@@ -65,6 +65,7 @@ interface QuotaCompassStore {
   addRenewal: (renewal: Omit<Renewal, 'id' | 'createdAt' | 'updatedAt' | 'daysToRenewal' | 'renewalQuarter'>) => void;
   updateRenewal: (id: string, updates: Partial<Renewal>) => void;
   deleteRenewal: (id: string) => void;
+  createMissingRenewalOpportunities: () => number;
   
   // Tasks
   tasks: Task[];
@@ -510,6 +511,62 @@ export const useStore = create<QuotaCompassStore>()(
         set((state) => ({
           renewals: state.renewals.filter(r => r.id !== id),
         }));
+      },
+      
+      createMissingRenewalOpportunities: () => {
+        const { renewals, opportunities } = get();
+        const newOpportunities: Opportunity[] = [];
+        const updatedRenewals: Renewal[] = [];
+        
+        renewals.forEach(renewal => {
+          // Skip if already has a linked opportunity that exists
+          if (renewal.linkedOpportunityId) {
+            const existingOpp = opportunities.find(o => o.id === renewal.linkedOpportunityId);
+            if (existingOpp) return;
+          }
+          
+          const opportunityId = generateId();
+          
+          // Calculate close date as day before renewal date
+          const dueDate = new Date(renewal.renewalDue);
+          const closeDateObj = new Date(dueDate);
+          closeDateObj.setDate(closeDateObj.getDate() - 1);
+          const closeDate = closeDateObj.toISOString().split('T')[0];
+          
+          const newOpportunity: Opportunity = {
+            id: opportunityId,
+            name: `${renewal.accountName} Renewal`,
+            accountName: renewal.accountName,
+            linkedContactIds: [],
+            status: 'active',
+            stage: 'Stage 1',
+            arr: renewal.arr,
+            churnRisk: renewal.churnRisk || 'low',
+            closeDate: closeDate,
+            activityLog: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          
+          newOpportunities.push(newOpportunity);
+          updatedRenewals.push({
+            ...renewal,
+            linkedOpportunityId: opportunityId,
+            updatedAt: new Date().toISOString(),
+          });
+        });
+        
+        if (newOpportunities.length > 0) {
+          set((state) => ({
+            opportunities: [...state.opportunities, ...newOpportunities],
+            renewals: state.renewals.map(r => {
+              const updated = updatedRenewals.find(ur => ur.id === r.id);
+              return updated || r;
+            }),
+          }));
+        }
+        
+        return newOpportunities.length;
       },
       
       // Tasks
