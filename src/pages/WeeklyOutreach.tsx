@@ -56,7 +56,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import type { Account, Motion, OutreachStatus } from '@/types';
+import type { Account, Motion, OutreachStatus, AccountTier, AccountStatus } from '@/types';
 
 // Quick Links
 const QUICK_LINKS = {
@@ -86,6 +86,20 @@ const STATUS_COLORS: Record<OutreachStatus, string> = {
   'closed-lost': 'bg-status-red/20 text-status-red',
 };
 
+const ACCOUNT_STATUS_COLORS: Record<AccountStatus, string> = {
+  'inactive': 'bg-muted text-muted-foreground',
+  'researched': 'bg-blue-500/20 text-blue-400',
+  'active': 'bg-status-green/20 text-status-green',
+  'meeting-booked': 'bg-primary/20 text-primary',
+  'disqualified': 'bg-status-red/20 text-status-red',
+};
+
+const TIER_COLORS: Record<AccountTier, string> = {
+  'A': 'border-status-green text-status-green',
+  'B': 'border-status-yellow text-status-yellow',
+  'C': 'border-muted-foreground text-muted-foreground',
+};
+
 export default function WeeklyOutreach() {
   const { accounts, addAccount, updateAccount, deleteAccount, logCall, logManualEmail, logAutomatedEmail, logMeetingHeld } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
@@ -98,6 +112,8 @@ export default function WeeklyOutreach() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [newAccount, setNewAccount] = useState<Partial<Account>>({
     priority: 'medium',
+    tier: 'B',
+    accountStatus: 'inactive',
     motion: 'new-logo',
     outreachStatus: 'not-started',
     techStack: [],
@@ -118,6 +134,8 @@ export default function WeeklyOutreach() {
       const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
       const account: Partial<Account> = {
         priority: 'medium',
+        tier: 'B',
+        accountStatus: 'inactive',
         motion: 'new-logo',
         outreachStatus: 'not-started',
         techStack: [],
@@ -146,6 +164,27 @@ export default function WeeklyOutreach() {
               account.priority = value.toLowerCase() as 'high' | 'medium' | 'low';
             }
             break;
+          case 'tier':
+            if (['a', 'b', 'c'].includes(value.toLowerCase())) {
+              account.tier = value.toUpperCase() as AccountTier;
+            }
+            break;
+          case 'status':
+          case 'account status':
+          case 'accountstatus':
+            const statusMap: Record<string, AccountStatus> = {
+              'inactive': 'inactive',
+              'researched': 'researched',
+              'active': 'active',
+              'meeting booked': 'meeting-booked',
+              'meeting-booked': 'meeting-booked',
+              'disqualified': 'disqualified',
+            };
+            const normalizedStatus = value.toLowerCase();
+            if (statusMap[normalizedStatus]) {
+              account.accountStatus = statusMap[normalizedStatus];
+            }
+            break;
           case 'motion':
           case 'type':
             if (value.toLowerCase().includes('new') || value.toLowerCase().includes('logo')) {
@@ -159,6 +198,16 @@ export default function WeeklyOutreach() {
           case 'industry':
           case 'vertical':
             account.industry = value;
+            break;
+          case 'martech':
+          case 'mar tech':
+          case 'marketing tech':
+            account.marTech = value;
+            break;
+          case 'ecommerce':
+          case 'e-commerce':
+          case 'commerce':
+            account.ecommerce = value;
             break;
           case 'notes':
           case 'note':
@@ -225,7 +274,7 @@ export default function WeeklyOutreach() {
   };
 
   const downloadTemplate = () => {
-    const template = 'Name,Website,Priority,Motion,Industry,Notes,Next Step\nAcme Corp,https://acme.com,high,new-logo,Technology,Initial outreach,Schedule intro call\nGlobal Inc,https://global.com,medium,expansion,Finance,,';
+    const template = 'Name,Website,Tier,Status,MarTech,Ecommerce,Notes\nAcme Corp,https://acme.com,A,inactive,Marketo,Shopify,Initial outreach target\nGlobal Inc,https://global.com,B,researched,HubSpot,Magento,Previous customer';
     const blob = new Blob([template], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -251,6 +300,8 @@ export default function WeeklyOutreach() {
     setShowAddDialog(false);
     setNewAccount({
       priority: 'medium',
+      tier: 'B',
+      accountStatus: 'inactive',
       motion: 'new-logo',
       outreachStatus: 'not-started',
       techStack: [],
@@ -399,7 +450,7 @@ export default function WeeklyOutreach() {
                       className="cursor-pointer"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Supported columns: Name, Website, Priority, Motion, Industry, Notes, Next Step
+                      Supported columns: Name, Website, Tier, Status, MarTech, Ecommerce, Notes
                     </p>
                   </div>
                   
@@ -419,9 +470,9 @@ export default function WeeklyOutreach() {
                           <TableHeader>
                             <TableRow>
                               <TableHead>Name</TableHead>
-                              <TableHead>Priority</TableHead>
-                              <TableHead>Motion</TableHead>
-                              <TableHead>Industry</TableHead>
+                              <TableHead>Tier</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>Website</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -429,19 +480,15 @@ export default function WeeklyOutreach() {
                               <TableRow key={idx}>
                                 <TableCell className="font-medium">{account.name}</TableCell>
                                 <TableCell>
-                                  <Badge variant="outline" className={cn(
-                                    account.priority === 'high' && 'border-status-red text-status-red',
-                                    account.priority === 'medium' && 'border-status-yellow text-status-yellow',
-                                    account.priority === 'low' && 'border-status-green text-status-green',
-                                  )}>
-                                    {account.priority}
+                                  <Badge variant="outline" className={cn(TIER_COLORS[account.tier || 'B'])}>
+                                    {account.tier || 'B'}
                                   </Badge>
                                 </TableCell>
                                 <TableCell className="text-xs capitalize">
-                                  {account.motion?.replace('-', ' ')}
+                                  {(account.accountStatus || 'inactive').replace('-', ' ')}
                                 </TableCell>
                                 <TableCell className="text-xs text-muted-foreground">
-                                  {account.industry || '—'}
+                                  {account.website || '—'}
                                 </TableCell>
                               </TableRow>
                             ))}
@@ -496,6 +543,42 @@ export default function WeeklyOutreach() {
                     placeholder="Acme Corp"
                   />
                 </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Tier</Label>
+                    <Select
+                      value={newAccount.tier || 'B'}
+                      onValueChange={(v) => setNewAccount({ ...newAccount, tier: v as AccountTier })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="A">A</SelectItem>
+                        <SelectItem value="B">B</SelectItem>
+                        <SelectItem value="C">C</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select
+                      value={newAccount.accountStatus || 'inactive'}
+                      onValueChange={(v) => setNewAccount({ ...newAccount, accountStatus: v as AccountStatus })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="inactive">Inactive</SelectItem>
+                        <SelectItem value="researched">Researched</SelectItem>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="meeting-booked">Meeting Booked</SelectItem>
+                        <SelectItem value="disqualified">Disqualified</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
                 <div className="space-y-2">
                   <Label>Website</Label>
                   <Input
@@ -506,53 +589,29 @@ export default function WeeklyOutreach() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Priority</Label>
-                    <Select
-                      value={newAccount.priority}
-                      onValueChange={(v) => setNewAccount({ ...newAccount, priority: v as 'high' | 'medium' | 'low' })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="high">High</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="low">Low</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label>MarTech</Label>
+                    <Input
+                      value={newAccount.marTech || ''}
+                      onChange={(e) => setNewAccount({ ...newAccount, marTech: e.target.value })}
+                      placeholder="e.g., Marketo, HubSpot"
+                    />
                   </div>
                   <div className="space-y-2">
-                    <Label>Motion</Label>
-                    <Select
-                      value={newAccount.motion as string}
-                      onValueChange={(v) => setNewAccount({ ...newAccount, motion: v as Motion | 'both' })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="new-logo">New Logo</SelectItem>
-                        <SelectItem value="expansion">Expansion</SelectItem>
-                        <SelectItem value="both">Both</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label>Ecommerce</Label>
+                    <Input
+                      value={newAccount.ecommerce || ''}
+                      onChange={(e) => setNewAccount({ ...newAccount, ecommerce: e.target.value })}
+                      placeholder="e.g., Shopify, Magento"
+                    />
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Industry</Label>
-                  <Input
-                    value={newAccount.industry || ''}
-                    onChange={(e) => setNewAccount({ ...newAccount, industry: e.target.value })}
-                    placeholder="Technology"
-                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Notes</Label>
                   <Textarea
                     value={newAccount.notes || ''}
                     onChange={(e) => setNewAccount({ ...newAccount, notes: e.target.value })}
-                    placeholder="Any initial notes..."
-                    rows={2}
+                    placeholder="Any initial notes or links..."
+                    rows={3}
                   />
                 </div>
               </div>
@@ -604,21 +663,20 @@ export default function WeeklyOutreach() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[200px]">Account</TableHead>
-                <TableHead className="w-[80px]">Priority</TableHead>
-                <TableHead className="w-[100px]">Motion</TableHead>
-                <TableHead className="w-[120px]">Status</TableHead>
-                <TableHead className="w-[100px]">Last Touch</TableHead>
-                <TableHead className="w-[60px] text-center">Touches</TableHead>
-                <TableHead>Next Step</TableHead>
-                <TableHead className="w-[140px]">Quick Actions</TableHead>
+                <TableHead className="w-[180px]">Account</TableHead>
+                <TableHead className="w-[70px]">Tier</TableHead>
+                <TableHead className="w-[140px]">Status</TableHead>
+                <TableHead className="w-[120px]">Website</TableHead>
+                <TableHead className="w-[120px]">MarTech</TableHead>
+                <TableHead className="w-[120px]">Ecommerce</TableHead>
+                <TableHead className="min-w-[200px]">Notes</TableHead>
                 <TableHead className="w-[40px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredAccounts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     {accounts.length === 0 
                       ? "No accounts yet. Add your first account to get started!"
                       : "No accounts match your filters."}
@@ -628,94 +686,85 @@ export default function WeeklyOutreach() {
                 filteredAccounts.map((account) => (
                   <TableRow key={account.id}>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center">
-                          <Building2 className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                        <div>
-                          <div className="font-medium">{account.name}</div>
-                          {account.website && (
-                            <a 
-                              href={account.website} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1"
-                            >
-                              <Globe className="h-3 w-3" />
-                              {new URL(account.website).hostname}
-                            </a>
-                          )}
-                        </div>
-                      </div>
+                      <div className="font-medium">{account.name}</div>
                     </TableCell>
                     <TableCell>
-                      <Badge 
-                        variant="outline" 
-                        className={cn(
-                          account.priority === 'high' && 'border-status-red text-status-red',
-                          account.priority === 'medium' && 'border-status-yellow text-status-yellow',
-                          account.priority === 'low' && 'border-status-green text-status-green',
-                        )}
+                      <Select
+                        value={account.tier || 'B'}
+                        onValueChange={(v) => updateAccount(account.id, { tier: v as AccountTier })}
                       >
-                        {account.priority}
-                      </Badge>
+                        <SelectTrigger className="h-7 w-14 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="A">A</SelectItem>
+                          <SelectItem value="B">B</SelectItem>
+                          <SelectItem value="C">C</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell>
-                      <span className="text-xs capitalize">{account.motion.replace('-', ' ')}</span>
+                      <Select
+                        value={account.accountStatus || 'inactive'}
+                        onValueChange={(v) => updateAccount(account.id, { accountStatus: v as AccountStatus })}
+                      >
+                        <SelectTrigger className="h-7 w-full text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                          <SelectItem value="researched">Researched</SelectItem>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="meeting-booked">Meeting Booked</SelectItem>
+                          <SelectItem value="disqualified">Disqualified</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell>
-                      <Badge className={cn('text-xs', STATUS_COLORS[account.outreachStatus])}>
-                        {account.outreachStatus.replace(/-/g, ' ')}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-xs text-muted-foreground">
-                        {account.lastTouchDate || '—'}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <span className="font-mono">{account.touchesThisWeek}</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-xs text-muted-foreground line-clamp-1">
-                        {account.nextStep || '—'}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button 
-                          size="icon" 
-                          variant="ghost" 
-                          className="h-7 w-7"
-                          onClick={() => handleQuickAction('call', account.id)}
+                      {account.website ? (
+                        <a 
+                          href={account.website} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1"
                         >
-                          <Phone className="h-3 w-3" />
-                        </Button>
-                        <Button 
-                          size="icon" 
-                          variant="ghost" 
-                          className="h-7 w-7"
-                          onClick={() => handleQuickAction('manual-email', account.id)}
-                        >
-                          <Mail className="h-3 w-3" />
-                        </Button>
-                        <Button 
-                          size="icon" 
-                          variant="ghost" 
-                          className="h-7 w-7"
-                          onClick={() => handleQuickAction('auto-email', account.id)}
-                        >
-                          <MailCheck className="h-3 w-3" />
-                        </Button>
-                        <Button 
-                          size="icon" 
-                          variant="ghost" 
-                          className="h-7 w-7"
-                          onClick={() => handleQuickAction('meeting', account.id)}
-                        >
-                          <MessageSquare className="h-3 w-3" />
-                        </Button>
-                      </div>
+                          <Globe className="h-3 w-3" />
+                          {(() => {
+                            try {
+                              return new URL(account.website).hostname;
+                            } catch {
+                              return account.website;
+                            }
+                          })()}
+                        </a>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        value={account.marTech || ''}
+                        onChange={(e) => updateAccount(account.id, { marTech: e.target.value })}
+                        placeholder="—"
+                        className="h-7 text-xs"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        value={account.ecommerce || ''}
+                        onChange={(e) => updateAccount(account.id, { ecommerce: e.target.value })}
+                        placeholder="—"
+                        className="h-7 text-xs"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Textarea
+                        value={account.notes || ''}
+                        onChange={(e) => updateAccount(account.id, { notes: e.target.value })}
+                        placeholder="Add notes or links..."
+                        className="min-h-[32px] h-8 text-xs resize-none py-1"
+                        rows={1}
+                      />
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
@@ -727,7 +776,6 @@ export default function WeeklyOutreach() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem>Edit Account</DropdownMenuItem>
                           <DropdownMenuItem>View Contacts</DropdownMenuItem>
-                          <DropdownMenuItem>Add Note</DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem 
                             className="text-destructive"
