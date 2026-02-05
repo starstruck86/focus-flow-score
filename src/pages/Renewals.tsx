@@ -93,7 +93,7 @@ const VIEWS = [
 ];
 
 export default function Renewals() {
-  const { renewals, addRenewal, updateRenewal, deleteRenewal, logCall, logManualEmail, logMeetingHeld } = useStore();
+  const { renewals, addRenewal, updateRenewal, deleteRenewal, createMissingRenewalOpportunities, logCall, logManualEmail, logMeetingHeld } = useStore();
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentView, setCurrentView] = useState('all');
@@ -509,6 +509,22 @@ export default function Renewals() {
           
           <TabsContent value="renewals">
           <div className="flex items-center gap-2 mb-4">
+            {/* Create Missing Opportunities Button */}
+            <Button 
+              variant="outline"
+              onClick={() => {
+                const count = createMissingRenewalOpportunities();
+                if (count > 0) {
+                  toast.success(`Created ${count} renewal ${count === 1 ? 'opportunity' : 'opportunities'}`);
+                } else {
+                  toast.info('All renewals already have linked opportunities');
+                }
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create Renewal Opps
+            </Button>
+            
             {/* Bulk Import Button */}
             <Dialog open={showBulkImportDialog} onOpenChange={(open) => {
               setShowBulkImportDialog(open);
