@@ -13,6 +13,11 @@ import type {
   DailyRawInputs,
   DailyActivityInputs,
   RecoveryInputs,
+  Opportunity,
+  OpportunityStatus,
+  OpportunityStage,
+  OpportunityActivity,
+  TouchType,
 } from '@/types';
 import { calculateAllScores } from '@/lib/calculations';
 
@@ -67,6 +72,13 @@ interface QuotaCompassStore {
   updateTask: (id: string, updates: Partial<Task>) => void;
   deleteTask: (id: string) => void;
   toggleTaskComplete: (id: string) => void;
+  
+  // Opportunities
+  opportunities: Opportunity[];
+  addOpportunity: (opportunity: Omit<Opportunity, 'id' | 'createdAt' | 'updatedAt' | 'activityLog'>) => void;
+  updateOpportunity: (id: string, updates: Partial<Opportunity>) => void;
+  deleteOpportunity: (id: string) => void;
+  logOpportunityActivity: (id: string, type: TouchType, notes?: string) => void;
   
   // Quick Actions - increment metrics
   logCall: (hadConversation: boolean) => void;
@@ -509,6 +521,59 @@ export const useStore = create<QuotaCompassStore>()(
         }));
       },
       
+      // Opportunities
+      opportunities: getDefaultOpportunities(),
+      
+      addOpportunity: (opportunity) => {
+        const newOpportunity: Opportunity = {
+          ...opportunity,
+          id: generateId(),
+          activityLog: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        set((state) => ({ opportunities: [...state.opportunities, newOpportunity] }));
+      },
+      
+      updateOpportunity: (id, updates) => {
+        set((state) => ({
+          opportunities: state.opportunities.map(o =>
+            o.id === id
+              ? { ...o, ...updates, updatedAt: new Date().toISOString() }
+              : o
+          ),
+        }));
+      },
+      
+      deleteOpportunity: (id) => {
+        set((state) => ({
+          opportunities: state.opportunities.filter(o => o.id !== id),
+        }));
+      },
+      
+      logOpportunityActivity: (id, type, notes) => {
+        set((state) => ({
+          opportunities: state.opportunities.map(o =>
+            o.id === id
+              ? {
+                  ...o,
+                  activityLog: [
+                    ...o.activityLog,
+                    {
+                      id: generateId(),
+                      type,
+                      date: new Date().toISOString(),
+                      notes,
+                    },
+                  ],
+                  lastTouchDate: getTodayString(),
+                  updatedAt: new Date().toISOString(),
+                }
+              : o
+          ),
+        }));
+      },
+      
       // Quick Actions
       logCall: (hadConversation) => {
         const { updateActivityInputs, updateRawInputs, currentDay } = get();
@@ -570,7 +635,35 @@ export const useStore = create<QuotaCompassStore>()(
         renewals: state.renewals,
         tasks: state.tasks,
         focusBlocks: state.focusBlocks,
+        opportunities: state.opportunities,
       }),
     }
   )
 );
+
+// Default opportunities (seed data)
+function getDefaultOpportunities(): Opportunity[] {
+  return [
+    // Active
+    { id: generateId(), name: 'Isabella Stewart Gardner Museum', status: 'active', stage: 'Stage 1', nextStepDate: '2026-02-11', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: generateId(), name: 'Franklin Park Conservatory', status: 'active', stage: 'Stage 2', nextStepDate: '2026-02-06', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: generateId(), name: 'Golden Lighting', status: 'active', stage: 'Stage 3', nextStepDate: '2026-02-06', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: generateId(), name: '360 View', status: 'active', stage: 'Stage 4', nextStep: 'TBD', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: generateId(), name: 'Peabody Essex Museum', status: 'active', stage: '', nextStep: 'TBD', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: generateId(), name: 'Ingram Book Group LLC', status: 'active', stage: '', nextStepDate: '2026-02-06', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: generateId(), name: 'St Pete/Clearwater', status: 'active', stage: '', nextStepDate: '2026-02-09', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: generateId(), name: 'FTD, Inc.', status: 'active', stage: '', nextStep: 'TBD', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    // Stalled
+    { id: generateId(), name: 'Visit Raleigh', status: 'stalled', stage: '', nextStepDate: '2026-02-09', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: generateId(), name: 'Kensington Hotel', status: 'stalled', stage: '', nextStep: 'TBD', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: generateId(), name: 'TopBuild', status: 'stalled', stage: '', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: generateId(), name: 'Groundworks', status: 'stalled', stage: '', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: generateId(), name: 'WorldStrides', status: 'stalled', stage: '', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: generateId(), name: 'World Emblem', status: 'stalled', stage: '', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: generateId(), name: 'Legend Fitness', status: 'stalled', stage: '', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    // Closed Lost
+    { id: generateId(), name: 'HUB Industrial', status: 'closed-lost', stage: '', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: generateId(), name: 'Southern Gas', status: 'closed-lost', stage: '', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: generateId(), name: 'Beechwood Hotel', status: 'closed-lost', stage: '', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  ];
+}
