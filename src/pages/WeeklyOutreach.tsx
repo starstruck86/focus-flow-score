@@ -181,6 +181,68 @@ function WebsiteCell({ website, onChange }: { website: string; onChange: (value:
   );
 }
 
+// Status Summary Component for Accounts
+function AccountsStatusSummary() {
+  const { accounts } = useStore();
+  
+  const statusSummary = useMemo(() => {
+    const statuses: AccountStatus[] = ['inactive', 'researched', 'active', 'meeting-booked', 'disqualified'];
+    const summary: Record<AccountStatus, number> = {
+      'inactive': 0,
+      'researched': 0,
+      'active': 0,
+      'meeting-booked': 0,
+      'disqualified': 0,
+    };
+    
+    accounts.forEach(a => {
+      summary[a.accountStatus]++;
+    });
+    
+    return summary;
+  }, [accounts]);
+
+  const statusLabels: Record<AccountStatus, string> = {
+    'inactive': 'Inactive',
+    'researched': 'Researched',
+    'active': 'Active',
+    'meeting-booked': 'Meeting Booked',
+    'disqualified': 'Disqualified',
+  };
+
+  const totalCount = Object.values(statusSummary).reduce((sum, c) => sum + c, 0);
+
+  return (
+    <div className="space-y-4">
+      {/* Total Summary */}
+      <div className="flex items-center gap-4">
+        <div className="text-sm text-muted-foreground">
+          Total Accounts: <span className="font-semibold text-foreground">{totalCount}</span>
+        </div>
+      </div>
+      
+      {/* Status Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        {(['inactive', 'researched', 'active', 'meeting-booked', 'disqualified'] as AccountStatus[]).map(status => (
+          <div 
+            key={status} 
+            className={cn(
+              "metric-card p-3 flex items-center justify-between"
+            )}
+          >
+            <Badge className={cn("text-xs", ACCOUNT_STATUS_COLORS[status])}>
+              {statusLabels[status]}
+            </Badge>
+            <span className="text-lg font-bold font-mono">
+              {statusSummary[status]}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Stage Summary Component for Opportunities
 function OpportunitiesStageSummary() {
   const { opportunities } = useStore();
@@ -528,6 +590,9 @@ export default function WeeklyOutreach() {
 
           {/* Accounts Tab */}
           <TabsContent value="accounts" className="space-y-4">
+            {/* Status Summary */}
+            <AccountsStatusSummary />
+            
             {/* Accounts Actions */}
             <div className="flex items-center justify-end gap-2">
               {/* Bulk Import Button */}
