@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { 
   Plus, 
   Phone, 
@@ -9,7 +9,10 @@ import {
   ExternalLink,
   AlertTriangle,
   Calendar,
-  DollarSign
+  DollarSign,
+  Upload,
+  FileSpreadsheet,
+  Download
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
@@ -76,11 +79,197 @@ export default function Renewals() {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentView, setCurrentView] = useState('all');
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showBulkImportDialog, setShowBulkImportDialog] = useState(false);
+  const [importPreview, setImportPreview] = useState<Partial<Renewal>[]>([]);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [newRenewal, setNewRenewal] = useState<Partial<Renewal>>({
     healthStatus: 'green',
     autoRenew: false,
     owner: 'Corey Hartin',
   });
+
+  const parseCSV = (text: string): Partial<Renewal>[] => {
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) {
+      throw new Error('CSV must have a header row and at least one data row');
+    }
+    
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+    const parsedRenewals: Partial<Renewal>[] = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+      const renewal: Partial<Renewal> = {
+        healthStatus: 'green',
+        autoRenew: false,
+        owner: 'Corey Hartin',
+      };
+      
+      headers.forEach((header, idx) => {
+        const value = values[idx];
+        if (!value) return;
+        
+        switch (header) {
+          case 'account':
+          case 'account name':
+          case 'accountname':
+          case 'name':
+          case 'company':
+            renewal.accountName = value;
+            break;
+          case 'csm':
+          case 'customer success':
+          case 'cs manager':
+            renewal.csm = value;
+            break;
+          case 'arr':
+          case 'revenue':
+          case 'value':
+            renewal.arr = Number(value.replace(/[$,]/g, '')) || 0;
+            break;
+          case 'renewal date':
+          case 'renewaldate':
+          case 'renewal due':
+          case 'renewaldue':
+          case 'due date':
+          case 'duedate':
+          case 'date':
+            // Try to parse date
+            const dateVal = new Date(value);
+            if (!isNaN(dateVal.getTime())) {
+              renewal.renewalDue = dateVal.toISOString().split('T')[0];
+            }
+            break;
+          case 'health':
+          case 'health status':
+          case 'healthstatus':
+          case 'status':
+            const healthLower = value.toLowerCase();
+            if (['green', 'yellow', 'red'].includes(healthLower)) {
+              renewal.healthStatus = healthLower as HealthStatus;
+            }
+            break;
+          case 'auto renew':
+          case 'autorenew':
+          case 'auto-renew':
+          case 'auto':
+            renewal.autoRenew = ['yes', 'true', '1', 'y'].includes(value.toLowerCase());
+            break;
+          case 'product':
+          case 'plan':
+            renewal.product = value;
+            break;
+          case 'owner':
+            renewal.owner = value;
+            break;
+          case 'next step':
+          case 'nextstep':
+          case 'next_step':
+            renewal.nextStep = value;
+            break;
+          case 'planhat':
+          case 'planhat link':
+          case 'planhatlink':
+            renewal.planhatLink = value;
+            break;
+          case 'cs notes':
+          case 'csnotes':
+          case 'notes':
+            renewal.csNotes = value;
+            break;
+        }
+      });
+      
+      if (renewal.accountName && renewal.arr && renewal.renewalDue) {
+        parsedRenewals.push(renewal);
+      }
+    }
+    
+    return parsedRenewals;
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    setImportError(null);
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string;
+        const parsedRenewals = parseCSV(text);
+        
+        if (parsedRenewals.length === 0) {
+          setImportError('No valid renewals found. Make sure you have Account, ARR, and Renewal Date columns.');
+          return;
+        }
+        
+        setImportPreview(parsedRenewals);
+      } catch (error) {
+        setImportError(error instanceof Error ? error.message : 'Failed to parse CSV');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleBulkImport = () => {
+    let createdCount = 0;
+    let updatedCount = 0;
+    
+    importPreview.forEach(importRenewal => {
+      if (importRenewal.accountName && importRenewal.arr && importRenewal.renewalDue) {
+        // Check if renewal with same account name already exists
+        const existingRenewal = renewals.find(
+          r => r.accountName.toLowerCase().trim() === importRenewal.accountName!.toLowerCase().trim()
+        );
+        
+        if (existingRenewal) {
+          // Update existing renewal
+          const updates: Partial<Renewal> = {};
+          if (importRenewal.arr) updates.arr = importRenewal.arr;
+          if (importRenewal.renewalDue) updates.renewalDue = importRenewal.renewalDue;
+          if (importRenewal.csm) updates.csm = importRenewal.csm;
+          if (importRenewal.healthStatus) updates.healthStatus = importRenewal.healthStatus;
+          if (importRenewal.product) updates.product = importRenewal.product;
+          if (importRenewal.autoRenew !== undefined) updates.autoRenew = importRenewal.autoRenew;
+          if (importRenewal.nextStep) updates.nextStep = importRenewal.nextStep;
+          if (importRenewal.csNotes) updates.csNotes = importRenewal.csNotes;
+          
+          if (Object.keys(updates).length > 0) {
+            updateRenewal(existingRenewal.id, updates);
+            updatedCount++;
+          }
+        } else {
+          addRenewal(importRenewal as Omit<Renewal, 'id' | 'createdAt' | 'updatedAt' | 'daysToRenewal' | 'renewalQuarter'>);
+          createdCount++;
+        }
+      }
+    });
+    
+    const messages = [];
+    if (createdCount > 0) messages.push(`${createdCount} created`);
+    if (updatedCount > 0) messages.push(`${updatedCount} updated`);
+    toast.success(`Renewals: ${messages.join(', ')}!`);
+    
+    setShowBulkImportDialog(false);
+    setImportPreview([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const downloadTemplate = () => {
+    const template = 'Account Name,ARR,Renewal Date,CSM,Health,Auto Renew,Product,Next Step,Notes\nAcme Corp,50000,2026-06-30,Jane Doe,green,no,Enterprise,Schedule QBR,Key account\nGlobal Inc,25000,2026-09-15,John Smith,yellow,yes,Pro,Check usage,At risk';
+    const blob = new Blob([template], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'renewal_import_template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const filteredRenewals = renewals.filter(renewal => {
     const matchesSearch = renewal.accountName.toLowerCase().includes(searchQuery.toLowerCase());
@@ -174,20 +363,125 @@ export default function Renewals() {
             </p>
           </div>
           
-          <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Renewal
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Add Renewal</DialogTitle>
-                <DialogDescription>
-                  Add a new renewal to track.
-                </DialogDescription>
-              </DialogHeader>
+          <div className="flex items-center gap-2">
+            {/* Bulk Import Button */}
+            <Dialog open={showBulkImportDialog} onOpenChange={(open) => {
+              setShowBulkImportDialog(open);
+              if (!open) {
+                setImportPreview([]);
+                setImportError(null);
+                if (fileInputRef.current) fileInputRef.current.value = '';
+              }
+            }}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <Upload className="h-4 w-4 mr-2" />
+                  Bulk Import
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Bulk Import Renewals</DialogTitle>
+                  <DialogDescription>
+                    Upload a CSV file to import multiple renewals at once.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  {/* Template Download */}
+                  <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <FileSpreadsheet className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium">Need a template?</p>
+                        <p className="text-xs text-muted-foreground">Download our CSV template with example data</p>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={downloadTemplate}>
+                      <Download className="h-4 w-4 mr-2" />
+                      Download
+                    </Button>
+                  </div>
+                  
+                  {/* File Upload */}
+                  <div className="space-y-2">
+                    <Label>Upload CSV File</Label>
+                    <Input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".csv"
+                      onChange={handleFileUpload}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Required columns: Account Name, ARR, Renewal Date
+                    </p>
+                  </div>
+                  
+                  {/* Error Message */}
+                  {importError && (
+                    <div className="p-3 bg-destructive/10 text-destructive rounded-lg text-sm">
+                      {importError}
+                    </div>
+                  )}
+                  
+                  {/* Preview Table */}
+                  {importPreview.length > 0 && (
+                    <div className="space-y-2">
+                      <Label>Preview ({importPreview.length} renewals)</Label>
+                      <div className="max-h-60 overflow-auto border rounded-lg">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Account</TableHead>
+                              <TableHead>ARR</TableHead>
+                              <TableHead>Due Date</TableHead>
+                              <TableHead>Health</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {importPreview.slice(0, 10).map((renewal, idx) => (
+                              <TableRow key={idx}>
+                                <TableCell className="text-xs">{renewal.accountName}</TableCell>
+                                <TableCell className="text-xs font-mono">${renewal.arr?.toLocaleString()}</TableCell>
+                                <TableCell className="text-xs">{renewal.renewalDue}</TableCell>
+                                <TableCell className="text-xs">{renewal.healthStatus}</TableCell>
+                              </TableRow>
+                            ))}
+                            {importPreview.length > 10 && (
+                              <TableRow>
+                                <TableCell colSpan={4} className="text-center text-xs text-muted-foreground">
+                                  ...and {importPreview.length - 10} more
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setShowBulkImportDialog(false)}>Cancel</Button>
+                  <Button onClick={handleBulkImport} disabled={importPreview.length === 0}>
+                    Import {importPreview.length > 0 && `(${importPreview.length})`}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Renewal
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Add Renewal</DialogTitle>
+                  <DialogDescription>
+                    Add a new renewal to track.
+                  </DialogDescription>
+                </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -285,6 +579,7 @@ export default function Renewals() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Filters */}
