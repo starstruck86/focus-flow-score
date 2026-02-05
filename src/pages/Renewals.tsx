@@ -793,12 +793,12 @@ export default function Renewals() {
                 <Table className="min-w-[1400px]">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
-                      <TableHead className="w-[20%]">Account Name</TableHead>
+                      <TableHead className="w-[18%]">Account Name</TableHead>
+                      <TableHead className="w-[12%]">Renewal Date</TableHead>
+                      <TableHead className="w-[10%]">Churn Risk</TableHead>
+                      <TableHead className="w-[10%] text-right">ARR</TableHead>
                       <TableHead className="w-[12%]">CSM</TableHead>
-                      <TableHead className="w-[12%] text-right">ARR</TableHead>
-                      <TableHead className="w-[12%]">Churn Risk</TableHead>
-                      <TableHead className="w-[14%]">Renewal Due</TableHead>
-                      <TableHead className="w-[26%]">Next Step</TableHead>
+                      <TableHead className="w-[34%]">Next Step</TableHead>
                       <TableHead className="w-[4%]"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -810,15 +810,17 @@ export default function Renewals() {
                             <span className="font-medium text-sm">{renewal.accountName}</span>
                           </TableCell>
                           <TableCell className="align-top py-3">
-                            <Input
-                              value={renewal.csm || ''}
-                              onChange={(e) => updateRenewal(renewal.id, { csm: e.target.value })}
+                            <EditableDatePicker
+                              value={renewal.renewalDue}
+                              onChange={(v) => updateRenewal(renewal.id, { renewalDue: v || renewal.renewalDue })}
                               placeholder="—"
-                              className="h-8 text-sm"
+                              compact
+                              className={cn(
+                                "w-28",
+                                renewal.daysToRenewal <= 30 && "[&_button]:text-status-red [&_button]:font-medium",
+                                renewal.daysToRenewal > 30 && renewal.daysToRenewal <= 60 && "[&_button]:text-status-yellow"
+                              )}
                             />
-                          </TableCell>
-                          <TableCell className="align-top py-3 text-right font-mono text-sm">
-                            {formatCurrency(renewal.arr)}
                           </TableCell>
                           <TableCell className="align-top py-3">
                             <Select
@@ -836,17 +838,15 @@ export default function Renewals() {
                               </SelectContent>
                             </Select>
                           </TableCell>
+                          <TableCell className="align-top py-3 text-right font-mono text-sm">
+                            {formatCurrency(renewal.arr)}
+                          </TableCell>
                           <TableCell className="align-top py-3">
-                            <EditableDatePicker
-                              value={renewal.renewalDue}
-                              onChange={(v) => updateRenewal(renewal.id, { renewalDue: v || renewal.renewalDue })}
+                            <Input
+                              value={renewal.csm || ''}
+                              onChange={(e) => updateRenewal(renewal.id, { csm: e.target.value })}
                               placeholder="—"
-                              compact
-                              className={cn(
-                                "w-28",
-                                renewal.daysToRenewal <= 30 && "[&_button]:text-status-red [&_button]:font-medium",
-                                renewal.daysToRenewal > 30 && renewal.daysToRenewal <= 60 && "[&_button]:text-status-yellow"
-                              )}
+                              className="h-8 text-sm"
                             />
                           </TableCell>
                           <TableCell className="align-top py-3">
