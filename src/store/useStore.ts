@@ -445,15 +445,40 @@ export const useStore = create<QuotaCompassStore>()(
         const daysToRenewal = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
         const quarter = `Q${Math.ceil((dueDate.getMonth() + 1) / 3)} ${dueDate.getFullYear()}`;
         
-        const newRenewal: Renewal = {
-          ...renewal,
-          id: generateId(),
-          daysToRenewal,
-          renewalQuarter: quarter,
+        const renewalId = generateId();
+        const opportunityId = generateId();
+        
+        // Create linked renewal opportunity
+        const newOpportunity: Opportunity = {
+          id: opportunityId,
+          name: `${renewal.accountName} Renewal`,
+          accountName: renewal.accountName,
+          linkedContactIds: [],
+          status: 'active',
+          stage: 'Stage 1',
+          arr: renewal.arr,
+          churnRisk: renewal.churnRisk || 'low',
+          closeDate: renewal.renewalDue,
+          activityLog: [],
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
-        set((state) => ({ renewals: [...state.renewals, newRenewal] }));
+        
+        const newRenewal: Renewal = {
+          ...renewal,
+          id: renewalId,
+          daysToRenewal,
+          renewalQuarter: quarter,
+          linkedOpportunityId: opportunityId,
+          churnRisk: renewal.churnRisk || 'low',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        
+        set((state) => ({ 
+          renewals: [...state.renewals, newRenewal],
+          opportunities: [...state.opportunities, newOpportunity],
+        }));
       },
       
       updateRenewal: (id, updates) => {
