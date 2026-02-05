@@ -436,8 +436,6 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
               <OpportunityDetailsField
                 nextStepDate={opp.nextStepDate}
                 onNextStepDateChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
-                nextStep={opp.nextStep}
-                onNextStepChange={(v) => updateOpportunity(opp.id, { nextStep: v })}
                 lastTouchDate={opp.lastTouchDate}
                 onLastTouchDateChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
                 notes={opp.notes}
