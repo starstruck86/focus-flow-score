@@ -143,7 +143,7 @@ function WebsiteCell({ website, onChange }: { website: string; onChange: (value:
         onBlur={handleSave}
         onKeyDown={handleKeyDown}
         placeholder="https://..."
-        className="h-7 text-xs"
+        className="h-8 text-sm"
         autoFocus
       />
     );
@@ -154,7 +154,7 @@ function WebsiteCell({ website, onChange }: { website: string; onChange: (value:
       <Button
         variant="ghost"
         size="sm"
-        className="h-7 text-xs text-muted-foreground"
+        className="h-7 text-sm text-muted-foreground"
         onClick={() => setIsEditing(true)}
       >
         <Plus className="h-3 w-3 mr-1" />
@@ -169,15 +169,14 @@ function WebsiteCell({ website, onChange }: { website: string; onChange: (value:
         href={website.startsWith('http') ? website : `https://${website}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-xs text-primary hover:underline truncate max-w-[80px]"
-        title={website}
+        className="text-sm text-primary hover:underline break-all"
       >
         {website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
       </a>
       <Button
         variant="ghost"
         size="icon"
-        className="h-5 w-5 shrink-0"
+        className="h-6 w-6 shrink-0"
         onClick={() => {
           setEditValue(website);
           setIsEditing(true);
@@ -941,12 +940,13 @@ export default function WeeklyOutreach() {
                           <Table>
                             <TableHeader>
                               <TableRow className="hover:bg-transparent">
-                                <TableHead className="min-w-[280px]">Account</TableHead>
-                                <TableHead className="w-[70px]">Tier</TableHead>
-                                <TableHead className="w-[140px]">Website</TableHead>
-                                <TableHead className="w-[120px]">MarTech</TableHead>
-                                <TableHead className="w-[120px]">Ecommerce</TableHead>
-                                <TableHead className="w-[40px]"></TableHead>
+                                <TableHead className="w-[18%]">Account</TableHead>
+                                <TableHead className="w-[20%]">Website</TableHead>
+                                <TableHead className="w-[12%]">Status</TableHead>
+                                <TableHead className="w-[8%]">Tier</TableHead>
+                                <TableHead className="w-[18%]">MarTech</TableHead>
+                                <TableHead className="w-[18%]">Ecommerce</TableHead>
+                                <TableHead className="w-[6%]"></TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -954,15 +954,38 @@ export default function WeeklyOutreach() {
                                 return (
                                   <React.Fragment key={account.id}>
                                     <TableRow>
-                                      <TableCell>
-                                        <div className="font-medium">{account.name}</div>
+                                      <TableCell className="align-top py-3">
+                                        <div className="font-medium text-sm break-words">{account.name}</div>
                                       </TableCell>
-                                      <TableCell>
+                                      <TableCell className="align-top py-3">
+                                        <WebsiteCell
+                                          website={account.website || ''}
+                                          onChange={(value) => updateAccount(account.id, { website: value })}
+                                        />
+                                      </TableCell>
+                                      <TableCell className="align-top py-3">
+                                        <Select
+                                          value={account.accountStatus || 'inactive'}
+                                          onValueChange={(v) => updateAccount(account.id, { accountStatus: v as AccountStatus })}
+                                        >
+                                          <SelectTrigger className="h-8 text-sm">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="inactive">Inactive</SelectItem>
+                                            <SelectItem value="researched">Researched</SelectItem>
+                                            <SelectItem value="active">Active</SelectItem>
+                                            <SelectItem value="meeting-booked">Meeting Booked</SelectItem>
+                                            <SelectItem value="disqualified">Disqualified</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </TableCell>
+                                      <TableCell className="align-top py-3">
                                         <Select
                                           value={account.tier || 'B'}
                                           onValueChange={(v) => updateAccount(account.id, { tier: v as AccountTier })}
                                         >
-                                          <SelectTrigger className="h-7 w-14 text-xs">
+                                          <SelectTrigger className="h-8 w-16 text-sm">
                                             <SelectValue />
                                           </SelectTrigger>
                                           <SelectContent>
@@ -972,32 +995,28 @@ export default function WeeklyOutreach() {
                                           </SelectContent>
                                         </Select>
                                       </TableCell>
-                                      <TableCell>
-                                        <WebsiteCell
-                                          website={account.website || ''}
-                                          onChange={(value) => updateAccount(account.id, { website: value })}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <Input
+                                      <TableCell className="align-top py-3">
+                                        <Textarea
                                           value={account.marTech || ''}
                                           onChange={(e) => updateAccount(account.id, { marTech: e.target.value })}
                                           placeholder="—"
-                                          className="h-7 text-xs"
+                                          className="min-h-[36px] text-sm resize-none field-sizing-content"
+                                          rows={1}
                                         />
                                       </TableCell>
-                                      <TableCell>
-                                        <Input
+                                      <TableCell className="align-top py-3">
+                                        <Textarea
                                           value={account.ecommerce || ''}
                                           onChange={(e) => updateAccount(account.id, { ecommerce: e.target.value })}
                                           placeholder="—"
-                                          className="h-7 text-xs"
+                                          className="min-h-[36px] text-sm resize-none field-sizing-content"
+                                          rows={1}
                                         />
                                       </TableCell>
-                                      <TableCell>
+                                      <TableCell className="align-top py-3">
                                         <DropdownMenu>
                                           <DropdownMenuTrigger asChild>
-                                            <Button size="icon" variant="ghost" className="h-7 w-7">
+                                            <Button size="icon" variant="ghost" className="h-8 w-8">
                                               <MoreHorizontal className="h-4 w-4" />
                                             </Button>
                                           </DropdownMenuTrigger>
@@ -1016,7 +1035,7 @@ export default function WeeklyOutreach() {
                                     </TableRow>
                                     {/* Contacts row spans full width */}
                                     <TableRow className="hover:bg-transparent border-b-2">
-                                      <TableCell colSpan={6} className="pt-0 pb-3">
+                                      <TableCell colSpan={7} className="pt-0 pb-3">
                                         <AccountContactsField
                                           contacts={account.accountContacts || []}
                                           onChange={(contacts) => updateAccount(account.id, { accountContacts: contacts })}
