@@ -16,6 +16,8 @@ export type OutreachStatus =
   | 'opp-open' 
   | 'closed-won' 
   | 'closed-lost';
+export type AccountTier = 'A' | 'B' | 'C';
+export type AccountStatus = 'inactive' | 'researched' | 'active' | 'meeting-booked' | 'disqualified';
 export type TouchType = 'call' | 'manual-email' | 'automated-email' | 'meeting' | 'linkedin' | 'other';
 export type TaskCategory = 
   | 'call' 
@@ -114,6 +116,8 @@ export interface Account {
   website?: string;
   industry?: string;
   priority: 'high' | 'medium' | 'low';
+  tier: AccountTier;
+  accountStatus: AccountStatus;
   motion: Motion | 'both';
   salesforceLink?: string;
   techStack: string[];
@@ -127,6 +131,8 @@ export interface Account {
   nextStep?: string;
   nextTouchDue?: string;
   notes?: string;
+  marTech?: string;
+  ecommerce?: string;
   tags: string[];
   createdAt: string;
   updatedAt: string;
