@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { 
   ExternalLink, 
   Plus, 
@@ -11,7 +11,10 @@ import {
   Search,
   ChevronDown,
   Globe,
-  Building2
+  Building2,
+  Upload,
+  FileSpreadsheet,
+  Download
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
@@ -89,6 +92,10 @@ export default function WeeklyOutreach() {
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [filterMotion, setFilterMotion] = useState<string>('all');
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showBulkImportDialog, setShowBulkImportDialog] = useState(false);
+  const [importPreview, setImportPreview] = useState<Partial<Account>[]>([]);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [newAccount, setNewAccount] = useState<Partial<Account>>({
     priority: 'medium',
     motion: 'new-logo',
@@ -97,6 +104,136 @@ export default function WeeklyOutreach() {
     tags: [],
     techFitFlag: 'good',
   });
+
+  const parseCSV = (text: string): Partial<Account>[] => {
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) {
+      throw new Error('CSV must have a header row and at least one data row');
+    }
+    
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+    const accounts: Partial<Account>[] = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+      const account: Partial<Account> = {
+        priority: 'medium',
+        motion: 'new-logo',
+        outreachStatus: 'not-started',
+        techStack: [],
+        tags: [],
+        techFitFlag: 'good',
+        touchesThisWeek: 0,
+      };
+      
+      headers.forEach((header, idx) => {
+        const value = values[idx];
+        if (!value) return;
+        
+        switch (header) {
+          case 'name':
+          case 'account':
+          case 'account name':
+          case 'company':
+            account.name = value;
+            break;
+          case 'website':
+          case 'url':
+            account.website = value.startsWith('http') ? value : `https://${value}`;
+            break;
+          case 'priority':
+            if (['high', 'medium', 'low'].includes(value.toLowerCase())) {
+              account.priority = value.toLowerCase() as 'high' | 'medium' | 'low';
+            }
+            break;
+          case 'motion':
+          case 'type':
+            if (value.toLowerCase().includes('new') || value.toLowerCase().includes('logo')) {
+              account.motion = 'new-logo';
+            } else if (value.toLowerCase().includes('exp')) {
+              account.motion = 'expansion';
+            } else if (value.toLowerCase().includes('both')) {
+              account.motion = 'both';
+            }
+            break;
+          case 'industry':
+          case 'vertical':
+            account.industry = value;
+            break;
+          case 'notes':
+          case 'note':
+          case 'comments':
+            account.notes = value;
+            break;
+          case 'next step':
+          case 'nextstep':
+          case 'next_step':
+            account.nextStep = value;
+            break;
+        }
+      });
+      
+      if (account.name) {
+        accounts.push(account);
+      }
+    }
+    
+    return accounts;
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    setImportError(null);
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string;
+        const parsedAccounts = parseCSV(text);
+        
+        if (parsedAccounts.length === 0) {
+          setImportError('No valid accounts found in the CSV. Make sure you have a "name" or "account" column.');
+          return;
+        }
+        
+        setImportPreview(parsedAccounts);
+      } catch (error) {
+        setImportError(error instanceof Error ? error.message : 'Failed to parse CSV');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleBulkImport = () => {
+    let successCount = 0;
+    
+    importPreview.forEach(account => {
+      if (account.name) {
+        addAccount(account as Omit<Account, 'id' | 'createdAt' | 'updatedAt' | 'touchesThisWeek'>);
+        successCount++;
+      }
+    });
+    
+    toast.success(`Imported ${successCount} accounts!`);
+    setShowBulkImportDialog(false);
+    setImportPreview([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const downloadTemplate = () => {
+    const template = 'Name,Website,Priority,Motion,Industry,Notes,Next Step\nAcme Corp,https://acme.com,high,new-logo,Technology,Initial outreach,Schedule intro call\nGlobal Inc,https://global.com,medium,expansion,Finance,,';
+    const blob = new Blob([template], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'account_import_template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const filteredAccounts = accounts.filter(account => {
     const matchesSearch = account.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -212,13 +349,137 @@ export default function WeeklyOutreach() {
             <p className="text-sm text-muted-foreground">New Logo + Expansion Accounts</p>
           </div>
           
-          <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Account
-              </Button>
-            </DialogTrigger>
+          <div className="flex items-center gap-2">
+            {/* Bulk Import Button */}
+            <Dialog open={showBulkImportDialog} onOpenChange={(open) => {
+              setShowBulkImportDialog(open);
+              if (!open) {
+                setImportPreview([]);
+                setImportError(null);
+                if (fileInputRef.current) fileInputRef.current.value = '';
+              }
+            }}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <Upload className="h-4 w-4 mr-2" />
+                  Bulk Import
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Bulk Import Accounts</DialogTitle>
+                  <DialogDescription>
+                    Upload a CSV file to import multiple accounts at once.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  {/* Template Download */}
+                  <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <FileSpreadsheet className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium">Need a template?</p>
+                        <p className="text-xs text-muted-foreground">Download our CSV template with example data</p>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={downloadTemplate}>
+                      <Download className="h-4 w-4 mr-2" />
+                      Download
+                    </Button>
+                  </div>
+                  
+                  {/* File Upload */}
+                  <div className="space-y-2">
+                    <Label>Upload CSV File</Label>
+                    <Input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".csv"
+                      onChange={handleFileUpload}
+                      className="cursor-pointer"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Supported columns: Name, Website, Priority, Motion, Industry, Notes, Next Step
+                    </p>
+                  </div>
+                  
+                  {/* Error Message */}
+                  {importError && (
+                    <div className="p-3 bg-destructive/10 text-destructive rounded-lg text-sm">
+                      {importError}
+                    </div>
+                  )}
+                  
+                  {/* Preview Table */}
+                  {importPreview.length > 0 && (
+                    <div className="space-y-2">
+                      <Label>Preview ({importPreview.length} accounts)</Label>
+                      <div className="max-h-60 overflow-auto border rounded-lg">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Name</TableHead>
+                              <TableHead>Priority</TableHead>
+                              <TableHead>Motion</TableHead>
+                              <TableHead>Industry</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {importPreview.slice(0, 10).map((account, idx) => (
+                              <TableRow key={idx}>
+                                <TableCell className="font-medium">{account.name}</TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className={cn(
+                                    account.priority === 'high' && 'border-status-red text-status-red',
+                                    account.priority === 'medium' && 'border-status-yellow text-status-yellow',
+                                    account.priority === 'low' && 'border-status-green text-status-green',
+                                  )}>
+                                    {account.priority}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-xs capitalize">
+                                  {account.motion?.replace('-', ' ')}
+                                </TableCell>
+                                <TableCell className="text-xs text-muted-foreground">
+                                  {account.industry || '—'}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            {importPreview.length > 10 && (
+                              <TableRow>
+                                <TableCell colSpan={4} className="text-center text-muted-foreground text-sm">
+                                  ... and {importPreview.length - 10} more accounts
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setShowBulkImportDialog(false)}>
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleBulkImport} 
+                    disabled={importPreview.length === 0}
+                  >
+                    Import {importPreview.length} Accounts
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+            
+            {/* Add Single Account */}
+            <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Account
+                </Button>
+              </DialogTrigger>
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>Add New Account</DialogTitle>
@@ -300,7 +561,8 @@ export default function WeeklyOutreach() {
                 <Button onClick={handleAddAccount}>Add Account</Button>
               </DialogFooter>
             </DialogContent>
-          </Dialog>
+            </Dialog>
+          </div>
         </div>
 
         {/* Filters */}
