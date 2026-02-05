@@ -448,6 +448,11 @@ export const useStore = create<QuotaCompassStore>()(
         const renewalId = generateId();
         const opportunityId = generateId();
         
+        // Calculate close date as day before renewal date
+        const closeDateObj = new Date(dueDate);
+        closeDateObj.setDate(closeDateObj.getDate() - 1);
+        const closeDate = closeDateObj.toISOString().split('T')[0];
+        
         // Create linked renewal opportunity
         const newOpportunity: Opportunity = {
           id: opportunityId,
@@ -458,7 +463,7 @@ export const useStore = create<QuotaCompassStore>()(
           stage: 'Stage 1',
           arr: renewal.arr,
           churnRisk: renewal.churnRisk || 'low',
-          closeDate: renewal.renewalDue,
+          closeDate: closeDate,
           activityLog: [],
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
