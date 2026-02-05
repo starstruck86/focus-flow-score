@@ -223,6 +223,8 @@ export interface Renewal {
   riskReason?: string;
   renewalStage?: string;
   owner: string;
+  notes?: string;
+  accountContacts?: AccountContact[];
   createdAt: string;
   updatedAt: string;
 }
