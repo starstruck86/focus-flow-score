@@ -59,19 +59,30 @@ type SavedView = 'all' | 'active' | 'stalled' | 'next-step-due' | 'closing-this-
 
 interface OpportunitiesTableProps {
   onOpenDrawer: (opportunity: Opportunity) => void;
+  renewalsOnly?: boolean;
 }
 
-export function OpportunitiesTable({ onOpenDrawer }: OpportunitiesTableProps) {
-  const { opportunities, updateOpportunity, deleteOpportunity, addOpportunity } = useStore();
+export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false }: OpportunitiesTableProps) {
+  const { opportunities, renewals, updateOpportunity, deleteOpportunity, addOpportunity } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [savedView, setSavedView] = useState<SavedView>('all');
   const [showAddRow, setShowAddRow] = useState(false);
   const [newOppName, setNewOppName] = useState('');
 
+  // Get renewal-linked opportunity IDs
+  const renewalOpportunityIds = useMemo(() => {
+    return new Set(renewals.filter(r => r.linkedOpportunityId).map(r => r.linkedOpportunityId));
+  }, [renewals]);
+
   const filteredOpportunities = useMemo(() => {
     let filtered = opportunities.filter(opp =>
       opp.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+    // Filter to only renewal opportunities if renewalsOnly is true
+    if (renewalsOnly) {
+      filtered = filtered.filter(opp => renewalOpportunityIds.has(opp.id));
+    }
 
     switch (savedView) {
       case 'active':

@@ -955,7 +955,7 @@ export default function Renewals() {
           </TabsContent>
           
           <TabsContent value="opportunities">
-            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} />
+            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} renewalsOnly />
           </TabsContent>
           
           <OpportunityDrawer
