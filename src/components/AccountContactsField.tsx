@@ -93,26 +93,26 @@ export function AccountContactsField({
           </span>
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="pt-2 space-y-2">
+      <CollapsibleContent className="pt-3 space-y-3">
         {/* Company Notes */}
         {onCompanyNotesChange && (
-          <div className="pb-2 border-b border-border/50">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 block">
+          <div className="pb-3 border-b border-border/50">
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
               Company Notes
             </label>
             <Textarea
               value={companyNotes}
               onChange={(e) => onCompanyNotesChange(e.target.value)}
               placeholder="General account notes, context, history..."
-              className="min-h-[40px] text-xs resize-none py-1.5 field-sizing-content"
+              className="min-h-[60px] text-sm resize-none py-2 px-3 field-sizing-content"
               rows={2}
             />
           </div>
         )}
         
         {/* Contacts */}
-        <div className="space-y-1.5">
-          <label className="text-[10px] uppercase tracking-wider text-muted-foreground block">
+        <div className="space-y-2">
+          <label className="text-xs font-medium text-muted-foreground block">
             Contacts
           </label>
           {displayContacts.map((contact, index) => (
@@ -123,32 +123,32 @@ export function AccountContactsField({
               <Textarea
                 value={contact.name}
                 onChange={(e) => handleContactChange(index, 'name', e.target.value)}
-                placeholder="Contact"
-                className="min-h-[28px] text-xs resize-none py-1.5 w-[25%] shrink-0 field-sizing-content"
+                placeholder="Contact name"
+                className="min-h-[44px] text-sm resize-none py-2 px-3 w-[25%] shrink-0 field-sizing-content"
                 rows={1}
               />
               <Textarea
                 value={contact.title}
                 onChange={(e) => handleContactChange(index, 'title', e.target.value)}
-                placeholder="Title"
-                className="min-h-[28px] text-xs resize-none py-1.5 w-[25%] shrink-0 field-sizing-content"
+                placeholder="Title / Role"
+                className="min-h-[44px] text-sm resize-none py-2 px-3 w-[25%] shrink-0 field-sizing-content"
                 rows={1}
               />
               <Textarea
                 value={contact.notes}
                 onChange={(e) => handleContactChange(index, 'notes', e.target.value)}
-                placeholder="Notes"
-                className="min-h-[28px] text-xs resize-none py-1.5 flex-1 field-sizing-content"
+                placeholder="Notes about this contact..."
+                className="min-h-[44px] text-sm resize-none py-2 px-3 flex-1 field-sizing-content"
                 rows={1}
               />
               {displayContacts.length > DEFAULT_CONTACTS_COUNT && (
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5"
+                  className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1"
                   onClick={() => handleRemoveContact(index)}
                 >
-                  <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                  <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
                 </Button>
               )}
             </div>
