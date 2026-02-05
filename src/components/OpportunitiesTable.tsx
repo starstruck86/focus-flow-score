@@ -279,15 +279,25 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
     </TableCell>
   );
 
-  const NotesCell = ({ opp }: { opp: Opportunity }) => (
-    <TableCell>
-      <Textarea
-        value={opp.notes || ''}
-        onChange={(e) => updateOpportunity(opp.id, { notes: e.target.value })}
-        placeholder="Add notes..."
-        className="min-h-[32px] h-8 text-xs resize-none py-1"
-        rows={1}
-      />
+  const NotesCell = ({ opp, expanded = false }: { opp: Opportunity; expanded?: boolean }) => (
+    <TableCell className="align-top py-3">
+      {expanded ? (
+        <Textarea
+          value={opp.notes || ''}
+          onChange={(e) => updateOpportunity(opp.id, { notes: e.target.value })}
+          placeholder="Add notes..."
+          className="min-h-[36px] text-sm resize-none py-2 px-3 w-full"
+          style={{ fieldSizing: 'content' } as React.CSSProperties}
+        />
+      ) : (
+        <Textarea
+          value={opp.notes || ''}
+          onChange={(e) => updateOpportunity(opp.id, { notes: e.target.value })}
+          placeholder="Add notes..."
+          className="min-h-[32px] h-8 text-xs resize-none py-1"
+          rows={1}
+        />
+      )}
     </TableCell>
   );
 
@@ -327,6 +337,18 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
           <NextStepCell opp={opp} />
           <LastTouchCell opp={opp} />
           <NotesCell opp={opp} />
+          <ActionsCell opp={opp} />
+        </>
+      ) : renewalsOnly ? (
+        // Renewals-only view: no Next Step, no Last Touch, expanded Notes
+        <>
+          <StatusCell opp={opp} />
+          <NameCell opp={opp} />
+          <ArrCell opp={opp} />
+          {showChurnRisk && <ChurnRiskCell opp={opp} />}
+          <CloseDateCell opp={opp} />
+          <StageCell opp={opp} />
+          <NotesCell opp={opp} expanded />
           <ActionsCell opp={opp} />
         </>
       ) : (
@@ -418,6 +440,18 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
                   <TableHead className="w-[130px]">Next Step</TableHead>
                   <TableHead className="w-[100px]">Last Touch</TableHead>
                   <TableHead className="min-w-[200px]">Notes</TableHead>
+                  <TableHead className="w-[40px]"></TableHead>
+                </>
+              ) : renewalsOnly ? (
+                // Renewals-only headers: no Next Step, no Last Touch
+                <>
+                  <TableHead className="w-[130px]">Status</TableHead>
+                  <TableHead className="w-[200px]">Opportunity</TableHead>
+                  <TableHead className="w-[100px]">ARR</TableHead>
+                  {showChurnRisk && <TableHead className="w-[100px]">Churn Risk</TableHead>}
+                  <TableHead className="w-[130px]">Close Date</TableHead>
+                  <TableHead className="w-[100px]">Stage</TableHead>
+                  <TableHead className="min-w-[300px]">Notes</TableHead>
                   <TableHead className="w-[40px]"></TableHead>
                 </>
               ) : (
