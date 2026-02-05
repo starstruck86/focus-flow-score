@@ -178,6 +178,15 @@ export default function Renewals() {
           case 'notes':
             renewal.csNotes = value;
             break;
+          case 'entitlements':
+            renewal.entitlements = value;
+            break;
+          case 'usage':
+            renewal.usage = value;
+            break;
+          case 'term':
+            renewal.term = value;
+            break;
         }
       });
       
@@ -632,117 +641,136 @@ export default function Renewals() {
                 <Table>
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
-                      <TableHead className="w-[180px]">Account</TableHead>
+                      <TableHead className="w-[160px]">Account Name</TableHead>
                       <TableHead className="w-[80px]">CSM</TableHead>
-                      <TableHead className="w-[100px] text-right">ARR</TableHead>
-                      <TableHead className="w-[100px]">Due Date</TableHead>
-                      <TableHead className="w-[80px] text-center">Days</TableHead>
-                      <TableHead className="w-[80px]">Health</TableHead>
-                      <TableHead className="w-[60px] text-center">Auto</TableHead>
-                      <TableHead>Next Step</TableHead>
-                      <TableHead className="w-[100px]">Actions</TableHead>
+                      <TableHead className="w-[90px] text-right">ARR</TableHead>
+                      <TableHead className="w-[100px]">Renewal Due</TableHead>
+                      <TableHead className="w-[90px]">Entitlements</TableHead>
+                      <TableHead className="w-[80px]">Usage</TableHead>
+                      <TableHead className="w-[70px]">Term</TableHead>
+                      <TableHead className="w-[70px]">Planhat</TableHead>
+                      <TableHead className="w-[70px] text-center">Auto-Renew</TableHead>
+                      <TableHead className="w-[90px]">Product</TableHead>
+                      <TableHead className="w-[120px]">CS Notes</TableHead>
+                      <TableHead className="w-[120px]">Next Step</TableHead>
+                      <TableHead className="w-[40px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {quarterRenewals.map((renewal) => (
                       <TableRow key={renewal.id}>
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{renewal.accountName}</span>
-                            {renewal.planhatLink && (
-                              <a 
-                                href={renewal.planhatLink} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="text-muted-foreground hover:text-primary"
-                              >
-                                <ExternalLink className="h-3 w-3" />
-                              </a>
-                            )}
-                          </div>
+                          <span className="font-medium text-sm">{renewal.accountName}</span>
                         </TableCell>
                         <TableCell>
-                          <span className="text-xs text-muted-foreground">{renewal.csm || '—'}</span>
+                          <Input
+                            value={renewal.csm || ''}
+                            onChange={(e) => updateRenewal(renewal.id, { csm: e.target.value })}
+                            placeholder="—"
+                            className="h-7 text-xs"
+                          />
                         </TableCell>
-                        <TableCell className="text-right font-mono">
+                        <TableCell className="text-right font-mono text-sm">
                           {formatCurrency(renewal.arr)}
                         </TableCell>
                         <TableCell>
-                          <span className="text-xs">{renewal.renewalDue}</span>
-                        </TableCell>
-                        <TableCell className="text-center">
                           <span className={cn(
-                            "font-mono text-sm font-medium",
-                            renewal.daysToRenewal <= 30 && "text-status-red",
+                            "text-xs",
+                            renewal.daysToRenewal <= 30 && "text-status-red font-medium",
                             renewal.daysToRenewal > 30 && renewal.daysToRenewal <= 60 && "text-status-yellow",
-                            renewal.daysToRenewal > 60 && "text-muted-foreground"
                           )}>
-                            {renewal.daysToRenewal}
+                            {renewal.renewalDue}
                           </span>
                         </TableCell>
                         <TableCell>
-                          <Badge className={cn('text-xs border', HEALTH_COLORS[renewal.healthStatus])}>
-                            {renewal.healthStatus === 'red' && <AlertTriangle className="h-3 w-3 mr-1" />}
-                            {renewal.healthStatus}
-                          </Badge>
+                          <Input
+                            value={renewal.entitlements || ''}
+                            onChange={(e) => updateRenewal(renewal.id, { entitlements: e.target.value })}
+                            placeholder="—"
+                            className="h-7 text-xs"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={renewal.usage || ''}
+                            onChange={(e) => updateRenewal(renewal.id, { usage: e.target.value })}
+                            placeholder="—"
+                            className="h-7 text-xs"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={renewal.term || ''}
+                            onChange={(e) => updateRenewal(renewal.id, { term: e.target.value })}
+                            placeholder="—"
+                            className="h-7 text-xs w-16"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {renewal.planhatLink ? (
+                            <a 
+                              href={renewal.planhatLink} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline text-xs"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </a>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-center">
                           {renewal.autoRenew ? (
                             <Badge variant="outline" className="text-xs">Yes</Badge>
                           ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
+                            <span className="text-xs text-muted-foreground">No</span>
                           )}
                         </TableCell>
                         <TableCell>
-                          <span className="text-xs text-muted-foreground line-clamp-1">
-                            {renewal.nextStep || '—'}
-                          </span>
+                          <Input
+                            value={renewal.product || ''}
+                            onChange={(e) => updateRenewal(renewal.id, { product: e.target.value })}
+                            placeholder="—"
+                            className="h-7 text-xs"
+                          />
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1">
-                            <Button 
-                              size="icon" 
-                              variant="ghost" 
-                              className="h-7 w-7"
-                              onClick={() => handleQuickAction('call', renewal.id)}
-                            >
-                              <Phone className="h-3 w-3" />
-                            </Button>
-                            <Button 
-                              size="icon" 
-                              variant="ghost" 
-                              className="h-7 w-7"
-                              onClick={() => handleQuickAction('email', renewal.id)}
-                            >
-                              <Mail className="h-3 w-3" />
-                            </Button>
-                            <Button 
-                              size="icon" 
-                              variant="ghost" 
-                              className="h-7 w-7"
-                              onClick={() => handleQuickAction('meeting', renewal.id)}
-                            >
-                              <MessageSquare className="h-3 w-3" />
-                            </Button>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button size="icon" variant="ghost" className="h-7 w-7">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem>Edit Renewal</DropdownMenuItem>
-                                <DropdownMenuItem>View Details</DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem 
-                                  className="text-destructive"
-                                  onClick={() => deleteRenewal(renewal.id)}
-                                >
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
+                          <Textarea
+                            value={renewal.csNotes || ''}
+                            onChange={(e) => updateRenewal(renewal.id, { csNotes: e.target.value })}
+                            placeholder="CS notes..."
+                            className="min-h-[32px] h-8 text-xs resize-none py-1"
+                            rows={1}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Textarea
+                            value={renewal.nextStep || ''}
+                            onChange={(e) => updateRenewal(renewal.id, { nextStep: e.target.value })}
+                            placeholder="Next step..."
+                            className="min-h-[32px] h-8 text-xs resize-none py-1"
+                            rows={1}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button size="icon" variant="ghost" className="h-7 w-7">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem>Edit Renewal</DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem 
+                                className="text-destructive"
+                                onClick={() => deleteRenewal(renewal.id)}
+                              >
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </TableCell>
                       </TableRow>
                     ))}
