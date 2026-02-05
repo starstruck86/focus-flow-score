@@ -8,6 +8,8 @@ import {
   FileSpreadsheet,
   Download,
   Pencil,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
@@ -50,6 +52,11 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useStore } from '@/store/useStore';
@@ -57,6 +64,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { OpportunitiesTable } from '@/components/OpportunitiesTable';
 import { OpportunityDrawer } from '@/components/OpportunityDrawer';
+import { AccountContactsField, type AccountContact } from '@/components/AccountContactsField';
 import type { Account, AccountTier, AccountStatus, Opportunity, OpportunityStage } from '@/types';
 
 // Quick Links
@@ -316,6 +324,16 @@ function OpportunitiesStageSummary() {
   );
 }
 
+// Status order and labels
+const STATUS_ORDER: AccountStatus[] = ['meeting-booked', 'active', 'researched', 'inactive', 'disqualified'];
+const STATUS_LABELS: Record<AccountStatus, string> = {
+  'inactive': 'Inactive',
+  'researched': 'Researched',
+  'active': 'Active',
+  'meeting-booked': 'Meeting Booked',
+  'disqualified': 'Disqualified',
+};
+
 export default function WeeklyOutreach() {
   const { accounts, addAccount, updateAccount, deleteAccount } = useStore();
   const [activeTab, setActiveTab] = useState<'accounts' | 'opportunities'>('accounts');
@@ -328,6 +346,7 @@ export default function WeeklyOutreach() {
   const [importPreview, setImportPreview] = useState<Partial<Account>[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [collapsedStatuses, setCollapsedStatuses] = useState<Set<AccountStatus>>(new Set());
   const [newAccount, setNewAccount] = useState<Partial<Account>>({
     priority: 'medium',
     tier: 'B',
@@ -338,6 +357,18 @@ export default function WeeklyOutreach() {
     tags: [],
     techFitFlag: 'good',
   });
+
+  const toggleStatusCollapse = (status: AccountStatus) => {
+    setCollapsedStatuses(prev => {
+      const next = new Set(prev);
+      if (next.has(status)) {
+        next.delete(status);
+      } else {
+        next.add(status);
+      }
+      return next;
+    });
+  };
 
   const parseCSV = (text: string): Partial<Account>[] => {
     const lines = text.trim().split('\n');
@@ -508,6 +539,21 @@ export default function WeeklyOutreach() {
     const matchesStatus = filterStatus === 'all' || account.accountStatus === filterStatus;
     return matchesSearch && matchesTier && matchesStatus;
   });
+
+  // Group accounts by status
+  const accountsByStatus = useMemo(() => {
+    const grouped: Record<AccountStatus, Account[]> = {
+      'meeting-booked': [],
+      'active': [],
+      'researched': [],
+      'inactive': [],
+      'disqualified': [],
+    };
+    filteredAccounts.forEach(account => {
+      grouped[account.accountStatus].push(account);
+    });
+    return grouped;
+  }, [filteredAccounts]);
 
   const handleAddAccount = () => {
     if (!newAccount.name) {
@@ -854,134 +900,144 @@ export default function WeeklyOutreach() {
               </Select>
             </div>
 
-            {/* Accounts Table */}
-            <div className="metric-card overflow-hidden p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-[180px]">Account</TableHead>
-                    <TableHead className="w-[70px]">Tier</TableHead>
-                    <TableHead className="w-[140px]">Status</TableHead>
-                    <TableHead className="w-[140px]">Website</TableHead>
-                    <TableHead className="w-[120px]">MarTech</TableHead>
-                    <TableHead className="w-[120px]">Ecommerce</TableHead>
-                    <TableHead className="min-w-[180px]">Contacts</TableHead>
-                    <TableHead className="min-w-[180px]">Notes</TableHead>
-                    <TableHead className="w-[40px]"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredAccounts.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                        {accounts.length === 0 
-                          ? "No accounts yet. Add your first account to get started!"
-                          : "No accounts match your filters."}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredAccounts.map((account) => (
-                      <TableRow key={account.id}>
-                        <TableCell>
-                          <div className="font-medium">{account.name}</div>
-                        </TableCell>
-                        <TableCell>
-                          <Select
-                            value={account.tier || 'B'}
-                            onValueChange={(v) => updateAccount(account.id, { tier: v as AccountTier })}
-                          >
-                            <SelectTrigger className="h-7 w-14 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="A">A</SelectItem>
-                              <SelectItem value="B">B</SelectItem>
-                              <SelectItem value="C">C</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell>
-                          <Select
-                            value={account.accountStatus || 'inactive'}
-                            onValueChange={(v) => updateAccount(account.id, { accountStatus: v as AccountStatus })}
-                          >
-                            <SelectTrigger className="h-7 w-full text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="inactive">Inactive</SelectItem>
-                              <SelectItem value="researched">Researched</SelectItem>
-                              <SelectItem value="active">Active</SelectItem>
-                              <SelectItem value="meeting-booked">Meeting Booked</SelectItem>
-                              <SelectItem value="disqualified">Disqualified</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell>
-                          <WebsiteCell
-                            website={account.website || ''}
-                            onChange={(value) => updateAccount(account.id, { website: value })}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            value={account.marTech || ''}
-                            onChange={(e) => updateAccount(account.id, { marTech: e.target.value })}
-                            placeholder="—"
-                            className="h-7 text-xs"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            value={account.ecommerce || ''}
-                            onChange={(e) => updateAccount(account.id, { ecommerce: e.target.value })}
-                            placeholder="—"
-                            className="h-7 text-xs"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Textarea
-                            value={account.techStackNotes || ''}
-                            onChange={(e) => updateAccount(account.id, { techStackNotes: e.target.value })}
-                            placeholder="Contact names & notes..."
-                            className="min-h-[32px] h-8 text-xs resize-none py-1"
-                            rows={1}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Textarea
-                            value={account.notes || ''}
-                            onChange={(e) => updateAccount(account.id, { notes: e.target.value })}
-                            placeholder="Add notes..."
-                            className="min-h-[32px] h-8 text-xs resize-none py-1"
-                            rows={1}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button size="icon" variant="ghost" className="h-7 w-7">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem>Edit Account</DropdownMenuItem>
-                              <DropdownMenuItem>View Contacts</DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem 
-                                className="text-destructive"
-                                onClick={() => deleteAccount(account.id)}
-                              >
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+            {/* Accounts Table - Grouped by Status */}
+            <div className="space-y-4">
+              {filteredAccounts.length === 0 ? (
+                <div className="metric-card p-8 text-center text-muted-foreground">
+                  {accounts.length === 0 
+                    ? "No accounts yet. Add your first account to get started!"
+                    : "No accounts match your filters."}
+                </div>
+              ) : (
+                STATUS_ORDER.map(status => {
+                  const statusAccounts = accountsByStatus[status];
+                  if (statusAccounts.length === 0) return null;
+                  
+                  const isCollapsed = collapsedStatuses.has(status);
+                  
+                  return (
+                    <Collapsible 
+                      key={status} 
+                      open={!isCollapsed} 
+                      onOpenChange={() => toggleStatusCollapse(status)}
+                    >
+                      <div className="metric-card overflow-hidden p-0">
+                        <CollapsibleTrigger asChild>
+                          <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors border-b border-border/50">
+                            {isCollapsed ? (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            )}
+                            <Badge className={cn("text-xs", ACCOUNT_STATUS_COLORS[status])}>
+                              {STATUS_LABELS[status]}
+                            </Badge>
+                            <span className="text-sm text-muted-foreground">
+                              {statusAccounts.length} account{statusAccounts.length !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="hover:bg-transparent">
+                                <TableHead className="w-[180px]">Account</TableHead>
+                                <TableHead className="w-[70px]">Tier</TableHead>
+                                <TableHead className="w-[140px]">Website</TableHead>
+                                <TableHead className="w-[120px]">MarTech</TableHead>
+                                <TableHead className="w-[120px]">Ecommerce</TableHead>
+                                <TableHead className="min-w-[200px]">Contacts</TableHead>
+                                <TableHead className="min-w-[180px]">Notes</TableHead>
+                                <TableHead className="w-[40px]"></TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {statusAccounts.map((account) => (
+                                <TableRow key={account.id}>
+                                  <TableCell>
+                                    <div className="font-medium">{account.name}</div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Select
+                                      value={account.tier || 'B'}
+                                      onValueChange={(v) => updateAccount(account.id, { tier: v as AccountTier })}
+                                    >
+                                      <SelectTrigger className="h-7 w-14 text-xs">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="A">A</SelectItem>
+                                        <SelectItem value="B">B</SelectItem>
+                                        <SelectItem value="C">C</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </TableCell>
+                                  <TableCell>
+                                    <WebsiteCell
+                                      website={account.website || ''}
+                                      onChange={(value) => updateAccount(account.id, { website: value })}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Input
+                                      value={account.marTech || ''}
+                                      onChange={(e) => updateAccount(account.id, { marTech: e.target.value })}
+                                      placeholder="—"
+                                      className="h-7 text-xs"
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Input
+                                      value={account.ecommerce || ''}
+                                      onChange={(e) => updateAccount(account.id, { ecommerce: e.target.value })}
+                                      placeholder="—"
+                                      className="h-7 text-xs"
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <AccountContactsField
+                                      contacts={account.accountContacts || []}
+                                      onChange={(contacts) => updateAccount(account.id, { accountContacts: contacts })}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Textarea
+                                      value={account.notes || ''}
+                                      onChange={(e) => updateAccount(account.id, { notes: e.target.value })}
+                                      placeholder="Add notes..."
+                                      className="min-h-[32px] h-8 text-xs resize-none py-1"
+                                      rows={1}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button size="icon" variant="ghost" className="h-7 w-7">
+                                          <MoreHorizontal className="h-4 w-4" />
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end">
+                                        <DropdownMenuItem>Edit Account</DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem 
+                                          className="text-destructive"
+                                          onClick={() => deleteAccount(account.id)}
+                                        >
+                                          Delete
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </CollapsibleContent>
+                      </div>
+                    </Collapsible>
+                  );
+                })
+              )}
             </div>
           </TabsContent>
 
