@@ -42,6 +42,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { EditableDatePicker } from '@/components/EditableDatePicker';
 import type { Task, Priority, Motion, TaskCategory, TaskStatus } from '@/types';
 
 const PRIORITY_COLORS: Record<Priority, string> = {
@@ -296,10 +297,10 @@ export default function Tasks() {
                   </div>
                   <div className="space-y-2">
                     <Label>Due Date *</Label>
-                    <Input
-                      type="date"
-                      value={newTask.dueDate || ''}
-                      onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
+                    <EditableDatePicker
+                      value={newTask.dueDate}
+                      onChange={(v) => setNewTask({ ...newTask, dueDate: v || '' })}
+                      placeholder="Select due date"
                     />
                   </div>
                 </div>

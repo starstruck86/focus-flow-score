@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
+import { EditableDatePicker } from '@/components/EditableDatePicker';
 import { format, parseISO } from 'date-fns';
 import type { Opportunity, OpportunityStatus, OpportunityStage, Task, Priority, Motion } from '@/types';
 import { cn } from '@/lib/utils';
@@ -321,12 +322,10 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
 
                 <div className="space-y-2">
                   <Label>Close Date</Label>
-                  <Input
-                    type="date"
-                    value={opportunity.closeDate || ''}
-                    onChange={(e) => updateOpportunity(opportunity.id, { 
-                      closeDate: e.target.value || undefined 
-                    })}
+                  <EditableDatePicker
+                    value={opportunity.closeDate}
+                    onChange={(v) => updateOpportunity(opportunity.id, { closeDate: v })}
+                    placeholder="Select close date"
                   />
                 </div>
               </div>
@@ -334,13 +333,11 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
               <div className="space-y-2">
                 <Label>Next Step</Label>
                 <div className="flex gap-2">
-                  <Input
-                    type="date"
-                    value={opportunity.nextStepDate || ''}
-                    onChange={(e) => updateOpportunity(opportunity.id, { 
-                      nextStepDate: e.target.value || undefined 
-                    })}
-                    className="w-40"
+                  <EditableDatePicker
+                    value={opportunity.nextStepDate}
+                    onChange={(v) => updateOpportunity(opportunity.id, { nextStepDate: v })}
+                    placeholder="Select date"
+                    className="w-44"
                   />
                   <Input
                     value={opportunity.nextStep || ''}
@@ -438,10 +435,10 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
               </div>
               <div className="space-y-2">
                 <Label>Due Date</Label>
-                <Input
-                  type="date"
-                  value={newTask.dueDate || ''}
-                  onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
+                <EditableDatePicker
+                  value={newTask.dueDate}
+                  onChange={(v) => setNewTask({ ...newTask, dueDate: v || '' })}
+                  placeholder="Select due date"
                 />
               </div>
             </div>

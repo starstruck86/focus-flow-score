@@ -58,6 +58,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { OpportunitiesTable } from '@/components/OpportunitiesTable';
 import { OpportunityDrawer } from '@/components/OpportunityDrawer';
+import { EditableDatePicker } from '@/components/EditableDatePicker';
 import type { Renewal, HealthStatus, Opportunity, ChurnRisk } from '@/types';
 
 const HEALTH_COLORS: Record<HealthStatus, string> = {
@@ -657,10 +658,10 @@ export default function Renewals() {
                   </div>
                   <div className="space-y-2">
                     <Label>Renewal Due *</Label>
-                    <Input
-                      type="date"
-                      value={newRenewal.renewalDue || ''}
-                      onChange={(e) => setNewRenewal({ ...newRenewal, renewalDue: e.target.value })}
+                    <EditableDatePicker
+                      value={newRenewal.renewalDue}
+                      onChange={(v) => setNewRenewal({ ...newRenewal, renewalDue: v || '' })}
+                      placeholder="Select renewal date"
                     />
                   </div>
                 </div>
@@ -825,13 +826,17 @@ export default function Renewals() {
                           </Select>
                         </TableCell>
                         <TableCell>
-                          <span className={cn(
-                            "text-xs",
-                            renewal.daysToRenewal <= 30 && "text-status-red font-medium",
-                            renewal.daysToRenewal > 30 && renewal.daysToRenewal <= 60 && "text-status-yellow",
-                          )}>
-                            {renewal.renewalDue}
-                          </span>
+                          <EditableDatePicker
+                            value={renewal.renewalDue}
+                            onChange={(v) => updateRenewal(renewal.id, { renewalDue: v || renewal.renewalDue })}
+                            placeholder="—"
+                            compact
+                            className={cn(
+                              "w-28",
+                              renewal.daysToRenewal <= 30 && "[&_button]:text-status-red [&_button]:font-medium",
+                              renewal.daysToRenewal > 30 && renewal.daysToRenewal <= 60 && "[&_button]:text-status-yellow"
+                            )}
+                          />
                         </TableCell>
                         <TableCell>
                           <Input
