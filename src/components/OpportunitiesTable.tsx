@@ -60,9 +60,10 @@ type SavedView = 'all' | 'active' | 'stalled' | 'next-step-due' | 'closing-this-
 interface OpportunitiesTableProps {
   onOpenDrawer: (opportunity: Opportunity) => void;
   renewalsOnly?: boolean;
+  showChurnRisk?: boolean;
 }
 
-export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false }: OpportunitiesTableProps) {
+export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChurnRisk = true }: OpportunitiesTableProps) {
   const { opportunities, renewals, updateOpportunity, deleteOpportunity, addOpportunity } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [savedView, setSavedView] = useState<SavedView>('all');
@@ -194,23 +195,25 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false }: Oppor
           className="h-7 w-24 text-xs"
         />
       </TableCell>
-      <TableCell>
-        <Select
-          value={opp.churnRisk || 'none'}
-          onValueChange={(v) => updateOpportunity(opp.id, { churnRisk: (v === 'none' ? undefined : v) as ChurnRisk | undefined })}
-        >
-          <SelectTrigger className={cn("h-7 w-24 text-xs", opp.churnRisk && CHURN_RISK_COLORS[opp.churnRisk])}>
-            <SelectValue placeholder="—" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">—</SelectItem>
-            <SelectItem value="certain">Certain</SelectItem>
-            <SelectItem value="low">Low</SelectItem>
-            <SelectItem value="medium">Medium</SelectItem>
-            <SelectItem value="high">High</SelectItem>
-          </SelectContent>
-        </Select>
-      </TableCell>
+      {showChurnRisk && (
+        <TableCell>
+          <Select
+            value={opp.churnRisk || 'none'}
+            onValueChange={(v) => updateOpportunity(opp.id, { churnRisk: (v === 'none' ? undefined : v) as ChurnRisk | undefined })}
+          >
+            <SelectTrigger className={cn("h-7 w-24 text-xs", opp.churnRisk && CHURN_RISK_COLORS[opp.churnRisk])}>
+              <SelectValue placeholder="—" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">—</SelectItem>
+              <SelectItem value="certain">Certain</SelectItem>
+              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+            </SelectContent>
+          </Select>
+        </TableCell>
+      )}
       <TableCell>
         <EditableDatePicker
           value={opp.closeDate}
@@ -352,7 +355,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false }: Oppor
               <TableHead className="w-[130px]">Status</TableHead>
               <TableHead className="w-[200px]">Opportunity</TableHead>
               <TableHead className="w-[100px]">ARR</TableHead>
-              <TableHead className="w-[100px]">Churn Risk</TableHead>
+              {showChurnRisk && <TableHead className="w-[100px]">Churn Risk</TableHead>}
               <TableHead className="w-[130px]">Close Date</TableHead>
               <TableHead className="w-[130px]">Next Step</TableHead>
               <TableHead className="w-[100px]">Stage</TableHead>

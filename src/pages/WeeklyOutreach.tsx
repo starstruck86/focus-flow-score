@@ -987,7 +987,7 @@ export default function WeeklyOutreach() {
 
           {/* Opportunities Tab */}
           <TabsContent value="opportunities" className="space-y-4">
-            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} />
+            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} showChurnRisk={false} />
           </TabsContent>
         </Tabs>
 
