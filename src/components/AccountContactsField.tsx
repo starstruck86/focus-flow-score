@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Collapsible,
@@ -20,6 +19,8 @@ export interface AccountContact {
 interface AccountContactsFieldProps {
   contacts: AccountContact[];
   onChange: (contacts: AccountContact[]) => void;
+  companyNotes?: string;
+  onCompanyNotesChange?: (notes: string) => void;
 }
 
 function generateContactId(): string {
@@ -28,7 +29,12 @@ function generateContactId(): string {
 
 const DEFAULT_CONTACTS_COUNT = 3;
 
-export function AccountContactsField({ contacts, onChange }: AccountContactsFieldProps) {
+export function AccountContactsField({ 
+  contacts, 
+  onChange, 
+  companyNotes = '', 
+  onCompanyNotesChange 
+}: AccountContactsFieldProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   // Ensure we always have at least DEFAULT_CONTACTS_COUNT contacts
@@ -79,7 +85,7 @@ export function AccountContactsField({ contacts, onChange }: AccountContactsFiel
             <ChevronRight className="h-3 w-3 mr-1 shrink-0" />
           )}
           <span className={cn(
-            filledContactsCount > 0 ? 'text-foreground' : 'text-muted-foreground'
+            filledContactsCount > 0 || companyNotes ? 'text-foreground' : 'text-muted-foreground'
           )}>
             {filledContactsCount > 0 
               ? `${filledContactsCount} contact${filledContactsCount !== 1 ? 's' : ''}`
@@ -87,42 +93,67 @@ export function AccountContactsField({ contacts, onChange }: AccountContactsFiel
           </span>
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="pt-2 space-y-1.5">
-        {displayContacts.map((contact, index) => (
-          <div
-            key={contact.id}
-            className="flex items-center gap-2 group"
-          >
-            <Input
-              value={contact.name}
-              onChange={(e) => handleContactChange(index, 'name', e.target.value)}
-              placeholder="Contact"
-              className="h-6 text-xs w-[100px] shrink-0"
+      <CollapsibleContent className="pt-2 space-y-2">
+        {/* Company Notes */}
+        {onCompanyNotesChange && (
+          <div className="pb-2 border-b border-border/50">
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 block">
+              Company Notes
+            </label>
+            <Textarea
+              value={companyNotes}
+              onChange={(e) => onCompanyNotesChange(e.target.value)}
+              placeholder="General account notes, context, history..."
+              className="min-h-[40px] text-xs resize-none py-1.5 field-sizing-content"
+              rows={2}
             />
-            <Input
-              value={contact.title}
-              onChange={(e) => handleContactChange(index, 'title', e.target.value)}
-              placeholder="Title"
-              className="h-6 text-xs w-[100px] shrink-0"
-            />
-            <Input
-              value={contact.notes}
-              onChange={(e) => handleContactChange(index, 'notes', e.target.value)}
-              placeholder="Notes"
-              className="h-6 text-xs flex-1 min-w-[80px]"
-            />
-            {displayContacts.length > DEFAULT_CONTACTS_COUNT && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                onClick={() => handleRemoveContact(index)}
-              >
-                <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
-              </Button>
-            )}
           </div>
-        ))}
+        )}
+        
+        {/* Contacts */}
+        <div className="space-y-1.5">
+          <label className="text-[10px] uppercase tracking-wider text-muted-foreground block">
+            Contacts
+          </label>
+          {displayContacts.map((contact, index) => (
+            <div
+              key={contact.id}
+              className="flex items-start gap-2 group"
+            >
+              <Textarea
+                value={contact.name}
+                onChange={(e) => handleContactChange(index, 'name', e.target.value)}
+                placeholder="Contact"
+                className="min-h-[28px] text-xs resize-none py-1.5 w-[25%] shrink-0 field-sizing-content"
+                rows={1}
+              />
+              <Textarea
+                value={contact.title}
+                onChange={(e) => handleContactChange(index, 'title', e.target.value)}
+                placeholder="Title"
+                className="min-h-[28px] text-xs resize-none py-1.5 w-[25%] shrink-0 field-sizing-content"
+                rows={1}
+              />
+              <Textarea
+                value={contact.notes}
+                onChange={(e) => handleContactChange(index, 'notes', e.target.value)}
+                placeholder="Notes"
+                className="min-h-[28px] text-xs resize-none py-1.5 flex-1 field-sizing-content"
+                rows={1}
+              />
+              {displayContacts.length > DEFAULT_CONTACTS_COUNT && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5"
+                  onClick={() => handleRemoveContact(index)}
+                >
+                  <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
         <Button
           variant="ghost"
           size="sm"
