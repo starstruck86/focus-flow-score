@@ -193,15 +193,45 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
     </TableCell>
   );
 
+  const ArrInput = ({ opp }: { opp: Opportunity }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [editValue, setEditValue] = useState(opp.arr?.toString() || '');
+
+    const handleBlur = () => {
+      setIsEditing(false);
+      updateOpportunity(opp.id, { arr: editValue ? Number(editValue) : undefined });
+    };
+
+    if (isEditing) {
+      return (
+        <Input
+          type="number"
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={handleBlur}
+          onKeyDown={(e) => e.key === 'Enter' && handleBlur()}
+          autoFocus
+          className="h-7 w-28 text-xs"
+        />
+      );
+    }
+
+    return (
+      <button
+        onClick={() => {
+          setEditValue(opp.arr?.toString() || '');
+          setIsEditing(true);
+        }}
+        className="h-7 w-28 text-xs text-left px-3 py-1 rounded-md border border-transparent hover:border-input"
+      >
+        {formatCurrency(opp.arr)}
+      </button>
+    );
+  };
+
   const ArrCell = ({ opp }: { opp: Opportunity }) => (
     <TableCell>
-      <Input
-        type="number"
-        value={opp.arr || ''}
-        onChange={(e) => updateOpportunity(opp.id, { arr: e.target.value ? Number(e.target.value) : undefined })}
-        placeholder="—"
-        className="h-7 w-24 text-xs"
-      />
+      <ArrInput opp={opp} />
     </TableCell>
   );
 
@@ -357,13 +387,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
               </button>
             </TableCell>
             <TableCell className="align-top py-3">
-              <Input
-                type="number"
-                value={opp.arr || ''}
-                onChange={(e) => updateOpportunity(opp.id, { arr: e.target.value ? Number(e.target.value) : undefined })}
-                placeholder="—"
-                className="h-8 w-24 text-sm"
-              />
+              <ArrInput opp={opp} />
             </TableCell>
             {showChurnRisk && (
               <TableCell className="align-top py-3">
@@ -493,13 +517,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
               </Select>
             </TableCell>
             <TableCell className="align-top py-3">
-              <Input
-                type="number"
-                value={opp.arr || ''}
-                onChange={(e) => updateOpportunity(opp.id, { arr: e.target.value ? Number(e.target.value) : undefined })}
-                placeholder="—"
-                className="h-8 w-24 text-sm"
-              />
+              <ArrInput opp={opp} />
             </TableCell>
             <TableCell className="align-top py-3">
               <EditableDatePicker
