@@ -61,9 +61,10 @@ interface OpportunitiesTableProps {
   onOpenDrawer: (opportunity: Opportunity) => void;
   renewalsOnly?: boolean;
   showChurnRisk?: boolean;
+  columnOrder?: 'default' | 'outreach';
 }
 
-export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChurnRisk = true }: OpportunitiesTableProps) {
+export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChurnRisk = true, columnOrder = 'default' }: OpportunitiesTableProps) {
   const { opportunities, renewals, updateOpportunity, deleteOpportunity, addOpportunity } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [savedView, setSavedView] = useState<SavedView>('all');
@@ -160,133 +161,188 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
     }).format(amount);
   };
 
+  // Cell components for reordering
+  const StatusCell = ({ opp }: { opp: Opportunity }) => (
+    <TableCell>
+      <Select
+        value={opp.status}
+        onValueChange={(v) => updateOpportunity(opp.id, { status: v as OpportunityStatus })}
+      >
+        <SelectTrigger className="h-7 w-28 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="active">Active</SelectItem>
+          <SelectItem value="stalled">Stalled</SelectItem>
+          <SelectItem value="closed-lost">Closed Lost</SelectItem>
+          <SelectItem value="closed-won">Closed Won</SelectItem>
+        </SelectContent>
+      </Select>
+    </TableCell>
+  );
+
+  const NameCell = ({ opp }: { opp: Opportunity }) => (
+    <TableCell>
+      <button
+        onClick={() => onOpenDrawer(opp)}
+        className="font-medium text-primary hover:underline text-left"
+      >
+        {opp.name}
+      </button>
+    </TableCell>
+  );
+
+  const ArrCell = ({ opp }: { opp: Opportunity }) => (
+    <TableCell>
+      <Input
+        type="number"
+        value={opp.arr || ''}
+        onChange={(e) => updateOpportunity(opp.id, { arr: e.target.value ? Number(e.target.value) : undefined })}
+        placeholder="—"
+        className="h-7 w-24 text-xs"
+      />
+    </TableCell>
+  );
+
+  const ChurnRiskCell = ({ opp }: { opp: Opportunity }) => (
+    <TableCell>
+      <Select
+        value={opp.churnRisk || 'none'}
+        onValueChange={(v) => updateOpportunity(opp.id, { churnRisk: (v === 'none' ? undefined : v) as ChurnRisk | undefined })}
+      >
+        <SelectTrigger className={cn("h-7 w-24 text-xs", opp.churnRisk && CHURN_RISK_COLORS[opp.churnRisk])}>
+          <SelectValue placeholder="—" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">—</SelectItem>
+          <SelectItem value="certain">Certain</SelectItem>
+          <SelectItem value="low">Low</SelectItem>
+          <SelectItem value="medium">Medium</SelectItem>
+          <SelectItem value="high">High</SelectItem>
+        </SelectContent>
+      </Select>
+    </TableCell>
+  );
+
+  const CloseDateCell = ({ opp }: { opp: Opportunity }) => (
+    <TableCell>
+      <EditableDatePicker
+        value={opp.closeDate}
+        onChange={(v) => updateOpportunity(opp.id, { closeDate: v })}
+        placeholder="—"
+        compact
+        className={cn("w-28")}
+      />
+    </TableCell>
+  );
+
+  const NextStepCell = ({ opp }: { opp: Opportunity }) => (
+    <TableCell>
+      <EditableDatePicker
+        value={opp.nextStepDate}
+        onChange={(v) => updateOpportunity(opp.id, { 
+          nextStepDate: v,
+          nextStep: v ? undefined : opp.nextStep 
+        })}
+        placeholder={opp.nextStep || '—'}
+        compact
+        className={cn(
+          "w-28",
+          opp.nextStepDate && isPast(parseISO(opp.nextStepDate)) && !isToday(parseISO(opp.nextStepDate)) && "[&_button]:border-status-red"
+        )}
+      />
+    </TableCell>
+  );
+
+  const StageCell = ({ opp }: { opp: Opportunity }) => (
+    <TableCell>
+      <Select
+        value={opp.stage || 'none'}
+        onValueChange={(v) => updateOpportunity(opp.id, { stage: (v === 'none' ? '' : v) as OpportunityStage })}
+      >
+        <SelectTrigger className="h-7 w-24 text-xs">
+          <SelectValue placeholder="—" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">—</SelectItem>
+          {STAGE_OPTIONS.filter(s => s).map(stage => (
+            <SelectItem key={stage} value={stage}>{stage}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </TableCell>
+  );
+
+  const LastTouchCell = ({ opp }: { opp: Opportunity }) => (
+    <TableCell className="text-xs text-muted-foreground">
+      {formatDate(opp.lastTouchDate)}
+    </TableCell>
+  );
+
+  const NotesCell = ({ opp }: { opp: Opportunity }) => (
+    <TableCell>
+      <Textarea
+        value={opp.notes || ''}
+        onChange={(e) => updateOpportunity(opp.id, { notes: e.target.value })}
+        placeholder="Add notes..."
+        className="min-h-[32px] h-8 text-xs resize-none py-1"
+        rows={1}
+      />
+    </TableCell>
+  );
+
+  const ActionsCell = ({ opp }: { opp: Opportunity }) => (
+    <TableCell>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover:opacity-100">
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => onOpenDrawer(opp)}>
+            Open Details
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-destructive"
+            onClick={() => deleteOpportunity(opp.id)}
+          >
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </TableCell>
+  );
+
   const renderOpportunityRow = (opp: Opportunity) => (
     <TableRow key={opp.id} className="group">
-      <TableCell>
-        <Select
-          value={opp.status}
-          onValueChange={(v) => updateOpportunity(opp.id, { status: v as OpportunityStatus })}
-        >
-          <SelectTrigger className="h-7 w-28 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="stalled">Stalled</SelectItem>
-            <SelectItem value="closed-lost">Closed Lost</SelectItem>
-            <SelectItem value="closed-won">Closed Won</SelectItem>
-          </SelectContent>
-        </Select>
-      </TableCell>
-      <TableCell>
-        <button
-          onClick={() => onOpenDrawer(opp)}
-          className="font-medium text-primary hover:underline text-left"
-        >
-          {opp.name}
-        </button>
-      </TableCell>
-      <TableCell>
-        <Input
-          type="number"
-          value={opp.arr || ''}
-          onChange={(e) => updateOpportunity(opp.id, { arr: e.target.value ? Number(e.target.value) : undefined })}
-          placeholder="—"
-          className="h-7 w-24 text-xs"
-        />
-      </TableCell>
-      {showChurnRisk && (
-        <TableCell>
-          <Select
-            value={opp.churnRisk || 'none'}
-            onValueChange={(v) => updateOpportunity(opp.id, { churnRisk: (v === 'none' ? undefined : v) as ChurnRisk | undefined })}
-          >
-            <SelectTrigger className={cn("h-7 w-24 text-xs", opp.churnRisk && CHURN_RISK_COLORS[opp.churnRisk])}>
-              <SelectValue placeholder="—" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">—</SelectItem>
-              <SelectItem value="certain">Certain</SelectItem>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-            </SelectContent>
-          </Select>
-        </TableCell>
+      {columnOrder === 'outreach' ? (
+        <>
+          <NameCell opp={opp} />
+          <StatusCell opp={opp} />
+          <StageCell opp={opp} />
+          <ArrCell opp={opp} />
+          <CloseDateCell opp={opp} />
+          <NextStepCell opp={opp} />
+          <LastTouchCell opp={opp} />
+          <NotesCell opp={opp} />
+          <ActionsCell opp={opp} />
+        </>
+      ) : (
+        <>
+          <StatusCell opp={opp} />
+          <NameCell opp={opp} />
+          <ArrCell opp={opp} />
+          {showChurnRisk && <ChurnRiskCell opp={opp} />}
+          <CloseDateCell opp={opp} />
+          <NextStepCell opp={opp} />
+          <StageCell opp={opp} />
+          <LastTouchCell opp={opp} />
+          <NotesCell opp={opp} />
+          <ActionsCell opp={opp} />
+        </>
       )}
-      <TableCell>
-        <EditableDatePicker
-          value={opp.closeDate}
-          onChange={(v) => updateOpportunity(opp.id, { closeDate: v })}
-          placeholder="—"
-          compact
-          className={cn("w-28")}
-        />
-      </TableCell>
-      <TableCell>
-        <EditableDatePicker
-          value={opp.nextStepDate}
-          onChange={(v) => updateOpportunity(opp.id, { 
-            nextStepDate: v,
-            nextStep: v ? undefined : opp.nextStep 
-          })}
-          placeholder={opp.nextStep || '—'}
-          compact
-          className={cn(
-            "w-28",
-            opp.nextStepDate && isPast(parseISO(opp.nextStepDate)) && !isToday(parseISO(opp.nextStepDate)) && "[&_button]:border-status-red"
-          )}
-        />
-      </TableCell>
-      <TableCell>
-        <Select
-          value={opp.stage || 'none'}
-          onValueChange={(v) => updateOpportunity(opp.id, { stage: (v === 'none' ? '' : v) as OpportunityStage })}
-        >
-          <SelectTrigger className="h-7 w-24 text-xs">
-            <SelectValue placeholder="—" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">—</SelectItem>
-            {STAGE_OPTIONS.filter(s => s).map(stage => (
-              <SelectItem key={stage} value={stage}>{stage}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </TableCell>
-      <TableCell className="text-xs text-muted-foreground">
-        {formatDate(opp.lastTouchDate)}
-      </TableCell>
-      <TableCell>
-        <Textarea
-          value={opp.notes || ''}
-          onChange={(e) => updateOpportunity(opp.id, { notes: e.target.value })}
-          placeholder="Add notes..."
-          className="min-h-[32px] h-8 text-xs resize-none py-1"
-          rows={1}
-        />
-      </TableCell>
-      <TableCell>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover:opacity-100">
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onOpenDrawer(opp)}>
-              Open Details
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-destructive"
-              onClick={() => deleteOpportunity(opp.id)}
-            >
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </TableCell>
     </TableRow>
   );
 
@@ -352,16 +408,32 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="w-[130px]">Status</TableHead>
-              <TableHead className="w-[200px]">Opportunity</TableHead>
-              <TableHead className="w-[100px]">ARR</TableHead>
-              {showChurnRisk && <TableHead className="w-[100px]">Churn Risk</TableHead>}
-              <TableHead className="w-[130px]">Close Date</TableHead>
-              <TableHead className="w-[130px]">Next Step</TableHead>
-              <TableHead className="w-[100px]">Stage</TableHead>
-              <TableHead className="w-[100px]">Last Touch</TableHead>
-              <TableHead className="min-w-[200px]">Notes</TableHead>
-              <TableHead className="w-[40px]"></TableHead>
+              {columnOrder === 'outreach' ? (
+                <>
+                  <TableHead className="w-[200px]">Opportunity</TableHead>
+                  <TableHead className="w-[130px]">Status</TableHead>
+                  <TableHead className="w-[100px]">Stage</TableHead>
+                  <TableHead className="w-[100px]">ARR</TableHead>
+                  <TableHead className="w-[130px]">Close Date</TableHead>
+                  <TableHead className="w-[130px]">Next Step</TableHead>
+                  <TableHead className="w-[100px]">Last Touch</TableHead>
+                  <TableHead className="min-w-[200px]">Notes</TableHead>
+                  <TableHead className="w-[40px]"></TableHead>
+                </>
+              ) : (
+                <>
+                  <TableHead className="w-[130px]">Status</TableHead>
+                  <TableHead className="w-[200px]">Opportunity</TableHead>
+                  <TableHead className="w-[100px]">ARR</TableHead>
+                  {showChurnRisk && <TableHead className="w-[100px]">Churn Risk</TableHead>}
+                  <TableHead className="w-[130px]">Close Date</TableHead>
+                  <TableHead className="w-[130px]">Next Step</TableHead>
+                  <TableHead className="w-[100px]">Stage</TableHead>
+                  <TableHead className="w-[100px]">Last Touch</TableHead>
+                  <TableHead className="min-w-[200px]">Notes</TableHead>
+                  <TableHead className="w-[40px]"></TableHead>
+                </>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
