@@ -49,13 +49,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import type { Renewal, HealthStatus } from '@/types';
+import { OpportunitiesTable } from '@/components/OpportunitiesTable';
+import { OpportunityDrawer } from '@/components/OpportunityDrawer';
+import type { Renewal, HealthStatus, Opportunity } from '@/types';
 
 const HEALTH_COLORS: Record<HealthStatus, string> = {
   green: 'bg-status-green/20 text-status-green border-status-green/30',
@@ -76,6 +79,7 @@ const VIEWS = [
 
 export default function Renewals() {
   const { renewals, addRenewal, updateRenewal, deleteRenewal, logCall, logManualEmail, logMeetingHeld } = useStore();
+  const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentView, setCurrentView] = useState('all');
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -434,8 +438,16 @@ export default function Renewals() {
               {renewals.length} renewals • {formatCurrency(renewals.reduce((sum, r) => sum + r.arr, 0))} ARR
             </p>
           </div>
+        </div>
+        
+        <Tabs defaultValue="renewals" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="renewals">Renewals</TabsTrigger>
+            <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
+          </TabsList>
           
-          <div className="flex items-center gap-2">
+          <TabsContent value="renewals">
+          <div className="flex items-center gap-2 mb-4">
             {/* Bulk Import Button */}
             <Dialog open={showBulkImportDialog} onOpenChange={(open) => {
               setShowBulkImportDialog(open);
@@ -652,7 +664,6 @@ export default function Renewals() {
             </DialogContent>
           </Dialog>
           </div>
-        </div>
 
         {/* Filters */}
         <div className="flex items-center gap-4 mb-4">
@@ -843,6 +854,17 @@ export default function Renewals() {
             </div>
           ))
         )}
+          </TabsContent>
+          
+          <TabsContent value="opportunities">
+            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} />
+          </TabsContent>
+          
+          <OpportunityDrawer
+            opportunity={selectedOpportunity}
+            onClose={() => setSelectedOpportunity(null)}
+          />
+        </Tabs>
       </div>
     </Layout>
   );
