@@ -13,6 +13,7 @@ import { RingGauge } from '@/components/RingGauge';
 import { DailyEntryForm } from '@/components/DailyEntryForm';
 import { QuickActions } from '@/components/QuickActions';
 import { FocusTimer } from '@/components/FocusTimer';
+import { CalendarWidget } from '@/components/CalendarWidget';
 import { useStore } from '@/store/useStore';
 import { getRecoveryAdvice, getStrainLabel } from '@/lib/calculations';
 import { cn } from '@/lib/utils';
@@ -212,6 +213,7 @@ export default function Dashboard() {
 
           {/* Right Column - Entry Form */}
           <div className="space-y-6">
+            <CalendarWidget />
             <QuickActions />
             <DailyEntryForm />
           </div>
