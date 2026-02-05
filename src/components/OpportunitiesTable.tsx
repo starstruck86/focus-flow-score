@@ -30,10 +30,10 @@ import {
   Plus,
   MoreHorizontal,
   Filter,
-  ChevronDown,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { cn } from '@/lib/utils';
+import { EditableDatePicker } from '@/components/EditableDatePicker';
 import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk } from '@/types';
 import { format, parseISO, isToday, isPast, isThisQuarter } from 'date-fns';
 
@@ -201,25 +201,26 @@ export function OpportunitiesTable({ onOpenDrawer }: OpportunitiesTableProps) {
         </Select>
       </TableCell>
       <TableCell>
-        <Input
-          type="date"
-          value={opp.closeDate || ''}
-          onChange={(e) => updateOpportunity(opp.id, { closeDate: e.target.value || undefined })}
-          className="h-7 w-32 text-xs"
+        <EditableDatePicker
+          value={opp.closeDate}
+          onChange={(v) => updateOpportunity(opp.id, { closeDate: v })}
+          placeholder="—"
+          compact
+          className={cn("w-28")}
         />
       </TableCell>
       <TableCell>
-        <Input
-          type="date"
-          value={opp.nextStepDate || ''}
-          onChange={(e) => updateOpportunity(opp.id, { 
-            nextStepDate: e.target.value || undefined,
-            nextStep: e.target.value ? undefined : opp.nextStep 
+        <EditableDatePicker
+          value={opp.nextStepDate}
+          onChange={(v) => updateOpportunity(opp.id, { 
+            nextStepDate: v,
+            nextStep: v ? undefined : opp.nextStep 
           })}
           placeholder={opp.nextStep || '—'}
+          compact
           className={cn(
-            "h-7 w-32 text-xs",
-            opp.nextStepDate && isPast(parseISO(opp.nextStepDate)) && !isToday(parseISO(opp.nextStepDate)) && "border-status-red"
+            "w-28",
+            opp.nextStepDate && isPast(parseISO(opp.nextStepDate)) && !isToday(parseISO(opp.nextStepDate)) && "[&_button]:border-status-red"
           )}
         />
       </TableCell>
