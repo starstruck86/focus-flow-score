@@ -95,11 +95,32 @@ export default function Renewals() {
       throw new Error('CSV must have a header row and at least one data row');
     }
     
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+    // Handle CSV with quoted fields containing commas
+    const parseCSVLine = (line: string): string[] => {
+      const result: string[] = [];
+      let current = '';
+      let inQuotes = false;
+      
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          result.push(current.trim().replace(/^"|"$/g, ''));
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      result.push(current.trim().replace(/^"|"$/g, ''));
+      return result;
+    };
+    
+    const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase());
     const parsedRenewals: Partial<Renewal>[] = [];
     
     for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+      const values = parseCSVLine(lines[i]);
       const renewal: Partial<Renewal> = {
         healthStatus: 'green',
         autoRenew: false,
@@ -107,10 +128,13 @@ export default function Renewals() {
       };
       
       headers.forEach((header, idx) => {
-        const value = values[idx];
+        const value = values[idx]?.trim();
         if (!value) return;
         
         switch (header) {
+          case '':
+            // First empty column might be quarter - skip, we calculate this
+            break;
           case 'account':
           case 'account name':
           case 'accountname':
@@ -126,7 +150,7 @@ export default function Renewals() {
           case 'arr':
           case 'revenue':
           case 'value':
-            renewal.arr = Number(value.replace(/[$,]/g, '')) || 0;
+            renewal.arr = Number(value.replace(/[$,\s]/g, '')) || 0;
             break;
           case 'renewal date':
           case 'renewaldate':
@@ -135,10 +159,22 @@ export default function Renewals() {
           case 'due date':
           case 'duedate':
           case 'date':
-            // Try to parse date
-            const dateVal = new Date(value);
-            if (!isNaN(dateVal.getTime())) {
-              renewal.renewalDue = dateVal.toISOString().split('T')[0];
+            // Handle M/D/YY format like "2/1/26"
+            const parts = value.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+            if (parts) {
+              const month = parts[1].padStart(2, '0');
+              const day = parts[2].padStart(2, '0');
+              let year = parts[3];
+              if (year.length === 2) {
+                year = parseInt(year) > 50 ? `19${year}` : `20${year}`;
+              }
+              renewal.renewalDue = `${year}-${month}-${day}`;
+            } else {
+              // Try standard date parsing
+              const dateVal = new Date(value);
+              if (!isNaN(dateVal.getTime())) {
+                renewal.renewalDue = dateVal.toISOString().split('T')[0];
+              }
             }
             break;
           case 'health':
@@ -171,7 +207,7 @@ export default function Renewals() {
           case 'planhat':
           case 'planhat link':
           case 'planhatlink':
-            renewal.planhatLink = value;
+            renewal.planhatLink = value === 'Link' ? '' : value;
             break;
           case 'cs notes':
           case 'csnotes':
@@ -187,9 +223,14 @@ export default function Renewals() {
           case 'term':
             renewal.term = value;
             break;
+          case 'entitlements - usage - term':
+            // Combined field like "2025 - 86.6M - 1yr" or "Agreement - 1YR"
+            renewal.entitlements = value;
+            break;
         }
       });
       
+      // Only add if we have account name, ARR, and renewal date
       if (renewal.accountName && renewal.arr && renewal.renewalDue) {
         parsedRenewals.push(renewal);
       }
