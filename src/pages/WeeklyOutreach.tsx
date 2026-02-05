@@ -749,25 +749,12 @@ export default function WeeklyOutreach() {
                       </Select>
                     </TableCell>
                     <TableCell>
-                      {account.website ? (
-                        <a 
-                          href={account.website} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1"
-                        >
-                          <Globe className="h-3 w-3" />
-                          {(() => {
-                            try {
-                              return new URL(account.website).hostname;
-                            } catch {
-                              return account.website;
-                            }
-                          })()}
-                        </a>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
+                      <Input
+                        value={account.website || ''}
+                        onChange={(e) => updateAccount(account.id, { website: e.target.value })}
+                        placeholder="https://..."
+                        className="h-7 text-xs"
+                      />
                     </TableCell>
                     <TableCell>
                       <Input
