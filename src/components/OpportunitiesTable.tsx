@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { cn } from '@/lib/utils';
-import type { Opportunity, OpportunityStatus, OpportunityStage } from '@/types';
+import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk } from '@/types';
 import { format, parseISO, isToday, isPast, isThisQuarter } from 'date-fns';
 
 const STATUS_COLORS: Record<OpportunityStatus, string> = {
@@ -42,6 +42,12 @@ const STATUS_COLORS: Record<OpportunityStatus, string> = {
   'stalled': 'bg-status-yellow/20 text-status-yellow',
   'closed-lost': 'bg-status-red/20 text-status-red',
   'closed-won': 'bg-green-600/20 text-green-400',
+};
+
+const CHURN_RISK_COLORS: Record<ChurnRisk, string> = {
+  'low': 'bg-status-green/20 text-status-green',
+  'medium': 'bg-status-yellow/20 text-status-yellow',
+  'high': 'bg-status-red/20 text-status-red',
 };
 
 const STATUS_ORDER: OpportunityStatus[] = ['active', 'stalled', 'closed-lost', 'closed-won'];
@@ -175,6 +181,22 @@ export function OpportunitiesTable({ onOpenDrawer }: OpportunitiesTableProps) {
           placeholder="—"
           className="h-7 w-24 text-xs"
         />
+      </TableCell>
+      <TableCell>
+        <Select
+          value={opp.churnRisk || 'none'}
+          onValueChange={(v) => updateOpportunity(opp.id, { churnRisk: (v === 'none' ? undefined : v) as ChurnRisk | undefined })}
+        >
+          <SelectTrigger className={cn("h-7 w-24 text-xs", opp.churnRisk && CHURN_RISK_COLORS[opp.churnRisk])}>
+            <SelectValue placeholder="—" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">—</SelectItem>
+            <SelectItem value="low">Low</SelectItem>
+            <SelectItem value="medium">Medium</SelectItem>
+            <SelectItem value="high">High</SelectItem>
+          </SelectContent>
+        </Select>
       </TableCell>
       <TableCell>
         <Input
@@ -316,6 +338,7 @@ export function OpportunitiesTable({ onOpenDrawer }: OpportunitiesTableProps) {
               <TableHead className="w-[130px]">Status</TableHead>
               <TableHead className="w-[200px]">Opportunity</TableHead>
               <TableHead className="w-[100px]">ARR</TableHead>
+              <TableHead className="w-[100px]">Churn Risk</TableHead>
               <TableHead className="w-[130px]">Close Date</TableHead>
               <TableHead className="w-[130px]">Next Step</TableHead>
               <TableHead className="w-[100px]">Stage</TableHead>
