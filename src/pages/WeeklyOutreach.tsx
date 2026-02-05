@@ -256,16 +256,44 @@ export default function WeeklyOutreach() {
   };
 
   const handleBulkImport = () => {
-    let successCount = 0;
+    let createdCount = 0;
+    let updatedCount = 0;
     
-    importPreview.forEach(account => {
-      if (account.name) {
-        addAccount(account as Omit<Account, 'id' | 'createdAt' | 'updatedAt' | 'touchesThisWeek'>);
-        successCount++;
+    importPreview.forEach(importAccount => {
+      if (importAccount.name) {
+        // Check if account with same name already exists (case-insensitive)
+        const existingAccount = accounts.find(
+          a => a.name.toLowerCase().trim() === importAccount.name!.toLowerCase().trim()
+        );
+        
+        if (existingAccount) {
+          // Update existing account with new data (only non-empty fields)
+          const updates: Partial<Account> = {};
+          if (importAccount.website) updates.website = importAccount.website;
+          if (importAccount.tier) updates.tier = importAccount.tier;
+          if (importAccount.accountStatus) updates.accountStatus = importAccount.accountStatus;
+          if (importAccount.marTech) updates.marTech = importAccount.marTech;
+          if (importAccount.ecommerce) updates.ecommerce = importAccount.ecommerce;
+          if (importAccount.notes) updates.notes = importAccount.notes;
+          if (importAccount.industry) updates.industry = importAccount.industry;
+          
+          if (Object.keys(updates).length > 0) {
+            updateAccount(existingAccount.id, updates);
+            updatedCount++;
+          }
+        } else {
+          // Create new account
+          addAccount(importAccount as Omit<Account, 'id' | 'createdAt' | 'updatedAt' | 'touchesThisWeek'>);
+          createdCount++;
+        }
       }
     });
     
-    toast.success(`Imported ${successCount} accounts!`);
+    const messages = [];
+    if (createdCount > 0) messages.push(`${createdCount} created`);
+    if (updatedCount > 0) messages.push(`${updatedCount} updated`);
+    toast.success(`Accounts: ${messages.join(', ')}!`);
+    
     setShowBulkImportDialog(false);
     setImportPreview([]);
     if (fileInputRef.current) {
