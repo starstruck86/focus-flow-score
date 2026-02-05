@@ -116,11 +116,19 @@ export default function Renewals() {
       return result;
     };
     
-    const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase());
+    const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().trim());
     const parsedRenewals: Partial<Renewal>[] = [];
     
     for (let i = 1; i < lines.length; i++) {
       const values = parseCSVLine(lines[i]);
+      
+      // Skip rows without an account name (sub-line items)
+      const accountNameIdx = headers.findIndex(h => 
+        h === 'account name' || h === 'account' || h === 'name' || h === 'company' || h === 'accountname'
+      );
+      const accountNameValue = accountNameIdx >= 0 ? values[accountNameIdx]?.trim() : '';
+      if (!accountNameValue) continue;
+      
       const renewal: Partial<Renewal> = {
         healthStatus: 'green',
         autoRenew: false,
@@ -150,7 +158,8 @@ export default function Renewals() {
           case 'arr':
           case 'revenue':
           case 'value':
-            renewal.arr = Number(value.replace(/[$,\s]/g, '')) || 0;
+            // Handle "USD 120,043" format and "$161,124" format
+            renewal.arr = Number(value.replace(/[$,\s]|USD/gi, '')) || 0;
             break;
           case 'renewal date':
           case 'renewaldate':
@@ -224,14 +233,27 @@ export default function Renewals() {
             renewal.term = value;
             break;
           case 'entitlements - usage - term':
-            // Combined field like "2025 - 86.6M - 1yr" or "Agreement - 1YR"
-            renewal.entitlements = value;
+            // Combined field like "2025 - 86.6M - 1yr" or "Agreement - 1YR" or "Agreement - 3YR"
+            // Try to split into parts if possible
+            const entParts = value.split(' - ').map(p => p.trim());
+            if (entParts.length >= 3) {
+              // Format: "2025 - 86.6M - 1yr"
+              renewal.entitlements = entParts[0];
+              renewal.usage = entParts[1];
+              renewal.term = entParts.slice(2).join(' - ');
+            } else if (entParts.length === 2) {
+              // Format: "Agreement - 1YR"
+              renewal.entitlements = entParts[0];
+              renewal.term = entParts[1];
+            } else {
+              renewal.entitlements = value;
+            }
             break;
         }
       });
       
-      // Only add if we have account name, ARR, and renewal date
-      if (renewal.accountName && renewal.arr && renewal.renewalDue) {
+      // Only add if we have account name and renewal date (ARR can be 0 for some rows)
+      if (renewal.accountName && renewal.renewalDue) {
         parsedRenewals.push(renewal);
       }
     }
@@ -678,23 +700,23 @@ export default function Renewals() {
                 </span>
               </div>
               
-              <div className="metric-card overflow-hidden p-0">
-                <Table>
+              <div className="metric-card overflow-x-auto p-0">
+                <Table className="min-w-[1400px]">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
-                      <TableHead className="w-[160px]">Account Name</TableHead>
-                      <TableHead className="w-[80px]">CSM</TableHead>
-                      <TableHead className="w-[90px] text-right">ARR</TableHead>
-                      <TableHead className="w-[100px]">Renewal Due</TableHead>
-                      <TableHead className="w-[90px]">Entitlements</TableHead>
-                      <TableHead className="w-[80px]">Usage</TableHead>
-                      <TableHead className="w-[70px]">Term</TableHead>
-                      <TableHead className="w-[70px]">Planhat</TableHead>
-                      <TableHead className="w-[70px] text-center">Auto-Renew</TableHead>
-                      <TableHead className="w-[90px]">Product</TableHead>
-                      <TableHead className="w-[120px]">CS Notes</TableHead>
-                      <TableHead className="w-[120px]">Next Step</TableHead>
-                      <TableHead className="w-[40px]"></TableHead>
+                      <TableHead className="min-w-[180px]">Account Name</TableHead>
+                      <TableHead className="min-w-[100px]">CSM</TableHead>
+                      <TableHead className="min-w-[100px] text-right">ARR</TableHead>
+                      <TableHead className="min-w-[100px]">Renewal Due</TableHead>
+                      <TableHead className="min-w-[100px]">Entitlements</TableHead>
+                      <TableHead className="min-w-[80px]">Usage</TableHead>
+                      <TableHead className="min-w-[80px]">Term</TableHead>
+                      <TableHead className="min-w-[80px]">Planhat</TableHead>
+                      <TableHead className="min-w-[90px] text-center">Auto-Renew</TableHead>
+                      <TableHead className="min-w-[150px]">Product</TableHead>
+                      <TableHead className="min-w-[200px]">CS Notes</TableHead>
+                      <TableHead className="min-w-[200px]">Next Step</TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -728,7 +750,7 @@ export default function Renewals() {
                             value={renewal.entitlements || ''}
                             onChange={(e) => updateRenewal(renewal.id, { entitlements: e.target.value })}
                             placeholder="—"
-                            className="h-7 text-xs"
+                            className="h-7 text-xs min-w-[90px]"
                           />
                         </TableCell>
                         <TableCell>
@@ -736,7 +758,7 @@ export default function Renewals() {
                             value={renewal.usage || ''}
                             onChange={(e) => updateRenewal(renewal.id, { usage: e.target.value })}
                             placeholder="—"
-                            className="h-7 text-xs"
+                            className="h-7 text-xs min-w-[70px]"
                           />
                         </TableCell>
                         <TableCell>
@@ -744,7 +766,7 @@ export default function Renewals() {
                             value={renewal.term || ''}
                             onChange={(e) => updateRenewal(renewal.id, { term: e.target.value })}
                             placeholder="—"
-                            className="h-7 text-xs w-16"
+                            className="h-7 text-xs min-w-[70px]"
                           />
                         </TableCell>
                         <TableCell>
