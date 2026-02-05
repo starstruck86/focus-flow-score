@@ -30,6 +30,38 @@ export type TaskCategory =
   | 'admin';
 export type TimerBlockType = 'prospecting' | 'account-research' | 'deck-creation' | 'renewal-prep';
 
+// Opportunity types
+export type OpportunityStatus = 'active' | 'stalled' | 'closed-lost' | 'closed-won';
+export type OpportunityStage = '' | 'Stage 1' | 'Stage 2' | 'Stage 3' | 'Stage 4' | 'Stage 5';
+
+// Opportunity Activity Log
+export interface OpportunityActivity {
+  id: string;
+  type: TouchType;
+  date: string;
+  notes?: string;
+}
+
+// Opportunity
+export interface Opportunity {
+  id: string;
+  name: string;
+  accountId?: string;
+  accountName?: string;
+  linkedContactIds: string[];
+  status: OpportunityStatus;
+  stage: OpportunityStage;
+  arr?: number;
+  closeDate?: string;
+  nextStep?: string;
+  nextStepDate?: string;
+  lastTouchDate?: string;
+  notes?: string;
+  activityLog: OpportunityActivity[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Daily Entry - Raw counts user enters
 export interface DailyRawInputs {
   prospectsAddedToCadence: number;
