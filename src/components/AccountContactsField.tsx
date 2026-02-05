@@ -87,43 +87,40 @@ export function AccountContactsField({ contacts, onChange }: AccountContactsFiel
           </span>
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="pt-2 space-y-2">
+      <CollapsibleContent className="pt-2 space-y-1.5">
         {displayContacts.map((contact, index) => (
           <div
             key={contact.id}
-            className="p-2 bg-muted/30 rounded-md space-y-1.5 group relative"
+            className="flex items-center gap-2 group"
           >
-            <div className="flex items-center gap-2">
-              <Input
-                value={contact.name}
-                onChange={(e) => handleContactChange(index, 'name', e.target.value)}
-                placeholder="Contact name"
-                className="h-6 text-xs flex-1"
-              />
-              {displayContacts.length > DEFAULT_CONTACTS_COUNT && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                  onClick={() => handleRemoveContact(index)}
-                >
-                  <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
-                </Button>
-              )}
-            </div>
+            <Input
+              value={contact.name}
+              onChange={(e) => handleContactChange(index, 'name', e.target.value)}
+              placeholder="Contact"
+              className="h-6 text-xs w-[100px] shrink-0"
+            />
             <Input
               value={contact.title}
               onChange={(e) => handleContactChange(index, 'title', e.target.value)}
               placeholder="Title"
-              className="h-6 text-xs"
+              className="h-6 text-xs w-[100px] shrink-0"
             />
-            <Textarea
+            <Input
               value={contact.notes}
               onChange={(e) => handleContactChange(index, 'notes', e.target.value)}
-              placeholder="Notes..."
-              className="min-h-[24px] h-6 text-xs resize-none py-1"
-              rows={1}
+              placeholder="Notes"
+              className="h-6 text-xs flex-1 min-w-[80px]"
             />
+            {displayContacts.length > DEFAULT_CONTACTS_COUNT && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                onClick={() => handleRemoveContact(index)}
+              >
+                <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+              </Button>
+            )}
           </div>
         ))}
         <Button
