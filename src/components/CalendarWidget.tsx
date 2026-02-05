@@ -2,25 +2,37 @@ import { Calendar, RefreshCw, Clock, MapPin } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { useCalendarEvents, useSyncCalendar } from '@/hooks/useCalendarEvents';
-import { format, isToday, isTomorrow, parseISO } from 'date-fns';
+import { format, parseISO, isToday, isTomorrow } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
 import { cn } from '@/lib/utils';
+
+const TIMEZONE = 'America/New_York';
 
 export function CalendarWidget() {
   const { data: events, isLoading } = useCalendarEvents();
   const syncMutation = useSyncCalendar();
 
   const formatEventTime = (startTime: string, allDay: boolean) => {
-    const date = parseISO(startTime);
+    const utcDate = parseISO(startTime);
+    const estDate = toZonedTime(utcDate, TIMEZONE);
+    
+    // For day comparison, we need EST date
+    const today = toZonedTime(new Date(), TIMEZONE);
+    const isSameDay = estDate.toDateString() === today.toDateString();
+    
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const isTomorrowDay = estDate.toDateString() === tomorrow.toDateString();
     
     if (allDay) {
-      if (isToday(date)) return 'Today (All Day)';
-      if (isTomorrow(date)) return 'Tomorrow (All Day)';
-      return format(date, 'EEE, MMM d') + ' (All Day)';
+      if (isSameDay) return 'Today (All Day)';
+      if (isTomorrowDay) return 'Tomorrow (All Day)';
+      return format(estDate, 'EEE, MMM d') + ' (All Day)';
     }
     
-    if (isToday(date)) return `Today, ${format(date, 'h:mm a')}`;
-    if (isTomorrow(date)) return `Tomorrow, ${format(date, 'h:mm a')}`;
-    return format(date, 'EEE, MMM d, h:mm a');
+    if (isSameDay) return `Today, ${format(estDate, 'h:mm a')}`;
+    if (isTomorrowDay) return `Tomorrow, ${format(estDate, 'h:mm a')}`;
+    return format(estDate, 'EEE, MMM d, h:mm a');
   };
 
   return (
