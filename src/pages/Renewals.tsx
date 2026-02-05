@@ -850,13 +850,15 @@ export default function Renewals() {
                             />
                           </TableCell>
                           <TableCell className="align-top py-3">
-                            <Textarea
-                              value={renewal.nextStep || ''}
-                              onChange={(e) => updateRenewal(renewal.id, { nextStep: e.target.value })}
-                              placeholder="Next step..."
-                              className="min-h-[36px] text-sm resize-none py-2 px-3 field-sizing-content"
-                              rows={1}
-                            />
+                            <div className="whitespace-pre-wrap break-words text-sm min-h-[36px]">
+                              <Textarea
+                                value={renewal.nextStep || ''}
+                                onChange={(e) => updateRenewal(renewal.id, { nextStep: e.target.value })}
+                                placeholder="Next step..."
+                                className="min-h-[36px] text-sm resize-none py-2 px-3 w-full"
+                                style={{ fieldSizing: 'content' } as React.CSSProperties}
+                              />
+                            </div>
                           </TableCell>
                           <TableCell className="align-top py-3">
                             <DropdownMenu>
