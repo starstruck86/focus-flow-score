@@ -516,6 +516,9 @@ export default function WeeklyOutreach() {
           </div>
         </div>
 
+        {/* Stage Summary - Visible on both tabs */}
+        <OpportunitiesStageSummary />
+
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'accounts' | 'opportunities')} className="space-y-4">
           <TabsList className="grid w-full max-w-xs grid-cols-2">
@@ -919,8 +922,6 @@ export default function WeeklyOutreach() {
 
           {/* Opportunities Tab */}
           <TabsContent value="opportunities" className="space-y-4">
-            {/* Stage Summary */}
-            <OpportunitiesStageSummary />
             <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} />
           </TabsContent>
         </Tabs>
