@@ -1,0 +1,219 @@
+// Quota Compass Type Definitions
+
+export type FocusMode = 'new-logo' | 'expansion' | 'balanced';
+export type DistractionLevel = 'low' | 'medium' | 'high';
+export type ContextSwitchingLevel = 'low' | 'medium' | 'high';
+export type Priority = 'P0' | 'P1' | 'P2' | 'P3';
+export type Motion = 'new-logo' | 'expansion' | 'renewal';
+export type TaskStatus = 'open' | 'in-progress' | 'blocked' | 'done';
+export type HealthStatus = 'green' | 'yellow' | 'red';
+export type OutreachStatus = 
+  | 'not-started' 
+  | 'in-progress' 
+  | 'working' 
+  | 'nurture' 
+  | 'meeting-set' 
+  | 'opp-open' 
+  | 'closed-won' 
+  | 'closed-lost';
+export type TouchType = 'call' | 'manual-email' | 'automated-email' | 'meeting' | 'linkedin' | 'other';
+export type TaskCategory = 
+  | 'call' 
+  | 'manual-email' 
+  | 'automated-email' 
+  | 'research' 
+  | 'deck' 
+  | 'meeting-prep' 
+  | 'proposal' 
+  | 'admin';
+export type TimerBlockType = 'prospecting' | 'account-research' | 'deck-creation' | 'renewal-prep';
+
+// Daily Entry - Raw counts user enters
+export interface DailyRawInputs {
+  prospectsAddedToCadence: number;
+  coldCallsWithConversations: number;
+  emailsInMailsToManager: number;
+  initialMeetingsSet: number;
+  opportunitiesCreated: number;
+  personalDevelopment: 0 | 1;
+}
+
+// Additional Daily Inputs
+export interface DailyActivityInputs {
+  dials: number;
+  emailsTotal: number;
+  automatedPercent: 0 | 25 | 50 | 75 | 100;
+  execManagerOutreach: number; // 0-5
+  customerMeetingsHeld: number;
+  accountDeepWorkMinutes: number; // 0-180
+  prospectingBlockMinutes: number; // 0-180
+  expansionTouchpoints: number;
+  focusMode: FocusMode;
+}
+
+// Recovery Journal Inputs
+export interface RecoveryInputs {
+  energy: number; // 1-5
+  focusQuality: number; // 1-5
+  stress: number; // 1-5
+  sleepHours: number;
+  distractions: DistractionLevel;
+  adminHeavyDay: boolean;
+  travelDay: boolean;
+  clarity: number; // 1-5
+  contextSwitching: ContextSwitchingLevel;
+  meetingMinutes?: number; // Optional, from calendar
+}
+
+// Calculated Daily Scores
+export interface DailyScores {
+  dailyScore: number; // Sum of daily points, goal: 8
+  weeklyAverage: number;
+  goalMet: boolean;
+  streak: number;
+  salesStrain: number; // 0-21
+  strainBand: 'low' | 'moderate' | 'high' | 'very-high';
+  strainContributors: Array<{ name: string; value: number }>;
+  salesRecovery: number; // 0-100
+  recoveryBand: 'green' | 'yellow' | 'red';
+  recoveryDrivers: Array<{ name: string; value: number }>;
+  salesProductivity: number; // 0-100
+  effortQuality: 'low' | 'medium' | 'high';
+}
+
+// Complete Day Entry
+export interface DayEntry {
+  id: string;
+  date: string; // ISO date string YYYY-MM-DD
+  rawInputs: DailyRawInputs;
+  activityInputs: DailyActivityInputs;
+  recoveryInputs: RecoveryInputs;
+  scores: DailyScores;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Focus Timer Block
+export interface FocusBlock {
+  id: string;
+  date: string;
+  startTime: string;
+  endTime?: string;
+  durationMinutes: number;
+  type: TimerBlockType;
+  accountId?: string;
+  completed: boolean;
+  notes?: string;
+}
+
+// Account for Weekly Outreach
+export interface Account {
+  id: string;
+  name: string;
+  website?: string;
+  industry?: string;
+  priority: 'high' | 'medium' | 'low';
+  motion: Motion | 'both';
+  salesforceLink?: string;
+  techStack: string[];
+  techStackNotes?: string;
+  techFitFlag: 'good' | 'watch' | 'disqualify';
+  outreachStatus: OutreachStatus;
+  cadenceName?: string;
+  lastTouchDate?: string;
+  lastTouchType?: TouchType;
+  touchesThisWeek: number;
+  nextStep?: string;
+  nextTouchDue?: string;
+  notes?: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Contact
+export interface Contact {
+  id: string;
+  accountId: string;
+  name: string;
+  title?: string;
+  department?: string;
+  seniority?: string;
+  email?: string;
+  linkedInUrl?: string;
+  salesforceLink?: string;
+  status: 'target' | 'engaged' | 'unresponsive' | 'not-fit';
+  lastTouchDate?: string;
+  preferredChannel?: TouchType;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Renewal
+export interface Renewal {
+  id: string;
+  accountName: string;
+  csm?: string;
+  arr: number;
+  renewalDue: string; // ISO date
+  daysToRenewal: number; // Calculated
+  renewalQuarter: string; // e.g., "Q1 2026"
+  entitlementsUsageTerm?: string;
+  planhatLink?: string;
+  autoRenew: boolean;
+  product?: string;
+  csNotes?: string;
+  nextStep?: string;
+  healthStatus: HealthStatus;
+  riskReason?: string;
+  renewalStage?: string;
+  owner: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Task
+export interface Task {
+  id: string;
+  title: string;
+  priority: Priority;
+  dueDate: string;
+  status: TaskStatus;
+  motion: Motion;
+  linkedAccountId: string;
+  linkedContactId?: string;
+  category: TaskCategory;
+  estimatedMinutes?: number;
+  notes?: string;
+  subtasks: Array<{ id: string; title: string; completed: boolean }>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Time Range for global selector
+export type TimeRange = 
+  | 'today'
+  | 'last-7-days'
+  | 'last-30-days'
+  | 'mtd'
+  | 'qtd'
+  | 'last-6-months'
+  | 'ytd'
+  | 'last-12-months'
+  | 'all-time'
+  | { type: 'custom'; start: string; end: string };
+
+// Timer State
+export interface TimerState {
+  isRunning: boolean;
+  isPaused: boolean;
+  totalSeconds: number;
+  remainingSeconds: number;
+  blockType: TimerBlockType;
+  accountId?: string;
+  breakMode: boolean;
+  breakDuration: number;
+  repeatEnabled: boolean;
+}
