@@ -718,6 +718,7 @@ export default function Renewals() {
                       <TableHead className="min-w-[180px]">Account Name</TableHead>
                       <TableHead className="min-w-[100px]">CSM</TableHead>
                       <TableHead className="min-w-[100px] text-right">ARR</TableHead>
+                      <TableHead className="min-w-[100px]">Churn Risk</TableHead>
                       <TableHead className="min-w-[100px]">Renewal Due</TableHead>
                       <TableHead className="min-w-[100px]">Entitlements</TableHead>
                       <TableHead className="min-w-[80px]">Usage</TableHead>
@@ -746,6 +747,21 @@ export default function Renewals() {
                         </TableCell>
                         <TableCell className="text-right font-mono text-sm">
                           {formatCurrency(renewal.arr)}
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={renewal.healthStatus}
+                            onValueChange={(v) => updateRenewal(renewal.id, { healthStatus: v as HealthStatus })}
+                          >
+                            <SelectTrigger className={cn("h-7 w-24 text-xs", HEALTH_COLORS[renewal.healthStatus])}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="green">Low</SelectItem>
+                              <SelectItem value="yellow">Medium</SelectItem>
+                              <SelectItem value="red">High</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </TableCell>
                         <TableCell>
                           <span className={cn(
