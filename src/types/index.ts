@@ -143,6 +143,14 @@ export interface FocusBlock {
   notes?: string;
 }
 
+// Account Contact for nested contacts field
+export interface AccountContact {
+  id: string;
+  name: string;
+  title: string;
+  notes: string;
+}
+
 // Account for Weekly Outreach
 export interface Account {
   id: string;
@@ -167,6 +175,7 @@ export interface Account {
   notes?: string;
   marTech?: string;
   ecommerce?: string;
+  accountContacts?: AccountContact[];
   tags: string[];
   createdAt: string;
   updatedAt: string;
