@@ -941,97 +941,86 @@ export default function WeeklyOutreach() {
                           <Table>
                             <TableHeader>
                               <TableRow className="hover:bg-transparent">
-                                <TableHead className="w-[180px]">Account</TableHead>
+                                <TableHead className="min-w-[280px]">Account</TableHead>
                                 <TableHead className="w-[70px]">Tier</TableHead>
                                 <TableHead className="w-[140px]">Website</TableHead>
                                 <TableHead className="w-[120px]">MarTech</TableHead>
                                 <TableHead className="w-[120px]">Ecommerce</TableHead>
-                                <TableHead className="min-w-[180px]">Notes</TableHead>
                                 <TableHead className="w-[40px]"></TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
                               {statusAccounts.map((account) => {
-                                const filledContactsCount = (account.accountContacts || []).filter(c => c.name.trim()).length;
                                 return (
-                                  <>
-                                    <TableRow key={account.id}>
-                                      <TableCell>
-                                        <div className="font-medium">{account.name}</div>
-                                        <div className="mt-1">
-                                          <AccountContactsField
-                                            contacts={account.accountContacts || []}
-                                            onChange={(contacts) => updateAccount(account.id, { accountContacts: contacts })}
-                                          />
-                                        </div>
-                                      </TableCell>
-                                      <TableCell className="align-top pt-4">
-                                        <Select
-                                          value={account.tier || 'B'}
-                                          onValueChange={(v) => updateAccount(account.id, { tier: v as AccountTier })}
-                                        >
-                                          <SelectTrigger className="h-7 w-14 text-xs">
-                                            <SelectValue />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="A">A</SelectItem>
-                                            <SelectItem value="B">B</SelectItem>
-                                            <SelectItem value="C">C</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                      </TableCell>
-                                      <TableCell className="align-top pt-4">
-                                        <WebsiteCell
-                                          website={account.website || ''}
-                                          onChange={(value) => updateAccount(account.id, { website: value })}
+                                  <TableRow key={account.id}>
+                                    <TableCell>
+                                      <div className="font-medium">{account.name}</div>
+                                      <div className="mt-1">
+                                        <AccountContactsField
+                                          contacts={account.accountContacts || []}
+                                          onChange={(contacts) => updateAccount(account.id, { accountContacts: contacts })}
+                                          companyNotes={account.notes || ''}
+                                          onCompanyNotesChange={(notes) => updateAccount(account.id, { notes })}
                                         />
-                                      </TableCell>
-                                      <TableCell className="align-top pt-4">
-                                        <Input
-                                          value={account.marTech || ''}
-                                          onChange={(e) => updateAccount(account.id, { marTech: e.target.value })}
-                                          placeholder="—"
-                                          className="h-7 text-xs"
-                                        />
-                                      </TableCell>
-                                      <TableCell className="align-top pt-4">
-                                        <Input
-                                          value={account.ecommerce || ''}
-                                          onChange={(e) => updateAccount(account.id, { ecommerce: e.target.value })}
-                                          placeholder="—"
-                                          className="h-7 text-xs"
-                                        />
-                                      </TableCell>
-                                      <TableCell className="align-top pt-4">
-                                        <Textarea
-                                          value={account.notes || ''}
-                                          onChange={(e) => updateAccount(account.id, { notes: e.target.value })}
-                                          placeholder="Add notes..."
-                                          className="min-h-[32px] h-8 text-xs resize-none py-1"
-                                          rows={1}
-                                        />
-                                      </TableCell>
-                                      <TableCell className="align-top pt-4">
-                                        <DropdownMenu>
-                                          <DropdownMenuTrigger asChild>
-                                            <Button size="icon" variant="ghost" className="h-7 w-7">
-                                              <MoreHorizontal className="h-4 w-4" />
-                                            </Button>
-                                          </DropdownMenuTrigger>
-                                          <DropdownMenuContent align="end">
-                                            <DropdownMenuItem>Edit Account</DropdownMenuItem>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem 
-                                              className="text-destructive"
-                                              onClick={() => deleteAccount(account.id)}
-                                            >
-                                              Delete
-                                            </DropdownMenuItem>
-                                          </DropdownMenuContent>
-                                        </DropdownMenu>
-                                      </TableCell>
-                                    </TableRow>
-                                  </>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="align-top pt-4">
+                                      <Select
+                                        value={account.tier || 'B'}
+                                        onValueChange={(v) => updateAccount(account.id, { tier: v as AccountTier })}
+                                      >
+                                        <SelectTrigger className="h-7 w-14 text-xs">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="A">A</SelectItem>
+                                          <SelectItem value="B">B</SelectItem>
+                                          <SelectItem value="C">C</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </TableCell>
+                                    <TableCell className="align-top pt-4">
+                                      <WebsiteCell
+                                        website={account.website || ''}
+                                        onChange={(value) => updateAccount(account.id, { website: value })}
+                                      />
+                                    </TableCell>
+                                    <TableCell className="align-top pt-4">
+                                      <Input
+                                        value={account.marTech || ''}
+                                        onChange={(e) => updateAccount(account.id, { marTech: e.target.value })}
+                                        placeholder="—"
+                                        className="h-7 text-xs"
+                                      />
+                                    </TableCell>
+                                    <TableCell className="align-top pt-4">
+                                      <Input
+                                        value={account.ecommerce || ''}
+                                        onChange={(e) => updateAccount(account.id, { ecommerce: e.target.value })}
+                                        placeholder="—"
+                                        className="h-7 text-xs"
+                                      />
+                                    </TableCell>
+                                    <TableCell className="align-top pt-4">
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <Button size="icon" variant="ghost" className="h-7 w-7">
+                                            <MoreHorizontal className="h-4 w-4" />
+                                          </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                          <DropdownMenuItem>Edit Account</DropdownMenuItem>
+                                          <DropdownMenuSeparator />
+                                          <DropdownMenuItem 
+                                            className="text-destructive"
+                                            onClick={() => deleteAccount(account.id)}
+                                          >
+                                            Delete
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    </TableCell>
+                                  </TableRow>
                                 );
                               })}
                             </TableBody>
