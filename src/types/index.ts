@@ -166,7 +166,9 @@ export interface Renewal {
   renewalDue: string; // ISO date
   daysToRenewal: number; // Calculated
   renewalQuarter: string; // e.g., "Q1 2026"
-  entitlementsUsageTerm?: string;
+  entitlements?: string;
+  usage?: string;
+  term?: string;
   planhatLink?: string;
   autoRenew: boolean;
   product?: string;
