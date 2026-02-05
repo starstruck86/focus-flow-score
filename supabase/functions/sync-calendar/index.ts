@@ -15,16 +15,21 @@ interface CalendarEvent {
   all_day: boolean;
 }
 
-function parseICSDate(dateStr: string): { date: Date; allDay: boolean } {
-  // Remove any parameters like TZID
-  const cleanDate = dateStr.split(':').pop() || dateStr;
+function parseICSDate(dateStr: string, keyPart: string): { date: Date; allDay: boolean } {
+  // Extract timezone from TZID parameter if present (e.g., DTSTART;TZID=America/New_York:20260206T100000)
+  const tzidMatch = keyPart.match(/TZID=([^;:]+)/i);
+  const timezone = tzidMatch ? tzidMatch[1] : null;
+  
+  // Get the actual date value after the colon
+  const cleanDate = dateStr;
   
   // Check if it's an all-day event (YYYYMMDD format, no time)
   if (cleanDate.length === 8) {
     const year = parseInt(cleanDate.slice(0, 4));
     const month = parseInt(cleanDate.slice(4, 6)) - 1;
     const day = parseInt(cleanDate.slice(6, 8));
-    return { date: new Date(year, month, day), allDay: true };
+    // All-day events: treat as midnight UTC
+    return { date: new Date(Date.UTC(year, month, day, 0, 0, 0)), allDay: true };
   }
   
   // Full datetime format: YYYYMMDDTHHMMSS or YYYYMMDDTHHMMSSZ
@@ -35,11 +40,35 @@ function parseICSDate(dateStr: string): { date: Date; allDay: boolean } {
   const minute = parseInt(cleanDate.slice(11, 13)) || 0;
   const second = parseInt(cleanDate.slice(13, 15)) || 0;
   
+  // If ends with Z, it's already UTC
   if (cleanDate.endsWith('Z')) {
     return { date: new Date(Date.UTC(year, month, day, hour, minute, second)), allDay: false };
   }
   
-  return { date: new Date(year, month, day, hour, minute, second), allDay: false };
+  // If timezone is specified (usually America/New_York for EST/EDT), convert to UTC
+  // EST is UTC-5, EDT is UTC-4
+  if (timezone && (timezone.includes('Eastern') || timezone.includes('New_York'))) {
+    // Determine if DST is in effect (rough approximation: March-November)
+    const tempDate = new Date(year, month, day);
+    const isDST = month >= 2 && month <= 10; // March through November
+    const offsetHours = isDST ? 4 : 5; // EDT = -4, EST = -5
+    
+    return { 
+      date: new Date(Date.UTC(year, month, day, hour + offsetHours, minute, second)), 
+      allDay: false 
+    };
+  }
+  
+  // Default: assume the time is in Eastern timezone (EST/EDT)
+  // Most Outlook calendars use Eastern time
+  const tempDate = new Date(year, month, day);
+  const isDST = month >= 2 && month <= 10;
+  const offsetHours = isDST ? 4 : 5;
+  
+  return { 
+    date: new Date(Date.UTC(year, month, day, hour + offsetHours, minute, second)), 
+    allDay: false 
+  };
 }
 
 function parseICS(icsContent: string): CalendarEvent[] {
@@ -97,12 +126,12 @@ function parseICS(icsContent: string): CalendarEvent[] {
           currentEvent.description = value.replace(/\\n/g, '\n').replace(/\\,/g, ',');
           break;
         case 'DTSTART':
-          const start = parseICSDate(value);
+          const start = parseICSDate(value, keyPart);
           currentEvent.start_time = start.date.toISOString();
           allDay = start.allDay;
           break;
         case 'DTEND':
-          const end = parseICSDate(value);
+          const end = parseICSDate(value, keyPart);
           currentEvent.end_time = end.date.toISOString();
           break;
         case 'LOCATION':
