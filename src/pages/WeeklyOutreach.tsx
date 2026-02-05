@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { 
   ExternalLink, 
   Plus, 
@@ -952,75 +952,80 @@ export default function WeeklyOutreach() {
                             <TableBody>
                               {statusAccounts.map((account) => {
                                 return (
-                                  <TableRow key={account.id}>
-                                    <TableCell>
-                                      <div className="font-medium">{account.name}</div>
-                                      <div className="mt-1">
+                                  <React.Fragment key={account.id}>
+                                    <TableRow>
+                                      <TableCell>
+                                        <div className="font-medium">{account.name}</div>
+                                      </TableCell>
+                                      <TableCell>
+                                        <Select
+                                          value={account.tier || 'B'}
+                                          onValueChange={(v) => updateAccount(account.id, { tier: v as AccountTier })}
+                                        >
+                                          <SelectTrigger className="h-7 w-14 text-xs">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="A">A</SelectItem>
+                                            <SelectItem value="B">B</SelectItem>
+                                            <SelectItem value="C">C</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </TableCell>
+                                      <TableCell>
+                                        <WebsiteCell
+                                          website={account.website || ''}
+                                          onChange={(value) => updateAccount(account.id, { website: value })}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <Input
+                                          value={account.marTech || ''}
+                                          onChange={(e) => updateAccount(account.id, { marTech: e.target.value })}
+                                          placeholder="—"
+                                          className="h-7 text-xs"
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <Input
+                                          value={account.ecommerce || ''}
+                                          onChange={(e) => updateAccount(account.id, { ecommerce: e.target.value })}
+                                          placeholder="—"
+                                          className="h-7 text-xs"
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <DropdownMenu>
+                                          <DropdownMenuTrigger asChild>
+                                            <Button size="icon" variant="ghost" className="h-7 w-7">
+                                              <MoreHorizontal className="h-4 w-4" />
+                                            </Button>
+                                          </DropdownMenuTrigger>
+                                          <DropdownMenuContent align="end">
+                                            <DropdownMenuItem>Edit Account</DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem 
+                                              className="text-destructive"
+                                              onClick={() => deleteAccount(account.id)}
+                                            >
+                                              Delete
+                                            </DropdownMenuItem>
+                                          </DropdownMenuContent>
+                                        </DropdownMenu>
+                                      </TableCell>
+                                    </TableRow>
+                                    {/* Contacts row spans full width */}
+                                    <TableRow className="hover:bg-transparent border-b-2">
+                                      <TableCell colSpan={6} className="pt-0 pb-3">
                                         <AccountContactsField
                                           contacts={account.accountContacts || []}
                                           onChange={(contacts) => updateAccount(account.id, { accountContacts: contacts })}
                                           companyNotes={account.notes || ''}
                                           onCompanyNotesChange={(notes) => updateAccount(account.id, { notes })}
                                         />
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="align-top pt-4">
-                                      <Select
-                                        value={account.tier || 'B'}
-                                        onValueChange={(v) => updateAccount(account.id, { tier: v as AccountTier })}
-                                      >
-                                        <SelectTrigger className="h-7 w-14 text-xs">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="A">A</SelectItem>
-                                          <SelectItem value="B">B</SelectItem>
-                                          <SelectItem value="C">C</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    </TableCell>
-                                    <TableCell className="align-top pt-4">
-                                      <WebsiteCell
-                                        website={account.website || ''}
-                                        onChange={(value) => updateAccount(account.id, { website: value })}
-                                      />
-                                    </TableCell>
-                                    <TableCell className="align-top pt-4">
-                                      <Input
-                                        value={account.marTech || ''}
-                                        onChange={(e) => updateAccount(account.id, { marTech: e.target.value })}
-                                        placeholder="—"
-                                        className="h-7 text-xs"
-                                      />
-                                    </TableCell>
-                                    <TableCell className="align-top pt-4">
-                                      <Input
-                                        value={account.ecommerce || ''}
-                                        onChange={(e) => updateAccount(account.id, { ecommerce: e.target.value })}
-                                        placeholder="—"
-                                        className="h-7 text-xs"
-                                      />
-                                    </TableCell>
-                                    <TableCell className="align-top pt-4">
-                                      <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                          <Button size="icon" variant="ghost" className="h-7 w-7">
-                                            <MoreHorizontal className="h-4 w-4" />
-                                          </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                          <DropdownMenuItem>Edit Account</DropdownMenuItem>
-                                          <DropdownMenuSeparator />
-                                          <DropdownMenuItem 
-                                            className="text-destructive"
-                                            onClick={() => deleteAccount(account.id)}
-                                          >
-                                            Delete
-                                          </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                      </DropdownMenu>
-                                    </TableCell>
-                                  </TableRow>
+                                      </TableCell>
+                                    </TableRow>
+                                  </React.Fragment>
                                 );
                               })}
                             </TableBody>
