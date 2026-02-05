@@ -14,7 +14,9 @@ import {
   Building2,
   Upload,
   FileSpreadsheet,
-  Download
+  Download,
+  Pencil,
+  Users
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
@@ -99,6 +101,79 @@ const TIER_COLORS: Record<AccountTier, string> = {
   'B': 'border-status-yellow text-status-yellow',
   'C': 'border-muted-foreground text-muted-foreground',
 };
+
+// Website cell with edit toggle
+function WebsiteCell({ website, onChange }: { website: string; onChange: (value: string) => void }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(website);
+
+  const handleSave = () => {
+    onChange(editValue);
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSave();
+    } else if (e.key === 'Escape') {
+      setEditValue(website);
+      setIsEditing(false);
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <Input
+        value={editValue}
+        onChange={(e) => setEditValue(e.target.value)}
+        onBlur={handleSave}
+        onKeyDown={handleKeyDown}
+        placeholder="https://..."
+        className="h-7 text-xs"
+        autoFocus
+      />
+    );
+  }
+
+  if (!website) {
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 text-xs text-muted-foreground"
+        onClick={() => setIsEditing(true)}
+      >
+        <Plus className="h-3 w-3 mr-1" />
+        Add
+      </Button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <a
+        href={website.startsWith('http') ? website : `https://${website}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-xs text-primary hover:underline truncate max-w-[80px]"
+        title={website}
+      >
+        {website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+      </a>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-5 w-5 shrink-0"
+        onClick={() => {
+          setEditValue(website);
+          setIsEditing(true);
+        }}
+      >
+        <Pencil className="h-3 w-3" />
+      </Button>
+    </div>
+  );
+}
 
 export default function WeeklyOutreach() {
   const { accounts, addAccount, updateAccount, deleteAccount, logCall, logManualEmail, logAutomatedEmail, logMeetingHeld } = useStore();
@@ -701,17 +776,18 @@ export default function WeeklyOutreach() {
                 <TableHead className="w-[180px]">Account</TableHead>
                 <TableHead className="w-[70px]">Tier</TableHead>
                 <TableHead className="w-[140px]">Status</TableHead>
-                <TableHead className="w-[120px]">Website</TableHead>
+                <TableHead className="w-[140px]">Website</TableHead>
                 <TableHead className="w-[120px]">MarTech</TableHead>
                 <TableHead className="w-[120px]">Ecommerce</TableHead>
-                <TableHead className="min-w-[200px]">Notes</TableHead>
+                <TableHead className="min-w-[180px]">Contacts</TableHead>
+                <TableHead className="min-w-[180px]">Notes</TableHead>
                 <TableHead className="w-[40px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredAccounts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                     {accounts.length === 0 
                       ? "No accounts yet. Add your first account to get started!"
                       : "No accounts match your filters."}
@@ -756,11 +832,9 @@ export default function WeeklyOutreach() {
                       </Select>
                     </TableCell>
                     <TableCell>
-                      <Input
-                        value={account.website || ''}
-                        onChange={(e) => updateAccount(account.id, { website: e.target.value })}
-                        placeholder="https://..."
-                        className="h-7 text-xs"
+                      <WebsiteCell
+                        website={account.website || ''}
+                        onChange={(value) => updateAccount(account.id, { website: value })}
                       />
                     </TableCell>
                     <TableCell>
@@ -781,9 +855,18 @@ export default function WeeklyOutreach() {
                     </TableCell>
                     <TableCell>
                       <Textarea
+                        value={account.techStackNotes || ''}
+                        onChange={(e) => updateAccount(account.id, { techStackNotes: e.target.value })}
+                        placeholder="Contact names & notes..."
+                        className="min-h-[32px] h-8 text-xs resize-none py-1"
+                        rows={1}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Textarea
                         value={account.notes || ''}
                         onChange={(e) => updateAccount(account.id, { notes: e.target.value })}
-                        placeholder="Add notes or links..."
+                        placeholder="Add notes..."
                         className="min-h-[32px] h-8 text-xs resize-none py-1"
                         rows={1}
                       />
