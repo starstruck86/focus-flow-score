@@ -14,9 +14,9 @@ import { FocusTimer } from './FocusTimer';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/tasks', label: 'Tasks', icon: CheckSquare },
   { to: '/outreach', label: 'Weekly Outreach', icon: Users },
   { to: '/renewals', label: 'Renewals', icon: RefreshCw },
-  { to: '/tasks', label: 'Tasks', icon: CheckSquare },
   { to: '/trends', label: 'Trends', icon: TrendingUp },
   { to: '/quota', label: 'Quota', icon: DollarSign },
 ];
