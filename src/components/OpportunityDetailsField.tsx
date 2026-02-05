@@ -15,8 +15,6 @@ import { parseISO, isPast, isToday } from 'date-fns';
 interface OpportunityDetailsFieldProps {
   nextStepDate?: string;
   onNextStepDateChange?: (value: string | undefined) => void;
-  nextStep?: string;
-  onNextStepChange?: (value: string) => void;
   lastTouchDate?: string;
   onLastTouchDateChange?: (value: string | undefined) => void;
   notes?: string;
@@ -26,8 +24,6 @@ interface OpportunityDetailsFieldProps {
 export function OpportunityDetailsField({
   nextStepDate,
   onNextStepDateChange,
-  nextStep,
-  onNextStepChange,
   lastTouchDate,
   onLastTouchDateChange,
   notes,
@@ -35,7 +31,7 @@ export function OpportunityDetailsField({
 }: OpportunityDetailsFieldProps) {
   const [isOpen, setIsOpen] = useState(false);
 
-  const hasDetails = nextStepDate || nextStep || lastTouchDate || notes;
+  const hasDetails = nextStepDate || lastTouchDate || notes;
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -59,7 +55,7 @@ export function OpportunityDetailsField({
       </CollapsibleTrigger>
       <CollapsibleContent className="pt-3 space-y-4">
         {/* Row 1: Next Step Date, Last Touch Date */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           <div>
             <Label className="text-xs font-medium text-muted-foreground mb-1.5 block">
               Next Step Date
@@ -83,18 +79,6 @@ export function OpportunityDetailsField({
               onChange={(v) => onLastTouchDateChange?.(v)}
               placeholder="Select date..."
               className="w-full"
-            />
-          </div>
-          <div>
-            <Label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-              Next Step
-            </Label>
-            <Textarea
-              value={nextStep || ''}
-              onChange={(e) => onNextStepChange?.(e.target.value)}
-              placeholder="Describe next step..."
-              className="min-h-[36px] text-sm resize-none py-2 px-3 w-full"
-              style={{ fieldSizing: 'content' } as React.CSSProperties}
             />
           </div>
         </div>
