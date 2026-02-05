@@ -45,6 +45,7 @@ const STATUS_COLORS: Record<OpportunityStatus, string> = {
 };
 
 const CHURN_RISK_COLORS: Record<ChurnRisk, string> = {
+  'certain': 'bg-green-600/20 text-green-400',
   'low': 'bg-status-green/20 text-status-green',
   'medium': 'bg-status-yellow/20 text-status-yellow',
   'high': 'bg-status-red/20 text-status-red',
@@ -192,6 +193,7 @@ export function OpportunitiesTable({ onOpenDrawer }: OpportunitiesTableProps) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="none">—</SelectItem>
+            <SelectItem value="certain">Certain</SelectItem>
             <SelectItem value="low">Low</SelectItem>
             <SelectItem value="medium">Medium</SelectItem>
             <SelectItem value="high">High</SelectItem>

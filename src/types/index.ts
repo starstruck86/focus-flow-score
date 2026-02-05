@@ -33,7 +33,7 @@ export type TimerBlockType = 'prospecting' | 'account-research' | 'deck-creation
 // Opportunity types
 export type OpportunityStatus = 'active' | 'stalled' | 'closed-lost' | 'closed-won';
 export type OpportunityStage = '' | 'Stage 1' | 'Stage 2' | 'Stage 3' | 'Stage 4' | 'Stage 5';
-export type ChurnRisk = 'low' | 'medium' | 'high';
+export type ChurnRisk = 'certain' | 'high' | 'medium' | 'low';
 
 // Opportunity Activity Log
 export interface OpportunityActivity {
@@ -209,6 +209,8 @@ export interface Renewal {
   csNotes?: string;
   nextStep?: string;
   healthStatus: HealthStatus;
+  churnRisk: ChurnRisk;
+  linkedOpportunityId?: string;
   riskReason?: string;
   renewalStage?: string;
   owner: string;

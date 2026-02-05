@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { 
   Plus, 
   Phone, 
@@ -58,12 +58,26 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { OpportunitiesTable } from '@/components/OpportunitiesTable';
 import { OpportunityDrawer } from '@/components/OpportunityDrawer';
-import type { Renewal, HealthStatus, Opportunity } from '@/types';
+import type { Renewal, HealthStatus, Opportunity, ChurnRisk } from '@/types';
 
 const HEALTH_COLORS: Record<HealthStatus, string> = {
   green: 'bg-status-green/20 text-status-green border-status-green/30',
   yellow: 'bg-status-yellow/20 text-status-yellow border-status-yellow/30',
   red: 'bg-status-red/20 text-status-red border-status-red/30',
+};
+
+const CHURN_RISK_COLORS: Record<ChurnRisk, string> = {
+  certain: 'bg-green-600/20 text-green-400 border-green-600/30',
+  low: 'bg-status-green/20 text-status-green border-status-green/30',
+  medium: 'bg-status-yellow/20 text-status-yellow border-status-yellow/30',
+  high: 'bg-status-red/20 text-status-red border-status-red/30',
+};
+
+const CHURN_RISK_LABELS: Record<ChurnRisk, string> = {
+  certain: 'Certain',
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
 };
 
 const VIEWS = [
@@ -427,6 +441,24 @@ export default function Renewals() {
     }).format(value);
   };
 
+  // Calculate churn risk summary
+  const churnRiskSummary = useMemo(() => {
+    const summary: Record<ChurnRisk, { count: number; arr: number }> = {
+      certain: { count: 0, arr: 0 },
+      low: { count: 0, arr: 0 },
+      medium: { count: 0, arr: 0 },
+      high: { count: 0, arr: 0 },
+    };
+    
+    renewals.forEach(r => {
+      const risk = r.churnRisk || 'low';
+      summary[risk].count++;
+      summary[risk].arr += r.arr;
+    });
+    
+    return summary;
+  }, [renewals]);
+
   return (
     <Layout>
       <div className="p-6 lg:p-8">
@@ -438,6 +470,34 @@ export default function Renewals() {
               {renewals.length} renewals • {formatCurrency(renewals.reduce((sum, r) => sum + r.arr, 0))} ARR
             </p>
           </div>
+        </div>
+        
+        {/* Churn Risk Summary */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {(['certain', 'low', 'medium', 'high'] as ChurnRisk[]).map(risk => (
+            <div 
+              key={risk} 
+              className={cn(
+                "metric-card p-4 border-l-4",
+                risk === 'certain' && "border-l-green-500",
+                risk === 'low' && "border-l-status-green",
+                risk === 'medium' && "border-l-status-yellow",
+                risk === 'high' && "border-l-status-red",
+              )}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className={cn("text-sm font-medium", CHURN_RISK_COLORS[risk].split(' ')[1])}>
+                  {CHURN_RISK_LABELS[risk]} Risk
+                </span>
+                <Badge variant="outline" className={cn("text-xs", CHURN_RISK_COLORS[risk])}>
+                  {churnRiskSummary[risk].count}
+                </Badge>
+              </div>
+              <div className="text-xl font-bold font-mono">
+                {formatCurrency(churnRiskSummary[risk].arr)}
+              </div>
+            </div>
+          ))}
         </div>
         
         <Tabs defaultValue="renewals" className="space-y-4">
@@ -750,16 +810,17 @@ export default function Renewals() {
                         </TableCell>
                         <TableCell>
                           <Select
-                            value={renewal.healthStatus}
-                            onValueChange={(v) => updateRenewal(renewal.id, { healthStatus: v as HealthStatus })}
+                            value={renewal.churnRisk || 'low'}
+                            onValueChange={(v) => updateRenewal(renewal.id, { churnRisk: v as ChurnRisk })}
                           >
-                            <SelectTrigger className={cn("h-7 w-24 text-xs", HEALTH_COLORS[renewal.healthStatus])}>
+                            <SelectTrigger className={cn("h-7 w-24 text-xs", CHURN_RISK_COLORS[renewal.churnRisk || 'low'])}>
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="green">Low</SelectItem>
-                              <SelectItem value="yellow">Medium</SelectItem>
-                              <SelectItem value="red">High</SelectItem>
+                              <SelectItem value="certain">Certain</SelectItem>
+                              <SelectItem value="low">Low</SelectItem>
+                              <SelectItem value="medium">Medium</SelectItem>
+                              <SelectItem value="high">High</SelectItem>
                             </SelectContent>
                           </Select>
                         </TableCell>
