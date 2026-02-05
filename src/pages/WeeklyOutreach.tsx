@@ -103,6 +103,8 @@ const TIER_COLORS: Record<AccountTier, string> = {
 export default function WeeklyOutreach() {
   const { accounts, addAccount, updateAccount, deleteAccount, logCall, logManualEmail, logAutomatedEmail, logMeetingHeld } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterTier, setFilterTier] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [filterMotion, setFilterMotion] = useState<string>('all');
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -314,9 +316,11 @@ export default function WeeklyOutreach() {
 
   const filteredAccounts = accounts.filter(account => {
     const matchesSearch = account.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesTier = filterTier === 'all' || account.tier === filterTier;
+    const matchesStatus = filterStatus === 'all' || account.accountStatus === filterStatus;
     const matchesPriority = filterPriority === 'all' || account.priority === filterPriority;
     const matchesMotion = filterMotion === 'all' || account.motion === filterMotion || account.motion === 'both';
-    return matchesSearch && matchesPriority && matchesMotion;
+    return matchesSearch && matchesTier && matchesStatus && matchesPriority && matchesMotion;
   });
 
   const handleAddAccount = () => {
@@ -653,7 +657,7 @@ export default function WeeklyOutreach() {
         </div>
 
         {/* Filters */}
-        <div className="flex items-center gap-4 mb-4">
+        <div className="flex flex-wrap items-center gap-3 mb-4">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -663,25 +667,28 @@ export default function WeeklyOutreach() {
               className="pl-9"
             />
           </div>
-          <Select value={filterPriority} onValueChange={setFilterPriority}>
-            <SelectTrigger className="w-32">
-              <SelectValue placeholder="Priority" />
+          <Select value={filterTier} onValueChange={setFilterTier}>
+            <SelectTrigger className="w-24">
+              <SelectValue placeholder="Tier" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Priority</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="all">All Tiers</SelectItem>
+              <SelectItem value="A">Tier A</SelectItem>
+              <SelectItem value="B">Tier B</SelectItem>
+              <SelectItem value="C">Tier C</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={filterMotion} onValueChange={setFilterMotion}>
-            <SelectTrigger className="w-32">
-              <SelectValue placeholder="Motion" />
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-36">
+              <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Motion</SelectItem>
-              <SelectItem value="new-logo">New Logo</SelectItem>
-              <SelectItem value="expansion">Expansion</SelectItem>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
+              <SelectItem value="researched">Researched</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="meeting-booked">Meeting Booked</SelectItem>
+              <SelectItem value="disqualified">Disqualified</SelectItem>
             </SelectContent>
           </Select>
         </div>
