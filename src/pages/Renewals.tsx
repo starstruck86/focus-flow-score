@@ -59,7 +59,7 @@ import { cn } from '@/lib/utils';
 import { OpportunitiesTable } from '@/components/OpportunitiesTable';
 import { OpportunityDrawer } from '@/components/OpportunityDrawer';
 import { EditableDatePicker } from '@/components/EditableDatePicker';
-import { AccountContactsField } from '@/components/AccountContactsField';
+import { RenewalDetailsField } from '@/components/RenewalDetailsField';
 import type { Renewal, HealthStatus, Opportunity, ChurnRisk } from '@/types';
 
 const HEALTH_COLORS: Record<HealthStatus, string> = {
@@ -793,46 +793,39 @@ export default function Renewals() {
                 <Table className="min-w-[1400px]">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
-                      <TableHead className="min-w-[180px]">Account Name</TableHead>
-                      <TableHead className="min-w-[100px]">CSM</TableHead>
-                      <TableHead className="min-w-[100px] text-right">ARR</TableHead>
-                      <TableHead className="min-w-[100px]">Churn Risk</TableHead>
-                      <TableHead className="min-w-[100px]">Renewal Due</TableHead>
-                      <TableHead className="min-w-[100px]">Entitlements</TableHead>
-                      <TableHead className="min-w-[80px]">Usage</TableHead>
-                      <TableHead className="min-w-[80px]">Term</TableHead>
-                      <TableHead className="min-w-[80px]">Planhat</TableHead>
-                      <TableHead className="min-w-[90px] text-center">Auto-Renew</TableHead>
-                      <TableHead className="min-w-[150px]">Product</TableHead>
-                      <TableHead className="min-w-[200px]">CS Notes</TableHead>
-                      <TableHead className="min-w-[200px]">Next Step</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
+                      <TableHead className="w-[20%]">Account Name</TableHead>
+                      <TableHead className="w-[12%]">CSM</TableHead>
+                      <TableHead className="w-[12%] text-right">ARR</TableHead>
+                      <TableHead className="w-[12%]">Churn Risk</TableHead>
+                      <TableHead className="w-[14%]">Renewal Due</TableHead>
+                      <TableHead className="w-[26%]">Next Step</TableHead>
+                      <TableHead className="w-[4%]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {quarterRenewals.map((renewal) => (
                       <React.Fragment key={renewal.id}>
                         <TableRow className="hover:bg-muted/30">
-                          <TableCell>
+                          <TableCell className="align-top py-3">
                             <span className="font-medium text-sm">{renewal.accountName}</span>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="align-top py-3">
                             <Input
                               value={renewal.csm || ''}
                               onChange={(e) => updateRenewal(renewal.id, { csm: e.target.value })}
                               placeholder="—"
-                              className="h-7 text-xs"
+                              className="h-8 text-sm"
                             />
                           </TableCell>
-                          <TableCell className="text-right font-mono text-sm">
+                          <TableCell className="align-top py-3 text-right font-mono text-sm">
                             {formatCurrency(renewal.arr)}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="align-top py-3">
                             <Select
                               value={renewal.churnRisk || 'low'}
                               onValueChange={(v) => updateRenewal(renewal.id, { churnRisk: v as ChurnRisk })}
                             >
-                              <SelectTrigger className={cn("h-7 w-24 text-xs", CHURN_RISK_COLORS[renewal.churnRisk || 'low'])}>
+                              <SelectTrigger className={cn("h-8 w-24 text-xs", CHURN_RISK_COLORS[renewal.churnRisk || 'low'])}>
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -843,7 +836,7 @@ export default function Renewals() {
                               </SelectContent>
                             </Select>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="align-top py-3">
                             <EditableDatePicker
                               value={renewal.renewalDue}
                               onChange={(v) => updateRenewal(renewal.id, { renewalDue: v || renewal.renewalDue })}
@@ -856,78 +849,16 @@ export default function Renewals() {
                               )}
                             />
                           </TableCell>
-                          <TableCell>
-                            <Input
-                              value={renewal.entitlements || ''}
-                              onChange={(e) => updateRenewal(renewal.id, { entitlements: e.target.value })}
-                              placeholder="—"
-                              className="h-7 text-xs min-w-[90px]"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              value={renewal.usage || ''}
-                              onChange={(e) => updateRenewal(renewal.id, { usage: e.target.value })}
-                              placeholder="—"
-                              className="h-7 text-xs min-w-[70px]"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              value={renewal.term || ''}
-                              onChange={(e) => updateRenewal(renewal.id, { term: e.target.value })}
-                              placeholder="—"
-                              className="h-7 text-xs min-w-[70px]"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            {renewal.planhatLink ? (
-                              <a 
-                                href={renewal.planhatLink} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="text-primary hover:underline text-xs"
-                              >
-                                <ExternalLink className="h-4 w-4" />
-                              </a>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {renewal.autoRenew ? (
-                              <Badge variant="outline" className="text-xs">Yes</Badge>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">No</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              value={renewal.product || ''}
-                              onChange={(e) => updateRenewal(renewal.id, { product: e.target.value })}
-                              placeholder="—"
-                              className="h-7 text-xs"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Textarea
-                              value={renewal.csNotes || ''}
-                              onChange={(e) => updateRenewal(renewal.id, { csNotes: e.target.value })}
-                              placeholder="CS notes..."
-                              className="min-h-[32px] h-8 text-xs resize-none py-1"
-                              rows={1}
-                            />
-                          </TableCell>
-                          <TableCell>
+                          <TableCell className="align-top py-3">
                             <Textarea
                               value={renewal.nextStep || ''}
                               onChange={(e) => updateRenewal(renewal.id, { nextStep: e.target.value })}
                               placeholder="Next step..."
-                              className="min-h-[32px] h-8 text-xs resize-none py-1"
+                              className="min-h-[36px] text-sm resize-none py-2 px-3 field-sizing-content"
                               rows={1}
                             />
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="align-top py-3">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button size="icon" variant="ghost" className="h-7 w-7">
@@ -948,12 +879,26 @@ export default function Renewals() {
                           </TableCell>
                         </TableRow>
                         <TableRow className="hover:bg-transparent border-b-2">
-                          <TableCell colSpan={14} className="pt-0 pb-3">
-                            <AccountContactsField
+                          <TableCell colSpan={7} className="pt-0 pb-3">
+                            <RenewalDetailsField
                               contacts={renewal.accountContacts || []}
                               onChange={(contacts) => updateRenewal(renewal.id, { accountContacts: contacts })}
                               companyNotes={renewal.notes || ''}
                               onCompanyNotesChange={(notes) => updateRenewal(renewal.id, { notes })}
+                              entitlements={renewal.entitlements || ''}
+                              onEntitlementsChange={(v) => updateRenewal(renewal.id, { entitlements: v })}
+                              usage={renewal.usage || ''}
+                              onUsageChange={(v) => updateRenewal(renewal.id, { usage: v })}
+                              term={renewal.term || ''}
+                              onTermChange={(v) => updateRenewal(renewal.id, { term: v })}
+                              planhatLink={renewal.planhatLink || ''}
+                              onPlanhatLinkChange={(v) => updateRenewal(renewal.id, { planhatLink: v })}
+                              product={renewal.product || ''}
+                              onProductChange={(v) => updateRenewal(renewal.id, { product: v })}
+                              csNotes={renewal.csNotes || ''}
+                              onCsNotesChange={(v) => updateRenewal(renewal.id, { csNotes: v })}
+                              autoRenew={renewal.autoRenew}
+                              onAutoRenewChange={(v) => updateRenewal(renewal.id, { autoRenew: v })}
                             />
                           </TableCell>
                         </TableRow>
