@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { 
   ExternalLink, 
   Plus, 
@@ -57,7 +57,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { OpportunitiesTable } from '@/components/OpportunitiesTable';
 import { OpportunityDrawer } from '@/components/OpportunityDrawer';
-import type { Account, AccountTier, AccountStatus, Opportunity } from '@/types';
+import type { Account, AccountTier, AccountStatus, Opportunity, OpportunityStage } from '@/types';
 
 // Quick Links
 const QUICK_LINKS = {
@@ -88,6 +88,24 @@ const TIER_COLORS: Record<AccountTier, string> = {
   'A': 'border-status-green text-status-green',
   'B': 'border-status-yellow text-status-yellow',
   'C': 'border-muted-foreground text-muted-foreground',
+};
+
+const STAGE_COLORS: Record<string, string> = {
+  '': 'border-muted-foreground',
+  'Stage 1': 'border-blue-400',
+  'Stage 2': 'border-cyan-400',
+  'Stage 3': 'border-status-yellow',
+  'Stage 4': 'border-orange-400',
+  'Stage 5': 'border-status-green',
+};
+
+const STAGE_TEXT_COLORS: Record<string, string> = {
+  '': 'text-muted-foreground',
+  'Stage 1': 'text-blue-400',
+  'Stage 2': 'text-cyan-400',
+  'Stage 3': 'text-status-yellow',
+  'Stage 4': 'text-orange-400',
+  'Stage 5': 'text-status-green',
 };
 
 // Website cell with edit toggle
@@ -159,6 +177,79 @@ function WebsiteCell({ website, onChange }: { website: string; onChange: (value:
       >
         <Pencil className="h-3 w-3" />
       </Button>
+    </div>
+  );
+}
+
+// Stage Summary Component for Opportunities
+function OpportunitiesStageSummary() {
+  const { opportunities } = useStore();
+  
+  const stageSummary = useMemo(() => {
+    const stages: OpportunityStage[] = ['', 'Stage 1', 'Stage 2', 'Stage 3', 'Stage 4', 'Stage 5'];
+    const summary: Record<string, { count: number; arr: number }> = {};
+    
+    stages.forEach(stage => {
+      summary[stage] = { count: 0, arr: 0 };
+    });
+    
+    // Only count active opportunities
+    opportunities
+      .filter(o => o.status === 'active')
+      .forEach(o => {
+        const stage = o.stage || '';
+        summary[stage].count++;
+        summary[stage].arr += o.arr || 0;
+      });
+    
+    return summary;
+  }, [opportunities]);
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
+
+  const totalARR = Object.values(stageSummary).reduce((sum, s) => sum + s.arr, 0);
+  const totalCount = Object.values(stageSummary).reduce((sum, s) => sum + s.count, 0);
+
+  return (
+    <div className="space-y-4">
+      {/* Total Summary */}
+      <div className="flex items-center gap-4">
+        <div className="text-sm text-muted-foreground">
+          Active Pipeline: <span className="font-semibold text-foreground">{totalCount} opps</span> • <span className="font-mono font-semibold text-foreground">{formatCurrency(totalARR)}</span>
+        </div>
+      </div>
+      
+      {/* Stage Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {(['', 'Stage 1', 'Stage 2', 'Stage 3', 'Stage 4', 'Stage 5'] as OpportunityStage[]).map(stage => (
+          <div 
+            key={stage || 'no-stage'} 
+            className={cn(
+              "metric-card p-3 border-l-4",
+              STAGE_COLORS[stage]
+            )}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className={cn("text-xs font-medium", STAGE_TEXT_COLORS[stage])}>
+                {stage || 'No Stage'}
+              </span>
+              <Badge variant="outline" className="text-xs h-5 px-1.5">
+                {stageSummary[stage].count}
+              </Badge>
+            </div>
+            <div className="text-lg font-bold font-mono">
+              {formatCurrency(stageSummary[stage].arr)}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -828,6 +919,8 @@ export default function WeeklyOutreach() {
 
           {/* Opportunities Tab */}
           <TabsContent value="opportunities" className="space-y-4">
+            {/* Stage Summary */}
+            <OpportunitiesStageSummary />
             <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} />
           </TabsContent>
         </Tabs>
