@@ -447,34 +447,119 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
       );
     }
 
+    // Weekly Outreach view: use expandable details row
+    if (columnOrder === 'outreach') {
+      return (
+        <React.Fragment key={opp.id}>
+          <TableRow className="group hover:bg-muted/30">
+            <TableCell className="align-top py-3">
+              <button
+                onClick={() => onOpenDrawer(opp)}
+                className="font-medium text-primary hover:underline text-left"
+              >
+                {opp.name}
+              </button>
+            </TableCell>
+            <TableCell className="align-top py-3">
+              <Select
+                value={opp.status}
+                onValueChange={(v) => updateOpportunity(opp.id, { status: v as OpportunityStatus })}
+              >
+                <SelectTrigger className="h-8 w-28 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="stalled">Stalled</SelectItem>
+                  <SelectItem value="closed-lost">Closed Lost</SelectItem>
+                  <SelectItem value="closed-won">Closed Won</SelectItem>
+                </SelectContent>
+              </Select>
+            </TableCell>
+            <TableCell className="align-top py-3">
+              <Select
+                value={opp.stage || 'none'}
+                onValueChange={(v) => updateOpportunity(opp.id, { stage: (v === 'none' ? '' : v) as OpportunityStage })}
+              >
+                <SelectTrigger className="h-8 w-24 text-xs">
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">—</SelectItem>
+                  {STAGE_OPTIONS.filter(s => s).map(stage => (
+                    <SelectItem key={stage} value={stage}>{stage}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </TableCell>
+            <TableCell className="align-top py-3">
+              <Input
+                type="number"
+                value={opp.arr || ''}
+                onChange={(e) => updateOpportunity(opp.id, { arr: e.target.value ? Number(e.target.value) : undefined })}
+                placeholder="—"
+                className="h-8 w-24 text-sm"
+              />
+            </TableCell>
+            <TableCell className="align-top py-3">
+              <EditableDatePicker
+                value={opp.closeDate}
+                onChange={(v) => updateOpportunity(opp.id, { closeDate: v })}
+                placeholder="—"
+                compact
+                className="w-28"
+              />
+            </TableCell>
+            <TableCell className="align-top py-3">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover:opacity-100">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => onOpenDrawer(opp)}>
+                    Open Details
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive"
+                    onClick={() => deleteOpportunity(opp.id)}
+                  >
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </TableCell>
+          </TableRow>
+          <TableRow className="hover:bg-transparent border-b-2">
+            <TableCell colSpan={6} className="pt-0 pb-3">
+              <OpportunityDetailsField
+                nextStepDate={opp.nextStepDate}
+                onNextStepDateChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
+                lastTouchDate={opp.lastTouchDate}
+                onLastTouchDateChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
+                notes={opp.notes}
+                onNotesChange={(v) => updateOpportunity(opp.id, { notes: v })}
+              />
+            </TableCell>
+          </TableRow>
+        </React.Fragment>
+      );
+    }
+
     return (
       <TableRow key={opp.id} className="group">
-        {columnOrder === 'outreach' ? (
-          <>
-            <NameCell opp={opp} />
-            <StatusCell opp={opp} />
-            <StageCell opp={opp} />
-            <ArrCell opp={opp} />
-            <CloseDateCell opp={opp} />
-            <NextStepCell opp={opp} />
-            <LastTouchCell opp={opp} />
-            <NotesCell opp={opp} />
-            <ActionsCell opp={opp} />
-          </>
-        ) : (
-          <>
-            <StatusCell opp={opp} />
-            <NameCell opp={opp} />
-            <ArrCell opp={opp} />
-            {showChurnRisk && <ChurnRiskCell opp={opp} />}
-            <CloseDateCell opp={opp} />
-            <NextStepCell opp={opp} />
-            <StageCell opp={opp} />
-            <LastTouchCell opp={opp} />
-            <NotesCell opp={opp} />
-            <ActionsCell opp={opp} />
-          </>
-        )}
+        <StatusCell opp={opp} />
+        <NameCell opp={opp} />
+        <ArrCell opp={opp} />
+        {showChurnRisk && <ChurnRiskCell opp={opp} />}
+        <CloseDateCell opp={opp} />
+        <NextStepCell opp={opp} />
+        <StageCell opp={opp} />
+        <LastTouchCell opp={opp} />
+        <NotesCell opp={opp} />
+        <ActionsCell opp={opp} />
       </TableRow>
     );
   };
@@ -542,16 +627,14 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               {columnOrder === 'outreach' ? (
+                // Weekly Outreach headers: details in expandable row
                 <>
-                  <TableHead className="w-[200px]">Opportunity</TableHead>
-                  <TableHead className="w-[130px]">Status</TableHead>
-                  <TableHead className="w-[100px]">Stage</TableHead>
-                  <TableHead className="w-[100px]">ARR</TableHead>
-                  <TableHead className="w-[130px]">Close Date</TableHead>
-                  <TableHead className="w-[130px]">Next Step</TableHead>
-                  <TableHead className="w-[100px]">Last Touch</TableHead>
-                  <TableHead className="min-w-[200px]">Notes</TableHead>
-                  <TableHead className="w-[40px]"></TableHead>
+                  <TableHead className="w-[25%]">Opportunity</TableHead>
+                  <TableHead className="w-[15%]">Status</TableHead>
+                  <TableHead className="w-[12%]">Stage</TableHead>
+                  <TableHead className="w-[12%]">ARR</TableHead>
+                  <TableHead className="w-[15%]">Close Date</TableHead>
+                  <TableHead className="w-[6%]"></TableHead>
                 </>
               ) : renewalsOnly ? (
                 // Renewals-only headers: details in expandable row
