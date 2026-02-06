@@ -10,7 +10,8 @@ import {
   Database, 
   Bell,
   ChevronDown,
-  Check
+  Check,
+  ClipboardCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +22,13 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { 
   useWorkScheduleConfig, 
   useHolidays, 
@@ -435,6 +443,149 @@ export default function Settings() {
                       checked={config?.reminderEnabled}
                       onCheckedChange={(checked) => updateConfig.mutate({ reminderEnabled: checked })}
                     />
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Journal Schedule Settings */}
+            <div className="metric-card">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <ClipboardCheck className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold">Daily Check-In Schedule</h3>
+                  <p className="text-sm text-muted-foreground">Configure when journal prompts appear</p>
+                </div>
+              </div>
+              
+              {isLoading ? (
+                <div className="space-y-4">
+                  <div className="h-12 bg-muted/30 rounded animate-pulse" />
+                  <div className="h-12 bg-muted/30 rounded animate-pulse" />
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* EOD Check-In Time */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        End-of-Day Check-In Time
+                      </Label>
+                    </div>
+                    <Select
+                      value={config?.eodCheckinTime?.slice(0, 5) || '16:30'}
+                      onValueChange={(value) => updateConfig.mutate({ eodCheckinTime: value + ':00' })}
+                    >
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="14:00">2:00 PM</SelectItem>
+                        <SelectItem value="14:30">2:30 PM</SelectItem>
+                        <SelectItem value="15:00">3:00 PM</SelectItem>
+                        <SelectItem value="15:30">3:30 PM</SelectItem>
+                        <SelectItem value="16:00">4:00 PM</SelectItem>
+                        <SelectItem value="16:30">4:30 PM</SelectItem>
+                        <SelectItem value="17:00">5:00 PM</SelectItem>
+                        <SelectItem value="17:30">5:30 PM</SelectItem>
+                        <SelectItem value="18:00">6:00 PM</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      When the daily check-in prompt appears
+                    </p>
+                  </div>
+                  
+                  {/* EOD Reminder Time */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="flex items-center gap-2">
+                        <Bell className="h-4 w-4 text-muted-foreground" />
+                        Reminder Time
+                      </Label>
+                    </div>
+                    <Select
+                      value={config?.eodReminderTime?.slice(0, 5) || '18:30'}
+                      onValueChange={(value) => updateConfig.mutate({ eodReminderTime: value + ':00' })}
+                    >
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="17:00">5:00 PM</SelectItem>
+                        <SelectItem value="17:30">5:30 PM</SelectItem>
+                        <SelectItem value="18:00">6:00 PM</SelectItem>
+                        <SelectItem value="18:30">6:30 PM</SelectItem>
+                        <SelectItem value="19:00">7:00 PM</SelectItem>
+                        <SelectItem value="19:30">7:30 PM</SelectItem>
+                        <SelectItem value="20:00">8:00 PM</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Reminder banner if not checked in by this time
+                    </p>
+                  </div>
+                  
+                  {/* Morning Confirm Time */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="flex items-center gap-2">
+                        <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                        Morning Confirmation Time
+                      </Label>
+                    </div>
+                    <Select
+                      value={config?.morningConfirmTime?.slice(0, 5) || '08:00'}
+                      onValueChange={(value) => updateConfig.mutate({ morningConfirmTime: value + ':00' })}
+                    >
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="06:00">6:00 AM</SelectItem>
+                        <SelectItem value="06:30">6:30 AM</SelectItem>
+                        <SelectItem value="07:00">7:00 AM</SelectItem>
+                        <SelectItem value="07:30">7:30 AM</SelectItem>
+                        <SelectItem value="08:00">8:00 AM</SelectItem>
+                        <SelectItem value="08:30">8:30 AM</SelectItem>
+                        <SelectItem value="09:00">9:00 AM</SelectItem>
+                        <SelectItem value="09:30">9:30 AM</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      When "Confirm Yesterday" prompt appears
+                    </p>
+                  </div>
+                  
+                  {/* Grace Window End Time */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        Late-Night Grace Window
+                      </Label>
+                    </div>
+                    <Select
+                      value={config?.graceWindowEndTime?.slice(0, 5) || '02:00'}
+                      onValueChange={(value) => updateConfig.mutate({ graceWindowEndTime: value + ':00' })}
+                    >
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="00:00">12:00 AM</SelectItem>
+                        <SelectItem value="01:00">1:00 AM</SelectItem>
+                        <SelectItem value="02:00">2:00 AM</SelectItem>
+                        <SelectItem value="03:00">3:00 AM</SelectItem>
+                        <SelectItem value="04:00">4:00 AM</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Check-ins before this time count for the previous day
+                    </p>
                   </div>
                 </div>
               )}

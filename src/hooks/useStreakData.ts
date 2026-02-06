@@ -23,6 +23,10 @@ function transformConfig(data: any): WorkScheduleConfig {
     graceWindowHours: data.grace_window_hours,
     goalDailyScoreThreshold: data.goal_daily_score_threshold,
     goalProductivityThreshold: data.goal_productivity_threshold,
+    eodCheckinTime: data.eod_checkin_time || '16:30:00',
+    eodReminderTime: data.eod_reminder_time || '18:30:00',
+    morningConfirmTime: data.morning_confirm_time || '08:00:00',
+    graceWindowEndTime: data.grace_window_end_time || '02:00:00',
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   };
@@ -284,6 +288,10 @@ export function useUpdateConfig() {
       if (updates.graceWindowHours !== undefined) dbUpdates.grace_window_hours = updates.graceWindowHours;
       if (updates.goalDailyScoreThreshold !== undefined) dbUpdates.goal_daily_score_threshold = updates.goalDailyScoreThreshold;
       if (updates.goalProductivityThreshold !== undefined) dbUpdates.goal_productivity_threshold = updates.goalProductivityThreshold;
+      if (updates.eodCheckinTime !== undefined) dbUpdates.eod_checkin_time = updates.eodCheckinTime;
+      if (updates.eodReminderTime !== undefined) dbUpdates.eod_reminder_time = updates.eodReminderTime;
+      if (updates.morningConfirmTime !== undefined) dbUpdates.morning_confirm_time = updates.morningConfirmTime;
+      if (updates.graceWindowEndTime !== undefined) dbUpdates.grace_window_end_time = updates.graceWindowEndTime;
       
       const { error } = await supabase
         .from('work_schedule_config')

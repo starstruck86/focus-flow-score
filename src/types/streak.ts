@@ -18,6 +18,11 @@ export interface WorkScheduleConfig {
   graceWindowHours: number;
   goalDailyScoreThreshold: number;
   goalProductivityThreshold: number;
+  // Journal schedule settings
+  eodCheckinTime: string; // HH:mm:ss - when to show EOD check-in prompt
+  eodReminderTime: string; // HH:mm:ss - when to show reminder if not checked in
+  morningConfirmTime: string; // HH:mm:ss - when to show morning confirmation
+  graceWindowEndTime: string; // HH:mm:ss - late-night entries count for previous day
   createdAt: string;
   updatedAt: string;
 }
