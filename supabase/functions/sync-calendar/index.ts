@@ -13,6 +13,7 @@ interface CalendarEvent {
   end_time: string | null;
   location: string | null;
   all_day: boolean;
+  user_id: string;
 }
 
 interface RawEvent {
@@ -224,7 +225,7 @@ function parseICS(icsContent: string): RawEvent[] {
   return events;
 }
 
-function expandRecurringEvents(rawEvents: RawEvent[], rangeStart: Date, rangeEnd: Date): CalendarEvent[] {
+function expandRecurringEvents(rawEvents: RawEvent[], rangeStart: Date, rangeEnd: Date, userId: string): CalendarEvent[] {
   const expandedEvents: CalendarEvent[] = [];
   const overrides = new Map<string, RawEvent>();
   
@@ -246,6 +247,7 @@ function expandRecurringEvents(rawEvents: RawEvent[], rangeStart: Date, rangeEnd
         end_time: event.end_time?.toISOString() || null,
         location: event.location,
         all_day: event.all_day,
+        user_id: userId,
       });
     } else if (event.rrule) {
       // Expand recurring event
@@ -276,6 +278,7 @@ function expandRecurringEvents(rawEvents: RawEvent[], rangeStart: Date, rangeEnd
           end_time: endTime?.toISOString() || null,
           location: event.location,
           all_day: event.all_day,
+          user_id: userId,
         });
       }
     } else {
@@ -288,6 +291,7 @@ function expandRecurringEvents(rawEvents: RawEvent[], rangeStart: Date, rangeEnd
         end_time: event.end_time?.toISOString() || null,
         location: event.location,
         all_day: event.all_day,
+        user_id: userId,
       });
     }
   }
@@ -307,12 +311,40 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Get user from auth header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    
+    // Create client with user's auth to get their ID
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(authHeader.replace('Bearer ', ''));
+    if (claimsError || !claimsData?.claims) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const userId = claimsData.claims.sub as string;
+
     const icsUrl = Deno.env.get('OUTLOOK_ICS_URL');
     if (!icsUrl) {
       throw new Error('OUTLOOK_ICS_URL is not configured');
     }
 
-    console.log('Fetching ICS from:', icsUrl);
+    console.log('Fetching ICS for user:', userId);
     
     const icsResponse = await fetch(icsUrl);
     if (!icsResponse.ok) {
@@ -330,21 +362,20 @@ Deno.serve(async (req) => {
     // Expand recurring events for next 90 days
     const now = new Date();
     const rangeEnd = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
-    const allEvents = expandRecurringEvents(rawEvents, now, rangeEnd);
+    const allEvents = expandRecurringEvents(rawEvents, now, rangeEnd, userId);
     console.log('Expanded events:', allEvents.length);
     
     // Filter for future events only
     const futureEvents = allEvents.filter(event => new Date(event.start_time) >= now);
     console.log('Future events:', futureEvents.length);
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // Use service role for database writes
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Clear old events and insert new ones
+    // Clear old events for this user and insert new ones
     if (futureEvents.length > 0) {
       // Delete old events first to handle removed/cancelled meetings
-      await supabase.from('calendar_events').delete().lt('start_time', now.toISOString());
+      await supabase.from('calendar_events').delete().eq('user_id', userId).lt('start_time', now.toISOString());
       
       const { error } = await supabase
         .from('calendar_events')
