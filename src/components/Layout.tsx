@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { FocusTimer } from './FocusTimer';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
+import { FloatingActionButton } from '@/components/FloatingActionButton';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -105,6 +106,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <main className="flex-1 overflow-auto">
         {children}
       </main>
+      
+      {/* Floating Action Button */}
+      <FloatingActionButton position="bottom-right" />
     </div>
   );
 }
