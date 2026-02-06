@@ -55,7 +55,7 @@ const CHURN_RISK_COLORS: Record<ChurnRisk, string> = {
 
 const STATUS_ORDER: OpportunityStatus[] = ['active', 'stalled', 'closed-lost', 'closed-won'];
 
-const STAGE_OPTIONS: OpportunityStage[] = ['', 'Stage 1', 'Stage 2', 'Stage 3', 'Stage 4', 'Stage 5'];
+const STAGE_OPTIONS: OpportunityStage[] = ['', 'Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate', 'Closed Won', 'Closed Lost'];
 
 type SavedView = 'all' | 'active' | 'stalled' | 'next-step-due' | 'closing-this-quarter' | 'no-next-step';
 

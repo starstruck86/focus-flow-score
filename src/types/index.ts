@@ -33,7 +33,7 @@ export type TimerBlockType = 'prospecting' | 'account-research' | 'deck-creation
 
 // Opportunity types
 export type OpportunityStatus = 'active' | 'stalled' | 'closed-lost' | 'closed-won';
-export type OpportunityStage = '' | 'Stage 1' | 'Stage 2' | 'Stage 3' | 'Stage 4' | 'Stage 5';
+export type OpportunityStage = '' | 'Prospect' | 'Discover' | 'Demo' | 'Proposal' | 'Negotiate' | 'Closed Won' | 'Closed Lost';
 export type ChurnRisk = 'certain' | 'high' | 'medium' | 'low';
 export type DealType = 'new-logo' | 'expansion' | 'renewal' | 'one-time';
 export type PaymentTerms = 'annual' | 'prepaid' | 'other';

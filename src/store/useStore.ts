@@ -467,7 +467,7 @@ export const useStore = create<QuotaCompassStore>()(
           accountName: renewal.accountName,
           linkedContactIds: [],
           status: 'active',
-          stage: 'Stage 1',
+          stage: 'Prospect',
           arr: renewal.arr,
           churnRisk: renewal.churnRisk || 'low',
           closeDate: closeDate,
@@ -545,7 +545,7 @@ export const useStore = create<QuotaCompassStore>()(
             accountName: renewal.accountName,
             linkedContactIds: [],
             status: 'active',
-            stage: 'Stage 1',
+            stage: 'Prospect',
             arr: renewal.arr,
             churnRisk: renewal.churnRisk || 'low',
             closeDate: closeDate,
@@ -743,10 +743,10 @@ export const useStore = create<QuotaCompassStore>()(
 function getDefaultOpportunities(): Opportunity[] {
   return [
     // Active
-    { id: generateId(), name: 'Isabella Stewart Gardner Museum', status: 'active', stage: 'Stage 1', nextStepDate: '2026-02-11', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: generateId(), name: 'Franklin Park Conservatory', status: 'active', stage: 'Stage 2', nextStepDate: '2026-02-06', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: generateId(), name: 'Golden Lighting', status: 'active', stage: 'Stage 3', nextStepDate: '2026-02-06', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: generateId(), name: '360 View', status: 'active', stage: 'Stage 4', nextStep: 'TBD', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: generateId(), name: 'Isabella Stewart Gardner Museum', status: 'active', stage: 'Prospect', nextStepDate: '2026-02-11', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: generateId(), name: 'Franklin Park Conservatory', status: 'active', stage: 'Discover', nextStepDate: '2026-02-06', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: generateId(), name: 'Golden Lighting', status: 'active', stage: 'Demo', nextStepDate: '2026-02-06', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: generateId(), name: '360 View', status: 'active', stage: 'Proposal', nextStep: 'TBD', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
     { id: generateId(), name: 'Peabody Essex Museum', status: 'active', stage: '', nextStep: 'TBD', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
     { id: generateId(), name: 'Ingram Book Group LLC', status: 'active', stage: '', nextStepDate: '2026-02-06', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
     { id: generateId(), name: 'St Pete/Clearwater', status: 'active', stage: '', nextStepDate: '2026-02-09', linkedContactIds: [], activityLog: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },

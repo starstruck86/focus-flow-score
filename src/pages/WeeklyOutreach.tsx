@@ -101,20 +101,24 @@ const TIER_COLORS: Record<AccountTier, string> = {
 
 const STAGE_COLORS: Record<string, string> = {
   '': 'border-muted-foreground',
-  'Stage 1': 'border-blue-400',
-  'Stage 2': 'border-cyan-400',
-  'Stage 3': 'border-status-yellow',
-  'Stage 4': 'border-orange-400',
-  'Stage 5': 'border-status-green',
+  'Prospect': 'border-blue-400',
+  'Discover': 'border-cyan-400',
+  'Demo': 'border-status-yellow',
+  'Proposal': 'border-orange-400',
+  'Negotiate': 'border-purple-400',
+  'Closed Won': 'border-status-green',
+  'Closed Lost': 'border-status-red',
 };
 
 const STAGE_TEXT_COLORS: Record<string, string> = {
   '': 'text-muted-foreground',
-  'Stage 1': 'text-blue-400',
-  'Stage 2': 'text-cyan-400',
-  'Stage 3': 'text-status-yellow',
-  'Stage 4': 'text-orange-400',
-  'Stage 5': 'text-status-green',
+  'Prospect': 'text-blue-400',
+  'Discover': 'text-cyan-400',
+  'Demo': 'text-status-yellow',
+  'Proposal': 'text-orange-400',
+  'Negotiate': 'text-purple-400',
+  'Closed Won': 'text-status-green',
+  'Closed Lost': 'text-status-red',
 };
 
 // Website cell with edit toggle
@@ -256,7 +260,7 @@ function OpportunitiesStageSummary() {
   const { opportunities } = useStore();
   
   const stageSummary = useMemo(() => {
-    const stages: OpportunityStage[] = ['', 'Stage 1', 'Stage 2', 'Stage 3', 'Stage 4', 'Stage 5'];
+    const stages: OpportunityStage[] = ['', 'Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate', 'Closed Won', 'Closed Lost'];
     const summary: Record<string, { count: number; arr: number }> = {};
     
     stages.forEach(stage => {
@@ -297,8 +301,8 @@ function OpportunitiesStageSummary() {
       </div>
       
       {/* Stage Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {(['', 'Stage 1', 'Stage 2', 'Stage 3', 'Stage 4', 'Stage 5'] as OpportunityStage[]).map(stage => (
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+        {(['', 'Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate', 'Closed Won', 'Closed Lost'] as OpportunityStage[]).map(stage => (
           <div 
             key={stage || 'no-stage'} 
             className={cn(

@@ -50,7 +50,7 @@ const STATUS_COLORS: Record<OpportunityStatus, string> = {
   'closed-won': 'bg-green-600/20 text-green-400',
 };
 
-const STAGE_OPTIONS: OpportunityStage[] = ['', 'Stage 1', 'Stage 2', 'Stage 3', 'Stage 4', 'Stage 5'];
+const STAGE_OPTIONS: OpportunityStage[] = ['', 'Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate', 'Closed Won', 'Closed Lost'];
 
 interface OpportunityDrawerProps {
   opportunity: Opportunity | null;
