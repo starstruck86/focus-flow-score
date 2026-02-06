@@ -35,6 +35,7 @@ import { useStore } from '@/store/useStore';
 import { cn } from '@/lib/utils';
 import { EditableDatePicker } from '@/components/EditableDatePicker';
 import { OpportunityDetailsField } from '@/components/OpportunityDetailsField';
+import { ClosedWonModal } from '@/components/quota/ClosedWonModal';
 import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk } from '@/types';
 import { format, parseISO, isToday, isPast, isThisQuarter } from 'date-fns';
 
@@ -71,6 +72,26 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
   const [savedView, setSavedView] = useState<SavedView>('all');
   const [showAddRow, setShowAddRow] = useState(false);
   const [newOppName, setNewOppName] = useState('');
+  const [closedWonModalOpen, setClosedWonModalOpen] = useState(false);
+  const [closedWonOpportunity, setClosedWonOpportunity] = useState<Opportunity | null>(null);
+
+  // Handle status change - trigger modal for Closed Won
+  const handleStatusChange = (opp: Opportunity, newStatus: OpportunityStatus) => {
+    if (newStatus === 'closed-won' && opp.status !== 'closed-won') {
+      // Open modal to collect required fields
+      setClosedWonOpportunity(opp);
+      setClosedWonModalOpen(true);
+    } else {
+      updateOpportunity(opp.id, { status: newStatus });
+    }
+  };
+
+  const handleClosedWonSave = (updates: Partial<Opportunity>) => {
+    if (closedWonOpportunity) {
+      updateOpportunity(closedWonOpportunity.id, updates);
+    }
+    setClosedWonOpportunity(null);
+  };
 
   // Get renewal-linked opportunity IDs
   const renewalOpportunityIds = useMemo(() => {
@@ -167,7 +188,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
     <TableCell>
       <Select
         value={opp.status}
-        onValueChange={(v) => updateOpportunity(opp.id, { status: v as OpportunityStatus })}
+        onValueChange={(v) => handleStatusChange(opp, v as OpportunityStatus)}
       >
         <SelectTrigger className="h-7 w-28 text-xs">
           <SelectValue />
@@ -365,7 +386,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
             <TableCell className="align-top py-3">
               <Select
                 value={opp.status}
-                onValueChange={(v) => updateOpportunity(opp.id, { status: v as OpportunityStatus })}
+                onValueChange={(v) => handleStatusChange(opp, v as OpportunityStatus)}
               >
                 <SelectTrigger className="h-8 w-28 text-xs">
                   <SelectValue />
@@ -487,7 +508,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
             <TableCell className="align-top py-3">
               <Select
                 value={opp.status}
-                onValueChange={(v) => updateOpportunity(opp.id, { status: v as OpportunityStatus })}
+                onValueChange={(v) => handleStatusChange(opp, v as OpportunityStatus)}
               >
                 <SelectTrigger className="h-8 w-28 text-xs">
                   <SelectValue />
@@ -723,6 +744,16 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
           </TableBody>
         </Table>
       </div>
+      
+      {/* Closed Won Modal */}
+      {closedWonOpportunity && (
+        <ClosedWonModal
+          open={closedWonModalOpen}
+          onOpenChange={setClosedWonModalOpen}
+          opportunity={closedWonOpportunity}
+          onSave={handleClosedWonSave}
+        />
+      )}
     </div>
   );
 }

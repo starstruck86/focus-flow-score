@@ -18,8 +18,10 @@ import type {
   OpportunityStage,
   OpportunityActivity,
   TouchType,
+  QuotaConfig,
 } from '@/types';
 import { calculateAllScores } from '@/lib/calculations';
+import { DEFAULT_QUOTA_CONFIG } from '@/lib/commissionCalculations';
 
 interface QuotaCompassStore {
   // Time Range
@@ -87,6 +89,10 @@ interface QuotaCompassStore {
   logAutomatedEmail: () => void;
   logMeetingHeld: () => void;
   logProspectsAdded: (count: number) => void;
+  
+  // Quota Config
+  quotaConfig: QuotaConfig | null;
+  setQuotaConfig: (config: QuotaConfig) => void;
 }
 
 function generateId(): string {
@@ -712,6 +718,10 @@ export const useStore = create<QuotaCompassStore>()(
           prospectsAddedToCadence: (currentDay?.rawInputs.prospectsAddedToCadence || 0) + count,
         });
       },
+      
+      // Quota Config
+      quotaConfig: null,
+      setQuotaConfig: (config) => set({ quotaConfig: config }),
     }),
     {
       name: 'quota-compass-storage',
@@ -723,6 +733,7 @@ export const useStore = create<QuotaCompassStore>()(
         tasks: state.tasks,
         focusBlocks: state.focusBlocks,
         opportunities: state.opportunities,
+        quotaConfig: state.quotaConfig,
       }),
     }
   )
