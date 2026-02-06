@@ -53,7 +53,14 @@ interface AddUpdateOpportunityModalProps {
   mode?: 'create' | 'update';
 }
 
-const STAGES: OpportunityStage[] = ['', 'Stage 1', 'Stage 2', 'Stage 3', 'Stage 4', 'Stage 5'];
+const STAGES: { value: string; label: string }[] = [
+  { value: 'none', label: 'No Stage' },
+  { value: 'Stage 1', label: 'Stage 1' },
+  { value: 'Stage 2', label: 'Stage 2' },
+  { value: 'Stage 3', label: 'Stage 3' },
+  { value: 'Stage 4', label: 'Stage 4' },
+  { value: 'Stage 5', label: 'Stage 5' },
+];
 const STATUSES: OpportunityStatus[] = ['active', 'stalled', 'closed-lost', 'closed-won'];
 const DEAL_TYPES: { value: DealType; label: string }[] = [
   { value: 'new-logo', label: 'New Logo' },
@@ -413,14 +420,17 @@ export function AddUpdateOpportunityModal({
               </div>
               <div className="space-y-2">
                 <Label>Stage</Label>
-                <Select value={stage} onValueChange={(v) => setStage(v as OpportunityStage)}>
+                <Select 
+                  value={stage || 'none'} 
+                  onValueChange={(v) => setStage(v === 'none' ? '' : v as OpportunityStage)}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="No Stage" />
                   </SelectTrigger>
                   <SelectContent>
                     {STAGES.map(s => (
-                      <SelectItem key={s || 'none'} value={s}>
-                        {s || 'No Stage'}
+                      <SelectItem key={s.value} value={s.value}>
+                        {s.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
