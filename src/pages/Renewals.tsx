@@ -60,6 +60,7 @@ import { cn } from '@/lib/utils';
 import { OpportunitiesTable } from '@/components/OpportunitiesTable';
 import { OpportunityDrawer } from '@/components/OpportunityDrawer';
 import { EditableDatePicker } from '@/components/EditableDatePicker';
+import { EditableUrlField } from '@/components/EditableUrlField';
 import { RenewalDetailsField } from '@/components/RenewalDetailsField';
 import type { Renewal, HealthStatus, Opportunity, ChurnRisk } from '@/types';
 
@@ -92,6 +93,8 @@ const VIEWS = [
   { value: 'at-risk', label: 'At Risk' },
   { value: 'auto-renew', label: 'Auto-Renew' },
   { value: 'no-next-step', label: 'No Next Step' },
+  { value: 'missing-planhat', label: 'Missing Planhat' },
+  { value: 'missing-agreement', label: 'Missing Agreement' },
 ];
 
 function EditableArrCell({ value, onChange }: { value: number; onChange: (v: number) => void }) {
@@ -284,6 +287,14 @@ export default function Renewals() {
           case 'planhatlink':
             renewal.planhatLink = value === 'Link' ? '' : value;
             break;
+          case 'agreement':
+          case 'agreement link':
+          case 'agreementlink':
+          case 'current agreement':
+          case 'currentagreement':
+          case 'current agreement link':
+            renewal.currentAgreementLink = value;
+            break;
           case 'cs notes':
           case 'csnotes':
           case 'notes':
@@ -434,6 +445,12 @@ export default function Renewals() {
         break;
       case 'no-next-step':
         matchesView = !renewal.nextStep;
+        break;
+      case 'missing-planhat':
+        matchesView = !renewal.planhatLink;
+        break;
+      case 'missing-agreement':
+        matchesView = !renewal.currentAgreementLink;
         break;
     }
     
@@ -764,13 +781,23 @@ export default function Renewals() {
                     <Label>Auto-Renew</Label>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Planhat Link</Label>
-                  <Input
-                    value={newRenewal.planhatLink || ''}
-                    onChange={(e) => setNewRenewal({ ...newRenewal, planhatLink: e.target.value })}
-                    placeholder="https://planhat.com/..."
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Planhat Link</Label>
+                    <Input
+                      value={newRenewal.planhatLink || ''}
+                      onChange={(e) => setNewRenewal({ ...newRenewal, planhatLink: e.target.value })}
+                      placeholder="https://planhat.com/..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Current Agreement Link</Label>
+                    <Input
+                      value={newRenewal.currentAgreementLink || ''}
+                      onChange={(e) => setNewRenewal({ ...newRenewal, currentAgreementLink: e.target.value })}
+                      placeholder="https://..."
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Next Step</Label>
@@ -837,15 +864,17 @@ export default function Renewals() {
               </div>
               
               <div className="metric-card overflow-x-auto p-0">
-                <Table className="min-w-[1400px]">
+                <Table className="min-w-[1600px]">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
-                      <TableHead className="w-[18%]">Account Name</TableHead>
-                      <TableHead className="w-[12%]">Renewal Date</TableHead>
-                      <TableHead className="w-[10%]">Churn Risk</TableHead>
-                      <TableHead className="w-[10%] text-right">ARR</TableHead>
-                      <TableHead className="w-[12%]">CSM</TableHead>
-                      <TableHead className="w-[34%]">Next Step</TableHead>
+                      <TableHead className="w-[14%]">Account Name</TableHead>
+                      <TableHead className="w-[10%]">Renewal Date</TableHead>
+                      <TableHead className="w-[8%]">Churn Risk</TableHead>
+                      <TableHead className="w-[8%] text-right">ARR</TableHead>
+                      <TableHead className="w-[10%]">CSM</TableHead>
+                      <TableHead className="w-[10%]">Planhat</TableHead>
+                      <TableHead className="w-[10%]">Agreement</TableHead>
+                      <TableHead className="w-[26%]">Next Step</TableHead>
                       <TableHead className="w-[4%]"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -900,6 +929,24 @@ export default function Renewals() {
                             />
                           </TableCell>
                           <TableCell className="align-top py-3">
+                            <EditableUrlField
+                              value={renewal.planhatLink || ''}
+                              onChange={(v) => updateRenewal(renewal.id, { planhatLink: v })}
+                              label="Planhat"
+                              placeholder="https://planhat.com/..."
+                              compact
+                            />
+                          </TableCell>
+                          <TableCell className="align-top py-3">
+                            <EditableUrlField
+                              value={renewal.currentAgreementLink || ''}
+                              onChange={(v) => updateRenewal(renewal.id, { currentAgreementLink: v })}
+                              label="Agreement"
+                              placeholder="https://..."
+                              compact
+                            />
+                          </TableCell>
+                          <TableCell className="align-top py-3">
                             <div className="whitespace-pre-wrap break-words text-sm min-h-[36px]">
                               <Textarea
                                 value={renewal.nextStep || ''}
@@ -931,7 +978,7 @@ export default function Renewals() {
                           </TableCell>
                         </TableRow>
                         <TableRow className="hover:bg-transparent border-b-2">
-                          <TableCell colSpan={7} className="pt-0 pb-3">
+                          <TableCell colSpan={9} className="pt-0 pb-3">
                             <RenewalDetailsField
                               contacts={renewal.accountContacts || []}
                               onChange={(contacts) => updateRenewal(renewal.id, { accountContacts: contacts })}
@@ -945,6 +992,8 @@ export default function Renewals() {
                               onTermChange={(v) => updateRenewal(renewal.id, { term: v })}
                               planhatLink={renewal.planhatLink || ''}
                               onPlanhatLinkChange={(v) => updateRenewal(renewal.id, { planhatLink: v })}
+                              currentAgreementLink={renewal.currentAgreementLink || ''}
+                              onCurrentAgreementLinkChange={(v) => updateRenewal(renewal.id, { currentAgreementLink: v })}
                               product={renewal.product || ''}
                               onProductChange={(v) => updateRenewal(renewal.id, { product: v })}
                               csNotes={renewal.csNotes || ''}
