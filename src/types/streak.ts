@@ -80,19 +80,27 @@ export interface StreakSummary {
   updatedAt: string;
 }
 
-// Level thresholds (in eligible days)
+// Level thresholds (in eligible days) - designed for years of use
+// ~250 workdays per year
 export const LEVEL_THRESHOLDS: number[] = [
-  0,   // Level 0
-  3,   // Level 1
-  5,   // Level 2
-  10,  // Level 3
-  20,  // Level 4
-  30,  // Level 5
-  45,  // Level 6
-  60,  // Level 7
-  90,  // Level 8
-  120, // Level 9
-  180, // Level 10
+  0,     // Level 0 - Starting Out
+  3,     // Level 1 - ~1 week
+  7,     // Level 2 - ~1.5 weeks
+  14,    // Level 3 - ~3 weeks
+  30,    // Level 4 - ~1.5 months
+  50,    // Level 5 - ~2.5 months
+  75,    // Level 6 - ~3.5 months
+  100,   // Level 7 - ~5 months
+  150,   // Level 8 - ~7 months
+  200,   // Level 9 - ~10 months
+  250,   // Level 10 - ~1 year
+  375,   // Level 11 - ~1.5 years
+  500,   // Level 12 - ~2 years
+  750,   // Level 13 - ~3 years
+  1000,  // Level 14 - ~4 years
+  1500,  // Level 15 - ~6 years
+  2000,  // Level 16 - ~8 years
+  2500,  // Level 17 - ~10 years
 ];
 
 export const BADGE_DEFINITIONS: Record<BadgeType, { name: string; description: string; icon: string }> = {
@@ -149,17 +157,24 @@ export function getProgressToNextLevel(streak: number): { current: number; next:
 
 export function getLevelTitle(level: number): string {
   const titles = [
-    'Starting Out',
-    'Building Momentum',
-    'Finding Rhythm',
-    'Getting Consistent',
-    'Forming Habits',
-    'In The Zone',
-    'Discipline Mode',
-    'Peak Performer',
-    'Elite Status',
-    'Legend',
-    'Hall of Fame',
+    'Starting Out',      // 0
+    'First Steps',       // 1
+    'Building Rhythm',   // 2
+    'Getting Consistent',// 3
+    'Habit Forming',     // 4
+    'In The Zone',       // 5
+    'Discipline Mode',   // 6
+    'Peak Performer',    // 7
+    'Elite Status',      // 8
+    'Top 1%',            // 9
+    'One Year Strong',   // 10
+    'Veteran',           // 11
+    'Master',            // 12
+    'Grandmaster',       // 13
+    'Legend',            // 14
+    'Mythic',            // 15
+    'Immortal',          // 16
+    'Hall of Fame',      // 17
   ];
-  return titles[level] || titles[0];
+  return titles[level] || 'Transcendent';
 }
