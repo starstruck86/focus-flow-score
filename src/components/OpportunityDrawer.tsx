@@ -52,6 +52,17 @@ const STATUS_COLORS: Record<OpportunityStatus, string> = {
 
 const STAGE_OPTIONS: OpportunityStage[] = ['', 'Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate', 'Closed Won', 'Closed Lost'];
 
+const STAGE_LABELS: Record<string, string> = {
+  '': '—',
+  'Prospect': '1 - Prospect',
+  'Discover': '2 - Discover',
+  'Demo': '3 - Demo',
+  'Proposal': '4 - Proposal',
+  'Negotiate': '5 - Negotiate',
+  'Closed Won': '6 - Closed Won',
+  'Closed Lost': '7 - Closed Lost',
+};
+
 interface OpportunityDrawerProps {
   opportunity: Opportunity | null;
   onClose: () => void;
@@ -304,7 +315,7 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
                     <SelectContent>
                       <SelectItem value="none">—</SelectItem>
                       {STAGE_OPTIONS.filter(s => s).map(stage => (
-                        <SelectItem key={stage} value={stage}>{stage}</SelectItem>
+                        <SelectItem key={stage} value={stage}>{STAGE_LABELS[stage]}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

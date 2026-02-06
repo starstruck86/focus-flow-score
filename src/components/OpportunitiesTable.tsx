@@ -57,6 +57,17 @@ const STATUS_ORDER: OpportunityStatus[] = ['active', 'stalled', 'closed-lost', '
 
 const STAGE_OPTIONS: OpportunityStage[] = ['', 'Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate', 'Closed Won', 'Closed Lost'];
 
+const STAGE_LABELS: Record<string, string> = {
+  '': '—',
+  'Prospect': '1 - Prospect',
+  'Discover': '2 - Discover',
+  'Demo': '3 - Demo',
+  'Proposal': '4 - Proposal',
+  'Negotiate': '5 - Negotiate',
+  'Closed Won': '6 - Closed Won',
+  'Closed Lost': '7 - Closed Lost',
+};
+
 type SavedView = 'all' | 'active' | 'stalled' | 'next-step-due' | 'closing-this-quarter' | 'no-next-step';
 
 interface OpportunitiesTableProps {
@@ -318,7 +329,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
         <SelectContent>
           <SelectItem value="none">—</SelectItem>
           {STAGE_OPTIONS.filter(s => s).map(stage => (
-            <SelectItem key={stage} value={stage}>{stage}</SelectItem>
+            <SelectItem key={stage} value={stage}>{STAGE_LABELS[stage]}</SelectItem>
           ))}
         </SelectContent>
       </Select>
@@ -449,7 +460,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
                 <SelectContent>
                   <SelectItem value="none">—</SelectItem>
                   {STAGE_OPTIONS.filter(s => s).map(stage => (
-                    <SelectItem key={stage} value={stage}>{stage}</SelectItem>
+                    <SelectItem key={stage} value={stage}>{STAGE_LABELS[stage]}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -532,7 +543,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
                 <SelectContent>
                   <SelectItem value="none">—</SelectItem>
                   {STAGE_OPTIONS.filter(s => s).map(stage => (
-                    <SelectItem key={stage} value={stage}>{stage}</SelectItem>
+                    <SelectItem key={stage} value={stage}>{STAGE_LABELS[stage]}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
