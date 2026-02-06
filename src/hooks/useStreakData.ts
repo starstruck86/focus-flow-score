@@ -173,9 +173,13 @@ export function useStreakEvents() {
   return useQuery({
     queryKey: ['streak-events'],
     queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+      
       const { data, error } = await supabase
         .from('streak_events')
         .select('*')
+        .eq('user_id', user.id)
         .order('date', { ascending: false });
       
       if (error) throw error;
@@ -188,9 +192,27 @@ export function useStreakSummary() {
   return useQuery({
     queryKey: ['streak-summary'],
     queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        return {
+          id: '',
+          currentCheckinStreak: 0,
+          currentPerformanceStreak: 0,
+          longestCheckinStreak: 0,
+          longestPerformanceStreak: 0,
+          totalEligibleDays: 0,
+          totalCheckins: 0,
+          totalGoalsMet: 0,
+          checkinLevel: 1,
+          performanceLevel: 1,
+          updatedAt: new Date().toISOString(),
+        } as StreakSummary;
+      }
+      
       const { data, error } = await supabase
         .from('streak_summary')
         .select('*')
+        .eq('user_id', user.id)
         .limit(1)
         .maybeSingle();
       
@@ -454,6 +476,7 @@ export function useRecordCheckIn() {
       const { data: events } = await supabase
         .from('streak_events')
         .select('*')
+        .eq('user_id', user.id)
         .order('date', { ascending: false });
       
       if (!events) return;
@@ -490,6 +513,7 @@ export function useRecordCheckIn() {
       const { data: summary } = await supabase
         .from('streak_summary')
         .select('*')
+        .eq('user_id', user.id)
         .limit(1)
         .single();
       
