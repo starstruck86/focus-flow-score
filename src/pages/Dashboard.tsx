@@ -41,7 +41,7 @@ export default function Dashboard() {
     <Layout>
       <div className="p-6 lg:p-8 max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-6">
           <div className="flex items-center gap-2 text-muted-foreground text-sm mb-2">
             <Calendar className="h-4 w-4" />
             {new Date().toLocaleDateString('en-US', { 
@@ -53,6 +53,15 @@ export default function Dashboard() {
           </div>
           <h1 className="font-display text-3xl font-bold">Daily Performance</h1>
         </div>
+
+        {/* Daily Entry Form - Moved under header */}
+        <motion.div
+          className="mb-6"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <DailyEntryForm />
+        </motion.div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Metrics */}
@@ -211,11 +220,10 @@ export default function Dashboard() {
             </motion.div>
           </div>
 
-          {/* Right Column - Entry Form */}
+          {/* Right Column - Widgets */}
           <div className="space-y-6">
             <CalendarWidget />
             <QuickActions />
-            <DailyEntryForm />
           </div>
         </div>
       </div>
