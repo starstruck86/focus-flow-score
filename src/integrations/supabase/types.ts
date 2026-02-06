@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      badges_earned: {
+        Row: {
+          badge_name: string
+          badge_type: string
+          earned_at: string
+          id: string
+          metadata: Json | null
+        }
+        Insert: {
+          badge_name: string
+          badge_type: string
+          earned_at?: string
+          id?: string
+          metadata?: Json | null
+        }
+        Update: {
+          badge_name?: string
+          badge_type?: string
+          earned_at?: string
+          id?: string
+          metadata?: Json | null
+        }
+        Relationships: []
+      }
       calendar_events: {
         Row: {
           all_day: boolean
@@ -50,6 +74,192 @@ export type Database = {
           start_time?: string
           title?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      holidays: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      pto_days: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          note: string | null
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          id?: string
+          note?: string | null
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          note?: string | null
+        }
+        Relationships: []
+      }
+      streak_events: {
+        Row: {
+          check_in_method: string | null
+          check_in_time: string | null
+          checked_in: boolean
+          created_at: string
+          daily_score: number | null
+          date: string
+          goal_met: boolean
+          id: string
+          is_eligible_day: boolean
+          productivity_score: number | null
+          updated_at: string
+        }
+        Insert: {
+          check_in_method?: string | null
+          check_in_time?: string | null
+          checked_in?: boolean
+          created_at?: string
+          daily_score?: number | null
+          date: string
+          goal_met?: boolean
+          id?: string
+          is_eligible_day?: boolean
+          productivity_score?: number | null
+          updated_at?: string
+        }
+        Update: {
+          check_in_method?: string | null
+          check_in_time?: string | null
+          checked_in?: boolean
+          created_at?: string
+          daily_score?: number | null
+          date?: string
+          goal_met?: boolean
+          id?: string
+          is_eligible_day?: boolean
+          productivity_score?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      streak_summary: {
+        Row: {
+          checkin_level: number
+          current_checkin_streak: number
+          current_performance_streak: number
+          id: string
+          longest_checkin_streak: number
+          longest_performance_streak: number
+          performance_level: number
+          total_checkins: number
+          total_eligible_days: number
+          total_goals_met: number
+          updated_at: string
+        }
+        Insert: {
+          checkin_level?: number
+          current_checkin_streak?: number
+          current_performance_streak?: number
+          id?: string
+          longest_checkin_streak?: number
+          longest_performance_streak?: number
+          performance_level?: number
+          total_checkins?: number
+          total_eligible_days?: number
+          total_goals_met?: number
+          updated_at?: string
+        }
+        Update: {
+          checkin_level?: number
+          current_checkin_streak?: number
+          current_performance_streak?: number
+          id?: string
+          longest_checkin_streak?: number
+          longest_performance_streak?: number
+          performance_level?: number
+          total_checkins?: number
+          total_eligible_days?: number
+          total_goals_met?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      work_schedule_config: {
+        Row: {
+          created_at: string
+          goal_daily_score_threshold: number
+          goal_productivity_threshold: number
+          grace_window_hours: number
+          id: string
+          reminder_enabled: boolean
+          reminder_time: string
+          updated_at: string
+          working_days: number[]
+        }
+        Insert: {
+          created_at?: string
+          goal_daily_score_threshold?: number
+          goal_productivity_threshold?: number
+          grace_window_hours?: number
+          id?: string
+          reminder_enabled?: boolean
+          reminder_time?: string
+          updated_at?: string
+          working_days?: number[]
+        }
+        Update: {
+          created_at?: string
+          goal_daily_score_threshold?: number
+          goal_productivity_threshold?: number
+          grace_window_hours?: number
+          id?: string
+          reminder_enabled?: boolean
+          reminder_time?: string
+          updated_at?: string
+          working_days?: number[]
+        }
+        Relationships: []
+      }
+      workday_overrides: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          is_workday: boolean
+          reason: string | null
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          id?: string
+          is_workday: boolean
+          reason?: string | null
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          is_workday?: boolean
+          reason?: string | null
         }
         Relationships: []
       }

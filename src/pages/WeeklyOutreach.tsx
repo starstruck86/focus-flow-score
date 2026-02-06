@@ -12,6 +12,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
+import { StreakChip } from '@/components/StreakChip';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -621,6 +622,7 @@ export default function WeeklyOutreach() {
             <h1 className="font-display text-2xl font-bold">Weekly Outreach</h1>
             <p className="text-sm text-muted-foreground">Pipeline & Account Execution</p>
           </div>
+          <StreakChip variant="full" />
         </div>
 
         {/* Stage Summary - Visible on both tabs */}
