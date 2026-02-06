@@ -34,6 +34,8 @@ export type TimerBlockType = 'prospecting' | 'account-research' | 'deck-creation
 export type OpportunityStatus = 'active' | 'stalled' | 'closed-lost' | 'closed-won';
 export type OpportunityStage = '' | 'Stage 1' | 'Stage 2' | 'Stage 3' | 'Stage 4' | 'Stage 5';
 export type ChurnRisk = 'certain' | 'high' | 'medium' | 'low';
+export type DealType = 'new-logo' | 'expansion' | 'renewal' | 'one-time';
+export type PaymentTerms = 'annual' | 'prepaid' | 'other';
 
 // Opportunity Activity Log
 export interface OpportunityActivity {
@@ -62,6 +64,76 @@ export interface Opportunity {
   activityLog: OpportunityActivity[];
   createdAt: string;
   updatedAt: string;
+  // Quota/Commission fields
+  dealType?: DealType;
+  paymentTerms?: PaymentTerms;
+  termMonths?: number;
+  priorContractArr?: number; // For renewals: the baseline ARR cap
+  renewalArr?: number; // For renewals: the contracted renewal ARR
+  oneTimeAmount?: number; // For one-time deals
+  isNewLogo?: boolean; // Account is a new logo
+}
+
+// Quota Configuration
+export interface QuotaConfig {
+  fiscalYearStart: string; // ISO date - start of fiscal period
+  fiscalYearEnd: string; // ISO date - end of fiscal period
+  newArrQuota: number; // 2H quota: 500,000
+  renewalArrQuota: number; // 2H quota: 822,542
+  newArrAcr: number; // Base ACR: 7.73% (0.0773)
+  renewalArrAcr: number; // Base ACR: 1.57% (0.0157)
+  // Overachievement accelerator thresholds
+  acceleratorTiers: {
+    threshold: number; // e.g., 1.0, 1.25, 1.5
+    multiplier: number; // e.g., 1.0, 1.5, 1.7, 2.0
+  }[];
+}
+
+// Ledger line types
+export type LedgerType = 'new-arr' | 'renewal-arr' | 'one-time';
+
+// Deals Ledger Entry (auto-generated from closed-won opportunities)
+export interface DealsLedgerEntry {
+  id: string;
+  opportunityId: string;
+  opportunityName: string;
+  accountName?: string;
+  closeDate: string;
+  ledgerType: LedgerType;
+  amount: number;
+  termMonths: number;
+  paymentTerms: PaymentTerms;
+  isNewLogo: boolean;
+  isMultiYear: boolean;
+  isAnnualTerms: boolean;
+  effectiveRate: number;
+  commissionAmount: number;
+  quotaCredit: number;
+}
+
+// Commission calculation result
+export interface CommissionSummary {
+  // New ARR
+  newArrBooked: number;
+  newArrQuota: number;
+  newArrAttainment: number;
+  newArrBaseCommission: number;
+  newArrAcceleratorBonus: number;
+  // Renewal ARR
+  renewalArrBooked: number;
+  renewalArrQuota: number;
+  renewalArrAttainment: number;
+  renewalArrBaseCommission: number;
+  renewalArrAcceleratorBonus: number;
+  // One-Time
+  oneTimeBooked: number;
+  oneTimeCommission: number;
+  // Totals
+  totalCommission: number;
+  remainingToHundred: number;
+  // Computed helpers
+  newArrRemainingToHundred: number;
+  renewalArrRemainingToHundred: number;
 }
 
 // Daily Entry - Raw counts user enters
