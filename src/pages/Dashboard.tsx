@@ -6,7 +6,9 @@ import {
   Target,
   Award,
   TrendingUp,
-  Calendar
+  Calendar,
+  ClipboardCheck,
+  AlertCircle,
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { RingGauge } from '@/components/RingGauge';
@@ -15,6 +17,7 @@ import { QuickActions } from '@/components/QuickActions';
 import { FocusTimer } from '@/components/FocusTimer';
 import { CalendarWidget } from '@/components/CalendarWidget';
 import { StreakModule } from '@/components/StreakModule';
+import { DailyCheckInModal } from '@/components/journal';
 import { useStore } from '@/store/useStore';
 import { getRecoveryAdvice, getStrainLabel } from '@/lib/calculations';
 import { cn } from '@/lib/utils';
@@ -27,6 +30,7 @@ import {
   useRecordCheckIn,
   isEligibleDay 
 } from '@/hooks/useStreakData';
+import { useTodayJournalEntry } from '@/hooks/useDailyJournal';
 import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -35,6 +39,7 @@ import { Textarea } from '@/components/ui/textarea';
 export default function Dashboard() {
   const { currentDay, initializeToday } = useStore();
   const [showManualCheckIn, setShowManualCheckIn] = useState(false);
+  const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
   const [checkInNote, setCheckInNote] = useState('');
   
   // Streak data hooks
@@ -44,6 +49,9 @@ export default function Dashboard() {
   const { data: overrides } = useWorkdayOverrides();
   const { data: streakEvents } = useStreakEvents();
   const recordCheckIn = useRecordCheckIn();
+  
+  // Journal entry for today
+  const { data: todayJournalEntry } = useTodayJournalEntry();
 
   useEffect(() => {
     initializeToday();
@@ -140,6 +148,53 @@ export default function Dashboard() {
           </div>
           <h1 className="font-display text-3xl font-bold">Daily Performance</h1>
         </div>
+        
+        {/* Check-In Banner - Show if not checked in today */}
+        {isTodayEligible && !todayCheckedIn && (
+          <motion.div
+            className="mb-6 p-4 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-between"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                <AlertCircle className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="font-medium">Today: Not checked in yet</p>
+                <p className="text-sm text-muted-foreground">Complete your daily check-in to track your streak</p>
+              </div>
+            </div>
+            <Button onClick={() => setShowDailyCheckIn(true)} className="gap-2">
+              <ClipboardCheck className="h-4 w-4" />
+              Start Daily Check-In
+            </Button>
+          </motion.div>
+        )}
+        
+        {/* Checked-In Banner */}
+        {todayCheckedIn && (
+          <motion.div
+            className="mb-6 p-4 rounded-xl bg-status-green/10 border border-status-green/20 flex items-center justify-between"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-status-green/20 flex items-center justify-center">
+                <ClipboardCheck className="h-5 w-5 text-status-green" />
+              </div>
+              <div>
+                <p className="font-medium text-status-green">✓ Checked in today</p>
+                <p className="text-sm text-muted-foreground">
+                  {todayJournalEntry?.confirmed ? 'Confirmed and locked' : 'Will be confirmed tomorrow morning'}
+                </p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setShowDailyCheckIn(true)}>
+              Edit Check-In
+            </Button>
+          </motion.div>
+        )}
         
         {/* Streak Module - Highly Visible at Top */}
         <motion.div
@@ -354,6 +409,15 @@ export default function Dashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* Daily Check-In Modal */}
+      <DailyCheckInModal
+        open={showDailyCheckIn}
+        onOpenChange={setShowDailyCheckIn}
+        initialActivity={todayJournalEntry?.activity}
+        initialPreparedness={todayJournalEntry?.preparedness}
+        initialRecovery={todayJournalEntry?.recovery}
+      />
     </Layout>
   );
 }

@@ -83,6 +83,156 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_journal_entries: {
+        Row: {
+          account_deep_work_minutes: number
+          accounts_researched: number
+          admin_heavy_day: boolean
+          automated_emails: number
+          calls_need_prep_count: number | null
+          calls_prep_note: string | null
+          check_in_timestamp: string | null
+          checked_in: boolean
+          clarity: number | null
+          confirmation_timestamp: string | null
+          confirmed: boolean
+          contacts_prepped: number
+          context_switching: string | null
+          conversations: number
+          created_at: string
+          customer_meetings_held: number
+          daily_score: number | null
+          date: string
+          dials: number
+          distractions: string | null
+          energy: number | null
+          expansion_touchpoints: number
+          focus_mode: string
+          focus_quality: number | null
+          goal_met: boolean
+          id: string
+          manager_plus_messages: number
+          manual_emails: number
+          meeting_prep_done: boolean | null
+          meetings_set: number
+          meetings_unprepared_for: boolean | null
+          meetings_unprepared_note: string | null
+          opportunities_created: number
+          personal_development: boolean
+          prepped_for_all_calls_tomorrow: boolean | null
+          prospecting_block_minutes: number
+          prospects_added: number
+          sales_productivity: number | null
+          sales_recovery: number | null
+          sales_strain: number | null
+          sleep_hours: number | null
+          stress: number | null
+          travel_day: boolean
+          updated_at: string
+          user_id: string | null
+          what_drained_you: string | null
+          what_worked_today: string | null
+        }
+        Insert: {
+          account_deep_work_minutes?: number
+          accounts_researched?: number
+          admin_heavy_day?: boolean
+          automated_emails?: number
+          calls_need_prep_count?: number | null
+          calls_prep_note?: string | null
+          check_in_timestamp?: string | null
+          checked_in?: boolean
+          clarity?: number | null
+          confirmation_timestamp?: string | null
+          confirmed?: boolean
+          contacts_prepped?: number
+          context_switching?: string | null
+          conversations?: number
+          created_at?: string
+          customer_meetings_held?: number
+          daily_score?: number | null
+          date: string
+          dials?: number
+          distractions?: string | null
+          energy?: number | null
+          expansion_touchpoints?: number
+          focus_mode?: string
+          focus_quality?: number | null
+          goal_met?: boolean
+          id?: string
+          manager_plus_messages?: number
+          manual_emails?: number
+          meeting_prep_done?: boolean | null
+          meetings_set?: number
+          meetings_unprepared_for?: boolean | null
+          meetings_unprepared_note?: string | null
+          opportunities_created?: number
+          personal_development?: boolean
+          prepped_for_all_calls_tomorrow?: boolean | null
+          prospecting_block_minutes?: number
+          prospects_added?: number
+          sales_productivity?: number | null
+          sales_recovery?: number | null
+          sales_strain?: number | null
+          sleep_hours?: number | null
+          stress?: number | null
+          travel_day?: boolean
+          updated_at?: string
+          user_id?: string | null
+          what_drained_you?: string | null
+          what_worked_today?: string | null
+        }
+        Update: {
+          account_deep_work_minutes?: number
+          accounts_researched?: number
+          admin_heavy_day?: boolean
+          automated_emails?: number
+          calls_need_prep_count?: number | null
+          calls_prep_note?: string | null
+          check_in_timestamp?: string | null
+          checked_in?: boolean
+          clarity?: number | null
+          confirmation_timestamp?: string | null
+          confirmed?: boolean
+          contacts_prepped?: number
+          context_switching?: string | null
+          conversations?: number
+          created_at?: string
+          customer_meetings_held?: number
+          daily_score?: number | null
+          date?: string
+          dials?: number
+          distractions?: string | null
+          energy?: number | null
+          expansion_touchpoints?: number
+          focus_mode?: string
+          focus_quality?: number | null
+          goal_met?: boolean
+          id?: string
+          manager_plus_messages?: number
+          manual_emails?: number
+          meeting_prep_done?: boolean | null
+          meetings_set?: number
+          meetings_unprepared_for?: boolean | null
+          meetings_unprepared_note?: string | null
+          opportunities_created?: number
+          personal_development?: boolean
+          prepped_for_all_calls_tomorrow?: boolean | null
+          prospecting_block_minutes?: number
+          prospects_added?: number
+          sales_productivity?: number | null
+          sales_recovery?: number | null
+          sales_strain?: number | null
+          sleep_hours?: number | null
+          stress?: number | null
+          travel_day?: boolean
+          updated_at?: string
+          user_id?: string | null
+          what_drained_you?: string | null
+          what_worked_today?: string | null
+        }
+        Relationships: []
+      }
       holidays: {
         Row: {
           created_at: string
@@ -224,10 +374,14 @@ export type Database = {
       work_schedule_config: {
         Row: {
           created_at: string
+          eod_checkin_time: string
+          eod_reminder_time: string
           goal_daily_score_threshold: number
           goal_productivity_threshold: number
+          grace_window_end_time: string
           grace_window_hours: number
           id: string
+          morning_confirm_time: string
           reminder_enabled: boolean
           reminder_time: string
           updated_at: string
@@ -236,10 +390,14 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          eod_checkin_time?: string
+          eod_reminder_time?: string
           goal_daily_score_threshold?: number
           goal_productivity_threshold?: number
+          grace_window_end_time?: string
           grace_window_hours?: number
           id?: string
+          morning_confirm_time?: string
           reminder_enabled?: boolean
           reminder_time?: string
           updated_at?: string
@@ -248,10 +406,14 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          eod_checkin_time?: string
+          eod_reminder_time?: string
           goal_daily_score_threshold?: number
           goal_productivity_threshold?: number
+          grace_window_end_time?: string
           grace_window_hours?: number
           id?: string
+          morning_confirm_time?: string
           reminder_enabled?: boolean
           reminder_time?: string
           updated_at?: string
