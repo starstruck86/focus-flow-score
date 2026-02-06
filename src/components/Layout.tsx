@@ -108,7 +108,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </main>
       
       {/* Floating Action Button */}
-      <FloatingActionButton position="bottom-right" />
+      <FloatingActionButton position="bottom-left" />
     </div>
   );
 }
