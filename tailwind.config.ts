@@ -67,8 +67,11 @@ export default {
         // Status colors
         status: {
           green: "hsl(var(--status-green))",
+          "green-foreground": "hsl(var(--status-green-foreground))",
           yellow: "hsl(var(--status-yellow))",
+          "yellow-foreground": "hsl(var(--status-yellow-foreground))",
           red: "hsl(var(--status-red))",
+          "red-foreground": "hsl(var(--status-red-foreground))",
         },
         // Priority colors
         priority: {
