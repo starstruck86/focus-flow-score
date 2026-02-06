@@ -82,9 +82,27 @@ export function useWorkScheduleConfig() {
         .from('work_schedule_config')
         .select('*')
         .limit(1)
-        .single();
+        .maybeSingle();
       
       if (error) throw error;
+      // Return defaults if no config exists
+      if (!data) {
+        return {
+          id: '',
+          workingDays: [1, 2, 3, 4, 5], // Mon-Fri
+          reminderEnabled: true,
+          reminderTime: '16:30:00',
+          graceWindowHours: 2,
+          goalDailyScoreThreshold: 8,
+          goalProductivityThreshold: 75,
+          eodCheckinTime: '16:30:00',
+          eodReminderTime: '18:30:00',
+          morningConfirmTime: '08:00:00',
+          graceWindowEndTime: '02:00:00',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        } as WorkScheduleConfig;
+      }
       return transformConfig(data);
     },
   });
@@ -174,9 +192,25 @@ export function useStreakSummary() {
         .from('streak_summary')
         .select('*')
         .limit(1)
-        .single();
+        .maybeSingle();
       
       if (error) throw error;
+      // Return defaults if no summary exists
+      if (!data) {
+        return {
+          id: '',
+          currentCheckinStreak: 0,
+          currentPerformanceStreak: 0,
+          longestCheckinStreak: 0,
+          longestPerformanceStreak: 0,
+          totalEligibleDays: 0,
+          totalCheckins: 0,
+          totalGoalsMet: 0,
+          checkinLevel: 1,
+          performanceLevel: 1,
+          updatedAt: new Date().toISOString(),
+        } as StreakSummary;
+      }
       return transformSummary(data);
     },
   });

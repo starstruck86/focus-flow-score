@@ -331,14 +331,15 @@ export function useJournalPromptStatus() {
         .from('work_schedule_config')
         .select('eod_checkin_time, eod_reminder_time, morning_confirm_time, grace_window_end_time')
         .limit(1)
-        .single();
+        .maybeSingle();
       
       if (error) throw error;
+      // Return defaults if no config exists
       return {
-        eodCheckinTime: data.eod_checkin_time || '16:30:00',
-        eodReminderTime: data.eod_reminder_time || '18:30:00',
-        morningConfirmTime: data.morning_confirm_time || '08:00:00',
-        graceWindowEndTime: data.grace_window_end_time || '02:00:00',
+        eodCheckinTime: data?.eod_checkin_time || '16:30:00',
+        eodReminderTime: data?.eod_reminder_time || '18:30:00',
+        morningConfirmTime: data?.morning_confirm_time || '08:00:00',
+        graceWindowEndTime: data?.grace_window_end_time || '02:00:00',
       };
     },
   });
