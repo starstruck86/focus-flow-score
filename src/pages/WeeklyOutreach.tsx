@@ -272,8 +272,15 @@ function OpportunitiesStageSummary() {
       .filter(o => o.status === 'active')
       .forEach(o => {
         const stage = o.stage || '';
-        summary[stage].count++;
-        summary[stage].arr += o.arr || 0;
+        // Only count if stage exists in our summary (handles legacy stage values)
+        if (summary[stage]) {
+          summary[stage].count++;
+          summary[stage].arr += o.arr || 0;
+        } else {
+          // Map legacy stages or unknown stages to "No Stage"
+          summary[''].count++;
+          summary[''].arr += o.arr || 0;
+        }
       });
     
     return summary;
