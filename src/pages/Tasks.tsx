@@ -2,12 +2,10 @@ import { useState } from 'react';
 import { 
   Plus, 
   CheckCircle2,
-  Circle,
   Calendar,
   Building2,
+  Target,
   MoreHorizontal,
-  GripVertical,
-  Filter
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
@@ -43,7 +41,8 @@ import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { EditableDatePicker } from '@/components/EditableDatePicker';
-import type { Task, Priority, Motion, TaskCategory, TaskStatus } from '@/types';
+import { LinkedRecordSelector } from '@/components/LinkedRecordSelector';
+import type { Task, Priority, Motion, TaskCategory, TaskStatus, LinkedRecordType } from '@/types';
 
 const PRIORITY_COLORS: Record<Priority, string> = {
   P0: 'bg-status-red text-white',
@@ -54,8 +53,8 @@ const PRIORITY_COLORS: Record<Priority, string> = {
 
 const MOTION_LABELS: Record<Motion, string> = {
   'new-logo': 'New Logo',
-  'expansion': 'Expansion',
   'renewal': 'Renewal',
+  'general': 'General',
 };
 
 const CATEGORY_OPTIONS: { value: TaskCategory; label: string }[] = [
@@ -78,19 +77,57 @@ const VIEWS = [
   { value: 'all', label: 'All Tasks' },
 ];
 
+interface NewTaskState {
+  title?: string;
+  priority: Priority;
+  motion: Motion;
+  category: TaskCategory;
+  dueDate?: string;
+  linkedRecordType?: LinkedRecordType;
+  linkedRecordId?: string;
+  linkedAccountId?: string;
+  notes?: string;
+}
+
 export default function Tasks() {
-  const { tasks, accounts, addTask, updateTask, deleteTask, toggleTaskComplete } = useStore();
+  const { tasks, accounts, opportunities, addTask, updateTask, deleteTask, toggleTaskComplete } = useStore();
   const [currentView, setCurrentView] = useState('today');
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [newTask, setNewTask] = useState<Partial<Task>>({
+  const [newTask, setNewTask] = useState<NewTaskState>({
     priority: 'P2',
-    status: 'open',
     motion: 'new-logo',
     category: 'call',
-    subtasks: [],
   });
 
   const today = new Date().toISOString().split('T')[0];
+
+  // Helper to get linked record display info (with backwards compatibility)
+  const getLinkedRecordInfo = (task: Task) => {
+    // Handle new linked record pattern
+    if (task.linkedRecordType === 'opportunity' && task.linkedRecordId) {
+      const opp = opportunities.find(o => o.id === task.linkedRecordId);
+      if (opp) {
+        const account = task.linkedAccountId 
+          ? accounts.find(a => a.id === task.linkedAccountId)
+          : accounts.find(a => a.name === opp.accountName);
+        return {
+          type: 'opportunity' as const,
+          name: opp.name,
+          accountName: account?.name || opp.accountName,
+          icon: Target,
+        };
+      }
+    }
+    
+    // Handle account link (new or legacy pattern)
+    const accountId = task.linkedRecordId || task.linkedAccountId;
+    const account = accountId ? accounts.find(a => a.id === accountId) : null;
+    return {
+      type: 'account' as const,
+      name: account?.name || 'Unknown',
+      icon: Building2,
+    };
+  };
 
   const filteredTasks = tasks.filter(task => {
     switch (currentView) {
@@ -131,32 +168,68 @@ export default function Tasks() {
         return acc;
       }, {} as Record<Priority, typeof filteredTasks>)
     : currentView === 'by-motion'
-    ? (['new-logo', 'expansion', 'renewal'] as Motion[]).reduce((acc, m) => {
+    ? (['new-logo', 'renewal', 'general'] as Motion[]).reduce((acc, m) => {
         acc[m] = filteredTasks.filter(t => t.motion === m);
         return acc;
       }, {} as Record<Motion, typeof filteredTasks>)
     : null;
 
   const handleAddTask = () => {
-    if (!newTask.title || !newTask.linkedAccountId || !newTask.dueDate) {
-      toast.error('Title, account, and due date are required');
+    if (!newTask.title || !newTask.linkedRecordId || !newTask.dueDate) {
+      toast.error('Title, linked record, and due date are required');
       return;
     }
-    addTask(newTask as Omit<Task, 'id' | 'createdAt' | 'updatedAt'>);
+    addTask({
+      title: newTask.title,
+      priority: newTask.priority,
+      dueDate: newTask.dueDate,
+      status: 'open',
+      motion: newTask.motion,
+      linkedRecordType: newTask.linkedRecordType || 'account',
+      linkedRecordId: newTask.linkedRecordId,
+      linkedAccountId: newTask.linkedAccountId,
+      category: newTask.category,
+      notes: newTask.notes,
+      subtasks: [],
+    });
     setShowAddDialog(false);
     setNewTask({
       priority: 'P2',
-      status: 'open',
       motion: 'new-logo',
       category: 'call',
-      subtasks: [],
     });
     toast.success('Task added!');
   };
 
+  // Top 3 helpers - Current Opps = tasks linked to opportunities
+  const currentOppsTasks = tasks
+    .filter(t => t.linkedRecordType === 'opportunity' && t.status !== 'done')
+    .sort((a, b) => {
+      const priorityOrder = { P0: 0, P1: 1, P2: 2, P3: 3 };
+      return priorityOrder[a.priority] - priorityOrder[b.priority];
+    })
+    .slice(0, 3);
+
+  const newLogoTasks = tasks
+    .filter(t => t.motion === 'new-logo' && t.linkedRecordType !== 'opportunity' && t.status !== 'done')
+    .sort((a, b) => {
+      const priorityOrder = { P0: 0, P1: 1, P2: 2, P3: 3 };
+      return priorityOrder[a.priority] - priorityOrder[b.priority];
+    })
+    .slice(0, 3);
+
+  const renewalTasks = tasks
+    .filter(t => t.motion === 'renewal' && t.status !== 'done')
+    .sort((a, b) => {
+      const priorityOrder = { P0: 0, P1: 1, P2: 2, P3: 3 };
+      return priorityOrder[a.priority] - priorityOrder[b.priority];
+    })
+    .slice(0, 3);
+
   const TaskItem = ({ task }: { task: Task }) => {
-    const account = accounts.find(a => a.id === task.linkedAccountId);
+    const recordInfo = getLinkedRecordInfo(task);
     const isOverdue = task.dueDate < today && task.status !== 'done';
+    const RecordIcon = recordInfo.icon;
     
     return (
       <div className={cn(
@@ -190,12 +263,13 @@ export default function Tasks() {
           </div>
           
           <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-            {account && (
-              <span className="flex items-center gap-1">
-                <Building2 className="h-3 w-3" />
-                {account.name}
-              </span>
-            )}
+            <span className="flex items-center gap-1">
+              <RecordIcon className="h-3 w-3" />
+              {recordInfo.name}
+              {recordInfo.type === 'opportunity' && recordInfo.accountName && (
+                <span className="text-muted-foreground/70">({recordInfo.accountName})</span>
+              )}
+            </span>
             <span className={cn(
               "flex items-center gap-1",
               isOverdue && "text-status-red"
@@ -264,7 +338,7 @@ export default function Tasks() {
               <DialogHeader>
                 <DialogTitle>Add Task</DialogTitle>
                 <DialogDescription>
-                  Create a new task for your pipeline work.
+                  Create a new task linked to an account or opportunity.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
@@ -277,6 +351,35 @@ export default function Tasks() {
                   />
                 </div>
                 
+                <div className="space-y-2">
+                  <Label>Linked Record *</Label>
+                  <LinkedRecordSelector
+                    value={newTask.linkedRecordId ? {
+                      type: newTask.linkedRecordType || 'account',
+                      id: newTask.linkedRecordId,
+                    } : undefined}
+                    onChange={(selected) => {
+                      if (selected) {
+                        setNewTask({
+                          ...newTask,
+                          linkedRecordType: selected.type,
+                          linkedRecordId: selected.id,
+                          linkedAccountId: selected.accountId,
+                          // Auto-suggest motion based on linked record
+                          motion: selected.suggestedMotion || newTask.motion,
+                        });
+                      } else {
+                        setNewTask({
+                          ...newTask,
+                          linkedRecordType: undefined,
+                          linkedRecordId: undefined,
+                          linkedAccountId: undefined,
+                        });
+                      }
+                    }}
+                  />
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Priority</Label>
@@ -317,8 +420,8 @@ export default function Tasks() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="new-logo">New Logo</SelectItem>
-                        <SelectItem value="expansion">Expansion</SelectItem>
                         <SelectItem value="renewal">Renewal</SelectItem>
+                        <SelectItem value="general">General</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -338,27 +441,6 @@ export default function Tasks() {
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Linked Account *</Label>
-                  <Select
-                    value={newTask.linkedAccountId}
-                    onValueChange={(v) => setNewTask({ ...newTask, linkedAccountId: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select account..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {accounts.length === 0 ? (
-                        <SelectItem value="none" disabled>No accounts - add one first</SelectItem>
-                      ) : (
-                        accounts.map((account) => (
-                          <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
                 </div>
 
                 <div className="space-y-2">
@@ -403,71 +485,57 @@ export default function Tasks() {
         <div className="mb-8">
           <h2 className="font-display text-lg font-semibold mb-4">Top 3 Priorities</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Current Opps */}
+            {/* Current Opps - Tasks linked to opportunities */}
             <div className="rounded-lg border border-border/50 bg-card p-4">
               <h3 className="font-display text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-status-blue"></span>
                 Current Opps
               </h3>
               <div className="space-y-2">
-                {tasks
-                  .filter(t => t.motion === 'expansion' && t.status !== 'done')
-                  .sort((a, b) => {
-                    const priorityOrder = { P0: 0, P1: 1, P2: 2, P3: 3 };
-                    return priorityOrder[a.priority] - priorityOrder[b.priority];
-                  })
-                  .slice(0, 3)
-                  .map((task) => (
-                    <div key={task.id} className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={task.status === 'done'}
-                        onCheckedChange={() => toggleTaskComplete(task.id)}
-                        className="h-4 w-4"
-                      />
-                      <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
-                        {task.title}
-                      </span>
-                      <Badge className={cn('text-[10px] h-4 ml-auto', PRIORITY_COLORS[task.priority])}>
-                        {task.priority}
-                      </Badge>
-                    </div>
-                  ))}
-                {tasks.filter(t => t.motion === 'expansion' && t.status !== 'done').length === 0 && (
+                {currentOppsTasks.map((task) => (
+                  <div key={task.id} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={task.status === 'done'}
+                      onCheckedChange={() => toggleTaskComplete(task.id)}
+                      className="h-4 w-4"
+                    />
+                    <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
+                      {task.title}
+                    </span>
+                    <Badge className={cn('text-[10px] h-4 ml-auto', PRIORITY_COLORS[task.priority])}>
+                      {task.priority}
+                    </Badge>
+                  </div>
+                ))}
+                {currentOppsTasks.length === 0 && (
                   <p className="text-xs text-muted-foreground italic">No tasks</p>
                 )}
               </div>
             </div>
 
-            {/* PG (New Logo) */}
+            {/* PG (New Logo) - Account-linked New Logo tasks */}
             <div className="rounded-lg border border-border/50 bg-card p-4">
               <h3 className="font-display text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-status-green"></span>
                 PG (New Logo)
               </h3>
               <div className="space-y-2">
-                {tasks
-                  .filter(t => t.motion === 'new-logo' && t.status !== 'done')
-                  .sort((a, b) => {
-                    const priorityOrder = { P0: 0, P1: 1, P2: 2, P3: 3 };
-                    return priorityOrder[a.priority] - priorityOrder[b.priority];
-                  })
-                  .slice(0, 3)
-                  .map((task) => (
-                    <div key={task.id} className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={task.status === 'done'}
-                        onCheckedChange={() => toggleTaskComplete(task.id)}
-                        className="h-4 w-4"
-                      />
-                      <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
-                        {task.title}
-                      </span>
-                      <Badge className={cn('text-[10px] h-4 ml-auto', PRIORITY_COLORS[task.priority])}>
-                        {task.priority}
-                      </Badge>
-                    </div>
-                  ))}
-                {tasks.filter(t => t.motion === 'new-logo' && t.status !== 'done').length === 0 && (
+                {newLogoTasks.map((task) => (
+                  <div key={task.id} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={task.status === 'done'}
+                      onCheckedChange={() => toggleTaskComplete(task.id)}
+                      className="h-4 w-4"
+                    />
+                    <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
+                      {task.title}
+                    </span>
+                    <Badge className={cn('text-[10px] h-4 ml-auto', PRIORITY_COLORS[task.priority])}>
+                      {task.priority}
+                    </Badge>
+                  </div>
+                ))}
+                {newLogoTasks.length === 0 && (
                   <p className="text-xs text-muted-foreground italic">No tasks</p>
                 )}
               </div>
@@ -480,29 +548,22 @@ export default function Tasks() {
                 Renewals
               </h3>
               <div className="space-y-2">
-                {tasks
-                  .filter(t => t.motion === 'renewal' && t.status !== 'done')
-                  .sort((a, b) => {
-                    const priorityOrder = { P0: 0, P1: 1, P2: 2, P3: 3 };
-                    return priorityOrder[a.priority] - priorityOrder[b.priority];
-                  })
-                  .slice(0, 3)
-                  .map((task) => (
-                    <div key={task.id} className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={task.status === 'done'}
-                        onCheckedChange={() => toggleTaskComplete(task.id)}
-                        className="h-4 w-4"
-                      />
-                      <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
-                        {task.title}
-                      </span>
-                      <Badge className={cn('text-[10px] h-4 ml-auto', PRIORITY_COLORS[task.priority])}>
-                        {task.priority}
-                      </Badge>
-                    </div>
-                  ))}
-                {tasks.filter(t => t.motion === 'renewal' && t.status !== 'done').length === 0 && (
+                {renewalTasks.map((task) => (
+                  <div key={task.id} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={task.status === 'done'}
+                      onCheckedChange={() => toggleTaskComplete(task.id)}
+                      className="h-4 w-4"
+                    />
+                    <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
+                      {task.title}
+                    </span>
+                    <Badge className={cn('text-[10px] h-4 ml-auto', PRIORITY_COLORS[task.priority])}>
+                      {task.priority}
+                    </Badge>
+                  </div>
+                ))}
+                {renewalTasks.length === 0 && (
                   <p className="text-xs text-muted-foreground italic">No tasks</p>
                 )}
               </div>

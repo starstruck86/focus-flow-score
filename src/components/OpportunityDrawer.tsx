@@ -126,7 +126,9 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
       dueDate: newTask.dueDate || new Date().toISOString().split('T')[0],
       status: 'open',
       motion: newTask.motion as Motion,
-      linkedAccountId: opportunity.accountId || '',
+      linkedRecordType: 'opportunity',
+      linkedRecordId: opportunity.id,
+      linkedAccountId: opportunity.accountId || undefined,
       category: newTask.category as any,
       subtasks: [],
     });
