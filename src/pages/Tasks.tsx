@@ -243,7 +243,7 @@ export default function Tasks() {
 
   return (
     <Layout>
-      <div className="p-6 lg:p-8 max-w-4xl mx-auto">
+      <div className="p-6 lg:p-8 max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -397,6 +397,117 @@ export default function Tasks() {
               )}
             </Button>
           ))}
+        </div>
+
+        {/* Top 3 Section */}
+        <div className="mb-8">
+          <h2 className="font-display text-lg font-semibold mb-4">Top 3 Priorities</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Current Opps */}
+            <div className="rounded-lg border border-border/50 bg-card p-4">
+              <h3 className="font-display text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-status-blue"></span>
+                Current Opps
+              </h3>
+              <div className="space-y-2">
+                {tasks
+                  .filter(t => t.motion === 'expansion' && t.status !== 'done')
+                  .sort((a, b) => {
+                    const priorityOrder = { P0: 0, P1: 1, P2: 2, P3: 3 };
+                    return priorityOrder[a.priority] - priorityOrder[b.priority];
+                  })
+                  .slice(0, 3)
+                  .map((task) => (
+                    <div key={task.id} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={task.status === 'done'}
+                        onCheckedChange={() => toggleTaskComplete(task.id)}
+                        className="h-4 w-4"
+                      />
+                      <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
+                        {task.title}
+                      </span>
+                      <Badge className={cn('text-[10px] h-4 ml-auto', PRIORITY_COLORS[task.priority])}>
+                        {task.priority}
+                      </Badge>
+                    </div>
+                  ))}
+                {tasks.filter(t => t.motion === 'expansion' && t.status !== 'done').length === 0 && (
+                  <p className="text-xs text-muted-foreground italic">No tasks</p>
+                )}
+              </div>
+            </div>
+
+            {/* PG (New Logo) */}
+            <div className="rounded-lg border border-border/50 bg-card p-4">
+              <h3 className="font-display text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-status-green"></span>
+                PG (New Logo)
+              </h3>
+              <div className="space-y-2">
+                {tasks
+                  .filter(t => t.motion === 'new-logo' && t.status !== 'done')
+                  .sort((a, b) => {
+                    const priorityOrder = { P0: 0, P1: 1, P2: 2, P3: 3 };
+                    return priorityOrder[a.priority] - priorityOrder[b.priority];
+                  })
+                  .slice(0, 3)
+                  .map((task) => (
+                    <div key={task.id} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={task.status === 'done'}
+                        onCheckedChange={() => toggleTaskComplete(task.id)}
+                        className="h-4 w-4"
+                      />
+                      <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
+                        {task.title}
+                      </span>
+                      <Badge className={cn('text-[10px] h-4 ml-auto', PRIORITY_COLORS[task.priority])}>
+                        {task.priority}
+                      </Badge>
+                    </div>
+                  ))}
+                {tasks.filter(t => t.motion === 'new-logo' && t.status !== 'done').length === 0 && (
+                  <p className="text-xs text-muted-foreground italic">No tasks</p>
+                )}
+              </div>
+            </div>
+
+            {/* Renewals */}
+            <div className="rounded-lg border border-border/50 bg-card p-4">
+              <h3 className="font-display text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-status-yellow"></span>
+                Renewals
+              </h3>
+              <div className="space-y-2">
+                {tasks
+                  .filter(t => t.motion === 'renewal' && t.status !== 'done')
+                  .sort((a, b) => {
+                    const priorityOrder = { P0: 0, P1: 1, P2: 2, P3: 3 };
+                    return priorityOrder[a.priority] - priorityOrder[b.priority];
+                  })
+                  .slice(0, 3)
+                  .map((task) => (
+                    <div key={task.id} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={task.status === 'done'}
+                        onCheckedChange={() => toggleTaskComplete(task.id)}
+                        className="h-4 w-4"
+                      />
+                      <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
+                        {task.title}
+                      </span>
+                      <Badge className={cn('text-[10px] h-4 ml-auto', PRIORITY_COLORS[task.priority])}>
+                        {task.priority}
+                      </Badge>
+                    </div>
+                  ))}
+                {tasks.filter(t => t.motion === 'renewal' && t.status !== 'done').length === 0 && (
+                  <p className="text-xs text-muted-foreground italic">No tasks</p>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Tasks List */}
