@@ -121,6 +121,17 @@ const STAGE_TEXT_COLORS: Record<string, string> = {
   'Closed Lost': 'text-status-red',
 };
 
+const STAGE_LABELS: Record<string, string> = {
+  '': 'No Stage',
+  'Prospect': '1 - Prospect',
+  'Discover': '2 - Discover',
+  'Demo': '3 - Demo',
+  'Proposal': '4 - Proposal',
+  'Negotiate': '5 - Negotiate',
+  'Closed Won': '6 - Closed Won',
+  'Closed Lost': '7 - Closed Lost',
+};
+
 // Website cell with edit toggle
 function WebsiteCell({ website, onChange }: { website: string; onChange: (value: string) => void }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -319,7 +330,7 @@ function OpportunitiesStageSummary() {
           >
             <div className="flex items-center justify-between mb-1">
               <span className={cn("text-xs font-medium", STAGE_TEXT_COLORS[stage])}>
-                {stage || 'No Stage'}
+                {STAGE_LABELS[stage] || stage || 'No Stage'}
               </span>
               <Badge variant="outline" className="text-xs h-5 px-1.5">
                 {stageSummary[stage].count}
