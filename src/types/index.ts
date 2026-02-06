@@ -286,6 +286,7 @@ export interface Renewal {
   usage?: string;
   term?: string;
   planhatLink?: string;
+  currentAgreementLink?: string; // Link to current contract/agreement
   autoRenew: boolean;
   product?: string;
   csNotes?: string;

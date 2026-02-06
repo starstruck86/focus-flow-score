@@ -33,6 +33,8 @@ interface RenewalDetailsFieldProps {
   onTermChange?: (value: string) => void;
   planhatLink?: string;
   onPlanhatLinkChange?: (value: string) => void;
+  currentAgreementLink?: string;
+  onCurrentAgreementLinkChange?: (value: string) => void;
   product?: string;
   onProductChange?: (value: string) => void;
   csNotes?: string;
@@ -60,6 +62,8 @@ export function RenewalDetailsField({
   onTermChange,
   planhatLink = '',
   onPlanhatLinkChange,
+  currentAgreementLink = '',
+  onCurrentAgreementLinkChange,
   product = '',
   onProductChange,
   csNotes = '',
@@ -69,6 +73,7 @@ export function RenewalDetailsField({
 }: RenewalDetailsFieldProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [editingPlanhat, setEditingPlanhat] = useState(false);
+  const [editingAgreement, setEditingAgreement] = useState(false);
 
   // Ensure we always have at least DEFAULT_CONTACTS_COUNT contacts
   const displayContacts = contacts.length >= DEFAULT_CONTACTS_COUNT 
@@ -144,8 +149,8 @@ export function RenewalDetailsField({
           </div>
         )}
         
-        {/* Row 2: Entitlements, Usage, Term, Planhat, Auto-Renew */}
-        <div className="grid grid-cols-5 gap-3">
+        {/* Row 2: Entitlements, Usage, Term, Auto-Renew */}
+        <div className="grid grid-cols-4 gap-3">
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
               Entitlements
@@ -184,6 +189,24 @@ export function RenewalDetailsField({
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+              Auto-Renew
+            </label>
+            <div className="flex items-center gap-2 h-9">
+              <Switch
+                checked={autoRenew}
+                onCheckedChange={(checked) => onAutoRenewChange?.(checked)}
+              />
+              <Label className="text-sm text-muted-foreground">
+                {autoRenew ? 'Yes' : 'No'}
+              </Label>
+            </div>
+          </div>
+        </div>
+        
+        {/* Row 3: Links Section */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
               Planhat Link
             </label>
             {editingPlanhat || !planhatLink ? (
@@ -201,10 +224,10 @@ export function RenewalDetailsField({
                   href={planhatLink} 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="text-primary hover:underline text-sm flex items-center gap-1"
+                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm font-medium"
                 >
-                  <ExternalLink className="h-4 w-4" />
-                  Open
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Open Planhat
                 </a>
                 <Button
                   variant="ghost"
@@ -219,17 +242,38 @@ export function RenewalDetailsField({
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-              Auto-Renew
+              Current Agreement
             </label>
-            <div className="flex items-center gap-2 h-9">
-              <Switch
-                checked={autoRenew}
-                onCheckedChange={(checked) => onAutoRenewChange?.(checked)}
+            {editingAgreement || !currentAgreementLink ? (
+              <Input
+                value={currentAgreementLink}
+                onChange={(e) => onCurrentAgreementLinkChange?.(e.target.value)}
+                onBlur={() => currentAgreementLink && setEditingAgreement(false)}
+                placeholder="https://..."
+                className="h-9 text-sm"
+                autoFocus={editingAgreement}
               />
-              <Label className="text-sm text-muted-foreground">
-                {autoRenew ? 'Yes' : 'No'}
-              </Label>
-            </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <a 
+                  href={currentAgreementLink} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm font-medium"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Open Agreement
+                </a>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => setEditingAgreement(true)}
+                >
+                  <Pencil className="h-3 w-3 text-muted-foreground" />
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
