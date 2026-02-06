@@ -55,11 +55,13 @@ interface AddUpdateOpportunityModalProps {
 
 const STAGES: { value: string; label: string }[] = [
   { value: 'none', label: 'No Stage' },
-  { value: 'Stage 1', label: 'Stage 1' },
-  { value: 'Stage 2', label: 'Stage 2' },
-  { value: 'Stage 3', label: 'Stage 3' },
-  { value: 'Stage 4', label: 'Stage 4' },
-  { value: 'Stage 5', label: 'Stage 5' },
+  { value: 'Prospect', label: '1 - Prospect' },
+  { value: 'Discover', label: '2 - Discover' },
+  { value: 'Demo', label: '3 - Demo' },
+  { value: 'Proposal', label: '4 - Proposal' },
+  { value: 'Negotiate', label: '5 - Negotiate' },
+  { value: 'Closed Won', label: '6 - Closed Won' },
+  { value: 'Closed Lost', label: '7 - Closed Lost' },
 ];
 const STATUSES: OpportunityStatus[] = ['active', 'stalled', 'closed-lost', 'closed-won'];
 const DEAL_TYPES: { value: DealType; label: string }[] = [
