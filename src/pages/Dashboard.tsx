@@ -54,123 +54,124 @@ export default function Dashboard() {
           <h1 className="font-display text-3xl font-bold">Daily Performance</h1>
         </div>
 
-        {/* Daily Entry Form - Moved under header */}
+        {/* Three Ring Gauges - Top Section */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          {/* Strain Card */}
+          <motion.div 
+            className="metric-card-strain"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <Flame className="h-5 w-5 text-strain" />
+              <h3 className="font-display font-semibold">Strain</h3>
+            </div>
+            <div className="flex justify-center">
+              <RingGauge
+                value={scores.salesStrain}
+                max={21}
+                type="strain"
+                sublabel={getStrainLabel(scores.strainBand)}
+                size={140}
+              />
+            </div>
+            <div className="mt-4 space-y-1">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Top Contributors</p>
+              {scores.strainContributors.slice(0, 3).map((c, i) => (
+                <div key={i} className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">{c.name}</span>
+                  <span className="text-strain font-medium">{c.value.toFixed(1)}</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+
+          {/* Recovery Card */}
+          <motion.div 
+            className="metric-card-recovery"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <Zap className="h-5 w-5 text-recovery" />
+              <h3 className="font-display font-semibold">Recovery</h3>
+            </div>
+            <div className="flex justify-center">
+              <RingGauge
+                value={scores.salesRecovery}
+                max={100}
+                type="recovery"
+                label="%"
+                size={140}
+              />
+            </div>
+            <div className="mt-4">
+              <p className={cn(
+                "text-xs p-2 rounded-lg",
+                scores.recoveryBand === 'green' && 'bg-status-green/10 text-status-green',
+                scores.recoveryBand === 'yellow' && 'bg-status-yellow/10 text-status-yellow',
+                scores.recoveryBand === 'red' && 'bg-status-red/10 text-status-red',
+              )}>
+                {getRecoveryAdvice(scores.recoveryBand)}
+              </p>
+            </div>
+          </motion.div>
+
+          {/* Productivity Card */}
+          <motion.div 
+            className="metric-card-productivity"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <Target className="h-5 w-5 text-productivity" />
+              <h3 className="font-display font-semibold">Productivity</h3>
+            </div>
+            <div className="flex justify-center">
+              <RingGauge
+                value={scores.salesProductivity}
+                max={100}
+                type="productivity"
+                label="%"
+                size={140}
+              />
+            </div>
+            <div className="mt-4 flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Effort Quality</span>
+              <span className={cn(
+                "text-xs font-medium px-2 py-1 rounded",
+                scores.effortQuality === 'high' && 'bg-status-green/10 text-status-green',
+                scores.effortQuality === 'medium' && 'bg-status-yellow/10 text-status-yellow',
+                scores.effortQuality === 'low' && 'bg-status-red/10 text-status-red',
+              )}>
+                {scores.effortQuality.toUpperCase()}
+              </span>
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Daily Entry Form */}
         <motion.div
           className="mb-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
         >
           <DailyEntryForm />
         </motion.div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Metrics */}
+          {/* Left Column - Stats & Timer */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Three Ring Gauges */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Strain Card */}
-              <motion.div 
-                className="metric-card-strain"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <Flame className="h-5 w-5 text-strain" />
-                  <h3 className="font-display font-semibold">Strain</h3>
-                </div>
-                <div className="flex justify-center">
-                  <RingGauge
-                    value={scores.salesStrain}
-                    max={21}
-                    type="strain"
-                    sublabel={getStrainLabel(scores.strainBand)}
-                    size={140}
-                  />
-                </div>
-                <div className="mt-4 space-y-1">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Top Contributors</p>
-                  {scores.strainContributors.slice(0, 3).map((c, i) => (
-                    <div key={i} className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">{c.name}</span>
-                      <span className="text-strain font-medium">{c.value.toFixed(1)}</span>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-
-              {/* Recovery Card */}
-              <motion.div 
-                className="metric-card-recovery"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <Zap className="h-5 w-5 text-recovery" />
-                  <h3 className="font-display font-semibold">Recovery</h3>
-                </div>
-                <div className="flex justify-center">
-                  <RingGauge
-                    value={scores.salesRecovery}
-                    max={100}
-                    type="recovery"
-                    label="%"
-                    size={140}
-                  />
-                </div>
-                <div className="mt-4">
-                  <p className={cn(
-                    "text-xs p-2 rounded-lg",
-                    scores.recoveryBand === 'green' && 'bg-status-green/10 text-status-green',
-                    scores.recoveryBand === 'yellow' && 'bg-status-yellow/10 text-status-yellow',
-                    scores.recoveryBand === 'red' && 'bg-status-red/10 text-status-red',
-                  )}>
-                    {getRecoveryAdvice(scores.recoveryBand)}
-                  </p>
-                </div>
-              </motion.div>
-
-              {/* Productivity Card */}
-              <motion.div 
-                className="metric-card-productivity"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <Target className="h-5 w-5 text-productivity" />
-                  <h3 className="font-display font-semibold">Productivity</h3>
-                </div>
-                <div className="flex justify-center">
-                  <RingGauge
-                    value={scores.salesProductivity}
-                    max={100}
-                    type="productivity"
-                    label="%"
-                    size={140}
-                  />
-                </div>
-                <div className="mt-4 flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Effort Quality</span>
-                  <span className={cn(
-                    "text-xs font-medium px-2 py-1 rounded",
-                    scores.effortQuality === 'high' && 'bg-status-green/10 text-status-green',
-                    scores.effortQuality === 'medium' && 'bg-status-yellow/10 text-status-yellow',
-                    scores.effortQuality === 'low' && 'bg-status-red/10 text-status-red',
-                  )}>
-                    {scores.effortQuality.toUpperCase()}
-                  </span>
-                </div>
-              </motion.div>
-            </div>
-
             {/* Stats Row */}
             <motion.div 
               className="grid grid-cols-4 gap-4"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
+              transition={{ delay: 0.5 }}
             >
               <div className="metric-card text-center">
                 <div className="text-2xl font-display font-bold text-foreground">
@@ -214,7 +215,7 @@ export default function Dashboard() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
+              transition={{ delay: 0.6 }}
             >
               <FocusTimer />
             </motion.div>
