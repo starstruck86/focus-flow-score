@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Flame, 
@@ -14,16 +14,103 @@ import { DailyEntryForm } from '@/components/DailyEntryForm';
 import { QuickActions } from '@/components/QuickActions';
 import { FocusTimer } from '@/components/FocusTimer';
 import { CalendarWidget } from '@/components/CalendarWidget';
+import { StreakModule } from '@/components/StreakModule';
 import { useStore } from '@/store/useStore';
 import { getRecoveryAdvice, getStrainLabel } from '@/lib/calculations';
 import { cn } from '@/lib/utils';
+import { 
+  useWorkScheduleConfig, 
+  useHolidays, 
+  usePtoDays, 
+  useWorkdayOverrides,
+  useStreakEvents,
+  useRecordCheckIn,
+  isEligibleDay 
+} from '@/hooks/useStreakData';
+import { format } from 'date-fns';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 
 export default function Dashboard() {
   const { currentDay, initializeToday } = useStore();
+  const [showManualCheckIn, setShowManualCheckIn] = useState(false);
+  const [checkInNote, setCheckInNote] = useState('');
+  
+  // Streak data hooks
+  const { data: config } = useWorkScheduleConfig();
+  const { data: holidays } = useHolidays();
+  const { data: ptoDays } = usePtoDays();
+  const { data: overrides } = useWorkdayOverrides();
+  const { data: streakEvents } = useStreakEvents();
+  const recordCheckIn = useRecordCheckIn();
 
   useEffect(() => {
     initializeToday();
   }, [initializeToday]);
+  
+  // Check if today is eligible and if already checked in
+  const today = new Date();
+  const todayStr = format(today, 'yyyy-MM-dd');
+  const isTodayEligible = config && holidays && ptoDays && overrides
+    ? isEligibleDay(today, config, holidays, ptoDays, overrides)
+    : false;
+  const todayEvent = streakEvents?.find(e => e.date === todayStr);
+  const todayCheckedIn = todayEvent?.checkedIn || false;
+  
+  // Auto check-in when user logs data
+  useEffect(() => {
+    if (!currentDay || !config || !isTodayEligible || todayCheckedIn) return;
+    
+    // Check if any meaningful activity happened
+    const hasActivity = 
+      currentDay.rawInputs.prospectsAddedToCadence > 0 ||
+      currentDay.rawInputs.coldCallsWithConversations > 0 ||
+      currentDay.rawInputs.emailsInMailsToManager > 0 ||
+      currentDay.rawInputs.initialMeetingsSet > 0 ||
+      currentDay.rawInputs.opportunitiesCreated > 0 ||
+      currentDay.activityInputs.dials > 0 ||
+      currentDay.activityInputs.emailsTotal > 0 ||
+      currentDay.activityInputs.prospectingBlockMinutes >= 10 ||
+      currentDay.activityInputs.accountDeepWorkMinutes >= 10;
+    
+    if (hasActivity) {
+      const goalMet = currentDay.scores.dailyScore >= (config.goalDailyScoreThreshold || 8) ||
+                     currentDay.scores.salesProductivity >= (config.goalProductivityThreshold || 75);
+      
+      recordCheckIn.mutate({
+        date: todayStr,
+        method: 'daily_input',
+        dailyScore: currentDay.scores.dailyScore,
+        productivityScore: currentDay.scores.salesProductivity,
+        isEligible: isTodayEligible,
+        goalMet,
+      });
+    }
+  }, [currentDay?.scores.dailyScore, isTodayEligible, todayCheckedIn]);
+  
+  const handleManualCheckIn = () => {
+    if (!config) return;
+    
+    const goalMet = currentDay 
+      ? (currentDay.scores.dailyScore >= (config.goalDailyScoreThreshold || 8) ||
+         currentDay.scores.salesProductivity >= (config.goalProductivityThreshold || 75))
+      : false;
+    
+    recordCheckIn.mutate({
+      date: todayStr,
+      method: 'manual',
+      dailyScore: currentDay?.scores.dailyScore,
+      productivityScore: currentDay?.scores.salesProductivity,
+      isEligible: isTodayEligible,
+      goalMet,
+    }, {
+      onSuccess: () => {
+        setShowManualCheckIn(false);
+        setCheckInNote('');
+      }
+    });
+  };
 
   if (!currentDay) {
     return (
@@ -53,8 +140,19 @@ export default function Dashboard() {
           </div>
           <h1 className="font-display text-3xl font-bold">Daily Performance</h1>
         </div>
-
-        {/* Three Ring Gauges - Top Section */}
+        
+        {/* Streak Module - Highly Visible at Top */}
+        <motion.div
+          className="mb-6"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <StreakModule 
+            onManualCheckIn={() => setShowManualCheckIn(true)}
+            todayCheckedIn={todayCheckedIn}
+          />
+        </motion.div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           {/* Strain Card */}
           <motion.div 
@@ -228,6 +326,34 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+      
+      {/* Manual Check-In Dialog */}
+      <Dialog open={showManualCheckIn} onOpenChange={setShowManualCheckIn}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Manual Check-In</DialogTitle>
+            <DialogDescription>
+              Confirm your check-in for today. Add an optional note about what you worked on.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Textarea
+              placeholder="What did you work on today? (optional)"
+              value={checkInNote}
+              onChange={(e) => setCheckInNote(e.target.value)}
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowManualCheckIn(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleManualCheckIn} disabled={recordCheckIn.isPending}>
+              {recordCheckIn.isPending ? 'Checking in...' : 'Check In'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }
