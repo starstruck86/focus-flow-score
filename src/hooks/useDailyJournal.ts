@@ -219,10 +219,15 @@ export function useSaveJournalEntry() {
       recovery: RecoveryJournalInputs;
       markAsCheckedIn?: boolean;
     }) => {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      
       // Calculate scores
       const scores = calculateJournalScores(activity, recovery);
       
       const payload = {
+        user_id: user.id,
         date,
         // Activity
         dials: activity.dials,

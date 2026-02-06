@@ -429,10 +429,15 @@ export function useRecordCheckIn() {
       isEligible: boolean;
       goalMet: boolean;
     }) => {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      
       // Upsert streak event
       const { error: eventError } = await supabase
         .from('streak_events')
         .upsert({
+          user_id: user.id,
           date,
           is_eligible_day: isEligible,
           checked_in: true,
@@ -441,7 +446,7 @@ export function useRecordCheckIn() {
           goal_met: goalMet,
           daily_score: dailyScore,
           productivity_score: productivityScore,
-        }, { onConflict: 'date' });
+        }, { onConflict: 'user_id,date' });
       
       if (eventError) throw eventError;
       
