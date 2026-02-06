@@ -149,6 +149,19 @@ export default function Dashboard() {
           <h1 className="font-display text-3xl font-bold">Daily Performance</h1>
         </div>
         
+        {/* Streak Module - Highly Visible at Top */}
+        <motion.div
+          className="mb-6"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <StreakModule 
+            onManualCheckIn={() => setShowManualCheckIn(true)}
+            todayCheckedIn={todayCheckedIn}
+          />
+        </motion.div>
+        
         {/* Check-In Banner - Show if not checked in today */}
         {isTodayEligible && !todayCheckedIn && (
           <motion.div
@@ -195,19 +208,6 @@ export default function Dashboard() {
             </Button>
           </motion.div>
         )}
-        
-        {/* Streak Module - Highly Visible at Top */}
-        <motion.div
-          className="mb-6"
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <StreakModule 
-            onManualCheckIn={() => setShowManualCheckIn(true)}
-            todayCheckedIn={todayCheckedIn}
-          />
-        </motion.div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           {/* Strain Card */}
           <motion.div 
