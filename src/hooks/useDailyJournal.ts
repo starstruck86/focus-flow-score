@@ -312,19 +312,45 @@ export function useConfirmJournalEntry() {
   });
 }
 
+// Helper to parse time string (HH:MM:SS) to minutes from midnight
+function parseTimeToMinutes(time: string): number {
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
 // Hook to check if prompts should show
 export function useJournalPromptStatus() {
   const { data: today, isLoading: loadingToday } = useTodayJournalEntry();
   const { data: yesterday, isLoading: loadingYesterday } = useYesterdayJournalEntry();
+  
+  // Import config to get schedule times
+  const { data: config, isLoading: loadingConfig } = useQuery({
+    queryKey: ['work-schedule-config-journal'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('work_schedule_config')
+        .select('eod_checkin_time, eod_reminder_time, morning_confirm_time, grace_window_end_time')
+        .limit(1)
+        .single();
+      
+      if (error) throw error;
+      return {
+        eodCheckinTime: data.eod_checkin_time || '16:30:00',
+        eodReminderTime: data.eod_reminder_time || '18:30:00',
+        morningConfirmTime: data.morning_confirm_time || '08:00:00',
+        graceWindowEndTime: data.grace_window_end_time || '02:00:00',
+      };
+    },
+  });
   
   const now = new Date();
   const currentHour = now.getHours();
   const currentMinute = now.getMinutes();
   const currentTime = currentHour * 60 + currentMinute;
   
-  // Default times (in minutes from midnight)
-  const eodCheckInTime = 16 * 60 + 30; // 4:30 PM
-  const morningConfirmTime = 8 * 60; // 8:00 AM
+  // Parse times from config or use defaults
+  const eodCheckInTime = config ? parseTimeToMinutes(config.eodCheckinTime) : 16 * 60 + 30;
+  const morningConfirmTime = config ? parseTimeToMinutes(config.morningConfirmTime) : 8 * 60;
   
   // Should show EOD check-in?
   const shouldShowEodCheckIn = 
@@ -343,6 +369,7 @@ export function useJournalPromptStatus() {
     shouldShowMorningConfirm,
     todayEntry: today,
     yesterdayEntry: yesterday,
-    isLoading: loadingToday || loadingYesterday,
+    isLoading: loadingToday || loadingYesterday || loadingConfig,
+    config,
   };
 }
