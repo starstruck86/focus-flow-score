@@ -7,10 +7,13 @@ import {
   TrendingUp,
   DollarSign,
   Settings,
-  Compass
+  Compass,
+  LogOut
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { FocusTimer } from './FocusTimer';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -23,6 +26,7 @@ const navItems = [
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
+  const { user, signOut } = useAuth();
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -38,7 +42,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <h1 className="font-display text-lg font-bold text-sidebar-foreground">
                 Quota Compass
               </h1>
-              <p className="text-xs text-muted-foreground">Corey Hartin</p>
+              <p className="text-xs text-muted-foreground truncate max-w-[140px]">
+                {user?.email || 'User'}
+              </p>
             </div>
           </div>
         </div>
@@ -70,8 +76,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <FocusTimer compact />
         </div>
 
-        {/* Settings */}
-        <div className="p-4 border-t border-sidebar-border">
+        {/* Settings & Sign Out */}
+        <div className="p-4 border-t border-sidebar-border space-y-1">
           <RouterNavLink
             to="/settings"
             className={cn(
@@ -84,6 +90,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <Settings className="h-5 w-5" />
             Settings
           </RouterNavLink>
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-3 px-4 py-3 h-auto text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent"
+            onClick={signOut}
+          >
+            <LogOut className="h-5 w-5" />
+            Sign Out
+          </Button>
         </div>
       </aside>
 

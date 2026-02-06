@@ -21,6 +21,7 @@ export type Database = {
           earned_at: string
           id: string
           metadata: Json | null
+          user_id: string | null
         }
         Insert: {
           badge_name: string
@@ -28,6 +29,7 @@ export type Database = {
           earned_at?: string
           id?: string
           metadata?: Json | null
+          user_id?: string | null
         }
         Update: {
           badge_name?: string
@@ -35,6 +37,7 @@ export type Database = {
           earned_at?: string
           id?: string
           metadata?: Json | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -50,6 +53,7 @@ export type Database = {
           start_time: string
           title: string
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           all_day?: boolean
@@ -62,6 +66,7 @@ export type Database = {
           start_time: string
           title: string
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           all_day?: boolean
@@ -74,6 +79,7 @@ export type Database = {
           start_time?: string
           title?: string
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -83,18 +89,21 @@ export type Database = {
           date: string
           id: string
           name: string
+          user_id: string | null
         }
         Insert: {
           created_at?: string
           date: string
           id?: string
           name: string
+          user_id?: string | null
         }
         Update: {
           created_at?: string
           date?: string
           id?: string
           name?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -104,18 +113,21 @@ export type Database = {
           date: string
           id: string
           note: string | null
+          user_id: string | null
         }
         Insert: {
           created_at?: string
           date: string
           id?: string
           note?: string | null
+          user_id?: string | null
         }
         Update: {
           created_at?: string
           date?: string
           id?: string
           note?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -132,6 +144,7 @@ export type Database = {
           is_eligible_day: boolean
           productivity_score: number | null
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           check_in_method?: string | null
@@ -145,6 +158,7 @@ export type Database = {
           is_eligible_day?: boolean
           productivity_score?: number | null
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           check_in_method?: string | null
@@ -158,6 +172,7 @@ export type Database = {
           is_eligible_day?: boolean
           productivity_score?: number | null
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -174,6 +189,7 @@ export type Database = {
           total_eligible_days: number
           total_goals_met: number
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           checkin_level?: number
@@ -187,6 +203,7 @@ export type Database = {
           total_eligible_days?: number
           total_goals_met?: number
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           checkin_level?: number
@@ -200,6 +217,7 @@ export type Database = {
           total_eligible_days?: number
           total_goals_met?: number
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -213,6 +231,7 @@ export type Database = {
           reminder_enabled: boolean
           reminder_time: string
           updated_at: string
+          user_id: string | null
           working_days: number[]
         }
         Insert: {
@@ -224,6 +243,7 @@ export type Database = {
           reminder_enabled?: boolean
           reminder_time?: string
           updated_at?: string
+          user_id?: string | null
           working_days?: number[]
         }
         Update: {
@@ -235,6 +255,7 @@ export type Database = {
           reminder_enabled?: boolean
           reminder_time?: string
           updated_at?: string
+          user_id?: string | null
           working_days?: number[]
         }
         Relationships: []
@@ -246,6 +267,7 @@ export type Database = {
           id: string
           is_workday: boolean
           reason: string | null
+          user_id: string | null
         }
         Insert: {
           created_at?: string
@@ -253,6 +275,7 @@ export type Database = {
           id?: string
           is_workday: boolean
           reason?: string | null
+          user_id?: string | null
         }
         Update: {
           created_at?: string
@@ -260,6 +283,7 @@ export type Database = {
           id?: string
           is_workday?: boolean
           reason?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
