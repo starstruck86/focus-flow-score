@@ -1,4 +1,5 @@
-import { format, subDays } from 'date-fns';
+import { format } from 'date-fns';
+import { useYesterdayJournalEntry, useConfirmJournalEntry } from '@/hooks/useDailyJournal';
 import {
   Dialog,
   DialogContent,
@@ -16,7 +17,7 @@ import {
   Target,
   Calendar,
 } from 'lucide-react';
-import { useConfirmJournalEntry } from '@/hooks/useDailyJournal';
+
 import { RingGauge } from '@/components/RingGauge';
 import { cn } from '@/lib/utils';
 import type { DailyJournalEntry } from '@/types/journal';
@@ -25,19 +26,23 @@ import { toast } from 'sonner';
 interface ConfirmYesterdayModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  entry: DailyJournalEntry;
-  onEdit: () => void;
+  entry?: DailyJournalEntry | null;
+  onEdit?: () => void;
 }
 
 export function ConfirmYesterdayModal({
   open,
   onOpenChange,
-  entry,
+  entry: propEntry,
   onEdit,
 }: ConfirmYesterdayModalProps) {
+  // Allow entry to come from props or fetch it ourselves
+  const { data: fetchedEntry } = useYesterdayJournalEntry();
+  const entry = propEntry || fetchedEntry;
   const confirmEntry = useConfirmJournalEntry();
   
   const handleConfirm = async () => {
+    if (!entry) return;
     try {
       await confirmEntry.mutateAsync(entry.date);
       toast.success('Yesterday confirmed!', {
@@ -52,8 +57,13 @@ export function ConfirmYesterdayModal({
   
   const handleEdit = () => {
     onOpenChange(false);
-    onEdit();
+    onEdit?.();
   };
+  
+  // Don't render if no entry
+  if (!entry) {
+    return null;
+  }
   
   const dateDisplay = format(new Date(entry.date + 'T12:00:00'), 'EEEE, MMMM d');
   const strainBand = (entry.salesStrain || 0) <= 6 ? 'low' : (entry.salesStrain || 0) <= 11 ? 'moderate' : 'high';
