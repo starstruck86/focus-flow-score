@@ -62,8 +62,11 @@
 
     /* Status colors */
     --status-green: 142 71% 45%;
+    --status-green-foreground: 0 0% 100%;
     --status-yellow: 38 92% 50%;
+    --status-yellow-foreground: 0 0% 10%;
     --status-red: 0 72% 51%;
+    --status-red-foreground: 0 0% 100%;
 
     /* Sidebar */
     --sidebar-background: 220 20% 8%;
