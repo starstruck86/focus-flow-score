@@ -110,6 +110,8 @@ export function AddUpdateOpportunityModal({
   const [paymentTerms, setPaymentTerms] = useState<PaymentTerms | ''>('');
   const [termMonths, setTermMonths] = useState('12');
   const [priorContractArr, setPriorContractArr] = useState('');
+  const [renewalArr, setRenewalArr] = useState('');
+  const [oneTimeAmount, setOneTimeAmount] = useState('');
   const [nextStep, setNextStep] = useState('');
   const [notes, setNotes] = useState('');
   const [churnRisk, setChurnRisk] = useState<ChurnRisk>('low');
@@ -152,6 +154,8 @@ export function AddUpdateOpportunityModal({
     setPaymentTerms('');
     setTermMonths('12');
     setPriorContractArr('');
+    setRenewalArr('');
+    setOneTimeAmount('');
     setNextStep('');
     setNotes('');
     setChurnRisk('low');
@@ -162,7 +166,8 @@ export function AddUpdateOpportunityModal({
     if (renewal) {
       setName(`${renewal.accountName} Renewal`);
       setAccountName(renewal.accountName);
-      setArr(renewal.arr?.toString() || '');
+      // Set prior contract ARR from renewal's current ARR
+      setPriorContractArr(renewal.arr?.toString() || '');
       setChurnRisk(renewal.churnRisk || 'low');
       // Close date is day before renewal
       if (renewal.renewalDue) {
@@ -187,6 +192,8 @@ export function AddUpdateOpportunityModal({
       setPaymentTerms(opp.paymentTerms || '');
       setTermMonths(opp.termMonths?.toString() || '12');
       setPriorContractArr(opp.priorContractArr?.toString() || '');
+      setRenewalArr(opp.renewalArr?.toString() || '');
+      setOneTimeAmount(opp.oneTimeAmount?.toString() || '');
       setNextStep(opp.nextStep || '');
       setNotes(opp.notes || '');
       setChurnRisk(opp.churnRisk || 'low');
@@ -269,6 +276,8 @@ export function AddUpdateOpportunityModal({
       paymentTerms: paymentTerms || undefined,
       termMonths: termMonths ? parseInt(termMonths) : undefined,
       priorContractArr: priorContractArr ? parseFloat(priorContractArr) : undefined,
+      renewalArr: renewalArr ? parseFloat(renewalArr) : undefined,
+      oneTimeAmount: oneTimeAmount ? parseFloat(oneTimeAmount) : undefined,
       nextStep: nextStep.trim() || undefined,
       notes: notes.trim() || undefined,
       linkedContactIds: selectedOpp?.linkedContactIds || [],
@@ -618,26 +627,102 @@ export function AddUpdateOpportunityModal({
               </div>
             </div>
             
-            {/* ARR & Close Date Row */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>ARR {status === 'closed-won' && '*'}</Label>
-                <Input
-                  type="number"
-                  placeholder="e.g., 50000"
-                  value={arr}
-                  onChange={(e) => setArr(e.target.value)}
-                />
+            {/* ARR Fields - Different for New Logo vs Renewal */}
+            {opportunityType === 'new-logo' ? (
+              /* New Logo: Simple ARR & Close Date */
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>ARR {status === 'closed-won' && '*'}</Label>
+                  <Input
+                    type="number"
+                    placeholder="e.g., 50000"
+                    value={arr}
+                    onChange={(e) => setArr(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Close Date {status === 'closed-won' && '*'}</Label>
+                  <Input
+                    type="date"
+                    value={closeDate}
+                    onChange={(e) => setCloseDate(e.target.value)}
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Close Date {status === 'closed-won' && '*'}</Label>
-                <Input
-                  type="date"
-                  value={closeDate}
-                  onChange={(e) => setCloseDate(e.target.value)}
-                />
-              </div>
-            </div>
+            ) : (
+              /* Renewal: Prior Contract ARR, Renewal ARR, New ARR (calc), One-Time */
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Prior Contract ARR</Label>
+                    <Input
+                      type="number"
+                      placeholder="e.g., 50000"
+                      value={priorContractArr}
+                      onChange={(e) => setPriorContractArr(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">Current contract value (auto-filled from renewal)</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Close Date {status === 'closed-won' && '*'}</Label>
+                    <Input
+                      type="date"
+                      value={closeDate}
+                      onChange={(e) => setCloseDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Renewal ARR</Label>
+                    <Input
+                      type="number"
+                      placeholder="e.g., 50000"
+                      value={renewalArr}
+                      onChange={(e) => setRenewalArr(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">Contracted renewal amount (capped at prior)</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>New ARR (Expansion)</Label>
+                    <div className="h-10 px-3 py-2 rounded-md border bg-muted/50 text-sm font-mono">
+                      {(() => {
+                        const prior = parseFloat(priorContractArr) || 0;
+                        const renewal = parseFloat(renewalArr) || 0;
+                        const expansion = Math.max(0, renewal - prior);
+                        return expansion > 0 ? `$${expansion.toLocaleString()}` : '—';
+                      })()}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Auto-calculated uplift beyond prior contract</p>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>One-Time (Non-Recurring)</Label>
+                    <Input
+                      type="number"
+                      placeholder="e.g., 5000"
+                      value={oneTimeAmount}
+                      onChange={(e) => setOneTimeAmount(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">Professional services, one-time fees, etc.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Total Deal Value</Label>
+                    <div className="h-10 px-3 py-2 rounded-md border bg-muted/50 text-sm font-mono font-medium">
+                      {(() => {
+                        const renewal = parseFloat(renewalArr) || 0;
+                        const oneTime = parseFloat(oneTimeAmount) || 0;
+                        const total = renewal + oneTime;
+                        return total > 0 ? `$${total.toLocaleString()}` : '—';
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
             
             {/* Deal Type & Payment Terms (visible when Closed Won) */}
             {status === 'closed-won' && (
@@ -675,26 +760,13 @@ export function AddUpdateOpportunityModal({
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Term Months</Label>
-                    <Input
-                      type="number"
-                      value={termMonths}
-                      onChange={(e) => setTermMonths(e.target.value)}
-                    />
-                  </div>
-                  {dealType === 'renewal' && (
-                    <div className="space-y-2">
-                      <Label>Prior Contract ARR *</Label>
-                      <Input
-                        type="number"
-                        placeholder="e.g., 45000"
-                        value={priorContractArr}
-                        onChange={(e) => setPriorContractArr(e.target.value)}
-                      />
-                    </div>
-                  )}
+                <div className="space-y-2">
+                  <Label>Term Months</Label>
+                  <Input
+                    type="number"
+                    value={termMonths}
+                    onChange={(e) => setTermMonths(e.target.value)}
+                  />
                 </div>
               </>
             )}
