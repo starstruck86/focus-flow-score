@@ -34,7 +34,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { Target, Building2, Check, ChevronsUpDown, Plus, Pencil } from 'lucide-react';
+import { Target, Building2, Check, ChevronsUpDown, Plus, Pencil, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { 
   OpportunityStatus, 
@@ -50,8 +50,11 @@ interface AddUpdateOpportunityModalProps {
   prefillOpportunityId?: string;
   prefillAccountId?: string;
   prefillAccountName?: string;
+  prefillRenewalId?: string;
   mode?: 'create' | 'update';
 }
+
+type OpportunityType = 'new-logo' | 'renewal';
 
 const STAGES: { value: string; label: string }[] = [
   { value: 'none', label: 'No Stage' },
@@ -82,16 +85,20 @@ export function AddUpdateOpportunityModal({
   prefillOpportunityId,
   prefillAccountId,
   prefillAccountName,
+  prefillRenewalId,
   mode: initialMode = 'create',
 }: AddUpdateOpportunityModalProps) {
-  const { opportunities, accounts, addOpportunity, updateOpportunity } = useStore();
+  const { opportunities, accounts, renewals, addOpportunity, updateOpportunity, updateRenewal } = useStore();
   
   const [mode, setMode] = useState<'create' | 'update'>(initialMode);
   const [oppSelectOpen, setOppSelectOpen] = useState(false);
   const [accountSelectOpen, setAccountSelectOpen] = useState(false);
+  const [renewalSelectOpen, setRenewalSelectOpen] = useState(false);
   
   // Form state
+  const [opportunityType, setOpportunityType] = useState<OpportunityType>('new-logo');
   const [selectedOppId, setSelectedOppId] = useState('');
+  const [selectedRenewalId, setSelectedRenewalId] = useState('');
   const [name, setName] = useState('');
   const [accountId, setAccountId] = useState('');
   const [accountName, setAccountName] = useState('');
@@ -105,6 +112,7 @@ export function AddUpdateOpportunityModal({
   const [priorContractArr, setPriorContractArr] = useState('');
   const [nextStep, setNextStep] = useState('');
   const [notes, setNotes] = useState('');
+  const [churnRisk, setChurnRisk] = useState<ChurnRisk>('low');
   
   // Reset form
   useEffect(() => {
@@ -119,18 +127,25 @@ export function AddUpdateOpportunityModal({
           resetForm();
           if (prefillAccountId) setAccountId(prefillAccountId);
           if (prefillAccountName) setAccountName(prefillAccountName);
+          if (prefillRenewalId) {
+            setOpportunityType('renewal');
+            setSelectedRenewalId(prefillRenewalId);
+            loadRenewalDefaults(prefillRenewalId);
+          }
         }
       }
     }
-  }, [open, prefillOpportunityId, prefillAccountId, prefillAccountName, initialMode]);
+  }, [open, prefillOpportunityId, prefillAccountId, prefillAccountName, prefillRenewalId, initialMode]);
   
   const resetForm = () => {
+    setOpportunityType('new-logo');
     setSelectedOppId('');
+    setSelectedRenewalId('');
     setName('');
     setAccountId('');
     setAccountName('');
     setStatus('active');
-    setStage('');
+    setStage('Prospect');
     setArr('');
     setCloseDate('');
     setDealType('');
@@ -139,6 +154,23 @@ export function AddUpdateOpportunityModal({
     setPriorContractArr('');
     setNextStep('');
     setNotes('');
+    setChurnRisk('low');
+  };
+  
+  const loadRenewalDefaults = (renewalId: string) => {
+    const renewal = renewals.find(r => r.id === renewalId);
+    if (renewal) {
+      setName(`${renewal.accountName} Renewal`);
+      setAccountName(renewal.accountName);
+      setArr(renewal.arr?.toString() || '');
+      setChurnRisk(renewal.churnRisk || 'low');
+      // Close date is day before renewal
+      if (renewal.renewalDue) {
+        const dueDate = new Date(renewal.renewalDue);
+        dueDate.setDate(dueDate.getDate() - 1);
+        setCloseDate(dueDate.toISOString().split('T')[0]);
+      }
+    }
   };
   
   const loadOpportunity = (id: string) => {
@@ -157,6 +189,13 @@ export function AddUpdateOpportunityModal({
       setPriorContractArr(opp.priorContractArr?.toString() || '');
       setNextStep(opp.nextStep || '');
       setNotes(opp.notes || '');
+      setChurnRisk(opp.churnRisk || 'low');
+      // Check if this opp is linked to a renewal
+      const linkedRenewal = renewals.find(r => r.linkedOpportunityId === id);
+      if (linkedRenewal) {
+        setOpportunityType('renewal');
+        setSelectedRenewalId(linkedRenewal.id);
+      }
     }
   };
   
@@ -165,6 +204,11 @@ export function AddUpdateOpportunityModal({
     [opportunities, selectedOppId]
   );
   
+  const selectedRenewal = useMemo(() =>
+    renewals.find(r => r.id === selectedRenewalId),
+    [renewals, selectedRenewalId]
+  );
+
   const selectedAccount = useMemo(() =>
     accounts.find(a => a.id === accountId),
     [accounts, accountId]
@@ -194,7 +238,13 @@ export function AddUpdateOpportunityModal({
         toast.error('Opportunity name is required');
         return;
       }
-      if (!accountId && !accountName.trim()) {
+      // For renewals, require a renewal selection
+      if (opportunityType === 'renewal' && !selectedRenewalId) {
+        toast.error('Please select a renewal account');
+        return;
+      }
+      // For new-logo, require an account
+      if (opportunityType === 'new-logo' && !accountId && !accountName.trim()) {
         toast.error('Please select or enter an account');
         return;
       }
@@ -209,10 +259,11 @@ export function AddUpdateOpportunityModal({
     const oppData = {
       name: name.trim(),
       accountId: accountId || undefined,
-      accountName: accountName.trim() || selectedAccount?.name || undefined,
+      accountName: accountName.trim() || selectedAccount?.name || selectedRenewal?.accountName || undefined,
       status,
       stage,
       arr: arr ? parseFloat(arr) : undefined,
+      churnRisk: opportunityType === 'renewal' ? churnRisk : undefined,
       closeDate: closeDate || undefined,
       dealType: dealType || undefined,
       paymentTerms: paymentTerms || undefined,
@@ -226,6 +277,23 @@ export function AddUpdateOpportunityModal({
     
     if (mode === 'create') {
       addOpportunity(oppData as any);
+      
+      // If creating a renewal opportunity, link it to the renewal
+      if (opportunityType === 'renewal' && selectedRenewalId) {
+        // We need to get the newly created opportunity and link it
+        setTimeout(() => {
+          const { opportunities: updatedOpps } = useStore.getState();
+          const newOpp = updatedOpps.find(o => 
+            o.name === name.trim() && 
+            o.accountName === (accountName.trim() || selectedRenewal?.accountName) &&
+            !renewals.some(r => r.linkedOpportunityId === o.id)
+          );
+          if (newOpp) {
+            updateRenewal(selectedRenewalId, { linkedOpportunityId: newOpp.id });
+          }
+        }, 0);
+      }
+      
       toast.success('Opportunity created', {
         description: name.trim(),
       });
@@ -322,6 +390,98 @@ export function AddUpdateOpportunityModal({
               </div>
             )}
             
+            {/* Opportunity Type Toggle (Create mode) */}
+            {mode === 'create' && (
+              <div className="space-y-2">
+                <Label>Opportunity Type</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={opportunityType === 'new-logo' ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1 gap-2"
+                    onClick={() => {
+                      setOpportunityType('new-logo');
+                      setSelectedRenewalId('');
+                    }}
+                  >
+                    <Building2 className="h-4 w-4" />
+                    New Logo
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={opportunityType === 'renewal' ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1 gap-2"
+                    onClick={() => {
+                      setOpportunityType('renewal');
+                      setAccountId('');
+                      setAccountName('');
+                    }}
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Renewal
+                  </Button>
+                </div>
+              </div>
+            )}
+            
+            {/* Renewal Selector (Create mode, renewal type) */}
+            {mode === 'create' && opportunityType === 'renewal' && (
+              <div className="space-y-2">
+                <Label>Linked Renewal Account *</Label>
+                <Popover open={renewalSelectOpen} onOpenChange={setRenewalSelectOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className="w-full justify-between"
+                    >
+                      {selectedRenewal ? (
+                        <span className="flex items-center gap-2 truncate">
+                          <RefreshCw className="h-4 w-4 text-muted-foreground" />
+                          {selectedRenewal.accountName}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">Select renewal...</span>
+                      )}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[350px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search renewals..." />
+                      <CommandList>
+                        <CommandEmpty>No renewals found.</CommandEmpty>
+                        <CommandGroup>
+                          {renewals.map(renewal => (
+                            <CommandItem
+                              key={renewal.id}
+                              value={renewal.accountName}
+                              onSelect={() => {
+                                setSelectedRenewalId(renewal.id);
+                                loadRenewalDefaults(renewal.id);
+                                setRenewalSelectOpen(false);
+                              }}
+                            >
+                              <RefreshCw className="h-4 w-4 mr-2 text-muted-foreground" />
+                              <span className="truncate">{renewal.accountName}</span>
+                              <Check
+                                className={cn(
+                                  "ml-auto h-4 w-4",
+                                  selectedRenewalId === renewal.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            )}
+            
             {/* Name (Create mode) */}
             {mode === 'create' && (
               <div className="space-y-2">
@@ -334,8 +494,8 @@ export function AddUpdateOpportunityModal({
               </div>
             )}
             
-            {/* Account Selector (Create mode) */}
-            {mode === 'create' && (
+            {/* Account Selector (Create mode, new-logo type only) */}
+            {mode === 'create' && opportunityType === 'new-logo' && (
               <div className="space-y-2">
                 <Label>Linked Account *</Label>
                 <Popover open={accountSelectOpen} onOpenChange={setAccountSelectOpen}>
@@ -400,6 +560,24 @@ export function AddUpdateOpportunityModal({
                     </Command>
                   </PopoverContent>
                 </Popover>
+              </div>
+            )}
+            
+            {/* Churn Risk (Renewal type only) */}
+            {opportunityType === 'renewal' && (
+              <div className="space-y-2">
+                <Label>Churn Risk</Label>
+                <Select value={churnRisk} onValueChange={(v) => setChurnRisk(v as ChurnRisk)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="certain">Certain</SelectItem>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             )}
             
