@@ -549,6 +549,13 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
                 onLastTouchDateChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
                 notes={opp.notes}
                 onNotesChange={(v) => updateOpportunity(opp.id, { notes: v })}
+                isRenewal={true}
+                priorContractArr={opp.priorContractArr}
+                onPriorContractArrChange={(v) => updateOpportunity(opp.id, { priorContractArr: v })}
+                renewalArr={opp.renewalArr}
+                onRenewalArrChange={(v) => updateOpportunity(opp.id, { renewalArr: v })}
+                oneTimeAmount={opp.oneTimeAmount}
+                onOneTimeAmountChange={(v) => updateOpportunity(opp.id, { oneTimeAmount: v })}
               />
             </TableCell>
           </TableRow>
