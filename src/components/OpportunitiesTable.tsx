@@ -78,13 +78,20 @@ interface OpportunitiesTableProps {
 }
 
 export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChurnRisk = true, columnOrder = 'default' }: OpportunitiesTableProps) {
-  const { opportunities, renewals, updateOpportunity, deleteOpportunity, addOpportunity } = useStore();
+  const { opportunities, renewals, updateOpportunity, deleteOpportunity, addOpportunity, updateRenewal } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [savedView, setSavedView] = useState<SavedView>('all');
   const [showAddRow, setShowAddRow] = useState(false);
   const [newOppName, setNewOppName] = useState('');
+  const [selectedRenewalId, setSelectedRenewalId] = useState('');
   const [closedWonModalOpen, setClosedWonModalOpen] = useState(false);
   const [closedWonOpportunity, setClosedWonOpportunity] = useState<Opportunity | null>(null);
+
+  // Get renewals that don't have linked opportunities yet (for adding new renewal opps)
+  const renewalsWithoutOpps = useMemo(() => {
+    const linkedOppIds = new Set(renewals.filter(r => r.linkedOpportunityId).map(r => r.linkedOpportunityId));
+    return renewals.filter(r => !r.linkedOpportunityId || !opportunities.some(o => o.id === r.linkedOpportunityId));
+  }, [renewals, opportunities]);
 
   // Handle status change - trigger modal for Closed Won
   const handleStatusChange = (opp: Opportunity, newStatus: OpportunityStatus) => {
@@ -165,13 +172,59 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
 
   const handleAddOpportunity = () => {
     if (!newOppName.trim()) return;
-    addOpportunity({
-      name: newOppName.trim(),
-      status: 'active',
-      stage: '',
-      linkedContactIds: [],
-    });
+    
+    // If we're in renewalsOnly mode and a renewal is selected, link the opportunity to it
+    if (renewalsOnly && selectedRenewalId) {
+      const renewal = renewals.find(r => r.id === selectedRenewalId);
+      if (renewal) {
+        // Generate a unique ID for the opportunity
+        const oppId = Math.random().toString(36).substring(2, 15);
+        
+        // Calculate close date as day before renewal date
+        const dueDate = new Date(renewal.renewalDue);
+        const closeDateObj = new Date(dueDate);
+        closeDateObj.setDate(closeDateObj.getDate() - 1);
+        const closeDate = closeDateObj.toISOString().split('T')[0];
+        
+        // Add the opportunity with renewal details
+        addOpportunity({
+          name: newOppName.trim(),
+          accountName: renewal.accountName,
+          status: 'active',
+          stage: 'Prospect',
+          arr: renewal.arr,
+          churnRisk: renewal.churnRisk || 'low',
+          closeDate: closeDate,
+          linkedContactIds: [],
+        });
+        
+        // Get the newest opportunity (just added) and link it to the renewal
+        // We need to update the renewal with the new opportunity's ID
+        // Since addOpportunity generates the ID internally, we need to find it
+        setTimeout(() => {
+          const { opportunities: updatedOpps } = useStore.getState();
+          const newOpp = updatedOpps.find(o => 
+            o.name === newOppName.trim() && 
+            o.accountName === renewal.accountName &&
+            !renewals.some(r => r.linkedOpportunityId === o.id)
+          );
+          if (newOpp) {
+            updateRenewal(renewal.id, { linkedOpportunityId: newOpp.id });
+          }
+        }, 0);
+      }
+    } else {
+      // Regular opportunity creation
+      addOpportunity({
+        name: newOppName.trim(),
+        status: 'active',
+        stage: '',
+        linkedContactIds: [],
+      });
+    }
+    
     setNewOppName('');
+    setSelectedRenewalId('');
     setShowAddRow(false);
   };
 
@@ -717,25 +770,56 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
             {showAddRow && (
               <TableRow>
                 <TableCell colSpan={9}>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {renewalsOnly && (
+                      <Select 
+                        value={selectedRenewalId} 
+                        onValueChange={(id) => {
+                          setSelectedRenewalId(id);
+                          const renewal = renewals.find(r => r.id === id);
+                          if (renewal && !newOppName) {
+                            setNewOppName(`${renewal.accountName} Renewal`);
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="w-56">
+                          <SelectValue placeholder="Select renewal account..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {renewals.map(renewal => (
+                            <SelectItem key={renewal.id} value={renewal.id}>
+                              {renewal.accountName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                     <Input
                       value={newOppName}
                       onChange={(e) => setNewOppName(e.target.value)}
                       placeholder="Opportunity name..."
                       className="max-w-sm"
-                      autoFocus
+                      autoFocus={!renewalsOnly}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleAddOpportunity();
+                        if (e.key === 'Enter' && (!renewalsOnly || selectedRenewalId)) handleAddOpportunity();
                         if (e.key === 'Escape') {
                           setShowAddRow(false);
                           setNewOppName('');
+                          setSelectedRenewalId('');
                         }
                       }}
                     />
-                    <Button size="sm" onClick={handleAddOpportunity}>Add</Button>
+                    <Button 
+                      size="sm" 
+                      onClick={handleAddOpportunity}
+                      disabled={renewalsOnly && !selectedRenewalId}
+                    >
+                      Add
+                    </Button>
                     <Button size="sm" variant="ghost" onClick={() => {
                       setShowAddRow(false);
                       setNewOppName('');
+                      setSelectedRenewalId('');
                     }}>Cancel</Button>
                   </div>
                 </TableCell>
