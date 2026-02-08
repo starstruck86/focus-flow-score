@@ -12,7 +12,11 @@ import {
   ChevronDown,
   Check,
   ClipboardCheck,
+  Upload,
+  Download,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { ImportModal } from '@/components/import';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -81,6 +85,50 @@ const US_FEDERAL_HOLIDAYS_2026 = [
   { date: '2026-11-26', name: 'Thanksgiving Day' },
   { date: '2026-12-25', name: 'Christmas Day' },
 ];
+
+// Data Import Section Component
+function DataImportSection() {
+  const [showImportModal, setShowImportModal] = useState(false);
+  
+  return (
+    <>
+      <div className="metric-card">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-recovery/10 flex items-center justify-center">
+              <Upload className="h-5 w-5 text-recovery" />
+            </div>
+            <div>
+              <h3 className="font-semibold">Import Data</h3>
+              <p className="text-sm text-muted-foreground">Import accounts, opportunities, and contacts from CSV</p>
+            </div>
+          </div>
+          <Button onClick={() => setShowImportModal(true)}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Import CSV
+          </Button>
+        </div>
+        
+        <div className="bg-muted/30 rounded-lg p-3">
+          <p className="text-sm text-muted-foreground mb-2">
+            Auto-detects column headers for seamless mapping. Supports:
+          </p>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="px-2 py-1 bg-background rounded">Account Name</span>
+            <span className="px-2 py-1 bg-background rounded">Salesforce Links</span>
+            <span className="px-2 py-1 bg-background rounded">Planhat Links</span>
+            <span className="px-2 py-1 bg-background rounded">Agreement Links</span>
+            <span className="px-2 py-1 bg-background rounded">ARR</span>
+            <span className="px-2 py-1 bg-background rounded">Priority</span>
+            <span className="px-2 py-1 bg-background rounded">+more</span>
+          </div>
+        </div>
+      </div>
+      
+      <ImportModal open={showImportModal} onOpenChange={setShowImportModal} />
+    </>
+  );
+}
 
 export default function Settings() {
   const { data: config, isLoading: configLoading } = useWorkScheduleConfig();
@@ -610,14 +658,18 @@ export default function Settings() {
           
           {/* Data Tab */}
           <TabsContent value="data" className="space-y-4">
+            {/* Import Section */}
+            <DataImportSection />
+            
+            {/* Export Section */}
             <div className="metric-card">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Database className="h-5 w-5 text-primary" />
+                  <Download className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-semibold">Data</h3>
-                  <p className="text-sm text-muted-foreground">Export and backup options</p>
+                  <h3 className="font-semibold">Export Data</h3>
+                  <p className="text-sm text-muted-foreground">Download your data as CSV</p>
                 </div>
               </div>
               <p className="text-sm text-muted-foreground">

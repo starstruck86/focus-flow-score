@@ -36,6 +36,7 @@ import { cn } from '@/lib/utils';
 import { EditableDatePicker } from '@/components/EditableDatePicker';
 import { OpportunityDetailsField } from '@/components/OpportunityDetailsField';
 import { ClosedWonModal } from '@/components/quota/ClosedWonModal';
+import { OpportunityName } from '@/components/ClickableName';
 import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk } from '@/types';
 import { format, parseISO, isToday, isPast, isThisQuarter } from 'date-fns';
 
@@ -269,12 +270,20 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
 
   const NameCell = ({ opp }: { opp: Opportunity }) => (
     <TableCell>
-      <button
-        onClick={() => onOpenDrawer(opp)}
-        className="font-medium text-primary hover:underline text-left"
-      >
-        {opp.name}
-      </button>
+      {opp.salesforceLink ? (
+        <OpportunityName 
+          name={opp.name} 
+          salesforceLink={opp.salesforceLink}
+          className="text-primary"
+        />
+      ) : (
+        <button
+          onClick={() => onOpenDrawer(opp)}
+          className="font-medium text-primary hover:underline text-left"
+        >
+          {opp.name}
+        </button>
+      )}
     </TableCell>
   );
 

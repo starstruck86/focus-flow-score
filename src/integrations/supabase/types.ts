@@ -14,6 +14,150 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_contacts: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          renewal_id: string | null
+          title: string | null
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          renewal_id?: string | null
+          title?: string | null
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          renewal_id?: string | null
+          title?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_contacts_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_contacts_renewal_id_fkey"
+            columns: ["renewal_id"]
+            isOneToOne: false
+            referencedRelation: "renewals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      accounts: {
+        Row: {
+          account_status: string | null
+          cadence_name: string | null
+          created_at: string
+          current_agreement_link: string | null
+          ecommerce: string | null
+          id: string
+          industry: string | null
+          last_touch_date: string | null
+          last_touch_type: string | null
+          mar_tech: string | null
+          motion: string | null
+          name: string
+          next_step: string | null
+          next_touch_due: string | null
+          notes: string | null
+          outreach_status: string | null
+          planhat_link: string | null
+          priority: string | null
+          salesforce_id: string | null
+          salesforce_link: string | null
+          tags: string[] | null
+          tech_fit_flag: string | null
+          tech_stack: string[] | null
+          tech_stack_notes: string | null
+          tier: string | null
+          touches_this_week: number | null
+          updated_at: string
+          user_id: string
+          website: string | null
+        }
+        Insert: {
+          account_status?: string | null
+          cadence_name?: string | null
+          created_at?: string
+          current_agreement_link?: string | null
+          ecommerce?: string | null
+          id?: string
+          industry?: string | null
+          last_touch_date?: string | null
+          last_touch_type?: string | null
+          mar_tech?: string | null
+          motion?: string | null
+          name: string
+          next_step?: string | null
+          next_touch_due?: string | null
+          notes?: string | null
+          outreach_status?: string | null
+          planhat_link?: string | null
+          priority?: string | null
+          salesforce_id?: string | null
+          salesforce_link?: string | null
+          tags?: string[] | null
+          tech_fit_flag?: string | null
+          tech_stack?: string[] | null
+          tech_stack_notes?: string | null
+          tier?: string | null
+          touches_this_week?: number | null
+          updated_at?: string
+          user_id: string
+          website?: string | null
+        }
+        Update: {
+          account_status?: string | null
+          cadence_name?: string | null
+          created_at?: string
+          current_agreement_link?: string | null
+          ecommerce?: string | null
+          id?: string
+          industry?: string | null
+          last_touch_date?: string | null
+          last_touch_type?: string | null
+          mar_tech?: string | null
+          motion?: string | null
+          name?: string
+          next_step?: string | null
+          next_touch_due?: string | null
+          notes?: string | null
+          outreach_status?: string | null
+          planhat_link?: string | null
+          priority?: string | null
+          salesforce_id?: string | null
+          salesforce_link?: string | null
+          tags?: string[] | null
+          tech_fit_flag?: string | null
+          tech_stack?: string[] | null
+          tech_stack_notes?: string | null
+          tier?: string | null
+          touches_this_week?: number | null
+          updated_at?: string
+          user_id?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
       badges_earned: {
         Row: {
           badge_name: string
@@ -82,6 +226,74 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      contacts: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          department: string | null
+          email: string | null
+          id: string
+          last_touch_date: string | null
+          linkedin_url: string | null
+          name: string
+          notes: string | null
+          preferred_channel: string | null
+          salesforce_id: string | null
+          salesforce_link: string | null
+          seniority: string | null
+          status: string | null
+          title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          department?: string | null
+          email?: string | null
+          id?: string
+          last_touch_date?: string | null
+          linkedin_url?: string | null
+          name: string
+          notes?: string | null
+          preferred_channel?: string | null
+          salesforce_id?: string | null
+          salesforce_link?: string | null
+          seniority?: string | null
+          status?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          department?: string | null
+          email?: string | null
+          id?: string
+          last_touch_date?: string | null
+          linkedin_url?: string | null
+          name?: string
+          notes?: string | null
+          preferred_channel?: string | null
+          salesforce_id?: string | null
+          salesforce_link?: string | null
+          seniority?: string | null
+          status?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contacts_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       daily_journal_entries: {
         Row: {
@@ -257,6 +469,101 @@ export type Database = {
         }
         Relationships: []
       }
+      opportunities: {
+        Row: {
+          account_id: string | null
+          activity_log: Json | null
+          arr: number | null
+          churn_risk: string | null
+          close_date: string | null
+          created_at: string
+          deal_type: string | null
+          id: string
+          is_new_logo: boolean | null
+          last_touch_date: string | null
+          linked_renewal_id: string | null
+          name: string
+          next_step: string | null
+          next_step_date: string | null
+          notes: string | null
+          one_time_amount: number | null
+          payment_terms: string | null
+          prior_contract_arr: number | null
+          renewal_arr: number | null
+          salesforce_id: string | null
+          salesforce_link: string | null
+          stage: string | null
+          status: string | null
+          term_months: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          activity_log?: Json | null
+          arr?: number | null
+          churn_risk?: string | null
+          close_date?: string | null
+          created_at?: string
+          deal_type?: string | null
+          id?: string
+          is_new_logo?: boolean | null
+          last_touch_date?: string | null
+          linked_renewal_id?: string | null
+          name: string
+          next_step?: string | null
+          next_step_date?: string | null
+          notes?: string | null
+          one_time_amount?: number | null
+          payment_terms?: string | null
+          prior_contract_arr?: number | null
+          renewal_arr?: number | null
+          salesforce_id?: string | null
+          salesforce_link?: string | null
+          stage?: string | null
+          status?: string | null
+          term_months?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          activity_log?: Json | null
+          arr?: number | null
+          churn_risk?: string | null
+          close_date?: string | null
+          created_at?: string
+          deal_type?: string | null
+          id?: string
+          is_new_logo?: boolean | null
+          last_touch_date?: string | null
+          linked_renewal_id?: string | null
+          name?: string
+          next_step?: string | null
+          next_step_date?: string | null
+          notes?: string | null
+          one_time_amount?: number | null
+          payment_terms?: string | null
+          prior_contract_arr?: number | null
+          renewal_arr?: number | null
+          salesforce_id?: string | null
+          salesforce_link?: string | null
+          stage?: string | null
+          status?: string | null
+          term_months?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "opportunities_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pto_days: {
         Row: {
           created_at: string
@@ -280,6 +587,108 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      renewals: {
+        Row: {
+          account_id: string | null
+          account_name: string
+          arr: number
+          auto_renew: boolean | null
+          churn_risk: string | null
+          created_at: string
+          cs_notes: string | null
+          csm: string | null
+          current_agreement_link: string | null
+          entitlements: string | null
+          health_status: string | null
+          id: string
+          linked_opportunity_id: string | null
+          next_step: string | null
+          notes: string | null
+          owner: string | null
+          planhat_link: string | null
+          product: string | null
+          renewal_due: string
+          renewal_quarter: string | null
+          renewal_stage: string | null
+          risk_reason: string | null
+          term: string | null
+          updated_at: string
+          usage: string | null
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          account_name: string
+          arr?: number
+          auto_renew?: boolean | null
+          churn_risk?: string | null
+          created_at?: string
+          cs_notes?: string | null
+          csm?: string | null
+          current_agreement_link?: string | null
+          entitlements?: string | null
+          health_status?: string | null
+          id?: string
+          linked_opportunity_id?: string | null
+          next_step?: string | null
+          notes?: string | null
+          owner?: string | null
+          planhat_link?: string | null
+          product?: string | null
+          renewal_due: string
+          renewal_quarter?: string | null
+          renewal_stage?: string | null
+          risk_reason?: string | null
+          term?: string | null
+          updated_at?: string
+          usage?: string | null
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          account_name?: string
+          arr?: number
+          auto_renew?: boolean | null
+          churn_risk?: string | null
+          created_at?: string
+          cs_notes?: string | null
+          csm?: string | null
+          current_agreement_link?: string | null
+          entitlements?: string | null
+          health_status?: string | null
+          id?: string
+          linked_opportunity_id?: string | null
+          next_step?: string | null
+          notes?: string | null
+          owner?: string | null
+          planhat_link?: string | null
+          product?: string | null
+          renewal_due?: string
+          renewal_quarter?: string | null
+          renewal_stage?: string | null
+          risk_reason?: string | null
+          term?: string | null
+          updated_at?: string
+          usage?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "renewals_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "renewals_linked_opportunity_id_fkey"
+            columns: ["linked_opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       streak_events: {
         Row: {

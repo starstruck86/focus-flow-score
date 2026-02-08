@@ -66,6 +66,8 @@ import { cn } from '@/lib/utils';
 import { OpportunitiesTable } from '@/components/OpportunitiesTable';
 import { OpportunityDrawer } from '@/components/OpportunityDrawer';
 import { AccountContactsField, type AccountContact } from '@/components/AccountContactsField';
+import { AccountName } from '@/components/ClickableName';
+import { ImportModal } from '@/components/import';
 import type { Account, AccountTier, AccountStatus, Opportunity, OpportunityStage } from '@/types';
 
 // Quick Links
@@ -365,6 +367,7 @@ export default function WeeklyOutreach() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showBulkImportDialog, setShowBulkImportDialog] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [importPreview, setImportPreview] = useState<Partial<Account>[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -664,7 +667,13 @@ export default function WeeklyOutreach() {
             
             {/* Accounts Actions */}
             <div className="flex items-center justify-end gap-2">
-              {/* Bulk Import Button */}
+              {/* New Import Button (uses database) */}
+              <Button variant="outline" onClick={() => setShowImportModal(true)}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Import
+              </Button>
+              
+              {/* Legacy Bulk Import Button (uses local state) */}
               <Dialog open={showBulkImportDialog} onOpenChange={(open) => {
                 setShowBulkImportDialog(open);
                 if (!open) {
@@ -674,9 +683,9 @@ export default function WeeklyOutreach() {
                 }
               }}>
                 <DialogTrigger asChild>
-                  <Button variant="outline">
+                  <Button variant="ghost" size="sm" className="text-muted-foreground">
                     <Upload className="h-4 w-4 mr-2" />
-                    Bulk Import
+                    Quick Import (Local)
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-2xl">
@@ -979,7 +988,11 @@ export default function WeeklyOutreach() {
                                   <React.Fragment key={account.id}>
                                     <TableRow>
                                       <TableCell className="align-top py-3">
-                                        <div className="font-medium text-sm break-words">{account.name}</div>
+                                        <AccountName 
+                                          name={account.name} 
+                                          salesforceLink={account.salesforceLink}
+                                          className="text-sm break-words"
+                                        />
                                       </TableCell>
                                       <TableCell className="align-top py-3">
                                         <WebsiteCell
@@ -1093,6 +1106,9 @@ export default function WeeklyOutreach() {
           opportunity={selectedOpportunity}
           onClose={() => setSelectedOpportunity(null)}
         />
+        
+        {/* Import Modal */}
+        <ImportModal open={showImportModal} onOpenChange={setShowImportModal} />
       </div>
     </Layout>
   );
