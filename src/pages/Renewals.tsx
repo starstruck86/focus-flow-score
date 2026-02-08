@@ -62,6 +62,7 @@ import { OpportunityDrawer } from '@/components/OpportunityDrawer';
 import { EditableDatePicker } from '@/components/EditableDatePicker';
 import { EditableUrlField } from '@/components/EditableUrlField';
 import { RenewalDetailsField } from '@/components/RenewalDetailsField';
+import { AccountName } from '@/components/ClickableName';
 import type { Renewal, HealthStatus, Opportunity, ChurnRisk } from '@/types';
 
 const HEALTH_COLORS: Record<HealthStatus, string> = {
@@ -883,7 +884,11 @@ export default function Renewals() {
                       <React.Fragment key={renewal.id}>
                         <TableRow className="hover:bg-muted/30">
                           <TableCell className="align-top py-3">
-                            <span className="font-medium text-sm">{renewal.accountName}</span>
+                            <AccountName 
+                              name={renewal.accountName} 
+                              salesforceLink={renewal.salesforceLink}
+                              className="text-sm"
+                            />
                           </TableCell>
                           <TableCell className="align-top py-3">
                             <EditableDatePicker

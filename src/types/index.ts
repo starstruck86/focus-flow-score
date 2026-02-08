@@ -52,6 +52,8 @@ export interface Opportunity {
   name: string;
   accountId?: string;
   accountName?: string;
+  salesforceLink?: string;
+  salesforceId?: string;
   linkedContactIds: string[];
   status: OpportunityStatus;
   stage: OpportunityStage;
@@ -235,6 +237,9 @@ export interface Account {
   accountStatus: AccountStatus;
   motion: Motion | 'both';
   salesforceLink?: string;
+  salesforceId?: string;
+  planhatLink?: string;
+  currentAgreementLink?: string;
   techStack: string[];
   techStackNotes?: string;
   techFitFlag: 'good' | 'watch' | 'disqualify';
@@ -265,6 +270,7 @@ export interface Contact {
   email?: string;
   linkedInUrl?: string;
   salesforceLink?: string;
+  salesforceId?: string;
   status: 'target' | 'engaged' | 'unresponsive' | 'not-fit';
   lastTouchDate?: string;
   preferredChannel?: TouchType;
@@ -276,7 +282,10 @@ export interface Contact {
 // Renewal
 export interface Renewal {
   id: string;
+  accountId?: string;
   accountName: string;
+  salesforceLink?: string;
+  salesforceId?: string;
   csm?: string;
   arr: number;
   renewalDue: string; // ISO date
