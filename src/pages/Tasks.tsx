@@ -246,40 +246,48 @@ export default function Tasks() {
           />
         </div>
         
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={cn(
-              "font-medium",
-              task.status === 'done' && "line-through text-muted-foreground"
-            )}>
-              {task.title}
-            </span>
-            <Badge className={cn('text-xs h-5', PRIORITY_COLORS[task.priority])}>
-              {task.priority}
-            </Badge>
-            <Badge variant="outline" className="text-xs h-5">
-              {MOTION_LABELS[task.motion]}
-            </Badge>
-          </div>
-          
-          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <RecordIcon className="h-3 w-3" />
-              {recordInfo.name}
-              {recordInfo.type === 'opportunity' && recordInfo.accountName && (
-                <span className="text-muted-foreground/70">({recordInfo.accountName})</span>
+          <div className="flex-1 min-w-0">
+            {/* Account name first */}
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-0.5">
+              <Building2 className="h-3 w-3" />
+              <span className="font-medium">
+                {recordInfo.type === 'opportunity' ? recordInfo.accountName || 'Unknown' : recordInfo.name}
+              </span>
+              {recordInfo.type === 'opportunity' && (
+                <>
+                  <span className="text-muted-foreground/50">›</span>
+                  <Target className="h-3 w-3" />
+                  <span>{recordInfo.name}</span>
+                </>
               )}
-            </span>
-            <span className={cn(
-              "flex items-center gap-1",
-              isOverdue && "text-status-red"
-            )}>
-              <Calendar className="h-3 w-3" />
-              {task.dueDate}
-              {isOverdue && " (Overdue)"}
-            </span>
-            <span className="capitalize">{task.category.replace('-', ' ')}</span>
-          </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={cn(
+                "font-medium",
+                task.status === 'done' && "line-through text-muted-foreground"
+              )}>
+                {task.title}
+              </span>
+              <Badge className={cn('text-xs h-5', PRIORITY_COLORS[task.priority])}>
+                {task.priority}
+              </Badge>
+              <Badge variant="outline" className="text-xs h-5">
+                {MOTION_LABELS[task.motion]}
+              </Badge>
+            </div>
+            
+            <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+              <span className={cn(
+                "flex items-center gap-1",
+                isOverdue && "text-status-red"
+              )}>
+                <Calendar className="h-3 w-3" />
+                {task.dueDate}
+                {isOverdue && " (Overdue)"}
+              </span>
+              <span className="capitalize">{task.category.replace('-', ' ')}</span>
+            </div>
           
           {task.notes && (
             <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
