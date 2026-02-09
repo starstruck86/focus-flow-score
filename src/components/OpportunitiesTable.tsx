@@ -74,11 +74,12 @@ type SavedView = 'all' | 'active' | 'stalled' | 'next-step-due' | 'closing-this-
 interface OpportunitiesTableProps {
   onOpenDrawer: (opportunity: Opportunity) => void;
   renewalsOnly?: boolean;
+  excludeRenewals?: boolean;
   showChurnRisk?: boolean;
   columnOrder?: 'default' | 'outreach';
 }
 
-export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChurnRisk = true, columnOrder = 'default' }: OpportunitiesTableProps) {
+export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, excludeRenewals = false, showChurnRisk = true, columnOrder = 'default' }: OpportunitiesTableProps) {
   const { opportunities, renewals, updateOpportunity, deleteOpportunity, addOpportunity, updateRenewal } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [savedView, setSavedView] = useState<SavedView>('all');
@@ -126,6 +127,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
     if (renewalsOnly) {
       filtered = filtered.filter(opp => renewalOpportunityIds.has(opp.id));
     }
+    
+    // Exclude renewal opportunities if excludeRenewals is true (for New Logo tab)
+    if (excludeRenewals) {
+      filtered = filtered.filter(opp => !renewalOpportunityIds.has(opp.id));
+    }
 
     switch (savedView) {
       case 'active':
@@ -153,7 +159,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, showChu
     }
 
     return filtered;
-  }, [opportunities, searchQuery, savedView]);
+  }, [opportunities, searchQuery, savedView, renewalsOnly, excludeRenewals, renewalOpportunityIds]);
 
   // Group by status
   const groupedOpportunities = useMemo(() => {
