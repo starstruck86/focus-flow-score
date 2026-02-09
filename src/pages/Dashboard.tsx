@@ -153,61 +153,62 @@ export default function Dashboard() {
           confirmed={todayJournalEntry?.confirmed}
         />
         
-        {/* SECTION 1: Commission Pacing (Top Tile) */}
-        <motion.div
-          className="mb-6"
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <CommissionPacingTile 
-            projectedQuarterCommission={commissionPacing?.projectedQuarterCommission || 0}
-            weeklyPaceTrend={commissionPacing?.weeklyPaceTrend || 0}
-            projectedAttainment={commissionPacing?.projectedAttainment || 0}
-            status={commissionPacing?.status || 'stable'}
-            isLoading={pacingLoading}
-            onClick={() => setShowCommissionDetail(true)}
-          />
-        </motion.div>
-        
-        {/* SECTION 2: Expected vs Actual (Today + WTD) */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {/* Today's Progress */}
-        <ExpectedVsActualCard
-          title="Today's Progress"
-          subtitle={todayCheckedIn ? "Checked in" : "Not yet checked in"}
-          metrics={todayJournalEntry ? [
-            {
-              metric: 'Points',
-              expected: 8,
-              actual: todayJournalEntry.dailyScore || 0,
-              gap: 8 - (todayJournalEntry.dailyScore || 0),
-              percentComplete: (todayJournalEntry.dailyScore || 0) / 8,
-              status: (todayJournalEntry.dailyScore || 0) >= 8 ? 'ahead' : 
-                      (todayJournalEntry.dailyScore || 0) >= 6 ? 'on-track' : 'behind',
-            },
-            {
-              metric: 'Conversations',
-              expected: defaultTemplate.conversations,
-              actual: todayJournalEntry.activity.conversations,
-              gap: defaultTemplate.conversations - todayJournalEntry.activity.conversations,
-              percentComplete: todayJournalEntry.activity.conversations / defaultTemplate.conversations,
-              status: todayJournalEntry.activity.conversations >= defaultTemplate.conversations ? 'ahead' : 'behind',
-            },
-            {
-              metric: 'Prospects Added',
-              expected: defaultTemplate.prospectsAdded,
-              actual: todayJournalEntry.activity.prospectsAdded,
-              gap: defaultTemplate.prospectsAdded - todayJournalEntry.activity.prospectsAdded,
-              percentComplete: todayJournalEntry.activity.prospectsAdded / defaultTemplate.prospectsAdded,
-              status: todayJournalEntry.activity.prospectsAdded >= defaultTemplate.prospectsAdded ? 'ahead' : 'behind',
-            },
-          ] : []}
-          pointsEarned={todayJournalEntry?.dailyScore || 0}
-          pointsTarget={8}
-          isLoading={journalLoading}
-        />
+        {/* SECTION 1: Commission Pacing + Today + WTD (3-column tiles) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          {/* Commission Pacing Tile */}
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <CommissionPacingTile 
+              projectedQuarterCommission={commissionPacing?.projectedQuarterCommission || 0}
+              weeklyPaceTrend={commissionPacing?.weeklyPaceTrend || 0}
+              projectedAttainment={commissionPacing?.projectedAttainment || 0}
+              status={commissionPacing?.status || 'stable'}
+              isLoading={pacingLoading}
+              onClick={() => setShowCommissionDetail(true)}
+              compact
+            />
+          </motion.div>
           
-          {/* Week-to-Date Progress */}
+          {/* Today's Progress Tile */}
+          <ExpectedVsActualCard
+            title="Today's Progress"
+            subtitle={todayCheckedIn ? "Checked in" : "Not yet checked in"}
+            metrics={todayJournalEntry ? [
+              {
+                metric: 'Points',
+                expected: 8,
+                actual: todayJournalEntry.dailyScore || 0,
+                gap: 8 - (todayJournalEntry.dailyScore || 0),
+                percentComplete: (todayJournalEntry.dailyScore || 0) / 8,
+                status: (todayJournalEntry.dailyScore || 0) >= 8 ? 'ahead' : 
+                        (todayJournalEntry.dailyScore || 0) >= 6 ? 'on-track' : 'behind',
+              },
+              {
+                metric: 'Conversations',
+                expected: defaultTemplate.conversations,
+                actual: todayJournalEntry.activity.conversations,
+                gap: defaultTemplate.conversations - todayJournalEntry.activity.conversations,
+                percentComplete: todayJournalEntry.activity.conversations / defaultTemplate.conversations,
+                status: todayJournalEntry.activity.conversations >= defaultTemplate.conversations ? 'ahead' : 'behind',
+              },
+              {
+                metric: 'Prospects Added',
+                expected: defaultTemplate.prospectsAdded,
+                actual: todayJournalEntry.activity.prospectsAdded,
+                gap: defaultTemplate.prospectsAdded - todayJournalEntry.activity.prospectsAdded,
+                percentComplete: todayJournalEntry.activity.prospectsAdded / defaultTemplate.prospectsAdded,
+                status: todayJournalEntry.activity.prospectsAdded >= defaultTemplate.prospectsAdded ? 'ahead' : 'behind',
+              },
+            ] : []}
+            pointsEarned={todayJournalEntry?.dailyScore || 0}
+            pointsTarget={8}
+            isLoading={journalLoading}
+            compact
+          />
+          
+          {/* Week-to-Date Progress Tile */}
           <ExpectedVsActualCard
             title="Week-to-Date"
             subtitle={`${daysElapsedThisWeek} of 5 workdays`}
@@ -215,6 +216,7 @@ export default function Dashboard() {
             pointsEarned={wtdMetrics?.pointsEarned || 0}
             pointsTarget={8 * daysElapsedThisWeek}
             isLoading={wtdLoading}
+            compact
           />
         </div>
         
