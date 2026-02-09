@@ -30,6 +30,8 @@ import {
   Plus,
   MoreHorizontal,
   Filter,
+  ChevronRight,
+  ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EditableDatePicker } from '@/components/EditableDatePicker';
@@ -193,6 +195,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const [selectedRenewalId, setSelectedRenewalId] = useState('');
   const [closedWonModalOpen, setClosedWonModalOpen] = useState(false);
   const [closedWonOpportunity, setClosedWonOpportunity] = useState<Opportunity | null>(null);
+  const [expandedOppIds, setExpandedOppIds] = useState<Set<string>>(new Set());
 
   // Get renewals that don't have linked opportunities yet (for adding new renewal opps)
   const renewalsWithoutOpps = useMemo(() => {
@@ -545,13 +548,28 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     </TableCell>
   );
 
+  const toggleExpand = (id: string) => {
+    setExpandedOppIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const renderOpportunityRow = (opp: Opportunity) => {
+    const isExpanded = expandedOppIds.has(opp.id);
+
     if (renewalsOnly) {
-      // Renewals view: use expandable details row
       return (
         <React.Fragment key={opp.id}>
-          <TableRow className="group hover:bg-muted/30">
-            <TableCell className="align-top py-3">
+          <TableRow className="group hover:bg-muted/30 cursor-pointer" onClick={() => toggleExpand(opp.id)}>
+            <TableCell className="w-8 py-3">
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); toggleExpand(opp.id); }}>
+                {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              </Button>
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <Select
                 value={opp.status}
                 onValueChange={(v) => handleStatusChange(opp, v as OpportunityStatus)}
@@ -568,18 +586,22 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               </Select>
             </TableCell>
             <TableCell className="align-top py-3">
-              <button
-                onClick={() => onOpenDrawer(opp)}
-                className="font-medium text-primary hover:underline text-left"
-              >
-                {opp.name}
-              </button>
+              <OpportunityNameCell
+                name={opp.name}
+                salesforceLink={opp.salesforceLink}
+                onNameChange={(name) => updateOpportunity(opp.id, { name })}
+                onSalesforceLinkChange={(link) => {
+                  const dbUpdates: Partial<DbOpportunity> = { salesforce_link: link || null };
+                  updateOpportunityMutation.mutate({ id: opp.id, updates: dbUpdates });
+                }}
+                onOpenDetails={() => onOpenDrawer(opp)}
+              />
             </TableCell>
-            <TableCell className="align-top py-3">
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <ArrInput opp={opp} />
             </TableCell>
             {showChurnRisk && (
-              <TableCell className="align-top py-3">
+              <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                 <Select
                   value={opp.churnRisk || 'none'}
                   onValueChange={(v) => updateOpportunity(opp.id, { churnRisk: (v === 'none' ? undefined : v) as ChurnRisk | undefined })}
@@ -597,7 +619,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 </Select>
               </TableCell>
             )}
-            <TableCell className="align-top py-3">
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <EditableDatePicker
                 value={opp.closeDate}
                 onChange={(v) => updateOpportunity(opp.id, { closeDate: v })}
@@ -606,7 +628,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 className="w-28"
               />
             </TableCell>
-            <TableCell className="align-top py-3">
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <Select
                 value={opp.stage || 'none'}
                 onValueChange={(v) => updateOpportunity(opp.id, { stage: (v === 'none' ? '' : v) as OpportunityStage })}
@@ -622,7 +644,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 </SelectContent>
               </Select>
             </TableCell>
-            <TableCell className="align-top py-3">
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover:opacity-100">
@@ -644,43 +666,54 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               </DropdownMenu>
             </TableCell>
           </TableRow>
-          <TableRow className="hover:bg-transparent border-b-2">
-            <TableCell colSpan={showChurnRisk ? 7 : 6} className="pt-0 pb-3">
-              <OpportunityDetailsField
-                nextStepDate={opp.nextStepDate}
-                onNextStepDateChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
-                lastTouchDate={opp.lastTouchDate}
-                onLastTouchDateChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
-                notes={opp.notes}
-                onNotesChange={(v) => updateOpportunity(opp.id, { notes: v })}
-                isRenewal={true}
-                priorContractArr={opp.priorContractArr}
-                onPriorContractArrChange={(v) => updateOpportunity(opp.id, { priorContractArr: v })}
-                renewalArr={opp.renewalArr}
-                onRenewalArrChange={(v) => updateOpportunity(opp.id, { renewalArr: v })}
-                oneTimeAmount={opp.oneTimeAmount}
-                onOneTimeAmountChange={(v) => updateOpportunity(opp.id, { oneTimeAmount: v })}
-              />
-            </TableCell>
-          </TableRow>
+          {isExpanded && (
+            <TableRow className="hover:bg-transparent border-b-2">
+              <TableCell colSpan={showChurnRisk ? 8 : 7} className="pt-0 pb-3">
+                <OpportunityDetailsField
+                  nextStepDate={opp.nextStepDate}
+                  onNextStepDateChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
+                  lastTouchDate={opp.lastTouchDate}
+                  onLastTouchDateChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
+                  notes={opp.notes}
+                  onNotesChange={(v) => updateOpportunity(opp.id, { notes: v })}
+                  isRenewal={true}
+                  priorContractArr={opp.priorContractArr}
+                  onPriorContractArrChange={(v) => updateOpportunity(opp.id, { priorContractArr: v })}
+                  renewalArr={opp.renewalArr}
+                  onRenewalArrChange={(v) => updateOpportunity(opp.id, { renewalArr: v })}
+                  oneTimeAmount={opp.oneTimeAmount}
+                  onOneTimeAmountChange={(v) => updateOpportunity(opp.id, { oneTimeAmount: v })}
+                />
+              </TableCell>
+            </TableRow>
+          )}
         </React.Fragment>
       );
     }
 
-    // Weekly Outreach view: use expandable details row
+    // Weekly Outreach / New Logo view
     if (columnOrder === 'outreach') {
       return (
         <React.Fragment key={opp.id}>
-          <TableRow className="group hover:bg-muted/30">
-            <TableCell className="align-top py-3">
-              <button
-                onClick={() => onOpenDrawer(opp)}
-                className="font-medium text-primary hover:underline text-left"
-              >
-                {opp.name}
-              </button>
+          <TableRow className="group hover:bg-muted/30 cursor-pointer" onClick={() => toggleExpand(opp.id)}>
+            <TableCell className="w-8 py-3">
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); toggleExpand(opp.id); }}>
+                {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              </Button>
             </TableCell>
             <TableCell className="align-top py-3">
+              <OpportunityNameCell
+                name={opp.name}
+                salesforceLink={opp.salesforceLink}
+                onNameChange={(name) => updateOpportunity(opp.id, { name })}
+                onSalesforceLinkChange={(link) => {
+                  const dbUpdates: Partial<DbOpportunity> = { salesforce_link: link || null };
+                  updateOpportunityMutation.mutate({ id: opp.id, updates: dbUpdates });
+                }}
+                onOpenDetails={() => onOpenDrawer(opp)}
+              />
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <Select
                 value={opp.status}
                 onValueChange={(v) => handleStatusChange(opp, v as OpportunityStatus)}
@@ -696,7 +729,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 </SelectContent>
               </Select>
             </TableCell>
-            <TableCell className="align-top py-3">
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <Select
                 value={opp.stage || 'none'}
                 onValueChange={(v) => updateOpportunity(opp.id, { stage: (v === 'none' ? '' : v) as OpportunityStage })}
@@ -712,10 +745,10 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 </SelectContent>
               </Select>
             </TableCell>
-            <TableCell className="align-top py-3">
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <ArrInput opp={opp} />
             </TableCell>
-            <TableCell className="align-top py-3">
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <EditableDatePicker
                 value={opp.closeDate}
                 onChange={(v) => updateOpportunity(opp.id, { closeDate: v })}
@@ -724,7 +757,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 className="w-28"
               />
             </TableCell>
-            <TableCell className="align-top py-3">
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover:opacity-100">
@@ -746,8 +779,44 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               </DropdownMenu>
             </TableCell>
           </TableRow>
+          {isExpanded && (
+            <TableRow className="hover:bg-transparent border-b-2">
+              <TableCell colSpan={7} className="pt-0 pb-3">
+                <OpportunityDetailsField
+                  nextStepDate={opp.nextStepDate}
+                  onNextStepDateChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
+                  lastTouchDate={opp.lastTouchDate}
+                  onLastTouchDateChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
+                  notes={opp.notes}
+                  onNotesChange={(v) => updateOpportunity(opp.id, { notes: v })}
+                />
+              </TableCell>
+            </TableRow>
+          )}
+        </React.Fragment>
+      );
+    }
+
+    // Default view (fallback — also uses chevron expand)
+    return (
+      <React.Fragment key={opp.id}>
+        <TableRow className="group hover:bg-muted/30 cursor-pointer" onClick={() => toggleExpand(opp.id)}>
+          <TableCell className="w-8 py-3">
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); toggleExpand(opp.id); }}>
+              {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            </Button>
+          </TableCell>
+          <StatusCell opp={opp} />
+          <NameCell opp={opp} />
+          <ArrCell opp={opp} />
+          {showChurnRisk && <ChurnRiskCell opp={opp} />}
+          <CloseDateCell opp={opp} />
+          <StageCell opp={opp} />
+          <ActionsCell opp={opp} />
+        </TableRow>
+        {isExpanded && (
           <TableRow className="hover:bg-transparent border-b-2">
-            <TableCell colSpan={6} className="pt-0 pb-3">
+            <TableCell colSpan={showChurnRisk ? 8 : 7} className="pt-0 pb-3">
               <OpportunityDetailsField
                 nextStepDate={opp.nextStepDate}
                 onNextStepDateChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
@@ -758,23 +827,8 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               />
             </TableCell>
           </TableRow>
-        </React.Fragment>
-      );
-    }
-
-    return (
-      <TableRow key={opp.id} className="group">
-        <StatusCell opp={opp} />
-        <NameCell opp={opp} />
-        <ArrCell opp={opp} />
-        {showChurnRisk && <ChurnRiskCell opp={opp} />}
-        <CloseDateCell opp={opp} />
-        <NextStepCell opp={opp} />
-        <StageCell opp={opp} />
-        <LastTouchCell opp={opp} />
-        <NotesCell opp={opp} />
-        <ActionsCell opp={opp} />
-      </TableRow>
+        )}
+      </React.Fragment>
     );
   };
 
@@ -841,8 +895,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               {columnOrder === 'outreach' ? (
-                // Weekly Outreach headers: details in expandable row
+                // Weekly Outreach headers
                 <>
+                  <TableHead className="w-8"></TableHead>
                   <TableHead className="w-[25%]">Opportunity</TableHead>
                   <TableHead className="w-[15%]">Status</TableHead>
                   <TableHead className="w-[12%]">Stage</TableHead>
@@ -851,8 +906,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   <TableHead className="w-[6%]"></TableHead>
                 </>
               ) : renewalsOnly ? (
-                // Renewals-only headers: details in expandable row
+                // Renewals-only headers
                 <>
+                  <TableHead className="w-8"></TableHead>
                   <TableHead className="w-[15%]">Status</TableHead>
                   <TableHead className="w-[25%]">Opportunity</TableHead>
                   <TableHead className="w-[12%]">ARR</TableHead>
@@ -863,15 +919,13 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 </>
               ) : (
                 <>
+                  <TableHead className="w-8"></TableHead>
                   <TableHead className="w-[130px]">Status</TableHead>
                   <TableHead className="w-[200px]">Opportunity</TableHead>
                   <TableHead className="w-[100px]">ARR</TableHead>
                   {showChurnRisk && <TableHead className="w-[100px]">Churn Risk</TableHead>}
                   <TableHead className="w-[130px]">Close Date</TableHead>
-                  <TableHead className="w-[130px]">Next Step</TableHead>
                   <TableHead className="w-[100px]">Stage</TableHead>
-                  <TableHead className="w-[100px]">Last Touch</TableHead>
-                  <TableHead className="min-w-[200px]">Notes</TableHead>
                   <TableHead className="w-[40px]"></TableHead>
                 </>
               )}
