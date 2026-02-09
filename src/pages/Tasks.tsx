@@ -510,7 +510,7 @@ export default function Tasks() {
                         className="h-4 w-4 mt-0.5"
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="text-[11px] text-muted-foreground truncate">
+                        <div className="text-[11px] text-muted-foreground">
                           {info.accountName || info.name}
                         </div>
                         <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
@@ -546,7 +546,7 @@ export default function Tasks() {
                         className="h-4 w-4 mt-0.5"
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="text-[11px] text-muted-foreground truncate">
+                        <div className="text-[11px] text-muted-foreground">
                           {info.name}
                         </div>
                         <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
@@ -582,7 +582,7 @@ export default function Tasks() {
                         className="h-4 w-4 mt-0.5"
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="text-[11px] text-muted-foreground truncate">
+                        <div className="text-[11px] text-muted-foreground">
                           {info.accountName || info.name}
                         </div>
                         <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
