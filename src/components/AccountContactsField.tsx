@@ -21,6 +21,7 @@ interface AccountContactsFieldProps {
   onChange: (contacts: AccountContact[]) => void;
   companyNotes?: string;
   onCompanyNotesChange?: (notes: string) => void;
+  defaultOpen?: boolean;
 }
 
 function generateContactId(): string {
@@ -33,9 +34,10 @@ export function AccountContactsField({
   contacts, 
   onChange, 
   companyNotes = '', 
-  onCompanyNotesChange 
+  onCompanyNotesChange,
+  defaultOpen = true,
 }: AccountContactsFieldProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(defaultOpen);
 
   // Ensure we always have at least DEFAULT_CONTACTS_COUNT contacts
   const displayContacts = contacts.length >= DEFAULT_CONTACTS_COUNT 
