@@ -1,3 +1,4 @@
+import { forwardRef } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -23,13 +24,13 @@ function generateContactId(): string {
 
 const DEFAULT_CONTACTS_COUNT = 3;
 
-export function AccountContactsField({ 
+export const AccountContactsField = forwardRef<HTMLDivElement, AccountContactsFieldProps>(function AccountContactsField({ 
   contacts, 
   onChange, 
   companyNotes = '', 
   onCompanyNotesChange,
   defaultOpen = false,
-}: AccountContactsFieldProps) {
+}, ref) {
   // Ensure we always have at least DEFAULT_CONTACTS_COUNT contacts
   const displayContacts = contacts.length >= DEFAULT_CONTACTS_COUNT 
     ? contacts 
@@ -134,4 +135,4 @@ export function AccountContactsField({
       </Button>
     </div>
   );
-}
+});
