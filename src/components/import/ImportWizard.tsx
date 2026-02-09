@@ -60,6 +60,10 @@ import type {
   PendingValueMapping,
   UnrecognizedLink,
   NeedsReviewRow,
+  AccountNotFoundItem,
+  OpportunityNotFoundItem,
+  OrphanOpportunityItem,
+  OpportunityConflictItem,
 } from '@/lib/importTypes';
 import { 
   ACCOUNT_FIELDS, 
@@ -67,6 +71,7 @@ import {
   RENEWAL_FIELDS, 
   CONTACT_FIELDS,
   PICKLIST_VALUES,
+  canProceedWithImport,
 } from '@/lib/importTypes';
 import {
   parseCSV,
@@ -74,12 +79,16 @@ import {
   detectMotion,
   applyTransform,
   buildAccountLookup,
+  buildOpportunityLookup,
   findMatchingAccount,
+  findMatchingOpportunity,
   findFuzzyMatches,
+  findFuzzyOpportunityMatches,
   calculateSummary,
   extractSalesforceId,
   normalizeUrl,
   detectLinkType,
+  detectOpportunityConflicts,
 } from '@/lib/importParser';
 import { 
   useHeaderMappings, 
@@ -124,6 +133,12 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
   const [unrecognizedLinks, setUnrecognizedLinks] = useState<UnrecognizedLink[]>([]);
   const [needsReviewRows, setNeedsReviewRows] = useState<NeedsReviewRow[]>([]);
   
+  // Account/Opportunity resolution queues
+  const [accountNotFound, setAccountNotFound] = useState<AccountNotFoundItem[]>([]);
+  const [opportunityNotFound, setOpportunityNotFound] = useState<OpportunityNotFoundItem[]>([]);
+  const [orphanOpportunities, setOrphanOpportunities] = useState<OrphanOpportunityItem[]>([]);
+  const [opportunityConflicts, setOpportunityConflicts] = useState<OpportunityConflictItem[]>([]);
+  
   // Parsed data
   const [parsedRows, setParsedRows] = useState<ParsedImportRow[]>([]);
   
@@ -167,6 +182,10 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
     setPendingValueMappings([]);
     setUnrecognizedLinks([]);
     setNeedsReviewRows([]);
+    setAccountNotFound([]);
+    setOpportunityNotFound([]);
+    setOrphanOpportunities([]);
+    setOpportunityConflicts([]);
     setParsedRows([]);
     setIgnoredAcknowledged(false);
     setPreviewFilter('all');
@@ -230,10 +249,18 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
     if (!csvRows.length || !headerMappings.length) return;
     
     const accountLookup = buildAccountLookup(existingAccounts, savedAliases);
+    const opportunityLookup = buildOpportunityLookup(existingOpportunities);
     const pendingValues: PendingValueMapping[] = [];
     const unrecLinks: UnrecognizedLink[] = [];
     const reviewRows: NeedsReviewRow[] = [];
+    const accountsNotFound: AccountNotFoundItem[] = [];
+    const oppsNotFound: OpportunityNotFoundItem[] = [];
+    const orphanOpps: OrphanOpportunityItem[] = [];
     const rows: ParsedImportRow[] = [];
+    
+    // Track opportunity assignments for conflict detection
+    const oppAssignments: { rowIndex: number; oppName?: string; oppSfId?: string; accountName?: string; accountId?: string }[] = [];
+
     
     csvRows.forEach((row, rowIndex) => {
       // Extract account data
@@ -332,17 +359,37 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
       );
       
       let needsReview = false;
+      let hasAccountIssue = false;
+      
       if (!matchedAccount) {
         // Check for fuzzy matches
         const fuzzyMatches = findFuzzyMatches(accountData.name, existingAccounts);
         if (fuzzyMatches.length > 0 && fuzzyMatches[0].score < 100) {
           needsReview = true;
-          reviewRows.push({
+          hasAccountIssue = true;
+          // Use accountNotFound queue instead of needsReview
+          accountsNotFound.push({
             rowIndex,
             accountName: accountData.name,
             accountDomain: accountData.website,
+            salesforceId: accountData.salesforce_id,
             suggestedMatches: fuzzyMatches,
             createNew: false,
+            resolved: false,
+            ignored: false,
+            saveAliasForFuture: true,
+          });
+        } else if (fuzzyMatches.length === 0) {
+          // No fuzzy matches at all - account definitely not found
+          hasAccountIssue = true;
+          accountsNotFound.push({
+            rowIndex,
+            accountName: accountData.name,
+            accountDomain: accountData.website,
+            salesforceId: accountData.salesforce_id,
+            suggestedMatches: [],
+            createNew: true, // Default to create new since no matches
+            resolved: false,
             ignored: false,
             saveAliasForFuture: true,
           });
@@ -351,12 +398,41 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
       
       // Determine row type
       let rowType: 'account-only' | 'opportunity' | 'renewal' | 'mixed' = 'account-only';
-      if (Object.keys(oppData).length > 0 && Object.keys(renewalData).length > 0) {
+      const hasOppData = Object.keys(oppData).length > 0;
+      const hasRenewalData = Object.keys(renewalData).length > 0;
+      
+      if (hasOppData && hasRenewalData) {
         rowType = 'mixed';
-      } else if (Object.keys(oppData).length > 0) {
+      } else if (hasOppData) {
         rowType = 'opportunity';
-      } else if (Object.keys(renewalData).length > 0) {
+      } else if (hasRenewalData) {
         rowType = 'renewal';
+      }
+      
+      // Check for orphan opportunities (opportunity without account)
+      if (hasOppData && !matchedAccount && !hasAccountIssue) {
+        // This opportunity has no account match and no account issue detected
+        // This shouldn't happen if account detection is working, but just in case
+        orphanOpps.push({
+          rowIndex,
+          opportunityName: oppData.name || `Row ${rowIndex + 1} Opportunity`,
+          opportunityData: oppData,
+          suggestedAccounts: findFuzzyMatches(accountData.name || '', existingAccounts),
+          resolved: false,
+          ignored: false,
+          createNewAccount: false,
+        });
+      }
+      
+      // Track opportunity assignment for conflict detection
+      if (hasOppData) {
+        oppAssignments.push({
+          rowIndex,
+          oppName: oppData.name,
+          oppSfId: oppData.salesforce_id,
+          accountName: accountData.name,
+          accountId: matchedAccount?.id,
+        });
       }
       
       // Build parsed row
@@ -368,25 +444,49 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
         accountId: matchedAccount?.id,
         accountMatched: !!matchedAccount,
         accountAction: matchedAccount ? 'update' : 'create',
-        opportunityData: Object.keys(oppData).length > 0 ? oppData : undefined,
+        opportunityData: hasOppData ? oppData : undefined,
         opportunityMatched: false,
-        opportunityAction: Object.keys(oppData).length > 0 ? 'create' : undefined,
-        renewalData: Object.keys(renewalData).length > 0 ? renewalData : undefined,
+        opportunityAction: hasOppData ? 'create' : undefined,
+        renewalData: hasRenewalData ? renewalData : undefined,
         renewalMatched: false,
-        renewalAction: Object.keys(renewalData).length > 0 ? 'create' : undefined,
+        renewalAction: hasRenewalData ? 'create' : undefined,
         contactData: Object.keys(contactData).length > 0 ? contactData : undefined,
-        needsReview,
+        needsReview: hasAccountIssue,
         ignored: false,
         warnings,
         errors,
       });
     });
     
+    // Detect opportunity conflicts (same opp mapped to multiple accounts)
+    const conflicts = detectOpportunityConflicts(oppAssignments);
+    const conflictItems: OpportunityConflictItem[] = [];
+    conflicts.forEach((rowIndices, key) => {
+      const firstRow = oppAssignments.find(a => rowIndices.includes(a.rowIndex));
+      conflictItems.push({
+        rowIndices,
+        opportunityName: firstRow?.oppName || key,
+        salesforceId: firstRow?.oppSfId,
+        accountOptions: rowIndices.map(ri => {
+          const assignment = oppAssignments.find(a => a.rowIndex === ri);
+          return {
+            rowIndex: ri,
+            accountName: assignment?.accountName || '',
+            accountId: assignment?.accountId,
+          };
+        }),
+        resolved: false,
+      });
+    });
+    
     setPendingValueMappings(pendingValues);
     setUnrecognizedLinks(unrecLinks);
     setNeedsReviewRows(reviewRows);
+    setAccountNotFound(accountsNotFound);
+    setOrphanOpportunities(orphanOpps);
+    setOpportunityConflicts(conflictItems);
     setParsedRows(rows);
-  }, [csvRows, headerMappings, existingAccounts, savedAliases, savedValueMappings]);
+  }, [csvRows, headerMappings, existingAccounts, existingOpportunities, savedAliases, savedValueMappings]);
   
   // Process when moving to action-required step
   useEffect(() => {
@@ -402,13 +502,19 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
   const hasActionRequired = unmappedColumns.length > 0 || 
     pendingValueMappings.length > 0 || 
     unrecognizedLinks.length > 0 || 
-    needsReviewRows.length > 0;
+    needsReviewRows.length > 0 ||
+    accountNotFound.length > 0 ||
+    opportunityNotFound.length > 0 ||
+    orphanOpportunities.length > 0 ||
+    opportunityConflicts.length > 0;
   
   // Count ignored items
   const ignoredCount = unmappedColumns.filter(m => m.targetObject === 'ignore').length +
     pendingValueMappings.filter(pv => !pv.appValue).length +
-    needsReviewRows.filter(nr => nr.ignored).length;
-  
+    needsReviewRows.filter(nr => nr.ignored).length +
+    accountNotFound.filter(a => a.ignored).length +
+    orphanOpportunities.filter(o => o.ignored).length;
+
   // Update header mapping
   const updateHeaderMapping = (colIndex: number, updates: Partial<EnhancedHeaderMapping>) => {
     setHeaderMappings(prev => prev.map(m => 
@@ -465,9 +571,32 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
     const unresolvedMappings = unmappedColumns.filter(m => m.targetObject !== 'ignore');
     const unresolvedValues = pendingValueMappings.filter(pv => !pv.appValue);
     const unresolvedReviews = needsReviewRows.filter(nr => !nr.ignored && !nr.selectedAccountId && !nr.createNew);
+    const unresolvedAccounts = accountNotFound.filter(a => !a.resolved && !a.ignored);
+    const unresolvedOrphans = orphanOpportunities.filter(o => !o.resolved && !o.ignored);
+    const unresolvedConflicts = opportunityConflicts.filter(c => !c.resolved);
     
-    if (unresolvedMappings.length > 0 || unresolvedValues.length > 0 || unresolvedReviews.length > 0) {
-      toast.error('Please resolve or ignore all issues before proceeding');
+    if (unresolvedMappings.length > 0) {
+      toast.error(`${unresolvedMappings.length} unmapped column(s) need mapping or explicit ignore`);
+      return;
+    }
+    if (unresolvedValues.length > 0) {
+      toast.error(`${unresolvedValues.length} value(s) need mapping`);
+      return;
+    }
+    if (unresolvedAccounts.length > 0) {
+      toast.error(`${unresolvedAccounts.length} account(s) not found - select existing or create new`);
+      return;
+    }
+    if (unresolvedOrphans.length > 0) {
+      toast.error(`${unresolvedOrphans.length} orphan opportunity(s) must be linked to an account`);
+      return;
+    }
+    if (unresolvedConflicts.length > 0) {
+      toast.error(`${unresolvedConflicts.length} opportunity conflict(s) - same opportunity mapped to multiple accounts`);
+      return;
+    }
+    if (unresolvedReviews.length > 0) {
+      toast.error(`${unresolvedReviews.length} row(s) need review`);
       return;
     }
     
@@ -477,6 +606,71 @@ export function ImportWizard({ open, onOpenChange }: ImportWizardProps) {
     }
     
     setStep('preview');
+  };
+  
+  // Update account not found item
+  const updateAccountNotFound = (rowIndex: number, updates: Partial<AccountNotFoundItem>) => {
+    setAccountNotFound(prev => prev.map(item => 
+      item.rowIndex === rowIndex ? { ...item, ...updates, resolved: !!(updates.selectedAccountId || updates.createNew) } : item
+    ));
+    
+    // Also update parsed rows
+    setParsedRows(prev => prev.map(pr => {
+      if (pr.rowIndex === rowIndex) {
+        if (updates.ignored) return { ...pr, ignored: true, needsReview: false };
+        if (updates.selectedAccountId) {
+          return { 
+            ...pr, 
+            accountId: updates.selectedAccountId, 
+            accountMatched: true, 
+            accountAction: 'update',
+            needsReview: false,
+          };
+        }
+        if (updates.createNew) {
+          return { ...pr, accountAction: 'create', needsReview: false };
+        }
+      }
+      return pr;
+    }));
+  };
+  
+  // Update orphan opportunity
+  const updateOrphanOpportunity = (rowIndex: number, updates: Partial<OrphanOpportunityItem>) => {
+    setOrphanOpportunities(prev => prev.map(item => 
+      item.rowIndex === rowIndex ? { ...item, ...updates, resolved: !!(updates.selectedAccountId || updates.createNewAccount) } : item
+    ));
+    
+    setParsedRows(prev => prev.map(pr => {
+      if (pr.rowIndex === rowIndex) {
+        if (updates.ignored) return { ...pr, ignored: true };
+        if (updates.selectedAccountId) {
+          return { 
+            ...pr, 
+            accountId: updates.selectedAccountId, 
+            accountMatched: true, 
+            accountAction: 'update',
+          };
+        }
+      }
+      return pr;
+    }));
+  };
+  
+  // Update opportunity conflict
+  const updateOpportunityConflict = (oppName: string, selectedRowIndex: number) => {
+    setOpportunityConflicts(prev => prev.map(item => 
+      item.opportunityName === oppName ? { ...item, selectedRowIndex, resolved: true } : item
+    ));
+    
+    // Mark other rows as ignored
+    const conflict = opportunityConflicts.find(c => c.opportunityName === oppName);
+    if (conflict) {
+      const otherRows = conflict.rowIndices.filter(ri => ri !== selectedRowIndex);
+      setParsedRows(prev => prev.map(pr => 
+        otherRows.includes(pr.rowIndex) ? { ...pr, ignored: true } : pr
+      ));
+    }
   };
   
   // Perform import
@@ -817,6 +1011,9 @@ Global Inc,globalinc.com,Renewal,https://yourorg.lightning.force.com/Account/001
             <Accordion type="multiple" className="flex-1 overflow-auto" defaultValue={
               unmappedColumns.length > 0 ? ['unmapped-columns'] :
               pendingValueMappings.length > 0 ? ['unmapped-values'] :
+              accountNotFound.length > 0 ? ['account-not-found'] :
+              orphanOpportunities.length > 0 ? ['orphan-opportunities'] :
+              opportunityConflicts.length > 0 ? ['opportunity-conflicts'] :
               needsReviewRows.length > 0 ? ['needs-review'] : []
             }>
               {/* Unmapped Columns */}
@@ -988,6 +1185,217 @@ Global Inc,globalinc.com,Renewal,https://yourorg.lightning.force.com/Account/001
                               <span className="text-xs text-muted-foreground">Remember this match for future imports</span>
                             </div>
                           )}
+                        </div>
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              )}
+              
+              {/* Account Not Found */}
+              {accountNotFound.length > 0 && (
+                <AccordionItem value="account-not-found">
+                  <AccordionTrigger className="hover:no-underline">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-status-red" />
+                      <span>Account Not Found ({accountNotFound.filter(a => !a.resolved && !a.ignored).length} unresolved)</span>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-3 p-2">
+                      <p className="text-xs text-muted-foreground mb-2">
+                        These accounts could not be matched to existing records. Select an existing account or create a new one.
+                      </p>
+                      {accountNotFound.map((item) => (
+                        <div key={item.rowIndex} className={cn(
+                          "p-3 rounded-lg border",
+                          item.resolved ? "bg-status-green/10 border-status-green/30" :
+                          item.ignored ? "bg-muted/30 border-muted opacity-60" :
+                          "bg-status-red/5 border-status-red/30"
+                        )}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div>
+                              <p className="font-medium text-sm">"{item.accountName}"</p>
+                              {item.accountDomain && <p className="text-xs text-muted-foreground">Domain: {item.accountDomain}</p>}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {item.resolved && <Badge className="bg-status-green text-white">Resolved</Badge>}
+                              <Button
+                                size="sm"
+                                variant={item.createNew ? "default" : "outline"}
+                                onClick={() => updateAccountNotFound(item.rowIndex, { createNew: true, selectedAccountId: undefined, ignored: false })}
+                              >
+                                Create New
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant={item.ignored ? "destructive" : "outline"}
+                                onClick={() => updateAccountNotFound(item.rowIndex, { ignored: true, createNew: false, selectedAccountId: undefined })}
+                              >
+                                Ignore Row
+                              </Button>
+                            </div>
+                          </div>
+                          {item.suggestedMatches.length > 0 && !item.createNew && !item.ignored && (
+                            <div className="mt-2">
+                              <p className="text-xs text-muted-foreground mb-1">Similar accounts found:</p>
+                              <div className="space-y-1">
+                                {item.suggestedMatches.map(match => (
+                                  <button
+                                    key={match.id}
+                                    className={cn(
+                                      "w-full text-left p-2 rounded text-sm transition-colors",
+                                      item.selectedAccountId === match.id 
+                                        ? "bg-primary/20 border border-primary" 
+                                        : "bg-background hover:bg-muted"
+                                    )}
+                                    onClick={() => updateAccountNotFound(item.rowIndex, { selectedAccountId: match.id, createNew: false, ignored: false })}
+                                  >
+                                    <span className="font-medium">{match.name}</span>
+                                    {match.website && <span className="text-muted-foreground ml-2">({match.website})</span>}
+                                    <Badge variant="outline" className="ml-2 text-xs">{match.score}% match</Badge>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {item.selectedAccountId && (
+                            <div className="flex items-center gap-2 mt-2">
+                              <Checkbox
+                                checked={item.saveAliasForFuture}
+                                onCheckedChange={(checked) => updateAccountNotFound(item.rowIndex, { saveAliasForFuture: !!checked })}
+                              />
+                              <span className="text-xs text-muted-foreground">Remember this match for future imports</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              )}
+              
+              {/* Orphan Opportunities */}
+              {orphanOpportunities.length > 0 && (
+                <AccordionItem value="orphan-opportunities">
+                  <AccordionTrigger className="hover:no-underline">
+                    <div className="flex items-center gap-2">
+                      <X className="h-4 w-4 text-status-red" />
+                      <span>Orphan Opportunities ({orphanOpportunities.filter(o => !o.resolved && !o.ignored).length} unresolved)</span>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-3 p-2">
+                      <p className="text-xs text-status-red mb-2">
+                        ⚠️ Every opportunity MUST be linked to an account. These cannot be imported without resolution.
+                      </p>
+                      {orphanOpportunities.map((item) => (
+                        <div key={item.rowIndex} className={cn(
+                          "p-3 rounded-lg border",
+                          item.resolved ? "bg-status-green/10 border-status-green/30" :
+                          item.ignored ? "bg-muted/30 border-muted opacity-60" :
+                          "bg-status-red/10 border-status-red/30"
+                        )}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div>
+                              <p className="font-medium text-sm">{item.opportunityName}</p>
+                              <p className="text-xs text-muted-foreground">Row {item.rowIndex + 1}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {item.resolved && <Badge className="bg-status-green text-white">Resolved</Badge>}
+                              <Button
+                                size="sm"
+                                variant={item.createNewAccount ? "default" : "outline"}
+                                onClick={() => updateOrphanOpportunity(item.rowIndex, { createNewAccount: true, selectedAccountId: undefined, ignored: false })}
+                              >
+                                Create Account
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant={item.ignored ? "destructive" : "outline"}
+                                onClick={() => updateOrphanOpportunity(item.rowIndex, { ignored: true, createNewAccount: false, selectedAccountId: undefined })}
+                              >
+                                Ignore
+                              </Button>
+                            </div>
+                          </div>
+                          {item.suggestedAccounts.length > 0 && !item.createNewAccount && !item.ignored && (
+                            <div className="mt-2">
+                              <p className="text-xs text-muted-foreground mb-1">Link to existing account:</p>
+                              <div className="space-y-1">
+                                {item.suggestedAccounts.map(acc => (
+                                  <button
+                                    key={acc.id}
+                                    className={cn(
+                                      "w-full text-left p-2 rounded text-sm transition-colors",
+                                      item.selectedAccountId === acc.id 
+                                        ? "bg-primary/20 border border-primary" 
+                                        : "bg-background hover:bg-muted"
+                                    )}
+                                    onClick={() => updateOrphanOpportunity(item.rowIndex, { selectedAccountId: acc.id, createNewAccount: false, ignored: false })}
+                                  >
+                                    <span className="font-medium">{acc.name}</span>
+                                    {acc.website && <span className="text-muted-foreground ml-2">({acc.website})</span>}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              )}
+              
+              {/* Opportunity Conflicts */}
+              {opportunityConflicts.length > 0 && (
+                <AccordionItem value="opportunity-conflicts">
+                  <AccordionTrigger className="hover:no-underline">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-status-red" />
+                      <span>Opportunity Conflicts ({opportunityConflicts.filter(c => !c.resolved).length} unresolved)</span>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-3 p-2">
+                      <p className="text-xs text-status-red mb-2">
+                        ⚠️ Each opportunity can only belong to ONE account. Select which account should own each opportunity.
+                      </p>
+                      {opportunityConflicts.map((conflict) => (
+                        <div key={conflict.opportunityName} className={cn(
+                          "p-3 rounded-lg border",
+                          conflict.resolved ? "bg-status-green/10 border-status-green/30" : "bg-status-red/10 border-status-red/30"
+                        )}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div>
+                              <p className="font-medium text-sm">{conflict.opportunityName}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Found in rows: {conflict.rowIndices.map(r => r + 1).join(', ')}
+                              </p>
+                            </div>
+                            {conflict.resolved && <Badge className="bg-status-green text-white">Resolved</Badge>}
+                          </div>
+                          <div className="mt-2">
+                            <p className="text-xs text-muted-foreground mb-1">Select the correct account for this opportunity:</p>
+                            <div className="space-y-1">
+                              {conflict.accountOptions.map(option => (
+                                <button
+                                  key={option.rowIndex}
+                                  className={cn(
+                                    "w-full text-left p-2 rounded text-sm transition-colors",
+                                    conflict.selectedRowIndex === option.rowIndex 
+                                      ? "bg-primary/20 border border-primary" 
+                                      : "bg-background hover:bg-muted"
+                                  )}
+                                  onClick={() => updateOpportunityConflict(conflict.opportunityName, option.rowIndex)}
+                                >
+                                  <span className="font-medium">{option.accountName}</span>
+                                  <span className="text-muted-foreground ml-2">(Row {option.rowIndex + 1})</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>

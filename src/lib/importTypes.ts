@@ -139,7 +139,67 @@ export interface UnrecognizedLink {
   selectedType?: string;
 }
 
-// Row needing review (can't match to account)
+// Account not found - needs resolution
+export interface AccountNotFoundItem {
+  rowIndex: number;
+  accountName: string;
+  accountDomain?: string;
+  salesforceId?: string;
+  suggestedMatches: { id: string; name: string; website?: string; score: number }[];
+  selectedAccountId?: string;
+  createNew: boolean;
+  newAccountData?: {
+    name: string;
+    website?: string;
+    salesforce_link?: string;
+  };
+  resolved: boolean;
+  ignored: boolean;
+  saveAliasForFuture: boolean;
+}
+
+// Opportunity not found - needs resolution
+export interface OpportunityNotFoundItem {
+  rowIndex: number;
+  opportunityName: string;
+  accountId?: string;
+  accountName?: string;
+  salesforceId?: string;
+  suggestedMatches: { id: string; name: string; accountName?: string; score: number }[];
+  selectedOpportunityId?: string;
+  createNew: boolean;
+  resolved: boolean;
+  ignored: boolean;
+}
+
+// Orphan opportunity - has no account attached
+export interface OrphanOpportunityItem {
+  rowIndex: number;
+  opportunityName: string;
+  opportunityData: Record<string, any>;
+  suggestedAccounts: { id: string; name: string; website?: string; score: number }[];
+  selectedAccountId?: string;
+  createNewAccount: boolean;
+  newAccountData?: {
+    name: string;
+    website?: string;
+    salesforce_link?: string;
+  };
+  resolved: boolean;
+  ignored: boolean;
+}
+
+// Opportunity conflict - same opp mapped to multiple accounts
+export interface OpportunityConflictItem {
+  rowIndices: number[];
+  opportunityName: string;
+  salesforceId?: string;
+  accountOptions: { rowIndex: number; accountName: string; accountId?: string }[];
+  selectedRowIndex?: number;
+  resolved: boolean;
+}
+
+// Row needing review (can't match to account) - legacy, now replaced by AccountNotFoundItem
 export interface NeedsReviewRow {
   rowIndex: number;
   accountName: string;
@@ -229,7 +289,13 @@ export interface ImportState {
   // Unrecognized links
   unrecognizedLinks: UnrecognizedLink[];
   
-  // Needs review
+  // Account/Opportunity resolution queues
+  accountNotFound: AccountNotFoundItem[];
+  opportunityNotFound: OpportunityNotFoundItem[];
+  orphanOpportunities: OrphanOpportunityItem[];
+  opportunityConflicts: OpportunityConflictItem[];
+  
+  // Legacy - needs review (deprecated, use accountNotFound)
   needsReviewRows: NeedsReviewRow[];
   
   // Parsed rows
@@ -251,5 +317,45 @@ export interface ImportState {
     renewalsCreated: number;
     renewalsUpdated: number;
     errors: number;
+  };
+}
+
+// Check if import can proceed (all blocking issues resolved)
+export function canProceedWithImport(state: ImportState): { canProceed: boolean; blockers: string[] } {
+  const blockers: string[] = [];
+  
+  // Check unmapped columns that aren't ignored
+  const unmappedNotIgnored = state.unmappedColumns.filter(c => c.targetObject !== 'ignore');
+  if (unmappedNotIgnored.length > 0) {
+    blockers.push(`${unmappedNotIgnored.length} unmapped column(s) need mapping or explicit ignore`);
+  }
+  
+  // Check unresolved account not found
+  const unresolvedAccounts = state.accountNotFound.filter(a => !a.resolved && !a.ignored);
+  if (unresolvedAccounts.length > 0) {
+    blockers.push(`${unresolvedAccounts.length} account(s) not found - select existing or create new`);
+  }
+  
+  // Check unresolved opportunity not found
+  const unresolvedOpps = state.opportunityNotFound.filter(o => !o.resolved && !o.ignored);
+  if (unresolvedOpps.length > 0) {
+    blockers.push(`${unresolvedOpps.length} opportunity(s) not found - select existing or create new`);
+  }
+  
+  // Check orphan opportunities (BLOCKING - cannot be ignored without explicit confirmation)
+  const unresolvedOrphans = state.orphanOpportunities.filter(o => !o.resolved && !o.ignored);
+  if (unresolvedOrphans.length > 0) {
+    blockers.push(`${unresolvedOrphans.length} orphan opportunity(s) must be linked to an account`);
+  }
+  
+  // Check opportunity conflicts
+  const unresolvedConflicts = state.opportunityConflicts.filter(c => !c.resolved);
+  if (unresolvedConflicts.length > 0) {
+    blockers.push(`${unresolvedConflicts.length} opportunity conflict(s) - same opportunity mapped to multiple accounts`);
+  }
+  
+  return {
+    canProceed: blockers.length === 0,
+    blockers,
   };
 }
