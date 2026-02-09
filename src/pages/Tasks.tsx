@@ -500,21 +500,30 @@ export default function Tasks() {
                 Current Opps
               </h3>
               <div className="space-y-2">
-                {currentOppsTasks.map((task) => (
-                  <div key={task.id} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={task.status === 'done'}
-                      onCheckedChange={() => toggleTaskComplete(task.id)}
-                      className="h-4 w-4"
-                    />
-                    <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
-                      {task.title}
-                    </span>
-                    <Badge className={cn('text-[10px] h-4 ml-auto', PRIORITY_COLORS[task.priority])}>
-                      {task.priority}
-                    </Badge>
-                  </div>
-                ))}
+                {currentOppsTasks.map((task) => {
+                  const info = getLinkedRecordInfo(task);
+                  return (
+                    <div key={task.id} className="flex items-start gap-2 text-sm">
+                      <Checkbox
+                        checked={task.status === 'done'}
+                        onCheckedChange={() => toggleTaskComplete(task.id)}
+                        className="h-4 w-4 mt-0.5"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11px] text-muted-foreground truncate">
+                          {info.accountName || info.name}
+                          {info.type === 'opportunity' && <> › {info.name}</>}
+                        </div>
+                        <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
+                          {task.title}
+                        </span>
+                      </div>
+                      <Badge className={cn('text-[10px] h-4 shrink-0', PRIORITY_COLORS[task.priority])}>
+                        {task.priority}
+                      </Badge>
+                    </div>
+                  );
+                })}
                 {currentOppsTasks.length === 0 && (
                   <p className="text-xs text-muted-foreground italic">No tasks</p>
                 )}
@@ -528,21 +537,29 @@ export default function Tasks() {
                 PG (New Logo)
               </h3>
               <div className="space-y-2">
-                {newLogoTasks.map((task) => (
-                  <div key={task.id} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={task.status === 'done'}
-                      onCheckedChange={() => toggleTaskComplete(task.id)}
-                      className="h-4 w-4"
-                    />
-                    <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
-                      {task.title}
-                    </span>
-                    <Badge className={cn('text-[10px] h-4 ml-auto', PRIORITY_COLORS[task.priority])}>
-                      {task.priority}
-                    </Badge>
-                  </div>
-                ))}
+                {newLogoTasks.map((task) => {
+                  const info = getLinkedRecordInfo(task);
+                  return (
+                    <div key={task.id} className="flex items-start gap-2 text-sm">
+                      <Checkbox
+                        checked={task.status === 'done'}
+                        onCheckedChange={() => toggleTaskComplete(task.id)}
+                        className="h-4 w-4 mt-0.5"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11px] text-muted-foreground truncate">
+                          {info.name}
+                        </div>
+                        <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
+                          {task.title}
+                        </span>
+                      </div>
+                      <Badge className={cn('text-[10px] h-4 shrink-0', PRIORITY_COLORS[task.priority])}>
+                        {task.priority}
+                      </Badge>
+                    </div>
+                  );
+                })}
                 {newLogoTasks.length === 0 && (
                   <p className="text-xs text-muted-foreground italic">No tasks</p>
                 )}
@@ -556,21 +573,30 @@ export default function Tasks() {
                 Renewals
               </h3>
               <div className="space-y-2">
-                {renewalTasks.map((task) => (
-                  <div key={task.id} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={task.status === 'done'}
-                      onCheckedChange={() => toggleTaskComplete(task.id)}
-                      className="h-4 w-4"
-                    />
-                    <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
-                      {task.title}
-                    </span>
-                    <Badge className={cn('text-[10px] h-4 ml-auto', PRIORITY_COLORS[task.priority])}>
-                      {task.priority}
-                    </Badge>
-                  </div>
-                ))}
+                {renewalTasks.map((task) => {
+                  const info = getLinkedRecordInfo(task);
+                  return (
+                    <div key={task.id} className="flex items-start gap-2 text-sm">
+                      <Checkbox
+                        checked={task.status === 'done'}
+                        onCheckedChange={() => toggleTaskComplete(task.id)}
+                        className="h-4 w-4 mt-0.5"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11px] text-muted-foreground truncate">
+                          {info.accountName || info.name}
+                          {info.type === 'opportunity' && <> › {info.name}</>}
+                        </div>
+                        <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
+                          {task.title}
+                        </span>
+                      </div>
+                      <Badge className={cn('text-[10px] h-4 shrink-0', PRIORITY_COLORS[task.priority])}>
+                        {task.priority}
+                      </Badge>
+                    </div>
+                  );
+                })}
                 {renewalTasks.length === 0 && (
                   <p className="text-xs text-muted-foreground italic">No tasks</p>
                 )}
