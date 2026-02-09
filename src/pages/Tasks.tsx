@@ -93,6 +93,7 @@ export default function Tasks() {
   const { tasks, accounts, opportunities, addTask, updateTask, deleteTask, toggleTaskComplete } = useStore();
   const [currentView, setCurrentView] = useState('today');
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [newTask, setNewTask] = useState<NewTaskState>({
     priority: 'P2',
     motion: 'new-logo',
@@ -201,6 +202,21 @@ export default function Tasks() {
     toast.success('Task added!');
   };
 
+  const handleSaveEdit = () => {
+    if (!editingTask) return;
+    updateTask(editingTask.id, {
+      title: editingTask.title,
+      priority: editingTask.priority,
+      motion: editingTask.motion,
+      category: editingTask.category,
+      dueDate: editingTask.dueDate,
+      notes: editingTask.notes,
+      status: editingTask.status,
+    });
+    setEditingTask(null);
+    toast.success('Task updated!');
+  };
+
   // Top 3 helpers - Current Opps = tasks linked to opportunities
   const currentOppsTasks = tasks
     .filter(t => t.linkedRecordType === 'opportunity' && t.status !== 'done')
@@ -263,12 +279,15 @@ export default function Tasks() {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              <span className={cn(
-                "font-medium",
-                task.status === 'done' && "line-through text-muted-foreground"
-              )}>
+              <button
+                className={cn(
+                  "font-medium text-left hover:text-primary transition-colors cursor-pointer",
+                  task.status === 'done' && "line-through text-muted-foreground"
+                )}
+                onClick={() => setEditingTask({ ...task })}
+              >
                 {task.title}
-              </span>
+              </button>
               <Badge className={cn('text-xs h-5', PRIORITY_COLORS[task.priority])}>
                 {task.priority}
               </Badge>
@@ -303,7 +322,7 @@ export default function Tasks() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem>Edit Task</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setEditingTask({ ...task })}>Edit Task</DropdownMenuItem>
             <DropdownMenuItem onClick={() => updateTask(task.id, { status: 'in-progress' as TaskStatus })}>
               Mark In Progress
             </DropdownMenuItem>
@@ -513,9 +532,15 @@ export default function Tasks() {
                         <div className="text-[11px] text-muted-foreground">
                           {info.accountName || info.name}
                         </div>
-                        <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
+                        <button
+                          className={cn(
+                            "text-left hover:text-primary transition-colors cursor-pointer",
+                            task.status === 'done' && "line-through text-muted-foreground"
+                          )}
+                          onClick={() => setEditingTask({ ...task })}
+                        >
                           {task.title}
-                        </span>
+                        </button>
                       </div>
                       <Badge className={cn('text-[10px] h-4 shrink-0', PRIORITY_COLORS[task.priority])}>
                         {task.priority}
@@ -549,9 +574,15 @@ export default function Tasks() {
                         <div className="text-[11px] text-muted-foreground">
                           {info.name}
                         </div>
-                        <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
+                        <button
+                          className={cn(
+                            "text-left hover:text-primary transition-colors cursor-pointer",
+                            task.status === 'done' && "line-through text-muted-foreground"
+                          )}
+                          onClick={() => setEditingTask({ ...task })}
+                        >
                           {task.title}
-                        </span>
+                        </button>
                       </div>
                       <Badge className={cn('text-[10px] h-4 shrink-0', PRIORITY_COLORS[task.priority])}>
                         {task.priority}
@@ -585,9 +616,15 @@ export default function Tasks() {
                         <div className="text-[11px] text-muted-foreground">
                           {info.accountName || info.name}
                         </div>
-                        <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
+                        <button
+                          className={cn(
+                            "text-left hover:text-primary transition-colors cursor-pointer",
+                            task.status === 'done' && "line-through text-muted-foreground"
+                          )}
+                          onClick={() => setEditingTask({ ...task })}
+                        >
                           {task.title}
-                        </span>
+                        </button>
                       </div>
                       <Badge className={cn('text-[10px] h-4 shrink-0', PRIORITY_COLORS[task.priority])}>
                         {task.priority}
@@ -644,6 +681,97 @@ export default function Tasks() {
           </div>
         )}
       </div>
+
+      {/* Edit Task Dialog */}
+      <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Task</DialogTitle>
+            <DialogDescription>Update task details.</DialogDescription>
+          </DialogHeader>
+          {editingTask && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Title</Label>
+                <Input
+                  value={editingTask.title}
+                  onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Priority</Label>
+                  <Select
+                    value={editingTask.priority}
+                    onValueChange={(v) => setEditingTask({ ...editingTask, priority: v as Priority })}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="P0">P0 - Urgent</SelectItem>
+                      <SelectItem value="P1">P1 - High</SelectItem>
+                      <SelectItem value="P2">P2 - Medium</SelectItem>
+                      <SelectItem value="P3">P3 - Low</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Due Date</Label>
+                  <EditableDatePicker
+                    value={editingTask.dueDate}
+                    onChange={(v) => setEditingTask({ ...editingTask, dueDate: v || editingTask.dueDate })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select
+                    value={editingTask.status}
+                    onValueChange={(v) => setEditingTask({ ...editingTask, status: v as TaskStatus })}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="open">Open</SelectItem>
+                      <SelectItem value="in-progress">In Progress</SelectItem>
+                      <SelectItem value="blocked">Blocked</SelectItem>
+                      <SelectItem value="done">Done</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Category</Label>
+                  <Select
+                    value={editingTask.category}
+                    onValueChange={(v) => setEditingTask({ ...editingTask, category: v as TaskCategory })}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CATEGORY_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Textarea
+                  value={editingTask.notes || ''}
+                  onChange={(e) => setEditingTask({ ...editingTask, notes: e.target.value })}
+                  rows={3}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingTask(null)}>Cancel</Button>
+            <Button onClick={handleSaveEdit}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }
