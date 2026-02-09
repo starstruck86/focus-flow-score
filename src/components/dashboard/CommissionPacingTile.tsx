@@ -11,6 +11,7 @@ interface CommissionPacingTileProps {
   status: 'improving' | 'stable' | 'declining';
   isLoading?: boolean;
   onClick?: () => void;
+  compact?: boolean;
 }
 
 export function CommissionPacingTile({
@@ -20,6 +21,7 @@ export function CommissionPacingTile({
   status,
   isLoading,
   onClick,
+  compact,
 }: CommissionPacingTileProps) {
   const statusConfig = {
     improving: {
@@ -57,19 +59,25 @@ export function CommissionPacingTile({
   
   return (
     <motion.button
-      className="metric-card p-6 w-full text-left hover:border-primary/30 transition-colors"
+      className={cn(
+        "metric-card w-full text-left hover:border-primary/30 transition-colors h-full",
+        compact ? "p-4" : "p-6"
+      )}
       onClick={onClick}
       whileHover={{ scale: 1.01 }}
       whileTap={{ scale: 0.99 }}
     >
-      <div className="flex items-center justify-between mb-4">
+      <div className={cn("flex items-center justify-between", compact ? "mb-3" : "mb-4")}>
         <div className="flex items-center gap-2">
-          <div className="w-10 h-10 rounded-xl bg-status-green/10 flex items-center justify-center">
-            <DollarSign className="h-5 w-5 text-status-green" />
+          <div className={cn(
+            "rounded-xl bg-status-green/10 flex items-center justify-center",
+            compact ? "w-8 h-8" : "w-10 h-10"
+          )}>
+            <DollarSign className={cn(compact ? "h-4 w-4" : "h-5 w-5", "text-status-green")} />
           </div>
           <div>
-            <h3 className="font-display font-semibold text-lg">Commission Pacing</h3>
-            <p className="text-xs text-muted-foreground">Projected quarter-end</p>
+            <h3 className={cn("font-display font-semibold", compact ? "text-sm" : "text-lg")}>Commission Pacing</h3>
+            {!compact && <p className="text-xs text-muted-foreground">Projected quarter-end</p>}
           </div>
         </div>
         
@@ -84,11 +92,14 @@ export function CommissionPacingTile({
       </div>
       
       {/* Main Metric */}
-      <div className="mb-4">
-        <div className="text-4xl font-bold text-foreground mb-1">
+      <div className={compact ? "mb-3" : "mb-4"}>
+        <div className={cn(
+          "font-bold text-foreground mb-1",
+          compact ? "text-2xl" : "text-4xl"
+        )}>
           {formatCurrency(projectedQuarterCommission)}
         </div>
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-xs">
           <span className={cn(
             "flex items-center gap-1",
             weeklyPaceTrend >= 0 ? "text-status-green" : "text-status-red"
@@ -100,14 +111,13 @@ export function CommissionPacingTile({
             )}
             {weeklyPaceTrend >= 0 ? '+' : ''}{formatCurrency(weeklyPaceTrend)}/wk
           </span>
-          <span className="text-muted-foreground">pace trend</span>
         </div>
       </div>
       
       {/* Projected Attainment Bar */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">Projected Attainment</span>
+      <div className="space-y-1">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Attainment</span>
           <span className={cn(
             "font-semibold",
             projectedAttainment >= 1.0 ? "text-status-green" : 
@@ -129,23 +139,15 @@ export function CommissionPacingTile({
             transition={{ duration: 0.8, ease: "easeOut" }}
           />
         </div>
-        
-        {/* 100% marker */}
-        <div className="relative h-0">
-          <div 
-            className="absolute top-[-10px] left-[66.67%] transform -translate-x-1/2"
-            style={{ left: `${Math.min(100, (1 / 1.5) * 100)}%` }}
-          >
-            <div className="w-px h-3 bg-muted-foreground/30" />
-          </div>
-        </div>
       </div>
       
-      {/* Click hint */}
-      <div className="flex items-center justify-end mt-4 text-xs text-muted-foreground">
-        <span>View details</span>
-        <ChevronRight className="h-3 w-3 ml-1" />
-      </div>
+      {/* Click hint - hide in compact mode */}
+      {!compact && (
+        <div className="flex items-center justify-end mt-4 text-xs text-muted-foreground">
+          <span>View details</span>
+          <ChevronRight className="h-3 w-3 ml-1" />
+        </div>
+      )}
     </motion.button>
   );
 }

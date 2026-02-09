@@ -20,6 +20,7 @@ interface ExpectedVsActualCardProps {
   pointsEarned: number;
   pointsTarget: number;
   isLoading?: boolean;
+  compact?: boolean;
 }
 
 export function ExpectedVsActualCard({
@@ -29,6 +30,7 @@ export function ExpectedVsActualCard({
   pointsEarned,
   pointsTarget,
   isLoading,
+  compact,
 }: ExpectedVsActualCardProps) {
   const pointsPercentage = pointsTarget > 0 ? (pointsEarned / pointsTarget) * 100 : 0;
   const pointsStatus = pointsPercentage >= 100 ? 'ahead' : 
@@ -36,11 +38,11 @@ export function ExpectedVsActualCard({
   
   if (isLoading) {
     return (
-      <div className="metric-card p-6 animate-pulse">
-        <div className="h-6 bg-muted rounded w-1/3 mb-4" />
-        <div className="space-y-3">
-          {[1, 2, 3, 4].map(i => (
-            <div key={i} className="h-8 bg-muted rounded" />
+      <div className={cn("metric-card animate-pulse", compact ? "p-4" : "p-6")}>
+        <div className="h-5 bg-muted rounded w-1/3 mb-3" />
+        <div className="space-y-2">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-6 bg-muted rounded" />
           ))}
         </div>
       </div>
@@ -49,14 +51,14 @@ export function ExpectedVsActualCard({
   
   return (
     <motion.div
-      className="metric-card p-6"
+      className={cn("metric-card h-full", compact ? "p-4" : "p-6")}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
     >
-      <div className="flex items-center gap-2 mb-4">
-        <Target className="h-5 w-5 text-primary" />
+      <div className={cn("flex items-center gap-2", compact ? "mb-3" : "mb-4")}>
+        <Target className={cn(compact ? "h-4 w-4" : "h-5 w-5", "text-primary")} />
         <div>
-          <h3 className="font-display font-semibold">{title}</h3>
+          <h3 className={cn("font-display font-semibold", compact ? "text-sm" : "text-base")}>{title}</h3>
           {subtitle && (
             <p className="text-xs text-muted-foreground">{subtitle}</p>
           )}
@@ -65,28 +67,30 @@ export function ExpectedVsActualCard({
       
       {/* Points Summary */}
       <div className={cn(
-        "p-4 rounded-lg mb-4",
+        "rounded-lg",
+        compact ? "p-3 mb-3" : "p-4 mb-4",
         pointsStatus === 'ahead' ? "bg-status-green/10" :
         pointsStatus === 'on-track' ? "bg-status-yellow/10" : "bg-status-red/10"
       )}>
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium">Points Earned</span>
-          <div className="flex items-center gap-2">
+          <span className="text-xs font-medium">Points</span>
+          <div className="flex items-center gap-1">
             <span className={cn(
-              "text-2xl font-bold",
+              "font-bold",
+              compact ? "text-lg" : "text-2xl",
               pointsStatus === 'ahead' ? "text-status-green" :
               pointsStatus === 'on-track' ? "text-status-yellow" : "text-status-red"
             )}>
               {pointsEarned}
             </span>
-            <span className="text-sm text-muted-foreground">/ {pointsTarget}</span>
+            <span className="text-xs text-muted-foreground">/ {pointsTarget}</span>
           </div>
         </div>
         <Progress 
           value={Math.min(pointsPercentage, 100)} 
-          className="h-2"
+          className="h-1.5"
         />
-        <div className="flex items-center justify-between mt-2 text-xs">
+        <div className="flex items-center justify-between mt-1.5 text-xs">
           <span className={cn(
             "flex items-center gap-1",
             pointsStatus === 'ahead' ? "text-status-green" :
@@ -95,7 +99,7 @@ export function ExpectedVsActualCard({
             {pointsStatus === 'ahead' ? (
               <>
                 <CheckCircle2 className="h-3 w-3" />
-                Ahead of target
+                Ahead
               </>
             ) : pointsStatus === 'on-track' ? (
               <>
@@ -105,67 +109,56 @@ export function ExpectedVsActualCard({
             ) : (
               <>
                 <TrendingDown className="h-3 w-3" />
-                Behind by {pointsTarget - pointsEarned} pts
+                -{pointsTarget - pointsEarned}
               </>
             )}
           </span>
           <span className="text-muted-foreground">
-            {pointsPercentage.toFixed(0)}% complete
+            {pointsPercentage.toFixed(0)}%
           </span>
         </div>
       </div>
       
-      {/* Metric Breakdown */}
-      <div className="space-y-2">
+      {/* Metric Breakdown - show fewer in compact mode */}
+      <div className="space-y-1.5">
         {metrics.length === 0 ? (
-          <div className="text-center py-4 text-muted-foreground text-sm">
-            No activity data yet. Complete a daily check-in to see your metrics.
+          <div className="text-center py-3 text-muted-foreground text-xs">
+            No activity data yet
           </div>
         ) : (
           metrics
             .filter(m => m.metric !== 'Points')
+            .slice(0, compact ? 2 : undefined)
             .map((metric) => (
             <div 
               key={metric.metric}
-              className="flex items-center justify-between p-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
+              className="flex items-center justify-between p-1.5 rounded-lg bg-secondary/30"
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <div className={cn(
-                  "w-2 h-2 rounded-full",
+                  "w-1.5 h-1.5 rounded-full",
                   metric.status === 'ahead' ? "bg-status-green" :
                   metric.status === 'on-track' ? "bg-status-yellow" : "bg-status-red"
                 )} />
-                <span className="text-sm">{metric.metric}</span>
+                <span className="text-xs">{metric.metric}</span>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-mono">
-                  <span className={cn(
-                    "font-semibold",
-                    metric.status === 'ahead' ? "text-status-green" :
-                    metric.status === 'on-track' ? "text-foreground" : "text-status-red"
-                  )}>
-                    {metric.actual}
-                  </span>
-                  <span className="text-muted-foreground"> / {metric.expected}</span>
+              <span className="text-xs font-mono">
+                <span className={cn(
+                  "font-semibold",
+                  metric.status === 'ahead' ? "text-status-green" :
+                  metric.status === 'on-track' ? "text-foreground" : "text-status-red"
+                )}>
+                  {metric.actual}
                 </span>
-                {metric.gap > 0 && (
-                  <span className="text-xs text-status-red">
-                    -{metric.gap}
-                  </span>
-                )}
-                {metric.gap < 0 && (
-                  <span className="text-xs text-status-green">
-                    +{Math.abs(metric.gap)}
-                  </span>
-                )}
-              </div>
+                <span className="text-muted-foreground">/{metric.expected}</span>
+              </span>
             </div>
           ))
         )}
       </div>
       
-      {/* Smallest lever to catch up */}
-      {pointsStatus === 'behind' && (
+      {/* Quickest catch-up hint - only show in non-compact mode */}
+      {!compact && pointsStatus === 'behind' && (
         <div className="mt-4 p-3 rounded-lg bg-primary/5 border border-primary/10">
           <p className="text-sm text-muted-foreground">
             <span className="font-medium text-primary">Quickest catch-up:</span>{' '}
