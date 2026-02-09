@@ -512,7 +512,6 @@ export default function Tasks() {
                       <div className="flex-1 min-w-0">
                         <div className="text-[11px] text-muted-foreground truncate">
                           {info.accountName || info.name}
-                          {info.type === 'opportunity' && <> › {info.name}</>}
                         </div>
                         <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
                           {task.title}
@@ -585,7 +584,6 @@ export default function Tasks() {
                       <div className="flex-1 min-w-0">
                         <div className="text-[11px] text-muted-foreground truncate">
                           {info.accountName || info.name}
-                          {info.type === 'opportunity' && <> › {info.name}</>}
                         </div>
                         <span className={cn(task.status === 'done' && "line-through text-muted-foreground")}>
                           {task.title}
