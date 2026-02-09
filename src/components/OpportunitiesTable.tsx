@@ -35,7 +35,7 @@ import { cn } from '@/lib/utils';
 import { EditableDatePicker } from '@/components/EditableDatePicker';
 import { OpportunityDetailsField } from '@/components/OpportunityDetailsField';
 import { ClosedWonModal } from '@/components/quota/ClosedWonModal';
-import { OpportunityName } from '@/components/ClickableName';
+import { OpportunityNameCell } from '@/components/table/ClickableNameCell';
 import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
 import { format, parseISO, isToday, isPast, isThisQuarter } from 'date-fns';
 import { 
@@ -157,6 +157,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const updateOpportunity = (id: string, updates: Partial<Opportunity>) => {
     // Transform UI updates to DB format
     const dbUpdates: Partial<DbOpportunity> = {};
+    if (updates.name !== undefined) dbUpdates.name = updates.name;
     if (updates.status !== undefined) dbUpdates.status = updates.status;
     if (updates.stage !== undefined) dbUpdates.stage = updates.stage;
     if (updates.arr !== undefined) dbUpdates.arr = updates.arr;
@@ -368,20 +369,16 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
 
   const NameCell = ({ opp }: { opp: Opportunity }) => (
     <TableCell>
-      {opp.salesforceLink ? (
-        <OpportunityName 
-          name={opp.name} 
-          salesforceLink={opp.salesforceLink}
-          className="text-primary"
-        />
-      ) : (
-        <button
-          onClick={() => onOpenDrawer(opp)}
-          className="font-medium text-primary hover:underline text-left"
-        >
-          {opp.name}
-        </button>
-      )}
+      <OpportunityNameCell 
+        name={opp.name} 
+        salesforceLink={opp.salesforceLink}
+        onNameChange={(name) => updateOpportunity(opp.id, { name })}
+        onSalesforceLinkChange={(link) => {
+          const dbUpdates: Partial<DbOpportunity> = { salesforce_link: link || null };
+          updateOpportunityMutation.mutate({ id: opp.id, updates: dbUpdates });
+        }}
+        onOpenDetails={() => onOpenDrawer(opp)}
+      />
     </TableCell>
   );
 

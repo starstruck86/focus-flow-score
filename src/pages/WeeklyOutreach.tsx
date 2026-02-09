@@ -66,9 +66,8 @@ import { cn } from '@/lib/utils';
 import { OpportunitiesTable } from '@/components/OpportunitiesTable';
 import { OpportunityDrawer } from '@/components/OpportunityDrawer';
 import { AccountContactsField, type AccountContact } from '@/components/AccountContactsField';
-import { AccountName } from '@/components/ClickableName';
 import { ImportModal } from '@/components/import';
-import { EditableTextCell, EditableTextareaCell, DisplaySelectCell } from '@/components/table';
+import { EditableTextCell, EditableTextareaCell, DisplaySelectCell, WebsiteLinkCell, AccountNameCell } from '@/components/table';
 import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
 import { 
   sortAccountsDefault, 
@@ -143,77 +142,7 @@ const STAGE_LABELS: Record<string, string> = {
   'Closed Lost': '7 - Closed Lost',
 };
 
-// Website cell with edit toggle
-function WebsiteCell({ website, onChange }: { website: string; onChange: (value: string) => void }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(website);
-
-  const handleSave = () => {
-    onChange(editValue);
-    setIsEditing(false);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSave();
-    } else if (e.key === 'Escape') {
-      setEditValue(website);
-      setIsEditing(false);
-    }
-  };
-
-  if (isEditing) {
-    return (
-      <Input
-        value={editValue}
-        onChange={(e) => setEditValue(e.target.value)}
-        onBlur={handleSave}
-        onKeyDown={handleKeyDown}
-        placeholder="https://..."
-        className="h-8 text-sm"
-        autoFocus
-      />
-    );
-  }
-
-  if (!website) {
-    return (
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7 text-sm text-muted-foreground"
-        onClick={() => setIsEditing(true)}
-      >
-        <Plus className="h-3 w-3 mr-1" />
-        Add
-      </Button>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-1">
-      <a
-        href={website.startsWith('http') ? website : `https://${website}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-sm text-primary hover:underline break-all"
-      >
-        {website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-      </a>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-6 w-6 shrink-0"
-        onClick={() => {
-          setEditValue(website);
-          setIsEditing(true);
-        }}
-      >
-        <Pencil className="h-3 w-3" />
-      </Button>
-    </div>
-  );
-}
+// WebsiteCell replaced by WebsiteLinkCell from table components
 
 // Status Summary Component for Accounts
 function AccountsStatusSummary() {
@@ -1012,15 +941,17 @@ export default function WeeklyOutreach() {
                       <React.Fragment key={account.id}>
                         <TableRow className="hover:bg-muted/30">
                           <TableCell className="align-top py-3">
-                            <AccountName 
+                            <AccountNameCell 
                               name={account.name} 
                               salesforceLink={account.salesforceLink}
+                              onNameChange={(name) => updateAccount(account.id, { name })}
+                              onSalesforceLinkChange={(link) => updateAccount(account.id, { salesforceLink: link })}
                               className="text-sm break-words"
                             />
                           </TableCell>
-                          <TableCell className="align-top py-3">
-                            <WebsiteCell
-                              website={account.website || ''}
+                          <TableCell className="align-top py-3 group">
+                            <WebsiteLinkCell
+                              value={account.website || ''}
                               onChange={(value) => updateAccount(account.id, { website: value })}
                             />
                           </TableCell>
