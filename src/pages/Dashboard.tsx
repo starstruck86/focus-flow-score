@@ -53,7 +53,7 @@ export default function Dashboard() {
   const { data: streakEvents } = useStreakEvents();
   
   // Journal entry for today
-  const { data: todayJournalEntry } = useTodayJournalEntry();
+  const { data: todayJournalEntry, isLoading: journalLoading } = useTodayJournalEntry();
   
   // Commission Pacing (top tile)
   const { data: commissionPacing, isLoading: pacingLoading } = useCommissionPacing();
@@ -171,41 +171,41 @@ export default function Dashboard() {
         
         {/* SECTION 2: Expected vs Actual (Today + WTD) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Today's Progress */}
-          <ExpectedVsActualCard
-            title="Today's Progress"
-            subtitle={todayCheckedIn ? "Checked in" : "Not yet checked in"}
-            metrics={todayJournalEntry ? [
-              {
-                metric: 'Points',
-                expected: 8,
-                actual: todayJournalEntry.dailyScore || 0,
-                gap: 8 - (todayJournalEntry.dailyScore || 0),
-                percentComplete: (todayJournalEntry.dailyScore || 0) / 8,
-                status: (todayJournalEntry.dailyScore || 0) >= 8 ? 'ahead' : 
-                        (todayJournalEntry.dailyScore || 0) >= 6 ? 'on-track' : 'behind',
-              },
-              {
-                metric: 'Conversations',
-                expected: defaultTemplate.conversations,
-                actual: todayJournalEntry.activity.conversations,
-                gap: defaultTemplate.conversations - todayJournalEntry.activity.conversations,
-                percentComplete: todayJournalEntry.activity.conversations / defaultTemplate.conversations,
-                status: todayJournalEntry.activity.conversations >= defaultTemplate.conversations ? 'ahead' : 'behind',
-              },
-              {
-                metric: 'Prospects Added',
-                expected: defaultTemplate.prospectsAdded,
-                actual: todayJournalEntry.activity.prospectsAdded,
-                gap: defaultTemplate.prospectsAdded - todayJournalEntry.activity.prospectsAdded,
-                percentComplete: todayJournalEntry.activity.prospectsAdded / defaultTemplate.prospectsAdded,
-                status: todayJournalEntry.activity.prospectsAdded >= defaultTemplate.prospectsAdded ? 'ahead' : 'behind',
-              },
-            ] : []}
-            pointsEarned={todayJournalEntry?.dailyScore || 0}
-            pointsTarget={8}
-            isLoading={!todayJournalEntry && !todayCheckedIn}
-          />
+        {/* Today's Progress */}
+        <ExpectedVsActualCard
+          title="Today's Progress"
+          subtitle={todayCheckedIn ? "Checked in" : "Not yet checked in"}
+          metrics={todayJournalEntry ? [
+            {
+              metric: 'Points',
+              expected: 8,
+              actual: todayJournalEntry.dailyScore || 0,
+              gap: 8 - (todayJournalEntry.dailyScore || 0),
+              percentComplete: (todayJournalEntry.dailyScore || 0) / 8,
+              status: (todayJournalEntry.dailyScore || 0) >= 8 ? 'ahead' : 
+                      (todayJournalEntry.dailyScore || 0) >= 6 ? 'on-track' : 'behind',
+            },
+            {
+              metric: 'Conversations',
+              expected: defaultTemplate.conversations,
+              actual: todayJournalEntry.activity.conversations,
+              gap: defaultTemplate.conversations - todayJournalEntry.activity.conversations,
+              percentComplete: todayJournalEntry.activity.conversations / defaultTemplate.conversations,
+              status: todayJournalEntry.activity.conversations >= defaultTemplate.conversations ? 'ahead' : 'behind',
+            },
+            {
+              metric: 'Prospects Added',
+              expected: defaultTemplate.prospectsAdded,
+              actual: todayJournalEntry.activity.prospectsAdded,
+              gap: defaultTemplate.prospectsAdded - todayJournalEntry.activity.prospectsAdded,
+              percentComplete: todayJournalEntry.activity.prospectsAdded / defaultTemplate.prospectsAdded,
+              status: todayJournalEntry.activity.prospectsAdded >= defaultTemplate.prospectsAdded ? 'ahead' : 'behind',
+            },
+          ] : []}
+          pointsEarned={todayJournalEntry?.dailyScore || 0}
+          pointsTarget={8}
+          isLoading={journalLoading}
+        />
           
           {/* Week-to-Date Progress */}
           <ExpectedVsActualCard
