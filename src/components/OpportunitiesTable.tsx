@@ -31,14 +31,23 @@ import {
   MoreHorizontal,
   Filter,
 } from 'lucide-react';
-import { useStore } from '@/store/useStore';
 import { cn } from '@/lib/utils';
 import { EditableDatePicker } from '@/components/EditableDatePicker';
 import { OpportunityDetailsField } from '@/components/OpportunityDetailsField';
 import { ClosedWonModal } from '@/components/quota/ClosedWonModal';
 import { OpportunityName } from '@/components/ClickableName';
-import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk } from '@/types';
+import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
 import { format, parseISO, isToday, isPast, isThisQuarter } from 'date-fns';
+import { 
+  useDbOpportunities, 
+  useDbRenewals, 
+  useUpdateOpportunity, 
+  useDeleteOpportunity, 
+  useAddOpportunity,
+  useUpdateRenewal,
+  type DbOpportunity,
+  type DbRenewal,
+} from '@/hooks/useAccountsData';
 
 const STATUS_COLORS: Record<OpportunityStatus, string> = {
   'active': 'bg-status-green/20 text-status-green',
@@ -71,6 +80,58 @@ const STAGE_LABELS: Record<string, string> = {
 
 type SavedView = 'all' | 'active' | 'stalled' | 'next-step-due' | 'closing-this-quarter' | 'no-next-step';
 
+// Transform database opportunity to UI format
+function dbToUiOpportunity(db: DbOpportunity): Opportunity {
+  return {
+    id: db.id,
+    name: db.name,
+    accountId: db.account_id ?? undefined,
+    salesforceLink: db.salesforce_link ?? undefined,
+    salesforceId: db.salesforce_id ?? undefined,
+    linkedContactIds: [],
+    status: (db.status as OpportunityStatus) || 'active',
+    stage: (db.stage as OpportunityStage) || '',
+    arr: db.arr ?? undefined,
+    churnRisk: (db.churn_risk as ChurnRisk) ?? undefined,
+    closeDate: db.close_date ?? undefined,
+    nextStep: db.next_step ?? undefined,
+    nextStepDate: db.next_step_date ?? undefined,
+    lastTouchDate: db.last_touch_date ?? undefined,
+    notes: db.notes ?? undefined,
+    activityLog: (db.activity_log as any[]) || [],
+    createdAt: db.created_at,
+    updatedAt: db.updated_at,
+    dealType: (db.deal_type as DealType) ?? undefined,
+    paymentTerms: db.payment_terms as any,
+    termMonths: db.term_months ?? undefined,
+    priorContractArr: db.prior_contract_arr ?? undefined,
+    renewalArr: db.renewal_arr ?? undefined,
+    oneTimeAmount: db.one_time_amount ?? undefined,
+    isNewLogo: db.is_new_logo ?? undefined,
+  };
+}
+
+// Transform database renewal to simplified format for filtering
+interface RenewalForFilter {
+  id: string;
+  linkedOpportunityId?: string;
+  accountName: string;
+  arr: number;
+  renewalDue: string;
+  churnRisk?: ChurnRisk;
+}
+
+function dbToRenewalFilter(db: DbRenewal): RenewalForFilter {
+  return {
+    id: db.id,
+    linkedOpportunityId: db.linked_opportunity_id ?? undefined,
+    accountName: db.account_name,
+    arr: db.arr,
+    renewalDue: db.renewal_due,
+    churnRisk: (db.churn_risk as ChurnRisk) ?? undefined,
+  };
+}
+
 interface OpportunitiesTableProps {
   onOpenDrawer: (opportunity: Opportunity) => void;
   renewalsOnly?: boolean;
@@ -80,7 +141,50 @@ interface OpportunitiesTableProps {
 }
 
 export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, excludeRenewals = false, showChurnRisk = true, columnOrder = 'default' }: OpportunitiesTableProps) {
-  const { opportunities, renewals, updateOpportunity, deleteOpportunity, addOpportunity, updateRenewal } = useStore();
+  // Database hooks
+  const { data: dbOpportunities = [], isLoading: oppsLoading } = useDbOpportunities();
+  const { data: dbRenewals = [], isLoading: renewalsLoading } = useDbRenewals();
+  const updateOpportunityMutation = useUpdateOpportunity();
+  const deleteOpportunityMutation = useDeleteOpportunity();
+  const addOpportunityMutation = useAddOpportunity();
+  const updateRenewalMutation = useUpdateRenewal();
+
+  // Transform DB data to UI format
+  const opportunities = useMemo(() => dbOpportunities.map(dbToUiOpportunity), [dbOpportunities]);
+  const renewals = useMemo(() => dbRenewals.map(dbToRenewalFilter), [dbRenewals]);
+
+  // Wrapper functions for mutations
+  const updateOpportunity = (id: string, updates: Partial<Opportunity>) => {
+    // Transform UI updates to DB format
+    const dbUpdates: Partial<DbOpportunity> = {};
+    if (updates.status !== undefined) dbUpdates.status = updates.status;
+    if (updates.stage !== undefined) dbUpdates.stage = updates.stage;
+    if (updates.arr !== undefined) dbUpdates.arr = updates.arr;
+    if (updates.churnRisk !== undefined) dbUpdates.churn_risk = updates.churnRisk;
+    if (updates.closeDate !== undefined) dbUpdates.close_date = updates.closeDate;
+    if (updates.nextStep !== undefined) dbUpdates.next_step = updates.nextStep;
+    if (updates.nextStepDate !== undefined) dbUpdates.next_step_date = updates.nextStepDate;
+    if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
+    if (updates.dealType !== undefined) dbUpdates.deal_type = updates.dealType;
+    if (updates.paymentTerms !== undefined) dbUpdates.payment_terms = updates.paymentTerms;
+    if (updates.termMonths !== undefined) dbUpdates.term_months = updates.termMonths;
+    if (updates.priorContractArr !== undefined) dbUpdates.prior_contract_arr = updates.priorContractArr;
+    if (updates.renewalArr !== undefined) dbUpdates.renewal_arr = updates.renewalArr;
+    if (updates.oneTimeAmount !== undefined) dbUpdates.one_time_amount = updates.oneTimeAmount;
+    if (updates.isNewLogo !== undefined) dbUpdates.is_new_logo = updates.isNewLogo;
+    updateOpportunityMutation.mutate({ id, updates: dbUpdates });
+  };
+
+  const deleteOpportunity = (id: string) => {
+    deleteOpportunityMutation.mutate(id);
+  };
+
+  const updateRenewal = (id: string, updates: { linkedOpportunityId?: string }) => {
+    const dbUpdates: Partial<DbRenewal> = {};
+    if (updates.linkedOpportunityId !== undefined) dbUpdates.linked_opportunity_id = updates.linkedOpportunityId;
+    updateRenewalMutation.mutate({ id, updates: dbUpdates });
+  };
+
   const [searchQuery, setSearchQuery] = useState('');
   const [savedView, setSavedView] = useState<SavedView>('all');
   const [showAddRow, setShowAddRow] = useState(false);
@@ -91,7 +195,6 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
 
   // Get renewals that don't have linked opportunities yet (for adding new renewal opps)
   const renewalsWithoutOpps = useMemo(() => {
-    const linkedOppIds = new Set(renewals.filter(r => r.linkedOpportunityId).map(r => r.linkedOpportunityId));
     return renewals.filter(r => !r.linkedOpportunityId || !opportunities.some(o => o.id === r.linkedOpportunityId));
   }, [renewals, opportunities]);
 
@@ -117,6 +220,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const renewalOpportunityIds = useMemo(() => {
     return new Set(renewals.filter(r => r.linkedOpportunityId).map(r => r.linkedOpportunityId));
   }, [renewals]);
+
 
   const filteredOpportunities = useMemo(() => {
     let filtered = opportunities.filter(opp =>
@@ -177,56 +281,44 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     return groups;
   }, [filteredOpportunities]);
 
-  const handleAddOpportunity = () => {
+  const handleAddOpportunity = async () => {
     if (!newOppName.trim()) return;
     
     // If we're in renewalsOnly mode and a renewal is selected, link the opportunity to it
     if (renewalsOnly && selectedRenewalId) {
       const renewal = renewals.find(r => r.id === selectedRenewalId);
       if (renewal) {
-        // Generate a unique ID for the opportunity
-        const oppId = Math.random().toString(36).substring(2, 15);
-        
         // Calculate close date as day before renewal date
         const dueDate = new Date(renewal.renewalDue);
         const closeDateObj = new Date(dueDate);
         closeDateObj.setDate(closeDateObj.getDate() - 1);
         const closeDate = closeDateObj.toISOString().split('T')[0];
         
-        // Add the opportunity with renewal details
-        addOpportunity({
-          name: newOppName.trim(),
-          accountName: renewal.accountName,
-          status: 'active',
-          stage: 'Prospect',
-          arr: renewal.arr,
-          churnRisk: renewal.churnRisk || 'low',
-          closeDate: closeDate,
-          linkedContactIds: [],
-        });
-        
-        // Get the newest opportunity (just added) and link it to the renewal
-        // We need to update the renewal with the new opportunity's ID
-        // Since addOpportunity generates the ID internally, we need to find it
-        setTimeout(() => {
-          const { opportunities: updatedOpps } = useStore.getState();
-          const newOpp = updatedOpps.find(o => 
-            o.name === newOppName.trim() && 
-            o.accountName === renewal.accountName &&
-            !renewals.some(r => r.linkedOpportunityId === o.id)
-          );
-          if (newOpp) {
-            updateRenewal(renewal.id, { linkedOpportunityId: newOpp.id });
+        // Add the opportunity with renewal details and link to renewal
+        try {
+          const result = await addOpportunityMutation.mutateAsync({
+            name: newOppName.trim(),
+            status: 'active',
+            stage: '1 - Prospect',
+            arr: renewal.arr,
+            churn_risk: renewal.churnRisk || 'low',
+            close_date: closeDate,
+          });
+          
+          // Link the new opportunity to the renewal
+          if (result?.id) {
+            updateRenewal(renewal.id, { linkedOpportunityId: result.id });
           }
-        }, 0);
+        } catch (error) {
+          console.error('Failed to add opportunity:', error);
+        }
       }
     } else {
       // Regular opportunity creation
-      addOpportunity({
+      addOpportunityMutation.mutate({
         name: newOppName.trim(),
         status: 'active',
-        stage: '',
-        linkedContactIds: [],
+        stage: '1 - Prospect',
       });
     }
     
@@ -847,7 +939,13 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 </TableCell>
               </TableRow>
             )}
-            {filteredOpportunities.length === 0 && !showAddRow ? (
+            {oppsLoading || renewalsLoading ? (
+              <TableRow>
+                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                  Loading opportunities...
+                </TableCell>
+              </TableRow>
+            ) : filteredOpportunities.length === 0 && !showAddRow ? (
               <TableRow>
                 <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                   {opportunities.length === 0
