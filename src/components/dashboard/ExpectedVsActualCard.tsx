@@ -117,45 +117,51 @@ export function ExpectedVsActualCard({
       
       {/* Metric Breakdown */}
       <div className="space-y-2">
-        {metrics
-          .filter(m => m.metric !== 'Points')
-          .map((metric, idx) => (
-          <div 
-            key={metric.metric}
-            className="flex items-center justify-between p-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <div className={cn(
-                "w-2 h-2 rounded-full",
-                metric.status === 'ahead' ? "bg-status-green" :
-                metric.status === 'on-track' ? "bg-status-yellow" : "bg-status-red"
-              )} />
-              <span className="text-sm">{metric.metric}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-mono">
-                <span className={cn(
-                  "font-semibold",
-                  metric.status === 'ahead' ? "text-status-green" :
-                  metric.status === 'on-track' ? "text-foreground" : "text-status-red"
-                )}>
-                  {metric.actual}
-                </span>
-                <span className="text-muted-foreground"> / {metric.expected}</span>
-              </span>
-              {metric.gap > 0 && (
-                <span className="text-xs text-status-red">
-                  -{metric.gap}
-                </span>
-              )}
-              {metric.gap < 0 && (
-                <span className="text-xs text-status-green">
-                  +{Math.abs(metric.gap)}
-                </span>
-              )}
-            </div>
+        {metrics.length === 0 ? (
+          <div className="text-center py-4 text-muted-foreground text-sm">
+            No activity data yet. Complete a daily check-in to see your metrics.
           </div>
-        ))}
+        ) : (
+          metrics
+            .filter(m => m.metric !== 'Points')
+            .map((metric) => (
+            <div 
+              key={metric.metric}
+              className="flex items-center justify-between p-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <div className={cn(
+                  "w-2 h-2 rounded-full",
+                  metric.status === 'ahead' ? "bg-status-green" :
+                  metric.status === 'on-track' ? "bg-status-yellow" : "bg-status-red"
+                )} />
+                <span className="text-sm">{metric.metric}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-mono">
+                  <span className={cn(
+                    "font-semibold",
+                    metric.status === 'ahead' ? "text-status-green" :
+                    metric.status === 'on-track' ? "text-foreground" : "text-status-red"
+                  )}>
+                    {metric.actual}
+                  </span>
+                  <span className="text-muted-foreground"> / {metric.expected}</span>
+                </span>
+                {metric.gap > 0 && (
+                  <span className="text-xs text-status-red">
+                    -{metric.gap}
+                  </span>
+                )}
+                {metric.gap < 0 && (
+                  <span className="text-xs text-status-green">
+                    +{Math.abs(metric.gap)}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))
+        )}
       </div>
       
       {/* Smallest lever to catch up */}
