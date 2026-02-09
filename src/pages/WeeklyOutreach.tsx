@@ -934,7 +934,8 @@ export default function WeeklyOutreach() {
                       >
                         Ecommerce
                       </SortableHeader>
-                      <TableHead className="w-[6%]"></TableHead>
+                      <TableHead className="w-[4%]"></TableHead>
+                      <TableHead className="w-[4%]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -942,10 +943,9 @@ export default function WeeklyOutreach() {
                       <React.Fragment key={account.id}>
                         <TableRow 
                           className={cn(
-                            "hover:bg-muted/30 cursor-pointer",
+                            "hover:bg-muted/30",
                             expandedAccountId === account.id && "bg-muted/20"
                           )}
-                          onClick={() => setExpandedAccountId(expandedAccountId === account.id ? null : account.id)}
                         >
                           <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                             <AccountNameCell 
@@ -993,6 +993,20 @@ export default function WeeklyOutreach() {
                               emptyText="Add"
                             />
                           </TableCell>
+                          <TableCell className="align-top py-3">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8"
+                              onClick={() => setExpandedAccountId(expandedAccountId === account.id ? null : account.id)}
+                            >
+                              {expandedAccountId === account.id ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TableCell>
                           <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -1016,7 +1030,7 @@ export default function WeeklyOutreach() {
                         {/* Contacts row - only visible when account is expanded */}
                         {expandedAccountId === account.id && (
                           <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
-                            <TableCell colSpan={7} className="pt-0 pb-3">
+                            <TableCell colSpan={8} className="pt-0 pb-3">
                               <AccountContactsField
                                 contacts={account.accountContacts || []}
                                 onChange={(contacts) => updateAccount(account.id, { accountContacts: contacts })}
