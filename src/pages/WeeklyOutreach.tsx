@@ -319,6 +319,7 @@ export default function WeeklyOutreach() {
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [collapsedStatuses, setCollapsedStatuses] = useState<Set<AccountStatus>>(new Set());
+  const [expandedAccountId, setExpandedAccountId] = useState<string | null>(null);
   
   // Sort hook for accounts table
   const { sortConfig: accountSortConfig, handleSort: handleAccountSort } = useTableSort();
@@ -939,8 +940,14 @@ export default function WeeklyOutreach() {
                   <TableBody>
                     {sortedAccounts.map((account) => (
                       <React.Fragment key={account.id}>
-                        <TableRow className="hover:bg-muted/30">
-                          <TableCell className="align-top py-3">
+                        <TableRow 
+                          className={cn(
+                            "hover:bg-muted/30 cursor-pointer",
+                            expandedAccountId === account.id && "bg-muted/20"
+                          )}
+                          onClick={() => setExpandedAccountId(expandedAccountId === account.id ? null : account.id)}
+                        >
+                          <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                             <AccountNameCell 
                               name={account.name} 
                               salesforceLink={account.salesforceLink}
@@ -949,20 +956,20 @@ export default function WeeklyOutreach() {
                               className="text-sm break-words"
                             />
                           </TableCell>
-                          <TableCell className="align-top py-3 group">
+                          <TableCell className="align-top py-3 group" onClick={(e) => e.stopPropagation()}>
                             <WebsiteLinkCell
                               value={account.website || ''}
                               onChange={(value) => updateAccount(account.id, { website: value })}
                             />
                           </TableCell>
-                          <TableCell className="align-top py-3">
+                          <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                             <DisplaySelectCell
                               value={account.accountStatus || 'inactive'}
                               options={STATUS_OPTIONS}
                               onChange={(v) => updateAccount(account.id, { accountStatus: v as AccountStatus })}
                             />
                           </TableCell>
-                          <TableCell className="align-top py-3">
+                          <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                             <DisplaySelectCell
                               value={account.tier || 'B'}
                               options={TIER_OPTIONS}
@@ -970,7 +977,7 @@ export default function WeeklyOutreach() {
                               badgeClassName="border"
                             />
                           </TableCell>
-                          <TableCell className="align-top py-3">
+                          <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                             <EditableTextareaCell
                               value={account.marTech || ''}
                               onChange={(v) => updateAccount(account.id, { marTech: v })}
@@ -978,7 +985,7 @@ export default function WeeklyOutreach() {
                               emptyText="Add"
                             />
                           </TableCell>
-                          <TableCell className="align-top py-3">
+                          <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                             <EditableTextareaCell
                               value={account.ecommerce || ''}
                               onChange={(v) => updateAccount(account.id, { ecommerce: v })}
@@ -986,7 +993,7 @@ export default function WeeklyOutreach() {
                               emptyText="Add"
                             />
                           </TableCell>
-                          <TableCell className="align-top py-3">
+                          <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button size="icon" variant="ghost" className="h-8 w-8">
@@ -1006,17 +1013,19 @@ export default function WeeklyOutreach() {
                             </DropdownMenu>
                           </TableCell>
                         </TableRow>
-                        {/* Contacts row spans full width */}
-                        <TableRow className="hover:bg-transparent border-b-2">
-                          <TableCell colSpan={7} className="pt-0 pb-3">
-                            <AccountContactsField
-                              contacts={account.accountContacts || []}
-                              onChange={(contacts) => updateAccount(account.id, { accountContacts: contacts })}
-                              companyNotes={account.notes || ''}
-                              onCompanyNotesChange={(notes) => updateAccount(account.id, { notes })}
-                            />
-                          </TableCell>
-                        </TableRow>
+                        {/* Contacts row - only visible when account is expanded */}
+                        {expandedAccountId === account.id && (
+                          <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
+                            <TableCell colSpan={7} className="pt-0 pb-3">
+                              <AccountContactsField
+                                contacts={account.accountContacts || []}
+                                onChange={(contacts) => updateAccount(account.id, { accountContacts: contacts })}
+                                companyNotes={account.notes || ''}
+                                onCompanyNotesChange={(notes) => updateAccount(account.id, { notes })}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        )}
                       </React.Fragment>
                     ))}
                   </TableBody>
