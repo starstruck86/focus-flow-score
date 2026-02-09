@@ -469,6 +469,104 @@ export type Database = {
         }
         Relationships: []
       }
+      import_account_aliases: {
+        Row: {
+          account_id: string
+          alias_type: string
+          alias_value: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          alias_type: string
+          alias_value: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          alias_type?: string
+          alias_value?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_account_aliases_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      import_header_mappings: {
+        Row: {
+          created_at: string
+          csv_header: string
+          data_transform: string | null
+          id: string
+          target_field: string | null
+          target_object: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          csv_header: string
+          data_transform?: string | null
+          id?: string
+          target_field?: string | null
+          target_object: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          csv_header?: string
+          data_transform?: string | null
+          id?: string
+          target_field?: string | null
+          target_object?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      import_value_mappings: {
+        Row: {
+          app_value: string
+          created_at: string
+          csv_value: string
+          field_name: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          app_value: string
+          created_at?: string
+          csv_value: string
+          field_name: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          app_value?: string
+          created_at?: string
+          csv_value?: string
+          field_name?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       opportunities: {
         Row: {
           account_id: string | null
