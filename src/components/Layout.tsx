@@ -15,6 +15,7 @@ import { FocusTimer } from './FocusTimer';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { GlobalFAB } from '@/components/fab';
+import { WorkdayCheckInButton } from '@/components/WorkdayCheckInButton';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -104,6 +105,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
+        {/* Top bar with workday check-in */}
+        <div className="flex items-center justify-end px-6 pt-4 pb-0">
+          <WorkdayCheckInButton />
+        </div>
         {children}
       </main>
       

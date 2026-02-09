@@ -18,7 +18,7 @@ export type OutreachStatus =
   | 'closed-won' 
   | 'closed-lost';
 export type AccountTier = 'A' | 'B' | 'C';
-export type AccountStatus = 'inactive' | 'researched' | 'active' | 'meeting-booked' | 'disqualified';
+export type AccountStatus = 'researching' | 'prepped' | 'active' | 'inactive' | 'disqualified' | 'meeting-booked';
 export type TouchType = 'call' | 'manual-email' | 'automated-email' | 'meeting' | 'linkedin' | 'other';
 export type TaskCategory = 
   | 'call' 

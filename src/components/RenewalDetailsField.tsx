@@ -72,6 +72,7 @@ export function RenewalDetailsField({
   onAutoRenewChange,
 }: RenewalDetailsFieldProps) {
   const [isOpen, setIsOpen] = useState(false);
+  // Details sections are collapsed by default inside expansion
   const [editingPlanhat, setEditingPlanhat] = useState(false);
   const [editingAgreement, setEditingAgreement] = useState(false);
 

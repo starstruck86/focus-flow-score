@@ -13,7 +13,7 @@ export interface DbAccount {
   industry?: string;
   priority: 'high' | 'medium' | 'low';
   tier: 'A' | 'B' | 'C';
-  account_status: 'inactive' | 'researched' | 'active' | 'meeting-booked' | 'disqualified';
+  account_status: string; // 'researching' | 'prepped' | 'active' | 'inactive' | 'disqualified' | 'meeting-booked'
   motion: 'new-logo' | 'renewal' | 'general' | 'both';
   salesforce_link?: string;
   salesforce_id?: string;
