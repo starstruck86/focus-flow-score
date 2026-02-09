@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
   Plus, 
   ChevronDown,
@@ -8,6 +8,14 @@ import {
   Target,
   AlertCircle,
   Search,
+  Zap,
+  TrendingUp,
+  MessageSquare,
+  UserPlus,
+  Phone,
+  Mail,
+  Lightbulb,
+  ArrowRight,
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
@@ -29,11 +37,22 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { Task, Priority, TaskStatus, Workstream } from '@/types';
+import { useWeekToDateMetrics } from '@/hooks/useGoodDayMetrics';
+
+// ── Driver Tag type ────────────────────────────────────────
+export type DriverTag = 'cadence' | 'calls' | 'manager-outreach' | 'meeting-set' | 'opp-creation';
+
+const DRIVER_TAG_META: Record<DriverTag, { label: string; icon: typeof UserPlus; color: string }> = {
+  'cadence':          { label: 'Cadence/Prospects', icon: UserPlus, color: 'bg-blue-500/10 text-blue-600 border-blue-500/20' },
+  'calls':            { label: 'Calls/Conversations', icon: Phone, color: 'bg-green-500/10 text-green-600 border-green-500/20' },
+  'manager-outreach': { label: 'Manager+ Outreach', icon: Mail, color: 'bg-purple-500/10 text-purple-600 border-purple-500/20' },
+  'meeting-set':      { label: 'Meeting Set', icon: Calendar, color: 'bg-amber-500/10 text-amber-600 border-amber-500/20' },
+  'opp-creation':     { label: 'Opp Creation', icon: Target, color: 'bg-rose-500/10 text-rose-600 border-rose-500/20' },
+};
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -59,10 +78,18 @@ const WORKSTREAM_LABELS: Record<Workstream, string> = {
   renewals: 'Renewals',
 };
 
+// Good Day driver targets (from daily template defaults)
+const DEFAULT_DRIVER_TARGETS = {
+  prospectsAdded: 20,
+  conversations: 3,
+  managerPlusMessages: 5,
+  meetingsSet: 1,
+  oppsCreated: 0,
+};
+
 // ── Helper: derive workstream from legacy data ─────────────
 function getWorkstream(task: Task): Workstream {
   if (task.workstream) return task.workstream;
-  // Legacy: derive from motion
   if (task.motion === 'renewal') return 'renewals';
   return 'pg';
 }
@@ -70,24 +97,18 @@ function getWorkstream(task: Task): Workstream {
 // ── Helper: get account name for display ───────────────────
 function useAccountName(task: Task) {
   const { accounts, opportunities } = useStore();
-  
-  // New model
   if (task.linkedAccountId) {
-    const account = accounts.find(a => a.id === task.linkedAccountId);
-    return account?.name;
+    return accounts.find(a => a.id === task.linkedAccountId)?.name;
   }
-  // Legacy: linkedRecordType pattern
   if (task.linkedRecordType === 'opportunity' && task.linkedRecordId) {
     const opp = opportunities.find(o => o.id === task.linkedRecordId);
     if (opp?.accountId) {
-      const account = accounts.find(a => a.id === opp.accountId);
-      return account?.name || opp.accountName;
+      return accounts.find(a => a.id === opp.accountId)?.name || opp.accountName;
     }
     return opp?.accountName;
   }
   if (task.linkedRecordType === 'account' && task.linkedRecordId) {
-    const account = accounts.find(a => a.id === task.linkedRecordId);
-    return account?.name;
+    return accounts.find(a => a.id === task.linkedRecordId)?.name;
   }
   return undefined;
 }
@@ -103,17 +124,163 @@ function useOpportunityName(task: Task) {
 function sortTasks(tasks: Task[]): Task[] {
   const priorityOrder: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3 };
   return [...tasks].sort((a, b) => {
-    // Priority
     const pa = priorityOrder[a.priority] ?? 3;
     const pb = priorityOrder[b.priority] ?? 3;
     if (pa !== pb) return pa - pb;
-    // Due date (no date at bottom)
     if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
     if (a.dueDate && !b.dueDate) return -1;
     if (!a.dueDate && b.dueDate) return 1;
-    // Last updated desc
     return b.updatedAt.localeCompare(a.updatedAt);
   });
+}
+
+// ── Momentum Header ────────────────────────────────────────
+
+function MomentumHeader({ workstreamFilter }: { workstreamFilter: 'pg' | 'renewals' | 'all' }) {
+  const { currentDay, initializeToday } = useStore();
+  const { data: wtdMetrics } = useWeekToDateMetrics();
+  
+  useEffect(() => { initializeToday(); }, [initializeToday]);
+
+  const isPG = workstreamFilter !== 'renewals';
+  const pointsToday = currentDay?.scores?.dailyScore ?? 0;
+  const hasCheckIn = currentDay && (currentDay.scores?.dailyScore ?? 0) > 0;
+
+  // Today's actuals from store's currentDay
+  const todayActuals = {
+    prospectsAdded: currentDay?.rawInputs?.prospectsAddedToCadence ?? 0,
+    conversations: currentDay?.rawInputs?.coldCallsWithConversations ?? 0,
+    managerPlusMessages: currentDay?.rawInputs?.emailsInMailsToManager ?? 0,
+    meetingsSet: currentDay?.rawInputs?.initialMeetingsSet ?? 0,
+    oppsCreated: currentDay?.rawInputs?.opportunitiesCreated ?? 0,
+    pd: currentDay?.rawInputs?.personalDevelopment ?? 0,
+  };
+
+  const drivers = isPG ? [
+    { key: 'prospectsAdded', label: 'Prospects/Cadence', actual: todayActuals.prospectsAdded, target: DEFAULT_DRIVER_TARGETS.prospectsAdded, icon: UserPlus },
+    { key: 'conversations', label: 'Conversations', actual: todayActuals.conversations, target: DEFAULT_DRIVER_TARGETS.conversations, icon: Phone },
+    { key: 'managerPlusMessages', label: 'Manager+ Msgs', actual: todayActuals.managerPlusMessages, target: DEFAULT_DRIVER_TARGETS.managerPlusMessages, icon: Mail },
+    { key: 'meetingsSet', label: 'Meetings Set', actual: todayActuals.meetingsSet, target: DEFAULT_DRIVER_TARGETS.meetingsSet, icon: Calendar },
+    { key: 'oppsCreated', label: 'Opps Created', actual: todayActuals.oppsCreated, target: DEFAULT_DRIVER_TARGETS.oppsCreated, icon: Target },
+  ] : [
+    { key: 'conversations', label: 'Conversations', actual: todayActuals.conversations, target: DEFAULT_DRIVER_TARGETS.conversations, icon: Phone },
+    { key: 'meetingsSet', label: 'Meetings Set', actual: todayActuals.meetingsSet, target: DEFAULT_DRIVER_TARGETS.meetingsSet, icon: Calendar },
+  ];
+
+  // Compute suggested next 3 (biggest gaps for PG drivers)
+  const gaps = isPG ? [
+    { tag: 'cadence' as DriverTag, gap: Math.max(0, DEFAULT_DRIVER_TARGETS.prospectsAdded - todayActuals.prospectsAdded) },
+    { tag: 'calls' as DriverTag, gap: Math.max(0, DEFAULT_DRIVER_TARGETS.conversations - todayActuals.conversations) },
+    { tag: 'manager-outreach' as DriverTag, gap: Math.max(0, DEFAULT_DRIVER_TARGETS.managerPlusMessages - todayActuals.managerPlusMessages) },
+    { tag: 'meeting-set' as DriverTag, gap: Math.max(0, DEFAULT_DRIVER_TARGETS.meetingsSet - todayActuals.meetingsSet) },
+    { tag: 'opp-creation' as DriverTag, gap: Math.max(0, DEFAULT_DRIVER_TARGETS.oppsCreated - todayActuals.oppsCreated) },
+  ].filter(g => g.gap > 0).sort((a, b) => b.gap - a.gap).slice(0, 3) : [];
+
+  const title = isPG ? 'New Logo Momentum' : 'Renewals Focus';
+  const pointsColor = pointsToday >= 8 ? 'text-status-green' : pointsToday >= 5 ? 'text-status-yellow' : 'text-foreground';
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-5 w-5 text-primary" />
+          <h2 className="font-display text-base font-bold">{title}</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Points Today</span>
+          <span className={cn("font-display text-xl font-bold", pointsColor)}>
+            {pointsToday}
+          </span>
+          <span className="text-sm text-muted-foreground">/ 8</span>
+        </div>
+      </div>
+
+      {/* Driver chips */}
+      <div className="flex flex-wrap gap-2 mb-2">
+        {drivers.map(d => {
+          const met = d.target > 0 ? d.actual >= d.target : d.actual > 0;
+          const Icon = d.icon;
+          return (
+            <div
+              key={d.key}
+              className={cn(
+                "flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-colors",
+                met
+                  ? "bg-status-green/10 text-status-green border-status-green/20"
+                  : "bg-muted/50 text-muted-foreground border-border"
+              )}
+            >
+              <Icon className="h-3 w-3" />
+              <span>{d.label}</span>
+              <span className="font-bold">{d.actual}</span>
+              {d.target > 0 && <span className="opacity-60">/ {d.target}</span>}
+            </div>
+          );
+        })}
+        {/* PD as secondary */}
+        {isPG && (
+          <div className={cn(
+            "flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] font-medium",
+            todayActuals.pd ? "bg-status-green/10 text-status-green border-status-green/20" : "bg-muted/30 text-muted-foreground/60 border-border/50"
+          )}>
+            <Lightbulb className="h-3 w-3" />
+            PD {todayActuals.pd ? '✓' : '—'}
+          </div>
+        )}
+      </div>
+
+      {/* No check-in banner */}
+      {!hasCheckIn && (
+        <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
+          <Zap className="h-3.5 w-3.5 text-primary" />
+          <span>No activity logged today.</span>
+          <a href="/dashboard" className="text-primary font-medium hover:underline">Log Day →</a>
+        </div>
+      )}
+
+      {/* Suggested Next 3 (one-line, only when points < 8 and PG) */}
+      {isPG && pointsToday < 8 && gaps.length > 0 && (
+        <div className="mt-2 flex items-center gap-2 text-xs bg-primary/5 rounded-lg px-3 py-2 border border-primary/10">
+          <ArrowRight className="h-3.5 w-3.5 text-primary shrink-0" />
+          <span className="text-muted-foreground">Build momentum:</span>
+          {gaps.map(g => {
+            const meta = DRIVER_TAG_META[g.tag];
+            const Icon = meta.icon;
+            return (
+              <span key={g.tag} className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-medium", meta.color)}>
+                <Icon className="h-2.5 w-2.5" />
+                {meta.label}
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Renewal Due Banner ─────────────────────────────────────
+
+function RenewalDueBanner({ tasks, onSwitchFilter }: { tasks: Task[]; onSwitchFilter: () => void }) {
+  const today = new Date().toISOString().split('T')[0];
+  const renewalsDueToday = tasks.filter(t => {
+    const ws = getWorkstream(t);
+    return ws === 'renewals' && t.status !== 'done' && t.status !== 'dropped' && t.dueDate && t.dueDate <= today;
+  });
+
+  if (renewalsDueToday.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-2 text-xs bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 mb-4">
+      <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+      <span className="text-amber-700 dark:text-amber-400 font-medium">
+        {renewalsDueToday.length} Renewal task{renewalsDueToday.length > 1 ? 's' : ''} due today
+      </span>
+      <button onClick={onSwitchFilter} className="text-primary font-medium hover:underline ml-1">
+        View Renewals →
+      </button>
+    </div>
+  );
 }
 
 // ── Task Row Component ─────────────────────────────────────
@@ -126,13 +293,11 @@ function TaskRow({ task }: { task: Task }) {
   const [editState, setEditState] = useState<Task>(task);
   const workstream = getWorkstream(task);
   const today = new Date().toISOString().split('T')[0];
-  // Normalize legacy 'open' status to 'next'
   const effectiveStatus: TaskStatus = (task.status as string) === 'open' ? 'next' : task.status;
   const statusMeta = STATUS_META[effectiveStatus] || STATUS_META['next'];
   const isOverdue = task.dueDate && task.dueDate < today && effectiveStatus !== 'done' && effectiveStatus !== 'dropped';
   const isTerminal = effectiveStatus === 'done' || effectiveStatus === 'dropped';
 
-  // Inline status change
   const handleStatusChange = (newStatus: TaskStatus) => {
     const updates: Partial<Task> = { status: newStatus };
     if (newStatus === 'done') updates.completedAt = new Date().toISOString();
@@ -141,7 +306,6 @@ function TaskRow({ task }: { task: Task }) {
     toast.success(`Status → ${STATUS_META[newStatus].label}`, { duration: 1500 });
   };
 
-  // Save edit dialog
   const handleSaveEdit = () => {
     const updates: Partial<Task> = {
       title: editState.title,
@@ -164,10 +328,20 @@ function TaskRow({ task }: { task: Task }) {
     toast.success('Saved', { duration: 1500 });
   };
 
-  // Filter opps to selected account
   const accountOpps = editState.linkedAccountId
     ? opportunities.filter(o => o.accountId === editState.linkedAccountId)
     : [];
+
+  // Infer driver tag from task title keywords (lightweight heuristic)
+  const inferredTag = useMemo(() => {
+    const t = (task.title + ' ' + (task.notes || '')).toLowerCase();
+    if (t.includes('cadence') || t.includes('prospect') || t.includes('sequence')) return 'cadence' as DriverTag;
+    if (t.includes('call') || t.includes('dial') || t.includes('conversation') || t.includes('connect')) return 'calls' as DriverTag;
+    if (t.includes('manager') || t.includes('vp') || t.includes('director') || t.includes('exec') || t.includes('custom outreach')) return 'manager-outreach' as DriverTag;
+    if (t.includes('meeting') || t.includes('demo') || t.includes('schedule')) return 'meeting-set' as DriverTag;
+    if (t.includes('opp') || t.includes('opportunity') || t.includes('create opp')) return 'opp-creation' as DriverTag;
+    return null;
+  }, [task.title, task.notes]);
 
   return (
     <>
@@ -179,10 +353,7 @@ function TaskRow({ task }: { task: Task }) {
       )}>
         {/* Status pill */}
         <Select value={effectiveStatus} onValueChange={(v) => handleStatusChange(v as TaskStatus)}>
-          <SelectTrigger className={cn(
-            "h-7 w-[110px] text-xs font-medium border shrink-0",
-            statusMeta.color
-          )}>
+          <SelectTrigger className={cn("h-7 w-[110px] text-xs font-medium border shrink-0", statusMeta.color)}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -194,7 +365,6 @@ function TaskRow({ task }: { task: Task }) {
 
         {/* Main content */}
         <div className="flex-1 min-w-0">
-          {/* Account / Opp context */}
           {(accountName || oppName) && (
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-0.5">
               {accountName && (
@@ -213,7 +383,6 @@ function TaskRow({ task }: { task: Task }) {
             </div>
           )}
 
-          {/* Title - clickable to edit */}
           <button
             className={cn(
               "font-medium text-left hover:text-primary transition-colors cursor-pointer text-sm",
@@ -224,7 +393,6 @@ function TaskRow({ task }: { task: Task }) {
             {task.title}
           </button>
 
-          {/* Meta row */}
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             <Badge className={cn('text-[10px] h-5 cursor-pointer', PRIORITY_COLORS[task.priority])}
               onClick={() => {
@@ -240,6 +408,15 @@ function TaskRow({ task }: { task: Task }) {
             <Badge variant="outline" className="text-[10px] h-5">
               {WORKSTREAM_LABELS[workstream]}
             </Badge>
+            {/* Driver tag chip */}
+            {inferredTag && (
+              <span className={cn(
+                "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-medium",
+                DRIVER_TAG_META[inferredTag].color
+              )}>
+                {DRIVER_TAG_META[inferredTag].label}
+              </span>
+            )}
             {task.dueDate && (
               <span className={cn(
                 "flex items-center gap-1 text-[11px] text-muted-foreground",
@@ -252,7 +429,6 @@ function TaskRow({ task }: { task: Task }) {
             )}
           </div>
 
-          {/* Note preview */}
           {task.notes && (
             <p className="text-[11px] text-muted-foreground mt-1 line-clamp-1 italic">
               {task.notes}
@@ -260,7 +436,6 @@ function TaskRow({ task }: { task: Task }) {
           )}
         </div>
 
-        {/* Delete - appears on hover */}
         <Button
           size="sm"
           variant="ghost"
@@ -284,12 +459,8 @@ function TaskRow({ task }: { task: Task }) {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Title</Label>
-              <Input
-                value={editState.title}
-                onChange={(e) => setEditState({ ...editState, title: e.target.value })}
-              />
+              <Input value={editState.title} onChange={(e) => setEditState({ ...editState, title: e.target.value })} />
             </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Workstream</Label>
@@ -313,7 +484,6 @@ function TaskRow({ task }: { task: Task }) {
                 </Select>
               </div>
             </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Priority</Label>
@@ -328,15 +498,9 @@ function TaskRow({ task }: { task: Task }) {
               </div>
               <div className="space-y-2">
                 <Label>Due Date</Label>
-                <Input
-                  type="date"
-                  value={editState.dueDate || ''}
-                  onChange={(e) => setEditState({ ...editState, dueDate: e.target.value || undefined })}
-                />
+                <Input type="date" value={editState.dueDate || ''} onChange={(e) => setEditState({ ...editState, dueDate: e.target.value || undefined })} />
               </div>
             </div>
-
-            {/* Linked Account */}
             <div className="space-y-2">
               <Label>Linked Account</Label>
               <Select
@@ -356,8 +520,6 @@ function TaskRow({ task }: { task: Task }) {
                 </SelectContent>
               </Select>
             </div>
-
-            {/* Linked Opportunity (only if account set) */}
             {editState.linkedAccountId && accountOpps.length > 0 && (
               <div className="space-y-2">
                 <Label>Linked Opportunity</Label>
@@ -375,14 +537,9 @@ function TaskRow({ task }: { task: Task }) {
                 </Select>
               </div>
             )}
-
             <div className="space-y-2">
               <Label>Note</Label>
-              <Input
-                value={editState.notes || ''}
-                onChange={(e) => setEditState({ ...editState, notes: e.target.value || undefined })}
-                placeholder="Quick context or blocker..."
-              />
+              <Input value={editState.notes || ''} onChange={(e) => setEditState({ ...editState, notes: e.target.value || undefined })} placeholder="Quick context or blocker..." />
             </div>
           </div>
           <DialogFooter>
@@ -397,15 +554,28 @@ function TaskRow({ task }: { task: Task }) {
 
 // ── Add Task Dialog ────────────────────────────────────────
 
-function AddTaskDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+function AddTaskDialog({ open, onOpenChange, defaultWorkstream }: { open: boolean; onOpenChange: (v: boolean) => void; defaultWorkstream: Workstream }) {
   const { addTask, accounts, opportunities } = useStore();
   const [title, setTitle] = useState('');
-  const [workstream, setWorkstream] = useState<Workstream>('pg');
+  const [workstream, setWorkstream] = useState<Workstream>(defaultWorkstream);
   const [priority, setPriority] = useState<Priority>('P1');
   const [dueDate, setDueDate] = useState('');
   const [accountId, setAccountId] = useState<string>('');
   const [oppId, setOppId] = useState<string>('');
   const [notes, setNotes] = useState('');
+
+  // Sync default workstream when dialog opens
+  useEffect(() => {
+    if (open) {
+      setWorkstream(defaultWorkstream);
+      setTitle('');
+      setPriority('P1');
+      setDueDate('');
+      setAccountId('');
+      setOppId('');
+      setNotes('');
+    }
+  }, [open, defaultWorkstream]);
 
   const accountOpps = accountId
     ? opportunities.filter(o => o.accountId === accountId)
@@ -425,21 +595,12 @@ function AddTaskDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
       linkedAccountId: accountId || undefined,
       linkedOpportunityId: oppId || undefined,
       notes: notes.trim() || undefined,
-      // Legacy compat fields
       motion: workstream === 'renewals' ? 'renewal' : 'new-logo',
       linkedRecordType: oppId ? 'opportunity' : (accountId ? 'account' : 'account'),
       linkedRecordId: oppId || accountId || '',
     } as any);
     toast.success('Task added');
     onOpenChange(false);
-    // Reset
-    setTitle('');
-    setWorkstream('pg');
-    setPriority('P1');
-    setDueDate('');
-    setAccountId('');
-    setOppId('');
-    setNotes('');
   };
 
   return (
@@ -454,7 +615,6 @@ function AddTaskDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
             <Label>Title *</Label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What needs to be done?" autoFocus />
           </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Workstream *</Label>
@@ -478,18 +638,13 @@ function AddTaskDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
               </Select>
             </div>
           </div>
-
           <div className="space-y-2">
             <Label>Due Date</Label>
             <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </div>
-
           <div className="space-y-2">
             <Label>Linked Account</Label>
-            <Select value={accountId || '__none__'} onValueChange={(v) => {
-              setAccountId(v === '__none__' ? '' : v);
-              setOppId('');
-            }}>
+            <Select value={accountId || '__none__'} onValueChange={(v) => { setAccountId(v === '__none__' ? '' : v); setOppId(''); }}>
               <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">None</SelectItem>
@@ -499,7 +654,6 @@ function AddTaskDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
               </SelectContent>
             </Select>
           </div>
-
           {accountId && accountOpps.length > 0 && (
             <div className="space-y-2">
               <Label>Linked Opportunity</Label>
@@ -514,7 +668,6 @@ function AddTaskDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
               </Select>
             </div>
           )}
-
           <div className="space-y-2">
             <Label>Note</Label>
             <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Quick context..." />
@@ -538,7 +691,8 @@ export default function Tasks() {
     done: true,
     dropped: true,
   });
-  const [filterWorkstream, setFilterWorkstream] = useState<'all' | Workstream>('all');
+  // Default to PG (New Logo) — never default to 'all'
+  const [filterWorkstream, setFilterWorkstream] = useState<'all' | Workstream>('pg');
   const [filterDue, setFilterDue] = useState<'all' | 'today' | 'week'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -547,15 +701,11 @@ export default function Tasks() {
   weekFromNow.setDate(weekFromNow.getDate() + 7);
   const weekEnd = weekFromNow.toISOString().split('T')[0];
 
-  // Apply filters
   const filteredTasks = useMemo(() => {
     return tasks.filter(task => {
-      // Workstream filter
       if (filterWorkstream !== 'all' && getWorkstream(task) !== filterWorkstream) return false;
-      // Due filter
       if (filterDue === 'today' && task.dueDate !== today) return false;
       if (filterDue === 'week' && (!task.dueDate || task.dueDate > weekEnd)) return false;
-      // Search
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         if (!task.title.toLowerCase().includes(q) && !(task.notes || '').toLowerCase().includes(q)) return false;
@@ -564,18 +714,12 @@ export default function Tasks() {
     });
   }, [tasks, filterWorkstream, filterDue, searchQuery, today, weekEnd]);
 
-  // Group by status
   const grouped = useMemo(() => {
     const groups: Record<TaskStatus, Task[]> = {
-      'next': [],
-      'in-progress': [],
-      'blocked': [],
-      'done': [],
-      'dropped': [],
+      'next': [], 'in-progress': [], 'blocked': [], 'done': [], 'dropped': [],
     };
     filteredTasks.forEach(task => {
       const status = task.status as TaskStatus;
-      // Handle legacy 'open' status
       const effectiveStatus = status === ('open' as any) ? 'next' : status;
       if (groups[effectiveStatus]) {
         groups[effectiveStatus].push(task);
@@ -583,7 +727,6 @@ export default function Tasks() {
         groups['next'].push(task);
       }
     });
-    // Sort each group
     Object.keys(groups).forEach(k => {
       groups[k as TaskStatus] = sortTasks(groups[k as TaskStatus]);
     });
@@ -594,14 +737,17 @@ export default function Tasks() {
     setCollapsedGroups(prev => ({ ...prev, [status]: !prev[status] }));
   };
 
-  const activeCount = tasks.filter(t => t.status !== 'done' && t.status !== 'dropped').length;
-  const doneCount = tasks.filter(t => t.status === 'done').length;
+  const activeCount = filteredTasks.filter(t => t.status !== 'done' && t.status !== 'dropped').length;
+  const doneCount = filteredTasks.filter(t => t.status === 'done').length;
 
   return (
     <Layout>
       <div className="p-6 lg:p-8 max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        {/* Momentum Header */}
+        <MomentumHeader workstreamFilter={filterWorkstream} />
+
+        {/* Title + Add */}
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="font-display text-2xl font-bold">Tasks</h1>
             <p className="text-sm text-muted-foreground">
@@ -614,22 +760,31 @@ export default function Tasks() {
           </Button>
         </div>
 
+        {/* Renewal due-today banner (only when PG filter active) */}
+        {filterWorkstream === 'pg' && (
+          <RenewalDueBanner tasks={tasks} onSwitchFilter={() => setFilterWorkstream('renewals')} />
+        )}
+
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-2 mb-6">
-          {/* Workstream */}
+          {/* Workstream toggle: PG | Renewals | All */}
           <div className="flex rounded-lg border border-border overflow-hidden">
-            {(['all', 'pg', 'renewals'] as const).map(w => (
+            {([
+              { value: 'pg' as const, label: 'PG' },
+              { value: 'renewals' as const, label: 'Renewals' },
+              { value: 'all' as const, label: 'All' },
+            ]).map(w => (
               <button
-                key={w}
+                key={w.value}
                 className={cn(
                   "px-3 py-1.5 text-xs font-medium transition-colors",
-                  filterWorkstream === w
+                  filterWorkstream === w.value
                     ? "bg-primary text-primary-foreground"
                     : "bg-card hover:bg-muted text-muted-foreground"
                 )}
-                onClick={() => setFilterWorkstream(w)}
+                onClick={() => setFilterWorkstream(w.value)}
               >
-                {w === 'all' ? 'All' : w === 'pg' ? 'PG' : 'Renewals'}
+                {w.label}
               </button>
             ))}
           </div>
@@ -637,10 +792,10 @@ export default function Tasks() {
           {/* Due filter */}
           <div className="flex rounded-lg border border-border overflow-hidden">
             {([
-              { value: 'all', label: 'All' },
-              { value: 'today', label: 'Today' },
-              { value: 'week', label: 'This Week' },
-            ] as const).map(f => (
+              { value: 'all' as const, label: 'All' },
+              { value: 'today' as const, label: 'Today' },
+              { value: 'week' as const, label: 'This Week' },
+            ]).map(f => (
               <button
                 key={f.value}
                 className={cn(
@@ -677,7 +832,6 @@ export default function Tasks() {
             
             return (
               <div key={status}>
-                {/* Group header */}
                 <button
                   className="flex items-center gap-2 w-full text-left py-2 group"
                   onClick={() => toggleGroup(status)}
@@ -691,7 +845,6 @@ export default function Tasks() {
                   <span className="text-xs text-muted-foreground font-normal">({groupTasks.length})</span>
                 </button>
 
-                {/* Group tasks */}
                 {!isCollapsed && (
                   <div className="space-y-1.5 ml-6">
                     {groupTasks.length === 0 ? (
@@ -717,7 +870,7 @@ export default function Tasks() {
         )}
       </div>
 
-      <AddTaskDialog open={showAddDialog} onOpenChange={setShowAddDialog} />
+      <AddTaskDialog open={showAddDialog} onOpenChange={setShowAddDialog} defaultWorkstream={filterWorkstream === 'all' ? 'pg' : filterWorkstream} />
     </Layout>
   );
 }
