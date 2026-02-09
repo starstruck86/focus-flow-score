@@ -9,7 +9,8 @@ import {
   Download,
   ChevronDown,
   ChevronRight,
-  Pencil,
+  AlertTriangle,
+  Filter,
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { StreakChip } from '@/components/StreakChip';
@@ -143,75 +144,61 @@ const STAGE_LABELS: Record<string, string> = {
   'Closed Lost': '7 - Closed Lost',
 };
 
-// WebsiteCell replaced by WebsiteLinkCell from table components
+// Status options for select dropdown with numbered labels
+const STATUS_OPTIONS = [
+  { value: 'researching', label: '1 - Researching', className: 'bg-blue-500/20 text-blue-400' },
+  { value: 'prepped', label: '2 - Prepped', className: 'bg-cyan-500/20 text-cyan-400' },
+  { value: 'active', label: '3 - Active', className: 'bg-status-green/20 text-status-green' },
+  { value: 'inactive', label: '4 - Inactive', className: 'bg-muted text-muted-foreground' },
+  { value: 'disqualified', label: '5 - Disqualified', className: 'bg-status-red/20 text-status-red' },
+  { value: 'meeting-booked', label: '6 - Meeting Booked', className: 'bg-primary/20 text-primary' },
+];
 
-// Status Summary Component for Accounts
-function AccountsStatusSummary() {
-  const { accounts } = useStore();
-  
-  const statusSummary = useMemo(() => {
-    const statuses: AccountStatus[] = ['researching', 'prepped', 'active', 'inactive', 'disqualified', 'meeting-booked'];
-    const summary: Record<AccountStatus, number> = {
-      'researching': 0,
-      'prepped': 0,
-      'active': 0,
-      'inactive': 0,
-      'disqualified': 0,
-      'meeting-booked': 0,
-    };
-    
-    accounts.forEach(a => {
-      if (summary[a.accountStatus] !== undefined) {
-        summary[a.accountStatus]++;
-      } else {
-        // Map legacy statuses
-        summary['inactive']++;
-      }
-    });
-    
-    return summary;
-  }, [accounts]);
+// Tier options for select dropdown  
+const TIER_OPTIONS = [
+  { value: 'A', label: 'A', className: 'border-status-green text-status-green bg-transparent' },
+  { value: 'B', label: 'B', className: 'border-status-yellow text-status-yellow bg-transparent' },
+  { value: 'C', label: 'C', className: 'border-muted-foreground text-muted-foreground bg-transparent' },
+];
 
-  const statusLabels: Record<AccountStatus, string> = {
-    'researching': '1 - Researching',
-    'prepped': '2 - Prepped',
-    'active': '3 - Active',
-    'inactive': '4 - Inactive',
-    'disqualified': '5 - Disqualified',
-    'meeting-booked': '6 - Meeting Booked',
-  };
+// ===== FUNNEL CONFIGURATION =====
+interface FunnelGroup {
+  status: AccountStatus;
+  label: string;
+  hint: string;
+  color: string;
+  borderColor: string;
+  defaultCollapsed: boolean;
+  section: 'primary' | 'outcome' | 'holding';
+}
 
-  const totalCount = Object.values(statusSummary).reduce((sum, c) => sum + c, 0);
+const FUNNEL_GROUPS: FunnelGroup[] = [
+  { status: 'researching', label: '1 - Researching', hint: 'Identify fit + gather basics', color: 'text-blue-400', borderColor: 'border-blue-500/50', defaultCollapsed: false, section: 'primary' },
+  { status: 'prepped', label: '2 - Prepped', hint: 'Ready for cadence / first touches', color: 'text-cyan-400', borderColor: 'border-cyan-500/50', defaultCollapsed: false, section: 'primary' },
+  { status: 'active', label: '3 - Active', hint: 'In cadence / active outreach', color: 'text-status-green', borderColor: 'border-status-green/50', defaultCollapsed: false, section: 'primary' },
+  { status: 'meeting-booked', label: '5 - Meeting Booked', hint: 'Meeting scheduled', color: 'text-primary', borderColor: 'border-primary/50', defaultCollapsed: true, section: 'outcome' },
+  { status: 'disqualified', label: '6 - Disqualified', hint: 'Not a fit', color: 'text-status-red', borderColor: 'border-status-red/50', defaultCollapsed: true, section: 'outcome' },
+  { status: 'inactive', label: '4 - Inactive', hint: 'Holding bucket', color: 'text-muted-foreground', borderColor: 'border-border', defaultCollapsed: false, section: 'holding' },
+];
 
-  return (
-    <div className="space-y-4">
-      {/* Total Summary */}
-      <div className="flex items-center gap-4">
-        <div className="text-sm text-muted-foreground">
-          Total Accounts: <span className="font-semibold text-foreground">{totalCount}</span>
-        </div>
-      </div>
-      
-      {/* Status Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {(['researching', 'prepped', 'active', 'inactive', 'disqualified', 'meeting-booked'] as AccountStatus[]).map(status => (
-          <div 
-            key={status} 
-            className={cn(
-              "metric-card p-3 flex items-center justify-between"
-            )}
-          >
-            <Badge className={cn("text-xs", ACCOUNT_STATUS_COLORS[status])}>
-              {statusLabels[status]}
-            </Badge>
-            <span className="text-lg font-bold font-mono">
-              {statusSummary[status]}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+const DEFAULT_TARGETS: Record<string, number> = {
+  researching: 25,
+  prepped: 20,
+  active: 30,
+};
+
+// Sort within funnel group: Tier → Last Updated desc → Name A-Z
+function sortFunnelGroup(accounts: Account[]): Account[] {
+  return [...accounts].sort((a, b) => {
+    // 1) Tier
+    const tierA = TIER_SORT_RANK[a.tier as keyof typeof TIER_SORT_RANK] ?? 99;
+    const tierB = TIER_SORT_RANK[b.tier as keyof typeof TIER_SORT_RANK] ?? 99;
+    if (tierA !== tierB) return tierA - tierB;
+    // 2) Last Updated desc
+    if (a.updatedAt !== b.updatedAt) return b.updatedAt.localeCompare(a.updatedAt);
+    // 3) Name A-Z
+    return a.name.localeCompare(b.name);
+  });
 }
 
 // Stage Summary Component for Opportunities
@@ -226,17 +213,14 @@ function OpportunitiesStageSummary() {
       summary[stage] = { count: 0, arr: 0 };
     });
     
-    // Only count active opportunities
     opportunities
       .filter(o => o.status === 'active')
       .forEach(o => {
         const stage = o.stage || '';
-        // Only count if stage exists in our summary (handles legacy stage values)
         if (summary[stage]) {
           summary[stage].count++;
           summary[stage].arr += o.arr || 0;
         } else {
-          // Map legacy stages or unknown stages to "No Stage"
           summary[''].count++;
           summary[''].arr += o.arr || 0;
         }
@@ -259,22 +243,16 @@ function OpportunitiesStageSummary() {
 
   return (
     <div className="space-y-4">
-      {/* Total Summary */}
       <div className="flex items-center gap-4">
         <div className="text-sm text-muted-foreground">
           Active Pipeline: <span className="font-semibold text-foreground">{totalCount} opps</span> • <span className="font-mono font-semibold text-foreground">{formatCurrency(totalARR)}</span>
         </div>
       </div>
-      
-      {/* Stage Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
         {(['', 'Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate', 'Closed Won', 'Closed Lost'] as OpportunityStage[]).map(stage => (
           <div 
             key={stage || 'no-stage'} 
-            className={cn(
-              "metric-card p-3 border-l-4",
-              STAGE_COLORS[stage]
-            )}
+            className={cn("metric-card p-3 border-l-4", STAGE_COLORS[stage])}
           >
             <div className="flex items-center justify-between mb-1">
               <span className={cn("text-xs font-medium", STAGE_TEXT_COLORS[stage])}>
@@ -294,25 +272,233 @@ function OpportunitiesStageSummary() {
   );
 }
 
-// Status order for sorting (NEW numbered labels)
-const STATUS_ORDER: AccountStatus[] = ['researching', 'prepped', 'active', 'inactive', 'disqualified', 'meeting-booked'];
+// ===== FUNNEL HEALTH BAR =====
+function FunnelHealthBar({ accounts }: { accounts: Account[] }) {
+  const counts: Record<string, number> = { researching: 0, prepped: 0, active: 0 };
+  accounts.forEach(a => {
+    if (counts[a.accountStatus] !== undefined) counts[a.accountStatus]++;
+  });
 
-// Status options for select dropdown with numbered labels
-const STATUS_OPTIONS = [
-  { value: 'researching', label: '1 - Researching', className: 'bg-blue-500/20 text-blue-400' },
-  { value: 'prepped', label: '2 - Prepped', className: 'bg-cyan-500/20 text-cyan-400' },
-  { value: 'active', label: '3 - Active', className: 'bg-status-green/20 text-status-green' },
-  { value: 'inactive', label: '4 - Inactive', className: 'bg-muted text-muted-foreground' },
-  { value: 'disqualified', label: '5 - Disqualified', className: 'bg-status-red/20 text-status-red' },
-  { value: 'meeting-booked', label: '6 - Meeting Booked', className: 'bg-primary/20 text-primary' },
-];
+  const stages = [
+    { key: 'researching', label: '1 - Researching', count: counts.researching, target: DEFAULT_TARGETS.researching, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+    { key: 'prepped', label: '2 - Prepped', count: counts.prepped, target: DEFAULT_TARGETS.prepped, color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
+    { key: 'active', label: '3 - Active', count: counts.active, target: DEFAULT_TARGETS.active, color: 'text-status-green', bg: 'bg-status-green/10' },
+  ];
 
-// Tier options for select dropdown  
-const TIER_OPTIONS = [
-  { value: 'A', label: 'A', className: 'border-status-green text-status-green bg-transparent' },
-  { value: 'B', label: 'B', className: 'border-status-yellow text-status-yellow bg-transparent' },
-  { value: 'C', label: 'C', className: 'border-muted-foreground text-muted-foreground bg-transparent' },
-];
+  const warnings = stages.filter(s => s.count < s.target);
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-3 gap-3">
+        {stages.map(s => {
+          const belowTarget = s.count < s.target;
+          return (
+            <div key={s.key} className={cn("metric-card p-3 flex flex-col", s.bg)}>
+              <div className="flex items-center justify-between">
+                <span className={cn("text-xs font-medium", s.color)}>{s.label}</span>
+                <span className={cn("text-xl font-bold font-mono", belowTarget ? "text-status-yellow" : "text-foreground")}>
+                  {s.count}
+                  <span className="text-xs text-muted-foreground font-normal"> / {s.target}</span>
+                </span>
+              </div>
+              {belowTarget && (
+                <div className="flex items-center gap-1 mt-1">
+                  <AlertTriangle className="h-3 w-3 text-status-yellow" />
+                  <span className="text-[10px] text-status-yellow">Below target by {s.target - s.count}</span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ===== FUNNEL GROUP SECTION =====
+function FunnelGroupSection({
+  group,
+  accounts,
+  expandedAccountId,
+  setExpandedAccountId,
+  updateAccount,
+  deleteAccount,
+  isCollapsed,
+  onToggleCollapse,
+}: {
+  group: FunnelGroup;
+  accounts: Account[];
+  expandedAccountId: string | null;
+  setExpandedAccountId: (id: string | null) => void;
+  updateAccount: (id: string, updates: Partial<Account>) => void;
+  deleteAccount: (id: string) => void;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
+}) {
+  if (accounts.length === 0 && isCollapsed) return null;
+
+  return (
+    <Collapsible open={!isCollapsed} onOpenChange={() => onToggleCollapse()}>
+      <CollapsibleTrigger asChild>
+        <button className={cn(
+          "w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors",
+          "hover:bg-muted/50 text-left border",
+          group.borderColor
+        )}>
+          {isCollapsed ? <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />}
+          <Badge className={cn("text-xs shrink-0", ACCOUNT_STATUS_COLORS[group.status])}>
+            {group.label}
+          </Badge>
+          <span className="text-xs text-muted-foreground">{group.hint}</span>
+          <span className="ml-auto text-sm font-mono font-semibold">{accounts.length}</span>
+          {group.section === 'primary' && accounts.some(a => a.cadenceName) && (
+            <span className="text-[10px] text-muted-foreground">
+              {accounts.filter(a => a.cadenceName).length} in cadence
+            </span>
+          )}
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        {accounts.length === 0 ? (
+          <div className="px-4 py-3 text-xs text-muted-foreground italic">No accounts in this stage.</div>
+        ) : (
+          <div className="metric-card overflow-x-auto p-0 mt-1 mb-3">
+            <Table className="min-w-[1200px]">
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-[3%]"></TableHead>
+                  <TableHead className="w-[17%]">Account</TableHead>
+                  <TableHead className="w-[15%]">Website</TableHead>
+                  <TableHead className="w-[13%]">Status</TableHead>
+                  <TableHead className="w-[6%]">Tier</TableHead>
+                  {(group.status === 'prepped' || group.status === 'active') && (
+                    <TableHead className="w-[10%]">Cadence</TableHead>
+                  )}
+                  <TableHead className="w-[16%]">MarTech</TableHead>
+                  <TableHead className="w-[16%]">Ecommerce</TableHead>
+                  <TableHead className="w-[4%]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {accounts.map((account) => (
+                  <React.Fragment key={account.id}>
+                    <TableRow 
+                      className={cn(
+                        "hover:bg-muted/30",
+                        expandedAccountId === account.id && "bg-muted/20"
+                      )}
+                    >
+                      <TableCell className="align-top py-3">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          onClick={() => setExpandedAccountId(expandedAccountId === account.id ? null : account.id)}
+                        >
+                          {expandedAccountId === account.id ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </TableCell>
+                      <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                        <AccountNameCell 
+                          name={account.name} 
+                          salesforceLink={account.salesforceLink}
+                          onNameChange={(name) => updateAccount(account.id, { name })}
+                          onSalesforceLinkChange={(link) => updateAccount(account.id, { salesforceLink: link })}
+                          className="text-sm break-words"
+                        />
+                      </TableCell>
+                      <TableCell className="align-top py-3 group" onClick={(e) => e.stopPropagation()}>
+                        <WebsiteLinkCell
+                          value={account.website || ''}
+                          onChange={(value) => updateAccount(account.id, { website: value })}
+                        />
+                      </TableCell>
+                      <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                        <DisplaySelectCell
+                          value={account.accountStatus || 'inactive'}
+                          options={STATUS_OPTIONS}
+                          onChange={(v) => updateAccount(account.id, { accountStatus: v as AccountStatus })}
+                        />
+                      </TableCell>
+                      <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                        <DisplaySelectCell
+                          value={account.tier || 'B'}
+                          options={TIER_OPTIONS}
+                          onChange={(v) => updateAccount(account.id, { tier: v as AccountTier })}
+                          badgeClassName="border"
+                        />
+                      </TableCell>
+                      {(group.status === 'prepped' || group.status === 'active') && (
+                        <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                          {account.cadenceName ? (
+                            <Badge className="bg-status-green/15 text-status-green text-[10px]">In Cadence</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] text-muted-foreground">Not in Cadence</Badge>
+                          )}
+                        </TableCell>
+                      )}
+                      <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                        <EditableTextareaCell
+                          value={account.marTech || ''}
+                          onChange={(v) => updateAccount(account.id, { marTech: v })}
+                          placeholder="Add MarTech"
+                          emptyText="Add"
+                        />
+                      </TableCell>
+                      <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                        <EditableTextareaCell
+                          value={account.ecommerce || ''}
+                          onChange={(v) => updateAccount(account.id, { ecommerce: v })}
+                          placeholder="Add Ecommerce"
+                          emptyText="Add"
+                        />
+                      </TableCell>
+                      <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="icon" variant="ghost" className="h-8 w-8">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem>Edit Account</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                              className="text-destructive"
+                              onClick={() => deleteAccount(account.id)}
+                            >
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                    {expandedAccountId === account.id && (
+                      <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
+                        <TableCell colSpan={9} className="pt-0 pb-3">
+                          <AccountContactsField
+                            contacts={account.accountContacts || []}
+                            onChange={(contacts) => updateAccount(account.id, { accountContacts: contacts })}
+                            companyNotes={account.notes || ''}
+                            onCompanyNotesChange={(notes) => updateAccount(account.id, { notes })}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </React.Fragment>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 export default function WeeklyOutreach() {
   const { accounts, addAccount, updateAccount, deleteAccount } = useStore();
@@ -320,41 +506,43 @@ export default function WeeklyOutreach() {
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTier, setFilterTier] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showBulkImportDialog, setShowBulkImportDialog] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importPreview, setImportPreview] = useState<Partial<Account>[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [collapsedStatuses, setCollapsedStatuses] = useState<Set<AccountStatus>>(new Set());
   const [expandedAccountId, setExpandedAccountId] = useState<string | null>(null);
   
-  // Sort hook for accounts table
-  const { sortConfig: accountSortConfig, handleSort: handleAccountSort } = useTableSort();
+  // Quick filter toggles
+  const [filterTierAB, setFilterTierAB] = useState(false);
+  const [filterMissingCadence, setFilterMissingCadence] = useState(false);
+  const [filterStale, setFilterStale] = useState(false);
+
+  // Collapsed groups - outcomes collapsed by default
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<AccountStatus>>(
+    new Set(['meeting-booked', 'disqualified'])
+  );
+
+  const toggleGroupCollapse = (status: AccountStatus) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status);
+      else next.add(status);
+      return next;
+    });
+  };
   
   const [newAccount, setNewAccount] = useState<Partial<Account>>({
     priority: 'medium',
     tier: 'B',
-    accountStatus: 'inactive',
+    accountStatus: 'researching',
     motion: 'new-logo',
     outreachStatus: 'not-started',
     techStack: [],
     tags: [],
     techFitFlag: 'good',
   });
-
-  const toggleStatusCollapse = (status: AccountStatus) => {
-    setCollapsedStatuses(prev => {
-      const next = new Set(prev);
-      if (next.has(status)) {
-        next.delete(status);
-      } else {
-        next.add(status);
-      }
-      return next;
-    });
-  };
 
   const parseCSV = (text: string): Partial<Account>[] => {
     const lines = text.trim().split('\n');
@@ -521,24 +709,46 @@ export default function WeeklyOutreach() {
     URL.revokeObjectURL(url);
   };
 
-  const filteredAccounts = accounts.filter(account => {
-    const matchesSearch = account.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesTier = filterTier === 'all' || account.tier === filterTier;
-    const matchesStatus = filterStatus === 'all' || account.accountStatus === filterStatus;
-    return matchesSearch && matchesTier && matchesStatus;
-  });
+  // Apply search + quick filters
+  const filteredAccounts = useMemo(() => {
+    const fourteenDaysAgo = new Date();
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+    const staleDate = fourteenDaysAgo.toISOString();
 
-  // Sort accounts: default is Tier → Status → Name
-  const sortedAccounts = useMemo(() => {
-    const sortKeyMap = {
-      tier: { key: 'tier' as keyof Account, customRank: TIER_SORT_RANK },
-      accountStatus: { key: 'accountStatus' as keyof Account, customRank: ACCOUNT_STATUS_SORT_RANK },
-      name: { key: 'name' as keyof Account },
-      marTech: { key: 'marTech' as keyof Account },
-      ecommerce: { key: 'ecommerce' as keyof Account },
+    return accounts.filter(account => {
+      const matchesSearch = !searchQuery || account.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesTier = filterTier === 'all' || account.tier === filterTier;
+      const matchesTierAB = !filterTierAB || account.tier === 'A' || account.tier === 'B';
+      const matchesCadence = !filterMissingCadence || !account.cadenceName;
+      const matchesStale = !filterStale || !account.lastTouchDate || account.lastTouchDate < staleDate;
+      return matchesSearch && matchesTier && matchesTierAB && matchesCadence && matchesStale;
+    });
+  }, [accounts, searchQuery, filterTier, filterTierAB, filterMissingCadence, filterStale]);
+
+  // Group & sort accounts by funnel status
+  const groupedAccounts = useMemo(() => {
+    const groups: Record<AccountStatus, Account[]> = {
+      'researching': [],
+      'prepped': [],
+      'active': [],
+      'inactive': [],
+      'disqualified': [],
+      'meeting-booked': [],
     };
-    return applySortWithFallback(filteredAccounts, accountSortConfig, sortAccountsDefault, sortKeyMap);
-  }, [filteredAccounts, accountSortConfig]);
+    
+    filteredAccounts.forEach(a => {
+      const status = a.accountStatus || 'inactive';
+      if (groups[status]) groups[status].push(a);
+      else groups['inactive'].push(a);
+    });
+    
+    // Sort each group
+    Object.keys(groups).forEach(key => {
+      groups[key as AccountStatus] = sortFunnelGroup(groups[key as AccountStatus]);
+    });
+    
+    return groups;
+  }, [filteredAccounts]);
 
   const handleAddAccount = () => {
     if (!newAccount.name) {
@@ -550,7 +760,7 @@ export default function WeeklyOutreach() {
     setNewAccount({
       priority: 'medium',
       tier: 'B',
-      accountStatus: 'inactive',
+      accountStatus: 'researching',
       motion: 'new-logo',
       outreachStatus: 'not-started',
       techStack: [],
@@ -620,443 +830,353 @@ export default function WeeklyOutreach() {
             <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
           </TabsList>
 
-          {/* Accounts Tab */}
+          {/* Accounts Tab - Funnel View */}
           <TabsContent value="accounts" className="space-y-4">
-            {/* Status Summary */}
-            <AccountsStatusSummary />
+            {/* Funnel Health Bar */}
+            <FunnelHealthBar accounts={accounts} />
             
-            {/* Accounts Actions */}
-            <div className="flex items-center justify-end gap-2">
-              {/* New Import Button (uses database) */}
-              <Button variant="outline" onClick={() => setShowImportModal(true)}>
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
-                Import
-              </Button>
-              
-              {/* Legacy Bulk Import Button (uses local state) */}
-              <Dialog open={showBulkImportDialog} onOpenChange={(open) => {
-                setShowBulkImportDialog(open);
-                if (!open) {
-                  setImportPreview([]);
-                  setImportError(null);
-                  if (fileInputRef.current) fileInputRef.current.value = '';
-                }
-              }}>
-                <DialogTrigger asChild>
-                  <Button variant="ghost" size="sm" className="text-muted-foreground">
-                    <Upload className="h-4 w-4 mr-2" />
-                    Quick Import (Local)
+            {/* Actions Bar */}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              {/* Search + Quick Filters */}
+              <div className="flex items-center gap-2 flex-wrap flex-1">
+                <div className="relative max-w-sm min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search accounts..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <Select value={filterTier} onValueChange={setFilterTier}>
+                  <SelectTrigger className="w-24">
+                    <SelectValue placeholder="Tier" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Tiers</SelectItem>
+                    <SelectItem value="A">Tier A</SelectItem>
+                    <SelectItem value="B">Tier B</SelectItem>
+                    <SelectItem value="C">Tier C</SelectItem>
+                  </SelectContent>
+                </Select>
+                {/* Quick filter toggles */}
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant={filterTierAB ? "default" : "outline"}
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setFilterTierAB(!filterTierAB)}
+                  >
+                    Tier A/B
                   </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle>Bulk Import Accounts</DialogTitle>
-                    <DialogDescription>
-                      Upload a CSV file to import multiple accounts at once.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    {/* Template Download */}
-                    <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <FileSpreadsheet className="h-5 w-5 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm font-medium">Need a template?</p>
-                          <p className="text-xs text-muted-foreground">Download our CSV template with example data</p>
-                        </div>
-                      </div>
-                      <Button variant="ghost" size="sm" onClick={downloadTemplate}>
-                        <Download className="h-4 w-4 mr-2" />
-                        Download
-                      </Button>
-                    </div>
-                    
-                    {/* File Upload */}
-                    <div className="space-y-2">
-                      <Label>Upload CSV File</Label>
-                      <Input
-                        ref={fileInputRef}
-                        type="file"
-                        accept=".csv"
-                        onChange={handleFileUpload}
-                        className="cursor-pointer"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Supported columns: Name, Website, Tier, Status, MarTech, Ecommerce, Notes
-                      </p>
-                    </div>
-                    
-                    {/* Error Message */}
-                    {importError && (
-                      <div className="p-3 bg-destructive/10 text-destructive rounded-lg text-sm">
-                        {importError}
-                      </div>
-                    )}
-                    
-                    {/* Preview Table */}
-                    {importPreview.length > 0 && (
-                      <div className="space-y-2">
-                        <Label>Preview ({importPreview.length} accounts)</Label>
-                        <div className="max-h-60 overflow-auto border rounded-lg">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Name</TableHead>
-                                <TableHead>Tier</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Website</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {importPreview.slice(0, 10).map((account, idx) => (
-                                <TableRow key={idx}>
-                                  <TableCell className="font-medium">{account.name}</TableCell>
-                                  <TableCell>
-                                    <Badge variant="outline" className={cn(TIER_COLORS[account.tier || 'B'])}>
-                                      {account.tier || 'B'}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell className="text-xs capitalize">
-                                    {(account.accountStatus || 'inactive').replace('-', ' ')}
-                                  </TableCell>
-                                  <TableCell className="text-xs text-muted-foreground">
-                                    {account.website || '—'}
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                              {importPreview.length > 10 && (
-                                <TableRow>
-                                  <TableCell colSpan={4} className="text-center text-muted-foreground text-sm">
-                                    ... and {importPreview.length - 10} more accounts
-                                  </TableCell>
-                                </TableRow>
-                              )}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setShowBulkImportDialog(false)}>
-                      Cancel
-                    </Button>
-                    <Button 
-                      onClick={handleBulkImport} 
-                      disabled={importPreview.length === 0}
-                    >
-                      Import {importPreview.length} Accounts
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-              
-              {/* Add Single Account */}
-              <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-                <DialogTrigger asChild>
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Account
+                  <Button
+                    variant={filterMissingCadence ? "default" : "outline"}
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setFilterMissingCadence(!filterMissingCadence)}
+                  >
+                    No Cadence
                   </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Add New Account</DialogTitle>
-                    <DialogDescription>
-                      Add a new account to your weekly outreach list.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <Label>Account Name *</Label>
-                      <Input
-                        value={newAccount.name || ''}
-                        onChange={(e) => setNewAccount({ ...newAccount, name: e.target.value })}
-                        placeholder="Acme Corp"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Tier</Label>
-                        <Select
-                          value={newAccount.tier || 'B'}
-                          onValueChange={(v) => setNewAccount({ ...newAccount, tier: v as AccountTier })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="A">A</SelectItem>
-                            <SelectItem value="B">B</SelectItem>
-                            <SelectItem value="C">C</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Status</Label>
-                        <Select
-                          value={newAccount.accountStatus || 'inactive'}
-                          onValueChange={(v) => setNewAccount({ ...newAccount, accountStatus: v as AccountStatus })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="researching">1 - Researching</SelectItem>
-                            <SelectItem value="prepped">2 - Prepped</SelectItem>
-                            <SelectItem value="active">3 - Active</SelectItem>
-                            <SelectItem value="inactive">4 - Inactive</SelectItem>
-                            <SelectItem value="disqualified">5 - Disqualified</SelectItem>
-                            <SelectItem value="meeting-booked">6 - Meeting Booked</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Website</Label>
-                      <Input
-                        value={newAccount.website || ''}
-                        onChange={(e) => setNewAccount({ ...newAccount, website: e.target.value })}
-                        placeholder="https://acme.com"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>MarTech</Label>
-                        <Input
-                          value={newAccount.marTech || ''}
-                          onChange={(e) => setNewAccount({ ...newAccount, marTech: e.target.value })}
-                          placeholder="e.g., Marketo, HubSpot"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Ecommerce</Label>
-                        <Input
-                          value={newAccount.ecommerce || ''}
-                          onChange={(e) => setNewAccount({ ...newAccount, ecommerce: e.target.value })}
-                          placeholder="e.g., Shopify, Magento"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Notes</Label>
-                      <Textarea
-                        value={newAccount.notes || ''}
-                        onChange={(e) => setNewAccount({ ...newAccount, notes: e.target.value })}
-                        placeholder="Any initial notes or links..."
-                        rows={3}
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setShowAddDialog(false)}>Cancel</Button>
-                    <Button onClick={handleAddAccount}>Add Account</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </div>
-
-            {/* Filters */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="relative flex-1 max-w-sm">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search accounts..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
+                  <Button
+                    variant={filterStale ? "default" : "outline"}
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setFilterStale(!filterStale)}
+                  >
+                    Stale 14d+
+                  </Button>
+                </div>
               </div>
-              <Select value={filterTier} onValueChange={setFilterTier}>
-                <SelectTrigger className="w-24">
-                  <SelectValue placeholder="Tier" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Tiers</SelectItem>
-                  <SelectItem value="A">Tier A</SelectItem>
-                  <SelectItem value="B">Tier B</SelectItem>
-                  <SelectItem value="C">Tier C</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="researching">1 - Researching</SelectItem>
-                  <SelectItem value="prepped">2 - Prepped</SelectItem>
-                  <SelectItem value="active">3 - Active</SelectItem>
-                  <SelectItem value="inactive">4 - Inactive</SelectItem>
-                  <SelectItem value="meeting-booked">6 - Meeting Booked</SelectItem>
-                  <SelectItem value="disqualified">5 - Disqualified</SelectItem>
-                </SelectContent>
-              </Select>
+
+              {/* Import + Add */}
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => setShowImportModal(true)}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Import
+                </Button>
+                
+                <Dialog open={showBulkImportDialog} onOpenChange={(open) => {
+                  setShowBulkImportDialog(open);
+                  if (!open) {
+                    setImportPreview([]);
+                    setImportError(null);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }
+                }}>
+                  <DialogTrigger asChild>
+                    <Button variant="ghost" size="sm" className="text-muted-foreground">
+                      <Upload className="h-4 w-4 mr-2" />
+                      Quick Import (Local)
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                      <DialogTitle>Bulk Import Accounts</DialogTitle>
+                      <DialogDescription>
+                        Upload a CSV file to import multiple accounts at once.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <FileSpreadsheet className="h-5 w-5 text-muted-foreground" />
+                          <div>
+                            <p className="text-sm font-medium">Need a template?</p>
+                            <p className="text-xs text-muted-foreground">Download our CSV template with example data</p>
+                          </div>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={downloadTemplate}>
+                          <Download className="h-4 w-4 mr-2" />
+                          Download
+                        </Button>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label>Upload CSV File</Label>
+                        <Input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".csv"
+                          onChange={handleFileUpload}
+                          className="cursor-pointer"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Supported columns: Name, Website, Tier, Status, MarTech, Ecommerce, Notes
+                        </p>
+                      </div>
+                      
+                      {importError && (
+                        <div className="p-3 bg-destructive/10 text-destructive rounded-lg text-sm">
+                          {importError}
+                        </div>
+                      )}
+                      
+                      {importPreview.length > 0 && (
+                        <div className="space-y-2">
+                          <Label>Preview ({importPreview.length} accounts)</Label>
+                          <div className="max-h-60 overflow-auto border rounded-lg">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Name</TableHead>
+                                  <TableHead>Tier</TableHead>
+                                  <TableHead>Status</TableHead>
+                                  <TableHead>Website</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {importPreview.slice(0, 10).map((account, idx) => (
+                                  <TableRow key={idx}>
+                                    <TableCell className="font-medium">{account.name}</TableCell>
+                                    <TableCell>
+                                      <Badge variant="outline" className={cn(TIER_COLORS[account.tier || 'B'])}>
+                                        {account.tier || 'B'}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-xs capitalize">
+                                      {(account.accountStatus || 'inactive').replace('-', ' ')}
+                                    </TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">
+                                      {account.website || '—'}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                                {importPreview.length > 10 && (
+                                  <TableRow>
+                                    <TableCell colSpan={4} className="text-center text-muted-foreground text-sm">
+                                      ... and {importPreview.length - 10} more accounts
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setShowBulkImportDialog(false)}>
+                        Cancel
+                      </Button>
+                      <Button 
+                        onClick={handleBulkImport} 
+                        disabled={importPreview.length === 0}
+                      >
+                        Import {importPreview.length} Accounts
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+                
+                {/* Add Single Account */}
+                <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+                  <DialogTrigger asChild>
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Account
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Add New Account</DialogTitle>
+                      <DialogDescription>
+                        Add a new account to your weekly outreach list.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label>Account Name *</Label>
+                        <Input
+                          value={newAccount.name || ''}
+                          onChange={(e) => setNewAccount({ ...newAccount, name: e.target.value })}
+                          placeholder="Acme Corp"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Tier</Label>
+                          <Select
+                            value={newAccount.tier || 'B'}
+                            onValueChange={(v) => setNewAccount({ ...newAccount, tier: v as AccountTier })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="A">A</SelectItem>
+                              <SelectItem value="B">B</SelectItem>
+                              <SelectItem value="C">C</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Status</Label>
+                          <Select
+                            value={newAccount.accountStatus || 'researching'}
+                            onValueChange={(v) => setNewAccount({ ...newAccount, accountStatus: v as AccountStatus })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="researching">1 - Researching</SelectItem>
+                              <SelectItem value="prepped">2 - Prepped</SelectItem>
+                              <SelectItem value="active">3 - Active</SelectItem>
+                              <SelectItem value="inactive">4 - Inactive</SelectItem>
+                              <SelectItem value="disqualified">5 - Disqualified</SelectItem>
+                              <SelectItem value="meeting-booked">6 - Meeting Booked</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Website</Label>
+                        <Input
+                          value={newAccount.website || ''}
+                          onChange={(e) => setNewAccount({ ...newAccount, website: e.target.value })}
+                          placeholder="https://acme.com"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>MarTech</Label>
+                          <Input
+                            value={newAccount.marTech || ''}
+                            onChange={(e) => setNewAccount({ ...newAccount, marTech: e.target.value })}
+                            placeholder="e.g., Marketo, HubSpot"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Ecommerce</Label>
+                          <Input
+                            value={newAccount.ecommerce || ''}
+                            onChange={(e) => setNewAccount({ ...newAccount, ecommerce: e.target.value })}
+                            placeholder="e.g., Shopify, Magento"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Notes</Label>
+                        <Textarea
+                          value={newAccount.notes || ''}
+                          onChange={(e) => setNewAccount({ ...newAccount, notes: e.target.value })}
+                          placeholder="Any initial notes or links..."
+                          rows={3}
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setShowAddDialog(false)}>Cancel</Button>
+                      <Button onClick={handleAddAccount}>Add Account</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </div>
 
-            {/* Accounts Table - Flat sortable list */}
-            {sortedAccounts.length === 0 ? (
+            {/* Funnel Grouped View */}
+            {accounts.length === 0 ? (
               <div className="metric-card p-8 text-center text-muted-foreground">
-                {accounts.length === 0 
-                  ? "No accounts yet. Add your first account to get started!"
-                  : "No accounts match your filters."}
+                No accounts yet. Add your first account to get started!
               </div>
             ) : (
-              <div className="metric-card overflow-x-auto p-0">
-                <Table className="min-w-[1200px]">
-                  <TableHeader>
-                    <TableRow className="hover:bg-transparent">
-                      <TableHead className="w-[3%]"></TableHead>
-                      <SortableHeader 
-                        sortKey="name" 
-                        currentSort={accountSortConfig} 
-                        onSort={handleAccountSort}
-                        className="w-[17%]"
-                      >
-                        Account
-                      </SortableHeader>
-                      <TableHead className="w-[17%]">Website</TableHead>
-                      <SortableHeader 
-                        sortKey="accountStatus" 
-                        currentSort={accountSortConfig} 
-                        onSort={handleAccountSort}
-                        className="w-[13%]"
-                      >
-                        Status
-                      </SortableHeader>
-                      <SortableHeader 
-                        sortKey="tier" 
-                        currentSort={accountSortConfig} 
-                        onSort={handleAccountSort}
-                        className="w-[8%]"
-                      >
-                        Tier
-                      </SortableHeader>
-                      <SortableHeader 
-                        sortKey="marTech" 
-                        currentSort={accountSortConfig} 
-                        onSort={handleAccountSort}
-                        className="w-[18%]"
-                      >
-                        MarTech
-                      </SortableHeader>
-                      <SortableHeader 
-                        sortKey="ecommerce" 
-                        currentSort={accountSortConfig} 
-                        onSort={handleAccountSort}
-                        className="w-[18%]"
-                      >
-                        Ecommerce
-                      </SortableHeader>
-                      <TableHead className="w-[4%]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sortedAccounts.map((account) => (
-                      <React.Fragment key={account.id}>
-                        <TableRow 
-                          className={cn(
-                            "hover:bg-muted/30",
-                            expandedAccountId === account.id && "bg-muted/20"
-                          )}
-                        >
-                          <TableCell className="align-top py-3">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8"
-                              onClick={() => setExpandedAccountId(expandedAccountId === account.id ? null : account.id)}
-                            >
-                              {expandedAccountId === account.id ? (
-                                <ChevronDown className="h-4 w-4" />
-                              ) : (
-                                <ChevronRight className="h-4 w-4" />
-                              )}
-                            </Button>
-                          </TableCell>
-                          <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-                            <AccountNameCell 
-                              name={account.name} 
-                              salesforceLink={account.salesforceLink}
-                              onNameChange={(name) => updateAccount(account.id, { name })}
-                              onSalesforceLinkChange={(link) => updateAccount(account.id, { salesforceLink: link })}
-                              className="text-sm break-words"
-                            />
-                          </TableCell>
-                          <TableCell className="align-top py-3 group" onClick={(e) => e.stopPropagation()}>
-                            <WebsiteLinkCell
-                              value={account.website || ''}
-                              onChange={(value) => updateAccount(account.id, { website: value })}
-                            />
-                          </TableCell>
-                          <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-                            <DisplaySelectCell
-                              value={account.accountStatus || 'inactive'}
-                              options={STATUS_OPTIONS}
-                              onChange={(v) => updateAccount(account.id, { accountStatus: v as AccountStatus })}
-                            />
-                          </TableCell>
-                          <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-                            <DisplaySelectCell
-                              value={account.tier || 'B'}
-                              options={TIER_OPTIONS}
-                              onChange={(v) => updateAccount(account.id, { tier: v as AccountTier })}
-                              badgeClassName="border"
-                            />
-                          </TableCell>
-                          <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-                            <EditableTextareaCell
-                              value={account.marTech || ''}
-                              onChange={(v) => updateAccount(account.id, { marTech: v })}
-                              placeholder="Add MarTech"
-                              emptyText="Add"
-                            />
-                          </TableCell>
-                          <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-                            <EditableTextareaCell
-                              value={account.ecommerce || ''}
-                              onChange={(v) => updateAccount(account.id, { ecommerce: v })}
-                              placeholder="Add Ecommerce"
-                              emptyText="Add"
-                            />
-                          </TableCell>
-                          <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button size="icon" variant="ghost" className="h-8 w-8">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem>Edit Account</DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem 
-                                  className="text-destructive"
-                                  onClick={() => deleteAccount(account.id)}
-                                >
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                        {/* Contacts row - only visible when account is expanded */}
-                        {expandedAccountId === account.id && (
-                          <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
-                            <TableCell colSpan={8} className="pt-0 pb-3">
-                              <AccountContactsField
-                                contacts={account.accountContacts || []}
-                                onChange={(contacts) => updateAccount(account.id, { accountContacts: contacts })}
-                                companyNotes={account.notes || ''}
-                                onCompanyNotesChange={(notes) => updateAccount(account.id, { notes })}
-                              />
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </React.Fragment>
+              <div className="space-y-2">
+                {/* Primary Funnel: 1-3 */}
+                <div className="space-y-1">
+                  {FUNNEL_GROUPS.filter(g => g.section === 'primary').map(group => (
+                    <FunnelGroupSection
+                      key={group.status}
+                      group={group}
+                      accounts={groupedAccounts[group.status]}
+                      expandedAccountId={expandedAccountId}
+                      setExpandedAccountId={setExpandedAccountId}
+                      updateAccount={updateAccount}
+                      deleteAccount={deleteAccount}
+                      isCollapsed={collapsedGroups.has(group.status)}
+                      onToggleCollapse={() => toggleGroupCollapse(group.status)}
+                    />
+                  ))}
+                </div>
+
+                {/* Outcomes: Meeting Booked + Disqualified */}
+                <div className="pt-3 border-t border-border/50">
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1 px-1">Outcomes</p>
+                  <div className="space-y-1">
+                    {FUNNEL_GROUPS.filter(g => g.section === 'outcome').map(group => (
+                      <FunnelGroupSection
+                        key={group.status}
+                        group={group}
+                        accounts={groupedAccounts[group.status]}
+                        expandedAccountId={expandedAccountId}
+                        setExpandedAccountId={setExpandedAccountId}
+                        updateAccount={updateAccount}
+                        deleteAccount={deleteAccount}
+                        isCollapsed={collapsedGroups.has(group.status)}
+                        onToggleCollapse={() => toggleGroupCollapse(group.status)}
+                      />
                     ))}
-                  </TableBody>
-                </Table>
+                  </div>
+                </div>
+
+                {/* Holding: Inactive */}
+                <div className="pt-3 border-t border-border/50">
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1 px-1">Holding</p>
+                  <div className="space-y-1">
+                    {FUNNEL_GROUPS.filter(g => g.section === 'holding').map(group => (
+                      <FunnelGroupSection
+                        key={group.status}
+                        group={group}
+                        accounts={groupedAccounts[group.status]}
+                        expandedAccountId={expandedAccountId}
+                        setExpandedAccountId={setExpandedAccountId}
+                        updateAccount={updateAccount}
+                        deleteAccount={deleteAccount}
+                        isCollapsed={collapsedGroups.has(group.status)}
+                        onToggleCollapse={() => toggleGroupCollapse(group.status)}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
           </TabsContent>
