@@ -1,24 +1,18 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { 
   Plus, 
-  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Calendar,
   Building2,
   Target,
-  MoreHorizontal,
+  AlertCircle,
+  Search,
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu';
 import {
   Dialog,
   DialogContent,
@@ -26,7 +20,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -40,738 +33,688 @@ import { Textarea } from '@/components/ui/textarea';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { EditableDatePicker } from '@/components/EditableDatePicker';
-import { LinkedRecordSelector } from '@/components/LinkedRecordSelector';
-import type { Task, Priority, Motion, TaskCategory, TaskStatus, LinkedRecordType } from '@/types';
+import type { Task, Priority, TaskStatus, Workstream } from '@/types';
+
+// ── Constants ──────────────────────────────────────────────
+
+const STATUS_ORDER: TaskStatus[] = ['next', 'in-progress', 'blocked', 'done', 'dropped'];
+
+const STATUS_META: Record<TaskStatus, { label: string; color: string; dot: string }> = {
+  'next':        { label: 'Next',        color: 'bg-primary/10 text-primary border-primary/20',        dot: 'bg-primary' },
+  'in-progress': { label: 'In Progress', color: 'bg-status-blue/10 text-status-blue border-status-blue/20', dot: 'bg-status-blue' },
+  'blocked':     { label: 'Blocked',     color: 'bg-status-red/10 text-status-red border-status-red/20',     dot: 'bg-status-red' },
+  'done':        { label: 'Done',        color: 'bg-status-green/10 text-status-green border-status-green/20', dot: 'bg-status-green' },
+  'dropped':     { label: 'Dropped',     color: 'bg-muted text-muted-foreground border-border',               dot: 'bg-muted-foreground' },
+};
 
 const PRIORITY_COLORS: Record<Priority, string> = {
   P0: 'bg-status-red text-white',
   P1: 'bg-status-red/70 text-white',
   P2: 'bg-status-yellow text-black',
-  P3: 'bg-status-green/70 text-white',
+  P3: 'bg-muted text-muted-foreground',
 };
 
-const MOTION_LABELS: Record<Motion, string> = {
-  'new-logo': 'New Logo',
-  'renewal': 'Renewal',
-  'general': 'General',
+const WORKSTREAM_LABELS: Record<Workstream, string> = {
+  pg: 'PG',
+  renewals: 'Renewals',
 };
 
-const CATEGORY_OPTIONS: { value: TaskCategory; label: string }[] = [
-  { value: 'call', label: 'Call' },
-  { value: 'manual-email', label: 'Manual Email' },
-  { value: 'automated-email', label: 'Automated Email' },
-  { value: 'research', label: 'Research' },
-  { value: 'deck', label: 'Deck' },
-  { value: 'meeting-prep', label: 'Meeting Prep' },
-  { value: 'proposal', label: 'Proposal' },
-  { value: 'admin', label: 'Admin' },
-];
-
-const VIEWS = [
-  { value: 'today', label: 'Today' },
-  { value: 'overdue', label: 'Overdue' },
-  { value: 'this-week', label: 'This Week' },
-  { value: 'by-priority', label: 'By Priority' },
-  { value: 'by-motion', label: 'By Motion' },
-  { value: 'all', label: 'All Tasks' },
-];
-
-interface NewTaskState {
-  title?: string;
-  priority: Priority;
-  motion: Motion;
-  category: TaskCategory;
-  dueDate?: string;
-  linkedRecordType?: LinkedRecordType;
-  linkedRecordId?: string;
-  linkedAccountId?: string;
-  notes?: string;
+// ── Helper: derive workstream from legacy data ─────────────
+function getWorkstream(task: Task): Workstream {
+  if (task.workstream) return task.workstream;
+  // Legacy: derive from motion
+  if (task.motion === 'renewal') return 'renewals';
+  return 'pg';
 }
 
-export default function Tasks() {
-  const { tasks, accounts, opportunities, addTask, updateTask, deleteTask, toggleTaskComplete } = useStore();
-  const [currentView, setCurrentView] = useState('today');
-  const [showAddDialog, setShowAddDialog] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [newTask, setNewTask] = useState<NewTaskState>({
-    priority: 'P2',
-    motion: 'new-logo',
-    category: 'call',
-  });
+// ── Helper: get account name for display ───────────────────
+function useAccountName(task: Task) {
+  const { accounts, opportunities } = useStore();
+  
+  // New model
+  if (task.linkedAccountId) {
+    const account = accounts.find(a => a.id === task.linkedAccountId);
+    return account?.name;
+  }
+  // Legacy: linkedRecordType pattern
+  if (task.linkedRecordType === 'opportunity' && task.linkedRecordId) {
+    const opp = opportunities.find(o => o.id === task.linkedRecordId);
+    if (opp?.accountId) {
+      const account = accounts.find(a => a.id === opp.accountId);
+      return account?.name || opp.accountName;
+    }
+    return opp?.accountName;
+  }
+  if (task.linkedRecordType === 'account' && task.linkedRecordId) {
+    const account = accounts.find(a => a.id === task.linkedRecordId);
+    return account?.name;
+  }
+  return undefined;
+}
 
+function useOpportunityName(task: Task) {
+  const { opportunities } = useStore();
+  const oppId = task.linkedOpportunityId || (task.linkedRecordType === 'opportunity' ? task.linkedRecordId : undefined);
+  if (!oppId) return undefined;
+  return opportunities.find(o => o.id === oppId)?.name;
+}
+
+// ── Sort helper ────────────────────────────────────────────
+function sortTasks(tasks: Task[]): Task[] {
+  const priorityOrder: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3 };
+  return [...tasks].sort((a, b) => {
+    // Priority
+    const pa = priorityOrder[a.priority] ?? 3;
+    const pb = priorityOrder[b.priority] ?? 3;
+    if (pa !== pb) return pa - pb;
+    // Due date (no date at bottom)
+    if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+    if (a.dueDate && !b.dueDate) return -1;
+    if (!a.dueDate && b.dueDate) return 1;
+    // Last updated desc
+    return b.updatedAt.localeCompare(a.updatedAt);
+  });
+}
+
+// ── Task Row Component ─────────────────────────────────────
+
+function TaskRow({ task }: { task: Task }) {
+  const { updateTask, deleteTask, accounts, opportunities } = useStore();
+  const accountName = useAccountName(task);
+  const oppName = useOpportunityName(task);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editState, setEditState] = useState<Task>(task);
+  const workstream = getWorkstream(task);
   const today = new Date().toISOString().split('T')[0];
+  const isOverdue = task.dueDate && task.dueDate < today && task.status !== 'done' && task.status !== 'dropped';
+  const isTerminal = task.status === 'done' || task.status === 'dropped';
 
-  // Helper to get linked record display info (with backwards compatibility)
-  const getLinkedRecordInfo = (task: Task) => {
-    // Handle new linked record pattern
-    if (task.linkedRecordType === 'opportunity' && task.linkedRecordId) {
-      const opp = opportunities.find(o => o.id === task.linkedRecordId);
-      if (opp) {
-        const account = task.linkedAccountId 
-          ? accounts.find(a => a.id === task.linkedAccountId)
-          : accounts.find(a => a.name === opp.accountName);
-        return {
-          type: 'opportunity' as const,
-          name: opp.name,
-          accountName: account?.name || opp.accountName,
-          icon: Target,
-        };
-      }
-    }
-    
-    // Handle account link (new or legacy pattern)
-    const accountId = task.linkedRecordId || task.linkedAccountId;
-    const account = accountId ? accounts.find(a => a.id === accountId) : null;
-    return {
-      type: 'account' as const,
-      name: account?.name || 'Unknown',
-      icon: Building2,
-    };
+  // Inline status change
+  const handleStatusChange = (newStatus: TaskStatus) => {
+    const updates: Partial<Task> = { status: newStatus };
+    if (newStatus === 'done') updates.completedAt = new Date().toISOString();
+    if (newStatus !== 'done') updates.completedAt = undefined;
+    updateTask(task.id, updates);
+    toast.success(`Status → ${STATUS_META[newStatus].label}`, { duration: 1500 });
   };
 
-  const filteredTasks = tasks.filter(task => {
-    switch (currentView) {
-      case 'today':
-        return task.dueDate === today && task.status !== 'done';
-      case 'overdue':
-        return task.dueDate < today && task.status !== 'done';
-      case 'this-week': {
-        const weekFromNow = new Date();
-        weekFromNow.setDate(weekFromNow.getDate() + 7);
-        return task.dueDate <= weekFromNow.toISOString().split('T')[0] && task.status !== 'done';
-      }
-      case 'by-priority':
-      case 'by-motion':
-      case 'all':
-      default:
-        return true;
-    }
-  }).sort((a, b) => {
-    // Sort by status first (open before done)
-    if (a.status === 'done' && b.status !== 'done') return 1;
-    if (a.status !== 'done' && b.status === 'done') return -1;
-    
-    // Then by priority
-    const priorityOrder = { P0: 0, P1: 1, P2: 2, P3: 3 };
-    if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
-      return priorityOrder[a.priority] - priorityOrder[b.priority];
-    }
-    
-    // Then by due date
-    return a.dueDate.localeCompare(b.dueDate);
-  });
-
-  // Group tasks for certain views
-  const groupedTasks = currentView === 'by-priority' 
-    ? (['P0', 'P1', 'P2', 'P3'] as Priority[]).reduce((acc, p) => {
-        acc[p] = filteredTasks.filter(t => t.priority === p);
-        return acc;
-      }, {} as Record<Priority, typeof filteredTasks>)
-    : currentView === 'by-motion'
-    ? (['new-logo', 'renewal', 'general'] as Motion[]).reduce((acc, m) => {
-        acc[m] = filteredTasks.filter(t => t.motion === m);
-        return acc;
-      }, {} as Record<Motion, typeof filteredTasks>)
-    : null;
-
-  const handleAddTask = () => {
-    if (!newTask.title || !newTask.linkedRecordId || !newTask.dueDate) {
-      toast.error('Title, linked record, and due date are required');
-      return;
-    }
-    addTask({
-      title: newTask.title,
-      priority: newTask.priority,
-      dueDate: newTask.dueDate,
-      status: 'open',
-      motion: newTask.motion,
-      linkedRecordType: newTask.linkedRecordType || 'account',
-      linkedRecordId: newTask.linkedRecordId,
-      linkedAccountId: newTask.linkedAccountId,
-      category: newTask.category,
-      notes: newTask.notes,
-      subtasks: [],
-    });
-    setShowAddDialog(false);
-    setNewTask({
-      priority: 'P2',
-      motion: 'new-logo',
-      category: 'call',
-    });
-    toast.success('Task added!');
-  };
-
+  // Save edit dialog
   const handleSaveEdit = () => {
-    if (!editingTask) return;
-    updateTask(editingTask.id, {
-      title: editingTask.title,
-      priority: editingTask.priority,
-      motion: editingTask.motion,
-      category: editingTask.category,
-      dueDate: editingTask.dueDate,
-      notes: editingTask.notes,
-      status: editingTask.status,
-    });
-    setEditingTask(null);
-    toast.success('Task updated!');
+    const updates: Partial<Task> = {
+      title: editState.title,
+      priority: editState.priority,
+      status: editState.status,
+      dueDate: editState.dueDate,
+      notes: editState.notes,
+      workstream: editState.workstream,
+      linkedAccountId: editState.linkedAccountId,
+      linkedOpportunityId: editState.linkedOpportunityId,
+    };
+    if (editState.status === 'done' && task.status !== 'done') {
+      updates.completedAt = new Date().toISOString();
+    }
+    if (editState.status !== 'done') {
+      updates.completedAt = undefined;
+    }
+    updateTask(task.id, updates);
+    setEditOpen(false);
+    toast.success('Saved', { duration: 1500 });
   };
 
-  // Top 3 helpers - Current Opps = tasks linked to opportunities
-  const currentOppsTasks = tasks
-    .filter(t => t.linkedRecordType === 'opportunity' && t.status !== 'done')
-    .sort((a, b) => {
-      const priorityOrder = { P0: 0, P1: 1, P2: 2, P3: 3 };
-      return priorityOrder[a.priority] - priorityOrder[b.priority];
-    })
-    .slice(0, 3);
+  // Filter opps to selected account
+  const accountOpps = editState.linkedAccountId
+    ? opportunities.filter(o => o.accountId === editState.linkedAccountId)
+    : [];
 
-  const newLogoTasks = tasks
-    .filter(t => t.motion === 'new-logo' && t.linkedRecordType !== 'opportunity' && t.status !== 'done')
-    .sort((a, b) => {
-      const priorityOrder = { P0: 0, P1: 1, P2: 2, P3: 3 };
-      return priorityOrder[a.priority] - priorityOrder[b.priority];
-    })
-    .slice(0, 3);
-
-  const renewalTasks = tasks
-    .filter(t => t.motion === 'renewal' && t.status !== 'done')
-    .sort((a, b) => {
-      const priorityOrder = { P0: 0, P1: 1, P2: 2, P3: 3 };
-      return priorityOrder[a.priority] - priorityOrder[b.priority];
-    })
-    .slice(0, 3);
-
-  const TaskItem = ({ task }: { task: Task }) => {
-    const recordInfo = getLinkedRecordInfo(task);
-    const isOverdue = task.dueDate < today && task.status !== 'done';
-    const RecordIcon = recordInfo.icon;
-    
-    return (
+  return (
+    <>
       <div className={cn(
-        "flex items-start gap-3 p-3 rounded-lg border transition-all",
-        task.status === 'done' 
-          ? "bg-muted/30 border-border/30" 
-          : "bg-card border-border/50 hover:border-border"
+        "flex items-start gap-3 p-3 rounded-lg border transition-all group",
+        isTerminal
+          ? "bg-muted/20 border-border/30 opacity-70"
+          : "bg-card border-border/50 hover:border-border hover:shadow-sm"
       )}>
-        <div className="flex-shrink-0 pt-0.5">
-          <Checkbox
-            checked={task.status === 'done'}
-            onCheckedChange={() => toggleTaskComplete(task.id)}
-            className="h-5 w-5"
-          />
-        </div>
-        
-          <div className="flex-1 min-w-0">
-            {/* Account name first */}
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-0.5">
-              <Building2 className="h-3 w-3" />
-              <span className="font-medium">
-                {recordInfo.type === 'opportunity' ? recordInfo.accountName || 'Unknown' : recordInfo.name}
-              </span>
-              {recordInfo.type === 'opportunity' && (
+        {/* Status pill */}
+        <Select value={task.status} onValueChange={(v) => handleStatusChange(v as TaskStatus)}>
+          <SelectTrigger className={cn(
+            "h-7 w-[110px] text-xs font-medium border shrink-0",
+            STATUS_META[task.status].color
+          )}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUS_ORDER.map(s => (
+              <SelectItem key={s} value={s}>{STATUS_META[s].label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Main content */}
+        <div className="flex-1 min-w-0">
+          {/* Account / Opp context */}
+          {(accountName || oppName) && (
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-0.5">
+              {accountName && (
+                <>
+                  <Building2 className="h-3 w-3 shrink-0" />
+                  <span className="font-medium">{accountName}</span>
+                </>
+              )}
+              {oppName && (
                 <>
                   <span className="text-muted-foreground/50">›</span>
-                  <Target className="h-3 w-3" />
-                  <span>{recordInfo.name}</span>
+                  <Target className="h-3 w-3 shrink-0" />
+                  <span>{oppName}</span>
                 </>
               )}
             </div>
+          )}
 
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                className={cn(
-                  "font-medium text-left hover:text-primary transition-colors cursor-pointer",
-                  task.status === 'done' && "line-through text-muted-foreground"
-                )}
-                onClick={() => setEditingTask({ ...task })}
-              >
-                {task.title}
-              </button>
-              <Badge className={cn('text-xs h-5', PRIORITY_COLORS[task.priority])}>
-                {task.priority}
-              </Badge>
-              <Badge variant="outline" className="text-xs h-5">
-                {MOTION_LABELS[task.motion]}
-              </Badge>
-            </div>
-            
-            <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+          {/* Title - clickable to edit */}
+          <button
+            className={cn(
+              "font-medium text-left hover:text-primary transition-colors cursor-pointer text-sm",
+              isTerminal && "line-through text-muted-foreground"
+            )}
+            onClick={() => { setEditState({ ...task }); setEditOpen(true); }}
+          >
+            {task.title}
+          </button>
+
+          {/* Meta row */}
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <Badge className={cn('text-[10px] h-5 cursor-pointer', PRIORITY_COLORS[task.priority])}
+              onClick={() => {
+                const priorities: Priority[] = ['P0', 'P1', 'P2'];
+                const idx = priorities.indexOf(task.priority);
+                const next = priorities[(idx + 1) % priorities.length];
+                updateTask(task.id, { priority: next });
+                toast.success(`Priority → ${next}`, { duration: 1500 });
+              }}
+            >
+              {task.priority}
+            </Badge>
+            <Badge variant="outline" className="text-[10px] h-5">
+              {WORKSTREAM_LABELS[workstream]}
+            </Badge>
+            {task.dueDate && (
               <span className={cn(
-                "flex items-center gap-1",
-                isOverdue && "text-status-red"
+                "flex items-center gap-1 text-[11px] text-muted-foreground",
+                isOverdue && "text-status-red font-medium"
               )}>
                 <Calendar className="h-3 w-3" />
                 {task.dueDate}
-                {isOverdue && " (Overdue)"}
+                {isOverdue && <AlertCircle className="h-3 w-3" />}
               </span>
-              <span className="capitalize">{task.category.replace('-', ' ')}</span>
-            </div>
-          
+            )}
+          </div>
+
+          {/* Note preview */}
           {task.notes && (
-            <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+            <p className="text-[11px] text-muted-foreground mt-1 line-clamp-1 italic">
               {task.notes}
             </p>
           )}
         </div>
-        
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0">
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setEditingTask({ ...task })}>Edit Task</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => updateTask(task.id, { status: 'in-progress' as TaskStatus })}>
-              Mark In Progress
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => updateTask(task.id, { status: 'blocked' as TaskStatus })}>
-              Mark Blocked
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem 
-              className="text-destructive"
-              onClick={() => deleteTask(task.id)}
-            >
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    );
-  };
 
-  return (
-    <Layout>
-      <div className="p-6 lg:p-8 max-w-5xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="font-display text-2xl font-bold">Tasks</h1>
-            <p className="text-sm text-muted-foreground">
-              {tasks.filter(t => t.status !== 'done').length} open • {tasks.filter(t => t.status === 'done').length} completed
-            </p>
-          </div>
-          
-          <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Task
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Add Task</DialogTitle>
-                <DialogDescription>
-                  Create a new task linked to an account or opportunity.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label>Title *</Label>
-                  <Input
-                    value={newTask.title || ''}
-                    onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                    placeholder="Follow up with John..."
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label>Linked Record *</Label>
-                  <LinkedRecordSelector
-                    value={newTask.linkedRecordId ? {
-                      type: newTask.linkedRecordType || 'account',
-                      id: newTask.linkedRecordId,
-                    } : undefined}
-                    onChange={(selected) => {
-                      if (selected) {
-                        setNewTask({
-                          ...newTask,
-                          linkedRecordType: selected.type,
-                          linkedRecordId: selected.id,
-                          linkedAccountId: selected.accountId,
-                          // Auto-suggest motion based on linked record
-                          motion: selected.suggestedMotion || newTask.motion,
-                        });
-                      } else {
-                        setNewTask({
-                          ...newTask,
-                          linkedRecordType: undefined,
-                          linkedRecordId: undefined,
-                          linkedAccountId: undefined,
-                        });
-                      }
-                    }}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Priority</Label>
-                    <Select
-                      value={newTask.priority}
-                      onValueChange={(v) => setNewTask({ ...newTask, priority: v as Priority })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="P0">P0 - Urgent</SelectItem>
-                        <SelectItem value="P1">P1 - High</SelectItem>
-                        <SelectItem value="P2">P2 - Medium</SelectItem>
-                        <SelectItem value="P3">P3 - Low</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Due Date *</Label>
-                    <EditableDatePicker
-                      value={newTask.dueDate}
-                      onChange={(v) => setNewTask({ ...newTask, dueDate: v || '' })}
-                      placeholder="Select due date"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Motion</Label>
-                    <Select
-                      value={newTask.motion}
-                      onValueChange={(v) => setNewTask({ ...newTask, motion: v as Motion })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="new-logo">New Logo</SelectItem>
-                        <SelectItem value="renewal">Renewal</SelectItem>
-                        <SelectItem value="general">General</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Category</Label>
-                    <Select
-                      value={newTask.category}
-                      onValueChange={(v) => setNewTask({ ...newTask, category: v as TaskCategory })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CATEGORY_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Notes</Label>
-                  <Textarea
-                    value={newTask.notes || ''}
-                    onChange={(e) => setNewTask({ ...newTask, notes: e.target.value })}
-                    placeholder="Additional context..."
-                    rows={2}
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowAddDialog(false)}>Cancel</Button>
-                <Button onClick={handleAddTask}>Add Task</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-
-        {/* View Selector */}
-        <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2">
-          {VIEWS.map((view) => (
-            <Button
-              key={view.value}
-              size="sm"
-              variant={currentView === view.value ? 'default' : 'secondary'}
-              onClick={() => setCurrentView(view.value)}
-              className="whitespace-nowrap"
-            >
-              {view.label}
-              {view.value === 'overdue' && tasks.filter(t => t.dueDate < today && t.status !== 'done').length > 0 && (
-                <Badge className="ml-2 bg-status-red text-white text-xs h-4 px-1">
-                  {tasks.filter(t => t.dueDate < today && t.status !== 'done').length}
-                </Badge>
-              )}
-            </Button>
-          ))}
-        </div>
-
-        {/* Top 3 Section */}
-        <div className="mb-8">
-          <h2 className="font-display text-lg font-semibold mb-4">Top 3 Priorities</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Current Opps - Tasks linked to opportunities */}
-            <div className="rounded-lg border border-border/50 bg-card p-4">
-              <h3 className="font-display text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-status-blue"></span>
-                Current Opps
-              </h3>
-              <div className="space-y-2">
-                {currentOppsTasks.map((task) => {
-                  const info = getLinkedRecordInfo(task);
-                  return (
-                    <div key={task.id} className="flex items-start gap-2 text-sm">
-                      <Checkbox
-                        checked={task.status === 'done'}
-                        onCheckedChange={() => toggleTaskComplete(task.id)}
-                        className="h-4 w-4 mt-0.5"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[11px] text-muted-foreground">
-                          {info.accountName || info.name}
-                        </div>
-                        <button
-                          className={cn(
-                            "text-left hover:text-primary transition-colors cursor-pointer",
-                            task.status === 'done' && "line-through text-muted-foreground"
-                          )}
-                          onClick={() => setEditingTask({ ...task })}
-                        >
-                          {task.title}
-                        </button>
-                      </div>
-                      <Badge className={cn('text-[10px] h-4 shrink-0', PRIORITY_COLORS[task.priority])}>
-                        {task.priority}
-                      </Badge>
-                    </div>
-                  );
-                })}
-                {currentOppsTasks.length === 0 && (
-                  <p className="text-xs text-muted-foreground italic">No tasks</p>
-                )}
-              </div>
-            </div>
-
-            {/* PG (New Logo) - Account-linked New Logo tasks */}
-            <div className="rounded-lg border border-border/50 bg-card p-4">
-              <h3 className="font-display text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-status-green"></span>
-                PG (New Logo)
-              </h3>
-              <div className="space-y-2">
-                {newLogoTasks.map((task) => {
-                  const info = getLinkedRecordInfo(task);
-                  return (
-                    <div key={task.id} className="flex items-start gap-2 text-sm">
-                      <Checkbox
-                        checked={task.status === 'done'}
-                        onCheckedChange={() => toggleTaskComplete(task.id)}
-                        className="h-4 w-4 mt-0.5"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[11px] text-muted-foreground">
-                          {info.name}
-                        </div>
-                        <button
-                          className={cn(
-                            "text-left hover:text-primary transition-colors cursor-pointer",
-                            task.status === 'done' && "line-through text-muted-foreground"
-                          )}
-                          onClick={() => setEditingTask({ ...task })}
-                        >
-                          {task.title}
-                        </button>
-                      </div>
-                      <Badge className={cn('text-[10px] h-4 shrink-0', PRIORITY_COLORS[task.priority])}>
-                        {task.priority}
-                      </Badge>
-                    </div>
-                  );
-                })}
-                {newLogoTasks.length === 0 && (
-                  <p className="text-xs text-muted-foreground italic">No tasks</p>
-                )}
-              </div>
-            </div>
-
-            {/* Renewals */}
-            <div className="rounded-lg border border-border/50 bg-card p-4">
-              <h3 className="font-display text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-status-yellow"></span>
-                Renewals
-              </h3>
-              <div className="space-y-2">
-                {renewalTasks.map((task) => {
-                  const info = getLinkedRecordInfo(task);
-                  return (
-                    <div key={task.id} className="flex items-start gap-2 text-sm">
-                      <Checkbox
-                        checked={task.status === 'done'}
-                        onCheckedChange={() => toggleTaskComplete(task.id)}
-                        className="h-4 w-4 mt-0.5"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[11px] text-muted-foreground">
-                          {info.accountName || info.name}
-                        </div>
-                        <button
-                          className={cn(
-                            "text-left hover:text-primary transition-colors cursor-pointer",
-                            task.status === 'done' && "line-through text-muted-foreground"
-                          )}
-                          onClick={() => setEditingTask({ ...task })}
-                        >
-                          {task.title}
-                        </button>
-                      </div>
-                      <Badge className={cn('text-[10px] h-4 shrink-0', PRIORITY_COLORS[task.priority])}>
-                        {task.priority}
-                      </Badge>
-                    </div>
-                  );
-                })}
-                {renewalTasks.length === 0 && (
-                  <p className="text-xs text-muted-foreground italic">No tasks</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Tasks List */}
-        {groupedTasks ? (
-          // Grouped view
-          Object.entries(groupedTasks).map(([group, groupTasks]) => {
-            if (groupTasks.length === 0) return null;
-            return (
-              <div key={group} className="mb-6">
-                <h3 className="font-display text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                  {currentView === 'by-priority' ? group : MOTION_LABELS[group as Motion]}
-                  <span className="ml-2 text-xs font-normal">({groupTasks.length})</span>
-                </h3>
-                <div className="space-y-2">
-                  {groupTasks.map((task) => (
-                    <TaskItem key={task.id} task={task} />
-                  ))}
-                </div>
-              </div>
-            );
-          })
-        ) : (
-          // Flat list
-          <div className="space-y-2">
-            {filteredTasks.length === 0 ? (
-              <div className="metric-card text-center py-12">
-                <CheckCircle2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">
-                  {tasks.length === 0 
-                    ? "No tasks yet. Add your first task!"
-                    : currentView === 'today'
-                    ? "No tasks due today. You're all caught up!"
-                    : "No tasks match this view."}
-                </p>
-              </div>
-            ) : (
-              filteredTasks.map((task) => (
-                <TaskItem key={task.id} task={task} />
-              ))
-            )}
-          </div>
-        )}
+        {/* Delete - appears on hover */}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 px-2 text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+          onClick={() => {
+            deleteTask(task.id);
+            toast.success('Task deleted', { duration: 1500 });
+          }}
+        >
+          ×
+        </Button>
       </div>
 
-      {/* Edit Task Dialog */}
-      <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>
+      {/* Edit Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Edit Task</DialogTitle>
             <DialogDescription>Update task details.</DialogDescription>
           </DialogHeader>
-          {editingTask && (
-            <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Title</Label>
+              <Input
+                value={editState.title}
+                onChange={(e) => setEditState({ ...editState, title: e.target.value })}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Title</Label>
+                <Label>Workstream</Label>
+                <Select value={editState.workstream || getWorkstream(editState)} onValueChange={(v) => setEditState({ ...editState, workstream: v as Workstream })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pg">PG (New Logo)</SelectItem>
+                    <SelectItem value="renewals">Renewals</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select value={editState.status} onValueChange={(v) => setEditState({ ...editState, status: v as TaskStatus })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {STATUS_ORDER.map(s => (
+                      <SelectItem key={s} value={s}>{STATUS_META[s].label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Priority</Label>
+                <Select value={editState.priority} onValueChange={(v) => setEditState({ ...editState, priority: v as Priority })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="P0">P0 - Critical</SelectItem>
+                    <SelectItem value="P1">P1 - High</SelectItem>
+                    <SelectItem value="P2">P2 - Medium</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Due Date</Label>
                 <Input
-                  value={editingTask.title}
-                  onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Priority</Label>
-                  <Select
-                    value={editingTask.priority}
-                    onValueChange={(v) => setEditingTask({ ...editingTask, priority: v as Priority })}
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="P0">P0 - Urgent</SelectItem>
-                      <SelectItem value="P1">P1 - High</SelectItem>
-                      <SelectItem value="P2">P2 - Medium</SelectItem>
-                      <SelectItem value="P3">P3 - Low</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Due Date</Label>
-                  <EditableDatePicker
-                    value={editingTask.dueDate}
-                    onChange={(v) => setEditingTask({ ...editingTask, dueDate: v || editingTask.dueDate })}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select
-                    value={editingTask.status}
-                    onValueChange={(v) => setEditingTask({ ...editingTask, status: v as TaskStatus })}
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="open">Open</SelectItem>
-                      <SelectItem value="in-progress">In Progress</SelectItem>
-                      <SelectItem value="blocked">Blocked</SelectItem>
-                      <SelectItem value="done">Done</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Category</Label>
-                  <Select
-                    value={editingTask.category}
-                    onValueChange={(v) => setEditingTask({ ...editingTask, category: v as TaskCategory })}
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {CATEGORY_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Notes</Label>
-                <Textarea
-                  value={editingTask.notes || ''}
-                  onChange={(e) => setEditingTask({ ...editingTask, notes: e.target.value })}
-                  rows={3}
+                  type="date"
+                  value={editState.dueDate || ''}
+                  onChange={(e) => setEditState({ ...editState, dueDate: e.target.value || undefined })}
                 />
               </div>
             </div>
-          )}
+
+            {/* Linked Account */}
+            <div className="space-y-2">
+              <Label>Linked Account</Label>
+              <Select
+                value={editState.linkedAccountId || '__none__'}
+                onValueChange={(v) => setEditState({
+                  ...editState,
+                  linkedAccountId: v === '__none__' ? undefined : v,
+                  linkedOpportunityId: v === '__none__' ? undefined : editState.linkedOpportunityId,
+                })}
+              >
+                <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {accounts.map(a => (
+                    <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Linked Opportunity (only if account set) */}
+            {editState.linkedAccountId && accountOpps.length > 0 && (
+              <div className="space-y-2">
+                <Label>Linked Opportunity</Label>
+                <Select
+                  value={editState.linkedOpportunityId || '__none__'}
+                  onValueChange={(v) => setEditState({ ...editState, linkedOpportunityId: v === '__none__' ? undefined : v })}
+                >
+                  <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {accountOpps.map(o => (
+                      <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>Note</Label>
+              <Input
+                value={editState.notes || ''}
+                onChange={(e) => setEditState({ ...editState, notes: e.target.value || undefined })}
+                placeholder="Quick context or blocker..."
+              />
+            </div>
+          </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingTask(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
             <Button onClick={handleSaveEdit}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </>
+  );
+}
+
+// ── Add Task Dialog ────────────────────────────────────────
+
+function AddTaskDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { addTask, accounts, opportunities } = useStore();
+  const [title, setTitle] = useState('');
+  const [workstream, setWorkstream] = useState<Workstream>('pg');
+  const [priority, setPriority] = useState<Priority>('P1');
+  const [dueDate, setDueDate] = useState('');
+  const [accountId, setAccountId] = useState<string>('');
+  const [oppId, setOppId] = useState<string>('');
+  const [notes, setNotes] = useState('');
+
+  const accountOpps = accountId
+    ? opportunities.filter(o => o.accountId === accountId)
+    : [];
+
+  const handleSubmit = () => {
+    if (!title.trim()) {
+      toast.error('Title is required');
+      return;
+    }
+    addTask({
+      title: title.trim(),
+      workstream,
+      status: 'next',
+      priority,
+      dueDate: dueDate || undefined,
+      linkedAccountId: accountId || undefined,
+      linkedOpportunityId: oppId || undefined,
+      notes: notes.trim() || undefined,
+      // Legacy compat fields
+      motion: workstream === 'renewals' ? 'renewal' : 'new-logo',
+      linkedRecordType: oppId ? 'opportunity' : (accountId ? 'account' : 'account'),
+      linkedRecordId: oppId || accountId || '',
+    } as any);
+    toast.success('Task added');
+    onOpenChange(false);
+    // Reset
+    setTitle('');
+    setWorkstream('pg');
+    setPriority('P1');
+    setDueDate('');
+    setAccountId('');
+    setOppId('');
+    setNotes('');
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add Task</DialogTitle>
+          <DialogDescription>Create a task for PG or Renewals.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label>Title *</Label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What needs to be done?" autoFocus />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Workstream *</Label>
+              <Select value={workstream} onValueChange={(v) => setWorkstream(v as Workstream)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pg">PG (New Logo)</SelectItem>
+                  <SelectItem value="renewals">Renewals</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Priority</Label>
+              <Select value={priority} onValueChange={(v) => setPriority(v as Priority)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="P0">P0 - Critical</SelectItem>
+                  <SelectItem value="P1">P1 - High</SelectItem>
+                  <SelectItem value="P2">P2 - Medium</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Due Date</Label>
+            <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Linked Account</Label>
+            <Select value={accountId || '__none__'} onValueChange={(v) => {
+              setAccountId(v === '__none__' ? '' : v);
+              setOppId('');
+            }}>
+              <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None</SelectItem>
+                {accounts.map(a => (
+                  <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {accountId && accountOpps.length > 0 && (
+            <div className="space-y-2">
+              <Label>Linked Opportunity</Label>
+              <Select value={oppId || '__none__'} onValueChange={(v) => setOppId(v === '__none__' ? '' : v)}>
+                <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {accountOpps.map(o => (
+                    <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label>Note</Label>
+            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Quick context..." />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={handleSubmit}>Add Task</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Main Page ──────────────────────────────────────────────
+
+export default function Tasks() {
+  const { tasks } = useStore();
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({
+    done: true,
+    dropped: true,
+  });
+  const [filterWorkstream, setFilterWorkstream] = useState<'all' | Workstream>('all');
+  const [filterDue, setFilterDue] = useState<'all' | 'today' | 'week'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const today = new Date().toISOString().split('T')[0];
+  const weekFromNow = new Date();
+  weekFromNow.setDate(weekFromNow.getDate() + 7);
+  const weekEnd = weekFromNow.toISOString().split('T')[0];
+
+  // Apply filters
+  const filteredTasks = useMemo(() => {
+    return tasks.filter(task => {
+      // Workstream filter
+      if (filterWorkstream !== 'all' && getWorkstream(task) !== filterWorkstream) return false;
+      // Due filter
+      if (filterDue === 'today' && task.dueDate !== today) return false;
+      if (filterDue === 'week' && (!task.dueDate || task.dueDate > weekEnd)) return false;
+      // Search
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        if (!task.title.toLowerCase().includes(q) && !(task.notes || '').toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [tasks, filterWorkstream, filterDue, searchQuery, today, weekEnd]);
+
+  // Group by status
+  const grouped = useMemo(() => {
+    const groups: Record<TaskStatus, Task[]> = {
+      'next': [],
+      'in-progress': [],
+      'blocked': [],
+      'done': [],
+      'dropped': [],
+    };
+    filteredTasks.forEach(task => {
+      const status = task.status as TaskStatus;
+      // Handle legacy 'open' status
+      const effectiveStatus = status === ('open' as any) ? 'next' : status;
+      if (groups[effectiveStatus]) {
+        groups[effectiveStatus].push(task);
+      } else {
+        groups['next'].push(task);
+      }
+    });
+    // Sort each group
+    Object.keys(groups).forEach(k => {
+      groups[k as TaskStatus] = sortTasks(groups[k as TaskStatus]);
+    });
+    return groups;
+  }, [filteredTasks]);
+
+  const toggleGroup = (status: string) => {
+    setCollapsedGroups(prev => ({ ...prev, [status]: !prev[status] }));
+  };
+
+  const activeCount = tasks.filter(t => t.status !== 'done' && t.status !== 'dropped').length;
+  const doneCount = tasks.filter(t => t.status === 'done').length;
+
+  return (
+    <Layout>
+      <div className="p-6 lg:p-8 max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="font-display text-2xl font-bold">Tasks</h1>
+            <p className="text-sm text-muted-foreground">
+              {activeCount} active • {doneCount} done
+            </p>
+          </div>
+          <Button onClick={() => setShowAddDialog(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Task
+          </Button>
+        </div>
+
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-2 mb-6">
+          {/* Workstream */}
+          <div className="flex rounded-lg border border-border overflow-hidden">
+            {(['all', 'pg', 'renewals'] as const).map(w => (
+              <button
+                key={w}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium transition-colors",
+                  filterWorkstream === w
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-card hover:bg-muted text-muted-foreground"
+                )}
+                onClick={() => setFilterWorkstream(w)}
+              >
+                {w === 'all' ? 'All' : w === 'pg' ? 'PG' : 'Renewals'}
+              </button>
+            ))}
+          </div>
+
+          {/* Due filter */}
+          <div className="flex rounded-lg border border-border overflow-hidden">
+            {([
+              { value: 'all', label: 'All' },
+              { value: 'today', label: 'Today' },
+              { value: 'week', label: 'This Week' },
+            ] as const).map(f => (
+              <button
+                key={f.value}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium transition-colors",
+                  filterDue === f.value
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-card hover:bg-muted text-muted-foreground"
+                )}
+                onClick={() => setFilterDue(f.value)}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Search */}
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search tasks..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-8 pl-8 text-xs"
+            />
+          </div>
+        </div>
+
+        {/* Grouped list */}
+        <div className="space-y-4">
+          {STATUS_ORDER.map(status => {
+            const groupTasks = grouped[status];
+            const isCollapsed = collapsedGroups[status];
+            const meta = STATUS_META[status];
+            
+            return (
+              <div key={status}>
+                {/* Group header */}
+                <button
+                  className="flex items-center gap-2 w-full text-left py-2 group"
+                  onClick={() => toggleGroup(status)}
+                >
+                  {isCollapsed
+                    ? <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    : <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  }
+                  <span className={cn("h-2 w-2 rounded-full", meta.dot)} />
+                  <span className="font-display text-sm font-semibold">{meta.label}</span>
+                  <span className="text-xs text-muted-foreground font-normal">({groupTasks.length})</span>
+                </button>
+
+                {/* Group tasks */}
+                {!isCollapsed && (
+                  <div className="space-y-1.5 ml-6">
+                    {groupTasks.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic py-2">No tasks</p>
+                    ) : (
+                      groupTasks.map(task => <TaskRow key={task.id} task={task} />)
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {filteredTasks.length === 0 && (
+          <div className="text-center py-16">
+            <p className="text-muted-foreground text-sm">
+              {tasks.length === 0
+                ? "No tasks yet. Add your first task!"
+                : "No tasks match your filters."}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <AddTaskDialog open={showAddDialog} onOpenChange={setShowAddDialog} />
     </Layout>
   );
 }

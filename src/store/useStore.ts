@@ -608,7 +608,12 @@ export const useStore = create<QuotaCompassStore>()(
         set((state) => ({
           tasks: state.tasks.map(t =>
             t.id === id
-              ? { ...t, status: t.status === 'done' ? 'open' : 'done', updatedAt: new Date().toISOString() }
+              ? { 
+                  ...t, 
+                  status: (t.status === 'done' ? 'next' : 'done') as any,
+                  completedAt: t.status !== 'done' ? new Date().toISOString() : undefined,
+                  updatedAt: new Date().toISOString(),
+                }
               : t
           ),
         }));

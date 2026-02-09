@@ -5,7 +5,8 @@ export type DistractionLevel = 'low' | 'medium' | 'high';
 export type ContextSwitchingLevel = 'low' | 'medium' | 'high';
 export type Priority = 'P0' | 'P1' | 'P2' | 'P3';
 export type Motion = 'new-logo' | 'renewal' | 'general';
-export type TaskStatus = 'open' | 'in-progress' | 'blocked' | 'done';
+export type Workstream = 'pg' | 'renewals';
+export type TaskStatus = 'next' | 'in-progress' | 'blocked' | 'done' | 'dropped';
 export type LinkedRecordType = 'account' | 'opportunity';
 export type HealthStatus = 'green' | 'yellow' | 'red';
 export type OutreachStatus = 
@@ -316,22 +317,25 @@ export interface Renewal {
 export interface Task {
   id: string;
   title: string;
-  priority: Priority;
-  dueDate: string;
+  workstream: Workstream;
   status: TaskStatus;
-  motion: Motion;
-  // Linked Record - can link to Account OR Opportunity
-  linkedRecordType: LinkedRecordType;
-  linkedRecordId: string;
-  // Auto-filled when linking to an Opportunity for rollup convenience
+  priority: Priority;
+  dueDate?: string;
+  // Optional linking
   linkedAccountId?: string;
-  linkedContactId?: string;
-  category: TaskCategory;
-  estimatedMinutes?: number;
+  linkedOpportunityId?: string;
   notes?: string;
-  subtasks: Array<{ id: string; title: string; completed: boolean }>;
+  completedAt?: string;
   createdAt: string;
   updatedAt: string;
+  // Legacy fields (kept for backwards compat with persisted data)
+  motion?: Motion;
+  linkedRecordType?: LinkedRecordType;
+  linkedRecordId?: string;
+  linkedContactId?: string;
+  category?: TaskCategory;
+  estimatedMinutes?: number;
+  subtasks?: Array<{ id: string; title: string; completed: boolean }>;
 }
 
 // Time Range for global selector

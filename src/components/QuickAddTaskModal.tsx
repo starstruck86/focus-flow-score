@@ -9,7 +9,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -17,128 +16,73 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { LinkedRecordSelector } from '@/components/LinkedRecordSelector';
 import { useStore } from '@/store/useStore';
-import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
-import type { Motion, Priority, TaskCategory, LinkedRecordType } from '@/types';
+import type { Priority, Workstream } from '@/types';
 import { ListPlus, Zap } from 'lucide-react';
 
 interface QuickAddTaskModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  // Optional prefill overrides
-  prefillRecord?: { type: LinkedRecordType; id: string; accountId?: string };
-  prefillMotion?: Motion;
 }
 
-export function QuickAddTaskModal({
-  open,
-  onOpenChange,
-  prefillRecord,
-  prefillMotion,
-}: QuickAddTaskModalProps) {
-  const { addTask } = useStore();
-  const { currentRecord } = useLinkedRecordContext();
+export function QuickAddTaskModal({ open, onOpenChange }: QuickAddTaskModalProps) {
+  const { addTask, accounts, opportunities } = useStore();
   
-  // Form state
   const [title, setTitle] = useState('');
-  const [linkedRecord, setLinkedRecord] = useState<{
-    type: LinkedRecordType;
-    id: string;
-    accountId?: string;
-    suggestedMotion?: Motion;
-  } | null>(null);
-  const [motion, setMotion] = useState<Motion>('new-logo');
+  const [workstream, setWorkstream] = useState<Workstream>('pg');
   const [priority, setPriority] = useState<Priority>('P1');
-  const [dueDate, setDueDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [category, setCategory] = useState<TaskCategory | 'none'>('none');
+  const [dueDate, setDueDate] = useState('');
+  const [accountId, setAccountId] = useState('');
+  const [oppId, setOppId] = useState('');
   const [notes, setNotes] = useState('');
-  
-  // Reset form when modal opens
+
   useEffect(() => {
     if (open) {
       setTitle('');
-      setNotes('');
+      setWorkstream('pg');
       setPriority('P1');
-      setDueDate(format(new Date(), 'yyyy-MM-dd'));
-      setCategory('none');
-      
-      // Apply prefills in order of priority: explicit prefill > context
-      if (prefillRecord) {
-        setLinkedRecord({
-          type: prefillRecord.type,
-          id: prefillRecord.id,
-          accountId: prefillRecord.accountId,
-        });
-        setMotion(prefillMotion || 'new-logo');
-      } else if (currentRecord.type && currentRecord.id) {
-        setLinkedRecord({
-          type: currentRecord.type,
-          id: currentRecord.id,
-          accountId: currentRecord.accountId,
-          suggestedMotion: currentRecord.suggestedMotion,
-        });
-        setMotion(currentRecord.suggestedMotion || 'new-logo');
-      } else {
-        setLinkedRecord(null);
-        setMotion('new-logo');
-      }
+      setDueDate('');
+      setAccountId('');
+      setOppId('');
+      setNotes('');
     }
-  }, [open, prefillRecord, prefillMotion, currentRecord]);
-  
-  // Update motion when linked record changes
-  const handleLinkedRecordChange = (value: {
-    type: LinkedRecordType;
-    id: string;
-    accountId?: string;
-    suggestedMotion?: Motion;
-  } | null) => {
-    setLinkedRecord(value);
-    if (value?.suggestedMotion) {
-      setMotion(value.suggestedMotion);
-    }
-  };
-  
+  }, [open]);
+
+  const accountOpps = accountId
+    ? opportunities.filter(o => o.accountId === accountId)
+    : [];
+
   const handleSubmit = () => {
     if (!title.trim()) {
       toast.error('Please enter a task title');
       return;
     }
-    
-    if (!linkedRecord) {
-      toast.error('Please select a linked record');
-      return;
-    }
-    
+
     addTask({
       title: title.trim(),
+      workstream,
+      status: 'next',
       priority,
-      dueDate,
-      status: 'open',
-      motion,
-      linkedRecordType: linkedRecord.type,
-      linkedRecordId: linkedRecord.id,
-      linkedAccountId: linkedRecord.accountId,
-      category: category === 'none' ? 'admin' : category,
+      dueDate: dueDate || undefined,
+      linkedAccountId: accountId || undefined,
+      linkedOpportunityId: oppId || undefined,
       notes: notes.trim() || undefined,
-      subtasks: [],
-    });
-    
+      motion: workstream === 'renewals' ? 'renewal' : 'new-logo',
+      linkedRecordType: oppId ? 'opportunity' : (accountId ? 'account' : 'account'),
+      linkedRecordId: oppId || accountId || '',
+    } as any);
+
     toast.success('Task added', {
       description: title.trim(),
       action: {
         label: 'View',
-        onClick: () => {
-          window.location.href = '/tasks';
-        },
+        onClick: () => { window.location.href = '/tasks'; },
       },
     });
-    
     onOpenChange(false);
   };
-  
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -150,7 +94,6 @@ export function QuickAddTaskModal({
         </DialogHeader>
         
         <div className="space-y-4 py-4">
-          {/* Title */}
           <div className="space-y-2">
             <Label htmlFor="task-title">Title *</Label>
             <Input
@@ -161,96 +104,79 @@ export function QuickAddTaskModal({
               autoFocus
             />
           </div>
-          
-          {/* Linked Record */}
-          <div className="space-y-2">
-            <Label>Linked Record *</Label>
-            <LinkedRecordSelector
-              value={linkedRecord ? { type: linkedRecord.type, id: linkedRecord.id } : undefined}
-              onChange={handleLinkedRecordChange}
-              placeholder="Select account or opportunity..."
-            />
-          </div>
-          
-          {/* Motion */}
-          <div className="space-y-2">
-            <Label>Motion</Label>
-            <Select value={motion} onValueChange={(v) => setMotion(v as Motion)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="new-logo">New Logo</SelectItem>
-                <SelectItem value="renewal">Renewal</SelectItem>
-                <SelectItem value="general">General</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          
-          {/* Priority & Due Date Row */}
+
           <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Workstream *</Label>
+              <Select value={workstream} onValueChange={(v) => setWorkstream(v as Workstream)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pg">PG (New Logo)</SelectItem>
+                  <SelectItem value="renewals">Renewals</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label>Priority</Label>
               <Select value={priority} onValueChange={(v) => setPriority(v as Priority)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="P0">P0 - Critical</SelectItem>
                   <SelectItem value="P1">P1 - High</SelectItem>
                   <SelectItem value="P2">P2 - Medium</SelectItem>
-                  <SelectItem value="P3">P3 - Low</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            
-            <div className="space-y-2">
-              <Label>Due Date</Label>
-              <Input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-              />
-            </div>
           </div>
-          
-          {/* Completion Type */}
+
           <div className="space-y-2">
-            <Label>Completion Type</Label>
-            <Select value={category} onValueChange={(v) => setCategory(v as TaskCategory | 'none')}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select type..." />
-              </SelectTrigger>
+            <Label>Due Date</Label>
+            <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Linked Account</Label>
+            <Select value={accountId || '__none__'} onValueChange={(v) => {
+              setAccountId(v === '__none__' ? '' : v);
+              setOppId('');
+            }}>
+              <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                <SelectItem value="call">Call</SelectItem>
-                <SelectItem value="manual-email">Manual Email</SelectItem>
-                <SelectItem value="automated-email">Automated Email</SelectItem>
-                <SelectItem value="research">Research</SelectItem>
-                <SelectItem value="meeting-prep">Meeting Prep</SelectItem>
-                <SelectItem value="deck">Deck</SelectItem>
-                <SelectItem value="proposal">Proposal</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="__none__">None</SelectItem>
+                {accounts.map(a => (
+                  <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
-          
-          {/* Notes */}
+
+          {accountId && accountOpps.length > 0 && (
+            <div className="space-y-2">
+              <Label>Linked Opportunity</Label>
+              <Select value={oppId || '__none__'} onValueChange={(v) => setOppId(v === '__none__' ? '' : v)}>
+                <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {accountOpps.map(o => (
+                    <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="space-y-2">
-            <Label>Notes</Label>
-            <Textarea
-              placeholder="Optional notes..."
+            <Label>Note</Label>
+            <Input
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              rows={2}
+              placeholder="Quick context..."
             />
           </div>
         </div>
         
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={handleSubmit} className="gap-2">
             <Zap className="h-4 w-4" />
             Add Task

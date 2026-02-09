@@ -86,7 +86,7 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
   const [newTask, setNewTask] = useState<Partial<Task>>({
     priority: 'P1',
     motion: 'new-logo',
-    status: 'open',
+    status: 'next',
     category: 'call',
     subtasks: [],
   });
@@ -133,13 +133,15 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
 
     addTask({
       title: newTask.title,
+      workstream: (newTask.motion === 'renewal' ? 'renewals' : 'pg') as any,
       priority: newTask.priority as Priority,
       dueDate: newTask.dueDate || new Date().toISOString().split('T')[0],
-      status: 'open',
+      status: 'next',
       motion: newTask.motion as Motion,
       linkedRecordType: 'opportunity',
       linkedRecordId: opportunity.id,
       linkedAccountId: opportunity.accountId || undefined,
+      linkedOpportunityId: opportunity.id,
       category: newTask.category as any,
       subtasks: [],
     });
@@ -149,7 +151,7 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
     setNewTask({
       priority: 'P1',
       motion: 'new-logo',
-      status: 'open',
+      status: 'next',
       category: 'call',
       subtasks: [],
     });
