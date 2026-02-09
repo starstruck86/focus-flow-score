@@ -893,20 +893,21 @@ export default function WeeklyOutreach() {
                 <Table className="min-w-[1200px]">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
+                      <TableHead className="w-[3%]"></TableHead>
                       <SortableHeader 
                         sortKey="name" 
                         currentSort={accountSortConfig} 
                         onSort={handleAccountSort}
-                        className="w-[18%]"
+                        className="w-[17%]"
                       >
                         Account
                       </SortableHeader>
-                      <TableHead className="w-[18%]">Website</TableHead>
+                      <TableHead className="w-[17%]">Website</TableHead>
                       <SortableHeader 
                         sortKey="accountStatus" 
                         currentSort={accountSortConfig} 
                         onSort={handleAccountSort}
-                        className="w-[14%]"
+                        className="w-[13%]"
                       >
                         Status
                       </SortableHeader>
@@ -935,7 +936,6 @@ export default function WeeklyOutreach() {
                         Ecommerce
                       </SortableHeader>
                       <TableHead className="w-[4%]"></TableHead>
-                      <TableHead className="w-[4%]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -947,6 +947,20 @@ export default function WeeklyOutreach() {
                             expandedAccountId === account.id && "bg-muted/20"
                           )}
                         >
+                          <TableCell className="align-top py-3">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8"
+                              onClick={() => setExpandedAccountId(expandedAccountId === account.id ? null : account.id)}
+                            >
+                              {expandedAccountId === account.id ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TableCell>
                           <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                             <AccountNameCell 
                               name={account.name} 
@@ -992,20 +1006,6 @@ export default function WeeklyOutreach() {
                               placeholder="Add Ecommerce"
                               emptyText="Add"
                             />
-                          </TableCell>
-                          <TableCell className="align-top py-3">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8"
-                              onClick={() => setExpandedAccountId(expandedAccountId === account.id ? null : account.id)}
-                            >
-                              {expandedAccountId === account.id ? (
-                                <ChevronDown className="h-4 w-4" />
-                              ) : (
-                                <ChevronRight className="h-4 w-4" />
-                              )}
-                            </Button>
                           </TableCell>
                           <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                             <DropdownMenu>
