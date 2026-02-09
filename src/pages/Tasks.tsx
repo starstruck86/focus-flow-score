@@ -126,8 +126,11 @@ function TaskRow({ task }: { task: Task }) {
   const [editState, setEditState] = useState<Task>(task);
   const workstream = getWorkstream(task);
   const today = new Date().toISOString().split('T')[0];
-  const isOverdue = task.dueDate && task.dueDate < today && task.status !== 'done' && task.status !== 'dropped';
-  const isTerminal = task.status === 'done' || task.status === 'dropped';
+  // Normalize legacy 'open' status to 'next'
+  const effectiveStatus: TaskStatus = (task.status as string) === 'open' ? 'next' : task.status;
+  const statusMeta = STATUS_META[effectiveStatus] || STATUS_META['next'];
+  const isOverdue = task.dueDate && task.dueDate < today && effectiveStatus !== 'done' && effectiveStatus !== 'dropped';
+  const isTerminal = effectiveStatus === 'done' || effectiveStatus === 'dropped';
 
   // Inline status change
   const handleStatusChange = (newStatus: TaskStatus) => {
@@ -175,10 +178,10 @@ function TaskRow({ task }: { task: Task }) {
           : "bg-card border-border/50 hover:border-border hover:shadow-sm"
       )}>
         {/* Status pill */}
-        <Select value={task.status} onValueChange={(v) => handleStatusChange(v as TaskStatus)}>
+        <Select value={effectiveStatus} onValueChange={(v) => handleStatusChange(v as TaskStatus)}>
           <SelectTrigger className={cn(
             "h-7 w-[110px] text-xs font-medium border shrink-0",
-            STATUS_META[task.status].color
+            statusMeta.color
           )}>
             <SelectValue />
           </SelectTrigger>
