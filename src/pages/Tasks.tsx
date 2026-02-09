@@ -16,7 +16,9 @@ import {
   Mail,
   Lightbulb,
   ArrowRight,
+  Repeat,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -286,13 +288,14 @@ function RenewalDueBanner({ tasks, onSwitchFilter }: { tasks: Task[]; onSwitchFi
 // ── Task Row Component ─────────────────────────────────────
 
 function TaskRow({ task }: { task: Task }) {
-  const { updateTask, deleteTask, accounts, opportunities } = useStore();
+  const { updateTask, deleteTask, accounts, opportunities, recurringTemplates } = useStore();
   const accountName = useAccountName(task);
   const oppName = useOpportunityName(task);
   const [editOpen, setEditOpen] = useState(false);
   const [editState, setEditState] = useState<Task>(task);
   const workstream = getWorkstream(task);
   const today = new Date().toISOString().split('T')[0];
+  const isRecurringInstance = recurringTemplates.some(t => t.activeInstanceId === task.id);
   const effectiveStatus: TaskStatus = (task.status as string) === 'open' ? 'next' : task.status;
   const statusMeta = STATUS_META[effectiveStatus] || STATUS_META['next'];
   const isOverdue = task.dueDate && task.dueDate < today && effectiveStatus !== 'done' && effectiveStatus !== 'dropped';
@@ -383,15 +386,20 @@ function TaskRow({ task }: { task: Task }) {
             </div>
           )}
 
-          <button
-            className={cn(
-              "font-medium text-left hover:text-primary transition-colors cursor-pointer text-sm",
-              isTerminal && "line-through text-muted-foreground"
+          <div className="flex items-center gap-1.5">
+            {isRecurringInstance && (
+              <Repeat className="h-3 w-3 text-primary shrink-0" />
             )}
-            onClick={() => { setEditState({ ...task }); setEditOpen(true); }}
-          >
-            {task.title}
-          </button>
+            <button
+              className={cn(
+                "font-medium text-left hover:text-primary transition-colors cursor-pointer text-sm",
+                isTerminal && "line-through text-muted-foreground"
+              )}
+              onClick={() => { setEditState({ ...task }); setEditOpen(true); }}
+            >
+              {task.title}
+            </button>
+          </div>
 
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             <Badge className={cn('text-[10px] h-5 cursor-pointer', PRIORITY_COLORS[task.priority])}
@@ -685,7 +693,7 @@ function AddTaskDialog({ open, onOpenChange, defaultWorkstream }: { open: boolea
 // ── Main Page ──────────────────────────────────────────────
 
 export default function Tasks() {
-  const { tasks } = useStore();
+  const { tasks, recurringTemplates, generateDueRecurringInstances } = useStore();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({
     done: true,
@@ -695,6 +703,20 @@ export default function Tasks() {
   const [filterWorkstream, setFilterWorkstream] = useState<'all' | Workstream>('pg');
   const [filterDue, setFilterDue] = useState<'all' | 'today' | 'week'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Generate due recurring instances on mount
+  useEffect(() => {
+    generateDueRecurringInstances();
+  }, [generateDueRecurringInstances]);
+
+  // Build a set of task IDs that are recurring instances
+  const recurringInstanceIds = useMemo(() => {
+    const ids = new Set<string>();
+    recurringTemplates.forEach(t => {
+      if (t.activeInstanceId) ids.add(t.activeInstanceId);
+    });
+    return ids;
+  }, [recurringTemplates]);
 
   const today = new Date().toISOString().split('T')[0];
   const weekFromNow = new Date();
@@ -754,10 +776,21 @@ export default function Tasks() {
               {activeCount} active • {doneCount} done
             </p>
           </div>
-          <Button onClick={() => setShowAddDialog(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Task
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link to="/recurring">
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <Repeat className="h-3.5 w-3.5" />
+                Recurring
+                {recurringTemplates.length > 0 && (
+                  <Badge variant="secondary" className="h-4 px-1 text-[10px] ml-0.5">{recurringTemplates.length}</Badge>
+                )}
+              </Button>
+            </Link>
+            <Button onClick={() => setShowAddDialog(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Task
+            </Button>
+          </div>
         </div>
 
         {/* Renewal due-today banner (only when PG filter active) */}
