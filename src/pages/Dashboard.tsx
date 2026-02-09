@@ -1,46 +1,47 @@
-import { useEffect, useState } from 'react';
+// Results-First Dashboard with Sales Age, Pace to Quota, and Actionable Recommendations
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Flame, 
-  Zap, 
-  Target,
-  Award,
-  TrendingUp,
-  Calendar,
-  ClipboardCheck,
-  AlertCircle,
-} from 'lucide-react';
+import { Calendar, ClipboardCheck } from 'lucide-react';
 import { Layout } from '@/components/Layout';
-import { RingGauge } from '@/components/RingGauge';
-import { DailyEntryForm } from '@/components/DailyEntryForm';
-import { QuickActions } from '@/components/QuickActions';
-import { FocusTimer } from '@/components/FocusTimer';
-import { CalendarWidget } from '@/components/CalendarWidget';
-import { StreakModule } from '@/components/StreakModule';
 import { DailyCheckInModal } from '@/components/journal';
 import { useStore } from '@/store/useStore';
-import { getRecoveryAdvice, getStrainLabel } from '@/lib/calculations';
-import { cn } from '@/lib/utils';
 import { 
   useWorkScheduleConfig, 
   useHolidays, 
   usePtoDays, 
   useWorkdayOverrides,
   useStreakEvents,
-  useRecordCheckIn,
   isEligibleDay 
 } from '@/hooks/useStreakData';
 import { useTodayJournalEntry } from '@/hooks/useDailyJournal';
+import { 
+  useSalesAge, 
+  usePaceToQuota, 
+  useActionRecommendations,
+  usePerformanceRollups,
+  useQuotaTargets,
+  useSalesAgeHistory,
+} from '@/hooks/useSalesAge';
+import { calculateCommissionSummary, DEFAULT_QUOTA_CONFIG } from '@/lib/commissionCalculations';
+import { DEFAULT_QUOTA_TARGETS } from '@/lib/salesAgeCalculations';
 import { format } from 'date-fns';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import {
+  SalesAgeTile,
+  PaceToQuotaCard,
+  WhatToDoNext,
+  Next45DaysRisk,
+  PerformanceSnapshot,
+  CommissionSnapshot,
+  SalesAgeDetailModal,
+  CheckInBanner,
+} from '@/components/dashboard';
 
 export default function Dashboard() {
-  const { currentDay, initializeToday } = useStore();
-  const [showManualCheckIn, setShowManualCheckIn] = useState(false);
   const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
-  const [checkInNote, setCheckInNote] = useState('');
+  const [showSalesAgeDetail, setShowSalesAgeDetail] = useState(false);
+  
+  // Store data
+  const { opportunities, renewals, quotaConfig } = useStore();
   
   // Streak data hooks
   const { data: config } = useWorkScheduleConfig();
@@ -48,14 +49,17 @@ export default function Dashboard() {
   const { data: ptoDays } = usePtoDays();
   const { data: overrides } = useWorkdayOverrides();
   const { data: streakEvents } = useStreakEvents();
-  const recordCheckIn = useRecordCheckIn();
   
   // Journal entry for today
   const { data: todayJournalEntry } = useTodayJournalEntry();
-
-  useEffect(() => {
-    initializeToday();
-  }, [initializeToday]);
+  
+  // Sales Age and quota data
+  const { data: salesAge, isLoading: salesAgeLoading } = useSalesAge();
+  const paceToQuota = usePaceToQuota();
+  const recommendations = useActionRecommendations();
+  const { data: quotaTargets } = useQuotaTargets();
+  const { data: snapshotHistory } = useSalesAgeHistory();
+  const { data: performanceRollups, isLoading: rollupsLoading } = usePerformanceRollups();
   
   // Check if today is eligible and if already checked in
   const today = new Date();
@@ -64,73 +68,35 @@ export default function Dashboard() {
     ? isEligibleDay(today, config, holidays, ptoDays, overrides)
     : false;
   const todayEvent = streakEvents?.find(e => e.date === todayStr);
-  const todayCheckedIn = todayEvent?.checkedIn || false;
+  const todayCheckedIn = todayEvent?.checkedIn || todayJournalEntry?.checkedIn || false;
   
-  // Auto check-in when user logs data
-  useEffect(() => {
-    if (!currentDay || !config || !isTodayEligible || todayCheckedIn) return;
-    
-    // Check if any meaningful activity happened
-    const hasActivity = 
-      currentDay.rawInputs.prospectsAddedToCadence > 0 ||
-      currentDay.rawInputs.coldCallsWithConversations > 0 ||
-      currentDay.rawInputs.emailsInMailsToManager > 0 ||
-      currentDay.rawInputs.initialMeetingsSet > 0 ||
-      currentDay.rawInputs.opportunitiesCreated > 0 ||
-      currentDay.activityInputs.dials > 0 ||
-      currentDay.activityInputs.emailsTotal > 0 ||
-      currentDay.activityInputs.prospectingBlockMinutes >= 10 ||
-      currentDay.activityInputs.accountDeepWorkMinutes >= 10;
-    
-    if (hasActivity) {
-      const goalMet = currentDay.scores.dailyScore >= (config.goalDailyScoreThreshold || 8) ||
-                     currentDay.scores.salesProductivity >= (config.goalProductivityThreshold || 75);
-      
-      recordCheckIn.mutate({
-        date: todayStr,
-        method: 'daily_input',
-        dailyScore: currentDay.scores.dailyScore,
-        productivityScore: currentDay.scores.salesProductivity,
-        isEligible: isTodayEligible,
-        goalMet,
-      });
-    }
-  }, [currentDay?.scores.dailyScore, isTodayEligible, todayCheckedIn]);
-  
-  const handleManualCheckIn = () => {
-    if (!config) return;
-    
-    const goalMet = currentDay 
-      ? (currentDay.scores.dailyScore >= (config.goalDailyScoreThreshold || 8) ||
-         currentDay.scores.salesProductivity >= (config.goalProductivityThreshold || 75))
-      : false;
-    
-    recordCheckIn.mutate({
-      date: todayStr,
-      method: 'manual',
-      dailyScore: currentDay?.scores.dailyScore,
-      productivityScore: currentDay?.scores.salesProductivity,
-      isEligible: isTodayEligible,
-      goalMet,
-    }, {
-      onSuccess: () => {
-        setShowManualCheckIn(false);
-        setCheckInNote('');
-      }
-    });
+  // Commission summary
+  const effectiveConfig = quotaConfig || DEFAULT_QUOTA_CONFIG;
+  const effectiveTargets = quotaTargets || DEFAULT_QUOTA_TARGETS;
+  const fyStart = effectiveTargets.fiscalYearStart;
+  const dateFilter = {
+    start: fyStart,
+    end: format(today, 'yyyy-MM-dd'),
   };
-
-  if (!currentDay) {
-    return (
-      <Layout>
-        <div className="flex items-center justify-center h-screen">
-          <div className="animate-pulse text-muted-foreground">Loading...</div>
-        </div>
-      </Layout>
-    );
-  }
-
-  const { scores } = currentDay;
+  const commissionSummary = calculateCommissionSummary(opportunities, {
+    ...effectiveConfig,
+    newArrQuota: effectiveTargets.newArrQuota,
+    renewalArrQuota: effectiveTargets.renewalArrQuota,
+  }, dateFilter);
+  
+  const combinedAttainment = (commissionSummary.newArrBooked + commissionSummary.renewalArrBooked) / 
+    (effectiveTargets.newArrQuota + effectiveTargets.renewalArrQuota);
+  
+  // Performance targets for snapshot
+  const performanceTargets = {
+    dialsPerDay: effectiveTargets.targetDialsPerDay,
+    connectsPerDay: effectiveTargets.targetConnectsPerDay,
+    meetingsPerWeek: effectiveTargets.targetMeetingsSetPerWeek,
+    oppsPerWeek: effectiveTargets.targetOppsCreatedPerWeek,
+    customerMeetingsPerWeek: effectiveTargets.targetCustomerMeetingsPerWeek,
+    accountsResearchedPerDay: effectiveTargets.targetAccountsResearchedPerDay,
+    contactsPreppedPerDay: effectiveTargets.targetContactsPreppedPerDay,
+  };
 
   return (
     <Layout>
@@ -139,276 +105,97 @@ export default function Dashboard() {
         <div className="mb-6">
           <div className="flex items-center gap-2 text-muted-foreground text-sm mb-2">
             <Calendar className="h-4 w-4" />
-            {new Date().toLocaleDateString('en-US', { 
+            {today.toLocaleDateString('en-US', { 
               weekday: 'long', 
               year: 'numeric', 
               month: 'long', 
               day: 'numeric' 
             })}
           </div>
-          <h1 className="font-display text-3xl font-bold">Daily Performance</h1>
+          <h1 className="font-display text-3xl font-bold">Dashboard</h1>
         </div>
         
-        {/* Streak Module - Highly Visible at Top */}
+        {/* Check-In Banner */}
+        <CheckInBanner
+          checkedIn={todayCheckedIn}
+          isEligibleDay={isTodayEligible}
+          onStartCheckIn={() => setShowDailyCheckIn(true)}
+          onEditCheckIn={() => setShowDailyCheckIn(true)}
+          confirmed={todayJournalEntry?.confirmed}
+        />
+        
+        {/* SECTION 1: Sales Age (Top Tile) */}
         <motion.div
           className="mb-6"
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
         >
-          <StreakModule 
-            onManualCheckIn={() => setShowManualCheckIn(true)}
-            todayCheckedIn={todayCheckedIn}
+          <SalesAgeTile 
+            salesAge={salesAge} 
+            isLoading={salesAgeLoading}
+            onClick={() => setShowSalesAgeDetail(true)}
           />
         </motion.div>
         
-        {/* Check-In Banner - Show if not checked in today */}
-        {isTodayEligible && !todayCheckedIn && (
-          <motion.div
-            className="mb-6 p-4 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-between"
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-                <AlertCircle className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="font-medium">Today: Not checked in yet</p>
-                <p className="text-sm text-muted-foreground">Complete your daily check-in to track your streak</p>
-              </div>
-            </div>
-            <Button onClick={() => setShowDailyCheckIn(true)} className="gap-2">
-              <ClipboardCheck className="h-4 w-4" />
-              Start Daily Check-In
-            </Button>
-          </motion.div>
-        )}
+        {/* SECTION 2: Pace to Quota */}
+        <PaceToQuotaCard paceToQuota={paceToQuota} />
         
-        {/* Checked-In Banner */}
-        {todayCheckedIn && (
-          <motion.div
-            className="mb-6 p-4 rounded-xl bg-status-green/10 border border-status-green/20 flex items-center justify-between"
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-status-green/20 flex items-center justify-center">
-                <ClipboardCheck className="h-5 w-5 text-status-green" />
-              </div>
-              <div>
-                <p className="font-medium text-status-green">✓ Checked in today</p>
-                <p className="text-sm text-muted-foreground">
-                  {todayJournalEntry?.confirmed ? 'Confirmed and locked' : 'Will be confirmed tomorrow morning'}
-                </p>
-              </div>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => setShowDailyCheckIn(true)}>
-              Edit Check-In
-            </Button>
-          </motion.div>
-        )}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          {/* Strain Card */}
-          <motion.div 
-            className="metric-card-strain"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-          >
-            <div className="flex items-center gap-2 mb-4">
-              <Flame className="h-5 w-5 text-strain" />
-              <h3 className="font-display font-semibold">Strain</h3>
-            </div>
-            <div className="flex justify-center">
-              <RingGauge
-                value={scores.salesStrain}
-                max={21}
-                type="strain"
-                sublabel={getStrainLabel(scores.strainBand)}
-                size={140}
-              />
-            </div>
-            <div className="mt-4 space-y-1">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Top Contributors</p>
-              {scores.strainContributors.slice(0, 3).map((c, i) => (
-                <div key={i} className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">{c.name}</span>
-                  <span className="text-strain font-medium">{c.value.toFixed(1)}</span>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-
-          {/* Recovery Card */}
-          <motion.div 
-            className="metric-card-recovery"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <div className="flex items-center gap-2 mb-4">
-              <Zap className="h-5 w-5 text-recovery" />
-              <h3 className="font-display font-semibold">Recovery</h3>
-            </div>
-            <div className="flex justify-center">
-              <RingGauge
-                value={scores.salesRecovery}
-                max={100}
-                type="recovery"
-                label="%"
-                size={140}
-              />
-            </div>
-            <div className="mt-4">
-              <p className={cn(
-                "text-xs p-2 rounded-lg",
-                scores.recoveryBand === 'green' && 'bg-status-green/10 text-status-green',
-                scores.recoveryBand === 'yellow' && 'bg-status-yellow/10 text-status-yellow',
-                scores.recoveryBand === 'red' && 'bg-status-red/10 text-status-red',
-              )}>
-                {getRecoveryAdvice(scores.recoveryBand)}
-              </p>
-            </div>
-          </motion.div>
-
-          {/* Productivity Card */}
-          <motion.div 
-            className="metric-card-productivity"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            <div className="flex items-center gap-2 mb-4">
-              <Target className="h-5 w-5 text-productivity" />
-              <h3 className="font-display font-semibold">Productivity</h3>
-            </div>
-            <div className="flex justify-center">
-              <RingGauge
-                value={scores.salesProductivity}
-                max={100}
-                type="productivity"
-                label="%"
-                size={140}
-              />
-            </div>
-            <div className="mt-4 flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Effort Quality</span>
-              <span className={cn(
-                "text-xs font-medium px-2 py-1 rounded",
-                scores.effortQuality === 'high' && 'bg-status-green/10 text-status-green',
-                scores.effortQuality === 'medium' && 'bg-status-yellow/10 text-status-yellow',
-                scores.effortQuality === 'low' && 'bg-status-red/10 text-status-red',
-              )}>
-                {scores.effortQuality.toUpperCase()}
-              </span>
-            </div>
-          </motion.div>
+        {/* SECTION 3: What To Do Next */}
+        <div className="mt-6">
+          <WhatToDoNext 
+            recommendations={recommendations} 
+            isLoading={salesAgeLoading}
+          />
         </div>
-
-        {/* Daily Entry Form */}
-        <motion.div
-          className="mb-6"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-        >
-          <DailyEntryForm />
-        </motion.div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Stats & Timer */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Stats Row */}
-            <motion.div 
-              className="grid grid-cols-4 gap-4"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-            >
-              <div className="metric-card text-center">
-                <div className="text-2xl font-display font-bold text-foreground">
-                  {scores.dailyScore}
-                </div>
-                <div className="text-xs text-muted-foreground">Daily Score</div>
-              </div>
-              <div className="metric-card text-center">
-                <div className="text-2xl font-display font-bold text-foreground">
-                  {scores.weeklyAverage.toFixed(1)}
-                </div>
-                <div className="text-xs text-muted-foreground">Week Avg</div>
-              </div>
-              <div className="metric-card text-center">
-                <div className="flex items-center justify-center gap-1">
-                  <Award className={cn(
-                    "h-5 w-5",
-                    scores.goalMet ? "text-status-green" : "text-muted-foreground"
-                  )} />
-                  <span className={cn(
-                    "text-2xl font-display font-bold",
-                    scores.goalMet ? "text-status-green" : "text-foreground"
-                  )}>
-                    {scores.goalMet ? '✓' : '—'}
-                  </span>
-                </div>
-                <div className="text-xs text-muted-foreground">Goal Met</div>
-              </div>
-              <div className="metric-card text-center">
-                <div className="flex items-center justify-center gap-1">
-                  <TrendingUp className="h-5 w-5 text-primary" />
-                  <span className="text-2xl font-display font-bold">
-                    {scores.streak}
-                  </span>
-                </div>
-                <div className="text-xs text-muted-foreground">Day Streak</div>
-              </div>
-            </motion.div>
-
-            {/* Focus Timer - Full */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6 }}
-            >
-              <FocusTimer />
-            </motion.div>
-          </div>
-
-          {/* Right Column - Widgets */}
-          <div className="space-y-6">
-            <CalendarWidget />
-            <QuickActions />
-          </div>
+        
+        {/* SECTION 4: Next 45 Days Risk Window */}
+        <div className="mt-6">
+          <Next45DaysRisk 
+            opportunities={opportunities} 
+            renewals={renewals} 
+          />
+        </div>
+        
+        {/* SECTION 5 & 6: Performance + Commission Snapshots */}
+        <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <PerformanceSnapshot
+            wtd={performanceRollups?.wtd || {
+              dials: 0, conversations: 0, meetingsSet: 0, 
+              customerMeetingsHeld: 0, oppsCreated: 0,
+              accountsResearched: 0, contactsPrepped: 0
+            }}
+            mtd={performanceRollups?.mtd || {
+              dials: 0, conversations: 0, meetingsSet: 0, 
+              customerMeetingsHeld: 0, oppsCreated: 0,
+              accountsResearched: 0, contactsPrepped: 0
+            }}
+            wtdDays={performanceRollups?.wtdDays || 0}
+            mtdDays={performanceRollups?.mtdDays || 0}
+            targets={performanceTargets}
+            isLoading={rollupsLoading}
+          />
+          
+          <CommissionSnapshot
+            totalCommission={commissionSummary.totalCommission}
+            newArrAttainment={commissionSummary.newArrAttainment}
+            renewalArrAttainment={commissionSummary.renewalArrAttainment}
+            combinedAttainment={combinedAttainment}
+            projectedImpact={{
+              additionalNewArr: 50000,
+              additionalCommission: 50000 * effectiveConfig.newArrAcr,
+            }}
+          />
         </div>
       </div>
       
-      {/* Manual Check-In Dialog */}
-      <Dialog open={showManualCheckIn} onOpenChange={setShowManualCheckIn}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Manual Check-In</DialogTitle>
-            <DialogDescription>
-              Confirm your check-in for today. Add an optional note about what you worked on.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Textarea
-              placeholder="What did you work on today? (optional)"
-              value={checkInNote}
-              onChange={(e) => setCheckInNote(e.target.value)}
-              rows={3}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowManualCheckIn(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleManualCheckIn} disabled={recordCheckIn.isPending}>
-              {recordCheckIn.isPending ? 'Checking in...' : 'Check In'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Sales Age Detail Modal */}
+      <SalesAgeDetailModal
+        open={showSalesAgeDetail}
+        onOpenChange={setShowSalesAgeDetail}
+        salesAge={salesAge}
+        recommendations={recommendations}
+        snapshotHistory={snapshotHistory || []}
+      />
       
       {/* Daily Check-In Modal */}
       <DailyCheckInModal

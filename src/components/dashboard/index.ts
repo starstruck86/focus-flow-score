@@ -1,0 +1,9 @@
+// Dashboard components barrel export
+export { SalesAgeTile } from './SalesAgeTile';
+export { PaceToQuotaCard } from './PaceToQuotaCard';
+export { WhatToDoNext } from './WhatToDoNext';
+export { Next45DaysRisk } from './Next45DaysRisk';
+export { PerformanceSnapshot } from './PerformanceSnapshot';
+export { CommissionSnapshot } from './CommissionSnapshot';
+export { SalesAgeDetailModal } from './SalesAgeDetailModal';
+export { CheckInBanner } from './CheckInBanner';
