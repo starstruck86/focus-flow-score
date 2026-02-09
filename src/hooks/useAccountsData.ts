@@ -390,6 +390,83 @@ export function useUpsertOpportunity() {
   });
 }
 
+export function useUpdateOpportunity() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<DbOpportunity> }) => {
+      const { data, error } = await supabase
+        .from('opportunities')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['db-opportunities'] });
+    },
+  });
+}
+
+export function useDeleteOpportunity() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('opportunities').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['db-opportunities'] });
+    },
+  });
+}
+
+export function useAddOpportunity() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  
+  return useMutation({
+    mutationFn: async (opp: Partial<DbOpportunity> & { name: string }) => {
+      if (!user?.id) throw new Error('Not authenticated');
+      
+      const { data, error } = await supabase
+        .from('opportunities')
+        .insert({ ...opp, user_id: user.id })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['db-opportunities'] });
+    },
+  });
+}
+
+export function useUpdateRenewal() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<DbRenewal> }) => {
+      const { data, error } = await supabase
+        .from('renewals')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['db-renewals'] });
+    },
+  });
+}
+
+
 // Renewals hooks
 export function useDbRenewals() {
   const { user } = useAuth();
