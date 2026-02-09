@@ -102,50 +102,6 @@ const VIEWS = [
   { value: 'missing-agreement', label: 'Missing Agreement' },
 ];
 
-function EditableArrCell({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(value?.toString() || '');
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
-  const handleBlur = () => {
-    setIsEditing(false);
-    onChange(editValue ? Number(editValue) : 0);
-  };
-
-  if (isEditing) {
-    return (
-      <Input
-        type="number"
-        value={editValue}
-        onChange={(e) => setEditValue(e.target.value)}
-        onBlur={handleBlur}
-        onKeyDown={(e) => e.key === 'Enter' && handleBlur()}
-        autoFocus
-        className="h-8 w-28 text-sm font-mono text-right"
-      />
-    );
-  }
-
-  return (
-    <button
-      onClick={() => {
-        setEditValue(value?.toString() || '');
-        setIsEditing(true);
-      }}
-      className="h-8 w-28 text-sm font-mono text-right px-3 py-1 rounded-md border border-transparent hover:border-input"
-    >
-      {formatCurrency(value)}
-    </button>
-  );
-}
 
 export default function Renewals() {
   const { renewals, addRenewal, updateRenewal, deleteRenewal, createMissingRenewalOpportunities, logCall, logManualEmail, logMeetingHeld } = useStore();
