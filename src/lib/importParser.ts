@@ -621,3 +621,125 @@ export function calculateSummary(rows: ParsedImportRow[]): ImportPreviewSummary 
     renewalRowCount: rows.filter(r => r.motion === 'renewal' && !r.ignored).length,
   };
 }
+
+// Build opportunity lookup for matching
+export function buildOpportunityLookup(
+  opportunities: DbOpportunity[]
+): Map<string, DbOpportunity> {
+  const lookup = new Map<string, DbOpportunity>();
+  
+  opportunities.forEach(opp => {
+    // By Salesforce ID (highest priority)
+    if (opp.salesforce_id) {
+      lookup.set(`sfid:${opp.salesforce_id}`, opp);
+    }
+    
+    // By name + account
+    if (opp.account_id) {
+      lookup.set(`name+account:${opp.name.toLowerCase().trim()}:${opp.account_id}`, opp);
+    }
+    
+    // By name only (lower priority, for fuzzy matching)
+    lookup.set(`name:${opp.name.toLowerCase().trim()}`, opp);
+  });
+  
+  return lookup;
+}
+
+// Find matching opportunity
+export function findMatchingOpportunity(
+  name: string,
+  accountId: string | undefined,
+  sfId: string | undefined,
+  closeDate: string | undefined,
+  arr: number | undefined,
+  lookup: Map<string, DbOpportunity>,
+  allOpportunities: DbOpportunity[]
+): { match: DbOpportunity | undefined; confidence: 'high' | 'medium' | 'low' | 'suggestion' } {
+  // Priority 1: Salesforce ID (high confidence)
+  if (sfId) {
+    const match = lookup.get(`sfid:${sfId}`);
+    if (match) return { match, confidence: 'high' };
+  }
+  
+  // Priority 2: Name + Account (high confidence)
+  if (accountId && name) {
+    const match = lookup.get(`name+account:${name.toLowerCase().trim()}:${accountId}`);
+    if (match) return { match, confidence: 'high' };
+  }
+  
+  // Priority 3: Name + Close Date + ARR (weak suggestion only)
+  if (name && (closeDate || arr)) {
+    const candidates = allOpportunities.filter(opp => {
+      const nameMatch = opp.name.toLowerCase().includes(name.toLowerCase()) || 
+                       name.toLowerCase().includes(opp.name.toLowerCase());
+      const dateMatch = closeDate && opp.close_date === closeDate;
+      const arrMatch = arr && opp.arr === arr;
+      return nameMatch && (dateMatch || arrMatch);
+    });
+    
+    if (candidates.length === 1) {
+      return { match: candidates[0], confidence: 'suggestion' };
+    }
+  }
+  
+  return { match: undefined, confidence: 'low' };
+}
+
+// Find fuzzy opportunity matches for manual selection
+export function findFuzzyOpportunityMatches(
+  name: string,
+  opportunities: DbOpportunity[]
+): { id: string; name: string; accountName?: string; score: number }[] {
+  const normalized = name.toLowerCase().trim();
+  
+  return opportunities
+    .map(opp => {
+      const oppName = opp.name.toLowerCase().trim();
+      let score = 0;
+      
+      if (oppName === normalized) score = 100;
+      else if (oppName.includes(normalized) || normalized.includes(oppName)) {
+        score = 70;
+      } else {
+        const words1 = normalized.split(/\s+/);
+        const words2 = oppName.split(/\s+/);
+        const overlap = words1.filter(w => words2.some(w2 => w2.includes(w) || w.includes(w2))).length;
+        score = (overlap / Math.max(words1.length, words2.length)) * 50;
+      }
+      
+      return { id: opp.id, name: opp.name, score };
+    })
+    .filter(m => m.score > 20)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
+}
+
+// Detect opportunity conflicts (same opp mapped to multiple accounts)
+export function detectOpportunityConflicts(
+  rows: { rowIndex: number; oppName?: string; oppSfId?: string; accountName?: string; accountId?: string }[]
+): Map<string, number[]> {
+  const conflicts = new Map<string, number[]>();
+  const oppToRows = new Map<string, { rowIndex: number; accountId?: string; accountName?: string }[]>();
+  
+  rows.forEach(row => {
+    if (!row.oppName && !row.oppSfId) return;
+    
+    const key = row.oppSfId || row.oppName?.toLowerCase().trim() || '';
+    if (!key) return;
+    
+    const existing = oppToRows.get(key) || [];
+    existing.push({ rowIndex: row.rowIndex, accountId: row.accountId, accountName: row.accountName });
+    oppToRows.set(key, existing);
+  });
+  
+  // Find opps with multiple different accounts
+  oppToRows.forEach((rowsForOpp, key) => {
+    const uniqueAccounts = new Set(rowsForOpp.map(r => r.accountId || r.accountName));
+    if (uniqueAccounts.size > 1) {
+      conflicts.set(key, rowsForOpp.map(r => r.rowIndex));
+    }
+  });
+  
+  return conflicts;
+}
