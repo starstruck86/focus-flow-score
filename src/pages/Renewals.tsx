@@ -60,10 +60,8 @@ import { cn } from '@/lib/utils';
 import { OpportunitiesTable } from '@/components/OpportunitiesTable';
 import { OpportunityDrawer } from '@/components/OpportunityDrawer';
 import { EditableDatePicker } from '@/components/EditableDatePicker';
-import { EditableUrlField } from '@/components/EditableUrlField';
 import { RenewalDetailsField } from '@/components/RenewalDetailsField';
-import { AccountName } from '@/components/ClickableName';
-import { EditableTextCell, EditableNumberCell, DisplaySelectCell } from '@/components/table';
+import { EditableTextCell, EditableNumberCell, DisplaySelectCell, PlanhatLinkCell, AgreementLinkCell, AccountNameCell } from '@/components/table';
 import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
 import { sortRenewalsDefault, applySortWithFallback, CHURN_RISK_SORT_RANK, CHURN_RISK_DISPLAY_LABELS } from '@/lib/sortUtils';
 import type { Renewal, HealthStatus, Opportunity, ChurnRisk } from '@/types';
@@ -942,9 +940,11 @@ export default function Renewals() {
                       <React.Fragment key={renewal.id}>
                         <TableRow className="hover:bg-muted/30">
                           <TableCell className="align-top py-3">
-                            <AccountName 
+                            <AccountNameCell 
                               name={renewal.accountName} 
                               salesforceLink={renewal.salesforceLink}
+                              onNameChange={(name) => updateRenewal(renewal.id, { accountName: name })}
+                              onSalesforceLinkChange={(link) => updateRenewal(renewal.id, { salesforceLink: link })}
                               className="text-sm"
                             />
                           </TableCell>
@@ -983,22 +983,16 @@ export default function Renewals() {
                               emptyText="Add"
                             />
                           </TableCell>
-                          <TableCell className="align-top py-3">
-                            <EditableUrlField
+                          <TableCell className="align-top py-3 group">
+                            <PlanhatLinkCell
                               value={renewal.planhatLink || ''}
                               onChange={(v) => updateRenewal(renewal.id, { planhatLink: v })}
-                              label="Planhat"
-                              placeholder="https://planhat.com/..."
-                              compact
                             />
                           </TableCell>
-                          <TableCell className="align-top py-3">
-                            <EditableUrlField
+                          <TableCell className="align-top py-3 group">
+                            <AgreementLinkCell
                               value={renewal.currentAgreementLink || ''}
                               onChange={(v) => updateRenewal(renewal.id, { currentAgreementLink: v })}
-                              label="Agreement"
-                              placeholder="https://..."
-                              compact
                             />
                           </TableCell>
                           <TableCell className="align-top py-3">

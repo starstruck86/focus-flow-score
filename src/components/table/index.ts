@@ -2,3 +2,5 @@
 export * from './EditableCell';
 export * from './DisplaySelectCell';
 export * from './SortableHeader';
+export * from './EditableLinkCell';
+export * from './ClickableNameCell';
