@@ -63,6 +63,9 @@ import { EditableDatePicker } from '@/components/EditableDatePicker';
 import { EditableUrlField } from '@/components/EditableUrlField';
 import { RenewalDetailsField } from '@/components/RenewalDetailsField';
 import { AccountName } from '@/components/ClickableName';
+import { EditableTextCell, EditableNumberCell, DisplaySelectCell } from '@/components/table';
+import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
+import { sortRenewalsDefault, applySortWithFallback, CHURN_RISK_SORT_RANK, CHURN_RISK_DISPLAY_LABELS } from '@/lib/sortUtils';
 import type { Renewal, HealthStatus, Opportunity, ChurnRisk } from '@/types';
 
 const HEALTH_COLORS: Record<HealthStatus, string> = {
@@ -72,18 +75,19 @@ const HEALTH_COLORS: Record<HealthStatus, string> = {
 };
 
 const CHURN_RISK_COLORS: Record<ChurnRisk, string> = {
-  certain: 'bg-green-600/20 text-green-400 border-green-600/30',
   low: 'bg-status-green/20 text-status-green border-status-green/30',
   medium: 'bg-status-yellow/20 text-status-yellow border-status-yellow/30',
   high: 'bg-status-red/20 text-status-red border-status-red/30',
+  certain: 'bg-purple-600/20 text-purple-400 border-purple-600/30', // OOB / Churning
 };
 
-const CHURN_RISK_LABELS: Record<ChurnRisk, string> = {
-  certain: 'Certain',
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-};
+// Churn Risk options with numbered labels for sorting clarity
+const CHURN_RISK_OPTIONS = [
+  { value: 'low', label: '1 - Low Risk', className: 'bg-status-green/20 text-status-green' },
+  { value: 'medium', label: '2 - Medium Risk', className: 'bg-status-yellow/20 text-status-yellow' },
+  { value: 'high', label: '3 - High Risk', className: 'bg-status-red/20 text-status-red' },
+  { value: 'certain', label: '4 - OOB / Churning', className: 'bg-purple-600/20 text-purple-400' },
+];
 
 const VIEWS = [
   { value: 'all', label: 'All Renewals' },
@@ -153,6 +157,10 @@ export default function Renewals() {
   const [importPreview, setImportPreview] = useState<Partial<Renewal>[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Sort hook for renewals table
+  const { sortConfig: renewalSortConfig, handleSort: handleRenewalSort } = useTableSort();
+  
   const [newRenewal, setNewRenewal] = useState<Partial<Renewal>>({
     healthStatus: 'green',
     autoRenew: false,
@@ -456,15 +464,27 @@ export default function Renewals() {
     }
     
     return matchesSearch && matchesView;
-  }).sort((a, b) => a.daysToRenewal - b.daysToRenewal);
+  });
 
-  // Group by quarter
-  const groupedRenewals = filteredRenewals.reduce((acc, renewal) => {
+  // Sort renewals: default is Renewal Date → Churn Risk → ARR desc → Name
+  const sortedRenewals = useMemo(() => {
+    const sortKeyMap = {
+      renewalDue: { key: 'renewalDue' as keyof Renewal },
+      churnRisk: { key: 'churnRisk' as keyof Renewal, customRank: CHURN_RISK_SORT_RANK },
+      arr: { key: 'arr' as keyof Renewal },
+      accountName: { key: 'accountName' as keyof Renewal },
+      csm: { key: 'csm' as keyof Renewal },
+    };
+    return applySortWithFallback(filteredRenewals, renewalSortConfig, sortRenewalsDefault, sortKeyMap);
+  }, [filteredRenewals, renewalSortConfig]);
+
+  // Group by quarter for display
+  const groupedRenewals = sortedRenewals.reduce((acc, renewal) => {
     const quarter = renewal.renewalQuarter;
     if (!acc[quarter]) acc[quarter] = [];
     acc[quarter].push(renewal);
     return acc;
-  }, {} as Record<string, typeof filteredRenewals>);
+  }, {} as Record<string, typeof sortedRenewals>);
 
   const handleAddRenewal = () => {
     if (!newRenewal.accountName || !newRenewal.renewalDue || !newRenewal.arr) {
@@ -541,30 +561,33 @@ export default function Renewals() {
         
         {/* Churn Risk Summary */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          {(['certain', 'low', 'medium', 'high'] as ChurnRisk[]).map(risk => (
-            <div 
-              key={risk} 
-              className={cn(
-                "metric-card p-4 border-l-4",
-                risk === 'certain' && "border-l-green-500",
-                risk === 'low' && "border-l-status-green",
-                risk === 'medium' && "border-l-status-yellow",
-                risk === 'high' && "border-l-status-red",
-              )}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className={cn("text-sm font-medium", CHURN_RISK_COLORS[risk].split(' ')[1])}>
-                  {CHURN_RISK_LABELS[risk]} Risk
-                </span>
-                <Badge variant="outline" className={cn("text-xs", CHURN_RISK_COLORS[risk])}>
-                  {churnRiskSummary[risk].count}
-                </Badge>
+          {(['low', 'medium', 'high', 'certain'] as ChurnRisk[]).map(risk => {
+            const option = CHURN_RISK_OPTIONS.find(o => o.value === risk);
+            return (
+              <div 
+                key={risk} 
+                className={cn(
+                  "metric-card p-4 border-l-4",
+                  risk === 'low' && "border-l-status-green",
+                  risk === 'medium' && "border-l-status-yellow",
+                  risk === 'high' && "border-l-status-red",
+                  risk === 'certain' && "border-l-purple-500",
+                )}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className={cn("text-sm font-medium", CHURN_RISK_COLORS[risk].split(' ')[1])}>
+                    {option?.label || risk}
+                  </span>
+                  <Badge variant="outline" className={cn("text-xs", CHURN_RISK_COLORS[risk])}>
+                    {churnRiskSummary[risk].count}
+                  </Badge>
+                </div>
+                <div className="text-xl font-bold font-mono">
+                  {formatCurrency(churnRiskSummary[risk].arr)}
+                </div>
               </div>
-              <div className="text-xl font-bold font-mono">
-                {formatCurrency(churnRiskSummary[risk].arr)}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
         
         <Tabs defaultValue="renewals" className="space-y-4">
@@ -868,14 +891,49 @@ export default function Renewals() {
                 <Table className="min-w-[1600px]">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
-                      <TableHead className="w-[14%]">Account Name</TableHead>
-                      <TableHead className="w-[10%]">Renewal Date</TableHead>
-                      <TableHead className="w-[8%]">Churn Risk</TableHead>
-                      <TableHead className="w-[8%] text-right">ARR</TableHead>
-                      <TableHead className="w-[10%]">CSM</TableHead>
+                      <SortableHeader 
+                        sortKey="accountName" 
+                        currentSort={renewalSortConfig} 
+                        onSort={handleRenewalSort}
+                        className="w-[14%]"
+                      >
+                        Account Name
+                      </SortableHeader>
+                      <SortableHeader 
+                        sortKey="renewalDue" 
+                        currentSort={renewalSortConfig} 
+                        onSort={handleRenewalSort}
+                        className="w-[10%]"
+                      >
+                        Renewal Date
+                      </SortableHeader>
+                      <SortableHeader 
+                        sortKey="churnRisk" 
+                        currentSort={renewalSortConfig} 
+                        onSort={handleRenewalSort}
+                        className="w-[12%]"
+                      >
+                        Churn Risk
+                      </SortableHeader>
+                      <SortableHeader 
+                        sortKey="arr" 
+                        currentSort={renewalSortConfig} 
+                        onSort={handleRenewalSort}
+                        className="w-[8%] text-right"
+                      >
+                        ARR
+                      </SortableHeader>
+                      <SortableHeader 
+                        sortKey="csm" 
+                        currentSort={renewalSortConfig} 
+                        onSort={handleRenewalSort}
+                        className="w-[10%]"
+                      >
+                        CSM
+                      </SortableHeader>
                       <TableHead className="w-[10%]">Planhat</TableHead>
                       <TableHead className="w-[10%]">Agreement</TableHead>
-                      <TableHead className="w-[26%]">Next Step</TableHead>
+                      <TableHead className="w-[22%]">Next Step</TableHead>
                       <TableHead className="w-[4%]"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -904,33 +962,25 @@ export default function Renewals() {
                             />
                           </TableCell>
                           <TableCell className="align-top py-3">
-                            <Select
+                            <DisplaySelectCell
                               value={renewal.churnRisk || 'low'}
-                              onValueChange={(v) => updateRenewal(renewal.id, { churnRisk: v as ChurnRisk })}
-                            >
-                              <SelectTrigger className={cn("h-8 w-24 text-xs", CHURN_RISK_COLORS[renewal.churnRisk || 'low'])}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="certain">Certain</SelectItem>
-                                <SelectItem value="low">Low</SelectItem>
-                                <SelectItem value="medium">Medium</SelectItem>
-                                <SelectItem value="high">High</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell className="align-top py-3">
-                            <EditableArrCell
-                              value={renewal.arr}
-                              onChange={(v) => updateRenewal(renewal.id, { arr: v })}
+                              options={CHURN_RISK_OPTIONS}
+                              onChange={(v) => updateRenewal(renewal.id, { churnRisk: v as ChurnRisk })}
                             />
                           </TableCell>
                           <TableCell className="align-top py-3">
-                            <Input
+                            <EditableNumberCell
+                              value={renewal.arr}
+                              onChange={(v) => updateRenewal(renewal.id, { arr: v })}
+                              format="currency"
+                            />
+                          </TableCell>
+                          <TableCell className="align-top py-3">
+                            <EditableTextCell
                               value={renewal.csm || ''}
-                              onChange={(e) => updateRenewal(renewal.id, { csm: e.target.value })}
-                              placeholder="—"
-                              className="h-8 text-sm"
+                              onChange={(v) => updateRenewal(renewal.id, { csm: v })}
+                              placeholder="Add CSM"
+                              emptyText="Add"
                             />
                           </TableCell>
                           <TableCell className="align-top py-3">
@@ -952,15 +1002,12 @@ export default function Renewals() {
                             />
                           </TableCell>
                           <TableCell className="align-top py-3">
-                            <div className="whitespace-pre-wrap break-words text-sm min-h-[36px]">
-                              <Textarea
-                                value={renewal.nextStep || ''}
-                                onChange={(e) => updateRenewal(renewal.id, { nextStep: e.target.value })}
-                                placeholder="Next step..."
-                                className="min-h-[36px] text-sm resize-none py-2 px-3 w-full"
-                                style={{ fieldSizing: 'content' } as React.CSSProperties}
-                              />
-                            </div>
+                            <EditableTextCell
+                              value={renewal.nextStep || ''}
+                              onChange={(v) => updateRenewal(renewal.id, { nextStep: v })}
+                              placeholder="Add next step"
+                              emptyText="Add"
+                            />
                           </TableCell>
                           <TableCell className="align-top py-3">
                             <DropdownMenu>

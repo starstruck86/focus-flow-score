@@ -7,9 +7,9 @@ import {
   Upload,
   FileSpreadsheet,
   Download,
-  Pencil,
   ChevronDown,
   ChevronRight,
+  Pencil,
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { StreakChip } from '@/components/StreakChip';
@@ -68,6 +68,15 @@ import { OpportunityDrawer } from '@/components/OpportunityDrawer';
 import { AccountContactsField, type AccountContact } from '@/components/AccountContactsField';
 import { AccountName } from '@/components/ClickableName';
 import { ImportModal } from '@/components/import';
+import { EditableTextCell, EditableTextareaCell, DisplaySelectCell } from '@/components/table';
+import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
+import { 
+  sortAccountsDefault, 
+  applySortWithFallback,
+  ACCOUNT_STATUS_SORT_RANK,
+  ACCOUNT_STATUS_DISPLAY_LABELS,
+  TIER_SORT_RANK,
+} from '@/lib/sortUtils';
 import type { Account, AccountTier, AccountStatus, Opportunity, OpportunityStage } from '@/types';
 
 // Quick Links
@@ -348,15 +357,24 @@ function OpportunitiesStageSummary() {
   );
 }
 
-// Status order and labels
-const STATUS_ORDER: AccountStatus[] = ['meeting-booked', 'active', 'researched', 'inactive', 'disqualified'];
-const STATUS_LABELS: Record<AccountStatus, string> = {
-  'inactive': 'Inactive',
-  'researched': 'Researched',
-  'active': 'Active',
-  'meeting-booked': 'Meeting Booked',
-  'disqualified': 'Disqualified',
-};
+// Status order for sorting (NEW numbered labels)
+const STATUS_ORDER: AccountStatus[] = ['active', 'researched', 'inactive', 'disqualified', 'meeting-booked'];
+
+// Status options for select dropdown with numbered labels
+const STATUS_OPTIONS = [
+  { value: 'active', label: '1-Active', className: 'bg-status-green/20 text-status-green' },
+  { value: 'researched', label: '2-Researched', className: 'bg-blue-500/20 text-blue-400' },
+  { value: 'inactive', label: '3-Inactive', className: 'bg-muted text-muted-foreground' },
+  { value: 'disqualified', label: '4-Disqualified', className: 'bg-status-red/20 text-status-red' },
+  { value: 'meeting-booked', label: '5-Meeting Booked', className: 'bg-primary/20 text-primary' },
+];
+
+// Tier options for select dropdown  
+const TIER_OPTIONS = [
+  { value: 'A', label: 'A', className: 'border-status-green text-status-green bg-transparent' },
+  { value: 'B', label: 'B', className: 'border-status-yellow text-status-yellow bg-transparent' },
+  { value: 'C', label: 'C', className: 'border-muted-foreground text-muted-foreground bg-transparent' },
+];
 
 export default function WeeklyOutreach() {
   const { accounts, addAccount, updateAccount, deleteAccount } = useStore();
@@ -372,6 +390,10 @@ export default function WeeklyOutreach() {
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [collapsedStatuses, setCollapsedStatuses] = useState<Set<AccountStatus>>(new Set());
+  
+  // Sort hook for accounts table
+  const { sortConfig: accountSortConfig, handleSort: handleAccountSort } = useTableSort();
+  
   const [newAccount, setNewAccount] = useState<Partial<Account>>({
     priority: 'medium',
     tier: 'B',
@@ -565,20 +587,17 @@ export default function WeeklyOutreach() {
     return matchesSearch && matchesTier && matchesStatus;
   });
 
-  // Group accounts by status
-  const accountsByStatus = useMemo(() => {
-    const grouped: Record<AccountStatus, Account[]> = {
-      'meeting-booked': [],
-      'active': [],
-      'researched': [],
-      'inactive': [],
-      'disqualified': [],
+  // Sort accounts: default is Tier → Status → Name
+  const sortedAccounts = useMemo(() => {
+    const sortKeyMap = {
+      tier: { key: 'tier' as keyof Account, customRank: TIER_SORT_RANK },
+      accountStatus: { key: 'accountStatus' as keyof Account, customRank: ACCOUNT_STATUS_SORT_RANK },
+      name: { key: 'name' as keyof Account },
+      marTech: { key: 'marTech' as keyof Account },
+      ecommerce: { key: 'ecommerce' as keyof Account },
     };
-    filteredAccounts.forEach(account => {
-      grouped[account.accountStatus].push(account);
-    });
-    return grouped;
-  }, [filteredAccounts]);
+    return applySortWithFallback(filteredAccounts, accountSortConfig, sortAccountsDefault, sortKeyMap);
+  }, [filteredAccounts, accountSortConfig]);
 
   const handleAddAccount = () => {
     if (!newAccount.name) {
@@ -932,167 +951,147 @@ export default function WeeklyOutreach() {
               </Select>
             </div>
 
-            {/* Accounts Table - Grouped by Status */}
-            <div className="space-y-4">
-              {filteredAccounts.length === 0 ? (
-                <div className="metric-card p-8 text-center text-muted-foreground">
-                  {accounts.length === 0 
-                    ? "No accounts yet. Add your first account to get started!"
-                    : "No accounts match your filters."}
-                </div>
-              ) : (
-                STATUS_ORDER.map(status => {
-                  const statusAccounts = accountsByStatus[status];
-                  if (statusAccounts.length === 0) return null;
-                  
-                  const isCollapsed = collapsedStatuses.has(status);
-                  
-                  return (
-                    <Collapsible 
-                      key={status} 
-                      open={!isCollapsed} 
-                      onOpenChange={() => toggleStatusCollapse(status)}
-                    >
-                      <div className="metric-card overflow-hidden p-0">
-                        <CollapsibleTrigger asChild>
-                          <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors border-b border-border/50">
-                            {isCollapsed ? (
-                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                            ) : (
-                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                            )}
-                            <Badge className={cn("text-xs", ACCOUNT_STATUS_COLORS[status])}>
-                              {STATUS_LABELS[status]}
-                            </Badge>
-                            <span className="text-sm text-muted-foreground">
-                              {statusAccounts.length} account{statusAccounts.length !== 1 ? 's' : ''}
-                            </span>
-                          </div>
-                        </CollapsibleTrigger>
-                        <CollapsibleContent>
-                          <Table>
-                            <TableHeader>
-                              <TableRow className="hover:bg-transparent">
-                                <TableHead className="w-[18%]">Account</TableHead>
-                                <TableHead className="w-[20%]">Website</TableHead>
-                                <TableHead className="w-[12%]">Status</TableHead>
-                                <TableHead className="w-[8%]">Tier</TableHead>
-                                <TableHead className="w-[18%]">MarTech</TableHead>
-                                <TableHead className="w-[18%]">Ecommerce</TableHead>
-                                <TableHead className="w-[6%]"></TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {statusAccounts.map((account) => {
-                                return (
-                                  <React.Fragment key={account.id}>
-                                    <TableRow>
-                                      <TableCell className="align-top py-3">
-                                        <AccountName 
-                                          name={account.name} 
-                                          salesforceLink={account.salesforceLink}
-                                          className="text-sm break-words"
-                                        />
-                                      </TableCell>
-                                      <TableCell className="align-top py-3">
-                                        <WebsiteCell
-                                          website={account.website || ''}
-                                          onChange={(value) => updateAccount(account.id, { website: value })}
-                                        />
-                                      </TableCell>
-                                      <TableCell className="align-top py-3">
-                                        <Select
-                                          value={account.accountStatus || 'inactive'}
-                                          onValueChange={(v) => updateAccount(account.id, { accountStatus: v as AccountStatus })}
-                                        >
-                                          <SelectTrigger className="h-8 text-sm">
-                                            <SelectValue />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="inactive">Inactive</SelectItem>
-                                            <SelectItem value="researched">Researched</SelectItem>
-                                            <SelectItem value="active">Active</SelectItem>
-                                            <SelectItem value="meeting-booked">Meeting Booked</SelectItem>
-                                            <SelectItem value="disqualified">Disqualified</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                      </TableCell>
-                                      <TableCell className="align-top py-3">
-                                        <Select
-                                          value={account.tier || 'B'}
-                                          onValueChange={(v) => updateAccount(account.id, { tier: v as AccountTier })}
-                                        >
-                                          <SelectTrigger className="h-8 w-16 text-sm">
-                                            <SelectValue />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="A">A</SelectItem>
-                                            <SelectItem value="B">B</SelectItem>
-                                            <SelectItem value="C">C</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                      </TableCell>
-                                      <TableCell className="align-top py-3">
-                                        <Textarea
-                                          value={account.marTech || ''}
-                                          onChange={(e) => updateAccount(account.id, { marTech: e.target.value })}
-                                          placeholder="—"
-                                          className="min-h-[36px] text-sm resize-none field-sizing-content"
-                                          rows={1}
-                                        />
-                                      </TableCell>
-                                      <TableCell className="align-top py-3">
-                                        <Textarea
-                                          value={account.ecommerce || ''}
-                                          onChange={(e) => updateAccount(account.id, { ecommerce: e.target.value })}
-                                          placeholder="—"
-                                          className="min-h-[36px] text-sm resize-none field-sizing-content"
-                                          rows={1}
-                                        />
-                                      </TableCell>
-                                      <TableCell className="align-top py-3">
-                                        <DropdownMenu>
-                                          <DropdownMenuTrigger asChild>
-                                            <Button size="icon" variant="ghost" className="h-8 w-8">
-                                              <MoreHorizontal className="h-4 w-4" />
-                                            </Button>
-                                          </DropdownMenuTrigger>
-                                          <DropdownMenuContent align="end">
-                                            <DropdownMenuItem>Edit Account</DropdownMenuItem>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem 
-                                              className="text-destructive"
-                                              onClick={() => deleteAccount(account.id)}
-                                            >
-                                              Delete
-                                            </DropdownMenuItem>
-                                          </DropdownMenuContent>
-                                        </DropdownMenu>
-                                      </TableCell>
-                                    </TableRow>
-                                    {/* Contacts row spans full width */}
-                                    <TableRow className="hover:bg-transparent border-b-2">
-                                      <TableCell colSpan={7} className="pt-0 pb-3">
-                                        <AccountContactsField
-                                          contacts={account.accountContacts || []}
-                                          onChange={(contacts) => updateAccount(account.id, { accountContacts: contacts })}
-                                          companyNotes={account.notes || ''}
-                                          onCompanyNotesChange={(notes) => updateAccount(account.id, { notes })}
-                                        />
-                                      </TableCell>
-                                    </TableRow>
-                                  </React.Fragment>
-                                );
-                              })}
-                            </TableBody>
-                          </Table>
-                        </CollapsibleContent>
-                      </div>
-                    </Collapsible>
-                  );
-                })
-              )}
-            </div>
+            {/* Accounts Table - Flat sortable list */}
+            {sortedAccounts.length === 0 ? (
+              <div className="metric-card p-8 text-center text-muted-foreground">
+                {accounts.length === 0 
+                  ? "No accounts yet. Add your first account to get started!"
+                  : "No accounts match your filters."}
+              </div>
+            ) : (
+              <div className="metric-card overflow-x-auto p-0">
+                <Table className="min-w-[1200px]">
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <SortableHeader 
+                        sortKey="name" 
+                        currentSort={accountSortConfig} 
+                        onSort={handleAccountSort}
+                        className="w-[18%]"
+                      >
+                        Account
+                      </SortableHeader>
+                      <TableHead className="w-[18%]">Website</TableHead>
+                      <SortableHeader 
+                        sortKey="accountStatus" 
+                        currentSort={accountSortConfig} 
+                        onSort={handleAccountSort}
+                        className="w-[14%]"
+                      >
+                        Status
+                      </SortableHeader>
+                      <SortableHeader 
+                        sortKey="tier" 
+                        currentSort={accountSortConfig} 
+                        onSort={handleAccountSort}
+                        className="w-[8%]"
+                      >
+                        Tier
+                      </SortableHeader>
+                      <SortableHeader 
+                        sortKey="marTech" 
+                        currentSort={accountSortConfig} 
+                        onSort={handleAccountSort}
+                        className="w-[18%]"
+                      >
+                        MarTech
+                      </SortableHeader>
+                      <SortableHeader 
+                        sortKey="ecommerce" 
+                        currentSort={accountSortConfig} 
+                        onSort={handleAccountSort}
+                        className="w-[18%]"
+                      >
+                        Ecommerce
+                      </SortableHeader>
+                      <TableHead className="w-[6%]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedAccounts.map((account) => (
+                      <React.Fragment key={account.id}>
+                        <TableRow className="hover:bg-muted/30">
+                          <TableCell className="align-top py-3">
+                            <AccountName 
+                              name={account.name} 
+                              salesforceLink={account.salesforceLink}
+                              className="text-sm break-words"
+                            />
+                          </TableCell>
+                          <TableCell className="align-top py-3">
+                            <WebsiteCell
+                              website={account.website || ''}
+                              onChange={(value) => updateAccount(account.id, { website: value })}
+                            />
+                          </TableCell>
+                          <TableCell className="align-top py-3">
+                            <DisplaySelectCell
+                              value={account.accountStatus || 'inactive'}
+                              options={STATUS_OPTIONS}
+                              onChange={(v) => updateAccount(account.id, { accountStatus: v as AccountStatus })}
+                            />
+                          </TableCell>
+                          <TableCell className="align-top py-3">
+                            <DisplaySelectCell
+                              value={account.tier || 'B'}
+                              options={TIER_OPTIONS}
+                              onChange={(v) => updateAccount(account.id, { tier: v as AccountTier })}
+                              badgeClassName="border"
+                            />
+                          </TableCell>
+                          <TableCell className="align-top py-3">
+                            <EditableTextareaCell
+                              value={account.marTech || ''}
+                              onChange={(v) => updateAccount(account.id, { marTech: v })}
+                              placeholder="Add MarTech"
+                              emptyText="Add"
+                            />
+                          </TableCell>
+                          <TableCell className="align-top py-3">
+                            <EditableTextareaCell
+                              value={account.ecommerce || ''}
+                              onChange={(v) => updateAccount(account.id, { ecommerce: v })}
+                              placeholder="Add Ecommerce"
+                              emptyText="Add"
+                            />
+                          </TableCell>
+                          <TableCell className="align-top py-3">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button size="icon" variant="ghost" className="h-8 w-8">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem>Edit Account</DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem 
+                                  className="text-destructive"
+                                  onClick={() => deleteAccount(account.id)}
+                                >
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                        {/* Contacts row spans full width */}
+                        <TableRow className="hover:bg-transparent border-b-2">
+                          <TableCell colSpan={7} className="pt-0 pb-3">
+                            <AccountContactsField
+                              contacts={account.accountContacts || []}
+                              onChange={(contacts) => updateAccount(account.id, { accountContacts: contacts })}
+                              companyNotes={account.notes || ''}
+                              onCompanyNotesChange={(notes) => updateAccount(account.id, { notes })}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      </React.Fragment>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </TabsContent>
 
           {/* Opportunities Tab */}
