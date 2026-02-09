@@ -15,8 +15,10 @@ import {
   Upload,
   Download,
   FileSpreadsheet,
+  Link2,
+  ArrowRight,
 } from 'lucide-react';
-import { ImportModal } from '@/components/import';
+import { ImportWizard } from '@/components/import';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,6 +28,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -33,6 +36,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 import { 
   useWorkScheduleConfig, 
   useHolidays, 
@@ -43,6 +52,15 @@ import {
   useAddPtoDay,
   useRemovePtoDay,
 } from '@/hooks/useStreakData';
+import {
+  useHeaderMappings,
+  useDeleteHeaderMapping,
+  useValueMappings,
+  useDeleteValueMapping,
+  useAccountAliases,
+  useDeleteAccountAlias,
+} from '@/hooks/useImportMappings';
+import { useDbAccounts } from '@/hooks/useAccountsData';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -88,7 +106,7 @@ const US_FEDERAL_HOLIDAYS_2026 = [
 
 // Data Import Section Component
 function DataImportSection() {
-  const [showImportModal, setShowImportModal] = useState(false);
+  const [showImportWizard, setShowImportWizard] = useState(false);
   
   return (
     <>
@@ -100,10 +118,10 @@ function DataImportSection() {
             </div>
             <div>
               <h3 className="font-semibold">Import Data</h3>
-              <p className="text-sm text-muted-foreground">Import accounts, opportunities, and contacts from CSV</p>
+              <p className="text-sm text-muted-foreground">Import accounts, opportunities, renewals from CSV</p>
             </div>
           </div>
-          <Button onClick={() => setShowImportModal(true)}>
+          <Button onClick={() => setShowImportWizard(true)}>
             <FileSpreadsheet className="h-4 w-4 mr-2" />
             Import CSV
           </Button>
@@ -111,22 +129,162 @@ function DataImportSection() {
         
         <div className="bg-muted/30 rounded-lg p-3">
           <p className="text-sm text-muted-foreground mb-2">
-            Auto-detects column headers for seamless mapping. Supports:
+            Combined file support with "Map Once, Reuse Forever":
           </p>
           <div className="flex flex-wrap gap-2 text-xs">
-            <span className="px-2 py-1 bg-background rounded">Account Name</span>
+            <span className="px-2 py-1 bg-background rounded">New Logo + Renewals</span>
             <span className="px-2 py-1 bg-background rounded">Salesforce Links</span>
             <span className="px-2 py-1 bg-background rounded">Planhat Links</span>
-            <span className="px-2 py-1 bg-background rounded">Agreement Links</span>
+            <span className="px-2 py-1 bg-background rounded">Opportunities</span>
             <span className="px-2 py-1 bg-background rounded">ARR</span>
-            <span className="px-2 py-1 bg-background rounded">Priority</span>
             <span className="px-2 py-1 bg-background rounded">+more</span>
           </div>
         </div>
       </div>
       
-      <ImportModal open={showImportModal} onOpenChange={setShowImportModal} />
+      <ImportWizard open={showImportWizard} onOpenChange={setShowImportWizard} />
     </>
+  );
+}
+
+// Import Mappings Section Component
+function ImportMappingsSection() {
+  const { data: headerMappings = [] } = useHeaderMappings();
+  const { data: valueMappings = [] } = useValueMappings();
+  const { data: accountAliases = [] } = useAccountAliases();
+  const { data: accounts = [] } = useDbAccounts();
+  
+  const deleteHeaderMapping = useDeleteHeaderMapping();
+  const deleteValueMapping = useDeleteValueMapping();
+  const deleteAccountAlias = useDeleteAccountAlias();
+  
+  const getAccountName = (accountId: string) => {
+    const account = accounts.find(a => a.id === accountId);
+    return account?.name || 'Unknown';
+  };
+  
+  const hasAnyMappings = headerMappings.length > 0 || valueMappings.length > 0 || accountAliases.length > 0;
+  
+  return (
+    <div className="metric-card">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+          <Link2 className="h-5 w-5 text-primary" />
+        </div>
+        <div>
+          <h3 className="font-semibold">Import Mappings</h3>
+          <p className="text-sm text-muted-foreground">Saved mappings for future imports</p>
+        </div>
+      </div>
+      
+      {!hasAnyMappings ? (
+        <p className="text-sm text-muted-foreground">
+          No saved mappings yet. Mappings are created when you import data and choose to save them.
+        </p>
+      ) : (
+        <Accordion type="multiple" className="w-full">
+          {/* Header Mappings */}
+          {headerMappings.length > 0 && (
+            <AccordionItem value="headers">
+              <AccordionTrigger className="text-sm">
+                Header Mappings ({headerMappings.length})
+              </AccordionTrigger>
+              <AccordionContent>
+                <ScrollArea className="max-h-48">
+                  <div className="space-y-2">
+                    {headerMappings.map(hm => (
+                      <div key={hm.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-lg">
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="font-mono text-xs bg-background px-1.5 py-0.5 rounded">{hm.csv_header}</span>
+                          <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                          <Badge variant="outline" className="text-xs">
+                            {hm.target_object}.{hm.target_field}
+                          </Badge>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => deleteHeaderMapping.mutate(hm.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </AccordionContent>
+            </AccordionItem>
+          )}
+          
+          {/* Value Mappings */}
+          {valueMappings.length > 0 && (
+            <AccordionItem value="values">
+              <AccordionTrigger className="text-sm">
+                Value Mappings ({valueMappings.length})
+              </AccordionTrigger>
+              <AccordionContent>
+                <ScrollArea className="max-h-48">
+                  <div className="space-y-2">
+                    {valueMappings.map(vm => (
+                      <div key={vm.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-lg">
+                        <div className="flex items-center gap-2 text-sm">
+                          <Badge variant="secondary" className="text-xs">{vm.field_name}</Badge>
+                          <span className="text-xs">"{vm.csv_value}"</span>
+                          <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-xs font-medium">{vm.app_value}</span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => deleteValueMapping.mutate(vm.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </AccordionContent>
+            </AccordionItem>
+          )}
+          
+          {/* Account Aliases */}
+          {accountAliases.length > 0 && (
+            <AccordionItem value="aliases">
+              <AccordionTrigger className="text-sm">
+                Account Aliases ({accountAliases.length})
+              </AccordionTrigger>
+              <AccordionContent>
+                <ScrollArea className="max-h-48">
+                  <div className="space-y-2">
+                    {accountAliases.map(aa => (
+                      <div key={aa.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-lg">
+                        <div className="flex items-center gap-2 text-sm">
+                          <Badge variant="outline" className="text-xs">{aa.alias_type}</Badge>
+                          <span className="text-xs">"{aa.alias_value}"</span>
+                          <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-xs font-medium">{getAccountName(aa.account_id)}</span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => deleteAccountAlias.mutate(aa.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </AccordionContent>
+            </AccordionItem>
+          )}
+        </Accordion>
+      )}
+    </div>
   );
 }
 
@@ -660,6 +818,9 @@ export default function Settings() {
           <TabsContent value="data" className="space-y-4">
             {/* Import Section */}
             <DataImportSection />
+            
+            {/* Import Mappings Section */}
+            <ImportMappingsSection />
             
             {/* Export Section */}
             <div className="metric-card">
