@@ -20,6 +20,8 @@ import type {
   TouchType,
   QuotaConfig,
 } from '@/types';
+import type { RecurringTaskTemplate } from '@/types/recurring';
+import { isDueToday } from '@/lib/recurrence';
 import { calculateAllScores } from '@/lib/calculations';
 import { DEFAULT_QUOTA_CONFIG } from '@/lib/commissionCalculations';
 
@@ -75,6 +77,13 @@ interface QuotaCompassStore {
   updateTask: (id: string, updates: Partial<Task>) => void;
   deleteTask: (id: string) => void;
   toggleTaskComplete: (id: string) => void;
+  
+  // Recurring Task Templates
+  recurringTemplates: RecurringTaskTemplate[];
+  addRecurringTemplate: (template: Omit<RecurringTaskTemplate, 'id' | 'createdAt' | 'updatedAt' | 'paused'>) => void;
+  updateRecurringTemplate: (id: string, updates: Partial<RecurringTaskTemplate>) => void;
+  deleteRecurringTemplate: (id: string) => void;
+  generateDueRecurringInstances: () => void;
   
   // Opportunities
   opportunities: Opportunity[];
@@ -586,6 +595,7 @@ export const useStore = create<QuotaCompassStore>()(
           updatedAt: new Date().toISOString(),
         };
         set((state) => ({ tasks: [...state.tasks, newTask] }));
+        return newTask;
       },
       
       updateTask: (id, updates) => {
@@ -617,6 +627,84 @@ export const useStore = create<QuotaCompassStore>()(
               : t
           ),
         }));
+      },
+      
+      // Recurring Task Templates
+      recurringTemplates: [],
+      
+      addRecurringTemplate: (template) => {
+        const newTemplate: RecurringTaskTemplate = {
+          ...template,
+          id: generateId(),
+          paused: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        set((state) => ({ recurringTemplates: [...state.recurringTemplates, newTemplate] }));
+        // Immediately try to generate an instance for today
+        setTimeout(() => get().generateDueRecurringInstances(), 0);
+      },
+      
+      updateRecurringTemplate: (id, updates) => {
+        set((state) => ({
+          recurringTemplates: state.recurringTemplates.map(t =>
+            t.id === id ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t
+          ),
+        }));
+      },
+      
+      deleteRecurringTemplate: (id) => {
+        set((state) => ({
+          recurringTemplates: state.recurringTemplates.filter(t => t.id !== id),
+        }));
+      },
+      
+      generateDueRecurringInstances: () => {
+        const { recurringTemplates, tasks, addTask } = get();
+        const todayStr = getTodayString();
+        
+        recurringTemplates.forEach(template => {
+          // Skip if there's an active (non-done, non-dropped) instance — carry forward as overdue
+          if (template.activeInstanceId) {
+            const activeTask = tasks.find(t => t.id === template.activeInstanceId);
+            if (activeTask && activeTask.status !== 'done' && activeTask.status !== 'dropped') {
+              return; // Don't create duplicate, carry forward
+            }
+          }
+          
+          const dueDate = isDueToday(template, todayStr);
+          if (!dueDate) return;
+          
+          // Create new task instance
+          const newTask: Task = {
+            id: generateId(),
+            title: template.title,
+            workstream: template.workstream,
+            status: 'next',
+            priority: template.priority,
+            dueDate: dueDate,
+            linkedAccountId: template.linkedAccountId,
+            linkedOpportunityId: template.linkedOpportunityId,
+            notes: template.notes,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          
+          // Add the task directly to state and update template tracking
+          set((state) => ({
+            tasks: [...state.tasks, newTask],
+            recurringTemplates: state.recurringTemplates.map(t =>
+              t.id === template.id
+                ? {
+                    ...t,
+                    lastGeneratedDate: todayStr,
+                    activeInstanceId: newTask.id,
+                    updatedAt: new Date().toISOString(),
+                  }
+                : t
+            ),
+          }));
+        });
       },
       
       // Opportunities
@@ -736,6 +824,7 @@ export const useStore = create<QuotaCompassStore>()(
         contacts: state.contacts,
         renewals: state.renewals,
         tasks: state.tasks,
+        recurringTemplates: state.recurringTemplates,
         focusBlocks: state.focusBlocks,
         opportunities: state.opportunities,
         quotaConfig: state.quotaConfig,

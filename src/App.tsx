@@ -11,6 +11,7 @@ import Dashboard from "./pages/Dashboard";
 import WeeklyOutreach from "./pages/WeeklyOutreach";
 import Renewals from "./pages/Renewals";
 import Tasks from "./pages/Tasks";
+import RecurringTasks from "./pages/RecurringTasks";
 import Trends from "./pages/Trends";
 import Quota from "./pages/Quota";
 import Settings from "./pages/Settings";
@@ -34,6 +35,7 @@ const App = () => (
                 <Route path="/outreach" element={<ProtectedRoute><WeeklyOutreach /></ProtectedRoute>} />
                 <Route path="/renewals" element={<ProtectedRoute><Renewals /></ProtectedRoute>} />
                 <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
+                <Route path="/recurring" element={<ProtectedRoute><RecurringTasks /></ProtectedRoute>} />
                 <Route path="/trends" element={<ProtectedRoute><Trends /></ProtectedRoute>} />
                 <Route path="/quota" element={<ProtectedRoute><Quota /></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
