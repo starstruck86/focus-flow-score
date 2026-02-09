@@ -225,6 +225,7 @@ export interface AccountContact {
   name: string;
   title: string;
   notes: string;
+  salesforceLink?: string;
 }
 
 // Account for Weekly Outreach
