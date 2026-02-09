@@ -10,25 +10,46 @@ interface WhatToDoNextProps {
   isLoading?: boolean;
 }
 
-const workflowIcons = {
+const workflowIcons: Record<string, React.ElementType> = {
   'power-hour': Phone,
+  'Power Hour': Phone,
   'tasks': CheckSquare,
+  'Tasks': CheckSquare,
   'renewals': RefreshCw,
+  'Renewals': RefreshCw,
   'outreach': Users,
+  'Outreach': Users,
+  'pipeline': Zap,
+  'Pipeline': Zap,
+  'Daily Check-In': CheckSquare,
 };
 
-const workflowColors = {
+const workflowColors: Record<string, string> = {
   'power-hour': 'bg-status-red/10 text-status-red border-status-red/20',
+  'Power Hour': 'bg-status-red/10 text-status-red border-status-red/20',
   'tasks': 'bg-primary/10 text-primary border-primary/20',
+  'Tasks': 'bg-primary/10 text-primary border-primary/20',
   'renewals': 'bg-status-yellow/10 text-status-yellow border-status-yellow/20',
+  'Renewals': 'bg-status-yellow/10 text-status-yellow border-status-yellow/20',
   'outreach': 'bg-status-green/10 text-status-green border-status-green/20',
+  'Outreach': 'bg-status-green/10 text-status-green border-status-green/20',
+  'pipeline': 'bg-primary/10 text-primary border-primary/20',
+  'Pipeline': 'bg-primary/10 text-primary border-primary/20',
+  'Daily Check-In': 'bg-muted text-muted-foreground border-muted',
 };
 
-const workflowLabels = {
+const workflowLabels: Record<string, string> = {
   'power-hour': 'Power Hour',
+  'Power Hour': 'Power Hour',
   'tasks': 'Tasks',
+  'Tasks': 'Tasks',
   'renewals': 'Renewals',
+  'Renewals': 'Renewals',
   'outreach': 'Outreach',
+  'Outreach': 'Outreach',
+  'pipeline': 'Pipeline',
+  'Pipeline': 'Pipeline',
+  'Daily Check-In': 'Check-In',
 };
 
 export function WhatToDoNext({ recommendations, isLoading }: WhatToDoNextProps) {
@@ -93,7 +114,9 @@ export function WhatToDoNext({ recommendations, isLoading }: WhatToDoNextProps) 
       
       <div className="space-y-4">
         {recommendations.map((rec, index) => {
-          const WorkflowIcon = workflowIcons[rec.workflow];
+          const WorkflowIcon = workflowIcons[rec.workflow] || Zap;
+          const colorClass = workflowColors[rec.workflow] || 'bg-muted text-muted-foreground border-border';
+          const label = workflowLabels[rec.workflow] || rec.workflow;
           
           return (
             <motion.div 
@@ -106,7 +129,7 @@ export function WhatToDoNext({ recommendations, isLoading }: WhatToDoNextProps) 
               <div className="flex items-start gap-3">
                 <div className={cn(
                   "p-2 rounded-lg border",
-                  workflowColors[rec.workflow]
+                  colorClass
                 )}>
                   <WorkflowIcon className="h-4 w-4" />
                 </div>
@@ -116,9 +139,9 @@ export function WhatToDoNext({ recommendations, isLoading }: WhatToDoNextProps) 
                     <h4 className="font-medium text-sm leading-tight">{rec.action}</h4>
                     <span className={cn(
                       "text-xs px-2 py-0.5 rounded-full whitespace-nowrap",
-                      workflowColors[rec.workflow]
+                      colorClass
                     )}>
-                      {workflowLabels[rec.workflow]}
+                      {label}
                     </span>
                   </div>
                   
