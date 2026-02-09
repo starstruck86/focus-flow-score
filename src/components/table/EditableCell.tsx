@@ -98,7 +98,7 @@ export function EditableTextCell({
   );
 }
 
-// Textarea cell - multi-line input
+// Textarea cell - multi-line input with full-width editing
 export function EditableTextareaCell({
   value,
   onChange,
@@ -117,7 +117,9 @@ export function EditableTextareaCell({
   useEffect(() => {
     if (isEditing && textareaRef.current) {
       textareaRef.current.focus();
-      textareaRef.current.select();
+      // Move cursor to end
+      const len = textareaRef.current.value.length;
+      textareaRef.current.setSelectionRange(len, len);
     }
   }, [isEditing]);
 
@@ -139,17 +141,18 @@ export function EditableTextareaCell({
 
   if (isEditing) {
     return (
-      <Textarea
-        ref={textareaRef}
-        value={editValue}
-        onChange={(e) => setEditValue(e.target.value)}
-        onBlur={handleSave}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        className={cn("min-h-[60px] text-sm resize-none", className)}
-        style={{ fieldSizing: 'content' } as React.CSSProperties}
-        rows={2}
-      />
+      <div className="w-full">
+        <Textarea
+          ref={textareaRef}
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={handleSave}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          className={cn("w-full min-h-[120px] text-sm resize-y", className)}
+          rows={6}
+        />
+      </div>
     );
   }
 
@@ -170,7 +173,7 @@ export function EditableTextareaCell({
   return (
     <div
       className={cn(
-        "group flex items-start gap-1 cursor-pointer rounded px-2 py-1 -mx-2 hover:bg-muted/50 transition-colors min-h-[28px]",
+        "group flex items-start gap-1 cursor-pointer rounded px-2 py-1 -mx-2 hover:bg-muted/50 transition-colors min-h-[28px] w-full",
         className
       )}
       onClick={() => setIsEditing(true)}
