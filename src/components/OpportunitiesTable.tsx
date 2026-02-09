@@ -38,6 +38,8 @@ import { EditableDatePicker } from '@/components/EditableDatePicker';
 import { OpportunityDetailsField } from '@/components/OpportunityDetailsField';
 import { ClosedWonModal } from '@/components/quota/ClosedWonModal';
 import { OpportunityNameCell } from '@/components/table/ClickableNameCell';
+import { DisplaySelectCell } from '@/components/table/DisplaySelectCell';
+import { EditableNumberCell, EditableTextareaCell } from '@/components/table/EditableCell';
 import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
 import { format, parseISO, isToday, isPast, isThisQuarter } from 'date-fns';
 import { 
@@ -350,23 +352,40 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     }).format(amount);
   };
 
+  const STATUS_SELECT_OPTIONS = [
+    { value: 'active', label: 'Active', className: 'bg-status-green/20 text-status-green' },
+    { value: 'stalled', label: 'Stalled', className: 'bg-status-yellow/20 text-status-yellow' },
+    { value: 'closed-lost', label: 'Closed Lost', className: 'bg-status-red/20 text-status-red' },
+    { value: 'closed-won', label: 'Closed Won', className: 'bg-green-600/20 text-green-400' },
+  ];
+
+  const STAGE_SELECT_OPTIONS = [
+    { value: '', label: '—', className: 'bg-muted text-muted-foreground' },
+    { value: 'Prospect', label: '1 - Prospect', className: 'bg-blue-500/20 text-blue-400' },
+    { value: 'Discover', label: '2 - Discover', className: 'bg-cyan-500/20 text-cyan-400' },
+    { value: 'Demo', label: '3 - Demo', className: 'bg-status-yellow/20 text-status-yellow' },
+    { value: 'Proposal', label: '4 - Proposal', className: 'bg-orange-500/20 text-orange-400' },
+    { value: 'Negotiate', label: '5 - Negotiate', className: 'bg-purple-500/20 text-purple-400' },
+    { value: 'Closed Won', label: '6 - Closed Won', className: 'bg-status-green/20 text-status-green' },
+    { value: 'Closed Lost', label: '7 - Closed Lost', className: 'bg-status-red/20 text-status-red' },
+  ];
+
+  const CHURN_RISK_SELECT_OPTIONS = [
+    { value: '', label: '—', className: 'bg-muted text-muted-foreground' },
+    { value: 'low', label: '1 - Low', className: 'bg-status-green/20 text-status-green' },
+    { value: 'medium', label: '2 - Medium', className: 'bg-status-yellow/20 text-status-yellow' },
+    { value: 'high', label: '3 - High', className: 'bg-status-red/20 text-status-red' },
+    { value: 'certain', label: '4 - OOB', className: 'bg-purple-600/20 text-purple-400' },
+  ];
+
   // Cell components for reordering
   const StatusCell = ({ opp }: { opp: Opportunity }) => (
-    <TableCell>
-      <Select
+    <TableCell onClick={(e) => e.stopPropagation()}>
+      <DisplaySelectCell
         value={opp.status}
-        onValueChange={(v) => handleStatusChange(opp, v as OpportunityStatus)}
-      >
-        <SelectTrigger className="h-7 w-28 text-xs">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="active">Active</SelectItem>
-          <SelectItem value="stalled">Stalled</SelectItem>
-          <SelectItem value="closed-lost">Closed Lost</SelectItem>
-          <SelectItem value="closed-won">Closed Won</SelectItem>
-        </SelectContent>
-      </Select>
+        options={STATUS_SELECT_OPTIONS}
+        onChange={(v) => handleStatusChange(opp, v as OpportunityStatus)}
+      />
     </TableCell>
   );
 
@@ -385,65 +404,23 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     </TableCell>
   );
 
-  const ArrInput = ({ opp }: { opp: Opportunity }) => {
-    const [isEditing, setIsEditing] = useState(false);
-    const [editValue, setEditValue] = useState(opp.arr?.toString() || '');
-
-    const handleBlur = () => {
-      setIsEditing(false);
-      updateOpportunity(opp.id, { arr: editValue ? Number(editValue) : undefined });
-    };
-
-    if (isEditing) {
-      return (
-        <Input
-          type="number"
-          value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          onBlur={handleBlur}
-          onKeyDown={(e) => e.key === 'Enter' && handleBlur()}
-          autoFocus
-          className="h-7 w-28 text-xs"
-        />
-      );
-    }
-
-    return (
-      <button
-        onClick={() => {
-          setEditValue(opp.arr?.toString() || '');
-          setIsEditing(true);
-        }}
-        className="h-7 w-28 text-xs text-left px-3 py-1 rounded-md border border-transparent hover:border-input"
-      >
-        {formatCurrency(opp.arr)}
-      </button>
-    );
-  };
-
   const ArrCell = ({ opp }: { opp: Opportunity }) => (
-    <TableCell>
-      <ArrInput opp={opp} />
+    <TableCell onClick={(e) => e.stopPropagation()}>
+      <EditableNumberCell
+        value={opp.arr || 0}
+        onChange={(v) => updateOpportunity(opp.id, { arr: v || undefined })}
+        format="currency"
+      />
     </TableCell>
   );
 
   const ChurnRiskCell = ({ opp }: { opp: Opportunity }) => (
-    <TableCell>
-      <Select
-        value={opp.churnRisk || 'none'}
-        onValueChange={(v) => updateOpportunity(opp.id, { churnRisk: (v === 'none' ? undefined : v) as ChurnRisk | undefined })}
-      >
-        <SelectTrigger className={cn("h-7 w-24 text-xs", opp.churnRisk && CHURN_RISK_COLORS[opp.churnRisk])}>
-          <SelectValue placeholder="—" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="none">—</SelectItem>
-          <SelectItem value="certain">Certain</SelectItem>
-          <SelectItem value="low">Low</SelectItem>
-          <SelectItem value="medium">Medium</SelectItem>
-          <SelectItem value="high">High</SelectItem>
-        </SelectContent>
-      </Select>
+    <TableCell onClick={(e) => e.stopPropagation()}>
+      <DisplaySelectCell
+        value={opp.churnRisk || ''}
+        options={CHURN_RISK_SELECT_OPTIONS}
+        onChange={(v) => updateOpportunity(opp.id, { churnRisk: (v === '' ? undefined : v) as ChurnRisk | undefined })}
+      />
     </TableCell>
   );
 
@@ -478,21 +455,12 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   );
 
   const StageCell = ({ opp }: { opp: Opportunity }) => (
-    <TableCell>
-      <Select
-        value={opp.stage || 'none'}
-        onValueChange={(v) => updateOpportunity(opp.id, { stage: (v === 'none' ? '' : v) as OpportunityStage })}
-      >
-        <SelectTrigger className="h-7 w-24 text-xs">
-          <SelectValue placeholder="—" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="none">—</SelectItem>
-          {STAGE_OPTIONS.filter(s => s).map(stage => (
-            <SelectItem key={stage} value={stage}>{STAGE_LABELS[stage]}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+    <TableCell onClick={(e) => e.stopPropagation()}>
+      <DisplaySelectCell
+        value={opp.stage || ''}
+        options={STAGE_SELECT_OPTIONS}
+        onChange={(v) => updateOpportunity(opp.id, { stage: v as OpportunityStage })}
+      />
     </TableCell>
   );
 
@@ -502,25 +470,14 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     </TableCell>
   );
 
-  const NotesCell = ({ opp, expanded = false }: { opp: Opportunity; expanded?: boolean }) => (
-    <TableCell className="align-top py-3">
-      {expanded ? (
-        <Textarea
-          value={opp.notes || ''}
-          onChange={(e) => updateOpportunity(opp.id, { notes: e.target.value })}
-          placeholder="Add notes..."
-          className="min-h-[36px] text-sm resize-none py-2 px-3 w-full"
-          style={{ fieldSizing: 'content' } as React.CSSProperties}
-        />
-      ) : (
-        <Textarea
-          value={opp.notes || ''}
-          onChange={(e) => updateOpportunity(opp.id, { notes: e.target.value })}
-          placeholder="Add notes..."
-          className="min-h-[32px] h-8 text-xs resize-none py-1"
-          rows={1}
-        />
-      )}
+  const NotesCell = ({ opp }: { opp: Opportunity }) => (
+    <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+      <EditableTextareaCell
+        value={opp.notes || ''}
+        onChange={(v) => updateOpportunity(opp.id, { notes: v })}
+        placeholder="Add notes..."
+        emptyText="Add Notes"
+      />
     </TableCell>
   );
 
@@ -570,20 +527,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               </Button>
             </TableCell>
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-              <Select
+              <DisplaySelectCell
                 value={opp.status}
-                onValueChange={(v) => handleStatusChange(opp, v as OpportunityStatus)}
-              >
-                <SelectTrigger className="h-8 w-28 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="stalled">Stalled</SelectItem>
-                  <SelectItem value="closed-lost">Closed Lost</SelectItem>
-                  <SelectItem value="closed-won">Closed Won</SelectItem>
-                </SelectContent>
-              </Select>
+                options={STATUS_SELECT_OPTIONS}
+                onChange={(v) => handleStatusChange(opp, v as OpportunityStatus)}
+              />
             </TableCell>
             <TableCell className="align-top py-3">
               <OpportunityNameCell
@@ -598,25 +546,19 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               />
             </TableCell>
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-              <ArrInput opp={opp} />
+              <EditableNumberCell
+                value={opp.arr || 0}
+                onChange={(v) => updateOpportunity(opp.id, { arr: v || undefined })}
+                format="currency"
+              />
             </TableCell>
             {showChurnRisk && (
               <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-                <Select
-                  value={opp.churnRisk || 'none'}
-                  onValueChange={(v) => updateOpportunity(opp.id, { churnRisk: (v === 'none' ? undefined : v) as ChurnRisk | undefined })}
-                >
-                  <SelectTrigger className={cn("h-8 w-24 text-xs", opp.churnRisk && CHURN_RISK_COLORS[opp.churnRisk])}>
-                    <SelectValue placeholder="—" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">—</SelectItem>
-                    <SelectItem value="certain">Certain</SelectItem>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                  </SelectContent>
-                </Select>
+                <DisplaySelectCell
+                  value={opp.churnRisk || ''}
+                  options={CHURN_RISK_SELECT_OPTIONS}
+                  onChange={(v) => updateOpportunity(opp.id, { churnRisk: (v === '' ? undefined : v) as ChurnRisk | undefined })}
+                />
               </TableCell>
             )}
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
@@ -629,20 +571,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               />
             </TableCell>
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-              <Select
-                value={opp.stage || 'none'}
-                onValueChange={(v) => updateOpportunity(opp.id, { stage: (v === 'none' ? '' : v) as OpportunityStage })}
-              >
-                <SelectTrigger className="h-8 w-24 text-xs">
-                  <SelectValue placeholder="—" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">—</SelectItem>
-                  {STAGE_OPTIONS.filter(s => s).map(stage => (
-                    <SelectItem key={stage} value={stage}>{STAGE_LABELS[stage]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <DisplaySelectCell
+                value={opp.stage || ''}
+                options={STAGE_SELECT_OPTIONS}
+                onChange={(v) => updateOpportunity(opp.id, { stage: v as OpportunityStage })}
+              />
             </TableCell>
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <DropdownMenu>
@@ -714,39 +647,25 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               />
             </TableCell>
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-              <Select
+              <DisplaySelectCell
                 value={opp.status}
-                onValueChange={(v) => handleStatusChange(opp, v as OpportunityStatus)}
-              >
-                <SelectTrigger className="h-8 w-28 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="stalled">Stalled</SelectItem>
-                  <SelectItem value="closed-lost">Closed Lost</SelectItem>
-                  <SelectItem value="closed-won">Closed Won</SelectItem>
-                </SelectContent>
-              </Select>
+                options={STATUS_SELECT_OPTIONS}
+                onChange={(v) => handleStatusChange(opp, v as OpportunityStatus)}
+              />
             </TableCell>
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-              <Select
-                value={opp.stage || 'none'}
-                onValueChange={(v) => updateOpportunity(opp.id, { stage: (v === 'none' ? '' : v) as OpportunityStage })}
-              >
-                <SelectTrigger className="h-8 w-24 text-xs">
-                  <SelectValue placeholder="—" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">—</SelectItem>
-                  {STAGE_OPTIONS.filter(s => s).map(stage => (
-                    <SelectItem key={stage} value={stage}>{STAGE_LABELS[stage]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <DisplaySelectCell
+                value={opp.stage || ''}
+                options={STAGE_SELECT_OPTIONS}
+                onChange={(v) => updateOpportunity(opp.id, { stage: v as OpportunityStage })}
+              />
             </TableCell>
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-              <ArrInput opp={opp} />
+              <EditableNumberCell
+                value={opp.arr || 0}
+                onChange={(v) => updateOpportunity(opp.id, { arr: v || undefined })}
+                format="currency"
+              />
             </TableCell>
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <EditableDatePicker

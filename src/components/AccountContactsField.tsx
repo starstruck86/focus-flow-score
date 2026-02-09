@@ -1,13 +1,26 @@
-import { forwardRef } from 'react';
+import { forwardRef, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
+import { EditableTextCell, EditableTextareaCell } from '@/components/table/EditableCell';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 
 export interface AccountContact {
   id: string;
   name: string;
   title: string;
   notes: string;
+}
+
+function generateContactId(): string {
+  return Math.random().toString(36).substring(2, 9);
 }
 
 interface AccountContactsFieldProps {
@@ -18,121 +31,154 @@ interface AccountContactsFieldProps {
   defaultOpen?: boolean;
 }
 
-function generateContactId(): string {
-  return Math.random().toString(36).substring(2, 9);
-}
-
-const DEFAULT_CONTACTS_COUNT = 3;
-
 export const AccountContactsField = forwardRef<HTMLDivElement, AccountContactsFieldProps>(function AccountContactsField({ 
   contacts, 
   onChange, 
   companyNotes = '', 
   onCompanyNotesChange,
-  defaultOpen = false,
 }, ref) {
-  // Ensure we always have at least DEFAULT_CONTACTS_COUNT contacts
-  const displayContacts = contacts.length >= DEFAULT_CONTACTS_COUNT 
-    ? contacts 
-    : [
-        ...contacts,
-        ...Array.from({ length: DEFAULT_CONTACTS_COUNT - contacts.length }, () => ({
-          id: generateContactId(),
-          name: '',
-          title: '',
-          notes: '',
-        })),
-      ];
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newContact, setNewContact] = useState({ name: '', title: '', notes: '' });
 
-  const handleContactChange = (index: number, field: keyof AccountContact, value: string) => {
-    const newContacts = [...displayContacts];
-    newContacts[index] = { ...newContacts[index], [field]: value };
-    onChange(newContacts.filter(c => c.name.trim() || c.title.trim() || c.notes.trim()));
+  const realContacts = contacts.filter(c => c.name.trim());
+
+  const handleContactChange = (id: string, field: keyof AccountContact, value: string) => {
+    const updated = contacts.map(c => c.id === id ? { ...c, [field]: value } : c);
+    onChange(updated.filter(c => c.name.trim() || c.title.trim() || c.notes.trim()));
+  };
+
+  const handleRemoveContact = (id: string) => {
+    onChange(contacts.filter(c => c.id !== id));
   };
 
   const handleAddContact = () => {
-    onChange([
-      ...displayContacts,
-      { id: generateContactId(), name: '', title: '', notes: '' },
-    ]);
-  };
-
-  const handleRemoveContact = (index: number) => {
-    const newContacts = displayContacts.filter((_, i) => i !== index);
-    onChange(newContacts.filter(c => c.name.trim() || c.title.trim() || c.notes.trim()));
+    if (!newContact.name.trim()) return;
+    onChange([...contacts, { ...newContact, id: generateContactId() }]);
+    setNewContact({ name: '', title: '', notes: '' });
+    setShowAddModal(false);
   };
 
   return (
-    <div className="pt-3 space-y-3">
-      {/* Company Notes */}
+    <div className="pt-3 space-y-3" ref={ref}>
+      {/* Company Notes - display-first */}
       {onCompanyNotesChange && (
         <div className="pb-3 border-b border-border/50">
           <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
             Company Notes
           </label>
-          <Textarea
+          <EditableTextareaCell
             value={companyNotes}
-            onChange={(e) => onCompanyNotesChange(e.target.value)}
-            placeholder="General account notes, context, history..."
-            className="min-h-[60px] text-sm resize-none py-2 px-3 field-sizing-content"
-            rows={2}
+            onChange={onCompanyNotesChange}
+            placeholder="Add company notes..."
+            emptyText="Add Notes"
           />
         </div>
       )}
       
-      {/* Contacts */}
-      <div className="space-y-2">
+      {/* Contacts - display-first */}
+      <div className="space-y-1">
         <label className="text-xs font-medium text-muted-foreground block">
-          Contacts
+          Contacts {realContacts.length > 0 && `(${realContacts.length})`}
         </label>
-        {displayContacts.map((contact, index) => (
-          <div
-            key={contact.id}
-            className="flex items-start gap-2 group"
-          >
-            <Textarea
-              value={contact.name}
-              onChange={(e) => handleContactChange(index, 'name', e.target.value)}
-              placeholder="Contact name"
-              className="min-h-[44px] text-sm resize-none py-2 px-3 w-[25%] shrink-0 field-sizing-content"
-              rows={1}
-            />
-            <Textarea
-              value={contact.title}
-              onChange={(e) => handleContactChange(index, 'title', e.target.value)}
-              placeholder="Title / Role"
-              className="min-h-[44px] text-sm resize-none py-2 px-3 w-[25%] shrink-0 field-sizing-content"
-              rows={1}
-            />
-            <Textarea
-              value={contact.notes}
-              onChange={(e) => handleContactChange(index, 'notes', e.target.value)}
-              placeholder="Notes about this contact..."
-              className="min-h-[44px] text-sm resize-none py-2 px-3 flex-1 field-sizing-content"
-              rows={1}
-            />
-            {displayContacts.length > DEFAULT_CONTACTS_COUNT && (
+        {realContacts.length === 0 ? (
+          <div className="text-xs text-muted-foreground/60 py-1">No contacts added yet.</div>
+        ) : (
+          realContacts.map((contact) => (
+            <div
+              key={contact.id}
+              className="group flex items-start gap-3 py-1.5 px-2 -mx-2 rounded hover:bg-muted/30 transition-colors"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <EditableTextCell
+                    value={contact.name}
+                    onChange={(v) => handleContactChange(contact.id, 'name', v)}
+                    emptyText="Name"
+                  />
+                  {contact.title && (
+                    <span className="text-xs text-muted-foreground">•</span>
+                  )}
+                  <EditableTextCell
+                    value={contact.title}
+                    onChange={(v) => handleContactChange(contact.id, 'title', v)}
+                    emptyText="Title"
+                    className="text-muted-foreground"
+                  />
+                </div>
+                {contact.notes && (
+                  <EditableTextCell
+                    value={contact.notes}
+                    onChange={(v) => handleContactChange(contact.id, 'notes', v)}
+                    emptyText="Notes"
+                    className="text-muted-foreground text-xs mt-0.5"
+                  />
+                )}
+              </div>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1"
-                onClick={() => handleRemoveContact(index)}
+                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                onClick={() => handleRemoveContact(contact.id)}
               >
-                <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
               </Button>
-            )}
-          </div>
-        ))}
+            </div>
+          ))
+        )}
       </div>
       <Button
         variant="ghost"
         size="sm"
-        className="h-6 text-xs w-full text-muted-foreground hover:text-foreground"
-        onClick={handleAddContact}
+        className="h-6 text-xs text-muted-foreground hover:text-foreground"
+        onClick={() => setShowAddModal(true)}
       >
         <Plus className="h-3 w-3 mr-1" />
         Add contact
       </Button>
+
+      {/* Add Contact Modal */}
+      <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base">Add Contact</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label className="text-xs">Name *</Label>
+              <Input
+                value={newContact.name}
+                onChange={(e) => setNewContact({ ...newContact, name: e.target.value })}
+                placeholder="Contact name"
+                autoFocus
+                className="h-8 text-sm mt-1"
+                onKeyDown={(e) => e.key === 'Enter' && handleAddContact()}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Title / Role</Label>
+              <Input
+                value={newContact.title}
+                onChange={(e) => setNewContact({ ...newContact, title: e.target.value })}
+                placeholder="VP of Marketing"
+                className="h-8 text-sm mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Notes</Label>
+              <Input
+                value={newContact.notes}
+                onChange={(e) => setNewContact({ ...newContact, notes: e.target.value })}
+                placeholder="Optional notes..."
+                className="h-8 text-sm mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setShowAddModal(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleAddContact} disabled={!newContact.name.trim()}>Add</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 });
