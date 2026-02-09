@@ -96,11 +96,12 @@ const QUICK_LINKS = {
 };
 
 const ACCOUNT_STATUS_COLORS: Record<AccountStatus, string> = {
-  'inactive': 'bg-muted text-muted-foreground',
-  'researched': 'bg-blue-500/20 text-blue-400',
+  'researching': 'bg-blue-500/20 text-blue-400',
+  'prepped': 'bg-cyan-500/20 text-cyan-400',
   'active': 'bg-status-green/20 text-status-green',
-  'meeting-booked': 'bg-primary/20 text-primary',
+  'inactive': 'bg-muted text-muted-foreground',
   'disqualified': 'bg-status-red/20 text-status-red',
+  'meeting-booked': 'bg-primary/20 text-primary',
 };
 
 const TIER_COLORS: Record<AccountTier, string> = {
@@ -149,28 +150,35 @@ function AccountsStatusSummary() {
   const { accounts } = useStore();
   
   const statusSummary = useMemo(() => {
-    const statuses: AccountStatus[] = ['inactive', 'researched', 'active', 'meeting-booked', 'disqualified'];
+    const statuses: AccountStatus[] = ['researching', 'prepped', 'active', 'inactive', 'disqualified', 'meeting-booked'];
     const summary: Record<AccountStatus, number> = {
-      'inactive': 0,
-      'researched': 0,
+      'researching': 0,
+      'prepped': 0,
       'active': 0,
-      'meeting-booked': 0,
+      'inactive': 0,
       'disqualified': 0,
+      'meeting-booked': 0,
     };
     
     accounts.forEach(a => {
-      summary[a.accountStatus]++;
+      if (summary[a.accountStatus] !== undefined) {
+        summary[a.accountStatus]++;
+      } else {
+        // Map legacy statuses
+        summary['inactive']++;
+      }
     });
     
     return summary;
   }, [accounts]);
 
   const statusLabels: Record<AccountStatus, string> = {
-    'inactive': 'Inactive',
-    'researched': 'Researched',
-    'active': 'Active',
-    'meeting-booked': 'Meeting Booked',
-    'disqualified': 'Disqualified',
+    'researching': '1 - Researching',
+    'prepped': '2 - Prepped',
+    'active': '3 - Active',
+    'inactive': '4 - Inactive',
+    'disqualified': '5 - Disqualified',
+    'meeting-booked': '6 - Meeting Booked',
   };
 
   const totalCount = Object.values(statusSummary).reduce((sum, c) => sum + c, 0);
@@ -185,8 +193,8 @@ function AccountsStatusSummary() {
       </div>
       
       {/* Status Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-        {(['inactive', 'researched', 'active', 'meeting-booked', 'disqualified'] as AccountStatus[]).map(status => (
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {(['researching', 'prepped', 'active', 'inactive', 'disqualified', 'meeting-booked'] as AccountStatus[]).map(status => (
           <div 
             key={status} 
             className={cn(
@@ -287,15 +295,16 @@ function OpportunitiesStageSummary() {
 }
 
 // Status order for sorting (NEW numbered labels)
-const STATUS_ORDER: AccountStatus[] = ['active', 'researched', 'inactive', 'disqualified', 'meeting-booked'];
+const STATUS_ORDER: AccountStatus[] = ['researching', 'prepped', 'active', 'inactive', 'disqualified', 'meeting-booked'];
 
 // Status options for select dropdown with numbered labels
 const STATUS_OPTIONS = [
-  { value: 'active', label: '1-Active', className: 'bg-status-green/20 text-status-green' },
-  { value: 'researched', label: '2-Researched', className: 'bg-blue-500/20 text-blue-400' },
-  { value: 'inactive', label: '3-Inactive', className: 'bg-muted text-muted-foreground' },
-  { value: 'disqualified', label: '4-Disqualified', className: 'bg-status-red/20 text-status-red' },
-  { value: 'meeting-booked', label: '5-Meeting Booked', className: 'bg-primary/20 text-primary' },
+  { value: 'researching', label: '1 - Researching', className: 'bg-blue-500/20 text-blue-400' },
+  { value: 'prepped', label: '2 - Prepped', className: 'bg-cyan-500/20 text-cyan-400' },
+  { value: 'active', label: '3 - Active', className: 'bg-status-green/20 text-status-green' },
+  { value: 'inactive', label: '4 - Inactive', className: 'bg-muted text-muted-foreground' },
+  { value: 'disqualified', label: '5 - Disqualified', className: 'bg-status-red/20 text-status-red' },
+  { value: 'meeting-booked', label: '6 - Meeting Booked', className: 'bg-primary/20 text-primary' },
 ];
 
 // Tier options for select dropdown  
@@ -395,7 +404,9 @@ export default function WeeklyOutreach() {
           case 'accountstatus':
             const statusMap: Record<string, AccountStatus> = {
               'inactive': 'inactive',
-              'researched': 'researched',
+              'researched': 'researching',
+              'researching': 'researching',
+              'prepped': 'prepped',
               'active': 'active',
               'meeting booked': 'meeting-booked',
               'meeting-booked': 'meeting-booked',
@@ -791,11 +802,12 @@ export default function WeeklyOutreach() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="inactive">Inactive</SelectItem>
-                            <SelectItem value="researched">Researched</SelectItem>
-                            <SelectItem value="active">Active</SelectItem>
-                            <SelectItem value="meeting-booked">Meeting Booked</SelectItem>
-                            <SelectItem value="disqualified">Disqualified</SelectItem>
+                            <SelectItem value="researching">1 - Researching</SelectItem>
+                            <SelectItem value="prepped">2 - Prepped</SelectItem>
+                            <SelectItem value="active">3 - Active</SelectItem>
+                            <SelectItem value="inactive">4 - Inactive</SelectItem>
+                            <SelectItem value="disqualified">5 - Disqualified</SelectItem>
+                            <SelectItem value="meeting-booked">6 - Meeting Booked</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -867,16 +879,17 @@ export default function WeeklyOutreach() {
                 </SelectContent>
               </Select>
               <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-36">
+                <SelectTrigger className="w-40">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                  <SelectItem value="researched">Researched</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="meeting-booked">Meeting Booked</SelectItem>
-                  <SelectItem value="disqualified">Disqualified</SelectItem>
+                  <SelectItem value="researching">1 - Researching</SelectItem>
+                  <SelectItem value="prepped">2 - Prepped</SelectItem>
+                  <SelectItem value="active">3 - Active</SelectItem>
+                  <SelectItem value="inactive">4 - Inactive</SelectItem>
+                  <SelectItem value="meeting-booked">6 - Meeting Booked</SelectItem>
+                  <SelectItem value="disqualified">5 - Disqualified</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -3,21 +3,23 @@ import type { AccountStatus, AccountTier, ChurnRisk } from '@/types';
 import type { SortConfig } from '@/components/table/SortableHeader';
 
 // ====== STATUS SORT ORDER (with display labels) ======
-// Status order: 1-Active, 2-Researched, 3-Inactive, 4-Disqualified, 5-Meeting Booked
+// Status order: 1-Researching, 2-Prepped, 3-Active, 4-Inactive, 5-Disqualified, 6-Meeting Booked
 export const ACCOUNT_STATUS_SORT_RANK: Record<AccountStatus, number> = {
-  'active': 1,
-  'researched': 2,
-  'inactive': 3,
-  'disqualified': 4,
-  'meeting-booked': 5,
+  'researching': 1,
+  'prepped': 2,
+  'active': 3,
+  'inactive': 4,
+  'disqualified': 5,
+  'meeting-booked': 6,
 };
 
 export const ACCOUNT_STATUS_DISPLAY_LABELS: Record<AccountStatus, string> = {
-  'active': '1-Active',
-  'researched': '2-Researched',
-  'inactive': '3-Inactive',
-  'disqualified': '4-Disqualified',
-  'meeting-booked': '5-Meeting Booked',
+  'researching': '1 - Researching',
+  'prepped': '2 - Prepped',
+  'active': '3 - Active',
+  'inactive': '4 - Inactive',
+  'disqualified': '5 - Disqualified',
+  'meeting-booked': '6 - Meeting Booked',
 };
 
 // ====== TIER SORT ORDER ======

@@ -35,7 +35,7 @@ export function AccountContactsField({
   onChange, 
   companyNotes = '', 
   onCompanyNotesChange,
-  defaultOpen = true,
+  defaultOpen = false,
 }: AccountContactsFieldProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
 

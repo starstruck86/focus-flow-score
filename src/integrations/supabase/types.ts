@@ -319,6 +319,8 @@ export type Database = {
           distractions: string | null
           energy: number | null
           expansion_touchpoints: number
+          first_call_logged: boolean | null
+          first_call_time: string | null
           focus_mode: string
           focus_quality: number | null
           goal_met: boolean
@@ -344,6 +346,9 @@ export type Database = {
           user_id: string | null
           what_drained_you: string | null
           what_worked_today: string | null
+          workday_end_time: string | null
+          workday_focus: string | null
+          workday_start_time: string | null
         }
         Insert: {
           account_deep_work_minutes?: number
@@ -368,6 +373,8 @@ export type Database = {
           distractions?: string | null
           energy?: number | null
           expansion_touchpoints?: number
+          first_call_logged?: boolean | null
+          first_call_time?: string | null
           focus_mode?: string
           focus_quality?: number | null
           goal_met?: boolean
@@ -393,6 +400,9 @@ export type Database = {
           user_id?: string | null
           what_drained_you?: string | null
           what_worked_today?: string | null
+          workday_end_time?: string | null
+          workday_focus?: string | null
+          workday_start_time?: string | null
         }
         Update: {
           account_deep_work_minutes?: number
@@ -417,6 +427,8 @@ export type Database = {
           distractions?: string | null
           energy?: number | null
           expansion_touchpoints?: number
+          first_call_logged?: boolean | null
+          first_call_time?: string | null
           focus_mode?: string
           focus_quality?: number | null
           goal_met?: boolean
@@ -442,6 +454,9 @@ export type Database = {
           user_id?: string | null
           what_drained_you?: string | null
           what_worked_today?: string | null
+          workday_end_time?: string | null
+          workday_focus?: string | null
+          workday_start_time?: string | null
         }
         Relationships: []
       }
