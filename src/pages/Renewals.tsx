@@ -12,7 +12,9 @@ import {
   DollarSign,
   Upload,
   FileSpreadsheet,
-  Download
+  Download,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { StreakChip } from '@/components/StreakChip';
@@ -158,6 +160,9 @@ export default function Renewals() {
   
   // Sort hook for renewals table
   const { sortConfig: renewalSortConfig, handleSort: handleRenewalSort } = useTableSort();
+  
+  // Track which renewal is expanded to show details
+  const [expandedRenewalId, setExpandedRenewalId] = useState<string | null>(null);
   
   const [newRenewal, setNewRenewal] = useState<Partial<Renewal>>({
     healthStatus: 'green',
@@ -889,11 +894,12 @@ export default function Renewals() {
                 <Table className="min-w-[1600px]">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
+                      <TableHead className="w-[3%]"></TableHead>
                       <SortableHeader 
                         sortKey="accountName" 
                         currentSort={renewalSortConfig} 
                         onSort={handleRenewalSort}
-                        className="w-[14%]"
+                        className="w-[13%]"
                       >
                         Account Name
                       </SortableHeader>
@@ -938,7 +944,24 @@ export default function Renewals() {
                   <TableBody>
                     {quarterRenewals.map((renewal) => (
                       <React.Fragment key={renewal.id}>
-                        <TableRow className="hover:bg-muted/30">
+                        <TableRow className={cn(
+                          "hover:bg-muted/30",
+                          expandedRenewalId === renewal.id && "bg-muted/20"
+                        )}>
+                          <TableCell className="align-top py-3">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8"
+                              onClick={() => setExpandedRenewalId(expandedRenewalId === renewal.id ? null : renewal.id)}
+                            >
+                              {expandedRenewalId === renewal.id ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TableCell>
                           <TableCell className="align-top py-3">
                             <AccountNameCell 
                               name={renewal.accountName} 
@@ -1023,32 +1046,35 @@ export default function Renewals() {
                             </DropdownMenu>
                           </TableCell>
                         </TableRow>
-                        <TableRow className="hover:bg-transparent border-b-2">
-                          <TableCell colSpan={9} className="pt-0 pb-3">
-                            <RenewalDetailsField
-                              contacts={renewal.accountContacts || []}
-                              onChange={(contacts) => updateRenewal(renewal.id, { accountContacts: contacts })}
-                              companyNotes={renewal.notes || ''}
-                              onCompanyNotesChange={(notes) => updateRenewal(renewal.id, { notes })}
-                              entitlements={renewal.entitlements || ''}
-                              onEntitlementsChange={(v) => updateRenewal(renewal.id, { entitlements: v })}
-                              usage={renewal.usage || ''}
-                              onUsageChange={(v) => updateRenewal(renewal.id, { usage: v })}
-                              term={renewal.term || ''}
-                              onTermChange={(v) => updateRenewal(renewal.id, { term: v })}
-                              planhatLink={renewal.planhatLink || ''}
-                              onPlanhatLinkChange={(v) => updateRenewal(renewal.id, { planhatLink: v })}
-                              currentAgreementLink={renewal.currentAgreementLink || ''}
-                              onCurrentAgreementLinkChange={(v) => updateRenewal(renewal.id, { currentAgreementLink: v })}
-                              product={renewal.product || ''}
-                              onProductChange={(v) => updateRenewal(renewal.id, { product: v })}
-                              csNotes={renewal.csNotes || ''}
-                              onCsNotesChange={(v) => updateRenewal(renewal.id, { csNotes: v })}
-                              autoRenew={renewal.autoRenew}
-                              onAutoRenewChange={(v) => updateRenewal(renewal.id, { autoRenew: v })}
-                            />
-                          </TableCell>
-                        </TableRow>
+                        {/* Details row - only visible when renewal is expanded */}
+                        {expandedRenewalId === renewal.id && (
+                          <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
+                            <TableCell colSpan={10} className="pt-0 pb-3">
+                              <RenewalDetailsField
+                                contacts={renewal.accountContacts || []}
+                                onChange={(contacts) => updateRenewal(renewal.id, { accountContacts: contacts })}
+                                companyNotes={renewal.notes || ''}
+                                onCompanyNotesChange={(notes) => updateRenewal(renewal.id, { notes })}
+                                entitlements={renewal.entitlements || ''}
+                                onEntitlementsChange={(v) => updateRenewal(renewal.id, { entitlements: v })}
+                                usage={renewal.usage || ''}
+                                onUsageChange={(v) => updateRenewal(renewal.id, { usage: v })}
+                                term={renewal.term || ''}
+                                onTermChange={(v) => updateRenewal(renewal.id, { term: v })}
+                                planhatLink={renewal.planhatLink || ''}
+                                onPlanhatLinkChange={(v) => updateRenewal(renewal.id, { planhatLink: v })}
+                                currentAgreementLink={renewal.currentAgreementLink || ''}
+                                onCurrentAgreementLinkChange={(v) => updateRenewal(renewal.id, { currentAgreementLink: v })}
+                                product={renewal.product || ''}
+                                onProductChange={(v) => updateRenewal(renewal.id, { product: v })}
+                                csNotes={renewal.csNotes || ''}
+                                onCsNotesChange={(v) => updateRenewal(renewal.id, { csNotes: v })}
+                                autoRenew={renewal.autoRenew}
+                                onAutoRenewChange={(v) => updateRenewal(renewal.id, { autoRenew: v })}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        )}
                       </React.Fragment>
                     ))}
                   </TableBody>
