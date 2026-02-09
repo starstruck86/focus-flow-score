@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Phone, 
@@ -12,6 +12,8 @@ import {
   Plus,
   Minus,
   AlertCircle,
+  Star,
+  Target,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -25,10 +27,17 @@ import {
 } from '@/components/ui/select';
 import type { ActivityTotals, FocusModeJournal } from '@/types/journal';
 import { cn } from '@/lib/utils';
+import { 
+  DAY_TYPE_TEMPLATES, 
+  calculateGoodDayPoints,
+  type DayTypeTemplate,
+} from '@/lib/goodDayModel';
 
 interface ActivityStepProps {
   activity: ActivityTotals;
   onChange: (activity: ActivityTotals) => void;
+  selectedTemplate?: DayTypeTemplate;
+  onTemplateChange?: (template: DayTypeTemplate) => void;
 }
 
 interface CounterFieldProps {
@@ -94,15 +103,98 @@ function CounterField({ label, value, onChange, icon: Icon, max, step = 1 }: Cou
   );
 }
 
-export function ActivityStep({ activity, onChange }: ActivityStepProps) {
+export function ActivityStep({ 
+  activity, 
+  onChange,
+  selectedTemplate = 'balanced-pd',
+  onTemplateChange,
+}: ActivityStepProps) {
   const [estimateMode, setEstimateMode] = useState(false);
   
   const updateField = <K extends keyof ActivityTotals>(field: K, value: ActivityTotals[K]) => {
     onChange({ ...activity, [field]: value });
   };
   
+  // Calculate points in real-time
+  const pointsResult = useMemo(() => calculateGoodDayPoints({
+    prospectsAdded: activity.prospectsAdded,
+    conversations: activity.conversations,
+    managerPlusMessages: activity.managerPlusMessages,
+    meetingsSet: activity.meetingsSet,
+    oppsCreated: activity.opportunitiesCreated,
+    personalDevelopment: activity.personalDevelopment,
+  }), [activity]);
+  
+  const currentTemplate = DAY_TYPE_TEMPLATES.find(t => t.id === selectedTemplate);
+  
   return (
     <div className="space-y-4">
+      {/* Points Progress - Top */}
+      <div className={cn(
+        "p-4 rounded-xl border-2 text-center",
+        pointsResult.total >= 8 
+          ? "bg-status-green/10 border-status-green/30" 
+          : "bg-primary/5 border-primary/20"
+      )}>
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <Star className={cn(
+            "h-5 w-5",
+            pointsResult.total >= 8 ? "text-status-green fill-status-green" : "text-primary"
+          )} />
+          <span className="text-2xl font-bold">
+            {pointsResult.total}
+            <span className="text-lg font-normal text-muted-foreground">/8 points</span>
+          </span>
+        </div>
+        <div className="flex items-center justify-center gap-3 text-xs text-muted-foreground">
+          {pointsResult.breakdown.prospects > 0 && (
+            <span>Prospects: {pointsResult.breakdown.prospects}pt</span>
+          )}
+          {pointsResult.breakdown.conversations > 0 && (
+            <span>Convos: {pointsResult.breakdown.conversations}pt</span>
+          )}
+          {pointsResult.breakdown.messages > 0 && (
+            <span>Msgs: {pointsResult.breakdown.messages}pt</span>
+          )}
+          {pointsResult.breakdown.meetings > 0 && (
+            <span>Mtgs: {pointsResult.breakdown.meetings}pt</span>
+          )}
+          {pointsResult.breakdown.opps > 0 && (
+            <span>Opps: {pointsResult.breakdown.opps}pt</span>
+          )}
+          {pointsResult.breakdown.pd > 0 && (
+            <span>PD: {pointsResult.breakdown.pd}pt</span>
+          )}
+        </div>
+      </div>
+      
+      {/* Day Type Template Selection */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium flex items-center gap-2">
+          <Target className="h-4 w-4" />
+          Day Type (8 points each)
+        </Label>
+        <div className="grid grid-cols-2 gap-2">
+          {DAY_TYPE_TEMPLATES.filter(t => t.id !== 'custom').map((template) => (
+            <Button
+              key={template.id}
+              size="sm"
+              variant={selectedTemplate === template.id ? 'default' : 'secondary'}
+              onClick={() => onTemplateChange?.(template.id)}
+              className="flex flex-col h-auto py-2 px-3"
+            >
+              <span className="font-medium">{template.name}</span>
+              <span className="text-[10px] opacity-70 font-normal">{template.description}</span>
+            </Button>
+          ))}
+        </div>
+        {currentTemplate && currentTemplate.id !== 'custom' && (
+          <p className="text-xs text-muted-foreground">
+            Target: {currentTemplate.prospectsAdded} prospects, {currentTemplate.conversations} convos, {currentTemplate.managerPlusMessages} msgs
+          </p>
+        )}
+      </div>
+      
       {/* Estimate Mode Toggle */}
       <div className="flex items-center gap-2 p-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
         <AlertCircle className="h-4 w-4 text-amber-500" />

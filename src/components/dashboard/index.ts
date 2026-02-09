@@ -7,3 +7,6 @@ export { PerformanceSnapshot } from './PerformanceSnapshot';
 export { CommissionSnapshot } from './CommissionSnapshot';
 export { SalesAgeDetailModal } from './SalesAgeDetailModal';
 export { CheckInBanner } from './CheckInBanner';
+export { CommissionPacingTile } from './CommissionPacingTile';
+export { CommissionPacingDetailModal } from './CommissionPacingDetailModal';
+export { ExpectedVsActualCard } from './ExpectedVsActualCard';
