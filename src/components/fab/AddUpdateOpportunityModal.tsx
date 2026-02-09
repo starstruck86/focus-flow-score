@@ -5,7 +5,18 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -34,7 +45,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { Target, Building2, Check, ChevronsUpDown, Plus, Pencil, RefreshCw } from 'lucide-react';
+import { Target, Building2, Check, ChevronsUpDown, Plus, Pencil, RefreshCw, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { 
   OpportunityStatus, 
@@ -95,6 +106,10 @@ export function AddUpdateOpportunityModal({
   const [accountSelectOpen, setAccountSelectOpen] = useState(false);
   const [renewalSelectOpen, setRenewalSelectOpen] = useState(false);
   
+  // Multi-opp confirmation
+  const [showMultiOppConfirm, setShowMultiOppConfirm] = useState(false);
+  const [existingOppCount, setExistingOppCount] = useState(0);
+  
   // Form state
   const [opportunityType, setOpportunityType] = useState<OpportunityType>('new-logo');
   const [selectedOppId, setSelectedOppId] = useState('');
@@ -127,7 +142,10 @@ export function AddUpdateOpportunityModal({
         setMode(initialMode);
         if (initialMode === 'create') {
           resetForm();
-          if (prefillAccountId) setAccountId(prefillAccountId);
+          if (prefillAccountId) {
+            setAccountId(prefillAccountId);
+            inheritAccountData(prefillAccountId);
+          }
           if (prefillAccountName) setAccountName(prefillAccountName);
           if (prefillRenewalId) {
             setOpportunityType('renewal');
@@ -159,6 +177,36 @@ export function AddUpdateOpportunityModal({
     setNextStep('');
     setNotes('');
     setChurnRisk('low');
+    setShowMultiOppConfirm(false);
+  };
+
+  // Auto-inherit account data when an account is selected
+  const inheritAccountData = (acctId: string) => {
+    const account = accounts.find(a => a.id === acctId);
+    if (!account) return;
+    
+    setAccountId(acctId);
+    setAccountName(account.name);
+    
+    // Set motion-based defaults
+    if (account.motion === 'renewal') {
+      setOpportunityType('renewal');
+    }
+  };
+
+  // Handle account selection with multi-opp check
+  const handleAccountSelect = (acctId: string) => {
+    inheritAccountData(acctId);
+    setAccountSelectOpen(false);
+    
+    // Check for existing opportunities on this account
+    if (mode === 'create') {
+      const existingOpps = opportunities.filter(o => o.accountId === acctId);
+      if (existingOpps.length > 0) {
+        setExistingOppCount(existingOpps.length);
+        setShowMultiOppConfirm(true);
+      }
+    }
   };
   
   const loadRenewalDefaults = (renewalId: string) => {
@@ -166,6 +214,10 @@ export function AddUpdateOpportunityModal({
     if (renewal) {
       setName(`${renewal.accountName} Renewal`);
       setAccountName(renewal.accountName);
+      // Set account_id from renewal if available
+      if (renewal.accountId) {
+        setAccountId(renewal.accountId);
+      }
       // Set prior contract ARR from renewal's current ARR
       setPriorContractArr(renewal.arr?.toString() || '');
       setChurnRisk(renewal.churnRisk || 'low');
@@ -220,6 +272,12 @@ export function AddUpdateOpportunityModal({
     accounts.find(a => a.id === accountId),
     [accounts, accountId]
   );
+
+  // Get existing opps for the selected account (for the confirmation dialog list)
+  const existingAccountOpps = useMemo(() => {
+    if (!accountId) return [];
+    return opportunities.filter(o => o.accountId === accountId);
+  }, [opportunities, accountId]);
   
   const validateClosedWon = (): string | null => {
     if (status !== 'closed-won') return null;
@@ -289,7 +347,6 @@ export function AddUpdateOpportunityModal({
       
       // If creating a renewal opportunity, link it to the renewal
       if (opportunityType === 'renewal' && selectedRenewalId) {
-        // We need to get the newly created opportunity and link it
         setTimeout(() => {
           const { opportunities: updatedOpps } = useStore.getState();
           const newOpp = updatedOpps.find(o => 
@@ -315,353 +372,417 @@ export function AddUpdateOpportunityModal({
     
     onOpenChange(false);
   };
+
+  // Inherited account info display
+  const InheritedAccountInfo = () => {
+    if (!selectedAccount || mode !== 'create') return null;
+    
+    const hasLinks = selectedAccount.website || selectedAccount.salesforceLink || selectedAccount.planhatLink || selectedAccount.currentAgreementLink;
+    const hasTech = selectedAccount.techStack?.length > 0 || selectedAccount.marTech;
+    
+    if (!hasLinks && !hasTech) return null;
+    
+    return (
+      <div className="p-3 bg-muted/30 rounded-lg border border-border/50 space-y-2">
+        <Label className="text-xs font-semibold text-muted-foreground block">
+          Inherited from Account
+        </Label>
+        <div className="flex flex-wrap gap-2">
+          {selectedAccount.salesforceLink && (
+            <a
+              href={selectedAccount.salesforceLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExternalLink className="h-3 w-3" />
+              Salesforce
+            </a>
+          )}
+          {selectedAccount.website && (
+            <a
+              href={selectedAccount.website}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExternalLink className="h-3 w-3" />
+              Website
+            </a>
+          )}
+          {selectedAccount.planhatLink && (
+            <a
+              href={selectedAccount.planhatLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExternalLink className="h-3 w-3" />
+              Planhat
+            </a>
+          )}
+          {selectedAccount.currentAgreementLink && (
+            <a
+              href={selectedAccount.currentAgreementLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExternalLink className="h-3 w-3" />
+              Agreement
+            </a>
+          )}
+        </div>
+        {hasTech && (
+          <div className="text-xs text-muted-foreground">
+            {selectedAccount.techStack?.length > 0 && (
+              <span>Tech: {selectedAccount.techStack.join(', ')}</span>
+            )}
+            {selectedAccount.marTech && (
+              <span className="ml-2">MarTech: {selectedAccount.marTech}</span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
   
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Target className="h-5 w-5 text-primary" />
-            {mode === 'create' ? 'Create Opportunity' : 'Update Opportunity'}
-          </DialogTitle>
-        </DialogHeader>
-        
-        {/* Mode Toggle */}
-        <Tabs value={mode} onValueChange={(v) => {
-          setMode(v as 'create' | 'update');
-          if (v === 'create') resetForm();
-        }}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="create" className="gap-2">
-              <Plus className="h-4 w-4" />
-              Create
-            </TabsTrigger>
-            <TabsTrigger value="update" className="gap-2">
-              <Pencil className="h-4 w-4" />
-              Update
-            </TabsTrigger>
-          </TabsList>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Target className="h-5 w-5 text-primary" />
+              {mode === 'create' ? 'Create Opportunity' : 'Update Opportunity'}
+            </DialogTitle>
+          </DialogHeader>
           
-          <div className="space-y-4 py-4">
-            {/* Select Opportunity (Update mode) */}
-            {mode === 'update' && (
-              <div className="space-y-2">
-                <Label>Select Opportunity *</Label>
-                <Popover open={oppSelectOpen} onOpenChange={setOppSelectOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      className="w-full justify-between"
-                    >
-                      {selectedOpp ? (
-                        <span className="flex items-center gap-2 truncate">
-                          <Target className="h-4 w-4 text-muted-foreground" />
-                          {selectedOpp.name}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">Select opportunity...</span>
-                      )}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[350px] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search opportunities..." />
-                      <CommandList>
-                        <CommandEmpty>No opportunities found.</CommandEmpty>
-                        <CommandGroup>
-                          {opportunities.map(opp => (
-                            <CommandItem
-                              key={opp.id}
-                              value={opp.name}
-                              onSelect={() => {
-                                setSelectedOppId(opp.id);
-                                loadOpportunity(opp.id);
-                                setOppSelectOpen(false);
-                              }}
-                            >
-                              <Target className="h-4 w-4 mr-2 text-muted-foreground" />
-                              <span className="truncate">{opp.name}</span>
-                              <Check
-                                className={cn(
-                                  "ml-auto h-4 w-4",
-                                  selectedOppId === opp.id ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            )}
+          {/* Mode Toggle */}
+          <Tabs value={mode} onValueChange={(v) => {
+            setMode(v as 'create' | 'update');
+            if (v === 'create') resetForm();
+          }}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="create" className="gap-2">
+                <Plus className="h-4 w-4" />
+                Create
+              </TabsTrigger>
+              <TabsTrigger value="update" className="gap-2">
+                <Pencil className="h-4 w-4" />
+                Update
+              </TabsTrigger>
+            </TabsList>
             
-            {/* Opportunity Type Toggle (Create mode) */}
-            {mode === 'create' && (
-              <div className="space-y-2">
-                <Label>Opportunity Type</Label>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant={opportunityType === 'new-logo' ? 'default' : 'outline'}
-                    size="sm"
-                    className="flex-1 gap-2"
-                    onClick={() => {
-                      setOpportunityType('new-logo');
-                      setSelectedRenewalId('');
-                    }}
-                  >
-                    <Building2 className="h-4 w-4" />
-                    New Logo
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={opportunityType === 'renewal' ? 'default' : 'outline'}
-                    size="sm"
-                    className="flex-1 gap-2"
-                    onClick={() => {
-                      setOpportunityType('renewal');
-                      setAccountId('');
-                      setAccountName('');
-                    }}
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    Renewal
-                  </Button>
+            <div className="space-y-4 py-4">
+              {/* Select Opportunity (Update mode) */}
+              {mode === 'update' && (
+                <div className="space-y-2">
+                  <Label>Select Opportunity *</Label>
+                  <Popover open={oppSelectOpen} onOpenChange={setOppSelectOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        className="w-full justify-between"
+                      >
+                        {selectedOpp ? (
+                          <span className="flex items-center gap-2 truncate">
+                            <Target className="h-4 w-4 text-muted-foreground" />
+                            {selectedOpp.name}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">Select opportunity...</span>
+                        )}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[350px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search opportunities..." />
+                        <CommandList>
+                          <CommandEmpty>No opportunities found.</CommandEmpty>
+                          <CommandGroup>
+                            {opportunities.map(opp => (
+                              <CommandItem
+                                key={opp.id}
+                                value={opp.name}
+                                onSelect={() => {
+                                  setSelectedOppId(opp.id);
+                                  loadOpportunity(opp.id);
+                                  setOppSelectOpen(false);
+                                }}
+                              >
+                                <Target className="h-4 w-4 mr-2 text-muted-foreground" />
+                                <span className="truncate">{opp.name}</span>
+                                <Check
+                                  className={cn(
+                                    "ml-auto h-4 w-4",
+                                    selectedOppId === opp.id ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
-              </div>
-            )}
-            
-            {/* Renewal Selector (Create mode, renewal type) */}
-            {mode === 'create' && opportunityType === 'renewal' && (
-              <div className="space-y-2">
-                <Label>Linked Renewal Account *</Label>
-                <Popover open={renewalSelectOpen} onOpenChange={setRenewalSelectOpen}>
-                  <PopoverTrigger asChild>
+              )}
+              
+              {/* Opportunity Type Toggle (Create mode) */}
+              {mode === 'create' && (
+                <div className="space-y-2">
+                  <Label>Opportunity Type</Label>
+                  <div className="flex gap-2">
                     <Button
-                      variant="outline"
-                      role="combobox"
-                      className="w-full justify-between"
+                      type="button"
+                      variant={opportunityType === 'new-logo' ? 'default' : 'outline'}
+                      size="sm"
+                      className="flex-1 gap-2"
+                      onClick={() => {
+                        setOpportunityType('new-logo');
+                        setSelectedRenewalId('');
+                      }}
                     >
-                      {selectedRenewal ? (
-                        <span className="flex items-center gap-2 truncate">
-                          <RefreshCw className="h-4 w-4 text-muted-foreground" />
-                          {selectedRenewal.accountName}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">Select renewal...</span>
-                      )}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      <Building2 className="h-4 w-4" />
+                      New Logo
                     </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[350px] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search renewals..." />
-                      <CommandList>
-                        <CommandEmpty>No renewals found.</CommandEmpty>
-                        <CommandGroup>
-                          {renewals.map(renewal => (
-                            <CommandItem
-                              key={renewal.id}
-                              value={renewal.accountName}
-                              onSelect={() => {
-                                setSelectedRenewalId(renewal.id);
-                                loadRenewalDefaults(renewal.id);
-                                setRenewalSelectOpen(false);
-                              }}
-                            >
-                              <RefreshCw className="h-4 w-4 mr-2 text-muted-foreground" />
-                              <span className="truncate">{renewal.accountName}</span>
-                              <Check
-                                className={cn(
-                                  "ml-auto h-4 w-4",
-                                  selectedRenewalId === renewal.id ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            )}
-            
-            {/* Name (Create mode) */}
-            {mode === 'create' && (
-              <div className="space-y-2">
-                <Label>Opportunity Name *</Label>
-                <Input
-                  placeholder="e.g., Acme Corp - Enterprise License"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </div>
-            )}
-            
-            {/* Account Selector (Create mode, new-logo type only) */}
-            {mode === 'create' && opportunityType === 'new-logo' && (
-              <div className="space-y-2">
-                <Label>Linked Account *</Label>
-                <Popover open={accountSelectOpen} onOpenChange={setAccountSelectOpen}>
-                  <PopoverTrigger asChild>
                     <Button
-                      variant="outline"
-                      role="combobox"
-                      className="w-full justify-between"
+                      type="button"
+                      variant={opportunityType === 'renewal' ? 'default' : 'outline'}
+                      size="sm"
+                      className="flex-1 gap-2"
+                      onClick={() => {
+                        setOpportunityType('renewal');
+                        setAccountId('');
+                        setAccountName('');
+                      }}
                     >
-                      {selectedAccount ? (
-                        <span className="flex items-center gap-2 truncate">
-                          <Building2 className="h-4 w-4 text-muted-foreground" />
-                          {selectedAccount.name}
-                        </span>
-                      ) : accountName ? (
-                        <span className="flex items-center gap-2 truncate">
-                          <Building2 className="h-4 w-4 text-muted-foreground" />
-                          {accountName}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">Select account...</span>
-                      )}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      <RefreshCw className="h-4 w-4" />
+                      Renewal
                     </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[350px] p-0" align="start">
-                    <Command>
-                      <CommandInput 
-                        placeholder="Search or type new account..." 
-                        value={accountName}
-                        onValueChange={setAccountName}
-                      />
-                      <CommandList>
-                        <CommandEmpty>
-                          <div className="p-2 text-sm text-muted-foreground">
-                            No account found. Use "{accountName}" as new account.
-                          </div>
-                        </CommandEmpty>
-                        <CommandGroup>
-                          {accounts.map(account => (
-                            <CommandItem
-                              key={account.id}
-                              value={account.name}
-                              onSelect={() => {
-                                setAccountId(account.id);
-                                setAccountName(account.name);
-                                setAccountSelectOpen(false);
-                              }}
-                            >
-                              <Building2 className="h-4 w-4 mr-2 text-muted-foreground" />
-                              <span className="truncate">{account.name}</span>
-                              <Check
-                                className={cn(
-                                  "ml-auto h-4 w-4",
-                                  accountId === account.id ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            )}
-            
-            {/* Churn Risk (Renewal type only) */}
-            {opportunityType === 'renewal' && (
-              <div className="space-y-2">
-                <Label>Churn Risk</Label>
-                <Select value={churnRisk} onValueChange={(v) => setChurnRisk(v as ChurnRisk)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="certain">Certain</SelectItem>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            
-            {/* Status & Stage Row */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <Select value={status} onValueChange={(v) => setStatus(v as OpportunityStatus)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUSES.map(s => (
-                      <SelectItem key={s} value={s} className="capitalize">
-                        {s.replace('-', ' ')}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Stage</Label>
-                <Select 
-                  value={stage || 'none'} 
-                  onValueChange={(v) => setStage(v === 'none' ? '' : v as OpportunityStage)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="No Stage" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STAGES.map(s => (
-                      <SelectItem key={s.value} value={s.value}>
-                        {s.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            
-            {/* ARR Fields - Different for New Logo vs Renewal */}
-            {opportunityType === 'new-logo' ? (
-              /* New Logo: Simple ARR & Close Date */
+                  </div>
+                </div>
+              )}
+              
+              {/* Renewal Selector (Create mode, renewal type) */}
+              {mode === 'create' && opportunityType === 'renewal' && (
+                <div className="space-y-2">
+                  <Label>Linked Renewal Account *</Label>
+                  <Popover open={renewalSelectOpen} onOpenChange={setRenewalSelectOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        className="w-full justify-between"
+                      >
+                        {selectedRenewal ? (
+                          <span className="flex items-center gap-2 truncate">
+                            <RefreshCw className="h-4 w-4 text-muted-foreground" />
+                            {selectedRenewal.accountName}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">Select renewal...</span>
+                        )}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[350px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search renewals..." />
+                        <CommandList>
+                          <CommandEmpty>No renewals found.</CommandEmpty>
+                          <CommandGroup>
+                            {renewals.map(renewal => (
+                              <CommandItem
+                                key={renewal.id}
+                                value={renewal.accountName}
+                                onSelect={() => {
+                                  setSelectedRenewalId(renewal.id);
+                                  loadRenewalDefaults(renewal.id);
+                                  setRenewalSelectOpen(false);
+                                  
+                                  // Check for existing opps on this renewal's account
+                                  if (renewal.accountId) {
+                                    const existingOpps = opportunities.filter(o => o.accountId === renewal.accountId);
+                                    if (existingOpps.length > 0) {
+                                      setExistingOppCount(existingOpps.length);
+                                      setShowMultiOppConfirm(true);
+                                    }
+                                  }
+                                }}
+                              >
+                                <RefreshCw className="h-4 w-4 mr-2 text-muted-foreground" />
+                                <span className="truncate">{renewal.accountName}</span>
+                                <Check
+                                  className={cn(
+                                    "ml-auto h-4 w-4",
+                                    selectedRenewalId === renewal.id ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
+              
+              {/* Account Selector (Create mode) - shown for BOTH types */}
+              {mode === 'create' && opportunityType === 'new-logo' && (
+                <div className="space-y-2">
+                  <Label>Linked Account *</Label>
+                  <Popover open={accountSelectOpen} onOpenChange={setAccountSelectOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        className="w-full justify-between"
+                      >
+                        {selectedAccount ? (
+                          <span className="flex items-center gap-2 truncate">
+                            <Building2 className="h-4 w-4 text-muted-foreground" />
+                            {selectedAccount.name}
+                          </span>
+                        ) : accountName ? (
+                          <span className="flex items-center gap-2 truncate">
+                            <Building2 className="h-4 w-4 text-muted-foreground" />
+                            {accountName}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">Select account...</span>
+                        )}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[350px] p-0" align="start">
+                      <Command>
+                        <CommandInput 
+                          placeholder="Search or type new account..." 
+                          value={accountName}
+                          onValueChange={setAccountName}
+                        />
+                        <CommandList>
+                          <CommandEmpty>
+                            <div className="p-2 text-sm text-muted-foreground">
+                              No account found. Use "{accountName}" as new account.
+                            </div>
+                          </CommandEmpty>
+                          <CommandGroup>
+                            {accounts.map(account => (
+                              <CommandItem
+                                key={account.id}
+                                value={account.name}
+                                onSelect={() => handleAccountSelect(account.id)}
+                              >
+                                <Building2 className="h-4 w-4 mr-2 text-muted-foreground" />
+                                <span className="truncate">{account.name}</span>
+                                <Check
+                                  className={cn(
+                                    "ml-auto h-4 w-4",
+                                    accountId === account.id ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
+
+              {/* Inherited Account Info */}
+              <InheritedAccountInfo />
+              
+              {/* Name (Create mode) */}
+              {mode === 'create' && (
+                <div className="space-y-2">
+                  <Label>Opportunity Name *</Label>
+                  <Input
+                    placeholder="e.g., Acme Corp - Enterprise License"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </div>
+              )}
+              
+              {/* Churn Risk (Renewal type only) */}
+              {opportunityType === 'renewal' && (
+                <div className="space-y-2">
+                  <Label>Churn Risk</Label>
+                  <Select value={churnRisk} onValueChange={(v) => setChurnRisk(v as ChurnRisk)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="certain">Certain</SelectItem>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              
+              {/* Status & Stage Row */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>ARR {status === 'closed-won' && '*'}</Label>
-                  <Input
-                    type="number"
-                    placeholder="e.g., 50000"
-                    value={arr}
-                    onChange={(e) => setArr(e.target.value)}
-                  />
+                  <Label>Status</Label>
+                  <Select value={status} onValueChange={(v) => setStatus(v as OpportunityStatus)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STATUSES.map(s => (
+                        <SelectItem key={s} value={s} className="capitalize">
+                          {s.replace('-', ' ')}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Close Date {status === 'closed-won' && '*'}</Label>
-                  <Input
-                    type="date"
-                    value={closeDate}
-                    onChange={(e) => setCloseDate(e.target.value)}
-                  />
+                  <Label>Stage</Label>
+                  <Select 
+                    value={stage || 'none'} 
+                    onValueChange={(v) => setStage(v === 'none' ? '' : v as OpportunityStage)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="No Stage" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STAGES.map(s => (
+                        <SelectItem key={s.value} value={s.value}>
+                          {s.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-            ) : (
-              /* Renewal: Prior Contract ARR, Renewal ARR, New ARR (calc), One-Time */
-              <>
+              
+              {/* ARR Fields - Different for New Logo vs Renewal */}
+              {opportunityType === 'new-logo' ? (
+                /* New Logo: Simple ARR & Close Date */
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Prior Contract ARR</Label>
+                    <Label>ARR {status === 'closed-won' && '*'}</Label>
                     <Input
                       type="number"
                       placeholder="e.g., 50000"
-                      value={priorContractArr}
-                      onChange={(e) => setPriorContractArr(e.target.value)}
+                      value={arr}
+                      onChange={(e) => setArr(e.target.value)}
                     />
-                    <p className="text-xs text-muted-foreground">Current contract value (auto-filled from renewal)</p>
                   </div>
                   <div className="space-y-2">
                     <Label>Close Date {status === 'closed-won' && '*'}</Label>
@@ -672,138 +793,201 @@ export function AddUpdateOpportunityModal({
                     />
                   </div>
                 </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Renewal ARR</Label>
-                    <Input
-                      type="number"
-                      placeholder="e.g., 50000"
-                      value={renewalArr}
-                      onChange={(e) => setRenewalArr(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">Contracted renewal amount (capped at prior)</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>New ARR (Expansion)</Label>
-                    <div className="h-10 px-3 py-2 rounded-md border bg-muted/50 text-sm font-mono">
-                      {(() => {
-                        const prior = parseFloat(priorContractArr) || 0;
-                        const renewal = parseFloat(renewalArr) || 0;
-                        const expansion = Math.max(0, renewal - prior);
-                        return expansion > 0 ? `$${expansion.toLocaleString()}` : '—';
-                      })()}
+              ) : (
+                /* Renewal: Prior Contract ARR, Renewal ARR, New ARR (calc), One-Time */
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Prior Contract ARR</Label>
+                      <Input
+                        type="number"
+                        placeholder="e.g., 50000"
+                        value={priorContractArr}
+                        onChange={(e) => setPriorContractArr(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">Current contract value (auto-filled from renewal)</p>
                     </div>
-                    <p className="text-xs text-muted-foreground">Auto-calculated uplift beyond prior contract</p>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>One-Time (Non-Recurring)</Label>
-                    <Input
-                      type="number"
-                      placeholder="e.g., 5000"
-                      value={oneTimeAmount}
-                      onChange={(e) => setOneTimeAmount(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">Professional services, one-time fees, etc.</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Total Deal Value</Label>
-                    <div className="h-10 px-3 py-2 rounded-md border bg-muted/50 text-sm font-mono font-medium">
-                      {(() => {
-                        const renewal = parseFloat(renewalArr) || 0;
-                        const oneTime = parseFloat(oneTimeAmount) || 0;
-                        const total = renewal + oneTime;
-                        return total > 0 ? `$${total.toLocaleString()}` : '—';
-                      })()}
+                    <div className="space-y-2">
+                      <Label>Close Date {status === 'closed-won' && '*'}</Label>
+                      <Input
+                        type="date"
+                        value={closeDate}
+                        onChange={(e) => setCloseDate(e.target.value)}
+                      />
                     </div>
                   </div>
-                </div>
-              </>
-            )}
-            
-            {/* Deal Type & Payment Terms (visible when Closed Won) */}
-            {status === 'closed-won' && (
-              <>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Deal Type *</Label>
-                    <Select value={dealType} onValueChange={(v) => setDealType(v as DealType)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select type..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DEAL_TYPES.map(dt => (
-                          <SelectItem key={dt.value} value={dt.value}>
-                            {dt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Renewal ARR</Label>
+                      <Input
+                        type="number"
+                        placeholder="e.g., 50000"
+                        value={renewalArr}
+                        onChange={(e) => setRenewalArr(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">Contracted renewal amount (capped at prior)</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>New ARR (Expansion)</Label>
+                      <div className="h-10 px-3 py-2 rounded-md border bg-muted/50 text-sm font-mono">
+                        {(() => {
+                          const prior = parseFloat(priorContractArr) || 0;
+                          const renewal = parseFloat(renewalArr) || 0;
+                          const expansion = Math.max(0, renewal - prior);
+                          return expansion > 0 ? `$${expansion.toLocaleString()}` : '—';
+                        })()}
+                      </div>
+                      <p className="text-xs text-muted-foreground">Auto-calculated uplift beyond prior contract</p>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Payment Terms</Label>
-                    <Select value={paymentTerms} onValueChange={(v) => setPaymentTerms(v as PaymentTerms)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select terms..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PAYMENT_TERMS.map(pt => (
-                          <SelectItem key={pt.value} value={pt.value}>
-                            {pt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>One-Time (Non-Recurring)</Label>
+                      <Input
+                        type="number"
+                        placeholder="e.g., 5000"
+                        value={oneTimeAmount}
+                        onChange={(e) => setOneTimeAmount(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">Professional services, one-time fees, etc.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Total Deal Value</Label>
+                      <div className="h-10 px-3 py-2 rounded-md border bg-muted/50 text-sm font-mono font-medium">
+                        {(() => {
+                          const renewal = parseFloat(renewalArr) || 0;
+                          const oneTime = parseFloat(oneTimeAmount) || 0;
+                          const total = renewal + oneTime;
+                          return total > 0 ? `$${total.toLocaleString()}` : '—';
+                        })()}
+                      </div>
+                    </div>
                   </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label>Term Months</Label>
-                  <Input
-                    type="number"
-                    value={termMonths}
-                    onChange={(e) => setTermMonths(e.target.value)}
-                  />
-                </div>
-              </>
-            )}
-            
-            {/* Next Step */}
-            <div className="space-y-2">
-              <Label>Next Step</Label>
-              <Input
-                placeholder="e.g., Schedule demo with VP Sales"
-                value={nextStep}
-                onChange={(e) => setNextStep(e.target.value)}
-              />
+                </>
+              )}
+              
+              {/* Deal Type & Payment Terms (visible when Closed Won) */}
+              {status === 'closed-won' && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Deal Type *</Label>
+                      <Select value={dealType} onValueChange={(v) => setDealType(v as DealType)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select type..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DEAL_TYPES.map(dt => (
+                            <SelectItem key={dt.value} value={dt.value}>
+                              {dt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Payment Terms</Label>
+                      <Select value={paymentTerms} onValueChange={(v) => setPaymentTerms(v as PaymentTerms)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select terms..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PAYMENT_TERMS.map(pt => (
+                            <SelectItem key={pt.value} value={pt.value}>
+                              {pt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>Term Months</Label>
+                    <Input
+                      type="number"
+                      value={termMonths}
+                      onChange={(e) => setTermMonths(e.target.value)}
+                    />
+                  </div>
+                </>
+              )}
+              
+              {/* Next Step */}
+              <div className="space-y-2">
+                <Label>Next Step</Label>
+                <Input
+                  placeholder="e.g., Schedule demo with VP Sales"
+                  value={nextStep}
+                  onChange={(e) => setNextStep(e.target.value)}
+                />
+              </div>
+              
+              {/* Notes */}
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Textarea
+                  placeholder="Additional notes..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={3}
+                />
+              </div>
             </div>
-            
-            {/* Notes */}
-            <div className="space-y-2">
-              <Label>Notes</Label>
-              <Textarea
-                placeholder="Additional notes..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={3}
-              />
-            </div>
-          </div>
-        </Tabs>
-        
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} className="gap-2">
-            <Target className="h-4 w-4" />
-            {mode === 'create' ? 'Create Opportunity' : 'Save Changes'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          </Tabs>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} className="gap-2">
+              <Target className="h-4 w-4" />
+              {mode === 'create' ? 'Create Opportunity' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Multi-Opp Confirmation Dialog */}
+      <AlertDialog open={showMultiOppConfirm} onOpenChange={setShowMultiOppConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Account already has opportunities</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  This account already has {existingOppCount} opportunit{existingOppCount === 1 ? 'y' : 'ies'}. Are you creating a new one?
+                </p>
+                {existingAccountOpps.length > 0 && (
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {existingAccountOpps.map(opp => (
+                      <div key={opp.id} className="flex items-center gap-2 text-xs p-2 bg-muted/50 rounded">
+                        <Target className="h-3 w-3 text-muted-foreground shrink-0" />
+                        <span className="truncate font-medium">{opp.name}</span>
+                        <span className="text-muted-foreground capitalize ml-auto">{opp.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              // Reset account selection and go back
+              setAccountId('');
+              setAccountName('');
+            }}>
+              No, open existing
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={() => setShowMultiOppConfirm(false)}>
+              Yes, create another
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
