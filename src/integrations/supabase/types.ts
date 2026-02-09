@@ -588,6 +588,72 @@ export type Database = {
         }
         Relationships: []
       }
+      quota_targets: {
+        Row: {
+          created_at: string
+          fiscal_year_end: string
+          fiscal_year_start: string
+          id: string
+          new_arr_acr: number
+          new_arr_quota: number
+          qpi_new_logo_weight: number | null
+          qpi_renewal_weight: number | null
+          renewal_arr_acr: number
+          renewal_arr_quota: number
+          target_accounts_researched_per_day: number | null
+          target_connects_per_day: number | null
+          target_contacts_prepped_per_day: number | null
+          target_customer_meetings_per_week: number | null
+          target_dials_per_day: number | null
+          target_meetings_set_per_week: number | null
+          target_opps_created_per_week: number | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          fiscal_year_end: string
+          fiscal_year_start: string
+          id?: string
+          new_arr_acr?: number
+          new_arr_quota?: number
+          qpi_new_logo_weight?: number | null
+          qpi_renewal_weight?: number | null
+          renewal_arr_acr?: number
+          renewal_arr_quota?: number
+          target_accounts_researched_per_day?: number | null
+          target_connects_per_day?: number | null
+          target_contacts_prepped_per_day?: number | null
+          target_customer_meetings_per_week?: number | null
+          target_dials_per_day?: number | null
+          target_meetings_set_per_week?: number | null
+          target_opps_created_per_week?: number | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          fiscal_year_end?: string
+          fiscal_year_start?: string
+          id?: string
+          new_arr_acr?: number
+          new_arr_quota?: number
+          qpi_new_logo_weight?: number | null
+          qpi_renewal_weight?: number | null
+          renewal_arr_acr?: number
+          renewal_arr_quota?: number
+          target_accounts_researched_per_day?: number | null
+          target_connects_per_day?: number | null
+          target_contacts_prepped_per_day?: number | null
+          target_customer_meetings_per_week?: number | null
+          target_dials_per_day?: number | null
+          target_meetings_set_per_week?: number | null
+          target_opps_created_per_week?: number | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       renewals: {
         Row: {
           account_id: string | null
@@ -689,6 +755,96 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      sales_age_snapshots: {
+        Row: {
+          benchmark_30d_qpi: number | null
+          benchmark_6m_qpi: number | null
+          created_at: string
+          driver_accounts_researched_avg: number | null
+          driver_connects_avg: number | null
+          driver_contacts_prepped_avg: number | null
+          driver_customer_meetings_avg: number | null
+          driver_dials_avg: number | null
+          driver_meetings_set_avg: number | null
+          driver_opps_created_avg: number | null
+          id: string
+          new_arr_closed: number | null
+          new_arr_quota: number | null
+          pace_of_aging: number | null
+          projected_finish_30d: number | null
+          projected_finish_6m: number | null
+          qpi_combined: number
+          qpi_new_logo: number
+          qpi_renewal: number
+          renewal_arr_closed: number | null
+          renewal_arr_quota: number | null
+          sales_age: number
+          snapshot_date: string
+          status: string
+          updated_at: string
+          user_id: string | null
+          week_ending: string
+        }
+        Insert: {
+          benchmark_30d_qpi?: number | null
+          benchmark_6m_qpi?: number | null
+          created_at?: string
+          driver_accounts_researched_avg?: number | null
+          driver_connects_avg?: number | null
+          driver_contacts_prepped_avg?: number | null
+          driver_customer_meetings_avg?: number | null
+          driver_dials_avg?: number | null
+          driver_meetings_set_avg?: number | null
+          driver_opps_created_avg?: number | null
+          id?: string
+          new_arr_closed?: number | null
+          new_arr_quota?: number | null
+          pace_of_aging?: number | null
+          projected_finish_30d?: number | null
+          projected_finish_6m?: number | null
+          qpi_combined?: number
+          qpi_new_logo?: number
+          qpi_renewal?: number
+          renewal_arr_closed?: number | null
+          renewal_arr_quota?: number | null
+          sales_age?: number
+          snapshot_date: string
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+          week_ending: string
+        }
+        Update: {
+          benchmark_30d_qpi?: number | null
+          benchmark_6m_qpi?: number | null
+          created_at?: string
+          driver_accounts_researched_avg?: number | null
+          driver_connects_avg?: number | null
+          driver_contacts_prepped_avg?: number | null
+          driver_customer_meetings_avg?: number | null
+          driver_dials_avg?: number | null
+          driver_meetings_set_avg?: number | null
+          driver_opps_created_avg?: number | null
+          id?: string
+          new_arr_closed?: number | null
+          new_arr_quota?: number | null
+          pace_of_aging?: number | null
+          projected_finish_30d?: number | null
+          projected_finish_6m?: number | null
+          qpi_combined?: number
+          qpi_new_logo?: number
+          qpi_renewal?: number
+          renewal_arr_closed?: number | null
+          renewal_arr_quota?: number | null
+          sales_age?: number
+          snapshot_date?: string
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+          week_ending?: string
+        }
+        Relationships: []
       }
       streak_events: {
         Row: {
