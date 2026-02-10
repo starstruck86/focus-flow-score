@@ -38,9 +38,10 @@ export function OpportunityDetailsField({
   onRenewalArrChange,
   oneTimeAmount,
   onOneTimeAmountChange,
+  tabTarget = 'opportunities',
 }: OpportunityDetailsFieldProps) {
   const { getFieldsForTab } = useCustomFields();
-  const customExpandedFields = getFieldsForTab('opportunities', 'expanded');
+  const customExpandedFields = getFieldsForTab(tabTarget as any, 'expanded');
   
   const expansionArr = isRenewal && renewalArr && priorContractArr
     ? Math.max(0, renewalArr - priorContractArr) 
