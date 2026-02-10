@@ -239,26 +239,36 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   // Sort hook
   const { sortConfig, handleSort } = useTableSort();
 
+  // Check if an opportunity exists in the database (has UUID format)
+  const dbOpportunityIds = useMemo(() => new Set(dbOpportunities.map(o => o.id)), [dbOpportunities]);
+  const { updateOpportunity: storeUpdateOpportunity } = useStore();
+
   // Wrapper functions for mutations
   const updateOpportunity = (id: string, updates: Partial<Opportunity>) => {
-    const dbUpdates: Partial<DbOpportunity> = {};
-    if (updates.name !== undefined) dbUpdates.name = updates.name;
-    if (updates.status !== undefined) dbUpdates.status = updates.status;
-    if (updates.stage !== undefined) dbUpdates.stage = updates.stage;
-    if (updates.arr !== undefined) dbUpdates.arr = updates.arr;
-    if (updates.churnRisk !== undefined) dbUpdates.churn_risk = updates.churnRisk;
-    if (updates.closeDate !== undefined) dbUpdates.close_date = updates.closeDate;
-    if (updates.nextStep !== undefined) dbUpdates.next_step = updates.nextStep;
-    if (updates.nextStepDate !== undefined) dbUpdates.next_step_date = updates.nextStepDate;
-    if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
-    if (updates.dealType !== undefined) dbUpdates.deal_type = updates.dealType;
-    if (updates.paymentTerms !== undefined) dbUpdates.payment_terms = updates.paymentTerms;
-    if (updates.termMonths !== undefined) dbUpdates.term_months = updates.termMonths;
-    if (updates.priorContractArr !== undefined) dbUpdates.prior_contract_arr = updates.priorContractArr;
-    if (updates.renewalArr !== undefined) dbUpdates.renewal_arr = updates.renewalArr;
-    if (updates.oneTimeAmount !== undefined) dbUpdates.one_time_amount = updates.oneTimeAmount;
-    if (updates.isNewLogo !== undefined) dbUpdates.is_new_logo = updates.isNewLogo;
-    updateOpportunityMutation.mutate({ id, updates: dbUpdates });
+    // If this opportunity is in the DB, update via mutation
+    if (dbOpportunityIds.has(id)) {
+      const dbUpdates: Partial<DbOpportunity> = {};
+      if (updates.name !== undefined) dbUpdates.name = updates.name;
+      if (updates.status !== undefined) dbUpdates.status = updates.status;
+      if (updates.stage !== undefined) dbUpdates.stage = updates.stage;
+      if (updates.arr !== undefined) dbUpdates.arr = updates.arr;
+      if (updates.churnRisk !== undefined) dbUpdates.churn_risk = updates.churnRisk;
+      if (updates.closeDate !== undefined) dbUpdates.close_date = updates.closeDate;
+      if (updates.nextStep !== undefined) dbUpdates.next_step = updates.nextStep;
+      if (updates.nextStepDate !== undefined) dbUpdates.next_step_date = updates.nextStepDate;
+      if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
+      if (updates.dealType !== undefined) dbUpdates.deal_type = updates.dealType;
+      if (updates.paymentTerms !== undefined) dbUpdates.payment_terms = updates.paymentTerms;
+      if (updates.termMonths !== undefined) dbUpdates.term_months = updates.termMonths;
+      if (updates.priorContractArr !== undefined) dbUpdates.prior_contract_arr = updates.priorContractArr;
+      if (updates.renewalArr !== undefined) dbUpdates.renewal_arr = updates.renewalArr;
+      if (updates.oneTimeAmount !== undefined) dbUpdates.one_time_amount = updates.oneTimeAmount;
+      if (updates.isNewLogo !== undefined) dbUpdates.is_new_logo = updates.isNewLogo;
+      updateOpportunityMutation.mutate({ id, updates: dbUpdates });
+    } else {
+      // Fall back to Zustand store for legacy/store-only opportunities
+      storeUpdateOpportunity(id, updates);
+    }
   };
 
   const deleteOpportunity = (id: string) => {
