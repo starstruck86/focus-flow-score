@@ -120,6 +120,13 @@ export default function Renewals() {
   // Sort hook for renewals table
   const { sortConfig: renewalSortConfig, handleSort: handleRenewalSort } = useTableSort();
   
+  // Custom fields for summary table
+  const { getFieldsForTab } = useCustomFields();
+  const summaryCustomFields = useMemo(() => 
+    getFieldsForTab('renewals', 'summary').concat(getFieldsForTab('renewals', 'both')).filter((f, i, arr) => arr.findIndex(x => x.id === f.id) === i),
+    [getFieldsForTab]
+  );
+  
   // Track which renewal is expanded to show details
   const [expandedRenewalId, setExpandedRenewalId] = useState<string | null>(null);
   
@@ -911,7 +918,11 @@ export default function Renewals() {
                       </SortableHeader>
                       <TableHead className="w-[10%]">Planhat</TableHead>
                       <TableHead className="w-[10%]">Agreement</TableHead>
-                      <TableHead className="w-[22%]">Next Step</TableHead>
+                      <TableHead className="w-[20%]">Next Step</TableHead>
+                      {/* Custom field column headers */}
+                      {summaryCustomFields.map(field => (
+                        <TableHead key={field.id} className="text-xs">{field.name}</TableHead>
+                      ))}
                       <TableHead className="w-[4%]"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1000,6 +1011,12 @@ export default function Renewals() {
                               emptyText="Add"
                             />
                           </TableCell>
+                          {/* Custom field cells */}
+                          {summaryCustomFields.map(field => (
+                            <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                              <CustomFieldCell field={field} recordId={renewal.id} />
+                            </TableCell>
+                          ))}
                           <TableCell className="align-top py-3">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -1023,7 +1040,7 @@ export default function Renewals() {
                         {/* Details row - only visible when renewal is expanded */}
                         {expandedRenewalId === renewal.id && (
                           <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
-                            <TableCell colSpan={10} className="pt-0 pb-3">
+                            <TableCell colSpan={10 + summaryCustomFields.length} className="pt-0 pb-3">
                               <RenewalDetailsField
                                 renewalId={renewal.id}
                                 contacts={renewal.accountContacts || []}
