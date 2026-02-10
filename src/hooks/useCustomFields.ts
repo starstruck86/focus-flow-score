@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 export type CustomFieldType = 'text' | 'number' | 'currency' | 'date' | 'picklist' | 'url' | 'long-text' | 'boolean';
-export type TabTarget = 'accounts' | 'renewals' | 'opportunities';
+export type TabTarget = 'accounts' | 'renewals' | 'opportunities' | 'opportunities-newlogo' | 'opportunities-renewals';
 export type FieldPlacement = 'summary' | 'expanded' | 'both';
 
 export interface CustomFieldDefinition {
