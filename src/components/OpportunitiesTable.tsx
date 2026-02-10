@@ -985,6 +985,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[110px]">Close Date</SortableHeader>
                   <SortableHeader sortKey="stage" currentSort={sortConfig} onSort={handleSort} className="w-[90px]">Stage</SortableHeader>
                   <SortableHeader sortKey="nextStep" currentSort={sortConfig} onSort={handleSort} className="w-[150px]">Next Step</SortableHeader>
+                  {summaryCustomFields.map(field => (
+                    <SortableHeader key={field.id} sortKey={`custom:${field.id}`} currentSort={sortConfig} onSort={handleSort}>{field.name}</SortableHeader>
+                  ))}
                   <TableHead className="w-[40px]"></TableHead>
                 </>
               )}
