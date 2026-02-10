@@ -1,9 +1,12 @@
 import { EditableDatePicker } from '@/components/EditableDatePicker';
 import { EditableTextareaCell, EditableNumberCell } from '@/components/table/EditableCell';
+import { CustomFieldRow } from '@/components/table/CustomFieldCell';
+import { useCustomFields } from '@/hooks/useCustomFields';
 import { cn } from '@/lib/utils';
 import { parseISO, isPast, isToday } from 'date-fns';
 
 interface OpportunityDetailsFieldProps {
+  opportunityId?: string;
   nextStepDate?: string;
   onNextStepDateChange?: (value: string | undefined) => void;
   lastTouchDate?: string;
@@ -20,6 +23,7 @@ interface OpportunityDetailsFieldProps {
 }
 
 export function OpportunityDetailsField({
+  opportunityId,
   nextStepDate,
   onNextStepDateChange,
   lastTouchDate,
@@ -34,7 +38,10 @@ export function OpportunityDetailsField({
   oneTimeAmount,
   onOneTimeAmountChange,
 }: OpportunityDetailsFieldProps) {
-  const expansionArr = isRenewal && renewalArr && priorContractArr 
+  const { getFieldsForTab } = useCustomFields();
+  const customExpandedFields = getFieldsForTab('opportunities', 'expanded');
+  
+  const expansionArr = isRenewal && renewalArr && priorContractArr
     ? Math.max(0, renewalArr - priorContractArr) 
     : 0;
   const totalDealValue = (renewalArr || 0) + (oneTimeAmount || 0);
@@ -139,6 +146,15 @@ export function OpportunityDetailsField({
           emptyText="Add Notes"
         />
       </div>
+
+      {/* Custom Fields */}
+      {opportunityId && customExpandedFields.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {customExpandedFields.map(field => (
+            <CustomFieldRow key={field.id} field={field} recordId={opportunityId} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

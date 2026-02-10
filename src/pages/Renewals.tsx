@@ -64,6 +64,9 @@ import { OpportunityDrawer } from '@/components/OpportunityDrawer';
 import { EditableDatePicker } from '@/components/EditableDatePicker';
 import { RenewalDetailsField } from '@/components/RenewalDetailsField';
 import { EditableTextCell, EditableNumberCell, DisplaySelectCell, PlanhatLinkCell, AgreementLinkCell, AccountNameCell } from '@/components/table';
+import { ManageColumnsPopover } from '@/components/table/ManageColumnsPopover';
+import { CustomFieldCell, CustomFieldRow } from '@/components/table/CustomFieldCell';
+import { useCustomFields } from '@/hooks/useCustomFields';
 import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
 import { sortRenewalsDefault, applySortWithFallback, CHURN_RISK_SORT_RANK, CHURN_RISK_DISPLAY_LABELS } from '@/lib/sortUtils';
 import type { Renewal, HealthStatus, Opportunity, ChurnRisk } from '@/types';
@@ -557,8 +560,22 @@ export default function Renewals() {
           
           <TabsContent value="renewals">
           <div className="flex items-center gap-2 mb-4">
+            {/* Manage Columns */}
+            <ManageColumnsPopover
+              tabTarget="renewals"
+              builtInColumns={[
+                { key: 'renewalDue', label: 'Renewal Date' },
+                { key: 'churnRisk', label: 'Churn Risk' },
+                { key: 'arr', label: 'ARR' },
+                { key: 'csm', label: 'CSM' },
+                { key: 'planhat', label: 'Planhat' },
+                { key: 'agreement', label: 'Agreement' },
+                { key: 'nextStep', label: 'Next Step' },
+              ]}
+            />
+            
             {/* Create Missing Opportunities Button */}
-            <Button 
+            <Button
               variant="outline"
               onClick={() => {
                 const count = createMissingRenewalOpportunities();
@@ -1007,6 +1024,7 @@ export default function Renewals() {
                           <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
                             <TableCell colSpan={10} className="pt-0 pb-3">
                               <RenewalDetailsField
+                                renewalId={renewal.id}
                                 contacts={renewal.accountContacts || []}
                                 onChange={(contacts) => updateRenewal(renewal.id, { accountContacts: contacts })}
                                 companyNotes={renewal.notes || ''}

@@ -40,6 +40,9 @@ import { ClosedWonModal } from '@/components/quota/ClosedWonModal';
 import { OpportunityNameCell } from '@/components/table/ClickableNameCell';
 import { DisplaySelectCell } from '@/components/table/DisplaySelectCell';
 import { EditableNumberCell, EditableTextareaCell } from '@/components/table/EditableCell';
+import { ManageColumnsPopover } from '@/components/table/ManageColumnsPopover';
+import { CustomFieldCell, CustomFieldRow } from '@/components/table/CustomFieldCell';
+import { useCustomFields } from '@/hooks/useCustomFields';
 import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
 import { format, parseISO, isToday, isPast, isThisQuarter } from 'date-fns';
 import { 
@@ -609,6 +612,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             <TableRow className="hover:bg-transparent border-b-2">
               <TableCell colSpan={showChurnRisk ? 8 : 7} className="pt-0 pb-3">
                 <OpportunityDetailsField
+                  opportunityId={opp.id}
                   nextStepDate={opp.nextStepDate}
                   onNextStepDateChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
                   lastTouchDate={opp.lastTouchDate}
@@ -708,6 +712,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             <TableRow className="hover:bg-transparent border-b-2">
               <TableCell colSpan={7} className="pt-0 pb-3">
                 <OpportunityDetailsField
+                  opportunityId={opp.id}
                   nextStepDate={opp.nextStepDate}
                   onNextStepDateChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
                   lastTouchDate={opp.lastTouchDate}
@@ -743,6 +748,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           <TableRow className="hover:bg-transparent border-b-2">
             <TableCell colSpan={showChurnRisk ? 8 : 7} className="pt-0 pb-3">
               <OpportunityDetailsField
+                opportunityId={opp.id}
                 nextStepDate={opp.nextStepDate}
                 onNextStepDateChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
                 lastTouchDate={opp.lastTouchDate}
@@ -808,6 +814,16 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             <SelectItem value="no-next-step">No Next Step</SelectItem>
           </SelectContent>
         </Select>
+        <ManageColumnsPopover
+          tabTarget="opportunities"
+          builtInColumns={[
+            { key: 'status', label: 'Status' },
+            { key: 'stage', label: 'Stage' },
+            { key: 'arr', label: 'ARR' },
+            { key: 'churnRisk', label: 'Churn Risk' },
+            { key: 'closeDate', label: 'Close Date' },
+          ]}
+        />
         <Button onClick={() => setShowAddRow(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Add Opportunity

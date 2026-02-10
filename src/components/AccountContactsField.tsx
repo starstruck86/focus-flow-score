@@ -2,6 +2,8 @@ import { forwardRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EditableTextareaCell } from '@/components/table/EditableCell';
+import { CustomFieldRow } from '@/components/table/CustomFieldCell';
+import { useCustomFields } from '@/hooks/useCustomFields';
 import {
   ContactDisplayRow,
   AddContactInlineRow,
@@ -13,6 +15,7 @@ import type { AccountContact } from '@/components/contacts/ContactRow';
 export type { AccountContact } from '@/components/contacts/ContactRow';
 
 interface AccountContactsFieldProps {
+  accountId?: string;
   contacts: AccountContact[];
   onChange: (contacts: AccountContact[]) => void;
   companyNotes?: string;
@@ -21,11 +24,14 @@ interface AccountContactsFieldProps {
 }
 
 export const AccountContactsField = forwardRef<HTMLDivElement, AccountContactsFieldProps>(function AccountContactsField({ 
+  accountId,
   contacts, 
   onChange, 
   companyNotes = '', 
   onCompanyNotesChange,
 }, ref) {
+  const { getFieldsForTab } = useCustomFields();
+  const customExpandedFields = accountId ? getFieldsForTab('accounts', 'expanded') : [];
   const [showAddRow, setShowAddRow] = useState(false);
 
   const realContacts = contacts.filter(c => c.name.trim());
@@ -103,6 +109,15 @@ export const AccountContactsField = forwardRef<HTMLDivElement, AccountContactsFi
           <Plus className="h-3 w-3 mr-1" />
           Add contact
         </Button>
+      )}
+
+      {/* Custom Fields */}
+      {accountId && customExpandedFields.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-2">
+          {customExpandedFields.map(field => (
+            <CustomFieldRow key={field.id} field={field} recordId={accountId} />
+          ))}
+        </div>
       )}
     </div>
   );
