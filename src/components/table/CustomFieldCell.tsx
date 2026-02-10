@@ -13,6 +13,8 @@ import { Input } from '@/components/ui/input';
 interface CustomFieldCellProps {
   field: CustomFieldDefinition;
   recordId: string;
+  /** When provided, show this formatted string as display value instead of raw number */
+  metricDisplay?: string;
 }
 
 // Small link icon button that lets users attach a URL to any custom field value
