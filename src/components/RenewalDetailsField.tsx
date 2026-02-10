@@ -183,6 +183,15 @@ export function RenewalDetailsField({
         </div>
       </div>
 
+      {/* Custom Fields - right after company notes + detail fields */}
+      {renewalId && customExpandedFields.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {customExpandedFields.map(field => (
+            <CustomFieldRow key={field.id} field={field} recordId={renewalId} />
+          ))}
+        </div>
+      )}
+
       {/* Divider */}
       <div className="border-t border-border/50 pt-3" />
       
@@ -230,14 +239,6 @@ export function RenewalDetailsField({
         </Button>
       )}
 
-      {/* Custom Fields */}
-      {renewalId && customExpandedFields.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-2">
-          {customExpandedFields.map(field => (
-            <CustomFieldRow key={field.id} field={field} recordId={renewalId} />
-          ))}
-        </div>
-      )}
     </div>
   );
 }

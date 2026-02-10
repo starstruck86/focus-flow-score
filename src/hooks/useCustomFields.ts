@@ -28,6 +28,13 @@ export interface CustomFieldValues {
   };
 }
 
+// Custom field links per record (optional URL attached to any field value)
+export interface CustomFieldLinks {
+  [recordId: string]: {
+    [fieldId: string]: string | undefined;
+  };
+}
+
 // Column order per tab (array of column keys in display order)
 export interface ColumnOrder {
   [tabKey: string]: string[];
@@ -54,6 +61,11 @@ interface CustomFieldsStore {
   fieldValues: CustomFieldValues;
   setFieldValue: (recordId: string, fieldId: string, value: string | number | undefined) => void;
   getFieldValue: (recordId: string, fieldId: string) => string | number | undefined;
+  
+  // Custom field links (optional URL per field value)
+  fieldLinks: CustomFieldLinks;
+  setFieldLink: (recordId: string, fieldId: string, url: string | undefined) => void;
+  getFieldLink: (recordId: string, fieldId: string) => string | undefined;
   
   // Helpers
   getFieldsForTab: (tab: TabTarget, placement?: FieldPlacement) => CustomFieldDefinition[];
@@ -160,6 +172,24 @@ export const useCustomFields = create<CustomFieldsStore>()(
       
       getFieldValue: (recordId, fieldId) => {
         return get().fieldValues[recordId]?.[fieldId];
+      },
+      
+      fieldLinks: {},
+      
+      setFieldLink: (recordId, fieldId, url) => {
+        set((state) => ({
+          fieldLinks: {
+            ...state.fieldLinks,
+            [recordId]: {
+              ...(state.fieldLinks[recordId] || {}),
+              [fieldId]: url,
+            },
+          },
+        }));
+      },
+      
+      getFieldLink: (recordId, fieldId) => {
+        return get().fieldLinks[recordId]?.[fieldId];
       },
       
       getFieldsForTab: (tab, placement) => {

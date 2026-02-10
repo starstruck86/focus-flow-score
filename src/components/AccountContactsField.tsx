@@ -66,6 +66,15 @@ export const AccountContactsField = forwardRef<HTMLDivElement, AccountContactsFi
           />
         </div>
       )}
+
+      {/* Custom Fields - right after company notes */}
+      {accountId && customExpandedFields.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {customExpandedFields.map(field => (
+            <CustomFieldRow key={field.id} field={field} recordId={accountId} />
+          ))}
+        </div>
+      )}
       
       {/* Contacts header row */}
       <div className="space-y-1">
@@ -116,14 +125,6 @@ export const AccountContactsField = forwardRef<HTMLDivElement, AccountContactsFi
         </Button>
       )}
 
-      {/* Custom Fields */}
-      {accountId && customExpandedFields.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-2">
-          {customExpandedFields.map(field => (
-            <CustomFieldRow key={field.id} field={field} recordId={accountId} />
-          ))}
-        </div>
-      )}
     </div>
   );
 });

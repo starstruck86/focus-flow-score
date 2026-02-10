@@ -1,14 +1,96 @@
 // Renders a custom field value with display-first behavior, matching the field type
 import { useState } from 'react';
+import { Link2, ExternalLink, X } from 'lucide-react';
 import { EditableTextCell, EditableTextareaCell, EditableNumberCell } from './EditableCell';
 import { EditableLinkCell } from './EditableLinkCell';
 import { DisplaySelectCell } from './DisplaySelectCell';
 import { EditableDatePicker } from '@/components/EditableDatePicker';
 import { useCustomFields, type CustomFieldDefinition } from '@/hooks/useCustomFields';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 interface CustomFieldCellProps {
   field: CustomFieldDefinition;
   recordId: string;
+}
+
+// Small link icon button that lets users attach a URL to any custom field value
+function FieldLinkAttachment({ recordId, fieldId }: { recordId: string; fieldId: string }) {
+  const { getFieldLink, setFieldLink } = useCustomFields();
+  const link = getFieldLink(recordId, fieldId);
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState(link || '');
+
+  const handleSave = () => {
+    const normalized = url.trim();
+    if (normalized && !/^https?:\/\//i.test(normalized)) {
+      setFieldLink(recordId, fieldId, `https://${normalized}`);
+    } else {
+      setFieldLink(recordId, fieldId, normalized || undefined);
+    }
+    setOpen(false);
+  };
+
+  const handleRemove = () => {
+    setFieldLink(recordId, fieldId, undefined);
+    setUrl('');
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (o) setUrl(link || ''); }}>
+      <PopoverTrigger asChild>
+        <button
+          className={`inline-flex items-center justify-center h-4 w-4 rounded hover:bg-muted transition-colors ${link ? 'text-primary' : 'text-muted-foreground/40 hover:text-muted-foreground'}`}
+          title={link ? 'Edit link' : 'Add link'}
+        >
+          <Link2 className="h-3 w-3" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-3" align="start">
+        <div className="space-y-2">
+          <label className="text-xs font-medium text-muted-foreground">Link URL</label>
+          <Input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://example.com"
+            className="h-7 text-xs"
+            onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+          />
+          <div className="flex gap-1.5">
+            <Button size="sm" className="h-6 text-xs flex-1" onClick={handleSave}>Save</Button>
+            {link && (
+              <Button size="sm" variant="ghost" className="h-6 text-xs text-destructive" onClick={handleRemove}>
+                <X className="h-3 w-3 mr-0.5" /> Remove
+              </Button>
+            )}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Wraps a value with an external link if one is attached
+function LinkedValue({ recordId, fieldId, children }: { recordId: string; fieldId: string; children: React.ReactNode }) {
+  const { getFieldLink } = useCustomFields();
+  const link = getFieldLink(recordId, fieldId);
+
+  if (!link) return <>{children}</>;
+  
+  return (
+    <a
+      href={link}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 text-primary hover:underline cursor-pointer"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {children}
+      <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-60" />
+    </a>
+  );
 }
 
 export function CustomFieldCell({ field, recordId }: CustomFieldCellProps) {
@@ -120,14 +202,31 @@ export function CustomFieldCell({ field, recordId }: CustomFieldCellProps) {
   }
 }
 
-// Labeled custom field for expanded view
+// Labeled custom field for expanded view - data under title, with link attachment
 export function CustomFieldRow({ field, recordId }: CustomFieldCellProps) {
+  const { getFieldValue, getFieldLink } = useCustomFields();
+  const value = getFieldValue(recordId, field.id);
+  const hasValue = value != null && value !== '' && value !== 0;
+  const link = getFieldLink(recordId, field.id);
+
   return (
     <div>
-      <label className="text-xs font-medium text-muted-foreground mb-1 block">
-        {field.name}
-      </label>
-      <CustomFieldCell field={field} recordId={recordId} />
+      <div className="flex items-center gap-1.5 mb-1">
+        <label className="text-xs font-medium text-muted-foreground">
+          {field.name}
+        </label>
+        {/* Show link button when there's a value, or when a link already exists */}
+        {(hasValue || link) && field.type !== 'url' && (
+          <FieldLinkAttachment recordId={recordId} fieldId={field.id} />
+        )}
+      </div>
+      {link && hasValue ? (
+        <LinkedValue recordId={recordId} fieldId={field.id}>
+          <CustomFieldCell field={field} recordId={recordId} />
+        </LinkedValue>
+      ) : (
+        <CustomFieldCell field={field} recordId={recordId} />
+      )}
     </div>
   );
 }

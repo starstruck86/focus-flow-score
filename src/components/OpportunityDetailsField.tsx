@@ -147,7 +147,7 @@ export function OpportunityDetailsField({
         />
       </div>
 
-      {/* Custom Fields */}
+      {/* Custom Fields - right after notes */}
       {opportunityId && customExpandedFields.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {customExpandedFields.map(field => (
