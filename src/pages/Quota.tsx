@@ -9,6 +9,7 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { useStore } from '@/store/useStore';
 import { QuotaGauge } from '@/components/quota/QuotaGauge';
 import { CommissionCard } from '@/components/quota/CommissionCard';
@@ -23,13 +24,16 @@ import {
   formatCurrency,
 } from '@/lib/commissionCalculations';
 import type { QuotaConfig, Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
-import { DollarSign, Target, FileText, Settings2 } from 'lucide-react';
+import { DollarSign, Target, FileText, Settings2, AlertTriangle } from 'lucide-react';
 import { useDbOpportunities, type DbOpportunity } from '@/hooks/useAccountsData';
 
 // Normalize status based on stage (e.g., stage="Closed Won" but status="active")
 function normalizeOppStatus(status: OpportunityStatus, stage: OpportunityStage): OpportunityStatus {
   if (stage === 'Closed Won' && status !== 'closed-won') return 'closed-won';
   if (stage === 'Closed Lost' && status !== 'closed-lost') return 'closed-lost';
+  // Also handle stage values with prefixes like "6 - Closed Won"
+  if (typeof stage === 'string' && stage.includes('Closed Won') && status !== 'closed-won') return 'closed-won';
+  if (typeof stage === 'string' && stage.includes('Closed Lost') && status !== 'closed-lost') return 'closed-lost';
   return status;
 }
 
@@ -63,7 +67,7 @@ function dbToUiOpportunity(db: DbOpportunity): Opportunity {
     renewalArr: db.renewal_arr ?? undefined,
     oneTimeAmount: db.one_time_amount ?? undefined,
     isNewLogo: db.is_new_logo ?? undefined,
-    accountName: undefined, // DB doesn't have inline account name
+    accountName: undefined,
   };
 }
 
@@ -74,8 +78,12 @@ export default function Quota() {
   const { data: dbOpportunities = [] } = useDbOpportunities();
   const dbOpps = useMemo(() => dbOpportunities.map(dbToUiOpportunity), [dbOpportunities]);
   
-  // Also merge any Zustand-only opportunities (for backward compat)
-  const { opportunities: storeOpps, quotaConfig, setQuotaConfig } = useStore();
+  // Also merge any Zustand-only opportunities (for backward compat) — normalize status there too
+  const { opportunities: rawStoreOpps, quotaConfig, setQuotaConfig } = useStore();
+  const storeOpps = useMemo(() => rawStoreOpps.map(o => ({
+    ...o,
+    status: normalizeOppStatus(o.status, o.stage),
+  })), [rawStoreOpps]);
   
   // Combine: prefer DB opps, fall back to store opps not in DB
   const opportunities = useMemo(() => {
@@ -130,6 +138,24 @@ export default function Quota() {
     return filtered.flatMap(o => generateLedgerEntries(o, config));
   }, [opportunities, config, dateFilter]);
   
+  // "Needs Review" - closed-won opps missing required fields
+  const needsReviewDeals = useMemo(() => {
+    const closedWon = opportunities.filter(o => o.status === 'closed-won');
+    return closedWon.filter(o => {
+      const missingFields: string[] = [];
+      if (!o.closeDate) missingFields.push('Close Date');
+      if (!o.arr && !o.renewalArr && !o.oneTimeAmount) missingFields.push('ARR');
+      if (!o.dealType) missingFields.push('Deal Type');
+      return missingFields.length > 0;
+    }).map(o => {
+      const missing: string[] = [];
+      if (!o.closeDate) missing.push('Close Date');
+      if (!o.arr && !o.renewalArr && !o.oneTimeAmount) missing.push('ARR');
+      if (!o.dealType) missing.push('Deal Type');
+      return { ...o, missingFields: missing };
+    });
+  }, [opportunities]);
+  
   // Calculate weekly rate needed
   const weeklyRateNeeded = useMemo(() => {
     return calculateRequiredWeeklyRate(
@@ -142,9 +168,8 @@ export default function Quota() {
     setQuotaConfig(newConfig);
   };
   
-  // Combined attainment for header
-  const combinedAttainment = (summary.newArrBooked + summary.renewalArrBooked) / 
-    (config.newArrQuota + config.renewalArrQuota);
+  // All closed won count for header
+  const closedWonCount = opportunities.filter(o => o.status === 'closed-won').length;
   
   return (
     <Layout>
@@ -157,7 +182,10 @@ export default function Quota() {
               Quota & Compensation
             </h1>
             <p className="text-sm text-muted-foreground">
-              Tracking attainment and estimated commission from closed-won deals
+              {closedWonCount} closed-won deal{closedWonCount !== 1 ? 's' : ''} • {needsReviewDeals.length > 0 && (
+                <span className="text-status-yellow">{needsReviewDeals.length} need review</span>
+              )}
+              {needsReviewDeals.length === 0 && 'Tracking attainment and estimated commission'}
             </p>
           </div>
           
@@ -193,6 +221,33 @@ export default function Quota() {
           
           {/* Dashboard Tab */}
           <TabsContent value="dashboard" className="space-y-6">
+            {/* Needs Review Banner */}
+            {needsReviewDeals.length > 0 && (
+              <div className="rounded-lg border border-status-yellow/30 bg-status-yellow/5 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle className="h-4 w-4 text-status-yellow" />
+                  <h3 className="text-sm font-medium text-status-yellow">Needs Review</h3>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  These closed-won deals are missing required fields for commission calculation:
+                </p>
+                <div className="space-y-1.5">
+                  {needsReviewDeals.map(deal => (
+                    <div key={deal.id} className="flex items-center justify-between text-sm px-2 py-1 rounded bg-muted/30">
+                      <span className="font-medium">{deal.name}</span>
+                      <div className="flex gap-1">
+                        {deal.missingFields.map(f => (
+                          <Badge key={f} variant="outline" className="text-[10px] border-status-yellow/30 text-status-yellow">
+                            {f}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
             {/* Attainment Gauges */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <QuotaGauge
@@ -274,6 +329,24 @@ export default function Quota() {
                   {ledgerEntries.length} ledger entries from {opportunities.filter(o => o.status === 'closed-won').length} deals
                 </div>
               </div>
+              
+              {/* Needs Review in ledger */}
+              {needsReviewDeals.length > 0 && (
+                <div className="rounded-lg border border-status-yellow/30 bg-status-yellow/5 p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle className="h-3.5 w-3.5 text-status-yellow" />
+                    <span className="text-xs font-medium text-status-yellow">
+                      {needsReviewDeals.length} deal{needsReviewDeals.length !== 1 ? 's' : ''} need review before they can count toward quota
+                    </span>
+                  </div>
+                  {needsReviewDeals.map(deal => (
+                    <div key={deal.id} className="text-xs text-muted-foreground ml-5">
+                      <span className="font-medium text-foreground">{deal.name}</span> — missing: {deal.missingFields.join(', ')}
+                    </div>
+                  ))}
+                </div>
+              )}
+              
               <DealsLedger entries={ledgerEntries} />
             </div>
           </TabsContent>

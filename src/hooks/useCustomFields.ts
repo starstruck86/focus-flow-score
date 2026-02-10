@@ -28,6 +28,11 @@ export interface CustomFieldValues {
   };
 }
 
+// Column order per tab (array of column keys in display order)
+export interface ColumnOrder {
+  [tabKey: string]: string[];
+}
+
 interface CustomFieldsStore {
   // Field definitions
   fields: CustomFieldDefinition[];
@@ -38,6 +43,12 @@ interface CustomFieldsStore {
   // Column visibility per tab
   columnVisibility: Record<TabTarget, ColumnVisibility>;
   setColumnVisible: (tab: TabTarget, columnKey: string, visible: boolean) => void;
+  
+  // Column ordering per tab
+  columnOrder: ColumnOrder;
+  setColumnOrder: (tab: string, order: string[]) => void;
+  moveColumn: (tab: string, columnKey: string, direction: 'up' | 'down') => void;
+  resetColumnOrder: (tab: string) => void;
   
   // Custom field values
   fieldValues: CustomFieldValues;
@@ -101,6 +112,36 @@ export const useCustomFields = create<CustomFieldsStore>()(
             },
           },
         }));
+      },
+      
+      columnOrder: {},
+      
+      setColumnOrder: (tab, order) => {
+        set((state) => ({
+          columnOrder: { ...state.columnOrder, [tab]: order },
+        }));
+      },
+      
+      moveColumn: (tab, columnKey, direction) => {
+        set((state) => {
+          const current = state.columnOrder[tab];
+          if (!current) return state;
+          const idx = current.indexOf(columnKey);
+          if (idx === -1) return state;
+          const newIdx = direction === 'up' ? idx - 1 : idx + 1;
+          if (newIdx < 0 || newIdx >= current.length) return state;
+          const newOrder = [...current];
+          [newOrder[idx], newOrder[newIdx]] = [newOrder[newIdx], newOrder[idx]];
+          return { columnOrder: { ...state.columnOrder, [tab]: newOrder } };
+        });
+      },
+      
+      resetColumnOrder: (tab) => {
+        set((state) => {
+          const newOrder = { ...state.columnOrder };
+          delete newOrder[tab];
+          return { columnOrder: newOrder };
+        });
       },
       
       fieldValues: {},
