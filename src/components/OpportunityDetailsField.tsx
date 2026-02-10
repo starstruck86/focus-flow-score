@@ -20,6 +20,7 @@ interface OpportunityDetailsFieldProps {
   onRenewalArrChange?: (value: number | undefined) => void;
   oneTimeAmount?: number;
   onOneTimeAmountChange?: (value: number | undefined) => void;
+  tabTarget?: 'opportunities' | 'opportunities-newlogo' | 'opportunities-renewals';
 }
 
 export function OpportunityDetailsField({
