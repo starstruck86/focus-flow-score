@@ -45,6 +45,7 @@ import { CustomFieldCell, CustomFieldRow } from '@/components/table/CustomFieldC
 import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
 import { useCustomFields } from '@/hooks/useCustomFields';
 import { applySortWithFallback } from '@/lib/sortUtils';
+import { useStore } from '@/store/useStore';
 import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
 import { format, parseISO, isToday, isPast, isThisQuarter } from 'date-fns';
 import { 
@@ -195,9 +196,29 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const addOpportunityMutation = useAddOpportunity();
   const updateRenewalMutation = useUpdateRenewal();
 
+  // Zustand store renewals (source of truth when DB is empty)
+  const { renewals: storeRenewals } = useStore();
+
   // Transform DB data to UI format
   const opportunities = useMemo(() => dbOpportunities.map(dbToUiOpportunity), [dbOpportunities]);
-  const renewals = useMemo(() => dbRenewals.map(dbToRenewalFilter), [dbRenewals]);
+  
+  // Merge DB renewals with Zustand store renewals (same source as Renewals tab)
+  const renewals = useMemo(() => {
+    const dbMapped = dbRenewals.map(dbToRenewalFilter);
+    const dbIds = new Set(dbMapped.map(r => r.id));
+    // Add store renewals not already in DB
+    const storeOnly = storeRenewals
+      .filter(r => !dbIds.has(r.id))
+      .map(r => ({
+        id: r.id,
+        linkedOpportunityId: r.linkedOpportunityId,
+        accountName: r.accountName,
+        arr: r.arr,
+        renewalDue: r.renewalDue,
+        churnRisk: (r.churnRisk as ChurnRisk) ?? undefined,
+      }));
+    return [...dbMapped, ...storeOnly];
+  }, [dbRenewals, storeRenewals]);
 
   // Sort hook
   const { sortConfig, handleSort } = useTableSort();
