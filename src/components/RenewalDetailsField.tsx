@@ -5,6 +5,8 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { EditableTextCell, EditableTextareaCell } from '@/components/table/EditableCell';
 import { EditableLinkCell } from '@/components/table/EditableLinkCell';
+import { CustomFieldRow } from '@/components/table/CustomFieldCell';
+import { useCustomFields } from '@/hooks/useCustomFields';
 import {
   ContactDisplayRow,
   AddContactInlineRow,
@@ -16,6 +18,7 @@ import type { AccountContact } from '@/components/contacts/ContactRow';
 export type { AccountContact } from '@/components/contacts/ContactRow';
 
 interface RenewalDetailsFieldProps {
+  renewalId?: string;
   contacts: AccountContact[];
   onChange: (contacts: AccountContact[]) => void;
   companyNotes?: string;
@@ -39,6 +42,7 @@ interface RenewalDetailsFieldProps {
 }
 
 export function RenewalDetailsField({ 
+  renewalId,
   contacts, 
   onChange, 
   companyNotes = '', 
@@ -60,6 +64,8 @@ export function RenewalDetailsField({
   autoRenew = false,
   onAutoRenewChange,
 }: RenewalDetailsFieldProps) {
+  const { getFieldsForTab } = useCustomFields();
+  const customExpandedFields = renewalId ? getFieldsForTab('renewals', 'expanded') : [];
   const [showAddRow, setShowAddRow] = useState(false);
 
   const realContacts = contacts.filter(c => c.name.trim());
@@ -222,6 +228,15 @@ export function RenewalDetailsField({
           <Plus className="h-3 w-3 mr-1" />
           Add contact
         </Button>
+      )}
+
+      {/* Custom Fields */}
+      {renewalId && customExpandedFields.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-2">
+          {customExpandedFields.map(field => (
+            <CustomFieldRow key={field.id} field={field} recordId={renewalId} />
+          ))}
+        </div>
       )}
     </div>
   );

@@ -67,6 +67,9 @@ import { cn } from '@/lib/utils';
 import { OpportunitiesTable } from '@/components/OpportunitiesTable';
 import { OpportunityDrawer } from '@/components/OpportunityDrawer';
 import { AccountContactsField, type AccountContact } from '@/components/AccountContactsField';
+import { ManageColumnsPopover } from '@/components/table/ManageColumnsPopover';
+import { CustomFieldCell, CustomFieldRow } from '@/components/table/CustomFieldCell';
+import { useCustomFields } from '@/hooks/useCustomFields';
 import { ImportModal } from '@/components/import';
 import { EditableTextCell, EditableTextareaCell, DisplaySelectCell, WebsiteLinkCell, AccountNameCell } from '@/components/table';
 import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
@@ -481,6 +484,7 @@ function FunnelGroupSection({
                       <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
                         <TableCell colSpan={9} className="pt-0 pb-3">
                           <AccountContactsField
+                            accountId={account.id}
                             contacts={account.accountContacts || []}
                             onChange={(contacts) => updateAccount(account.id, { accountContacts: contacts })}
                             companyNotes={account.notes || ''}
@@ -890,6 +894,17 @@ export default function WeeklyOutreach() {
 
               {/* Import + Add */}
               <div className="flex items-center gap-2">
+                <ManageColumnsPopover
+                  tabTarget="accounts"
+                  builtInColumns={[
+                    { key: 'website', label: 'Website' },
+                    { key: 'status', label: 'Status' },
+                    { key: 'tier', label: 'Tier' },
+                    { key: 'cadence', label: 'Cadence' },
+                    { key: 'martech', label: 'MarTech' },
+                    { key: 'ecommerce', label: 'Ecommerce' },
+                  ]}
+                />
                 <Button variant="outline" onClick={() => setShowImportModal(true)}>
                   <FileSpreadsheet className="h-4 w-4 mr-2" />
                   Import

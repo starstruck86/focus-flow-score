@@ -1,0 +1,136 @@
+// Custom fields store - persisted Zustand store for user-defined columns
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+export type CustomFieldType = 'text' | 'number' | 'date' | 'picklist' | 'url' | 'long-text';
+export type TabTarget = 'accounts' | 'renewals' | 'opportunities';
+export type FieldPlacement = 'summary' | 'expanded' | 'both';
+
+export interface CustomFieldDefinition {
+  id: string;
+  name: string;
+  type: CustomFieldType;
+  tabTarget: TabTarget;
+  placement: FieldPlacement;
+  picklistOptions?: string[]; // For picklist type
+  createdAt: string;
+}
+
+// Column visibility for built-in fields
+export interface ColumnVisibility {
+  [columnKey: string]: boolean;
+}
+
+// Custom field values per record
+export interface CustomFieldValues {
+  [recordId: string]: {
+    [fieldId: string]: string | number | undefined;
+  };
+}
+
+interface CustomFieldsStore {
+  // Field definitions
+  fields: CustomFieldDefinition[];
+  addField: (field: Omit<CustomFieldDefinition, 'id' | 'createdAt'>) => void;
+  updateField: (id: string, updates: Partial<CustomFieldDefinition>) => void;
+  deleteField: (id: string) => void;
+  
+  // Column visibility per tab
+  columnVisibility: Record<TabTarget, ColumnVisibility>;
+  setColumnVisible: (tab: TabTarget, columnKey: string, visible: boolean) => void;
+  
+  // Custom field values
+  fieldValues: CustomFieldValues;
+  setFieldValue: (recordId: string, fieldId: string, value: string | number | undefined) => void;
+  getFieldValue: (recordId: string, fieldId: string) => string | number | undefined;
+  
+  // Helpers
+  getFieldsForTab: (tab: TabTarget, placement?: FieldPlacement) => CustomFieldDefinition[];
+}
+
+function generateId(): string {
+  return Math.random().toString(36).substring(2, 10);
+}
+
+export const useCustomFields = create<CustomFieldsStore>()(
+  persist(
+    (set, get) => ({
+      fields: [],
+      
+      addField: (field) => {
+        const newField: CustomFieldDefinition = {
+          ...field,
+          id: generateId(),
+          createdAt: new Date().toISOString(),
+        };
+        set((state) => ({ fields: [...state.fields, newField] }));
+      },
+      
+      updateField: (id, updates) => {
+        set((state) => ({
+          fields: state.fields.map(f => f.id === id ? { ...f, ...updates } : f),
+        }));
+      },
+      
+      deleteField: (id) => {
+        set((state) => ({
+          fields: state.fields.filter(f => f.id !== id),
+          // Also clean up field values
+          fieldValues: Object.fromEntries(
+            Object.entries(state.fieldValues).map(([recordId, values]) => [
+              recordId,
+              Object.fromEntries(Object.entries(values).filter(([fId]) => fId !== id)),
+            ])
+          ),
+        }));
+      },
+      
+      columnVisibility: {
+        accounts: {},
+        renewals: {},
+        opportunities: {},
+      },
+      
+      setColumnVisible: (tab, columnKey, visible) => {
+        set((state) => ({
+          columnVisibility: {
+            ...state.columnVisibility,
+            [tab]: {
+              ...state.columnVisibility[tab],
+              [columnKey]: visible,
+            },
+          },
+        }));
+      },
+      
+      fieldValues: {},
+      
+      setFieldValue: (recordId, fieldId, value) => {
+        set((state) => ({
+          fieldValues: {
+            ...state.fieldValues,
+            [recordId]: {
+              ...(state.fieldValues[recordId] || {}),
+              [fieldId]: value,
+            },
+          },
+        }));
+      },
+      
+      getFieldValue: (recordId, fieldId) => {
+        return get().fieldValues[recordId]?.[fieldId];
+      },
+      
+      getFieldsForTab: (tab, placement) => {
+        return get().fields.filter(f => {
+          if (f.tabTarget !== tab) return false;
+          if (placement && f.placement !== placement && f.placement !== 'both') return false;
+          return true;
+        });
+      },
+    }),
+    {
+      name: 'quota-compass-custom-fields',
+    }
+  )
+);
