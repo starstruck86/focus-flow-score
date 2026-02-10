@@ -69,6 +69,7 @@ import { OpportunityDrawer } from '@/components/OpportunityDrawer';
 import { AccountContactsField, type AccountContact } from '@/components/AccountContactsField';
 import { ManageColumnsPopover } from '@/components/table/ManageColumnsPopover';
 import { CustomFieldCell, CustomFieldRow } from '@/components/table/CustomFieldCell';
+import { MetricFieldCell } from '@/components/table/MetricFieldCell';
 import { useCustomFields } from '@/hooks/useCustomFields';
 import { ImportModal } from '@/components/import';
 import { EditableTextCell, EditableTextareaCell, DisplaySelectCell, WebsiteLinkCell, AccountNameCell } from '@/components/table';
