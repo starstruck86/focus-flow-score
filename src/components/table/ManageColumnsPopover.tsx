@@ -60,7 +60,7 @@ const PLACEMENT_LABELS: Record<FieldPlacement, string> = {
 
 export function ManageColumnsPopover({ tabTarget, builtInColumns, viewKey }: ManageColumnsPopoverProps) {
   const orderKey = viewKey || tabTarget;
-  const { fields, addField, deleteField, columnVisibility, setColumnVisible, columnOrder, setColumnOrder, moveColumn, resetColumnOrder } = useCustomFields();
+  const { fields, addField, deleteField, columnVisibility, setColumnVisible, columnOrder, setColumnOrder, moveColumn, resetColumnOrder, getColumnDisplayStyle, setColumnDisplayStyle } = useCustomFields();
   const [showAddForm, setShowAddForm] = useState(false);
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldType, setNewFieldType] = useState<CustomFieldType>('text');
