@@ -763,7 +763,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           </TableRow>
           {isExpanded && (
             <TableRow className="hover:bg-transparent border-b-2">
-              <TableCell colSpan={8} className="pt-0 pb-3">
+              <TableCell colSpan={8 + summaryCustomFields.length} className="pt-0 pb-3">
                 <OpportunityDetailsField
                   opportunityId={opp.id}
                   nextStepDate={opp.nextStepDate}
