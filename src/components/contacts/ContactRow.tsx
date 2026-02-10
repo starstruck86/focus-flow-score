@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Plus, Trash2, ExternalLink, Link } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { EditableTextCell, EditableTextareaCell } from '@/components/table/EditableCell';
 import {
   Popover,
@@ -17,6 +18,7 @@ export interface AccountContact {
   title: string;
   notes: string;
   salesforceLink?: string;
+  readyForOutreach?: boolean;
 }
 
 export function generateContactId(): string {
@@ -119,13 +121,24 @@ export function ContactDisplayRow({
   contact,
   onContactChange,
   onRemove,
+  onReadyForOutreachChange,
 }: {
   contact: AccountContact;
   onContactChange: (field: keyof AccountContact, value: string) => void;
   onRemove: () => void;
+  onReadyForOutreachChange?: (checked: boolean) => void;
 }) {
   return (
-    <div className="group grid grid-cols-[1fr_1fr_1.5fr_auto] md:grid-cols-[1fr_1fr_1.5fr_auto] gap-2 items-start py-1.5 px-2 -mx-2 rounded hover:bg-muted/30 transition-colors">
+    <div className="group grid grid-cols-[auto_1fr_1fr_1.5fr_auto] md:grid-cols-[auto_1fr_1fr_1.5fr_auto] gap-2 items-start py-1.5 px-2 -mx-2 rounded hover:bg-muted/30 transition-colors">
+      {/* Outreach-ready checkbox */}
+      <div className="flex items-center pt-0.5">
+        <Checkbox
+          checked={contact.readyForOutreach ?? false}
+          onCheckedChange={(checked) => onReadyForOutreachChange?.(checked === true)}
+          className="h-3.5 w-3.5"
+          title="Ready for outreach"
+        />
+      </div>
       {/* Name with SFDC link */}
       <div className="min-w-0">
         <ContactNameWithSfdc

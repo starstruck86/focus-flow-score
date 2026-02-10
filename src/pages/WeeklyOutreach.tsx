@@ -896,6 +896,7 @@ export default function WeeklyOutreach() {
               <div className="flex items-center gap-2">
                 <ManageColumnsPopover
                   tabTarget="accounts"
+                  viewKey="accounts-newlogo-funnel"
                   builtInColumns={[
                     { key: 'website', label: 'Website' },
                     { key: 'status', label: 'Status' },

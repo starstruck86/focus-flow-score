@@ -226,6 +226,7 @@ export interface AccountContact {
   title: string;
   notes: string;
   salesforceLink?: string;
+  readyForOutreach?: boolean;
 }
 
 // Account for Weekly Outreach
