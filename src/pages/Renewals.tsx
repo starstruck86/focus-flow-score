@@ -66,6 +66,7 @@ import { RenewalDetailsField } from '@/components/RenewalDetailsField';
 import { EditableTextCell, EditableNumberCell, DisplaySelectCell, PlanhatLinkCell, AgreementLinkCell, AccountNameCell } from '@/components/table';
 import { ManageColumnsPopover } from '@/components/table/ManageColumnsPopover';
 import { CustomFieldCell, CustomFieldRow } from '@/components/table/CustomFieldCell';
+import { MetricFieldCell } from '@/components/table/MetricFieldCell';
 import { useCustomFields } from '@/hooks/useCustomFields';
 import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
 import { sortRenewalsDefault, applySortWithFallback, CHURN_RISK_SORT_RANK, CHURN_RISK_DISPLAY_LABELS } from '@/lib/sortUtils';
