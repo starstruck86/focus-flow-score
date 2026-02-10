@@ -347,6 +347,10 @@ function FunnelGroupSection({
   isCollapsed: boolean;
   onToggleCollapse: () => void;
 }) {
+  const { fields, getFieldValue } = useCustomFields();
+  const summaryCustomFields = fields.filter(
+    f => f.tabTarget === 'accounts' && (f.placement === 'summary' || f.placement === 'both')
+  );
   if (accounts.length === 0 && isCollapsed) return null;
 
   return (
