@@ -26,8 +26,17 @@ import type { QuotaConfig, Opportunity, OpportunityStatus, OpportunityStage, Chu
 import { DollarSign, Target, FileText, Settings2 } from 'lucide-react';
 import { useDbOpportunities, type DbOpportunity } from '@/hooks/useAccountsData';
 
+// Normalize status based on stage (e.g., stage="Closed Won" but status="active")
+function normalizeOppStatus(status: OpportunityStatus, stage: OpportunityStage): OpportunityStatus {
+  if (stage === 'Closed Won' && status !== 'closed-won') return 'closed-won';
+  if (stage === 'Closed Lost' && status !== 'closed-lost') return 'closed-lost';
+  return status;
+}
+
 // Transform DB opportunity to UI format for commission calculations
 function dbToUiOpportunity(db: DbOpportunity): Opportunity {
+  const rawStatus = (db.status as OpportunityStatus) || 'active';
+  const stage = (db.stage as OpportunityStage) || '';
   return {
     id: db.id,
     name: db.name,
@@ -35,8 +44,8 @@ function dbToUiOpportunity(db: DbOpportunity): Opportunity {
     salesforceLink: db.salesforce_link ?? undefined,
     salesforceId: db.salesforce_id ?? undefined,
     linkedContactIds: [],
-    status: (db.status as OpportunityStatus) || 'active',
-    stage: (db.stage as OpportunityStage) || '',
+    status: normalizeOppStatus(rawStatus, stage),
+    stage,
     arr: db.arr ?? undefined,
     churnRisk: (db.churn_risk as ChurnRisk) ?? undefined,
     closeDate: db.close_date ?? undefined,
