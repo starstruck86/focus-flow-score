@@ -734,6 +734,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               />
             </TableCell>
             <NextStepTextCell opp={opp} />
+            {summaryCustomFields.map(field => (
+              <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                <CustomFieldCell field={field} recordId={opp.id} />
+              </TableCell>
+            ))}
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -746,10 +751,10 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                     Open Details
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-          <DropdownMenuItem
-            className="text-destructive"
-            onClick={() => setDeleteDialogOpp(opp)}
-          >
+                  <DropdownMenuItem
+                    className="text-destructive"
+                    onClick={() => setDeleteDialogOpp(opp)}
+                  >
                     Delete
                   </DropdownMenuItem>
                 </DropdownMenuContent>
