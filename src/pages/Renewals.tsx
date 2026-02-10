@@ -1040,18 +1040,11 @@ export default function Renewals() {
                             />
                           </TableCell>
                           {/* Custom field cells */}
-                          {summaryCustomFields.map(field => {
-                            const displayStyle = useCustomFields.getState().getColumnDisplayStyle(`renewals-accounts-${currentView}`, `custom:${field.id}`);
-                            return (
-                              <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-                                {displayStyle === 'metric' ? (
-                                  <MetricFieldCell field={field} recordId={renewal.id} />
-                                ) : (
-                                  <CustomFieldCell field={field} recordId={renewal.id} />
-                                )}
-                              </TableCell>
-                            );
-                          })}
+                          {summaryCustomFields.map(field => (
+                            <TableCell key={field.id} className="align-top py-2" onClick={(e) => e.stopPropagation()}>
+                              <MetricFieldCell field={field} recordId={renewal.id} />
+                            </TableCell>
+                          ))}
                           <TableCell className="align-top py-3">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
