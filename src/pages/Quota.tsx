@@ -10,12 +10,23 @@ import {
   SelectValue 
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useStore } from '@/store/useStore';
 import { QuotaGauge } from '@/components/quota/QuotaGauge';
 import { CommissionCard } from '@/components/quota/CommissionCard';
 import { RemainingCard } from '@/components/quota/RemainingCard';
 import { DealsLedger } from '@/components/quota/DealsLedger';
 import { QuotaConfigSettings } from '@/components/quota/QuotaConfigSettings';
+import { EditableDatePicker } from '@/components/EditableDatePicker';
+import { DisplaySelectCell } from '@/components/table/DisplaySelectCell';
 import { 
   DEFAULT_QUOTA_CONFIG, 
   calculateCommissionSummary,
@@ -24,8 +35,9 @@ import {
   formatCurrency,
 } from '@/lib/commissionCalculations';
 import type { QuotaConfig, Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
-import { DollarSign, Target, FileText, Settings2, AlertTriangle } from 'lucide-react';
-import { useDbOpportunities, type DbOpportunity } from '@/hooks/useAccountsData';
+import { DollarSign, Target, FileText, Settings2, AlertTriangle, Pencil } from 'lucide-react';
+import { useDbOpportunities, useUpdateOpportunity, type DbOpportunity } from '@/hooks/useAccountsData';
+import { toast } from 'sonner';
 
 // Normalize status based on stage (e.g., stage="Closed Won" but status="active")
 function normalizeOppStatus(status: OpportunityStatus, stage: OpportunityStage): OpportunityStatus {
@@ -94,7 +106,8 @@ export default function Quota() {
   
   const config = quotaConfig || DEFAULT_QUOTA_CONFIG;
   const [timeView, setTimeView] = useState<TimeView>('ytd');
-  
+  const [fixingDeal, setFixingDeal] = useState<(Opportunity & { missingFields: string[] }) | null>(null);
+  const updateOpportunityMutation = useUpdateOpportunity();
   // Calculate date filter based on time view
   const dateFilter = useMemo(() => {
     const now = new Date();
@@ -233,14 +246,30 @@ export default function Quota() {
                 </p>
                 <div className="space-y-1.5">
                   {needsReviewDeals.map(deal => (
-                    <div key={deal.id} className="flex items-center justify-between text-sm px-2 py-1 rounded bg-muted/30">
-                      <span className="font-medium">{deal.name}</span>
-                      <div className="flex gap-1">
-                        {deal.missingFields.map(f => (
-                          <Badge key={f} variant="outline" className="text-[10px] border-status-yellow/30 text-status-yellow">
-                            {f}
-                          </Badge>
-                        ))}
+                    <div key={deal.id} className="flex items-center justify-between text-sm px-2 py-1.5 rounded bg-muted/30">
+                      <button
+                        className="font-medium hover:text-primary hover:underline underline-offset-2 transition-colors text-left"
+                        onClick={() => setFixingDeal(deal)}
+                      >
+                        {deal.name}
+                      </button>
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-1">
+                          {deal.missingFields.map(f => (
+                            <Badge key={f} variant="outline" className="text-[10px] border-status-yellow/30 text-status-yellow">
+                              {f}
+                            </Badge>
+                          ))}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 text-xs gap-1 border-status-yellow/30 text-status-yellow hover:bg-status-yellow/10"
+                          onClick={() => setFixingDeal(deal)}
+                        >
+                          <Pencil className="h-3 w-3" />
+                          Fix
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -340,8 +369,25 @@ export default function Quota() {
                     </span>
                   </div>
                   {needsReviewDeals.map(deal => (
-                    <div key={deal.id} className="text-xs text-muted-foreground ml-5">
-                      <span className="font-medium text-foreground">{deal.name}</span> — missing: {deal.missingFields.join(', ')}
+                    <div key={deal.id} className="flex items-center justify-between text-xs text-muted-foreground ml-5 py-0.5">
+                      <span>
+                        <button
+                          className="font-medium text-foreground hover:text-primary hover:underline underline-offset-2 transition-colors"
+                          onClick={() => setFixingDeal(deal)}
+                        >
+                          {deal.name}
+                        </button>
+                        {' '}— missing: {deal.missingFields.join(', ')}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-5 text-[10px] gap-1 text-status-yellow"
+                        onClick={() => setFixingDeal(deal)}
+                      >
+                        <Pencil className="h-2.5 w-2.5" />
+                        Fix
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -411,7 +457,187 @@ export default function Quota() {
             </div>
           </TabsContent>
         </Tabs>
+
+        {/* Fix Deal Dialog */}
+        <FixDealDialog
+          deal={fixingDeal}
+          onClose={() => setFixingDeal(null)}
+          onSave={(id, updates) => {
+            const dbUpdates: Partial<DbOpportunity> = {};
+            if (updates.closeDate !== undefined) dbUpdates.close_date = updates.closeDate || null;
+            if (updates.arr !== undefined) dbUpdates.arr = updates.arr;
+            if (updates.dealType !== undefined) dbUpdates.deal_type = updates.dealType;
+            if (updates.stage !== undefined) dbUpdates.stage = updates.stage;
+            if (updates.status !== undefined) dbUpdates.status = updates.status;
+            if (updates.priorContractArr !== undefined) dbUpdates.prior_contract_arr = updates.priorContractArr;
+            if (updates.renewalArr !== undefined) dbUpdates.renewal_arr = updates.renewalArr;
+            if (updates.oneTimeAmount !== undefined) dbUpdates.one_time_amount = updates.oneTimeAmount;
+            updateOpportunityMutation.mutate({ id, updates: dbUpdates });
+            // Also update store opps for immediate reflection
+            const { updateOpportunity: storeUpdate } = useStore.getState();
+            storeUpdate(id, updates);
+            toast.success('Deal updated — quota recalculating');
+            setFixingDeal(null);
+          }}
+        />
       </div>
     </Layout>
+  );
+}
+
+// ===== Fix Deal Dialog =====
+const DEAL_TYPE_OPTIONS = [
+  { value: 'new-logo', label: 'New Logo' },
+  { value: 'expansion', label: 'Expansion' },
+  { value: 'renewal', label: 'Renewal' },
+  { value: 'one-time', label: 'One-Time' },
+];
+
+const STAGE_OPTIONS = [
+  { value: 'Closed Won', label: '6 - Closed Won' },
+  { value: 'Closed Lost', label: '7 - Closed Lost' },
+];
+
+function FixDealDialog({
+  deal,
+  onClose,
+  onSave,
+}: {
+  deal: (Opportunity & { missingFields: string[] }) | null;
+  onClose: () => void;
+  onSave: (id: string, updates: Partial<Opportunity>) => void;
+}) {
+  const [closeDate, setCloseDate] = useState('');
+  const [arr, setArr] = useState('');
+  const [dealType, setDealType] = useState('');
+  const [priorContractArr, setPriorContractArr] = useState('');
+  const [oneTimeAmount, setOneTimeAmount] = useState('');
+
+  // Reset form when deal changes
+  const dealId = deal?.id;
+  useState(() => {
+    if (deal) {
+      setCloseDate(deal.closeDate || '');
+      setArr(deal.arr?.toString() || '');
+      setDealType(deal.dealType || '');
+      setPriorContractArr(deal.priorContractArr?.toString() || '');
+      setOneTimeAmount(deal.oneTimeAmount?.toString() || '');
+    }
+  });
+
+  if (!deal) return null;
+
+  const handleSave = () => {
+    const updates: Partial<Opportunity> = {};
+    if (closeDate) updates.closeDate = closeDate;
+    if (arr) updates.arr = Number(arr);
+    if (dealType) updates.dealType = dealType as DealType;
+    if (priorContractArr) updates.priorContractArr = Number(priorContractArr);
+    if (oneTimeAmount) updates.oneTimeAmount = Number(oneTimeAmount);
+    onSave(deal.id, updates);
+  };
+
+  return (
+    <Dialog open={!!deal} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Pencil className="h-4 w-4 text-status-yellow" />
+            Fix: {deal.name}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="flex flex-wrap gap-1 mb-2">
+            {deal.missingFields.map(f => (
+              <Badge key={f} variant="outline" className="text-xs border-status-yellow/30 text-status-yellow">
+                Missing: {f}
+              </Badge>
+            ))}
+          </div>
+
+          {deal.missingFields.includes('Close Date') && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Close Date</Label>
+              <EditableDatePicker
+                value={closeDate || undefined}
+                onChange={(v) => setCloseDate(v || '')}
+                placeholder="Select close date"
+              />
+            </div>
+          )}
+
+          {deal.missingFields.includes('ARR') && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">ARR</Label>
+              <Input
+                type="number"
+                value={arr}
+                onChange={(e) => setArr(e.target.value)}
+                placeholder="e.g. 50000"
+                className="h-8"
+              />
+            </div>
+          )}
+
+          {deal.missingFields.includes('Deal Type') && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Deal Type</Label>
+              <Select value={dealType} onValueChange={setDealType}>
+                <SelectTrigger className="h-8">
+                  <SelectValue placeholder="Select deal type..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {DEAL_TYPE_OPTIONS.map(o => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Always show these for context */}
+          {!deal.missingFields.includes('ARR') && (
+            <div className="text-xs text-muted-foreground">
+              ARR: {formatCurrency(deal.arr || 0)}
+            </div>
+          )}
+          {!deal.missingFields.includes('Close Date') && deal.closeDate && (
+            <div className="text-xs text-muted-foreground">
+              Close Date: {deal.closeDate}
+            </div>
+          )}
+
+          {dealType === 'renewal' && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Prior Contract ARR (baseline)</Label>
+              <Input
+                type="number"
+                value={priorContractArr}
+                onChange={(e) => setPriorContractArr(e.target.value)}
+                placeholder="e.g. 40000"
+                className="h-8"
+              />
+            </div>
+          )}
+
+          {dealType === 'one-time' && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">One-Time Amount</Label>
+              <Input
+                type="number"
+                value={oneTimeAmount}
+                onChange={(e) => setOneTimeAmount(e.target.value)}
+                placeholder="e.g. 5000"
+                className="h-8"
+              />
+            </div>
+          )}
+        </div>
+        <div className="flex gap-2 justify-end">
+          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={handleSave}>Save & Recalculate</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -196,11 +196,19 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const addOpportunityMutation = useAddOpportunity();
   const updateRenewalMutation = useUpdateRenewal();
 
-  // Zustand store renewals (source of truth when DB is empty)
-  const { renewals: storeRenewals } = useStore();
+  // Zustand store renewals AND opportunities (source of truth when DB is empty)
+  const { renewals: storeRenewals, opportunities: storeOpportunities } = useStore();
 
-  // Transform DB data to UI format
-  const opportunities = useMemo(() => dbOpportunities.map(dbToUiOpportunity), [dbOpportunities]);
+  // Transform DB data to UI format, merge with store opps
+  const opportunities = useMemo(() => {
+    const dbMapped = dbOpportunities.map(dbToUiOpportunity);
+    const dbIds = new Set(dbMapped.map(o => o.id));
+    // Add store opportunities not already in DB (for backward compat)
+    const storeOnly = storeOpportunities
+      .filter(o => !dbIds.has(o.id))
+      .map(o => ({ ...o, status: normalizeOppStatus(o.status, o.stage) }));
+    return [...dbMapped, ...storeOnly];
+  }, [dbOpportunities, storeOpportunities]);
   
   // Merge DB renewals with Zustand store renewals (same source as Renewals tab)
   const renewals = useMemo(() => {
@@ -850,6 +858,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
         </Select>
         <ManageColumnsPopover
           tabTarget="opportunities"
+          viewKey={`opportunities-${renewalsOnly ? 'renewals' : excludeRenewals ? 'newlogo' : 'global'}-${savedView}`}
           builtInColumns={[
             { key: 'status', label: 'Status' },
             { key: 'stage', label: 'Stage' },

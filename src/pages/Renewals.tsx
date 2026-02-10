@@ -563,6 +563,7 @@ export default function Renewals() {
             {/* Manage Columns */}
             <ManageColumnsPopover
               tabTarget="renewals"
+              viewKey={`renewals-accounts-${currentView}`}
               builtInColumns={[
                 { key: 'renewalDue', label: 'Renewal Date' },
                 { key: 'churnRisk', label: 'Churn Risk' },

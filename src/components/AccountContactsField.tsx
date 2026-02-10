@@ -69,7 +69,8 @@ export const AccountContactsField = forwardRef<HTMLDivElement, AccountContactsFi
       
       {/* Contacts header row */}
       <div className="space-y-1">
-        <div className="grid grid-cols-[1fr_1fr_1.5fr_auto] gap-2 px-2 -mx-2">
+        <div className="grid grid-cols-[auto_1fr_1fr_1.5fr_auto] gap-2 px-2 -mx-2">
+          <div className="w-3.5" />
           <label className="text-xs font-medium text-muted-foreground">
             Name {realContacts.length > 0 && `(${realContacts.length})`}
           </label>
@@ -87,6 +88,10 @@ export const AccountContactsField = forwardRef<HTMLDivElement, AccountContactsFi
               contact={contact}
               onContactChange={(field, value) => handleContactChange(contact.id, field, value)}
               onRemove={() => handleRemoveContact(contact.id)}
+              onReadyForOutreachChange={(checked) => {
+                const updated = contacts.map(c => c.id === contact.id ? { ...c, readyForOutreach: checked } : c);
+                onChange(updated);
+              }}
             />
           ))
         )}

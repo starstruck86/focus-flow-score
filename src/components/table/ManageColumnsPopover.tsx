@@ -36,6 +36,8 @@ interface BuiltInColumn {
 interface ManageColumnsPopoverProps {
   tabTarget: TabTarget;
   builtInColumns: BuiltInColumn[];
+  /** Unique key for per-view column order persistence. Defaults to tabTarget. */
+  viewKey?: string;
 }
 
 const FIELD_TYPE_LABELS: Record<CustomFieldType, string> = {
@@ -53,7 +55,8 @@ const PLACEMENT_LABELS: Record<FieldPlacement, string> = {
   both: 'Both',
 };
 
-export function ManageColumnsPopover({ tabTarget, builtInColumns }: ManageColumnsPopoverProps) {
+export function ManageColumnsPopover({ tabTarget, builtInColumns, viewKey }: ManageColumnsPopoverProps) {
+  const orderKey = viewKey || tabTarget;
   const { fields, addField, deleteField, columnVisibility, setColumnVisible, columnOrder, setColumnOrder, moveColumn, resetColumnOrder } = useCustomFields();
   const [showAddForm, setShowAddForm] = useState(false);
   const [newFieldName, setNewFieldName] = useState('');
@@ -72,14 +75,13 @@ export function ManageColumnsPopover({ tabTarget, builtInColumns }: ManageColumn
   // Get ordered columns for reorder view
   const orderedColumns = useMemo(() => {
     const defaultOrder = builtInColumns.map(c => c.key);
-    const savedOrder = columnOrder[tabTarget];
+    const savedOrder = columnOrder[orderKey];
     if (!savedOrder) return defaultOrder;
-    // Filter to only keys that exist, then add any missing ones
     const validKeys = new Set(defaultOrder);
     const ordered = savedOrder.filter(k => validKeys.has(k));
     const missing = defaultOrder.filter(k => !ordered.includes(k));
     return [...ordered, ...missing];
-  }, [builtInColumns, columnOrder, tabTarget]);
+  }, [builtInColumns, columnOrder, orderKey]);
 
   const handleAddField = () => {
     if (!newFieldName.trim()) {
@@ -106,18 +108,16 @@ export function ManageColumnsPopover({ tabTarget, builtInColumns }: ManageColumn
   };
 
   const handleMoveColumn = (key: string, direction: 'up' | 'down') => {
-    // Initialize order if not set
-    if (!columnOrder[tabTarget]) {
-      setColumnOrder(tabTarget, orderedColumns);
-      // Need a tick for state to update, then move
-      setTimeout(() => moveColumn(tabTarget, key, direction), 0);
+    if (!columnOrder[orderKey]) {
+      setColumnOrder(orderKey, orderedColumns);
+      setTimeout(() => moveColumn(orderKey, key, direction), 0);
     } else {
-      moveColumn(tabTarget, key, direction);
+      moveColumn(orderKey, key, direction);
     }
   };
 
   const handleResetOrder = () => {
-    resetColumnOrder(tabTarget);
+    resetColumnOrder(orderKey);
     toast.success('Column order reset to default');
   };
 
