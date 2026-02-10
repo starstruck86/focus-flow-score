@@ -47,15 +47,14 @@ export function MetricFieldCell({ field, recordId, showLabel = true }: MetricFie
   const needsAbbreviation = fullFormatted && abbreviated && fullFormatted.replace(/[$,]/g, '').length > 6;
 
   return (
-    <div className="flex flex-col gap-0.5 py-0.5 min-w-0">
+    <div className="flex flex-col gap-1 py-1 min-w-0">
       {showLabel && (
-        <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider leading-none truncate">
+        <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider leading-none truncate">
           {field.name}
         </span>
       )}
-      <div className="text-sm font-semibold leading-tight min-w-0">
+      <div className="text-base font-bold leading-tight min-w-0 tabular-nums">
         {isNumeric && hasValue && fullFormatted ? (
-          // Render formatted display value; clicking activates edit via the underlying cell
           <div className="min-w-0">
             {needsAbbreviation ? (
               <TooltipProvider>
@@ -77,7 +76,9 @@ export function MetricFieldCell({ field, recordId, showLabel = true }: MetricFie
             )}
           </div>
         ) : (
-          <CustomFieldCell field={field} recordId={recordId} />
+          <div className={!hasValue ? 'text-sm font-normal' : ''}>
+            <CustomFieldCell field={field} recordId={recordId} />
+          </div>
         )}
       </div>
     </div>
