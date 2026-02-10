@@ -10,6 +10,8 @@ interface MetricFieldCellProps {
   showLabel?: boolean;
 }
 
+// Stacked layout: small label on top, prominent value below — matches built-in fields like Entitlements/Term
+
 function formatMetricValue(value: string | number | undefined, type: CustomFieldDefinition['type']): string | null {
   if (value == null || value === '' || value === 0) return null;
   
@@ -47,24 +49,24 @@ export function MetricFieldCell({ field, recordId, showLabel = true }: MetricFie
   const needsAbbreviation = fullFormatted && abbreviated && fullFormatted.replace(/[$,]/g, '').length > 6;
 
   return (
-    <div className="flex flex-col gap-1 py-1 min-w-0">
+    <div className="flex flex-col gap-0.5 py-0.5 min-w-0">
       {showLabel && (
-        <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider leading-none truncate">
+        <span className="text-[10px] font-medium text-muted-foreground leading-tight truncate">
           {field.name}
         </span>
       )}
-      <div className="text-base font-bold leading-tight min-w-0 tabular-nums">
+      <div className="text-sm font-semibold leading-snug min-w-0 tabular-nums text-foreground">
         {isNumeric && hasValue && fullFormatted ? (
-          <div className="min-w-0">
+          <>
             {needsAbbreviation ? (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="cursor-pointer">
+                    <span className="cursor-pointer hover:text-primary transition-colors">
                       <CustomFieldCell field={field} recordId={recordId} metricDisplay={
                         field.type === 'currency' ? `$${abbreviated}` : abbreviated!
                       } />
-                    </div>
+                    </span>
                   </TooltipTrigger>
                   <TooltipContent>
                     <p className="text-xs">{fullFormatted}</p>
@@ -74,9 +76,9 @@ export function MetricFieldCell({ field, recordId, showLabel = true }: MetricFie
             ) : (
               <CustomFieldCell field={field} recordId={recordId} metricDisplay={fullFormatted} />
             )}
-          </div>
+          </>
         ) : (
-          <div className={!hasValue ? 'text-sm font-normal' : ''}>
+          <div className={!hasValue ? 'text-xs font-normal text-muted-foreground' : ''}>
             <CustomFieldCell field={field} recordId={recordId} />
           </div>
         )}
