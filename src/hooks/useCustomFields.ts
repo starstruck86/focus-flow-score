@@ -207,6 +207,24 @@ export const useCustomFields = create<CustomFieldsStore>()(
         return get().fieldLinks[recordId]?.[fieldId];
       },
       
+      columnDisplayStyles: {},
+      
+      setColumnDisplayStyle: (viewKey, columnKey, style) => {
+        set((state) => ({
+          columnDisplayStyles: {
+            ...state.columnDisplayStyles,
+            [viewKey]: {
+              ...(state.columnDisplayStyles[viewKey] || {}),
+              [columnKey]: style,
+            },
+          },
+        }));
+      },
+      
+      getColumnDisplayStyle: (viewKey, columnKey) => {
+        return get().columnDisplayStyles[viewKey]?.[columnKey] || 'standard';
+      },
+      
       getFieldsForTab: (tab, placement) => {
         return get().fields.filter(f => {
           if (f.tabTarget !== tab) return false;
