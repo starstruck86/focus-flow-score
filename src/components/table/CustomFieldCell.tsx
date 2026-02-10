@@ -72,7 +72,7 @@ function FieldLinkAttachment({ recordId, fieldId }: { recordId: string; fieldId:
   );
 }
 
-// Wraps a value with an external link if one is attached
+// Renders a value alongside a separate link icon (so the value remains editable)
 function LinkedValue({ recordId, fieldId, children }: { recordId: string; fieldId: string; children: React.ReactNode }) {
   const { getFieldLink } = useCustomFields();
   const link = getFieldLink(recordId, fieldId);
@@ -80,16 +80,19 @@ function LinkedValue({ recordId, fieldId, children }: { recordId: string; fieldI
   if (!link) return <>{children}</>;
   
   return (
-    <a
-      href={link}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 text-primary hover:underline cursor-pointer"
-      onClick={(e) => e.stopPropagation()}
-    >
-      {children}
-      <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-60" />
-    </a>
+    <div className="flex items-center gap-1.5">
+      <div className="flex-1 min-w-0">{children}</div>
+      <a
+        href={link}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-primary/10 text-primary transition-colors flex-shrink-0"
+        onClick={(e) => e.stopPropagation()}
+        title="Open link"
+      >
+        <ExternalLink className="h-3.5 w-3.5" />
+      </a>
+    </div>
   );
 }
 
