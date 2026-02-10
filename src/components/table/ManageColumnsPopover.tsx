@@ -43,10 +43,12 @@ interface ManageColumnsPopoverProps {
 const FIELD_TYPE_LABELS: Record<CustomFieldType, string> = {
   text: 'Text',
   number: 'Number',
+  currency: 'Currency',
   date: 'Date',
   picklist: 'Picklist',
   url: 'URL',
   'long-text': 'Long Text',
+  boolean: 'Boolean',
 };
 
 const PLACEMENT_LABELS: Record<FieldPlacement, string> = {

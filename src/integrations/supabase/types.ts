@@ -66,6 +66,7 @@ export type Database = {
         Row: {
           account_status: string | null
           cadence_name: string | null
+          contact_status: string | null
           created_at: string
           current_agreement_link: string | null
           ecommerce: string | null
@@ -97,6 +98,7 @@ export type Database = {
         Insert: {
           account_status?: string | null
           cadence_name?: string | null
+          contact_status?: string | null
           created_at?: string
           current_agreement_link?: string | null
           ecommerce?: string | null
@@ -128,6 +130,7 @@ export type Database = {
         Update: {
           account_status?: string | null
           cadence_name?: string | null
+          contact_status?: string | null
           created_at?: string
           current_agreement_link?: string | null
           ecommerce?: string | null

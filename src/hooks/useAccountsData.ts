@@ -32,6 +32,7 @@ export interface DbAccount {
   notes?: string;
   mar_tech?: string;
   ecommerce?: string;
+  contact_status?: string;
   tags: string[];
   created_at: string;
   updated_at: string;

@@ -1,4 +1,5 @@
 // Renders a custom field value with display-first behavior, matching the field type
+import { useState } from 'react';
 import { EditableTextCell, EditableTextareaCell, EditableNumberCell } from './EditableCell';
 import { EditableLinkCell } from './EditableLinkCell';
 import { DisplaySelectCell } from './DisplaySelectCell';
@@ -41,6 +42,15 @@ export function CustomFieldCell({ field, recordId }: CustomFieldCellProps) {
           value={(value as number) || 0}
           onChange={(v) => setFieldValue(recordId, field.id, v)}
           format="number"
+        />
+      );
+
+    case 'currency':
+      return (
+        <EditableNumberCell
+          value={(value as number) || 0}
+          onChange={(v) => setFieldValue(recordId, field.id, v)}
+          format="currency"
         />
       );
 
@@ -88,6 +98,22 @@ export function CustomFieldCell({ field, recordId }: CustomFieldCellProps) {
           onChange={(v) => setFieldValue(recordId, field.id, v)}
         />
       );
+
+    case 'boolean': {
+      const boolVal = String(value) === 'true' || value === 1;
+      return (
+        <span
+          className="cursor-pointer select-none"
+          onClick={() => setFieldValue(recordId, field.id, boolVal ? undefined : 'true')}
+        >
+          {boolVal ? (
+            <span className="inline-flex items-center gap-1 text-xs text-status-green">✓ Yes</span>
+          ) : (
+            <span className="text-xs text-muted-foreground">+ Add</span>
+          )}
+        </span>
+      );
+    }
 
     default:
       return null;
