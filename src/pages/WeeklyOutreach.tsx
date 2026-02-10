@@ -511,7 +511,7 @@ function FunnelGroupSection({
                     </TableRow>
                     {expandedAccountId === account.id && (
                       <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
-                        <TableCell colSpan={10} className="pt-0 pb-3">
+                        <TableCell colSpan={10 + summaryCustomFields.length} className="pt-0 pb-3">
                           <AccountContactsField
                             accountId={account.id}
                             contacts={account.accountContacts || []}
