@@ -75,6 +75,11 @@ interface CustomFieldsStore {
   setFieldLink: (recordId: string, fieldId: string, url: string | undefined) => void;
   getFieldLink: (recordId: string, fieldId: string) => string | undefined;
   
+  // Column display styles (standard/metric) per view
+  columnDisplayStyles: ColumnDisplayStyles;
+  setColumnDisplayStyle: (viewKey: string, columnKey: string, style: ColumnDisplayStyle) => void;
+  getColumnDisplayStyle: (viewKey: string, columnKey: string) => ColumnDisplayStyle;
+  
   // Helpers
   getFieldsForTab: (tab: TabTarget, placement?: FieldPlacement) => CustomFieldDefinition[];
 }
