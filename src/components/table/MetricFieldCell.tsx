@@ -10,6 +10,8 @@ interface MetricFieldCellProps {
   showLabel?: boolean;
 }
 
+// Stacked layout: small label on top, prominent value below — matches built-in fields like Entitlements/Term
+
 function formatMetricValue(value: string | number | undefined, type: CustomFieldDefinition['type']): string | null {
   if (value == null || value === '' || value === 0) return null;
   
