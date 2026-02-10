@@ -189,6 +189,12 @@ interface OpportunitiesTableProps {
 }
 
 export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, excludeRenewals = false, showChurnRisk = true, columnOrder = 'default' }: OpportunitiesTableProps) {
+  // Custom fields for this specific opportunities context
+  const oppTabTarget = renewalsOnly ? 'opportunities-renewals' as const : 'opportunities-newlogo' as const;
+  const { fields, getFieldValue } = useCustomFields();
+  const summaryCustomFields = fields.filter(
+    f => f.tabTarget === oppTabTarget && (f.placement === 'summary' || f.placement === 'both')
+  );
   // Database hooks
   const { data: dbOpportunities = [], isLoading: oppsLoading } = useDbOpportunities();
   const { data: dbRenewals = [], isLoading: renewalsLoading } = useDbRenewals();
