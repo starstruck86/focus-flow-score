@@ -841,7 +841,12 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             />
           </TableCell>
           <NextStepTextCell opp={opp} />
-          <ActionsCell opp={opp} />
+            {summaryCustomFields.map(field => (
+              <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                <CustomFieldCell field={field} recordId={opp.id} />
+              </TableCell>
+            ))}
+            <ActionsCell opp={opp} />
         </TableRow>
         {isExpanded && (
           <TableRow className="hover:bg-transparent border-b-2">
