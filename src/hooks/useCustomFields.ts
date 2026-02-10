@@ -40,6 +40,14 @@ export interface ColumnOrder {
   [tabKey: string]: string[];
 }
 
+// Column display style per view (standard or metric)
+export type ColumnDisplayStyle = 'standard' | 'metric';
+export interface ColumnDisplayStyles {
+  [viewKey: string]: {
+    [columnKey: string]: ColumnDisplayStyle;
+  };
+}
+
 interface CustomFieldsStore {
   // Field definitions
   fields: CustomFieldDefinition[];
