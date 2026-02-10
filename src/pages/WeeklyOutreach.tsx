@@ -347,6 +347,10 @@ function FunnelGroupSection({
   isCollapsed: boolean;
   onToggleCollapse: () => void;
 }) {
+  const { fields, getFieldValue } = useCustomFields();
+  const summaryCustomFields = fields.filter(
+    f => f.tabTarget === 'accounts' && (f.placement === 'summary' || f.placement === 'both')
+  );
   if (accounts.length === 0 && isCollapsed) return null;
 
   return (
@@ -388,8 +392,11 @@ function FunnelGroupSection({
                     <TableHead className="w-[10%]">Cadence</TableHead>
                   )}
                   <TableHead className="w-[16%]">MarTech</TableHead>
-                  <TableHead className="w-[16%]">Ecommerce</TableHead>
-                  <TableHead className="w-[4%]"></TableHead>
+                    <TableHead className="w-[16%]">Ecommerce</TableHead>
+                    {summaryCustomFields.map(field => (
+                      <TableHead key={field.id}>{field.name}</TableHead>
+                    ))}
+                    <TableHead className="w-[4%]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -477,6 +484,11 @@ function FunnelGroupSection({
                           emptyText="Add"
                         />
                       </TableCell>
+                      {summaryCustomFields.map(field => (
+                        <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                          <CustomFieldCell field={field} recordId={account.id} />
+                        </TableCell>
+                      ))}
                       <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -499,7 +511,7 @@ function FunnelGroupSection({
                     </TableRow>
                     {expandedAccountId === account.id && (
                       <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
-                        <TableCell colSpan={10} className="pt-0 pb-3">
+                        <TableCell colSpan={10 + summaryCustomFields.length} className="pt-0 pb-3">
                           <AccountContactsField
                             accountId={account.id}
                             contacts={account.accountContacts || []}
