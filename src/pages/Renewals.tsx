@@ -436,6 +436,8 @@ export default function Renewals() {
   });
 
   // Sort renewals: default is Renewal Date → Churn Risk → ARR desc → Name
+  // Also supports sorting by custom field values
+  const { getFieldValue } = useCustomFields();
   const sortedRenewals = useMemo(() => {
     const sortKeyMap = {
       renewalDue: { key: 'renewalDue' as keyof Renewal },
@@ -444,8 +446,25 @@ export default function Renewals() {
       accountName: { key: 'accountName' as keyof Renewal },
       csm: { key: 'csm' as keyof Renewal },
     };
+    
+    // Check if sorting by a custom field
+    if (renewalSortConfig?.key.startsWith('custom:')) {
+      const fieldId = renewalSortConfig.key.slice(7);
+      const direction = renewalSortConfig.direction!;
+      return [...filteredRenewals].sort((a, b) => {
+        const aVal = getFieldValue(a.id, fieldId);
+        const bVal = getFieldValue(b.id, fieldId);
+        let comparison = 0;
+        if (aVal == null && bVal != null) comparison = 1;
+        else if (aVal != null && bVal == null) comparison = -1;
+        else if (typeof aVal === 'number' && typeof bVal === 'number') comparison = aVal - bVal;
+        else comparison = String(aVal ?? '').localeCompare(String(bVal ?? ''));
+        return direction === 'desc' ? -comparison : comparison;
+      });
+    }
+    
     return applySortWithFallback(filteredRenewals, renewalSortConfig, sortRenewalsDefault, sortKeyMap);
-  }, [filteredRenewals, renewalSortConfig]);
+  }, [filteredRenewals, renewalSortConfig, getFieldValue]);
 
   // Group by quarter for display
   const groupedRenewals = sortedRenewals.reduce((acc, renewal) => {
@@ -919,9 +938,17 @@ export default function Renewals() {
                       <TableHead className="w-[10%]">Planhat</TableHead>
                       <TableHead className="w-[10%]">Agreement</TableHead>
                       <TableHead className="w-[20%]">Next Step</TableHead>
-                      {/* Custom field column headers */}
+                      {/* Custom field column headers - sortable */}
                       {summaryCustomFields.map(field => (
-                        <TableHead key={field.id} className="text-xs">{field.name}</TableHead>
+                        <SortableHeader
+                          key={field.id}
+                          sortKey={`custom:${field.id}`}
+                          currentSort={renewalSortConfig}
+                          onSort={handleRenewalSort}
+                          className="text-xs"
+                        >
+                          {field.name}
+                        </SortableHeader>
                       ))}
                       <TableHead className="w-[4%]"></TableHead>
                     </TableRow>
