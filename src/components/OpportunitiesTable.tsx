@@ -37,6 +37,7 @@ import { cn } from '@/lib/utils';
 import { EditableDatePicker } from '@/components/EditableDatePicker';
 import { OpportunityDetailsField } from '@/components/OpportunityDetailsField';
 import { ClosedWonModal } from '@/components/quota/ClosedWonModal';
+import { DeleteOpportunityDialog } from '@/components/quota/DeleteOpportunityDialog';
 import { OpportunityNameCell } from '@/components/table/ClickableNameCell';
 import { DisplaySelectCell } from '@/components/table/DisplaySelectCell';
 import { EditableNumberCell, EditableTextareaCell, EditableTextCell } from '@/components/table/EditableCell';
@@ -271,6 +272,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const [closedWonModalOpen, setClosedWonModalOpen] = useState(false);
   const [closedWonOpportunity, setClosedWonOpportunity] = useState<Opportunity | null>(null);
   const [expandedOppIds, setExpandedOppIds] = useState<Set<string>>(new Set());
+  const [deleteDialogOpp, setDeleteDialogOpp] = useState<Opportunity | null>(null);
 
   // Get renewals that don't have linked opportunities yet (for adding new renewal opps)
   const renewalsWithoutOpps = useMemo(() => {
@@ -355,6 +357,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     closeDate: { key: 'closeDate' },
     stage: { key: 'stage', customRank: OPP_STAGE_SORT_RANK },
     nextStep: { key: 'nextStep' },
+    priorContractArr: { key: 'priorContractArr' },
+    renewalArr: { key: 'renewalArr' },
+    oneTimeAmount: { key: 'oneTimeAmount' },
   };
 
   const defaultOppSort = (items: Opportunity[]) => items; // keep grouped by status
@@ -497,7 +502,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           <DropdownMenuSeparator />
           <DropdownMenuItem
             className="text-destructive"
-            onClick={() => deleteOpportunity(opp.id)}
+            onClick={() => setDeleteDialogOpp(opp)}
           >
             Delete
           </DropdownMenuItem>
@@ -519,6 +524,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     const isExpanded = expandedOppIds.has(opp.id);
 
     if (renewalsOnly) {
+      const expansion = (opp.renewalArr || 0) - (opp.priorContractArr || 0);
+      const totalValue = (opp.renewalArr || 0) + (opp.oneTimeAmount || 0);
+
       return (
         <React.Fragment key={opp.id}>
           <TableRow className="group hover:bg-muted/30 cursor-pointer" onClick={() => toggleExpand(opp.id)}>
@@ -546,13 +554,6 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 onOpenDetails={() => onOpenDrawer(opp)}
               />
             </TableCell>
-            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-              <EditableNumberCell
-                value={opp.arr || 0}
-                onChange={(v) => updateOpportunity(opp.id, { arr: v || undefined })}
-                format="currency"
-              />
-            </TableCell>
             {showChurnRisk && (
               <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                 <DisplaySelectCell
@@ -578,7 +579,34 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 onChange={(v) => updateOpportunity(opp.id, { stage: v as OpportunityStage })}
               />
             </TableCell>
-            <NextStepTextCell opp={opp} />
+            {/* ARR Breakdown columns */}
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <EditableNumberCell
+                value={opp.priorContractArr || 0}
+                onChange={(v) => updateOpportunity(opp.id, { priorContractArr: v || undefined })}
+                format="currency"
+              />
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <EditableNumberCell
+                value={opp.renewalArr || 0}
+                onChange={(v) => updateOpportunity(opp.id, { renewalArr: v || undefined })}
+                format="currency"
+              />
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <EditableNumberCell
+                value={opp.oneTimeAmount || 0}
+                onChange={(v) => updateOpportunity(opp.id, { oneTimeAmount: v || undefined })}
+                format="currency"
+              />
+            </TableCell>
+            <TableCell className="align-top py-3 text-right font-mono text-sm">
+              {expansion !== 0 ? formatCurrency(expansion) : <span className="text-muted-foreground">—</span>}
+            </TableCell>
+            <TableCell className="align-top py-3 text-right font-mono text-sm font-semibold">
+              {totalValue !== 0 ? formatCurrency(totalValue) : <span className="text-muted-foreground">—</span>}
+            </TableCell>
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -593,7 +621,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     className="text-destructive"
-                    onClick={() => deleteOpportunity(opp.id)}
+                    onClick={() => setDeleteDialogOpp(opp)}
                   >
                     Delete
                   </DropdownMenuItem>
@@ -603,7 +631,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           </TableRow>
           {isExpanded && (
             <TableRow className="hover:bg-transparent border-b-2">
-              <TableCell colSpan={showChurnRisk ? 10 : 9} className="pt-0 pb-3">
+              <TableCell colSpan={showChurnRisk ? 13 : 12} className="pt-0 pb-3">
                 <OpportunityDetailsField
                   opportunityId={opp.id}
                   nextStepDate={opp.nextStepDate}
@@ -692,10 +720,10 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                     Open Details
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="text-destructive"
-                    onClick={() => deleteOpportunity(opp.id)}
-                  >
+          <DropdownMenuItem
+            className="text-destructive"
+            onClick={() => setDeleteDialogOpp(opp)}
+          >
                     Delete
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -827,7 +855,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     );
   };
 
-  const totalCols = columnOrder === 'outreach' ? 8 : (showChurnRisk ? 10 : 9);
+  const totalCols = renewalsOnly ? (showChurnRisk ? 13 : 12) : columnOrder === 'outreach' ? 8 : (showChurnRisk ? 10 : 9);
 
   return (
     <div className="space-y-4">
@@ -893,14 +921,17 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               ) : renewalsOnly ? (
                 <>
                   <TableHead className="w-8"></TableHead>
-                  <SortableHeader sortKey="status" currentSort={sortConfig} onSort={handleSort} className="w-[12%]">Status</SortableHeader>
-                  <SortableHeader sortKey="name" currentSort={sortConfig} onSort={handleSort} className="w-[20%]">Opportunity</SortableHeader>
-                  <SortableHeader sortKey="arr" currentSort={sortConfig} onSort={handleSort} className="w-[10%]">ARR</SortableHeader>
-                  {showChurnRisk && <SortableHeader sortKey="churnRisk" currentSort={sortConfig} onSort={handleSort} className="w-[10%]">Churn Risk</SortableHeader>}
-                  <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[12%]">Close Date</SortableHeader>
-                  <SortableHeader sortKey="stage" currentSort={sortConfig} onSort={handleSort} className="w-[12%]">Stage</SortableHeader>
-                  <SortableHeader sortKey="nextStep" currentSort={sortConfig} onSort={handleSort} className="w-[14%]">Next Step</SortableHeader>
-                  <TableHead className="w-[5%]"></TableHead>
+                  <SortableHeader sortKey="status" currentSort={sortConfig} onSort={handleSort} className="w-[10%]">Status</SortableHeader>
+                  <SortableHeader sortKey="name" currentSort={sortConfig} onSort={handleSort} className="w-[16%]">Opportunity</SortableHeader>
+                  {showChurnRisk && <SortableHeader sortKey="churnRisk" currentSort={sortConfig} onSort={handleSort} className="w-[8%]">Churn Risk</SortableHeader>}
+                  <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[10%]">Close Date</SortableHeader>
+                  <SortableHeader sortKey="stage" currentSort={sortConfig} onSort={handleSort} className="w-[10%]">Stage</SortableHeader>
+                  <SortableHeader sortKey="priorContractArr" currentSort={sortConfig} onSort={handleSort} className="w-[8%]">Prior Contract</SortableHeader>
+                  <SortableHeader sortKey="renewalArr" currentSort={sortConfig} onSort={handleSort} className="w-[8%]">Renewal ARR</SortableHeader>
+                  <SortableHeader sortKey="oneTimeAmount" currentSort={sortConfig} onSort={handleSort} className="w-[7%]">One-Time</SortableHeader>
+                  <TableHead className="w-[7%] text-xs">Expansion</TableHead>
+                  <TableHead className="w-[7%] text-xs">Total Value</TableHead>
+                  <TableHead className="w-[4%]"></TableHead>
                 </>
               ) : (
                 <>
@@ -1012,6 +1043,20 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           onOpenChange={setClosedWonModalOpen}
           opportunity={closedWonOpportunity}
           onSave={handleClosedWonSave}
+        />
+      )}
+
+      {/* Delete Opportunity Confirmation */}
+      {deleteDialogOpp && (
+        <DeleteOpportunityDialog
+          open={!!deleteDialogOpp}
+          onOpenChange={(open) => { if (!open) setDeleteDialogOpp(null); }}
+          opportunityName={deleteDialogOpp.name}
+          affectsQuota={deleteDialogOpp.status === 'closed-won'}
+          onConfirm={() => {
+            deleteOpportunity(deleteDialogOpp.id);
+            setDeleteDialogOpp(null);
+          }}
         />
       )}
     </div>
