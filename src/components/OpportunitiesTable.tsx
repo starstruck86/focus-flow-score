@@ -222,10 +222,15 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     setClosedWonOpportunity(null);
   };
 
-  // Get renewal-linked opportunity IDs
+  // Get renewal-linked opportunity IDs — includes both linked renewals AND deal_type='renewal'
   const renewalOpportunityIds = useMemo(() => {
-    return new Set(renewals.filter(r => r.linkedOpportunityId).map(r => r.linkedOpportunityId));
-  }, [renewals]);
+    const ids = new Set<string>();
+    // Include opps linked via renewal record
+    renewals.filter(r => r.linkedOpportunityId).forEach(r => ids.add(r.linkedOpportunityId!));
+    // Also include opps tagged as deal_type='renewal' even if not linked
+    opportunities.filter(o => o.dealType === 'renewal').forEach(o => ids.add(o.id));
+    return ids;
+  }, [renewals, opportunities]);
 
 
   const filteredOpportunities = useMemo(() => {
@@ -309,6 +314,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             arr: renewal.arr,
             churn_risk: renewal.churnRisk || 'low',
             close_date: closeDate,
+            deal_type: 'renewal',
           });
           
           // Link the new opportunity to the renewal
@@ -854,14 +860,14 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             {showAddRow && (
               <TableRow>
                 <TableCell colSpan={9}>
-                  <div className="flex items-center gap-2 flex-wrap">
+                   <div className="flex items-center gap-2 flex-wrap">
                     {renewalsOnly && (
                       <Select 
                         value={selectedRenewalId} 
                         onValueChange={(id) => {
                           setSelectedRenewalId(id);
                           const renewal = renewals.find(r => r.id === id);
-                          if (renewal && !newOppName) {
+                          if (renewal) {
                             setNewOppName(`${renewal.accountName} Renewal`);
                           }
                         }}
@@ -870,11 +876,15 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                           <SelectValue placeholder="Select renewal account..." />
                         </SelectTrigger>
                         <SelectContent>
-                          {renewals.map(renewal => (
-                            <SelectItem key={renewal.id} value={renewal.id}>
-                              {renewal.accountName}
-                            </SelectItem>
-                          ))}
+                          {renewals.length === 0 ? (
+                            <SelectItem value="__none" disabled>No renewal accounts found</SelectItem>
+                          ) : (
+                            renewals.map(renewal => (
+                              <SelectItem key={renewal.id} value={renewal.id}>
+                                {renewal.accountName} {renewal.linkedOpportunityId ? '(has opp)' : ''}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     )}

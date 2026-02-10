@@ -22,13 +22,59 @@ import {
   generateLedgerEntries,
   formatCurrency,
 } from '@/lib/commissionCalculations';
-import type { QuotaConfig } from '@/types';
+import type { QuotaConfig, Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
 import { DollarSign, Target, FileText, Settings2 } from 'lucide-react';
+import { useDbOpportunities, type DbOpportunity } from '@/hooks/useAccountsData';
+
+// Transform DB opportunity to UI format for commission calculations
+function dbToUiOpportunity(db: DbOpportunity): Opportunity {
+  return {
+    id: db.id,
+    name: db.name,
+    accountId: db.account_id ?? undefined,
+    salesforceLink: db.salesforce_link ?? undefined,
+    salesforceId: db.salesforce_id ?? undefined,
+    linkedContactIds: [],
+    status: (db.status as OpportunityStatus) || 'active',
+    stage: (db.stage as OpportunityStage) || '',
+    arr: db.arr ?? undefined,
+    churnRisk: (db.churn_risk as ChurnRisk) ?? undefined,
+    closeDate: db.close_date ?? undefined,
+    nextStep: db.next_step ?? undefined,
+    nextStepDate: db.next_step_date ?? undefined,
+    lastTouchDate: db.last_touch_date ?? undefined,
+    notes: db.notes ?? undefined,
+    activityLog: (db.activity_log as any[]) || [],
+    createdAt: db.created_at,
+    updatedAt: db.updated_at,
+    dealType: (db.deal_type as DealType) ?? undefined,
+    paymentTerms: db.payment_terms as any,
+    termMonths: db.term_months ?? undefined,
+    priorContractArr: db.prior_contract_arr ?? undefined,
+    renewalArr: db.renewal_arr ?? undefined,
+    oneTimeAmount: db.one_time_amount ?? undefined,
+    isNewLogo: db.is_new_logo ?? undefined,
+    accountName: undefined, // DB doesn't have inline account name
+  };
+}
 
 type TimeView = 'ytd' | 'qtd' | 'mtd';
 
 export default function Quota() {
-  const { opportunities, quotaConfig, setQuotaConfig } = useStore();
+  // Use DB hooks for opportunities (source of truth)
+  const { data: dbOpportunities = [] } = useDbOpportunities();
+  const dbOpps = useMemo(() => dbOpportunities.map(dbToUiOpportunity), [dbOpportunities]);
+  
+  // Also merge any Zustand-only opportunities (for backward compat)
+  const { opportunities: storeOpps, quotaConfig, setQuotaConfig } = useStore();
+  
+  // Combine: prefer DB opps, fall back to store opps not in DB
+  const opportunities = useMemo(() => {
+    const dbIds = new Set(dbOpps.map(o => o.id));
+    const storeOnly = storeOpps.filter(o => !dbIds.has(o.id));
+    return [...dbOpps, ...storeOnly];
+  }, [dbOpps, storeOpps]);
+  
   const config = quotaConfig || DEFAULT_QUOTA_CONFIG;
   const [timeView, setTimeView] = useState<TimeView>('ytd');
   
