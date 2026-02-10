@@ -40,6 +40,14 @@ export interface ColumnOrder {
   [tabKey: string]: string[];
 }
 
+// Column display style per view (standard or metric)
+export type ColumnDisplayStyle = 'standard' | 'metric';
+export interface ColumnDisplayStyles {
+  [viewKey: string]: {
+    [columnKey: string]: ColumnDisplayStyle;
+  };
+}
+
 interface CustomFieldsStore {
   // Field definitions
   fields: CustomFieldDefinition[];
@@ -66,6 +74,11 @@ interface CustomFieldsStore {
   fieldLinks: CustomFieldLinks;
   setFieldLink: (recordId: string, fieldId: string, url: string | undefined) => void;
   getFieldLink: (recordId: string, fieldId: string) => string | undefined;
+  
+  // Column display styles (standard/metric) per view
+  columnDisplayStyles: ColumnDisplayStyles;
+  setColumnDisplayStyle: (viewKey: string, columnKey: string, style: ColumnDisplayStyle) => void;
+  getColumnDisplayStyle: (viewKey: string, columnKey: string) => ColumnDisplayStyle;
   
   // Helpers
   getFieldsForTab: (tab: TabTarget, placement?: FieldPlacement) => CustomFieldDefinition[];
@@ -192,6 +205,24 @@ export const useCustomFields = create<CustomFieldsStore>()(
       
       getFieldLink: (recordId, fieldId) => {
         return get().fieldLinks[recordId]?.[fieldId];
+      },
+      
+      columnDisplayStyles: {},
+      
+      setColumnDisplayStyle: (viewKey, columnKey, style) => {
+        set((state) => ({
+          columnDisplayStyles: {
+            ...state.columnDisplayStyles,
+            [viewKey]: {
+              ...(state.columnDisplayStyles[viewKey] || {}),
+              [columnKey]: style,
+            },
+          },
+        }));
+      },
+      
+      getColumnDisplayStyle: (viewKey, columnKey) => {
+        return get().columnDisplayStyles[viewKey]?.[columnKey] || 'standard';
       },
       
       getFieldsForTab: (tab, placement) => {

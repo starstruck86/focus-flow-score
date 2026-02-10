@@ -13,6 +13,8 @@ import { Input } from '@/components/ui/input';
 interface CustomFieldCellProps {
   field: CustomFieldDefinition;
   recordId: string;
+  /** When provided, show this formatted string as display value instead of raw number */
+  metricDisplay?: string;
 }
 
 // Small link icon button that lets users attach a URL to any custom field value
@@ -96,9 +98,28 @@ function LinkedValue({ recordId, fieldId, children }: { recordId: string; fieldI
   );
 }
 
-export function CustomFieldCell({ field, recordId }: CustomFieldCellProps) {
+export function CustomFieldCell({ field, recordId, metricDisplay }: CustomFieldCellProps) {
   const { getFieldValue, setFieldValue } = useCustomFields();
   const value = getFieldValue(recordId, field.id);
+  const [metricEditing, setMetricEditing] = useState(false);
+
+  // For metric display: show formatted value, click to edit
+  if (metricDisplay && !metricEditing) {
+    return (
+      <span
+        className="cursor-pointer hover:text-primary transition-colors"
+        onClick={() => setMetricEditing(true)}
+      >
+        {metricDisplay}
+      </span>
+    );
+  }
+
+  // If we were in metric editing mode and the underlying cell blurs, exit
+  const wrapOnChange = (setter: (v: any) => void) => (v: any) => {
+    setter(v);
+    setMetricEditing(false);
+  };
 
   switch (field.type) {
     case 'text':

@@ -69,6 +69,7 @@ import { OpportunityDrawer } from '@/components/OpportunityDrawer';
 import { AccountContactsField, type AccountContact } from '@/components/AccountContactsField';
 import { ManageColumnsPopover } from '@/components/table/ManageColumnsPopover';
 import { CustomFieldCell, CustomFieldRow } from '@/components/table/CustomFieldCell';
+import { MetricFieldCell } from '@/components/table/MetricFieldCell';
 import { useCustomFields } from '@/hooks/useCustomFields';
 import { ImportModal } from '@/components/import';
 import { EditableTextCell, EditableTextareaCell, DisplaySelectCell, WebsiteLinkCell, AccountNameCell } from '@/components/table';
@@ -484,11 +485,18 @@ function FunnelGroupSection({
                           emptyText="Add"
                         />
                       </TableCell>
-                      {summaryCustomFields.map(field => (
-                        <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-                          <CustomFieldCell field={field} recordId={account.id} />
-                        </TableCell>
-                      ))}
+                      {summaryCustomFields.map(field => {
+                        const displayStyle = useCustomFields.getState().getColumnDisplayStyle('accounts-newlogo-funnel', `custom:${field.id}`);
+                        return (
+                          <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                            {displayStyle === 'metric' ? (
+                              <MetricFieldCell field={field} recordId={account.id} />
+                            ) : (
+                              <CustomFieldCell field={field} recordId={account.id} />
+                            )}
+                          </TableCell>
+                        );
+                      })}
                       <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

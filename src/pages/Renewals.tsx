@@ -66,6 +66,7 @@ import { RenewalDetailsField } from '@/components/RenewalDetailsField';
 import { EditableTextCell, EditableNumberCell, DisplaySelectCell, PlanhatLinkCell, AgreementLinkCell, AccountNameCell } from '@/components/table';
 import { ManageColumnsPopover } from '@/components/table/ManageColumnsPopover';
 import { CustomFieldCell, CustomFieldRow } from '@/components/table/CustomFieldCell';
+import { MetricFieldCell } from '@/components/table/MetricFieldCell';
 import { useCustomFields } from '@/hooks/useCustomFields';
 import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
 import { sortRenewalsDefault, applySortWithFallback, CHURN_RISK_SORT_RANK, CHURN_RISK_DISPLAY_LABELS } from '@/lib/sortUtils';
@@ -1039,11 +1040,18 @@ export default function Renewals() {
                             />
                           </TableCell>
                           {/* Custom field cells */}
-                          {summaryCustomFields.map(field => (
-                            <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-                              <CustomFieldCell field={field} recordId={renewal.id} />
-                            </TableCell>
-                          ))}
+                          {summaryCustomFields.map(field => {
+                            const displayStyle = useCustomFields.getState().getColumnDisplayStyle(`renewals-accounts-${currentView}`, `custom:${field.id}`);
+                            return (
+                              <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                                {displayStyle === 'metric' ? (
+                                  <MetricFieldCell field={field} recordId={renewal.id} />
+                                ) : (
+                                  <CustomFieldCell field={field} recordId={renewal.id} />
+                                )}
+                              </TableCell>
+                            );
+                          })}
                           <TableCell className="align-top py-3">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>

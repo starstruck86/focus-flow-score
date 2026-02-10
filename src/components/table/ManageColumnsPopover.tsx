@@ -25,6 +25,7 @@ import {
   type TabTarget,
   type CustomFieldType,
   type FieldPlacement,
+  type ColumnDisplayStyle,
 } from '@/hooks/useCustomFields';
 
 interface BuiltInColumn {
@@ -59,7 +60,7 @@ const PLACEMENT_LABELS: Record<FieldPlacement, string> = {
 
 export function ManageColumnsPopover({ tabTarget, builtInColumns, viewKey }: ManageColumnsPopoverProps) {
   const orderKey = viewKey || tabTarget;
-  const { fields, addField, deleteField, columnVisibility, setColumnVisible, columnOrder, setColumnOrder, moveColumn, resetColumnOrder } = useCustomFields();
+  const { fields, addField, deleteField, columnVisibility, setColumnVisible, columnOrder, setColumnOrder, moveColumn, resetColumnOrder, getColumnDisplayStyle, setColumnDisplayStyle } = useCustomFields();
   const [showAddForm, setShowAddForm] = useState(false);
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldType, setNewFieldType] = useState<CustomFieldType>('text');
@@ -202,6 +203,21 @@ export function ManageColumnsPopover({ tabTarget, builtInColumns, viewKey }: Man
                           {FIELD_TYPE_LABELS[field.type]} • {PLACEMENT_LABELS[field.placement]}
                         </span>
                       </div>
+                      {/* Display style toggle for summary fields */}
+                      {(field.placement === 'summary' || field.placement === 'both') && (
+                        <Button
+                          variant={getColumnDisplayStyle(orderKey, `custom:${field.id}`) === 'metric' ? 'secondary' : 'ghost'}
+                          size="sm"
+                          className="h-5 text-[9px] px-1.5 mr-1 shrink-0"
+                          onClick={() => {
+                            const current = getColumnDisplayStyle(orderKey, `custom:${field.id}`);
+                            setColumnDisplayStyle(orderKey, `custom:${field.id}`, current === 'metric' ? 'standard' : 'metric');
+                          }}
+                          title="Toggle metric display style"
+                        >
+                          {getColumnDisplayStyle(orderKey, `custom:${field.id}`) === 'metric' ? '▦ Metric' : '▤ Std'}
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"

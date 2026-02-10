@@ -43,6 +43,7 @@ import { DisplaySelectCell } from '@/components/table/DisplaySelectCell';
 import { EditableNumberCell, EditableTextareaCell, EditableTextCell } from '@/components/table/EditableCell';
 import { ManageColumnsPopover } from '@/components/table/ManageColumnsPopover';
 import { CustomFieldCell, CustomFieldRow } from '@/components/table/CustomFieldCell';
+import { MetricFieldCell } from '@/components/table/MetricFieldCell';
 import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
 import { useCustomFields } from '@/hooks/useCustomFields';
 import { applySortWithFallback } from '@/lib/sortUtils';
@@ -628,11 +629,15 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             <TableCell className="align-top py-3 text-right font-mono text-sm font-semibold">
               {totalValue !== 0 ? formatCurrency(totalValue) : <span className="text-muted-foreground">—</span>}
             </TableCell>
-            {summaryCustomFields.map(field => (
-              <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-                <CustomFieldCell field={field} recordId={opp.id} />
-              </TableCell>
-            ))}
+            {summaryCustomFields.map(field => {
+              const viewKeyStr = `opportunities-${renewalsOnly ? 'renewals' : excludeRenewals ? 'newlogo' : 'global'}-${savedView}`;
+              const ds = useCustomFields.getState().getColumnDisplayStyle(viewKeyStr, `custom:${field.id}`);
+              return (
+                <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                  {ds === 'metric' ? <MetricFieldCell field={field} recordId={opp.id} /> : <CustomFieldCell field={field} recordId={opp.id} />}
+                </TableCell>
+              );
+            })}
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -735,11 +740,15 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               />
             </TableCell>
             <NextStepTextCell opp={opp} />
-            {summaryCustomFields.map(field => (
-              <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-                <CustomFieldCell field={field} recordId={opp.id} />
-              </TableCell>
-            ))}
+            {summaryCustomFields.map(field => {
+              const viewKeyStr = `opportunities-${renewalsOnly ? 'renewals' : excludeRenewals ? 'newlogo' : 'global'}-${savedView}`;
+              const ds = useCustomFields.getState().getColumnDisplayStyle(viewKeyStr, `custom:${field.id}`);
+              return (
+                <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                  {ds === 'metric' ? <MetricFieldCell field={field} recordId={opp.id} /> : <CustomFieldCell field={field} recordId={opp.id} />}
+                </TableCell>
+              );
+            })}
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -843,11 +852,15 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             />
           </TableCell>
           <NextStepTextCell opp={opp} />
-            {summaryCustomFields.map(field => (
-              <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-                <CustomFieldCell field={field} recordId={opp.id} />
-              </TableCell>
-            ))}
+            {summaryCustomFields.map(field => {
+              const viewKeyStr = `opportunities-${renewalsOnly ? 'renewals' : excludeRenewals ? 'newlogo' : 'global'}-${savedView}`;
+              const ds = useCustomFields.getState().getColumnDisplayStyle(viewKeyStr, `custom:${field.id}`);
+              return (
+                <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                  {ds === 'metric' ? <MetricFieldCell field={field} recordId={opp.id} /> : <CustomFieldCell field={field} recordId={opp.id} />}
+                </TableCell>
+              );
+            })}
             <ActionsCell opp={opp} />
         </TableRow>
         {isExpanded && (
