@@ -25,6 +25,7 @@ import {
   type TabTarget,
   type CustomFieldType,
   type FieldPlacement,
+  type ColumnDisplayStyle,
 } from '@/hooks/useCustomFields';
 
 interface BuiltInColumn {
