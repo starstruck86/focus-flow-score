@@ -68,22 +68,26 @@ export function ManageColumnsPopover({ tabTarget, builtInColumns, viewKey }: Man
   const [activeTab, setActiveTab] = useState<'visibility' | 'order'>('visibility');
 
   const tabFields = fields.filter(f => f.tabTarget === tabTarget);
+  // Custom fields that appear in summary table (for reorder tab)
+  const summaryCustomFields = tabFields.filter(f => f.placement === 'summary' || f.placement === 'both');
   const tabVisibility = columnVisibility[tabTarget] || {};
 
   const isColumnVisible = (key: string, defaultVisible = true) => {
     return tabVisibility[key] ?? defaultVisible;
   };
 
-  // Get ordered columns for reorder view
+  // Get ordered columns for reorder view (built-in + custom fields)
   const orderedColumns = useMemo(() => {
-    const defaultOrder = builtInColumns.map(c => c.key);
+    const builtInKeys = builtInColumns.map(c => c.key);
+    const customKeys = summaryCustomFields.map(f => `custom:${f.id}`);
+    const allKeys = [...builtInKeys, ...customKeys];
     const savedOrder = columnOrder[orderKey];
-    if (!savedOrder) return defaultOrder;
-    const validKeys = new Set(defaultOrder);
+    if (!savedOrder) return allKeys;
+    const validKeys = new Set(allKeys);
     const ordered = savedOrder.filter(k => validKeys.has(k));
-    const missing = defaultOrder.filter(k => !ordered.includes(k));
+    const missing = allKeys.filter(k => !ordered.includes(k));
     return [...ordered, ...missing];
-  }, [builtInColumns, columnOrder, orderKey]);
+  }, [builtInColumns, summaryCustomFields, columnOrder, orderKey]);
 
   const handleAddField = () => {
     if (!newFieldName.trim()) {
@@ -123,7 +127,14 @@ export function ManageColumnsPopover({ tabTarget, builtInColumns, viewKey }: Man
     toast.success('Column order reset to default');
   };
 
-  const getColumnLabel = (key: string) => builtInColumns.find(c => c.key === key)?.label || key;
+  const getColumnLabel = (key: string) => {
+    if (key.startsWith('custom:')) {
+      const fieldId = key.slice(7);
+      const field = summaryCustomFields.find(f => f.id === fieldId);
+      return field ? `${field.name} ✦` : key;
+    }
+    return builtInColumns.find(c => c.key === key)?.label || key;
+  };
 
   return (
     <Popover>
