@@ -189,6 +189,12 @@ interface OpportunitiesTableProps {
 }
 
 export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, excludeRenewals = false, showChurnRisk = true, columnOrder = 'default' }: OpportunitiesTableProps) {
+  // Custom fields for this specific opportunities context
+  const oppTabTarget = renewalsOnly ? 'opportunities-renewals' as const : 'opportunities-newlogo' as const;
+  const { fields, getFieldValue } = useCustomFields();
+  const summaryCustomFields = fields.filter(
+    f => f.tabTarget === oppTabTarget && (f.placement === 'summary' || f.placement === 'both')
+  );
   // Database hooks
   const { data: dbOpportunities = [], isLoading: oppsLoading } = useDbOpportunities();
   const { data: dbRenewals = [], isLoading: renewalsLoading } = useDbRenewals();
@@ -369,6 +375,21 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
 
   const sortedOpportunities = useMemo(() => {
     if (!isUserSorted) return filteredOpportunities;
+    // Custom field sorting
+    if (sortConfig?.key.startsWith('custom:')) {
+      const fieldId = sortConfig.key.slice(7);
+      const direction = sortConfig.direction!;
+      return [...filteredOpportunities].sort((a, b) => {
+        const aVal = getFieldValue(a.id, fieldId);
+        const bVal = getFieldValue(b.id, fieldId);
+        let comparison = 0;
+        if (aVal == null && bVal != null) comparison = 1;
+        else if (aVal != null && bVal == null) comparison = -1;
+        else if (typeof aVal === 'number' && typeof bVal === 'number') comparison = aVal - bVal;
+        else comparison = String(aVal ?? '').localeCompare(String(bVal ?? ''));
+        return direction === 'desc' ? -comparison : comparison;
+      });
+    }
     return applySortWithFallback(filteredOpportunities, sortConfig, defaultOppSort, sortKeyMap);
   }, [filteredOpportunities, sortConfig, isUserSorted]);
 
@@ -607,6 +628,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             <TableCell className="align-top py-3 text-right font-mono text-sm font-semibold">
               {totalValue !== 0 ? formatCurrency(totalValue) : <span className="text-muted-foreground">—</span>}
             </TableCell>
+            {summaryCustomFields.map(field => (
+              <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                <CustomFieldCell field={field} recordId={opp.id} />
+              </TableCell>
+            ))}
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -631,8 +657,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           </TableRow>
           {isExpanded && (
             <TableRow className="hover:bg-transparent border-b-2">
-              <TableCell colSpan={showChurnRisk ? 13 : 12} className="pt-0 pb-3">
+              <TableCell colSpan={(showChurnRisk ? 13 : 12) + summaryCustomFields.length} className="pt-0 pb-3">
                 <OpportunityDetailsField
+                  tabTarget={oppTabTarget}
                   opportunityId={opp.id}
                   nextStepDate={opp.nextStepDate}
                   onNextStepDateChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
@@ -708,6 +735,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               />
             </TableCell>
             <NextStepTextCell opp={opp} />
+            {summaryCustomFields.map(field => (
+              <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                <CustomFieldCell field={field} recordId={opp.id} />
+              </TableCell>
+            ))}
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -720,10 +752,10 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                     Open Details
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-          <DropdownMenuItem
-            className="text-destructive"
-            onClick={() => setDeleteDialogOpp(opp)}
-          >
+                  <DropdownMenuItem
+                    className="text-destructive"
+                    onClick={() => setDeleteDialogOpp(opp)}
+                  >
                     Delete
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -732,8 +764,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           </TableRow>
           {isExpanded && (
             <TableRow className="hover:bg-transparent border-b-2">
-              <TableCell colSpan={8} className="pt-0 pb-3">
+              <TableCell colSpan={8 + summaryCustomFields.length} className="pt-0 pb-3">
                 <OpportunityDetailsField
+                  tabTarget={oppTabTarget}
                   opportunityId={opp.id}
                   nextStepDate={opp.nextStepDate}
                   onNextStepDateChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
@@ -810,12 +843,18 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             />
           </TableCell>
           <NextStepTextCell opp={opp} />
-          <ActionsCell opp={opp} />
+            {summaryCustomFields.map(field => (
+              <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                <CustomFieldCell field={field} recordId={opp.id} />
+              </TableCell>
+            ))}
+            <ActionsCell opp={opp} />
         </TableRow>
         {isExpanded && (
           <TableRow className="hover:bg-transparent border-b-2">
-            <TableCell colSpan={showChurnRisk ? 10 : 9} className="pt-0 pb-3">
+            <TableCell colSpan={(showChurnRisk ? 10 : 9) + summaryCustomFields.length} className="pt-0 pb-3">
               <OpportunityDetailsField
+                tabTarget={oppTabTarget}
                 opportunityId={opp.id}
                 nextStepDate={opp.nextStepDate}
                 onNextStepDateChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
@@ -855,7 +894,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     );
   };
 
-  const totalCols = renewalsOnly ? (showChurnRisk ? 13 : 12) : columnOrder === 'outreach' ? 8 : (showChurnRisk ? 10 : 9);
+  const totalCols = (renewalsOnly ? (showChurnRisk ? 13 : 12) : columnOrder === 'outreach' ? 8 : (showChurnRisk ? 10 : 9)) + summaryCustomFields.length;
 
   return (
     <div className="space-y-4">
@@ -885,7 +924,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           </SelectContent>
         </Select>
         <ManageColumnsPopover
-          tabTarget="opportunities"
+          tabTarget={oppTabTarget}
           viewKey={`opportunities-${renewalsOnly ? 'renewals' : excludeRenewals ? 'newlogo' : 'global'}-${savedView}`}
           builtInColumns={[
             { key: 'status', label: 'Status' },
@@ -916,6 +955,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   <SortableHeader sortKey="arr" currentSort={sortConfig} onSort={handleSort} className="w-[10%]">ARR</SortableHeader>
                   <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[12%]">Close Date</SortableHeader>
                   <SortableHeader sortKey="nextStep" currentSort={sortConfig} onSort={handleSort} className="w-[18%]">Next Step</SortableHeader>
+                  {summaryCustomFields.map(field => (
+                    <SortableHeader key={field.id} sortKey={`custom:${field.id}`} currentSort={sortConfig} onSort={handleSort}>{field.name}</SortableHeader>
+                  ))}
                   <TableHead className="w-[6%]"></TableHead>
                 </>
               ) : renewalsOnly ? (
@@ -931,6 +973,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   <SortableHeader sortKey="oneTimeAmount" currentSort={sortConfig} onSort={handleSort} className="w-[7%]">One-Time</SortableHeader>
                   <TableHead className="w-[7%] text-xs">Expansion</TableHead>
                   <TableHead className="w-[7%] text-xs">Total Value</TableHead>
+                  {summaryCustomFields.map(field => (
+                    <SortableHeader key={field.id} sortKey={`custom:${field.id}`} currentSort={sortConfig} onSort={handleSort}>{field.name}</SortableHeader>
+                  ))}
                   <TableHead className="w-[4%]"></TableHead>
                 </>
               ) : (
@@ -943,6 +988,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[110px]">Close Date</SortableHeader>
                   <SortableHeader sortKey="stage" currentSort={sortConfig} onSort={handleSort} className="w-[90px]">Stage</SortableHeader>
                   <SortableHeader sortKey="nextStep" currentSort={sortConfig} onSort={handleSort} className="w-[150px]">Next Step</SortableHeader>
+                  {summaryCustomFields.map(field => (
+                    <SortableHeader key={field.id} sortKey={`custom:${field.id}`} currentSort={sortConfig} onSort={handleSort}>{field.name}</SortableHeader>
+                  ))}
                   <TableHead className="w-[40px]"></TableHead>
                 </>
               )}

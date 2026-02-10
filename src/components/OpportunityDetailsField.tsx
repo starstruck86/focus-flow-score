@@ -20,6 +20,7 @@ interface OpportunityDetailsFieldProps {
   onRenewalArrChange?: (value: number | undefined) => void;
   oneTimeAmount?: number;
   onOneTimeAmountChange?: (value: number | undefined) => void;
+  tabTarget?: 'opportunities' | 'opportunities-newlogo' | 'opportunities-renewals';
 }
 
 export function OpportunityDetailsField({
@@ -37,9 +38,10 @@ export function OpportunityDetailsField({
   onRenewalArrChange,
   oneTimeAmount,
   onOneTimeAmountChange,
+  tabTarget = 'opportunities',
 }: OpportunityDetailsFieldProps) {
   const { getFieldsForTab } = useCustomFields();
-  const customExpandedFields = getFieldsForTab('opportunities', 'expanded');
+  const customExpandedFields = getFieldsForTab(tabTarget as any, 'expanded');
   
   const expansionArr = isRenewal && renewalArr && priorContractArr
     ? Math.max(0, renewalArr - priorContractArr) 
