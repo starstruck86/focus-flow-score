@@ -43,6 +43,7 @@ import { DisplaySelectCell } from '@/components/table/DisplaySelectCell';
 import { EditableNumberCell, EditableTextareaCell, EditableTextCell } from '@/components/table/EditableCell';
 import { ManageColumnsPopover } from '@/components/table/ManageColumnsPopover';
 import { CustomFieldCell, CustomFieldRow } from '@/components/table/CustomFieldCell';
+import { MetricFieldCell } from '@/components/table/MetricFieldCell';
 import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
 import { useCustomFields } from '@/hooks/useCustomFields';
 import { applySortWithFallback } from '@/lib/sortUtils';
