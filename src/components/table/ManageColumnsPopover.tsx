@@ -1,6 +1,6 @@
 // Manage Columns popover - show/hide columns + add custom fields + column reorder
 import { useState, useMemo } from 'react';
-import { Settings2, Plus, Trash2, ArrowUp, ArrowDown, RotateCcw } from 'lucide-react';
+import { Settings2, Plus, Trash2, ArrowUp, ArrowDown, RotateCcw, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
