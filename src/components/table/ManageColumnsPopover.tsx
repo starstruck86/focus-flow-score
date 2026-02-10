@@ -1,6 +1,6 @@
 // Manage Columns popover - show/hide columns + add custom fields + column reorder
 import { useState, useMemo } from 'react';
-import { Settings2, Plus, Trash2, ArrowUp, ArrowDown, RotateCcw } from 'lucide-react';
+import { Settings2, Plus, Trash2, ArrowUp, ArrowDown, RotateCcw, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -60,8 +60,12 @@ const PLACEMENT_LABELS: Record<FieldPlacement, string> = {
 
 export function ManageColumnsPopover({ tabTarget, builtInColumns, viewKey }: ManageColumnsPopoverProps) {
   const orderKey = viewKey || tabTarget;
-  const { fields, addField, deleteField, columnVisibility, setColumnVisible, columnOrder, setColumnOrder, moveColumn, resetColumnOrder, getColumnDisplayStyle, setColumnDisplayStyle } = useCustomFields();
+  const { fields, addField, updateField, deleteField, columnVisibility, setColumnVisible, columnOrder, setColumnOrder, moveColumn, resetColumnOrder, getColumnDisplayStyle, setColumnDisplayStyle } = useCustomFields();
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
+  const [editFieldName, setEditFieldName] = useState('');
+  const [editFieldPlacement, setEditFieldPlacement] = useState<FieldPlacement>('expanded');
+  const [editPicklistOptions, setEditPicklistOptions] = useState('');
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldType, setNewFieldType] = useState<CustomFieldType>('text');
   const [newFieldPlacement, setNewFieldPlacement] = useState<FieldPlacement>('expanded');
@@ -195,42 +199,117 @@ export function ManageColumnsPopover({ tabTarget, builtInColumns, viewKey }: Man
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium px-2 py-1">
                     Custom Fields
                   </p>
-                  {tabFields.map(field => (
-                    <div key={field.id} className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted/50">
-                      <div className="flex-1 min-w-0">
-                        <span className="text-sm block truncate">{field.name}</span>
-                        <span className="text-[10px] text-muted-foreground">
-                          {FIELD_TYPE_LABELS[field.type]} • {PLACEMENT_LABELS[field.placement]}
-                        </span>
-                      </div>
-                      {/* Display style toggle for summary fields */}
-                      {(field.placement === 'summary' || field.placement === 'both') && (
+                  {tabFields.map(field => {
+                    if (editingFieldId === field.id) {
+                      // Inline edit form
+                      return (
+                        <div key={field.id} className="px-2 py-2 rounded bg-muted/50 space-y-2">
+                          <div>
+                            <Label className="text-[10px]">Name</Label>
+                            <Input
+                              value={editFieldName}
+                              onChange={(e) => setEditFieldName(e.target.value)}
+                              className="h-7 text-xs mt-0.5"
+                              autoFocus
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-[10px]">Show In</Label>
+                            <Select value={editFieldPlacement} onValueChange={(v) => setEditFieldPlacement(v as FieldPlacement)}>
+                              <SelectTrigger className="h-7 text-xs mt-0.5">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {Object.entries(PLACEMENT_LABELS).map(([value, label]) => (
+                                  <SelectItem key={value} value={value}>{label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {field.type === 'picklist' && (
+                            <div>
+                              <Label className="text-[10px]">Options (comma-separated)</Label>
+                              <Input
+                                value={editPicklistOptions}
+                                onChange={(e) => setEditPicklistOptions(e.target.value)}
+                                className="h-7 text-xs mt-0.5"
+                              />
+                            </div>
+                          )}
+                          <div className="flex gap-1.5">
+                            <Button size="sm" className="h-6 text-[10px] flex-1" onClick={() => {
+                              const updates: Record<string, any> = {
+                                name: editFieldName.trim() || field.name,
+                                placement: editFieldPlacement,
+                              };
+                              if (field.type === 'picklist') {
+                                updates.picklistOptions = editPicklistOptions.split(',').map(o => o.trim()).filter(Boolean);
+                              }
+                              updateField(field.id, updates);
+                              toast.success(`Updated "${updates.name}"`);
+                              setEditingFieldId(null);
+                            }}>
+                              Save
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => setEditingFieldId(null)}>
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div key={field.id} className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted/50">
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm block truncate">{field.name}</span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {FIELD_TYPE_LABELS[field.type]} • {PLACEMENT_LABELS[field.placement]}
+                          </span>
+                        </div>
+                        {/* Display style toggle for summary fields */}
+                        {(field.placement === 'summary' || field.placement === 'both') && (
+                          <Button
+                            variant={getColumnDisplayStyle(orderKey, `custom:${field.id}`) === 'metric' ? 'secondary' : 'ghost'}
+                            size="sm"
+                            className="h-5 text-[9px] px-1.5 mr-1 shrink-0"
+                            onClick={() => {
+                              const current = getColumnDisplayStyle(orderKey, `custom:${field.id}`);
+                              setColumnDisplayStyle(orderKey, `custom:${field.id}`, current === 'metric' ? 'standard' : 'metric');
+                            }}
+                            title="Toggle metric display style"
+                          >
+                            {getColumnDisplayStyle(orderKey, `custom:${field.id}`) === 'metric' ? '▦ Metric' : '▤ Std'}
+                          </Button>
+                        )}
                         <Button
-                          variant={getColumnDisplayStyle(orderKey, `custom:${field.id}`) === 'metric' ? 'secondary' : 'ghost'}
-                          size="sm"
-                          className="h-5 text-[9px] px-1.5 mr-1 shrink-0"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
                           onClick={() => {
-                            const current = getColumnDisplayStyle(orderKey, `custom:${field.id}`);
-                            setColumnDisplayStyle(orderKey, `custom:${field.id}`, current === 'metric' ? 'standard' : 'metric');
+                            setEditingFieldId(field.id);
+                            setEditFieldName(field.name);
+                            setEditFieldPlacement(field.placement);
+                            setEditPicklistOptions((field.picklistOptions || []).join(', '));
                           }}
-                          title="Toggle metric display style"
+                          title="Edit field"
                         >
-                          {getColumnDisplayStyle(orderKey, `custom:${field.id}`) === 'metric' ? '▦ Metric' : '▤ Std'}
+                          <Pencil className="h-3 w-3" />
                         </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive"
-                        onClick={() => {
-                          deleteField(field.id);
-                          toast.success(`Removed "${field.name}"`);
-                        }}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ))}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => {
+                            deleteField(field.id);
+                            toast.success(`Removed "${field.name}"`);
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    );
+                  })}
                 </>
               )}
             </div>
