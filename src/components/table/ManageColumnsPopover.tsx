@@ -60,8 +60,12 @@ const PLACEMENT_LABELS: Record<FieldPlacement, string> = {
 
 export function ManageColumnsPopover({ tabTarget, builtInColumns, viewKey }: ManageColumnsPopoverProps) {
   const orderKey = viewKey || tabTarget;
-  const { fields, addField, deleteField, columnVisibility, setColumnVisible, columnOrder, setColumnOrder, moveColumn, resetColumnOrder, getColumnDisplayStyle, setColumnDisplayStyle } = useCustomFields();
+  const { fields, addField, updateField, deleteField, columnVisibility, setColumnVisible, columnOrder, setColumnOrder, moveColumn, resetColumnOrder, getColumnDisplayStyle, setColumnDisplayStyle } = useCustomFields();
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
+  const [editFieldName, setEditFieldName] = useState('');
+  const [editFieldPlacement, setEditFieldPlacement] = useState<FieldPlacement>('expanded');
+  const [editPicklistOptions, setEditPicklistOptions] = useState('');
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldType, setNewFieldType] = useState<CustomFieldType>('text');
   const [newFieldPlacement, setNewFieldPlacement] = useState<FieldPlacement>('expanded');
