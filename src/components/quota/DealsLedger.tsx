@@ -10,7 +10,19 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency, formatPercent } from '@/lib/commissionCalculations';
 import type { DealsLedgerEntry } from '@/types';
-import { CheckCircle2, Star, Calendar as CalendarIcon } from 'lucide-react';
+import { CheckCircle2, Star, Calendar as CalendarIcon, Banknote } from 'lucide-react';
+import { addMonths, format, parseISO } from 'date-fns';
+
+/** Commission payout month = close_date month + 1 */
+function getPayoutMonth(closeDate: string): string {
+  try {
+    const date = parseISO(closeDate);
+    const payoutDate = addMonths(date, 1);
+    return format(payoutDate, 'MMM yyyy');
+  } catch {
+    return '—';
+  }
+}
 
 interface DealsLedgerProps {
   entries: DealsLedgerEntry[];
@@ -50,6 +62,7 @@ export function DealsLedger({ entries }: DealsLedgerProps) {
             <TableHead>Flags</TableHead>
             <TableHead className="text-right">Rate</TableHead>
             <TableHead className="text-right">Commission</TableHead>
+            <TableHead>Payout Month</TableHead>
             <TableHead className="text-right">Quota Credit</TableHead>
           </TableRow>
         </TableHeader>
@@ -102,6 +115,12 @@ export function DealsLedger({ entries }: DealsLedgerProps) {
                 </TableCell>
                 <TableCell className="text-right font-medium text-status-green">
                   {formatCurrency(entry.commissionAmount)}
+                </TableCell>
+                <TableCell className="text-sm">
+                  <div className="flex items-center gap-1.5">
+                    <Banknote className="h-3 w-3 text-muted-foreground" />
+                    {getPayoutMonth(entry.closeDate)}
+                  </div>
                 </TableCell>
                 <TableCell className="text-right">
                   {entry.quotaCredit > 0 ? formatCurrency(entry.quotaCredit) : '—'}
