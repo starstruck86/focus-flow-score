@@ -485,11 +485,18 @@ function FunnelGroupSection({
                           emptyText="Add"
                         />
                       </TableCell>
-                      {summaryCustomFields.map(field => (
-                        <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-                          <CustomFieldCell field={field} recordId={account.id} />
-                        </TableCell>
-                      ))}
+                      {summaryCustomFields.map(field => {
+                        const displayStyle = useCustomFields.getState().getColumnDisplayStyle('accounts-newlogo-funnel', `custom:${field.id}`);
+                        return (
+                          <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                            {displayStyle === 'metric' ? (
+                              <MetricFieldCell field={field} recordId={account.id} />
+                            ) : (
+                              <CustomFieldCell field={field} recordId={account.id} />
+                            )}
+                          </TableCell>
+                        );
+                      })}
                       <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
