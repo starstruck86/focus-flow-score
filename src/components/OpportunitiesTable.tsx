@@ -921,7 +921,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           </SelectContent>
         </Select>
         <ManageColumnsPopover
-          tabTarget="opportunities"
+          tabTarget={oppTabTarget}
           viewKey={`opportunities-${renewalsOnly ? 'renewals' : excludeRenewals ? 'newlogo' : 'global'}-${savedView}`}
           builtInColumns={[
             { key: 'status', label: 'Status' },
