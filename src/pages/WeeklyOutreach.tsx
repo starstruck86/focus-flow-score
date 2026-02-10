@@ -395,7 +395,7 @@ function FunnelGroupSection({
                   <TableHead className="w-[16%]">MarTech</TableHead>
                     <TableHead className="w-[16%]">Ecommerce</TableHead>
                     {summaryCustomFields.map(field => (
-                      <TableHead key={field.id} className="w-[8%]"></TableHead>
+                      <TableHead key={field.id} className="w-[8%]">{field.name}</TableHead>
                     ))}
                     <TableHead className="w-[4%]"></TableHead>
                 </TableRow>
