@@ -79,6 +79,8 @@ import {
   ACCOUNT_STATUS_SORT_RANK,
   ACCOUNT_STATUS_DISPLAY_LABELS,
   TIER_SORT_RANK,
+  CONTACT_STATUS_SORT_RANK,
+  CONTACT_STATUS_DISPLAY_LABELS,
 } from '@/lib/sortUtils';
 import type { Account, AccountTier, AccountStatus, Opportunity, OpportunityStage } from '@/types';
 
@@ -162,6 +164,13 @@ const TIER_OPTIONS = [
   { value: 'A', label: 'A', className: 'border-status-green text-status-green bg-transparent' },
   { value: 'B', label: 'B', className: 'border-status-yellow text-status-yellow bg-transparent' },
   { value: 'C', label: 'C', className: 'border-muted-foreground text-muted-foreground bg-transparent' },
+];
+
+// Contact Status options
+const CONTACT_STATUS_OPTIONS = [
+  { value: 'ready', label: 'Ready', className: 'bg-status-green/20 text-status-green' },
+  { value: 'in-progress', label: 'In-Progress', className: 'bg-status-yellow/20 text-status-yellow' },
+  { value: 'not-started', label: 'Not Started', className: 'bg-muted text-muted-foreground' },
 ];
 
 // ===== FUNNEL CONFIGURATION =====
@@ -372,7 +381,8 @@ function FunnelGroupSection({
                   <TableHead className="w-[3%]"></TableHead>
                   <TableHead className="w-[17%]">Account</TableHead>
                   <TableHead className="w-[15%]">Website</TableHead>
-                  <TableHead className="w-[13%]">Status</TableHead>
+                  <TableHead className="w-[12%]">Account Status</TableHead>
+                  <TableHead className="w-[10%]">Contact Status</TableHead>
                   <TableHead className="w-[6%]">Tier</TableHead>
                   {(group.status === 'prepped' || group.status === 'active') && (
                     <TableHead className="w-[10%]">Cadence</TableHead>
@@ -425,6 +435,13 @@ function FunnelGroupSection({
                           value={account.accountStatus || 'inactive'}
                           options={STATUS_OPTIONS}
                           onChange={(v) => updateAccount(account.id, { accountStatus: v as AccountStatus })}
+                        />
+                      </TableCell>
+                      <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                        <DisplaySelectCell
+                          value={account.contactStatus || 'not-started'}
+                          options={CONTACT_STATUS_OPTIONS}
+                          onChange={(v) => updateAccount(account.id, { contactStatus: v as any })}
                         />
                       </TableCell>
                       <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
@@ -482,7 +499,7 @@ function FunnelGroupSection({
                     </TableRow>
                     {expandedAccountId === account.id && (
                       <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
-                        <TableCell colSpan={9} className="pt-0 pb-3">
+                        <TableCell colSpan={10} className="pt-0 pb-3">
                           <AccountContactsField
                             accountId={account.id}
                             contacts={account.accountContacts || []}
@@ -899,7 +916,8 @@ export default function WeeklyOutreach() {
                   viewKey="accounts-newlogo-funnel"
                   builtInColumns={[
                     { key: 'website', label: 'Website' },
-                    { key: 'status', label: 'Status' },
+                    { key: 'status', label: 'Account Status' },
+                    { key: 'contactStatus', label: 'Contact Status' },
                     { key: 'tier', label: 'Tier' },
                     { key: 'cadence', label: 'Cadence' },
                     { key: 'martech', label: 'MarTech' },
@@ -1066,7 +1084,7 @@ export default function WeeklyOutreach() {
                           </Select>
                         </div>
                         <div className="space-y-2">
-                          <Label>Status</Label>
+                          <Label>Account Status</Label>
                           <Select
                             value={newAccount.accountStatus || 'researching'}
                             onValueChange={(v) => setNewAccount({ ...newAccount, accountStatus: v as AccountStatus })}

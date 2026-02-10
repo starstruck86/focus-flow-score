@@ -22,6 +22,19 @@ export const ACCOUNT_STATUS_DISPLAY_LABELS: Record<AccountStatus, string> = {
   'meeting-booked': '6 - Meeting Booked',
 };
 
+// ====== CONTACT STATUS SORT ORDER ======
+export const CONTACT_STATUS_SORT_RANK: Record<string, number> = {
+  'ready': 1,
+  'in-progress': 2,
+  'not-started': 3,
+};
+
+export const CONTACT_STATUS_DISPLAY_LABELS: Record<string, string> = {
+  'ready': 'Ready',
+  'in-progress': 'In-Progress',
+  'not-started': 'Not Started',
+};
+
 // ====== TIER SORT ORDER ======
 export const TIER_SORT_RANK: Record<AccountTier | 'D', number> = {
   'A': 1,

@@ -256,6 +256,7 @@ export interface Account {
   notes?: string;
   marTech?: string;
   ecommerce?: string;
+  contactStatus?: 'ready' | 'in-progress' | 'not-started';
   accountContacts?: AccountContact[];
   tags: string[];
   createdAt: string;
