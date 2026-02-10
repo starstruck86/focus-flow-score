@@ -628,9 +628,6 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             <TableCell className="align-top py-3 text-right font-mono text-sm font-semibold">
               {totalValue !== 0 ? formatCurrency(totalValue) : <span className="text-muted-foreground">—</span>}
             </TableCell>
-            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-              {/* custom field cells for renewal opps */}
-            </TableCell>
             {summaryCustomFields.map(field => (
               <TableCell key={field.id} className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                 <CustomFieldCell field={field} recordId={opp.id} />
