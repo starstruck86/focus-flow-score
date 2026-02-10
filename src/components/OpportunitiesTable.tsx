@@ -39,10 +39,12 @@ import { OpportunityDetailsField } from '@/components/OpportunityDetailsField';
 import { ClosedWonModal } from '@/components/quota/ClosedWonModal';
 import { OpportunityNameCell } from '@/components/table/ClickableNameCell';
 import { DisplaySelectCell } from '@/components/table/DisplaySelectCell';
-import { EditableNumberCell, EditableTextareaCell } from '@/components/table/EditableCell';
+import { EditableNumberCell, EditableTextareaCell, EditableTextCell } from '@/components/table/EditableCell';
 import { ManageColumnsPopover } from '@/components/table/ManageColumnsPopover';
 import { CustomFieldCell, CustomFieldRow } from '@/components/table/CustomFieldCell';
+import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
 import { useCustomFields } from '@/hooks/useCustomFields';
+import { applySortWithFallback } from '@/lib/sortUtils';
 import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
 import { format, parseISO, isToday, isPast, isThisQuarter } from 'date-fns';
 import { 
@@ -70,7 +72,7 @@ const CHURN_RISK_COLORS: Record<ChurnRisk, string> = {
   'high': 'bg-status-red/20 text-status-red',
 };
 
-const STATUS_ORDER: OpportunityStatus[] = ['active', 'stalled', 'closed-lost', 'closed-won'];
+const STATUS_ORDER: OpportunityStatus[] = ['active', 'stalled', 'closed-won', 'closed-lost'];
 
 const STAGE_OPTIONS: OpportunityStage[] = ['', 'Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate', 'Closed Won', 'Closed Lost'];
 
@@ -85,10 +87,47 @@ const STAGE_LABELS: Record<string, string> = {
   'Closed Lost': '7 - Closed Lost',
 };
 
+// Sort ranks for opp-specific enums
+const OPP_STATUS_SORT_RANK: Record<OpportunityStatus, number> = {
+  'active': 1,
+  'stalled': 2,
+  'closed-won': 3,
+  'closed-lost': 4,
+};
+
+const OPP_STAGE_SORT_RANK: Record<string, number> = {
+  '': 0,
+  'Prospect': 1,
+  'Discover': 2,
+  'Demo': 3,
+  'Proposal': 4,
+  'Negotiate': 5,
+  'Closed Won': 6,
+  'Closed Lost': 7,
+};
+
+const CHURN_RISK_SORT_RANK: Record<string, number> = {
+  'low': 1,
+  'medium': 2,
+  'high': 3,
+  'certain': 4,
+};
+
 type SavedView = 'all' | 'active' | 'stalled' | 'next-step-due' | 'closing-this-quarter' | 'no-next-step';
+
+/**
+ * Normalize status: if stage says "Closed Won" or "Closed Lost" but status doesn't match, fix it.
+ */
+function normalizeOppStatus(status: OpportunityStatus, stage: OpportunityStage): OpportunityStatus {
+  if (stage === 'Closed Won' && status !== 'closed-won') return 'closed-won';
+  if (stage === 'Closed Lost' && status !== 'closed-lost') return 'closed-lost';
+  return status;
+}
 
 // Transform database opportunity to UI format
 function dbToUiOpportunity(db: DbOpportunity): Opportunity {
+  const rawStatus = (db.status as OpportunityStatus) || 'active';
+  const stage = (db.stage as OpportunityStage) || '';
   return {
     id: db.id,
     name: db.name,
@@ -96,8 +135,8 @@ function dbToUiOpportunity(db: DbOpportunity): Opportunity {
     salesforceLink: db.salesforce_link ?? undefined,
     salesforceId: db.salesforce_id ?? undefined,
     linkedContactIds: [],
-    status: (db.status as OpportunityStatus) || 'active',
-    stage: (db.stage as OpportunityStage) || '',
+    status: normalizeOppStatus(rawStatus, stage),
+    stage,
     arr: db.arr ?? undefined,
     churnRisk: (db.churn_risk as ChurnRisk) ?? undefined,
     closeDate: db.close_date ?? undefined,
@@ -160,9 +199,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const opportunities = useMemo(() => dbOpportunities.map(dbToUiOpportunity), [dbOpportunities]);
   const renewals = useMemo(() => dbRenewals.map(dbToRenewalFilter), [dbRenewals]);
 
+  // Sort hook
+  const { sortConfig, handleSort } = useTableSort();
+
   // Wrapper functions for mutations
   const updateOpportunity = (id: string, updates: Partial<Opportunity>) => {
-    // Transform UI updates to DB format
     const dbUpdates: Partial<DbOpportunity> = {};
     if (updates.name !== undefined) dbUpdates.name = updates.name;
     if (updates.status !== undefined) dbUpdates.status = updates.status;
@@ -210,7 +251,6 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   // Handle status change - trigger modal for Closed Won
   const handleStatusChange = (opp: Opportunity, newStatus: OpportunityStatus) => {
     if (newStatus === 'closed-won' && opp.status !== 'closed-won') {
-      // Open modal to collect required fields
       setClosedWonOpportunity(opp);
       setClosedWonModalOpen(true);
     } else {
@@ -228,9 +268,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   // Get renewal-linked opportunity IDs — includes both linked renewals AND deal_type='renewal'
   const renewalOpportunityIds = useMemo(() => {
     const ids = new Set<string>();
-    // Include opps linked via renewal record
     renewals.filter(r => r.linkedOpportunityId).forEach(r => ids.add(r.linkedOpportunityId!));
-    // Also include opps tagged as deal_type='renewal' even if not linked
     opportunities.filter(o => o.dealType === 'renewal').forEach(o => ids.add(o.id));
     return ids;
   }, [renewals, opportunities]);
@@ -272,14 +310,35 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
         });
         break;
       case 'no-next-step':
-        filtered = filtered.filter(o => !o.nextStepDate && o.nextStep !== 'TBD');
+        filtered = filtered.filter(o => !o.nextStep && !o.nextStepDate);
         break;
     }
 
     return filtered;
   }, [opportunities, searchQuery, savedView, renewalsOnly, excludeRenewals, renewalOpportunityIds]);
 
-  // Group by status
+  // Sort opportunities
+  const sortKeyMap: Record<string, { key: keyof Opportunity; customRank?: Record<string, number> }> = {
+    status: { key: 'status', customRank: OPP_STATUS_SORT_RANK },
+    name: { key: 'name' },
+    arr: { key: 'arr' },
+    churnRisk: { key: 'churnRisk', customRank: CHURN_RISK_SORT_RANK },
+    closeDate: { key: 'closeDate' },
+    stage: { key: 'stage', customRank: OPP_STAGE_SORT_RANK },
+    nextStep: { key: 'nextStep' },
+  };
+
+  const defaultOppSort = (items: Opportunity[]) => items; // keep grouped by status
+
+  // When user sorts, we flatten (don't group by status)
+  const isUserSorted = sortConfig !== null;
+
+  const sortedOpportunities = useMemo(() => {
+    if (!isUserSorted) return filteredOpportunities;
+    return applySortWithFallback(filteredOpportunities, sortConfig, defaultOppSort, sortKeyMap);
+  }, [filteredOpportunities, sortConfig, isUserSorted]);
+
+  // Group by status (only when no user sort active)
   const groupedOpportunities = useMemo(() => {
     const groups: Record<OpportunityStatus, Opportunity[]> = {
       'active': [],
@@ -298,17 +357,14 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const handleAddOpportunity = async () => {
     if (!newOppName.trim()) return;
     
-    // If we're in renewalsOnly mode and a renewal is selected, link the opportunity to it
     if (renewalsOnly && selectedRenewalId) {
       const renewal = renewals.find(r => r.id === selectedRenewalId);
       if (renewal) {
-        // Calculate close date as day before renewal date
         const dueDate = new Date(renewal.renewalDue);
         const closeDateObj = new Date(dueDate);
         closeDateObj.setDate(closeDateObj.getDate() - 1);
         const closeDate = closeDateObj.toISOString().split('T')[0];
         
-        // Add the opportunity with renewal details and link to renewal
         try {
           const result = await addOpportunityMutation.mutateAsync({
             name: newOppName.trim(),
@@ -320,7 +376,6 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             deal_type: 'renewal',
           });
           
-          // Link the new opportunity to the renewal
           if (result?.id) {
             updateRenewal(renewal.id, { linkedOpportunityId: result.id });
           }
@@ -329,7 +384,6 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
         }
       }
     } else {
-      // Regular opportunity creation
       addOpportunityMutation.mutate({
         name: newOppName.trim(),
         status: 'active',
@@ -387,105 +441,14 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     { value: 'certain', label: '4 - OOB', className: 'bg-purple-600/20 text-purple-400' },
   ];
 
-  // Cell components for reordering
-  const StatusCell = ({ opp }: { opp: Opportunity }) => (
-    <TableCell onClick={(e) => e.stopPropagation()}>
-      <DisplaySelectCell
-        value={opp.status}
-        options={STATUS_SELECT_OPTIONS}
-        onChange={(v) => handleStatusChange(opp, v as OpportunityStatus)}
-      />
-    </TableCell>
-  );
-
-  const NameCell = ({ opp }: { opp: Opportunity }) => (
-    <TableCell>
-      <OpportunityNameCell 
-        name={opp.name} 
-        salesforceLink={opp.salesforceLink}
-        onNameChange={(name) => updateOpportunity(opp.id, { name })}
-        onSalesforceLinkChange={(link) => {
-          const dbUpdates: Partial<DbOpportunity> = { salesforce_link: link || null };
-          updateOpportunityMutation.mutate({ id: opp.id, updates: dbUpdates });
-        }}
-        onOpenDetails={() => onOpenDrawer(opp)}
-      />
-    </TableCell>
-  );
-
-  const ArrCell = ({ opp }: { opp: Opportunity }) => (
-    <TableCell onClick={(e) => e.stopPropagation()}>
-      <EditableNumberCell
-        value={opp.arr || 0}
-        onChange={(v) => updateOpportunity(opp.id, { arr: v || undefined })}
-        format="currency"
-      />
-    </TableCell>
-  );
-
-  const ChurnRiskCell = ({ opp }: { opp: Opportunity }) => (
-    <TableCell onClick={(e) => e.stopPropagation()}>
-      <DisplaySelectCell
-        value={opp.churnRisk || ''}
-        options={CHURN_RISK_SELECT_OPTIONS}
-        onChange={(v) => updateOpportunity(opp.id, { churnRisk: (v === '' ? undefined : v) as ChurnRisk | undefined })}
-      />
-    </TableCell>
-  );
-
-  const CloseDateCell = ({ opp }: { opp: Opportunity }) => (
-    <TableCell>
-      <EditableDatePicker
-        value={opp.closeDate}
-        onChange={(v) => updateOpportunity(opp.id, { closeDate: v })}
-        placeholder="—"
-        compact
-        className={cn("w-28")}
-      />
-    </TableCell>
-  );
-
-  const NextStepCell = ({ opp }: { opp: Opportunity }) => (
-    <TableCell>
-      <EditableDatePicker
-        value={opp.nextStepDate}
-        onChange={(v) => updateOpportunity(opp.id, { 
-          nextStepDate: v,
-          nextStep: v ? undefined : opp.nextStep 
-        })}
-        placeholder={opp.nextStep || '—'}
-        compact
-        className={cn(
-          "w-28",
-          opp.nextStepDate && isPast(parseISO(opp.nextStepDate)) && !isToday(parseISO(opp.nextStepDate)) && "[&_button]:border-status-red"
-        )}
-      />
-    </TableCell>
-  );
-
-  const StageCell = ({ opp }: { opp: Opportunity }) => (
-    <TableCell onClick={(e) => e.stopPropagation()}>
-      <DisplaySelectCell
-        value={opp.stage || ''}
-        options={STAGE_SELECT_OPTIONS}
-        onChange={(v) => updateOpportunity(opp.id, { stage: v as OpportunityStage })}
-      />
-    </TableCell>
-  );
-
-  const LastTouchCell = ({ opp }: { opp: Opportunity }) => (
-    <TableCell className="text-xs text-muted-foreground">
-      {formatDate(opp.lastTouchDate)}
-    </TableCell>
-  );
-
-  const NotesCell = ({ opp }: { opp: Opportunity }) => (
-    <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-      <EditableTextareaCell
-        value={opp.notes || ''}
-        onChange={(v) => updateOpportunity(opp.id, { notes: v })}
-        placeholder="Add notes..."
-        emptyText="Add Notes"
+  // Next Step cell — display-first editable text
+  const NextStepTextCell = ({ opp }: { opp: Opportunity }) => (
+    <TableCell className="align-top py-3 max-w-[200px]" onClick={(e) => e.stopPropagation()}>
+      <EditableTextCell
+        value={opp.nextStep || ''}
+        onChange={(v) => updateOpportunity(opp.id, { nextStep: v })}
+        emptyText="+ Add"
+        className="truncate"
       />
     </TableCell>
   );
@@ -586,6 +549,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 onChange={(v) => updateOpportunity(opp.id, { stage: v as OpportunityStage })}
               />
             </TableCell>
+            <NextStepTextCell opp={opp} />
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -610,7 +574,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           </TableRow>
           {isExpanded && (
             <TableRow className="hover:bg-transparent border-b-2">
-              <TableCell colSpan={showChurnRisk ? 8 : 7} className="pt-0 pb-3">
+              <TableCell colSpan={showChurnRisk ? 10 : 9} className="pt-0 pb-3">
                 <OpportunityDetailsField
                   opportunityId={opp.id}
                   nextStepDate={opp.nextStepDate}
@@ -686,6 +650,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 className="w-28"
               />
             </TableCell>
+            <NextStepTextCell opp={opp} />
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -710,7 +675,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           </TableRow>
           {isExpanded && (
             <TableRow className="hover:bg-transparent border-b-2">
-              <TableCell colSpan={7} className="pt-0 pb-3">
+              <TableCell colSpan={8} className="pt-0 pb-3">
                 <OpportunityDetailsField
                   opportunityId={opp.id}
                   nextStepDate={opp.nextStepDate}
@@ -727,7 +692,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       );
     }
 
-    // Default view (fallback — also uses chevron expand)
+    // Default view (global opps tab)
     return (
       <React.Fragment key={opp.id}>
         <TableRow className="group hover:bg-muted/30 cursor-pointer" onClick={() => toggleExpand(opp.id)}>
@@ -736,17 +701,63 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
             </Button>
           </TableCell>
-          <StatusCell opp={opp} />
-          <NameCell opp={opp} />
-          <ArrCell opp={opp} />
-          {showChurnRisk && <ChurnRiskCell opp={opp} />}
-          <CloseDateCell opp={opp} />
-          <StageCell opp={opp} />
+          <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+            <DisplaySelectCell
+              value={opp.status}
+              options={STATUS_SELECT_OPTIONS}
+              onChange={(v) => handleStatusChange(opp, v as OpportunityStatus)}
+            />
+          </TableCell>
+          <TableCell className="align-top py-3">
+            <OpportunityNameCell
+              name={opp.name}
+              salesforceLink={opp.salesforceLink}
+              onNameChange={(name) => updateOpportunity(opp.id, { name })}
+              onSalesforceLinkChange={(link) => {
+                const dbUpdates: Partial<DbOpportunity> = { salesforce_link: link || null };
+                updateOpportunityMutation.mutate({ id: opp.id, updates: dbUpdates });
+              }}
+              onOpenDetails={() => onOpenDrawer(opp)}
+            />
+          </TableCell>
+          <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+            <EditableNumberCell
+              value={opp.arr || 0}
+              onChange={(v) => updateOpportunity(opp.id, { arr: v || undefined })}
+              format="currency"
+            />
+          </TableCell>
+          {showChurnRisk && (
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <DisplaySelectCell
+                value={opp.churnRisk || ''}
+                options={CHURN_RISK_SELECT_OPTIONS}
+                onChange={(v) => updateOpportunity(opp.id, { churnRisk: (v === '' ? undefined : v) as ChurnRisk | undefined })}
+              />
+            </TableCell>
+          )}
+          <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+            <EditableDatePicker
+              value={opp.closeDate}
+              onChange={(v) => updateOpportunity(opp.id, { closeDate: v })}
+              placeholder="—"
+              compact
+              className="w-28"
+            />
+          </TableCell>
+          <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+            <DisplaySelectCell
+              value={opp.stage || ''}
+              options={STAGE_SELECT_OPTIONS}
+              onChange={(v) => updateOpportunity(opp.id, { stage: v as OpportunityStage })}
+            />
+          </TableCell>
+          <NextStepTextCell opp={opp} />
           <ActionsCell opp={opp} />
         </TableRow>
         {isExpanded && (
           <TableRow className="hover:bg-transparent border-b-2">
-            <TableCell colSpan={showChurnRisk ? 8 : 7} className="pt-0 pb-3">
+            <TableCell colSpan={showChurnRisk ? 10 : 9} className="pt-0 pb-3">
               <OpportunityDetailsField
                 opportunityId={opp.id}
                 nextStepDate={opp.nextStepDate}
@@ -769,9 +780,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     const statusLabel = status.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
 
     return (
-      <>
+      <React.Fragment key={status}>
         <TableRow className="bg-muted/30 hover:bg-muted/30">
-          <TableCell colSpan={9} className="py-2">
+          <TableCell colSpan={12} className="py-2">
             <div className="flex items-center gap-2">
               <Badge className={cn("text-xs", STATUS_COLORS[status])}>
                 {statusLabel}
@@ -783,9 +794,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           </TableCell>
         </TableRow>
         {opps.map(renderOpportunityRow)}
-      </>
+      </React.Fragment>
     );
   };
+
+  const totalCols = columnOrder === 'outreach' ? 8 : (showChurnRisk ? 10 : 9);
 
   return (
     <div className="space-y-4">
@@ -822,6 +835,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             { key: 'arr', label: 'ARR' },
             { key: 'churnRisk', label: 'Churn Risk' },
             { key: 'closeDate', label: 'Close Date' },
+            { key: 'nextStep', label: 'Next Step' },
           ]}
         />
         <Button onClick={() => setShowAddRow(true)}>
@@ -836,37 +850,38 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               {columnOrder === 'outreach' ? (
-                // Weekly Outreach headers
                 <>
                   <TableHead className="w-8"></TableHead>
-                  <TableHead className="w-[25%]">Opportunity</TableHead>
-                  <TableHead className="w-[15%]">Status</TableHead>
-                  <TableHead className="w-[12%]">Stage</TableHead>
-                  <TableHead className="w-[12%]">ARR</TableHead>
-                  <TableHead className="w-[15%]">Close Date</TableHead>
+                  <SortableHeader sortKey="name" currentSort={sortConfig} onSort={handleSort} className="w-[22%]">Opportunity</SortableHeader>
+                  <SortableHeader sortKey="status" currentSort={sortConfig} onSort={handleSort} className="w-[12%]">Status</SortableHeader>
+                  <SortableHeader sortKey="stage" currentSort={sortConfig} onSort={handleSort} className="w-[12%]">Stage</SortableHeader>
+                  <SortableHeader sortKey="arr" currentSort={sortConfig} onSort={handleSort} className="w-[10%]">ARR</SortableHeader>
+                  <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[12%]">Close Date</SortableHeader>
+                  <SortableHeader sortKey="nextStep" currentSort={sortConfig} onSort={handleSort} className="w-[18%]">Next Step</SortableHeader>
                   <TableHead className="w-[6%]"></TableHead>
                 </>
               ) : renewalsOnly ? (
-                // Renewals-only headers
                 <>
                   <TableHead className="w-8"></TableHead>
-                  <TableHead className="w-[15%]">Status</TableHead>
-                  <TableHead className="w-[25%]">Opportunity</TableHead>
-                  <TableHead className="w-[12%]">ARR</TableHead>
-                  {showChurnRisk && <TableHead className="w-[12%]">Churn Risk</TableHead>}
-                  <TableHead className="w-[15%]">Close Date</TableHead>
-                  <TableHead className="w-[15%]">Stage</TableHead>
-                  <TableHead className="w-[6%]"></TableHead>
+                  <SortableHeader sortKey="status" currentSort={sortConfig} onSort={handleSort} className="w-[12%]">Status</SortableHeader>
+                  <SortableHeader sortKey="name" currentSort={sortConfig} onSort={handleSort} className="w-[20%]">Opportunity</SortableHeader>
+                  <SortableHeader sortKey="arr" currentSort={sortConfig} onSort={handleSort} className="w-[10%]">ARR</SortableHeader>
+                  {showChurnRisk && <SortableHeader sortKey="churnRisk" currentSort={sortConfig} onSort={handleSort} className="w-[10%]">Churn Risk</SortableHeader>}
+                  <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[12%]">Close Date</SortableHeader>
+                  <SortableHeader sortKey="stage" currentSort={sortConfig} onSort={handleSort} className="w-[12%]">Stage</SortableHeader>
+                  <SortableHeader sortKey="nextStep" currentSort={sortConfig} onSort={handleSort} className="w-[14%]">Next Step</SortableHeader>
+                  <TableHead className="w-[5%]"></TableHead>
                 </>
               ) : (
                 <>
                   <TableHead className="w-8"></TableHead>
-                  <TableHead className="w-[130px]">Status</TableHead>
-                  <TableHead className="w-[200px]">Opportunity</TableHead>
-                  <TableHead className="w-[100px]">ARR</TableHead>
-                  {showChurnRisk && <TableHead className="w-[100px]">Churn Risk</TableHead>}
-                  <TableHead className="w-[130px]">Close Date</TableHead>
-                  <TableHead className="w-[100px]">Stage</TableHead>
+                  <SortableHeader sortKey="status" currentSort={sortConfig} onSort={handleSort} className="w-[110px]">Status</SortableHeader>
+                  <SortableHeader sortKey="name" currentSort={sortConfig} onSort={handleSort} className="w-[180px]">Opportunity</SortableHeader>
+                  <SortableHeader sortKey="arr" currentSort={sortConfig} onSort={handleSort} className="w-[90px]">ARR</SortableHeader>
+                  {showChurnRisk && <SortableHeader sortKey="churnRisk" currentSort={sortConfig} onSort={handleSort} className="w-[90px]">Churn Risk</SortableHeader>}
+                  <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[110px]">Close Date</SortableHeader>
+                  <SortableHeader sortKey="stage" currentSort={sortConfig} onSort={handleSort} className="w-[90px]">Stage</SortableHeader>
+                  <SortableHeader sortKey="nextStep" currentSort={sortConfig} onSort={handleSort} className="w-[150px]">Next Step</SortableHeader>
                   <TableHead className="w-[40px]"></TableHead>
                 </>
               )}
@@ -875,7 +890,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           <TableBody>
             {showAddRow && (
               <TableRow>
-                <TableCell colSpan={9}>
+                <TableCell colSpan={totalCols}>
                    <div className="flex items-center gap-2 flex-wrap">
                     {renewalsOnly && (
                       <Select 
@@ -937,19 +952,23 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             )}
             {oppsLoading || renewalsLoading ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={totalCols} className="text-center py-8 text-muted-foreground">
                   Loading opportunities...
                 </TableCell>
               </TableRow>
             ) : filteredOpportunities.length === 0 && !showAddRow ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={totalCols} className="text-center py-8 text-muted-foreground">
                   {opportunities.length === 0
                     ? "No opportunities yet. Add your first opportunity to get started!"
                     : "No opportunities match your filters."}
                 </TableCell>
               </TableRow>
+            ) : isUserSorted ? (
+              // Flat sorted list when user clicks a column header
+              sortedOpportunities.map(renderOpportunityRow)
             ) : (
+              // Default: grouped by status
               STATUS_ORDER.map(status => renderStatusGroup(status, groupedOpportunities[status]))
             )}
           </TableBody>
