@@ -375,6 +375,21 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
 
   const sortedOpportunities = useMemo(() => {
     if (!isUserSorted) return filteredOpportunities;
+    // Custom field sorting
+    if (sortConfig?.key.startsWith('custom:')) {
+      const fieldId = sortConfig.key.slice(7);
+      const direction = sortConfig.direction!;
+      return [...filteredOpportunities].sort((a, b) => {
+        const aVal = getFieldValue(a.id, fieldId);
+        const bVal = getFieldValue(b.id, fieldId);
+        let comparison = 0;
+        if (aVal == null && bVal != null) comparison = 1;
+        else if (aVal != null && bVal == null) comparison = -1;
+        else if (typeof aVal === 'number' && typeof bVal === 'number') comparison = aVal - bVal;
+        else comparison = String(aVal ?? '').localeCompare(String(bVal ?? ''));
+        return direction === 'desc' ? -comparison : comparison;
+      });
+    }
     return applySortWithFallback(filteredOpportunities, sortConfig, defaultOppSort, sortKeyMap);
   }, [filteredOpportunities, sortConfig, isUserSorted]);
 
