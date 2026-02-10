@@ -112,6 +112,8 @@ export const useCustomFields = create<CustomFieldsStore>()(
         accounts: {},
         renewals: {},
         opportunities: {},
+        'opportunities-newlogo': {},
+        'opportunities-renewals': {},
       },
       
       setColumnVisible: (tab, columnKey, visible) => {
