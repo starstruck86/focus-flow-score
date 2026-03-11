@@ -759,9 +759,10 @@ export default function WeeklyOutreach() {
   const highlightProcessedRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const id = searchParams.get('highlight') || (currentRecord.type === 'account' ? currentRecord.id : null);
+    const urlId = searchParams.get('highlight');
+    const id = urlId || (currentRecord.type === 'account' ? currentRecord.id : null);
     
-    if (searchParams.get('highlight')) {
+    if (urlId) {
       const newParams = new URLSearchParams(searchParams);
       newParams.delete('highlight');
       setSearchParams(newParams, { replace: true });
@@ -771,7 +772,7 @@ export default function WeeklyOutreach() {
     highlightProcessedRef.current = id;
     setExpandedAccountId(id);
     setHighlightId(id);
-    clearCurrentRecord();
+    setTimeout(() => clearCurrentRecord(), 0);
 
     let attempts = 0;
     const scrollInterval = setInterval(() => {
@@ -783,9 +784,9 @@ export default function WeeklyOutreach() {
       if (++attempts > 30) clearInterval(scrollInterval);
     }, 100);
 
-    const timer = setTimeout(() => setHighlightId(null), 4000);
-    return () => { clearTimeout(timer); clearInterval(scrollInterval); };
-  }, [currentRecord.id, currentRecord.type, searchParams, setSearchParams, clearCurrentRecord]);
+    setTimeout(() => setHighlightId(null), 4000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRecord.id, currentRecord.type]);
   
   // Quick filter toggles
   const [filterTierAB, setFilterTierAB] = useState(false);

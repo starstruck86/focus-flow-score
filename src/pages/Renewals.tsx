@@ -223,11 +223,12 @@ export default function Renewals() {
   const highlightProcessedRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const id = searchParams.get('highlight') || currentRecord.id;
+    const urlId = searchParams.get('highlight');
     const tab = searchParams.get('tab');
+    const id = urlId || currentRecord.id;
     
     // Clean URL params if present
-    if (searchParams.get('highlight') || searchParams.get('tab')) {
+    if (urlId || tab) {
       const newParams = new URLSearchParams(searchParams);
       newParams.delete('highlight');
       newParams.delete('tab');
@@ -250,8 +251,8 @@ export default function Renewals() {
       setActiveTab('opportunities');
     }
 
-    // Clear context after consuming
-    clearCurrentRecord();
+    // Clear context after consuming — use setTimeout to avoid re-render killing our intervals
+    setTimeout(() => clearCurrentRecord(), 0);
 
     // Retry scroll until element appears (max 3s)
     let attempts = 0;
@@ -265,9 +266,9 @@ export default function Renewals() {
       if (++attempts > 30) clearInterval(scrollInterval);
     }, 100);
 
-    const timer = setTimeout(() => setHighlightId(null), 4000);
-    return () => { clearTimeout(timer); clearInterval(scrollInterval); };
-  }, [currentRecord.id, searchParams, setSearchParams, renewals, clearCurrentRecord]);
+    setTimeout(() => setHighlightId(null), 4000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRecord.id, renewals.length]);
   const [newRenewal, setNewRenewal] = useState<Partial<Renewal>>({
     healthStatus: 'green',
     autoRenew: false,
