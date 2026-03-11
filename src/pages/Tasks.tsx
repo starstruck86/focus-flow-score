@@ -788,6 +788,9 @@ export default function Tasks() {
 
   const activeCount = filteredTasks.filter(t => t.status !== 'done' && t.status !== 'dropped').length;
   const doneCount = filteredTasks.filter(t => t.status === 'done').length;
+  const overdueCount = filteredTasks.filter(t => 
+    t.dueDate && t.dueDate < today && t.status !== 'done' && t.status !== 'dropped'
+  ).length;
 
   return (
     <Layout>
@@ -798,7 +801,14 @@ export default function Tasks() {
         {/* Title + Add */}
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="font-display text-2xl font-bold">Tasks</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="font-display text-2xl font-bold">Tasks</h1>
+              {overdueCount > 0 && (
+                <Badge variant="destructive" className="text-[10px] h-5 px-1.5">
+                  {overdueCount} overdue
+                </Badge>
+              )}
+            </div>
             <p className="text-sm text-muted-foreground">
               {activeCount} active • {doneCount} done
             </p>
