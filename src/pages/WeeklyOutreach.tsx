@@ -1084,7 +1084,8 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterStale ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs"
+                    className="h-8 text-xs shrink-0"
+                    aria-label="Filter stale accounts untouched 14+ days"
                     onClick={() => setFilterStale(!filterStale)}
                   >
                     Stale 14d+
