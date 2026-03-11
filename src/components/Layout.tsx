@@ -8,7 +8,8 @@ import {
   DollarSign,
   Settings,
   Compass,
-  LogOut
+  LogOut,
+  Menu,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { FocusTimer } from './FocusTimer';
@@ -16,6 +17,19 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { GlobalFAB } from '@/components/fab';
 import { WorkdayCheckInButton } from '@/components/WorkdayCheckInButton';
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+  useSidebar,
+} from '@/components/ui/sidebar';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -26,94 +40,140 @@ const navItems = [
   { to: '/quota', label: 'Quota', icon: DollarSign },
 ];
 
-export function Layout({ children }: { children: React.ReactNode }) {
+function AppSidebar() {
   const location = useLocation();
   const { user, signOut } = useAuth();
+  const { state } = useSidebar();
+  const collapsed = state === 'collapsed';
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Sidebar */}
-      <aside className="w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border">
+      <SidebarContent className="bg-sidebar flex flex-col h-full">
         {/* Logo */}
-        <div className="p-6 border-b border-sidebar-border">
+        <div className={cn("p-4 border-b border-sidebar-border", collapsed && "px-2")}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-              <Compass className="h-6 w-6 text-primary" />
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+              <Compass className="h-5 w-5 text-primary" />
             </div>
-            <div>
-              <h1 className="font-display text-lg font-bold text-sidebar-foreground">
-                Quota Compass
-              </h1>
-              <p className="text-xs text-muted-foreground truncate max-w-[140px]">
-                {user?.email || 'User'}
-              </p>
-            </div>
+            {!collapsed && (
+              <div className="min-w-0">
+                <h1 className="font-display text-sm font-bold text-sidebar-foreground truncate">
+                  Quota Compass
+                </h1>
+                <p className="text-[10px] text-muted-foreground truncate">
+                  {user?.email || 'User'}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-1">
-          {navItems.map((item) => {
-            const isActive = location.pathname === item.to;
-            return (
-              <RouterNavLink
-                key={item.to}
-                to={item.to}
-                className={cn(
-                  'flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all',
-                  isActive
-                    ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                )}
-              >
-                <item.icon className="h-5 w-5" />
-                {item.label}
-              </RouterNavLink>
-            );
-          })}
-        </nav>
+        <SidebarGroup className="flex-1 py-2">
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {navItems.map((item) => {
+                const isActive = location.pathname === item.to;
+                return (
+                  <SidebarMenuItem key={item.to}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <SidebarMenuButton asChild isActive={isActive}>
+                          <RouterNavLink
+                            to={item.to}
+                            className={cn(
+                              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
+                              isActive
+                                ? 'bg-sidebar-primary text-sidebar-primary-foreground'
+                                : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                            )}
+                          >
+                            <item.icon className="h-5 w-5 shrink-0" />
+                            {!collapsed && <span>{item.label}</span>}
+                          </RouterNavLink>
+                        </SidebarMenuButton>
+                      </TooltipTrigger>
+                      {collapsed && (
+                        <TooltipContent side="right">{item.label}</TooltipContent>
+                      )}
+                    </Tooltip>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
-        {/* Compact Timer in Sidebar */}
-        <div className="p-4 border-t border-sidebar-border">
-          <FocusTimer compact />
-        </div>
+        {/* Compact Timer */}
+        {!collapsed && (
+          <div className="px-4 py-3 border-t border-sidebar-border">
+            <FocusTimer compact />
+          </div>
+        )}
 
         {/* Settings & Sign Out */}
-        <div className="p-4 border-t border-sidebar-border space-y-1">
-          <RouterNavLink
-            to="/settings"
-            className={cn(
-              'flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all',
-              location.pathname === '/settings'
-                ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-                : 'text-sidebar-foreground hover:bg-sidebar-accent'
-            )}
-          >
-            <Settings className="h-5 w-5" />
-            Settings
-          </RouterNavLink>
-          <Button
-            variant="ghost"
-            className="w-full justify-start gap-3 px-4 py-3 h-auto text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent"
-            onClick={signOut}
-          >
-            <LogOut className="h-5 w-5" />
-            Sign Out
-          </Button>
+        <div className={cn("p-2 border-t border-sidebar-border space-y-1", collapsed && "px-1")}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <RouterNavLink
+                to="/settings"
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
+                  location.pathname === '/settings'
+                    ? 'bg-sidebar-primary text-sidebar-primary-foreground'
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent'
+                )}
+              >
+                <Settings className="h-5 w-5 shrink-0" />
+                {!collapsed && <span>Settings</span>}
+              </RouterNavLink>
+            </TooltipTrigger>
+            {collapsed && <TooltipContent side="right">Settings</TooltipContent>}
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                className={cn(
+                  "w-full justify-start gap-3 px-3 py-2.5 h-auto text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent",
+                  collapsed && "justify-center px-0"
+                )}
+                onClick={signOut}
+              >
+                <LogOut className="h-5 w-5 shrink-0" />
+                {!collapsed && <span>Sign Out</span>}
+              </Button>
+            </TooltipTrigger>
+            {collapsed && <TooltipContent side="right">Sign Out</TooltipContent>}
+          </Tooltip>
         </div>
-      </aside>
+      </SidebarContent>
+    </Sidebar>
+  );
+}
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-auto">
-        {/* Top bar with workday check-in */}
-        <div className="flex items-center justify-end px-6 pt-4 pb-0">
-          <WorkdayCheckInButton />
+export function Layout({ children }: { children: React.ReactNode }) {
+  return (
+    <SidebarProvider defaultOpen={true}>
+      <div className="min-h-screen bg-background flex w-full">
+        <AppSidebar />
+
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Top bar */}
+          <header className="flex items-center justify-between px-4 py-2 border-b border-border/50">
+            <SidebarTrigger className="text-muted-foreground hover:text-foreground" />
+            <WorkdayCheckInButton />
+          </header>
+
+          {/* Main Content */}
+          <main className="flex-1 overflow-auto">
+            {children}
+          </main>
         </div>
-        {children}
-      </main>
+      </div>
       
       {/* Floating Action Button */}
       <GlobalFAB position="bottom-left" />
-    </div>
+    </SidebarProvider>
   );
 }

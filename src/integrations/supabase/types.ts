@@ -680,6 +680,60 @@ export type Database = {
           },
         ]
       }
+      power_hour_sessions: {
+        Row: {
+          connects: number
+          created_at: string
+          dials: number
+          duration_minutes: number
+          ended_at: string | null
+          focus: string
+          id: string
+          journal_date: string | null
+          meetings_set: number
+          notes: string | null
+          started_at: string
+          status: string
+          synced_to_journal: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          connects?: number
+          created_at?: string
+          dials?: number
+          duration_minutes?: number
+          ended_at?: string | null
+          focus?: string
+          id?: string
+          journal_date?: string | null
+          meetings_set?: number
+          notes?: string | null
+          started_at?: string
+          status?: string
+          synced_to_journal?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          connects?: number
+          created_at?: string
+          dials?: number
+          duration_minutes?: number
+          ended_at?: string | null
+          focus?: string
+          id?: string
+          journal_date?: string | null
+          meetings_set?: number
+          notes?: string | null
+          started_at?: string
+          status?: string
+          synced_to_journal?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       pto_days: {
         Row: {
           created_at: string
