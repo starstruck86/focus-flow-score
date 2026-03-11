@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LinkedRecordProvider } from "@/contexts/LinkedRecordContext";
+import { DataSyncProvider } from "@/components/DataSyncProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { JournalPromptManager } from "@/components/journal";
 import Dashboard from "./pages/Dashboard";
@@ -27,24 +28,26 @@ const App = () => (
       <TooltipProvider>
         <AuthProvider>
           <LinkedRecordProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <JournalPromptManager>
-                <Routes>
-                  <Route path="/auth" element={<Auth />} />
-                  <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                  <Route path="/outreach" element={<ProtectedRoute><WeeklyOutreach /></ProtectedRoute>} />
-                  <Route path="/renewals" element={<ProtectedRoute><Renewals /></ProtectedRoute>} />
-                  <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
-                  <Route path="/recurring" element={<ProtectedRoute><RecurringTasks /></ProtectedRoute>} />
-                  <Route path="/trends" element={<ProtectedRoute><Trends /></ProtectedRoute>} />
-                  <Route path="/quota" element={<ProtectedRoute><Quota /></ProtectedRoute>} />
-                  <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </JournalPromptManager>
-            </BrowserRouter>
+            <DataSyncProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <JournalPromptManager>
+                  <Routes>
+                    <Route path="/auth" element={<Auth />} />
+                    <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                    <Route path="/outreach" element={<ProtectedRoute><WeeklyOutreach /></ProtectedRoute>} />
+                    <Route path="/renewals" element={<ProtectedRoute><Renewals /></ProtectedRoute>} />
+                    <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
+                    <Route path="/recurring" element={<ProtectedRoute><RecurringTasks /></ProtectedRoute>} />
+                    <Route path="/trends" element={<ProtectedRoute><Trends /></ProtectedRoute>} />
+                    <Route path="/quota" element={<ProtectedRoute><Quota /></ProtectedRoute>} />
+                    <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </JournalPromptManager>
+              </BrowserRouter>
+            </DataSyncProvider>
           </LinkedRecordProvider>
         </AuthProvider>
       </TooltipProvider>
