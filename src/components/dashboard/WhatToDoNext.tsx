@@ -73,8 +73,7 @@ export function WhatToDoNext({ recommendations, isLoading }: WhatToDoNextProps) 
 
   const handleAction = (rec: ActionRecommendation) => {
     const route = workflowRoutes[rec.workflow];
-    if (rec.workflow === 'power-hour' || rec.workflow === 'Power Hour') {
-      // Trigger power hour via keyboard shortcut
+    if (rec.workflow === 'power-hour') {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'q' }));
     } else if (route) {
       navigate(route);
