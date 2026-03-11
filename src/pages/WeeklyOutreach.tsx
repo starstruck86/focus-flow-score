@@ -683,6 +683,10 @@ export default function WeeklyOutreach() {
   const [filterTierAB, setFilterTierAB] = useState(false);
   const [filterMissingCadence, setFilterMissingCadence] = useState(false);
   const [filterStale, setFilterStale] = useState(false);
+  const [filterIcpTier12, setFilterIcpTier12] = useState(false);
+  const [filterTriggered, setFilterTriggered] = useState(false);
+  const [filterHighProbability, setFilterHighProbability] = useState(false);
+  const [filterUnenriched, setFilterUnenriched] = useState(false);
   
   // Active filter chips
   const activeFilters = useMemo(() => {
@@ -692,8 +696,12 @@ export default function WeeklyOutreach() {
     if (filterTierAB) filters.push({ key: 'tierAB', label: 'Tier', value: 'A & B only', onRemove: () => setFilterTierAB(false) });
     if (filterMissingCadence) filters.push({ key: 'cadence', label: 'Cadence', value: 'Missing', onRemove: () => setFilterMissingCadence(false) });
     if (filterStale) filters.push({ key: 'stale', label: 'Stale', value: '7+ days', onRemove: () => setFilterStale(false) });
+    if (filterIcpTier12) filters.push({ key: 'icpTier', label: 'ICP Tier', value: '1 & 2', onRemove: () => setFilterIcpTier12(false) });
+    if (filterTriggered) filters.push({ key: 'triggered', label: 'Triggered', value: 'Yes', onRemove: () => setFilterTriggered(false) });
+    if (filterHighProbability) filters.push({ key: 'highProb', label: 'High Probability', value: 'Yes', onRemove: () => setFilterHighProbability(false) });
+    if (filterUnenriched) filters.push({ key: 'unenriched', label: 'Enrichment', value: 'Not enriched', onRemove: () => setFilterUnenriched(false) });
     return filters;
-  }, [searchQuery, filterTier, filterTierAB, filterMissingCadence, filterStale]);
+  }, [searchQuery, filterTier, filterTierAB, filterMissingCadence, filterStale, filterIcpTier12, filterTriggered, filterHighProbability, filterUnenriched]);
 
   // Collapsed groups - outcomes collapsed by default
   const [collapsedGroups, setCollapsedGroups] = useState<Set<AccountStatus>>(
