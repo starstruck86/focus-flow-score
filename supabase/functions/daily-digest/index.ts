@@ -24,16 +24,17 @@ Deno.serve(async (req: Request) => {
 
     // Optional: target a specific user (for manual trigger) or process all
     let targetUserId: string | null = null;
+    let forceRegenerate = false;
     try {
       const body = await req.json();
       targetUserId = body?.userId || null;
+      forceRegenerate = !!targetUserId; // Manual triggers always regenerate
     } catch { /* no body = process all */ }
 
-    // Get all enriched accounts (those with ICP scores, indicating they've been tiered)
+    // Get ALL accounts (not just enriched ones)
     let query = supabase
       .from("accounts")
-      .select("id, user_id, name, website, industry, lifecycle_tier, icp_fit_score")
-      .not("icp_fit_score", "is", null);
+      .select("id, user_id, name, website, industry, lifecycle_tier, icp_fit_score, tier");
 
     if (targetUserId) {
       query = query.eq("user_id", targetUserId);
@@ -43,7 +44,7 @@ Deno.serve(async (req: Request) => {
     if (acctError) throw acctError;
     if (!accounts || accounts.length === 0) {
       return new Response(
-        JSON.stringify({ success: true, message: "No enriched accounts to scan", itemsCreated: 0 }),
+        JSON.stringify({ success: true, message: "No accounts to scan", itemsCreated: 0 }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -67,10 +68,32 @@ Deno.serve(async (req: Request) => {
         .eq("user_id", userId)
         .eq("digest_date", todayStr);
 
-      if (count && count > 0) {
+      if (count && count > 0 && !forceRegenerate) {
         console.log(`Digest already generated for user ${userId} on ${todayStr}, skipping`);
         continue;
       }
+
+      // If regenerating, delete old items first
+      if (count && count > 0 && forceRegenerate) {
+        await supabase
+          .from("daily_digest_items")
+          .delete()
+          .eq("user_id", userId)
+          .eq("digest_date", todayStr);
+        console.log(`Cleared existing digest for user ${userId} to regenerate`);
+      }
+
+      // Prioritize: sort by tier (A first), then by ICP score
+      const sorted = [...userAccts].sort((a, b) => {
+        const tierOrder: Record<string, number> = { A: 0, B: 1, C: 2 };
+        const ta = tierOrder[a.tier || 'C'] ?? 2;
+        const tb = tierOrder[b.tier || 'C'] ?? 2;
+        if (ta !== tb) return ta - tb;
+        return (b.icp_fit_score || 0) - (a.icp_fit_score || 0);
+      });
+
+      // Cap at 30 accounts to avoid excessive API calls
+      const accountsToScan = sorted.slice(0, 30);
 
       // Batch accounts into groups of 10 for Perplexity queries
       const batches: typeof userAccts[] = [];
