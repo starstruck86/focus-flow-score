@@ -387,7 +387,8 @@ const FunnelHealthBar = memo(function FunnelHealthBar({ accounts }: { accounts: 
       </div>
     </div>
   );
-}
+});
+FunnelHealthBar.displayName = 'FunnelHealthBar';
 
 // ===== FUNNEL GROUP SECTION =====
 function FunnelGroupSection({
