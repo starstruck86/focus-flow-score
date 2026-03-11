@@ -247,6 +247,7 @@ export default function Renewals() {
   // Step 2: Once renewals are available, scroll to the target
   useEffect(() => {
     const id = highlightTargetRef.current;
+    console.log('[Renewals] Scroll effect - ref:', id, 'renewals:', renewals.length);
     if (!id || renewals.length === 0) return;
     highlightTargetRef.current = null; // consume
 
