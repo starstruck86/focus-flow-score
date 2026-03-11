@@ -848,19 +848,6 @@ export default function WeeklyOutreach() {
     return filters;
   }, [searchQuery, filterTier, filterTierAB, filterMissingCadence, filterStale, filterIcpTier12, filterTriggered, filterHighProbability, filterUnenriched]);
 
-  // Collapsed groups - outcomes collapsed by default
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<AccountStatus>>(
-    new Set(['meeting-booked', 'disqualified'])
-  );
-
-  const toggleGroupCollapse = (status: AccountStatus) => {
-    setCollapsedGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(status)) next.delete(status);
-      else next.add(status);
-      return next;
-    });
-  };
   
   const [newAccount, setNewAccount] = useState<Partial<Account>>({
     priority: 'medium',
