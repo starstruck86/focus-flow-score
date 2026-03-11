@@ -1040,11 +1040,13 @@ export default function Renewals() {
                       >
                         ARR
                       </SortableHeader>
+                      <TableHead className="w-[6%]">ICP Score</TableHead>
+                      <TableHead className="w-[5%]">Tier</TableHead>
                       <SortableHeader 
                         sortKey="csm" 
                         currentSort={renewalSortConfig} 
                         onSort={handleRenewalSort}
-                        className="w-[10%]"
+                        className="w-[8%]"
                       >
                         CSM
                       </SortableHeader>
