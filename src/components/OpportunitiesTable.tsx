@@ -507,7 +507,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   ];
 
   const CHURN_RISK_SELECT_OPTIONS = [
-    { value: '', label: '—', className: 'bg-muted text-muted-foreground' },
+    { value: 'none', label: '—', className: 'bg-muted text-muted-foreground' },
     { value: 'low', label: '1 - Low', className: 'bg-status-green/20 text-status-green' },
     { value: 'medium', label: '2 - Medium', className: 'bg-status-yellow/20 text-status-yellow' },
     { value: 'high', label: '3 - High', className: 'bg-status-red/20 text-status-red' },
