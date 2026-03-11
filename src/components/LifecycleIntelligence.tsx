@@ -158,12 +158,12 @@ export function EnrichButton({ account, compact = false }: { account: Account; c
 // ── Signal Detail Panel (for expanded account row) ──────
 
 const SIGNAL_DEFS = [
-  { key: 'directEcommerce', label: 'Direct Ecommerce', icon: Globe, description: 'Customers can buy online' },
-  { key: 'emailSmsCapture', label: 'Email/SMS Capture', icon: Mail, description: 'Active subscriber acquisition' },
-  { key: 'loyaltyMembership', label: 'Loyalty/Membership', icon: Crown, description: 'Rewards or membership program' },
-  { key: 'categoryComplexity', label: 'Category Complexity', icon: LayoutGrid, description: '5+ top-level nav categories' },
-  { key: 'mobileApp', label: 'Mobile App', icon: Smartphone, description: 'Has mobile application' },
-  { key: 'marketingPlatformDetected', label: 'Marketing Platform', icon: Cpu, description: 'Detected marketing platform' },
+  { key: 'directEcommerce', evidenceKey: 'direct_ecommerce', label: 'Direct Ecommerce', icon: Globe, description: 'Customers can buy online' },
+  { key: 'emailSmsCapture', evidenceKey: 'email_sms_capture', label: 'Email/SMS Capture', icon: Mail, description: 'Active subscriber acquisition' },
+  { key: 'loyaltyMembership', evidenceKey: 'loyalty_membership', label: 'Loyalty/Membership', icon: Crown, description: 'Rewards or membership program' },
+  { key: 'categoryComplexity', evidenceKey: 'category_complexity', label: 'Category Complexity', icon: LayoutGrid, description: '5+ top-level nav categories' },
+  { key: 'mobileApp', evidenceKey: 'mobile_app', label: 'Mobile App', icon: Smartphone, description: 'Has mobile application' },
+  { key: 'marketingPlatformDetected', evidenceKey: 'marketing_platform', label: 'Marketing Platform', icon: Cpu, description: 'Detected marketing platform' },
 ] as const;
 
 const CONFIDENCE_ICONS = {

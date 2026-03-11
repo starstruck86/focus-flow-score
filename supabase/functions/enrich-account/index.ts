@@ -240,6 +240,14 @@ Deno.serve(async (req) => {
         marketing_platform: signals.marketing_platform_confidence,
         crm_lifecycle_team_size: signals.crm_lifecycle_team_size_confidence,
       },
+      evidence: {
+        direct_ecommerce: signals.direct_ecommerce_evidence || '',
+        email_sms_capture: signals.email_sms_capture_evidence || '',
+        loyalty_membership: signals.loyalty_membership_evidence || '',
+        category_complexity: signals.category_complexity_evidence || '',
+        mobile_app: signals.mobile_app_evidence || '',
+        marketing_platform: signals.marketing_platform_evidence || '',
+        crm_lifecycle_team_size: signals.crm_lifecycle_team_size_evidence || '',
       scores: {
         icp_fit_score: icpFitScore,
         timing_score: 0,
