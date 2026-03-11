@@ -117,11 +117,8 @@ function CopilotDialog() {
         onAccountUpdated: () => {
           setUpdatesApplied(true);
           toast.success('Account data updated by AI research', {
-            description: 'Your accounts have been enriched with new intel',
-            icon: <DatabaseZap className="h-4 w-4" />,
+            description: 'Your accounts have been enriched — refresh to see changes',
           });
-          // Refresh local store
-          if (refreshAccounts) refreshAccounts();
         },
         signal: abort.signal,
       });
