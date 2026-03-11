@@ -58,7 +58,7 @@ function CopilotDialog() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const processedQuestionRef = useRef<string | null>(null);
-  const refreshAccounts = useStore((s) => s.refreshAccounts);
+  
 
   useEffect(() => {
     if (state.open) {
