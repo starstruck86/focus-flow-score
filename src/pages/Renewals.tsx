@@ -1,4 +1,5 @@
-import React, { useState, useRef, useMemo, useCallback, memo } from 'react';
+import React, { useState, useRef, useMemo, useCallback, memo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Plus, 
   Phone, 
