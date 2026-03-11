@@ -87,6 +87,7 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
           e.preventDefault();
           setShowQuickLog(true);
         }
+      }
       // Cmd/Ctrl + K for FAB menu
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
