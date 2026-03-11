@@ -44,6 +44,7 @@ import {
   TodayAgenda,
   MeetingPrepCard,
   SmartWorkQueue,
+  DailyDigest,
 } from '@/components/dashboard';
 
 export default function Dashboard() {
