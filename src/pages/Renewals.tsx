@@ -191,6 +191,18 @@ export default function Renewals() {
   // Sort hook for renewals table
   const { sortConfig: renewalSortConfig, handleSort: handleRenewalSort } = useTableSort();
   
+  // Account lookup map for ICP intelligence
+  const accountMap = useMemo(() => {
+    const map = new Map<string, typeof accounts[number]>();
+    accounts.forEach(a => map.set(a.id, a));
+    return map;
+  }, [accounts]);
+  const getAccountForRenewal = useCallback((renewal: Renewal) => {
+    if (renewal.accountId) return accountMap.get(renewal.accountId);
+    // Fallback: match by name
+    return accounts.find(a => a.name.toLowerCase() === renewal.accountName.toLowerCase());
+  }, [accountMap, accounts]);
+  
   // Custom fields for summary table
   const { getFieldsForTab } = useCustomFields();
   const summaryCustomFields = useMemo(() => 
