@@ -194,9 +194,10 @@ interface OpportunitiesTableProps {
   columnOrder?: 'default' | 'outreach';
   stageFilter?: OpportunityStage | null;
   onClearStageFilter?: () => void;
+  highlightId?: string | null;
 }
 
-export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, excludeRenewals = false, showChurnRisk = true, columnOrder = 'default', stageFilter, onClearStageFilter }: OpportunitiesTableProps) {
+export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, excludeRenewals = false, showChurnRisk = true, columnOrder = 'default', stageFilter, onClearStageFilter, highlightId }: OpportunitiesTableProps) {
   // Custom fields for this specific opportunities context
   const oppTabTarget = renewalsOnly ? 'opportunities-renewals' as const : 'opportunities-newlogo' as const;
   const { fields, getFieldValue } = useCustomFields();
