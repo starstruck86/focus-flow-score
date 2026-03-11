@@ -1125,6 +1125,27 @@ export default function Renewals() {
                               format="currency"
                             />
                           </TableCell>
+                          {/* ICP Score + Tier from linked account */}
+                          {(() => {
+                            const acct = getAccountForRenewal(renewal);
+                            return (
+                              <>
+                                <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                                  {acct ? (
+                                    <div className="flex items-center gap-1">
+                                      <IcpScorePill account={acct} />
+                                      <EnrichButton account={acct} />
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                                  {acct ? <LifecycleTierBadge account={acct} /> : <span className="text-xs text-muted-foreground">—</span>}
+                                </TableCell>
+                              </>
+                            );
+                          })()}
                           <TableCell className="align-top py-3">
                             <EditableTextCell
                               value={renewal.csm || ''}
