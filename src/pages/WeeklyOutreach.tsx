@@ -1311,7 +1311,7 @@ export default function WeeklyOutreach() {
                         expandedAccountId={expandedAccountId}
                         setExpandedAccountId={setExpandedAccountId}
                         updateAccount={updateAccount}
-                        deleteAccount={deleteAccount}
+                        deleteAccount={(id) => { const acct = accounts.find(a => a.id === id); if (acct) deleteWithUndo(acct); }}
                         isCollapsed={collapsedGroups.has(group.status)}
                         onToggleCollapse={() => toggleGroupCollapse(group.status)}
                         isSelected={bulkSelection.isSelected}
