@@ -234,7 +234,7 @@ const StalenessAlert = memo(function StalenessAlert({ accounts }: { accounts: Ac
     if (a.accountStatus === 'disqualified' || a.accountStatus === 'inactive') return false;
     if (!a.lastTouchDate) return true;
     const days = Math.floor((Date.now() - new Date(a.lastTouchDate).getTime()) / 86400000);
-    return days > 7;
+    return days > 14;
   }).length;
 
   const noNextStep = accounts.filter(a => 
