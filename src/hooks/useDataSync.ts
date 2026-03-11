@@ -294,18 +294,17 @@ export function useDataSync() {
           const dbOppIds = new Set(dbOpps.map(o => o.id));
           const dbRenewalIds = new Set(dbRenewals.map(r => r.id));
 
-          // Only merge store items that have valid UUIDs and aren't already in DB
           const mergedAccounts = [
             ...dbAccounts,
-            ...store.accounts.filter(a => !dbAccountIds.has(a.id) && isUUID(a.id)),
+            ...migratedAccounts.filter(a => !dbAccountIds.has(a.id)),
           ];
           const mergedOpps = [
             ...dbOpps,
-            ...store.opportunities.filter(o => !dbOppIds.has(o.id) && isUUID(o.id)),
+            ...migratedOpps.filter(o => !dbOppIds.has(o.id)),
           ];
           const mergedRenewals = [
             ...dbRenewals,
-            ...store.renewals.filter(r => !dbRenewalIds.has(r.id) && isUUID(r.id)),
+            ...migratedRenewals.filter(r => !dbRenewalIds.has(r.id)),
           ];
 
           useStore.setState({
@@ -314,10 +313,9 @@ export function useDataSync() {
             renewals: mergedRenewals,
           });
 
-          // Push store-only items to DB (only valid UUIDs)
-          const storeOnlyAccounts = store.accounts.filter(a => !dbAccountIds.has(a.id) && isUUID(a.id));
-          const storeOnlyOpps = store.opportunities.filter(o => !dbOppIds.has(o.id) && isUUID(o.id));
-          const storeOnlyRenewals = store.renewals.filter(r => !dbRenewalIds.has(r.id) && isUUID(r.id));
+          const storeOnlyAccounts = migratedAccounts.filter(a => !dbAccountIds.has(a.id));
+          const storeOnlyOpps = migratedOpps.filter(o => !dbOppIds.has(o.id));
+          const storeOnlyRenewals = migratedRenewals.filter(r => !dbRenewalIds.has(r.id));
 
           if (storeOnlyAccounts.length > 0) {
             await supabase.from('accounts').upsert(
@@ -334,25 +332,27 @@ export function useDataSync() {
               storeOnlyRenewals.map(r => storeRenewalToDb(r, userId))
             );
           }
-        } else if (store.accounts.length > 0 || store.opportunities.length > 0 || store.renewals.length > 0) {
-          // Only push items with valid UUIDs
-          const validAccounts = store.accounts.filter(a => isUUID(a.id));
-          const validOpps = store.opportunities.filter(o => isUUID(o.id));
-          const validRenewals = store.renewals.filter(r => isUUID(r.id));
+        } else if (migratedAccounts.length > 0 || migratedOpps.length > 0 || migratedRenewals.length > 0) {
+          // Update store with migrated IDs
+          useStore.setState({
+            accounts: migratedAccounts,
+            opportunities: migratedOpps,
+            renewals: migratedRenewals,
+          });
           
-          if (validAccounts.length > 0) {
+          if (migratedAccounts.length > 0) {
             await supabase.from('accounts').upsert(
-              validAccounts.map(a => storeAccountToDb(a, userId))
+              migratedAccounts.map(a => storeAccountToDb(a, userId))
             );
           }
-          if (validOpps.length > 0) {
+          if (migratedOpps.length > 0) {
             await supabase.from('opportunities').upsert(
-              validOpps.map(o => storeOpportunityToDb(o, userId))
+              migratedOpps.map(o => storeOpportunityToDb(o, userId))
             );
           }
-          if (validRenewals.length > 0) {
+          if (migratedRenewals.length > 0) {
             await supabase.from('renewals').upsert(
-              validRenewals.map(r => storeRenewalToDb(r, userId))
+              migratedRenewals.map(r => storeRenewalToDb(r, userId))
             );
           }
         }
