@@ -226,6 +226,7 @@ export default function Renewals() {
   useEffect(() => {
     const id = searchParams.get('highlight');
     const tab = searchParams.get('tab');
+    console.log('[Renewals] Mount effect - highlight:', id, 'tab:', tab, 'renewals count:', renewals.length);
     if (id) {
       highlightTargetRef.current = id;
       setHighlightId(id);
