@@ -558,6 +558,7 @@ function FunnelGroupSection({
 
 export default function WeeklyOutreach() {
   const { accounts, addAccount, updateAccount, deleteAccount } = useStore();
+  const bulkSelection = useBulkSelection<Account>();
   const [activeTab, setActiveTab] = useState<'accounts' | 'opportunities'>('accounts');
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
