@@ -1,12 +1,14 @@
-// Territory Copilot — ⌘K command bar with Quick / Deep Research / Meeting Prep modes
+// Territory Copilot v3 — ⌘K with Quick / Deep Research / Meeting Prep + write-back
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Sparkles, Send, Loader2, MessageSquare, ArrowRight, Zap, RotateCcw, Search, Calendar } from 'lucide-react';
+import { Sparkles, Send, Loader2, MessageSquare, ArrowRight, Zap, RotateCcw, Search, Calendar, DatabaseZap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { streamCopilot, SUGGESTED_QUESTIONS, MODE_CONFIG, type CopilotMsg, type CopilotMode } from '@/lib/territoryCopilot';
 import { useCopilot } from '@/contexts/CopilotContext';
+import { useStore } from '@/store/useStore';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { toast } from 'sonner';
 
 const MODE_ICONS: Record<CopilotMode, typeof Zap> = {
   quick: Zap,
@@ -51,10 +53,12 @@ function CopilotDialog() {
   const [mode, setMode] = useState<CopilotMode>('quick');
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [updatesApplied, setUpdatesApplied] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const processedQuestionRef = useRef<string | null>(null);
+  const refreshAccounts = useStore((s) => s.refreshAccounts);
 
   useEffect(() => {
     if (state.open) {
@@ -62,7 +66,7 @@ function CopilotDialog() {
       if (state.initialQuestion && processedQuestionRef.current !== state.initialQuestion) {
         processedQuestionRef.current = state.initialQuestion;
         setMessages([]);
-        // Auto-detect mode from initial question
+        setUpdatesApplied(false);
         const detectedMode = state.mode || 'quick';
         setMode(detectedMode);
         setTimeout(() => sendMessage(state.initialQuestion!, detectedMode), 200);
@@ -85,6 +89,7 @@ function CopilotDialog() {
     
     const activeMode = overrideMode || mode;
     setError(null);
+    setUpdatesApplied(false);
     const userMsg: CopilotMsg = { role: 'user', content: text.trim() };
     setMessages(prev => {
       const newMsgs = [...prev, userMsg];
@@ -108,9 +113,15 @@ function CopilotDialog() {
           });
         },
         onDone: () => setIsStreaming(false),
-        onError: (err) => {
-          setError(err);
-          setIsStreaming(false);
+        onError: (err) => { setError(err); setIsStreaming(false); },
+        onAccountUpdated: () => {
+          setUpdatesApplied(true);
+          toast.success('Account data updated by AI research', {
+            description: 'Your accounts have been enriched with new intel',
+            icon: <DatabaseZap className="h-4 w-4" />,
+          });
+          // Refresh local store
+          if (refreshAccounts) refreshAccounts();
         },
         signal: abort.signal,
       });
@@ -118,19 +129,10 @@ function CopilotDialog() {
       return newMsgs;
     });
     setInput('');
-  }, [isStreaming, mode, state.accountId]);
+  }, [isStreaming, mode, state.accountId, refreshAccounts]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    sendMessage(input);
-  };
-
-  const handleClear = () => {
-    setMessages([]);
-    setError(null);
-    abortRef.current?.abort();
-    setIsStreaming(false);
-  };
+  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); sendMessage(input); };
+  const handleClear = () => { setMessages([]); setError(null); setUpdatesApplied(false); abortRef.current?.abort(); setIsStreaming(false); };
 
   const showSuggestions = messages.length === 0 && !isStreaming;
   const filteredSuggestions = SUGGESTED_QUESTIONS.filter(q => mode === 'quick' || q.mode === mode).slice(0, 6);
@@ -158,8 +160,8 @@ function CopilotDialog() {
             mode === 'deep' ? "bg-primary/5 text-primary" : "bg-accent/30 text-accent-foreground"
           )}>
             {MODE_CONFIG[mode].icon} {MODE_CONFIG[mode].description}
-            {mode === 'deep' && " — uses Perplexity for live web search"}
-            {mode === 'meeting' && " — includes contacts, news & talking points"}
+            {mode === 'deep' && <span className="ml-1 text-muted-foreground">• will auto-update accounts with findings</span>}
+            {mode === 'meeting' && <span className="ml-1 text-muted-foreground">• auto-enriches account intel</span>}
           </div>
         )}
 
@@ -170,8 +172,8 @@ function CopilotDialog() {
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Zap className="h-3 w-3 text-primary" />
                 {mode === 'quick' && "Ask anything about your territory, accounts, or pipeline."}
-                {mode === 'deep' && "Deep research combines your CRM data with live web intelligence."}
-                {mode === 'meeting' && "Get a comprehensive meeting brief with contacts and talking points."}
+                {mode === 'deep' && "Deep research combines CRM data with web intel and auto-updates your accounts."}
+                {mode === 'meeting' && "Get a comprehensive meeting brief — auto-enriches account data."}
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {filteredSuggestions.map((q) => (
@@ -203,7 +205,7 @@ function CopilotDialog() {
                 {msg.role === 'user' ? (
                   <p className="text-sm">{msg.content}</p>
                 ) : (
-                  <div className="prose prose-sm dark:prose-invert max-w-none [&_p]:text-sm [&_li]:text-sm [&_strong]:text-foreground [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_ul]:my-1 [&_ol]:my-1 [&_p]:my-1 [&_a]:text-primary [&_a]:underline">
+                  <div className="prose prose-sm dark:prose-invert max-w-none [&_p]:text-sm [&_li]:text-sm [&_strong]:text-foreground [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_ul]:my-1 [&_ol]:my-1 [&_p]:my-1 [&_a]:text-primary [&_a]:underline [&_blockquote]:border-primary/30 [&_blockquote]:bg-primary/5 [&_blockquote]:rounded-md [&_blockquote]:py-1">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {msg.content}
                     </ReactMarkdown>
@@ -218,16 +220,14 @@ function CopilotDialog() {
               <Loader2 className="h-3 w-3 animate-spin" />
               <span className="text-xs">
                 {mode === 'quick' && "Analyzing your territory..."}
-                {mode === 'deep' && "Running deep research (CRM + web)..."}
+                {mode === 'deep' && "Researching & updating accounts..."}
                 {mode === 'meeting' && "Building your meeting brief..."}
               </span>
             </div>
           )}
 
           {error && (
-            <div className="text-xs text-destructive bg-destructive/10 rounded-lg p-3">
-              {error}
-            </div>
+            <div className="text-xs text-destructive bg-destructive/10 rounded-lg p-3">{error}</div>
           )}
         </div>
 
@@ -239,7 +239,7 @@ function CopilotDialog() {
             onChange={(e) => setInput(e.target.value)}
             placeholder={
               mode === 'quick' ? "Ask about your territory..." :
-              mode === 'deep' ? "What do you want to research?" :
+              mode === 'deep' ? "What do you want to research? (will auto-update accounts)" :
               "Which account's meeting should I prep?"
             }
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
@@ -263,10 +263,7 @@ export function TerritoryCopilot() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        openCopilot();
-      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openCopilot(); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
