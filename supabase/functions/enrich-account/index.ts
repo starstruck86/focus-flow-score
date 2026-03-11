@@ -111,23 +111,30 @@ Deno.serve(async (req) => {
             properties: {
               direct_ecommerce: { type: 'boolean', description: 'Can customers buy products, tickets, or services directly online? Look for cart, checkout, buy buttons, ticket purchasing, donation flows.' },
               direct_ecommerce_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+              direct_ecommerce_evidence: { type: 'string', description: 'Specific evidence: quote exact UI elements, URLs, buttons, or page sections that prove this. E.g. "Add to Cart button on /shop, checkout flow at /cart, Shopify checkout detected"' },
               email_sms_capture: { type: 'boolean', description: 'Does the site actively capture email/SMS subscribers? Look for newsletter signups, popup forms, SMS opt-in.' },
               email_sms_capture_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+              email_sms_capture_evidence: { type: 'string', description: 'Specific evidence: quote the signup forms, popups, footer signups, or SMS opt-in language found. E.g. "Footer email signup form with 10% off offer, exit-intent popup for SMS club"' },
               loyalty_membership: { type: 'boolean', description: 'Does the company run loyalty, rewards, membership, donor, patron, VIP, insider, or perks programs?' },
               loyalty_membership_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+              loyalty_membership_evidence: { type: 'string', description: 'Specific evidence: name the program, quote links or pages found. E.g. "Rewards program link in nav bar, /rewards page with points system"' },
               category_complexity: { type: 'boolean', description: 'Does the navigation show 5+ top-level categories?' },
               category_complexity_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+              category_complexity_evidence: { type: 'string', description: 'Specific evidence: list the top-level navigation categories found. E.g. "Nav has: Women, Men, Kids, Home, Sale, New Arrivals, Accessories (7 categories)"' },
               crm_lifecycle_team_size: { type: 'integer', description: 'Estimated CRM/lifecycle/retention/email marketing team size. 0 if no evidence.' },
               crm_lifecycle_team_size_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+              crm_lifecycle_team_size_evidence: { type: 'string', description: 'Specific evidence: what indicators suggest this team size? E.g. "LinkedIn shows 3 email marketing roles, careers page lists Lifecycle Marketing Manager opening"' },
               mobile_app: { type: 'boolean', description: 'Has mobile app? Look for app store links.' },
               mobile_app_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+              mobile_app_evidence: { type: 'string', description: 'Specific evidence: quote app store links, download CTAs, or app banners found. E.g. "iOS App Store link in footer, smart app banner on mobile"' },
               marketing_platform_detected: { type: 'string', description: 'Marketing/email platform detected from scripts/pixels (e.g., Klaviyo, HubSpot, Mailchimp, SFMC, Braze). Empty string if none.' },
               marketing_platform_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+              marketing_platform_evidence: { type: 'string', description: 'Specific evidence: what script, pixel, or code snippet was detected? E.g. "Klaviyo signup form embed detected, klaviyo.com/onsite/js loaded in page source"' },
               summary: { type: 'string', description: '2-3 sentence summary of lifecycle marketing maturity findings.' },
             },
             required: ['direct_ecommerce', 'email_sms_capture', 'loyalty_membership', 'category_complexity', 'crm_lifecycle_team_size', 'mobile_app', 'marketing_platform_detected', 'summary'],
           },
-          prompt: `Analyze this website for a B2B sales rep selling marketing automation / lifecycle marketing software to ${accountName || 'this company'}. Evaluate each signal carefully. For CRM team size, estimate based on job listings links, team pages, or company size indicators.`,
+          prompt: `Analyze this website for a B2B sales rep selling marketing automation / lifecycle marketing software to ${accountName || 'this company'}. Evaluate each signal carefully and provide SPECIFIC EVIDENCE for every detection — cite exact page elements, URLs, button text, script names, or navigation items you observe. For CRM team size, estimate based on job listings links, team pages, or company size indicators.`,
         },
         onlyMainContent: false,
         waitFor: 2000,
@@ -172,6 +179,16 @@ Deno.serve(async (req) => {
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
         const supabase = createClient(supabaseUrl, supabaseKey);
 
+        const evidence = {
+            direct_ecommerce: signals.direct_ecommerce_evidence || '',
+            email_sms_capture: signals.email_sms_capture_evidence || '',
+            loyalty_membership: signals.loyalty_membership_evidence || '',
+            category_complexity: signals.category_complexity_evidence || '',
+            mobile_app: signals.mobile_app_evidence || '',
+            marketing_platform: signals.marketing_platform_evidence || '',
+            crm_lifecycle_team_size: signals.crm_lifecycle_team_size_evidence || '',
+          };
+
         const { error: dbError } = await supabase
           .from('accounts')
           .update({
@@ -191,6 +208,7 @@ Deno.serve(async (req) => {
             confidence_score: confidenceScore,
             last_enriched_at: new Date().toISOString(),
             enrichment_source_summary: signals.summary,
+            enrichment_evidence: evidence,
           })
           .eq('id', accountId);
 
@@ -221,6 +239,15 @@ Deno.serve(async (req) => {
         mobile_app: signals.mobile_app_confidence,
         marketing_platform: signals.marketing_platform_confidence,
         crm_lifecycle_team_size: signals.crm_lifecycle_team_size_confidence,
+      },
+      evidence: {
+        direct_ecommerce: signals.direct_ecommerce_evidence || '',
+        email_sms_capture: signals.email_sms_capture_evidence || '',
+        loyalty_membership: signals.loyalty_membership_evidence || '',
+        category_complexity: signals.category_complexity_evidence || '',
+        mobile_app: signals.mobile_app_evidence || '',
+        marketing_platform: signals.marketing_platform_evidence || '',
+        crm_lifecycle_team_size: signals.crm_lifecycle_team_size_evidence || '',
       },
       scores: {
         icp_fit_score: icpFitScore,

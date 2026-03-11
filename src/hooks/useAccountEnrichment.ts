@@ -17,6 +17,7 @@ export interface EnrichmentResult {
     crm_lifecycle_team_size: number;
   };
   confidence?: Record<string, 'high' | 'medium' | 'low'>;
+  evidence?: Record<string, string>;
   scores?: {
     icp_fit_score: number;
     timing_score: number;
@@ -78,6 +79,7 @@ export function useAccountEnrichment() {
         confidenceScore: result.scores!.confidence_score,
         lastEnrichedAt: new Date().toISOString(),
         enrichmentSourceSummary: result.summary,
+        enrichmentEvidence: result.evidence,
       };
 
       updateAccount(account.id, updates);

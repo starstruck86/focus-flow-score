@@ -75,6 +75,7 @@ export type Database = {
           direct_ecommerce: boolean | null
           ecommerce: string | null
           email_sms_capture: boolean | null
+          enrichment_evidence: Json | null
           enrichment_source_summary: string | null
           high_probability_buyer: boolean | null
           icp_fit_score: number | null
@@ -128,6 +129,7 @@ export type Database = {
           direct_ecommerce?: boolean | null
           ecommerce?: string | null
           email_sms_capture?: boolean | null
+          enrichment_evidence?: Json | null
           enrichment_source_summary?: string | null
           high_probability_buyer?: boolean | null
           icp_fit_score?: number | null
@@ -181,6 +183,7 @@ export type Database = {
           direct_ecommerce?: boolean | null
           ecommerce?: string | null
           email_sms_capture?: boolean | null
+          enrichment_evidence?: Json | null
           enrichment_source_summary?: string | null
           high_probability_buyer?: boolean | null
           icp_fit_score?: number | null

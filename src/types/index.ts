@@ -279,6 +279,7 @@ export interface Account {
   confidenceScore?: number;
   lastEnrichedAt?: string;
   enrichmentSourceSummary?: string;
+  enrichmentEvidence?: Record<string, string>;
   lifecycleOverride?: boolean;
   lifecycleOverrideReason?: string;
   icpScoreOverride?: number;
