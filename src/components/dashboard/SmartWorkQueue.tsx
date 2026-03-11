@@ -51,7 +51,6 @@ function WorkItemCard({ item, index }: { item: WorkItem; index: number }) {
   const formatArr = (v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`;
 
   const handleClick = () => {
-    // Map work item type to the correct linked record type for context
     const recordType = item.type === 'renewal' ? 'renewal' 
       : item.type === 'opportunity' ? 'opportunity' 
       : 'account';
@@ -60,7 +59,7 @@ function WorkItemCard({ item, index }: { item: WorkItem; index: number }) {
       id: item.id,
       accountId: item.accountId,
     });
-    navigate(item.route);
+    navigate(`${item.route}?highlight=${item.id}`);
   };
 
   return (
