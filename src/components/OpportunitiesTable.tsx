@@ -737,9 +737,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             </TableCell>
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <DisplaySelectCell
-                value={opp.stage || ''}
+                value={opp.stage || 'none'}
                 options={STAGE_SELECT_OPTIONS}
-                onChange={(v) => updateOpportunity(opp.id, { stage: v as OpportunityStage })}
+                onChange={(v) => updateOpportunity(opp.id, { stage: (v === 'none' ? '' : v) as OpportunityStage })}
               />
             </TableCell>
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
