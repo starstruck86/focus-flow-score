@@ -1006,6 +1006,38 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
         </div>
       </div>
 
+      {/* Filtered count + staleness */}
+      {filteredOpportunities.length !== opportunities.length && (
+        <div className="text-xs text-muted-foreground">
+          Showing <span className="font-semibold text-foreground">{filteredOpportunities.length}</span> of {opportunities.length} opportunities
+        </div>
+      )}
+      {(() => {
+        const staleOpps = filteredOpportunities.filter(o => {
+          if (o.status !== 'active') return false;
+          if (!o.lastTouchDate) return true;
+          return Math.floor((Date.now() - new Date(o.lastTouchDate).getTime()) / 86400000) > 14;
+        });
+        const noNextStep = filteredOpportunities.filter(o => o.status === 'active' && !o.nextStep).length;
+        if (staleOpps.length === 0 && noNextStep === 0) return null;
+        return (
+          <div className="flex flex-wrap gap-3">
+            {staleOpps.length > 0 && (
+              <div className="flex items-center gap-2 text-xs bg-status-red/10 border border-status-red/20 rounded-lg px-3 py-2">
+                <span className="text-status-red font-medium">{staleOpps.length} opps</span>
+                <span className="text-muted-foreground">untouched 14+ days</span>
+              </div>
+            )}
+            {noNextStep > 0 && (
+              <div className="flex items-center gap-2 text-xs bg-status-yellow/10 border border-status-yellow/20 rounded-lg px-3 py-2">
+                <span className="text-status-yellow font-medium">{noNextStep} active opps</span>
+                <span className="text-muted-foreground">missing next step</span>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Bulk Actions Bar */}
       <BulkActionsBar
         selectedCount={bulkSelection.selectedCount}

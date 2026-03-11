@@ -1046,8 +1046,8 @@ export default function WeeklyOutreach() {
             
             {/* Actions Bar */}
             <div className="space-y-3">
-              {/* Search row */}
-              <div className="flex items-center gap-2 flex-wrap">
+              {/* Search + actions row */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <div className="relative flex-1 min-w-0">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -1057,9 +1057,9 @@ export default function WeeklyOutreach() {
                     className="pl-9"
                   />
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                {/* Quick filter toggles */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                <div className="flex items-center gap-2 shrink-0 overflow-x-auto">
+              {/* Quick filter toggles */}
+              <div className="flex items-center gap-1.5 pb-0.5 scrollbar-thin">
                   <Button
                     variant={filterTierAB ? "default" : "outline"}
                     size="sm"
