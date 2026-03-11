@@ -113,7 +113,17 @@ function AppSidebar() {
                             )}
                           >
                             <item.icon className="h-5 w-5 shrink-0" />
-                            {!collapsed && <span>{item.label}</span>}
+                            {!collapsed && (
+                              <span className="flex-1">{item.label}</span>
+                            )}
+                            {!collapsed && badgeCounts[item.to] > 0 && (
+                              <span className="ml-auto min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold px-1">
+                                {badgeCounts[item.to]}
+                              </span>
+                            )}
+                            {collapsed && badgeCounts[item.to] > 0 && (
+                              <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-destructive" />
+                            )}
                           </RouterNavLink>
                         </SidebarMenuButton>
                       </TooltipTrigger>
