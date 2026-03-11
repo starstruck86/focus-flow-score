@@ -347,7 +347,7 @@ function OpportunitiesStageSummary() {
 }
 
 // ===== FUNNEL HEALTH BAR =====
-function FunnelHealthBar({ accounts }: { accounts: Account[] }) {
+const FunnelHealthBar = memo(function FunnelHealthBar({ accounts }: { accounts: Account[] }) {
   const counts: Record<string, number> = { researching: 0, prepped: 0, active: 0 };
   accounts.forEach(a => {
     if (counts[a.accountStatus] !== undefined) counts[a.accountStatus]++;
