@@ -213,7 +213,28 @@ export default function Renewals() {
   
   // Track which renewal is expanded to show details
   const [expandedRenewalId, setExpandedRenewalId] = useState<string | null>(null);
-  
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Auto-expand and scroll to highlighted renewal from Work Queue
+  useEffect(() => {
+    const id = searchParams.get('highlight');
+    if (id) {
+      setExpandedRenewalId(id);
+      setHighlightId(id);
+      // Clean up URL
+      searchParams.delete('highlight');
+      setSearchParams(searchParams, { replace: true });
+      // Scroll to the row after render
+      requestAnimationFrame(() => {
+        const el = document.querySelector(`[data-renewal-id="${id}"]`);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+      // Clear highlight after animation
+      const timer = setTimeout(() => setHighlightId(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams, setSearchParams]);
   const [newRenewal, setNewRenewal] = useState<Partial<Renewal>>({
     healthStatus: 'green',
     autoRenew: false,
