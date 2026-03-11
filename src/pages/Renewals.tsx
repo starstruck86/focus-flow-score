@@ -71,6 +71,68 @@ import { useCustomFields } from '@/hooks/useCustomFields';
 import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
 import { sortRenewalsDefault, applySortWithFallback, CHURN_RISK_SORT_RANK, CHURN_RISK_DISPLAY_LABELS } from '@/lib/sortUtils';
 import type { Renewal, HealthStatus, Opportunity, ChurnRisk } from '@/types';
+import { computeRenewalRiskScore } from '@/hooks/useTimeAllocation';
+
+// ===== RENEWAL URGENCY HEADER =====
+function RenewalUrgencyHeader({ renewals, formatCurrency }: { renewals: Renewal[]; formatCurrency: (v: number) => string }) {
+  const nearest = renewals.filter(r => r.daysToRenewal > 0).sort((a, b) => a.daysToRenewal - b.daysToRenewal)[0];
+  const atRiskArr = renewals
+    .filter(r => r.churnRisk === 'high' || r.churnRisk === 'certain' || r.healthStatus === 'red')
+    .reduce((sum, r) => sum + r.arr, 0);
+  const next30Arr = renewals
+    .filter(r => r.daysToRenewal >= 0 && r.daysToRenewal <= 30)
+    .reduce((sum, r) => sum + r.arr, 0);
+  const missingNextStep = renewals.filter(r => r.daysToRenewal <= 90 && !r.nextStep).length;
+
+  if (!nearest && atRiskArr === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-3 mb-4">
+      {nearest && (
+        <div className={cn(
+          "flex items-center gap-2 text-xs rounded-lg px-3 py-2 border",
+          nearest.daysToRenewal <= 14 ? "bg-status-red/10 border-status-red/20" :
+          nearest.daysToRenewal <= 30 ? "bg-status-yellow/10 border-status-yellow/20" :
+          "bg-primary/10 border-primary/20"
+        )}>
+          <Calendar className="h-3.5 w-3.5 shrink-0" />
+          <span className="font-medium">Next renewal:</span>
+          <span className="font-bold">{nearest.accountName}</span>
+          <span>in</span>
+          <span className={cn(
+            "font-mono font-bold",
+            nearest.daysToRenewal <= 14 ? "text-status-red" :
+            nearest.daysToRenewal <= 30 ? "text-status-yellow" : "text-primary"
+          )}>
+            {nearest.daysToRenewal}d
+          </span>
+          <span className="text-muted-foreground">({formatCurrency(nearest.arr)})</span>
+        </div>
+      )}
+      {next30Arr > 0 && (
+        <div className="flex items-center gap-2 text-xs bg-status-yellow/10 border border-status-yellow/20 rounded-lg px-3 py-2">
+          <DollarSign className="h-3.5 w-3.5 text-status-yellow shrink-0" />
+          <span className="font-mono font-bold text-status-yellow">{formatCurrency(next30Arr)}</span>
+          <span className="text-muted-foreground">due in 30 days</span>
+        </div>
+      )}
+      {atRiskArr > 0 && (
+        <div className="flex items-center gap-2 text-xs bg-status-red/10 border border-status-red/20 rounded-lg px-3 py-2">
+          <AlertTriangle className="h-3.5 w-3.5 text-status-red shrink-0" />
+          <span className="font-mono font-bold text-status-red">{formatCurrency(atRiskArr)}</span>
+          <span className="text-muted-foreground">ARR at risk</span>
+        </div>
+      )}
+      {missingNextStep > 0 && (
+        <div className="flex items-center gap-2 text-xs bg-status-yellow/10 border border-status-yellow/20 rounded-lg px-3 py-2">
+          <AlertTriangle className="h-3.5 w-3.5 text-status-yellow shrink-0" />
+          <span className="text-status-yellow font-medium">{missingNextStep} renewals</span>
+          <span className="text-muted-foreground">in 90d window missing next step</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const HEALTH_COLORS: Record<HealthStatus, string> = {
   green: 'bg-status-green/20 text-status-green border-status-green/30',
