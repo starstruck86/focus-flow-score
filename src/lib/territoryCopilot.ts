@@ -1,4 +1,4 @@
-// Territory Copilot - streaming chat client with auth + modes
+// Territory Copilot v3 - streaming chat client with auth, modes, and write-back actions
 import { supabase } from '@/integrations/supabase/client';
 
 export type CopilotMsg = { role: "user" | "assistant"; content: string };
@@ -18,6 +18,7 @@ export async function streamCopilot({
   onDelta,
   onDone,
   onError,
+  onAccountUpdated,
   signal,
 }: {
   messages: CopilotMsg[];
@@ -26,6 +27,7 @@ export async function streamCopilot({
   onDelta: (text: string) => void;
   onDone: () => void;
   onError: (error: string) => void;
+  onAccountUpdated?: () => void;
   signal?: AbortSignal;
 }) {
   try {
@@ -60,6 +62,7 @@ export async function streamCopilot({
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let detectedUpdate = false;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -77,6 +80,7 @@ export async function streamCopilot({
 
         const jsonStr = line.slice(6).trim();
         if (jsonStr === "[DONE]") {
+          if (detectedUpdate && onAccountUpdated) onAccountUpdated();
           onDone();
           return;
         }
@@ -84,7 +88,13 @@ export async function streamCopilot({
         try {
           const parsed = JSON.parse(jsonStr);
           const content = parsed.choices?.[0]?.delta?.content;
-          if (content) onDelta(content);
+          if (content) {
+            onDelta(content);
+            // Detect if updates were applied
+            if (content.includes("🔄 **Data Updates Applied**") || content.includes("✅ Updated")) {
+              detectedUpdate = true;
+            }
+          }
         } catch {
           buffer = line + "\n" + buffer;
           break;
@@ -92,7 +102,7 @@ export async function streamCopilot({
       }
     }
 
-    // Flush remaining
+    // Flush
     if (buffer.trim()) {
       for (let raw of buffer.split("\n")) {
         if (!raw) continue;
@@ -108,6 +118,7 @@ export async function streamCopilot({
       }
     }
 
+    if (detectedUpdate && onAccountUpdated) onAccountUpdated();
     onDone();
   } catch (e: any) {
     if (e.name === "AbortError") return;
@@ -120,14 +131,14 @@ export const SUGGESTED_QUESTIONS: { text: string; mode: CopilotMode }[] = [
   { text: "Which accounts show new buying signals?", mode: "quick" },
   { text: "Which renewals are at risk this quarter?", mode: "quick" },
   { text: "What should I know before my next meeting?", mode: "meeting" },
-  { text: "Deep dive: which accounts are most likely to buy soon?", mode: "deep" },
+  { text: "Research & update my top pipeline accounts", mode: "deep" },
   { text: "Which Tier 1 accounts are underworked?", mode: "quick" },
-  { text: "Research my top 3 pipeline accounts", mode: "deep" },
+  { text: "Deep research and enrich my top 3 accounts", mode: "deep" },
   { text: "What changed in my territory this week?", mode: "deep" },
 ];
 
 export const MODE_CONFIG: Record<CopilotMode, { label: string; description: string; icon: string }> = {
   quick: { label: "Quick", description: "Fast answers from your CRM data", icon: "⚡" },
-  deep: { label: "Deep Research", description: "CRM + live web intelligence via Perplexity", icon: "🔬" },
-  meeting: { label: "Meeting Prep", description: "Full brief with contacts, news & talking points", icon: "📋" },
+  deep: { label: "Deep Research", description: "CRM + web intel → auto-updates accounts", icon: "🔬" },
+  meeting: { label: "Meeting Prep", description: "Full brief + auto-enriches account data", icon: "📋" },
 };

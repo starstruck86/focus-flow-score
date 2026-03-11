@@ -5,15 +5,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// ─── Modes ────────────────────────────────────────────────
-// quick    → fast answer from DB context only (default)
-// deep     → DB context + live web research via Perplexity
-// meeting  → focused meeting prep: account intel + recent news + contacts
 type CopilotMode = "quick" | "deep" | "meeting";
 
-// ─── Compact serializers (token-efficient) ────────────────
+// ─── Compact serializers ──────────────────────────────────
 function compactAccount(a: any): string {
-  const p = [a.name];
+  const p = [a.name, `id:${a.id}`];
   if (a.tier) p.push(`T:${a.tier}`);
   if (a.account_status) p.push(`S:${a.account_status}`);
   if (a.motion) p.push(`M:${a.motion}`);
@@ -80,10 +76,7 @@ async function perplexitySearch(query: string, apiKey: string): Promise<string> 
   try {
     const response = await fetch("https://api.perplexity.ai/chat/completions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "sonar",
         messages: [
@@ -93,13 +86,7 @@ async function perplexitySearch(query: string, apiKey: string): Promise<string> 
         search_recency_filter: "month",
       }),
     });
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error("Perplexity error:", response.status, text);
-      return `[Web research unavailable: ${response.status}]`;
-    }
-
+    if (!response.ok) return `[Web research unavailable: ${response.status}]`;
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || "";
     const citations = data.citations?.map((c: string, i: number) => `[${i + 1}] ${c}`).join('\n') || "";
@@ -115,102 +102,194 @@ async function scrapeWebsite(url: string, apiKey: string): Promise<string> {
   try {
     let formattedUrl = url.trim();
     if (!formattedUrl.startsWith("http")) formattedUrl = `https://${formattedUrl}`;
-
     const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        url: formattedUrl,
-        formats: ["markdown"],
-        onlyMainContent: true,
-        waitFor: 3000,
-      }),
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ url: formattedUrl, formats: ["markdown"], onlyMainContent: true, waitFor: 3000 }),
     });
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error("Firecrawl error:", response.status, text);
-      return "";
-    }
-
+    if (!response.ok) return "";
     const data = await response.json();
-    const markdown = data.data?.markdown || data.markdown || "";
-    // Truncate to keep context manageable
-    return markdown.slice(0, 3000);
-  } catch (e) {
-    console.error("Firecrawl error:", e);
-    return "";
-  }
+    return (data.data?.markdown || data.markdown || "").slice(0, 3000);
+  } catch { return ""; }
 }
 
-// ─── Deep research: multi-query Perplexity ────────────────
+// ─── Deep research ────────────────────────────────────────
 async function deepResearch(accountName: string, website: string | null, industry: string | null, perplexityKey: string, firecrawlKey: string | null): Promise<string> {
   const queries = [
     `${accountName} company recent news executive changes marketing digital transformation 2025 2026`,
     `${accountName} ${industry || 'ecommerce'} marketing technology stack CRM lifecycle email marketing automation`,
     `${accountName} company hiring marketing CRM lifecycle retention growth job postings`,
   ];
-
   const tasks: Promise<string>[] = queries.map(q => perplexitySearch(q, perplexityKey));
-
-  // Optionally scrape website for tech signals
-  if (website && firecrawlKey) {
-    tasks.push(scrapeWebsite(website, firecrawlKey));
-  }
-
+  if (website && firecrawlKey) tasks.push(scrapeWebsite(website, firecrawlKey));
   const results = await Promise.allSettled(tasks);
-  const sections = [
-    "### Recent News & Executive Changes",
-    "### Marketing Tech & Digital Strategy",
-    "### Hiring & Growth Signals",
-  ];
-
+  const sections = ["### Recent News & Executive Changes", "### Marketing Tech & Digital Strategy", "### Hiring & Growth Signals"];
   let output = "";
   results.forEach((r, i) => {
     if (r.status === "fulfilled" && r.value) {
-      if (i < sections.length) {
-        output += `\n${sections[i]}\n${r.value}\n`;
-      } else {
-        output += `\n### Website Analysis\n${r.value.slice(0, 1500)}\n`;
-      }
+      output += i < sections.length ? `\n${sections[i]}\n${r.value}\n` : `\n### Website Analysis\n${r.value.slice(0, 1500)}\n`;
     }
   });
-
   return output || "[No research results found]";
 }
 
-// ─── System prompts by mode ──────────────────────────────
+// ─── Tool definitions for AI write-back ───────────────────
+const ACCOUNT_TOOLS = [
+  {
+    type: "function",
+    function: {
+      name: "update_account",
+      description: "Update an account's fields based on research findings. Use this when you discover new intel about an account — industry, tech stack, notes, next steps, tags, etc. Always include a reason for the update. You can update multiple fields at once.",
+      parameters: {
+        type: "object",
+        properties: {
+          account_id: { type: "string", description: "UUID of the account to update" },
+          updates: {
+            type: "object",
+            description: "Fields to update on the account",
+            properties: {
+              industry: { type: "string", description: "Industry classification" },
+              tech_stack: { type: "array", items: { type: "string" }, description: "Technologies detected" },
+              notes: { type: "string", description: "Append research findings to notes" },
+              next_step: { type: "string", description: "Recommended next action" },
+              tags: { type: "array", items: { type: "string" }, description: "Tags to set" },
+              tier: { type: "string", enum: ["A", "B", "C", "D"], description: "Account tier based on potential" },
+              enrichment_source_summary: { type: "string", description: "Summary of what was discovered" },
+              mar_tech: { type: "string", description: "Marketing technology detected" },
+              ecommerce: { type: "string", description: "Ecommerce platform detected" },
+              direct_ecommerce: { type: "boolean" },
+              email_sms_capture: { type: "boolean" },
+              loyalty_membership: { type: "boolean" },
+              mobile_app: { type: "boolean" },
+              category_complexity: { type: "boolean" },
+              marketing_platform_detected: { type: "string" },
+              crm_lifecycle_team_size: { type: "integer", description: "Estimated CRM/lifecycle team headcount" },
+            },
+          },
+          reason: { type: "string", description: "Why this update is being made (research source)" },
+        },
+        required: ["account_id", "updates", "reason"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_multiple_accounts",
+      description: "Batch update multiple accounts at once. Use when research reveals insights about several accounts.",
+      parameters: {
+        type: "object",
+        properties: {
+          updates: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                account_id: { type: "string" },
+                updates: { type: "object" },
+                reason: { type: "string" },
+              },
+              required: ["account_id", "updates", "reason"],
+            },
+          },
+        },
+        required: ["updates"],
+        additionalProperties: false,
+      },
+    },
+  },
+];
+
+// ─── Execute tool calls against DB ────────────────────────
+async function executeToolCalls(toolCalls: any[], supabase: any, userId: string): Promise<{ name: string; result: any; id: string }[]> {
+  const results: { name: string; result: any; id: string }[] = [];
+
+  for (const tc of toolCalls) {
+    const fn = tc.function;
+    const args = typeof fn.arguments === "string" ? JSON.parse(fn.arguments) : fn.arguments;
+
+    if (fn.name === "update_account") {
+      const { account_id, updates, reason } = args;
+      // Append to notes rather than overwrite
+      let finalUpdates = { ...updates };
+      if (updates.notes) {
+        const { data: existing } = await supabase.from("accounts").select("notes").eq("id", account_id).eq("user_id", userId).single();
+        const existingNotes = existing?.notes || "";
+        const timestamp = new Date().toISOString().split("T")[0];
+        finalUpdates.notes = existingNotes
+          ? `${existingNotes}\n\n---\n📡 AI Research (${timestamp}): ${updates.notes}`
+          : `📡 AI Research (${timestamp}): ${updates.notes}`;
+      }
+      // Set enrichment timestamp
+      finalUpdates.last_enriched_at = new Date().toISOString();
+      
+      const { error } = await supabase.from("accounts").update(finalUpdates).eq("id", account_id).eq("user_id", userId);
+      results.push({
+        id: tc.id,
+        name: fn.name,
+        result: error ? { success: false, error: error.message } : { success: true, account_id, fields_updated: Object.keys(updates), reason },
+      });
+    } else if (fn.name === "update_multiple_accounts") {
+      const batchResults: any[] = [];
+      for (const item of args.updates) {
+        let finalUpdates = { ...item.updates };
+        if (item.updates.notes) {
+          const { data: existing } = await supabase.from("accounts").select("notes").eq("id", item.account_id).eq("user_id", userId).single();
+          const existingNotes = existing?.notes || "";
+          const timestamp = new Date().toISOString().split("T")[0];
+          finalUpdates.notes = existingNotes
+            ? `${existingNotes}\n\n---\n📡 AI Research (${timestamp}): ${item.updates.notes}`
+            : `📡 AI Research (${timestamp}): ${item.updates.notes}`;
+        }
+        finalUpdates.last_enriched_at = new Date().toISOString();
+        const { error } = await supabase.from("accounts").update(finalUpdates).eq("id", item.account_id).eq("user_id", userId);
+        batchResults.push(error ? { account_id: item.account_id, success: false } : { account_id: item.account_id, success: true, fields: Object.keys(item.updates) });
+      }
+      results.push({ id: tc.id, name: fn.name, result: { updates: batchResults } });
+    }
+  }
+  return results;
+}
+
+// ─── System prompts ──────────────────────────────────────
 function buildSystemPrompt(ctx: any, mode: CopilotMode, researchData?: string): string {
   const today = new Date().toISOString().split("T")[0];
   const dayOfWeek = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
+  const toolInstructions = `
+
+## ACTIONS YOU CAN TAKE
+You have tools to UPDATE account data directly. When your research reveals new intel, USE THEM proactively:
+- Discovered their tech stack? → update_account with tech_stack
+- Found their industry? → update_account with industry
+- Found marketing platform? → update_account with marketing_platform_detected, mar_tech
+- Detected ecommerce signals? → update direct_ecommerce, email_sms_capture, etc.
+- Research reveals team size? → update crm_lifecycle_team_size
+- Multiple accounts researched? → update_multiple_accounts
+
+IMPORTANT RULES FOR UPDATES:
+- ALWAYS use the exact account UUID (id) from the data below
+- ALWAYS provide a reason citing what research revealed
+- For notes, provide NEW findings only (system appends with timestamp)
+- For tags, include ALL existing tags plus new ones
+- After updating, tell the user exactly what you changed and why
+- Be aggressive about updating — the user wants you to maintain their data`;
+
   const modeInstructions: Record<CopilotMode, string> = {
     quick: `You are Territory Intelligence — a chief of staff for a B2B Account Executive.
-Answer concisely from the data below. Bullet points. Actionable. Explain WHY using signals and scores.`,
-
+Answer concisely from the data below. Bullet points. Actionable. Explain WHY using signals and scores.
+${toolInstructions}`,
     deep: `You are Territory Intelligence running in DEEP RESEARCH mode.
 You have access to both internal CRM data AND live web research results.
-Your job: synthesize internal data + web intel into actionable insights.
-Structure your answer:
-1. **Key Findings** — what's most important
-2. **Signals Detected** — buying signals, risk indicators, changes
-3. **Recommended Actions** — specific next steps with rationale
-4. **Confidence Assessment** — how confident you are and what's missing
-Be thorough but organized. Cite specific data points and web sources.`,
-
+Synthesize internal data + web intel into actionable insights, then UPDATE accounts with what you found.
+Structure: 1. Key Findings 2. Signals Detected 3. Account Updates Applied 4. Recommended Actions
+${toolInstructions}`,
     meeting: `You are Territory Intelligence running in MEETING PREP mode.
 Create a comprehensive meeting brief. Structure:
-1. **Account Overview** — who they are, what they do, our relationship
-2. **Recent Intel** — news, changes, signals from web research
-3. **Key Contacts** — who to reference, their roles
-4. **Our Position** — current status, pipeline, opportunities
-5. **Talking Points** — 3-5 specific things to discuss
-6. **Risk Factors** — what to watch out for
-7. **Success Criteria** — what a great meeting looks like
-Be specific. Use real data. Flag unknowns.`,
+1. Account Overview 2. Recent Intel 3. Key Contacts 4. Our Position 5. Talking Points 6. Risk Factors 7. Success Criteria
+After building the brief, update the account with any new intel discovered.
+${toolInstructions}`,
   };
 
   let prompt = `${modeInstructions[mode]}
@@ -227,10 +306,8 @@ ${ctx.opportunities?.map((o: any) => compactOpp(o, ctx.accounts || [])).join('\n
 ## Renewals (${ctx.renewals?.length || 0})
 ${ctx.renewals?.map(compactRenewal).join('\n') || 'None'}`;
 
-  // Add contacts for meeting mode
-  if (mode === 'meeting' && ctx.contacts?.length) {
-    prompt += `\n\n## Contacts (${ctx.contacts.length})
-${ctx.contacts.map(compactContact).join('\n')}`;
+  if ((mode === 'meeting' || mode === 'deep') && ctx.contacts?.length) {
+    prompt += `\n\n## Contacts (${ctx.contacts.length})\n${ctx.contacts.map(compactContact).join('\n')}`;
   }
 
   prompt += `\n\n## Today's Calendar
@@ -242,7 +319,6 @@ ${ctx.quota ? `New ARR: $${ctx.quota.new_arr_quota} | Renewal ARR: $${ctx.quota.
 ## Last Check-in
 ${ctx.journal ? `${ctx.journal.date} | Dials:${ctx.journal.dials} Conv:${ctx.journal.conversations} MtgSet:${ctx.journal.meetings_set} Score:${ctx.journal.daily_score || '?'} Focus:${ctx.journal.focus_mode}` : 'None'}`;
 
-  // Append web research for deep/meeting modes
   if (researchData) {
     prompt += `\n\n## Live Web Research Results\n${researchData}`;
   }
@@ -250,11 +326,10 @@ ${ctx.journal ? `${ctx.journal.date} | Dials:${ctx.journal.dials} Conv:${ctx.jou
   return prompt;
 }
 
-// ─── Detect if query is about a specific account ─────────
+// ─── Account focus detection ─────────────────────────────
 function detectAccountFocus(userMessage: string, accounts: any[]): any | null {
   if (!accounts?.length) return null;
   const lower = userMessage.toLowerCase();
-  // Sort by name length desc to match longest first (avoid partial matches)
   const sorted = [...accounts].sort((a, b) => b.name.length - a.name.length);
   return sorted.find(a => lower.includes(a.name.toLowerCase())) || null;
 }
@@ -296,7 +371,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Determine mode
     const mode: CopilotMode = requestedMode || "quick";
     const today = new Date().toISOString().split("T")[0];
 
@@ -313,11 +387,8 @@ Deno.serve(async (req) => {
       supabase.from("quota_targets").select("*").eq("user_id", user.id).limit(1),
     ];
 
-    // For deep/meeting modes, also fetch contacts
     if (mode === "deep" || mode === "meeting") {
-      dbQueries.push(
-        supabase.from("contacts").select("*").eq("user_id", user.id).limit(500)
-      );
+      dbQueries.push(supabase.from("contacts").select("*").eq("user_id", user.id).limit(500));
     }
 
     const dbResults = await Promise.all(dbQueries);
@@ -333,14 +404,13 @@ Deno.serve(async (req) => {
       contacts: contactsRes?.data || [],
     };
 
-    // For deep/meeting modes, run web research
+    // Deep/meeting: web research
     let researchData: string | undefined;
     if (mode === "deep" || mode === "meeting") {
       const perplexityKey = Deno.env.get("PERPLEXITY_API_KEY");
       const firecrawlKey = Deno.env.get("FIRECRAWL_API_KEY");
 
       if (perplexityKey) {
-        // Detect which account the user is asking about
         const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user")?.content || "";
         let focusAccount = accountId
           ? ctx.accounts.find((a: any) => a.id === accountId)
@@ -348,66 +418,131 @@ Deno.serve(async (req) => {
 
         if (focusAccount) {
           console.log(`Deep research on: ${focusAccount.name}`);
-          researchData = await deepResearch(
-            focusAccount.name,
-            focusAccount.website,
-            focusAccount.industry,
-            perplexityKey,
-            firecrawlKey || null
-          );
+          researchData = await deepResearch(focusAccount.name, focusAccount.website, focusAccount.industry, perplexityKey, firecrawlKey || null);
         } else {
-          // General territory research — use the question itself
-          console.log("Deep research: general territory query");
           researchData = await perplexitySearch(lastUserMsg, perplexityKey);
         }
       } else {
-        researchData = "[Deep research unavailable: Perplexity not connected. Using internal data only.]";
+        researchData = "[Deep research unavailable: Perplexity not connected.]";
       }
     }
 
-    // Select model based on mode
     const model = mode === "deep" ? "google/gemini-2.5-pro" : "google/gemini-3-flash-preview";
-
     const systemPrompt = buildSystemPrompt(ctx, mode, researchData);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // First call: non-streaming with tools to get potential tool calls
+    const aiPayload: any = {
+      model,
+      messages: [{ role: "system", content: systemPrompt }, ...messages],
+      tools: ACCOUNT_TOOLS,
+      stream: false,
+    };
+
+    const firstResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...messages,
-        ],
-        stream: true,
-      }),
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify(aiPayload),
     });
 
-    if (!response.ok) {
-      const status = response.status;
-      if (status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please wait a moment and try again." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Add credits in workspace settings." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const text = await response.text();
+    if (!firstResponse.ok) {
+      const status = firstResponse.status;
+      if (status === 429) return new Response(JSON.stringify({ error: "Rate limit exceeded. Please wait." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      if (status === 402) return new Response(JSON.stringify({ error: "AI credits exhausted." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const text = await firstResponse.text();
       console.error("AI gateway error:", status, text);
-      return new Response(JSON.stringify({ error: "AI service temporarily unavailable." }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(JSON.stringify({ error: "AI service temporarily unavailable." }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    return new Response(response.body, {
-      headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+    const firstResult = await firstResponse.json();
+    const choice = firstResult.choices?.[0];
+    const toolCalls = choice?.message?.tool_calls;
+
+    // If no tool calls, stream the response directly
+    if (!toolCalls || toolCalls.length === 0) {
+      // Re-request with streaming for better UX
+      const streamPayload = { ...aiPayload, stream: true };
+      delete streamPayload.tools;
+      const streamResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify(streamPayload),
+      });
+      if (!streamResponse.ok) {
+        return new Response(JSON.stringify({ error: "AI service error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      return new Response(streamResponse.body, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
+    }
+
+    // Execute tool calls
+    console.log(`Executing ${toolCalls.length} tool call(s)...`);
+    const toolResults = await executeToolCalls(toolCalls, supabase, user.id);
+
+    // Build tool result messages
+    const toolMessages = toolCalls.map((tc: any, i: number) => ({
+      role: "tool",
+      tool_call_id: tc.id,
+      content: JSON.stringify(toolResults[i]?.result || { success: false }),
+    }));
+
+    // Second call: stream final response with tool results
+    const followUpPayload = {
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...messages,
+        choice.message, // assistant message with tool_calls
+        ...toolMessages,
+      ],
+      stream: true,
+    };
+
+    const followUpResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify(followUpPayload),
     });
+
+    if (!followUpResponse.ok) {
+      // Fallback: return the first response content + tool results as non-streaming
+      const content = (choice.message.content || "") + "\n\n✅ **Account Updates Applied:**\n" +
+        toolResults.map(r => `- ${r.name}: ${JSON.stringify(r.result)}`).join('\n');
+      const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`;
+      return new Response(sseData, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
+    }
+
+    // Prepend an update notification SSE event before streaming
+    const updateSummary = toolResults.map(r => {
+      if (r.name === "update_account" && r.result.success) {
+        return `✅ Updated account (${r.result.fields_updated.join(', ')}): ${r.result.reason}`;
+      }
+      if (r.name === "update_multiple_accounts") {
+        const count = r.result.updates?.filter((u: any) => u.success).length || 0;
+        return `✅ Updated ${count} account(s)`;
+      }
+      return null;
+    }).filter(Boolean).join('\n');
+
+    const notificationEvent = updateSummary
+      ? `data: ${JSON.stringify({ choices: [{ delta: { content: `> 🔄 **Data Updates Applied**\n> ${updateSummary.replace(/\n/g, '\n> ')}\n\n` } }] })}\n\n`
+      : "";
+
+    // Merge notification + stream
+    const encoder = new TextEncoder();
+    const notifChunk = encoder.encode(notificationEvent);
+    const mergedStream = new ReadableStream({
+      async start(controller) {
+        if (notifChunk.length > 0) controller.enqueue(notifChunk);
+        const reader = followUpResponse.body!.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          controller.enqueue(value);
+        }
+        controller.close();
+      },
+    });
+
+    return new Response(mergedStream, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
   } catch (e) {
     console.error("territory-copilot error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
