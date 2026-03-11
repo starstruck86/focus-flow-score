@@ -244,17 +244,17 @@ function storeRenewalToDb(r: Renewal, userId: string): any {
 // ── Sync Hook ─────────────────────────────────────────────
 
 let _isHydrating = false;
-let _lastSyncedHash = '';
-
-function hashArray(arr: any[]): string {
-  return arr.length + ':' + (arr[0]?.updatedAt || '') + (arr[arr.length - 1]?.updatedAt || '');
-}
 
 export function useDataSync() {
   const { user } = useAuth();
   const userId = user?.id;
   const hasHydrated = useRef(false);
   const writeTimers = useRef<Record<string, NodeJS.Timeout>>({});
+  const prevState = useRef<{
+    accounts: Account[];
+    opportunities: Opportunity[];
+    renewals: Renewal[];
+  } | null>(null);
 
   // Initial hydration: DB → Zustand
   useEffect(() => {
@@ -273,73 +273,81 @@ export function useDataSync() {
         const dbOpps = (oppsRes.data || []).map(dbOpportunityToStore);
         const dbRenewals = (renewalsRes.data || []).map(dbRenewalToStore);
 
+        console.log(`[DataSync] Hydrating: ${dbAccounts.length} accounts, ${dbOpps.length} opps, ${dbRenewals.length} renewals from DB`);
+
         const store = useStore.getState();
+        
+        const isUUID = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+        
+        // Migrate non-UUID local items by assigning new UUIDs so they sync to DB
+        const genUUID = () => typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`.replace(/\./g, '');
+        
+        const migrateId = <T extends { id: string }>(item: T): T => {
+          if (isUUID(item.id)) return item;
+          return { ...item, id: genUUID() };
+        };
+        
+        // Only migrate local items that have valid content (not empty seed data)
+        const localAccounts = store.accounts.filter(a => a.name).map(migrateId);
+        const localOpps = store.opportunities.filter(o => o.name).map(migrateId);
+        const localRenewals = store.renewals.filter(r => r.accountName).map(migrateId);
 
-        // Merge strategy: DB wins for matching IDs, keep store-only items
-        if (dbAccounts.length > 0 || dbOpps.length > 0 || dbRenewals.length > 0) {
-          const dbAccountIds = new Set(dbAccounts.map(a => a.id));
-          const dbOppIds = new Set(dbOpps.map(o => o.id));
-          const dbRenewalIds = new Set(dbRenewals.map(r => r.id));
+        // DB is the source of truth — start with DB data, then add local-only items
+        const dbAccountIds = new Set(dbAccounts.map(a => a.id));
+        const dbOppIds = new Set(dbOpps.map(o => o.id));
+        const dbRenewalIds = new Set(dbRenewals.map(r => r.id));
+        
+        // Find local items that don't exist in DB (by name match to avoid duplicates from migration)
+        const dbAccountNames = new Set(dbAccounts.map(a => a.name.toLowerCase()));
+        const dbOppNames = new Set(dbOpps.map(o => o.name.toLowerCase()));
+        const dbRenewalNames = new Set(dbRenewals.map(r => r.accountName.toLowerCase()));
+        
+        const newLocalAccounts = localAccounts.filter(a => 
+          !dbAccountIds.has(a.id) && !dbAccountNames.has(a.name.toLowerCase())
+        );
+        const newLocalOpps = localOpps.filter(o => 
+          !dbOppIds.has(o.id) && !dbOppNames.has(o.name.toLowerCase())
+        );
+        const newLocalRenewals = localRenewals.filter(r => 
+          !dbRenewalIds.has(r.id) && !dbRenewalNames.has(r.accountName.toLowerCase())
+        );
 
-          const mergedAccounts = [
-            ...dbAccounts,
-            ...store.accounts.filter(a => !dbAccountIds.has(a.id)),
-          ];
-          const mergedOpps = [
-            ...dbOpps,
-            ...store.opportunities.filter(o => !dbOppIds.has(o.id)),
-          ];
-          const mergedRenewals = [
-            ...dbRenewals,
-            ...store.renewals.filter(r => !dbRenewalIds.has(r.id)),
-          ];
+        const mergedAccounts = [...dbAccounts, ...newLocalAccounts];
+        const mergedOpps = [...dbOpps, ...newLocalOpps];
+        const mergedRenewals = [...dbRenewals, ...newLocalRenewals];
 
-          useStore.setState({
-            accounts: mergedAccounts,
-            opportunities: mergedOpps,
-            renewals: mergedRenewals,
-          });
+        console.log(`[DataSync] Merged: ${mergedAccounts.length} accounts, ${mergedOpps.length} opps, ${mergedRenewals.length} renewals`);
 
-          // Push store-only items to DB
-          const storeOnlyAccounts = store.accounts.filter(a => !dbAccountIds.has(a.id));
-          const storeOnlyOpps = store.opportunities.filter(o => !dbOppIds.has(o.id));
-          const storeOnlyRenewals = store.renewals.filter(r => !dbRenewalIds.has(r.id));
+        useStore.setState({
+          accounts: mergedAccounts,
+          opportunities: mergedOpps,
+          renewals: mergedRenewals,
+        });
 
-          if (storeOnlyAccounts.length > 0) {
-            await supabase.from('accounts').upsert(
-              storeOnlyAccounts.map(a => storeAccountToDb(a, userId))
-            );
-          }
-          if (storeOnlyOpps.length > 0) {
-            await supabase.from('opportunities').upsert(
-              storeOnlyOpps.map(o => storeOpportunityToDb(o, userId))
-            );
-          }
-          if (storeOnlyRenewals.length > 0) {
-            await supabase.from('renewals').upsert(
-              storeOnlyRenewals.map(r => storeRenewalToDb(r, userId))
-            );
-          }
-        } else if (store.accounts.length > 0 || store.opportunities.length > 0 || store.renewals.length > 0) {
-          // DB empty, push all store data to DB
-          if (store.accounts.length > 0) {
-            await supabase.from('accounts').upsert(
-              store.accounts.map(a => storeAccountToDb(a, userId))
-            );
-          }
-          if (store.opportunities.length > 0) {
-            await supabase.from('opportunities').upsert(
-              store.opportunities.map(o => storeOpportunityToDb(o, userId))
-            );
-          }
-          if (store.renewals.length > 0) {
-            await supabase.from('renewals').upsert(
-              store.renewals.map(r => storeRenewalToDb(r, userId))
-            );
-          }
+        // Push any new local-only items to DB
+        if (newLocalAccounts.length > 0) {
+          await supabase.from('accounts').upsert(
+            newLocalAccounts.map(a => storeAccountToDb(a, userId))
+          );
+        }
+        if (newLocalOpps.length > 0) {
+          await supabase.from('opportunities').upsert(
+            newLocalOpps.map(o => storeOpportunityToDb(o, userId))
+          );
+        }
+        if (newLocalRenewals.length > 0) {
+          await supabase.from('renewals').upsert(
+            newLocalRenewals.map(r => storeRenewalToDb(r, userId))
+          );
         }
 
-        _lastSyncedHash = hashArray(useStore.getState().accounts) + hashArray(useStore.getState().opportunities) + hashArray(useStore.getState().renewals);
+        // Snapshot current state for diffing
+        const currentState = useStore.getState();
+        prevState.current = {
+          accounts: currentState.accounts,
+          opportunities: currentState.opportunities,
+          renewals: currentState.renewals,
+        };
         hasHydrated.current = true;
       } catch (err) {
         console.error('[DataSync] Hydration error:', err);
@@ -351,18 +359,15 @@ export function useDataSync() {
     hydrate();
   }, [userId]);
 
-  // Write-back: Zustand → DB (debounced, after hydration)
+  // Write-back: Zustand → DB (debounced, only changed records)
   useEffect(() => {
     if (!userId) return;
 
-    const unsub = useStore.subscribe((state, prevState) => {
-      if (_isHydrating) return;
-      
-      const currentHash = hashArray(state.accounts) + hashArray(state.opportunities) + hashArray(state.renewals);
-      if (currentHash === _lastSyncedHash) return;
-      _lastSyncedHash = currentHash;
+    const unsub = useStore.subscribe((state) => {
+      if (_isHydrating || !prevState.current || !hasHydrated.current) return;
 
-      // Debounce writes by entity type
+      const prev = prevState.current;
+
       const scheduleWrite = (key: string, fn: () => Promise<void>) => {
         if (writeTimers.current[key]) clearTimeout(writeTimers.current[key]);
         writeTimers.current[key] = setTimeout(async () => {
@@ -372,31 +377,87 @@ export function useDataSync() {
         }, 1500);
       };
 
-      if (state.accounts !== prevState.accounts) {
+      // Diff accounts - find changed/added/deleted
+      if (state.accounts !== prev.accounts) {
         scheduleWrite('accounts', async () => {
-          if (state.accounts.length > 0) {
+          const prevMap = new Map(prev.accounts.map(a => [a.id, a]));
+          const currMap = new Map(state.accounts.map(a => [a.id, a]));
+          
+          // Upsert changed or new
+          const toUpsert = state.accounts.filter(a => {
+            const old = prevMap.get(a.id);
+            return !old || old.updatedAt !== a.updatedAt || old !== a;
+          });
+          
+          // Delete removed
+          const deletedIds = prev.accounts
+            .filter(a => !currMap.has(a.id))
+            .map(a => a.id);
+          
+          if (toUpsert.length > 0) {
             await supabase.from('accounts').upsert(
-              state.accounts.map(a => storeAccountToDb(a, userId))
+              toUpsert.map(a => storeAccountToDb(a, userId))
             );
           }
+          if (deletedIds.length > 0) {
+            await supabase.from('accounts').delete().in('id', deletedIds);
+          }
+          
+          prevState.current = { ...prevState.current!, accounts: state.accounts };
         });
       }
-      if (state.opportunities !== prevState.opportunities) {
+
+      if (state.opportunities !== prev.opportunities) {
         scheduleWrite('opportunities', async () => {
-          if (state.opportunities.length > 0) {
+          const prevMap = new Map(prev.opportunities.map(o => [o.id, o]));
+          const currMap = new Map(state.opportunities.map(o => [o.id, o]));
+          
+          const toUpsert = state.opportunities.filter(o => {
+            const old = prevMap.get(o.id);
+            return !old || old.updatedAt !== o.updatedAt || old !== o;
+          });
+          
+          const deletedIds = prev.opportunities
+            .filter(o => !currMap.has(o.id))
+            .map(o => o.id);
+          
+          if (toUpsert.length > 0) {
             await supabase.from('opportunities').upsert(
-              state.opportunities.map(o => storeOpportunityToDb(o, userId))
+              toUpsert.map(o => storeOpportunityToDb(o, userId))
             );
           }
+          if (deletedIds.length > 0) {
+            await supabase.from('opportunities').delete().in('id', deletedIds);
+          }
+          
+          prevState.current = { ...prevState.current!, opportunities: state.opportunities };
         });
       }
-      if (state.renewals !== prevState.renewals) {
+
+      if (state.renewals !== prev.renewals) {
         scheduleWrite('renewals', async () => {
-          if (state.renewals.length > 0) {
+          const prevMap = new Map(prev.renewals.map(r => [r.id, r]));
+          const currMap = new Map(state.renewals.map(r => [r.id, r]));
+          
+          const toUpsert = state.renewals.filter(r => {
+            const old = prevMap.get(r.id);
+            return !old || old.updatedAt !== r.updatedAt || old !== r;
+          });
+          
+          const deletedIds = prev.renewals
+            .filter(r => !currMap.has(r.id))
+            .map(r => r.id);
+          
+          if (toUpsert.length > 0) {
             await supabase.from('renewals').upsert(
-              state.renewals.map(r => storeRenewalToDb(r, userId))
+              toUpsert.map(r => storeRenewalToDb(r, userId))
             );
           }
+          if (deletedIds.length > 0) {
+            await supabase.from('renewals').delete().in('id', deletedIds);
+          }
+          
+          prevState.current = { ...prevState.current!, renewals: state.renewals };
         });
       }
     });

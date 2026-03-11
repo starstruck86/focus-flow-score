@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
@@ -40,9 +40,7 @@ export function isEnrichmentStale(account: Account): boolean {
 export function useAccountEnrichment() {
   const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
   const updateAccount = useStore((s) => s.updateAccount);
-  const accounts = useStore((s) => s.accounts);
-  // Track previous website values for auto-enrich
-  const prevWebsitesRef = useRef<Map<string, string | undefined>>(new Map());
+  
 
   const enrichAccount = useCallback(async (account: Account): Promise<EnrichmentResult> => {
     if (!account.website) {
@@ -114,40 +112,6 @@ export function useAccountEnrichment() {
     }
     toast.success(`Finished enriching ${withWebsite.length} accounts`);
   }, [enrichAccount]);
-
-  // Auto-enrich when a website URL is added or changed
-  useEffect(() => {
-    const prev = prevWebsitesRef.current;
-    const toEnrich: Account[] = [];
-
-    for (const account of accounts) {
-      const prevUrl = prev.get(account.id);
-      const currentUrl = account.website;
-
-      // Trigger if: URL was just set (from empty) or changed to a different URL
-      if (currentUrl && currentUrl !== prevUrl && !enrichingIds.has(account.id)) {
-        // Only auto-enrich if not recently enriched (within 5 minutes)
-        const recentlyEnriched = account.lastEnrichedAt && 
-          (Date.now() - new Date(account.lastEnrichedAt).getTime()) < 300000;
-        if (!recentlyEnriched) {
-          toEnrich.push(account);
-        }
-      }
-    }
-
-    // Update ref
-    const newMap = new Map<string, string | undefined>();
-    accounts.forEach(a => newMap.set(a.id, a.website));
-    prevWebsitesRef.current = newMap;
-
-    // Fire enrichments (don't await, fire and forget)
-    if (toEnrich.length > 0) {
-      // Stagger to avoid hammering the API
-      toEnrich.forEach((account, i) => {
-        setTimeout(() => enrichAccount(account), i * 1500);
-      });
-    }
-  }, [accounts, enrichAccount, enrichingIds]);
 
   return {
     enrichAccount,
