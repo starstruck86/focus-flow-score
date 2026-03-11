@@ -273,6 +273,8 @@ export function useDataSync() {
         const dbOpps = (oppsRes.data || []).map(dbOpportunityToStore);
         const dbRenewals = (renewalsRes.data || []).map(dbRenewalToStore);
 
+        console.log(`[DataSync] Hydrating: ${dbAccounts.length} accounts, ${dbOpps.length} opps, ${dbRenewals.length} renewals from DB`);
+
         const store = useStore.getState();
         
         const isUUID = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -285,33 +287,42 @@ export function useDataSync() {
           return { ...item, id: genUUID() };
         };
         
-        const migratedAccounts = store.accounts.map(migrateId);
-        const migratedOpps = store.opportunities.map(migrateId);
-        const migratedRenewals = store.renewals.map(migrateId);
+        // Only migrate local items that have valid content (not empty seed data)
+        const localAccounts = store.accounts.filter(a => a.name).map(migrateId);
+        const localOpps = store.opportunities.filter(o => o.name).map(migrateId);
+        const localRenewals = store.renewals.filter(r => r.accountName).map(migrateId);
 
-        if (dbAccounts.length > 0 || dbOpps.length > 0 || dbRenewals.length > 0) {
-          const dbAccountIds = new Set(dbAccounts.map(a => a.id));
-          const dbOppIds = new Set(dbOpps.map(o => o.id));
-          const dbRenewalIds = new Set(dbRenewals.map(r => r.id));
+        // DB is the source of truth — start with DB data, then add local-only items
+        const dbAccountIds = new Set(dbAccounts.map(a => a.id));
+        const dbOppIds = new Set(dbOpps.map(o => o.id));
+        const dbRenewalIds = new Set(dbRenewals.map(r => r.id));
+        
+        // Find local items that don't exist in DB (by name match to avoid duplicates from migration)
+        const dbAccountNames = new Set(dbAccounts.map(a => a.name.toLowerCase()));
+        const dbOppNames = new Set(dbOpps.map(o => o.name.toLowerCase()));
+        const dbRenewalNames = new Set(dbRenewals.map(r => r.accountName.toLowerCase()));
+        
+        const newLocalAccounts = localAccounts.filter(a => 
+          !dbAccountIds.has(a.id) && !dbAccountNames.has(a.name.toLowerCase())
+        );
+        const newLocalOpps = localOpps.filter(o => 
+          !dbOppIds.has(o.id) && !dbOppNames.has(o.name.toLowerCase())
+        );
+        const newLocalRenewals = localRenewals.filter(r => 
+          !dbRenewalIds.has(r.id) && !dbRenewalNames.has(r.accountName.toLowerCase())
+        );
 
-          const mergedAccounts = [
-            ...dbAccounts,
-            ...migratedAccounts.filter(a => !dbAccountIds.has(a.id)),
-          ];
-          const mergedOpps = [
-            ...dbOpps,
-            ...migratedOpps.filter(o => !dbOppIds.has(o.id)),
-          ];
-          const mergedRenewals = [
-            ...dbRenewals,
-            ...migratedRenewals.filter(r => !dbRenewalIds.has(r.id)),
-          ];
+        const mergedAccounts = [...dbAccounts, ...newLocalAccounts];
+        const mergedOpps = [...dbOpps, ...newLocalOpps];
+        const mergedRenewals = [...dbRenewals, ...newLocalRenewals];
 
-          useStore.setState({
-            accounts: mergedAccounts,
-            opportunities: mergedOpps,
-            renewals: mergedRenewals,
-          });
+        console.log(`[DataSync] Merged: ${mergedAccounts.length} accounts, ${mergedOpps.length} opps, ${mergedRenewals.length} renewals`);
+
+        useStore.setState({
+          accounts: mergedAccounts,
+          opportunities: mergedOpps,
+          renewals: mergedRenewals,
+        });
 
           const storeOnlyAccounts = migratedAccounts.filter(a => !dbAccountIds.has(a.id));
           const storeOnlyOpps = migratedOpps.filter(o => !dbOppIds.has(o.id));
