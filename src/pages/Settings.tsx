@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { NotificationSettings } from '@/components/NotificationSettings';
 import { Layout } from '@/components/Layout';
 import { 
   Calendar as CalendarIcon, 
@@ -377,6 +378,7 @@ export default function Settings() {
           <TabsList>
             <TabsTrigger value="schedule">Work Schedule</TabsTrigger>
             <TabsTrigger value="appearance">Appearance</TabsTrigger>
+            <TabsTrigger value="notifications">Notifications</TabsTrigger>
             <TabsTrigger value="data">Data</TabsTrigger>
           </TabsList>
           
@@ -812,6 +814,11 @@ export default function Settings() {
               </div>
               <p className="text-sm text-muted-foreground">Coming soon...</p>
             </div>
+          </TabsContent>
+          
+          {/* Notifications Tab */}
+          <TabsContent value="notifications" className="space-y-4">
+            <NotificationSettings />
           </TabsContent>
           
           {/* Data Tab */}

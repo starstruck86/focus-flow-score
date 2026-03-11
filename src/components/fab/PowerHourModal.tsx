@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/select';
 import { useStore } from '@/store/useStore';
 import { supabase } from '@/integrations/supabase/client';
+import { enqueueAction } from '@/lib/offlineQueue';
 import { toast } from 'sonner';
 import { 
   Zap, 
@@ -124,28 +125,32 @@ export function PowerHourModal({ open, onOpenChange }: PowerHourModalProps) {
       });
     }
     
-    // Persist to database for cross-device sync
+    // Persist to database — falls back to offline queue if no connectivity
+    const sessionData = {
+      user_id: '', // will be set below
+      started_at: startTime?.toISOString() || new Date().toISOString(),
+      ended_at: new Date().toISOString(),
+      duration_minutes: duration,
+      focus,
+      dials,
+      connects,
+      meetings_set: meetingsSet,
+      notes: notes || null,
+      status: 'completed',
+      synced_to_journal: true,
+      journal_date: new Date().toISOString().slice(0, 10),
+    };
+
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const today = new Date().toISOString().slice(0, 10);
-        await supabase.from('power_hour_sessions' as any).insert({
-          user_id: user.id,
-          started_at: startTime?.toISOString() || new Date().toISOString(),
-          ended_at: new Date().toISOString(),
-          duration_minutes: duration,
-          focus,
-          dials,
-          connects,
-          meetings_set: meetingsSet,
-          notes: notes || null,
-          status: 'completed',
-          synced_to_journal: true,
-          journal_date: today,
-        });
+        sessionData.user_id = user.id;
+        const { error } = await supabase.from('power_hour_sessions' as any).insert(sessionData);
+        if (error) throw error;
       }
     } catch (err) {
-      console.error('Failed to sync power hour session:', err);
+      console.error('Failed to sync, queuing offline:', err);
+      enqueueAction('power_hour_sessions', 'insert', sessionData);
     }
     
     toast.success('Power Hour complete!', {
