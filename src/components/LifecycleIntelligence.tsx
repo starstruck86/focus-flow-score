@@ -14,6 +14,10 @@ import {
   RefreshCw,
   Pencil,
   Info,
+  Package,
+  Wrench,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -182,6 +186,8 @@ export function SignalDetailPanel({ account }: { account: Account }) {
   const score = account.icpScoreOverride ?? account.icpFitScore;
   const tier = account.tierOverride || account.lifecycleTier;
   const { enrichAccount, isEnriching } = useAccountEnrichment();
+  const [expanded, setExpanded] = React.useState(true);
+  const evidence = account.enrichmentEvidence || {};
 
   return (
     <div className="space-y-4 p-4 bg-muted/30 rounded-lg border border-border/50">
@@ -201,95 +207,152 @@ export function SignalDetailPanel({ account }: { account: Account }) {
             </div>
           )}
         </div>
-        {account.website && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => enrichAccount(account)}
-            disabled={isEnriching(account.id)}
-            className="h-7 text-xs gap-1"
-          >
-            <RefreshCw className={cn('h-3 w-3', isEnriching(account.id) && 'animate-spin')} />
-            {account.lastEnrichedAt ? 'Re-enrich' : 'Auto-detect'}
-          </Button>
-        )}
+        <div className="flex items-center gap-1">
+          {score != null && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setExpanded(!expanded)}
+              className="h-7 text-xs gap-1"
+            >
+              {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              {expanded ? 'Collapse' : 'Expand'}
+            </Button>
+          )}
+          {account.website && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => enrichAccount(account)}
+              disabled={isEnriching(account.id)}
+              className="h-7 text-xs gap-1"
+            >
+              <RefreshCw className={cn('h-3 w-3', isEnriching(account.id) && 'animate-spin')} />
+              {account.lastEnrichedAt ? 'Re-enrich' : 'Auto-detect'}
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Signals Grid */}
-      {score != null ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {SIGNAL_DEFS.map(({ key, evidenceKey, label, icon: Icon }) => {
-            const value = (account as any)[key];
-            const isDetected = key === 'marketingPlatformDetected' ? !!value : value === true;
-            const evidence = account.enrichmentEvidence?.[evidenceKey];
-
-            return (
-              <div
-                key={key}
-                className={cn(
-                  'flex items-start gap-2 p-2.5 rounded-md border text-xs',
-                  isDetected ? 'border-status-green/30 bg-status-green/5' : 'border-border bg-background'
+      {/* Discovery Cards */}
+      {score != null && expanded ? (
+        <div className="space-y-3">
+          {/* Tech Stack Discovery - always show first if we have data */}
+          {(evidence.ecommerce_platform || evidence.marketing_platform || evidence.other_tech_detected) && (
+            <div className="p-3 rounded-md border border-primary/20 bg-primary/5">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Wrench className="h-3.5 w-3.5 text-primary" />
+                <span className="text-xs font-semibold text-primary">Tech Stack Discovered</span>
+              </div>
+              <div className="space-y-1.5">
+                {evidence.ecommerce_platform && (
+                  <div className="flex items-start gap-2 text-xs">
+                    <Package className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+                    <span><span className="font-medium">Ecommerce:</span> {evidence.ecommerce_platform}</span>
+                  </div>
                 )}
-              >
-                <Icon className={cn('h-3.5 w-3.5 shrink-0 mt-0.5', isDetected ? 'text-status-green' : 'text-muted-foreground')} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-medium">{label}</span>
-                    {key === 'marketingPlatformDetected' && value ? (
-                      <Badge variant="outline" className="text-[9px] h-4 px-1 font-mono">{value}</Badge>
+                {account.marketingPlatformDetected && (
+                  <div className="flex items-start gap-2 text-xs">
+                    <Cpu className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+                    <span><span className="font-medium">Marketing Platform:</span> {account.marketingPlatformDetected}</span>
+                  </div>
+                )}
+                {evidence.marketing_platform && (
+                  <p className="text-[11px] text-muted-foreground ml-5">{evidence.marketing_platform}</p>
+                )}
+                {evidence.other_tech_detected && (
+                  <div className="flex items-start gap-2 text-xs">
+                    <Wrench className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+                    <span><span className="font-medium">Other Tech:</span> {evidence.other_tech_detected}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Signal Discovery Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {SIGNAL_DEFS.map(({ key, evidenceKey, label, icon: Icon }) => {
+              const value = (account as any)[key];
+              const isDetected = key === 'marketingPlatformDetected' ? !!value : value === true;
+              const details = evidence[evidenceKey];
+
+              return (
+                <div
+                  key={key}
+                  className={cn(
+                    'flex items-start gap-2 p-2.5 rounded-md border text-xs',
+                    isDetected ? 'border-status-green/30 bg-status-green/5' : 'border-border bg-background'
+                  )}
+                >
+                  <Icon className={cn('h-3.5 w-3.5 shrink-0 mt-0.5', isDetected ? 'text-status-green' : 'text-muted-foreground')} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium">{label}</span>
+                      {key === 'marketingPlatformDetected' && value ? (
+                        <Badge variant="outline" className="text-[9px] h-4 px-1 font-mono">{value}</Badge>
+                      ) : (
+                        <span className={cn('text-[10px]', isDetected ? 'text-status-green' : 'text-muted-foreground')}>
+                          {isDetected ? '✓' : '✗'}
+                        </span>
+                      )}
+                    </div>
+                    {details ? (
+                      <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{details}</p>
                     ) : (
-                      <span className={cn('text-[10px]', isDetected ? 'text-status-green' : 'text-muted-foreground')}>
-                        {isDetected ? '✓ Detected' : '✗ Not detected'}
-                      </span>
+                      <p className="text-[10px] text-muted-foreground/60 mt-0.5 italic">
+                        {isDetected ? 'Detected — re-enrich for details' : 'Not detected'}
+                      </p>
                     )}
                   </div>
-                  {evidence && (
-                    <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{evidence}</p>
-                  )}
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
 
-          {/* CRM Team Size */}
-          <div className={cn(
-            'flex items-start gap-2 p-2.5 rounded-md border text-xs',
-            account.crmLifecycleTeamSize != null && account.crmLifecycleTeamSize >= 1 && account.crmLifecycleTeamSize <= 5
-              ? 'border-status-green/30 bg-status-green/5'
-              : 'border-border bg-background'
-          )}>
-            <Users className={cn('h-3.5 w-3.5 shrink-0 mt-0.5',
+            {/* CRM Team Size */}
+            <div className={cn(
+              'flex items-start gap-2 p-2.5 rounded-md border text-xs',
               account.crmLifecycleTeamSize != null && account.crmLifecycleTeamSize >= 1 && account.crmLifecycleTeamSize <= 5
-                ? 'text-status-green' : 'text-muted-foreground'
-            )} />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="font-medium">CRM/Lifecycle Team</span>
-                <span className="text-[10px] text-muted-foreground">
-                  {account.crmLifecycleTeamSize == null ? 'Unknown' : `~${account.crmLifecycleTeamSize} people`}
-                </span>
+                ? 'border-status-green/30 bg-status-green/5'
+                : 'border-border bg-background'
+            )}>
+              <Users className={cn('h-3.5 w-3.5 shrink-0 mt-0.5',
+                account.crmLifecycleTeamSize != null && account.crmLifecycleTeamSize >= 1 && account.crmLifecycleTeamSize <= 5
+                  ? 'text-status-green' : 'text-muted-foreground'
+              )} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-medium">CRM/Lifecycle Team</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {account.crmLifecycleTeamSize == null ? '?' : `~${account.crmLifecycleTeamSize}`}
+                  </span>
+                </div>
+                {evidence.crm_lifecycle_team_size ? (
+                  <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{evidence.crm_lifecycle_team_size}</p>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground/60 mt-0.5 italic">
+                    {account.crmLifecycleTeamSize != null ? 'Re-enrich for details' : 'Unknown'}
+                  </p>
+                )}
               </div>
-              {account.enrichmentEvidence?.crm_lifecycle_team_size && (
-                <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{account.enrichmentEvidence.crm_lifecycle_team_size}</p>
-              )}
             </div>
           </div>
+
+          {/* Enrichment Summary */}
+          {account.enrichmentSourceSummary && (
+            <div className="text-xs text-muted-foreground bg-muted/50 p-2.5 rounded-md">
+              <span className="font-medium">Summary:</span> {account.enrichmentSourceSummary}
+            </div>
+          )}
         </div>
-      ) : (
+      ) : score == null ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
           <Info className="h-3.5 w-3.5" />
           {account.website 
             ? 'Click "Auto-detect" to analyze this account\'s website for ICP signals.'
             : 'Add a website URL to enable automatic ICP detection.'}
         </div>
-      )}
-
-      {/* Enrichment Summary */}
-      {account.enrichmentSourceSummary && (
-        <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-md">
-          <span className="font-medium">AI Summary:</span> {account.enrichmentSourceSummary}
-        </div>
-      )}
+      ) : null}
 
       {/* Last enriched */}
       {account.lastEnrichedAt && (
