@@ -214,27 +214,45 @@ export default function Renewals() {
   // Track which renewal is expanded to show details
   const [expandedRenewalId, setExpandedRenewalId] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('renewals');
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Auto-expand and scroll to highlighted renewal from Work Queue
+  // Auto-expand and scroll to highlighted record from Work Queue
   useEffect(() => {
     const id = searchParams.get('highlight');
+    const tab = searchParams.get('tab');
     if (id) {
-      setExpandedRenewalId(id);
       setHighlightId(id);
       // Clean up URL
       searchParams.delete('highlight');
+      searchParams.delete('tab');
       setSearchParams(searchParams, { replace: true });
-      // Scroll to the row after render
-      requestAnimationFrame(() => {
-        const el = document.querySelector(`[data-renewal-id="${id}"]`);
-        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      });
-      // Clear highlight after animation
+
+      // Determine if this is a renewal or opportunity
+      const isRenewal = renewals.some(r => r.id === id);
+      if (isRenewal) {
+        setActiveTab('renewals');
+        setExpandedRenewalId(id);
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            const el = document.querySelector(`[data-renewal-id="${id}"]`);
+            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 100);
+        });
+      } else {
+        // It's an opportunity — switch to opportunities tab
+        setActiveTab('opportunities');
+      }
+
       const timer = setTimeout(() => setHighlightId(null), 3000);
       return () => clearTimeout(timer);
     }
-  }, [searchParams, setSearchParams]);
+    if (tab) {
+      setActiveTab(tab);
+      searchParams.delete('tab');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, renewals]);
   const [newRenewal, setNewRenewal] = useState<Partial<Renewal>>({
     healthStatus: 'green',
     autoRenew: false,
