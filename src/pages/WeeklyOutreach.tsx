@@ -275,8 +275,11 @@ const StalenessAlert = memo(function StalenessAlert({ accounts }: { accounts: Ac
 });
 StalenessAlert.displayName = 'StalenessAlert';
 
-// Stage Summary Component for Opportunities
-function OpportunitiesStageSummary() {
+// Stage Summary Component for Opportunities - clickable tiles filter the table
+function OpportunitiesStageSummary({ activeStageFilter, onStageFilterChange }: {
+  activeStageFilter?: OpportunityStage | null;
+  onStageFilterChange?: (stage: OpportunityStage | null) => void;
+}) {
   const { opportunities } = useStore();
   
   const stageSummary = useMemo(() => {
@@ -321,26 +324,43 @@ function OpportunitiesStageSummary() {
         <div className="text-sm text-muted-foreground">
           Active Pipeline: <span className="font-semibold text-foreground">{totalCount} opps</span> • <span className="font-mono font-semibold text-foreground">{formatCurrency(totalARR)}</span>
         </div>
+        {activeStageFilter && (
+          <button
+            onClick={() => onStageFilterChange?.(null)}
+            className="text-[10px] text-primary hover:text-primary/80 underline"
+          >
+            Clear filter
+          </button>
+        )}
       </div>
       <div className="hidden sm:grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3">
-        {(['', 'Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate', 'Closed Won', 'Closed Lost'] as OpportunityStage[]).map(stage => (
-          <div 
-            key={stage || 'no-stage'} 
-            className={cn("metric-card p-3 border-l-4", STAGE_COLORS[stage])}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <span className={cn("text-xs font-medium", STAGE_TEXT_COLORS[stage])}>
-                {STAGE_LABELS[stage] || stage || 'No Stage'}
-              </span>
-              <Badge variant="outline" className="text-xs h-5 px-1.5">
-                {stageSummary[stage].count}
-              </Badge>
-            </div>
-            <div className="text-lg font-bold font-mono">
-              {formatCurrency(stageSummary[stage].arr)}
-            </div>
-          </div>
-        ))}
+        {(['', 'Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate', 'Closed Won', 'Closed Lost'] as OpportunityStage[]).map(stage => {
+          const isActive = activeStageFilter === stage;
+          return (
+            <button 
+              key={stage || 'no-stage'} 
+              onClick={() => onStageFilterChange?.(isActive ? null : stage)}
+              className={cn(
+                "metric-card p-3 border-l-4 text-left transition-all cursor-pointer",
+                "hover:ring-1 hover:ring-primary/40 hover:shadow-sm",
+                isActive && "ring-2 ring-primary shadow-md",
+                STAGE_COLORS[stage],
+              )}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className={cn("text-xs font-medium", STAGE_TEXT_COLORS[stage])}>
+                  {STAGE_LABELS[stage] || stage || 'No Stage'}
+                </span>
+                <Badge variant="outline" className="text-xs h-5 px-1.5">
+                  {stageSummary[stage].count}
+                </Badge>
+              </div>
+              <div className="text-lg font-bold font-mono">
+                {formatCurrency(stageSummary[stage].arr)}
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
