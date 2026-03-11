@@ -360,4 +360,9 @@
   .animate-ring-fill {
     animation: ring-fill 1s ease-out forwards;
   }
+
+  /* Mobile safe area for bottom nav */
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
 }
