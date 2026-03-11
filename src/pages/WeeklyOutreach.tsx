@@ -253,7 +253,7 @@ const StalenessAlert = memo(function StalenessAlert({ accounts }: { accounts: Ac
         <div className="flex items-center gap-2 text-xs bg-status-red/10 border border-status-red/20 rounded-lg px-3 py-2">
           <AlertTriangle className="h-3.5 w-3.5 text-status-red shrink-0" />
           <span className="text-status-red font-medium">{staleCount} accounts</span>
-          <span className="text-muted-foreground">untouched 7+ days</span>
+          <span className="text-muted-foreground">untouched 14+ days</span>
         </div>
       )}
       {noNextStep > 0 && (
