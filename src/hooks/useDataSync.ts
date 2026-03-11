@@ -347,7 +347,13 @@ export function useDataSync() {
         });
       }
       if (state.renewals !== prevState.renewals) {
-        writeBack('renewals', state.renewals, (r: Renewal) => storeRenewalToDb(r, userId));
+        scheduleWrite('renewals', async () => {
+          if (state.renewals.length > 0) {
+            await supabase.from('renewals').upsert(
+              state.renewals.map(r => storeRenewalToDb(r, userId))
+            );
+          }
+        });
       }
     });
 
