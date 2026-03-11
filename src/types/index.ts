@@ -7,7 +7,7 @@ export type Priority = 'P0' | 'P1' | 'P2' | 'P3';
 export type Motion = 'new-logo' | 'renewal' | 'general';
 export type Workstream = 'pg' | 'renewals';
 export type TaskStatus = 'next' | 'in-progress' | 'blocked' | 'done' | 'dropped';
-export type LinkedRecordType = 'account' | 'opportunity';
+export type LinkedRecordType = 'account' | 'opportunity' | 'renewal';
 export type HealthStatus = 'green' | 'yellow' | 'red';
 export type OutreachStatus = 
   | 'not-started' 
