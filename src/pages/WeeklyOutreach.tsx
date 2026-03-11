@@ -905,9 +905,13 @@ export default function WeeklyOutreach() {
       const matchesTierAB = !filterTierAB || account.tier === 'A' || account.tier === 'B';
       const matchesCadence = !filterMissingCadence || !account.cadenceName;
       const matchesStale = !filterStale || !account.lastTouchDate || account.lastTouchDate < staleDate;
-      return matchesSearch && matchesTier && matchesTierAB && matchesCadence && matchesStale;
+      const matchesIcpTier = !filterIcpTier12 || account.lifecycleTier === '1' || account.lifecycleTier === '2';
+      const matchesTriggered = !filterTriggered || account.triggeredAccount;
+      const matchesHighProb = !filterHighProbability || account.highProbabilityBuyer;
+      const matchesUnenriched = !filterUnenriched || !account.lastEnrichedAt;
+      return matchesSearch && matchesTier && matchesTierAB && matchesCadence && matchesStale && matchesIcpTier && matchesTriggered && matchesHighProb && matchesUnenriched;
     });
-  }, [accounts, searchQuery, filterTier, filterTierAB, filterMissingCadence, filterStale]);
+  }, [accounts, searchQuery, filterTier, filterTierAB, filterMissingCadence, filterStale, filterIcpTier12, filterTriggered, filterHighProbability, filterUnenriched]);
 
   // Group & sort accounts by funnel status
   const groupedAccounts = useMemo(() => {
