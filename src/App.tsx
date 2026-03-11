@@ -28,6 +28,7 @@ const App = () => (
       <TooltipProvider>
         <AuthProvider>
           <LinkedRecordProvider>
+            <CopilotProvider>
             <DataSyncProvider>
               <Toaster />
               <Sonner />
