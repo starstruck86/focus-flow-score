@@ -17,6 +17,7 @@ export interface EnrichmentResult {
     crm_lifecycle_team_size: number;
   };
   confidence?: Record<string, 'high' | 'medium' | 'low'>;
+  evidence?: Record<string, string>;
   scores?: {
     icp_fit_score: number;
     timing_score: number;
