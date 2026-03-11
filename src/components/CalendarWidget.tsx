@@ -1,8 +1,8 @@
 import { Calendar, RefreshCw, Clock, MapPin } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { useCalendarEvents, useSyncCalendar } from '@/hooks/useCalendarEvents';
-import { format, parseISO, isToday, isTomorrow } from 'date-fns';
+import { useCalendarEvents, useSyncCalendar, useAutoSyncCalendar } from '@/hooks/useCalendarEvents';
+import { format, parseISO } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { cn } from '@/lib/utils';
 
@@ -11,6 +11,7 @@ const TIMEZONE = 'America/New_York';
 export function CalendarWidget() {
   const { data: events, isLoading } = useCalendarEvents();
   const syncMutation = useSyncCalendar();
+  useAutoSyncCalendar();
 
   const formatEventTime = (startTime: string, allDay: boolean) => {
     const utcDate = parseISO(startTime);
