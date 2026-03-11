@@ -38,6 +38,28 @@ function dbAccountToStore(db: any): Account {
     tags: db.tags ?? [],
     createdAt: db.created_at,
     updatedAt: db.updated_at,
+    // Lifecycle Intelligence
+    directEcommerce: db.direct_ecommerce ?? undefined,
+    emailSmsCapture: db.email_sms_capture ?? undefined,
+    loyaltyMembership: db.loyalty_membership ?? undefined,
+    categoryComplexity: db.category_complexity ?? undefined,
+    mobileApp: db.mobile_app ?? undefined,
+    marketingPlatformDetected: db.marketing_platform_detected ?? undefined,
+    crmLifecycleTeamSize: db.crm_lifecycle_team_size ?? undefined,
+    triggerEvents: db.trigger_events ?? [],
+    icpFitScore: db.icp_fit_score != null ? Number(db.icp_fit_score) : undefined,
+    timingScore: db.timing_score != null ? Number(db.timing_score) : undefined,
+    priorityScore: db.priority_score != null ? Number(db.priority_score) : undefined,
+    lifecycleTier: db.lifecycle_tier ?? undefined,
+    highProbabilityBuyer: db.high_probability_buyer ?? false,
+    triggeredAccount: db.triggered_account ?? false,
+    confidenceScore: db.confidence_score != null ? Number(db.confidence_score) : undefined,
+    lastEnrichedAt: db.last_enriched_at ?? undefined,
+    enrichmentSourceSummary: db.enrichment_source_summary ?? undefined,
+    lifecycleOverride: db.lifecycle_override ?? false,
+    lifecycleOverrideReason: db.lifecycle_override_reason ?? undefined,
+    icpScoreOverride: db.icp_score_override != null ? Number(db.icp_score_override) : undefined,
+    tierOverride: db.tier_override ?? undefined,
   };
 }
 
