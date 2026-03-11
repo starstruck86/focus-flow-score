@@ -901,11 +901,12 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     if (opps.length === 0) return null;
 
     const statusLabel = status.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
+    const groupArr = opps.reduce((sum, o) => sum + (o.arr || 0), 0);
 
     return (
       <React.Fragment key={status}>
         <TableRow className="bg-muted/30 hover:bg-muted/30">
-          <TableCell colSpan={12} className="py-2">
+          <TableCell colSpan={99} className="py-2">
             <div className="flex items-center gap-2">
               <Badge className={cn("text-xs", STATUS_COLORS[status])}>
                 {statusLabel}
@@ -913,6 +914,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               <span className="text-xs text-muted-foreground">
                 ({opps.length})
               </span>
+              {groupArr > 0 && (
+                <span className="text-xs font-mono text-muted-foreground ml-1">
+                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(groupArr)}
+                </span>
+              )}
             </div>
           </TableCell>
         </TableRow>
