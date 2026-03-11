@@ -190,6 +190,10 @@ export default function Dashboard() {
         );
       case 'progress-tabs':
         return null; // Rendered inside commission-pacing
+      case 'today-agenda':
+        return <TodayAgenda key={widgetId} />;
+      case 'meeting-prep':
+        return <MeetingPrepCard key={widgetId} />;
       case 'pipeline':
         return <UnifiedPipeline key={widgetId} />;
       case 'pace-to-quota':
