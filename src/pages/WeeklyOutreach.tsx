@@ -391,7 +391,7 @@ const FunnelHealthBar = memo(function FunnelHealthBar({ accounts }: { accounts: 
 FunnelHealthBar.displayName = 'FunnelHealthBar';
 
 // ===== FUNNEL GROUP SECTION =====
-function FunnelGroupSection({
+const FunnelGroupSection = memo(function FunnelGroupSection({
   group,
   accounts,
   expandedAccountId,
