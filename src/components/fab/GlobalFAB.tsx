@@ -49,6 +49,7 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
   const [showPowerHour, setShowPowerHour] = useState(false);
   const [showFocusTimer, setShowFocusTimer] = useState(false);
   const [showCheckIn, setShowCheckIn] = useState(false);
+  const [showQuickLog, setShowQuickLog] = useState(false);
   
   // Context for prefills
   const { currentRecord } = useLinkedRecordContext();
