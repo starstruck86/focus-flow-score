@@ -1062,7 +1062,7 @@ export default function WeeklyOutreach() {
                   </SelectContent>
                 </Select>
                 {/* Quick filter toggles */}
-                <div className="flex items-center gap-1.5 flex-wrap">
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
                   <Button
                     variant={filterTierAB ? "default" : "outline"}
                     size="sm"
