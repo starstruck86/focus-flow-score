@@ -14,3 +14,4 @@ export { UnifiedPipeline } from './UnifiedPipeline';
 export { TodayAgenda } from './TodayAgenda';
 export { MeetingPrepCard } from './MeetingPrepCard';
 export { SmartWorkQueue } from './SmartWorkQueue';
+export { DailyDigest } from './DailyDigest';

@@ -2,3 +2,6 @@ project_id = "odbjjklumdsuqdvkgwyv"
 
 [functions.enrich-account]
 verify_jwt = false
+
+[functions.daily-digest]
+verify_jwt = false

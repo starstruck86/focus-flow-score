@@ -44,6 +44,7 @@ import {
   TodayAgenda,
   MeetingPrepCard,
   SmartWorkQueue,
+  DailyDigest,
 } from '@/components/dashboard';
 
 export default function Dashboard() {
@@ -247,6 +248,8 @@ export default function Dashboard() {
             </CollapsibleContent>
           </Collapsible>
         );
+      case 'daily-digest':
+        return <DailyDigest key={widgetId} />;
       default:
         return null;
     }
