@@ -41,6 +41,8 @@ import {
   CommissionPacingDetailModal,
   ExpectedVsActualCard,
   UnifiedPipeline,
+  TodayAgenda,
+  MeetingPrepCard,
 } from '@/components/dashboard';
 
 export default function Dashboard() {
@@ -188,6 +190,10 @@ export default function Dashboard() {
         );
       case 'progress-tabs':
         return null; // Rendered inside commission-pacing
+      case 'today-agenda':
+        return <TodayAgenda key={widgetId} />;
+      case 'meeting-prep':
+        return <MeetingPrepCard key={widgetId} />;
       case 'pipeline':
         return <UnifiedPipeline key={widgetId} />;
       case 'pace-to-quota':
@@ -246,7 +252,7 @@ export default function Dashboard() {
   return (
     <Layout>
       <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-        {/* Header */}
+        {/* Header with meeting count */}
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
