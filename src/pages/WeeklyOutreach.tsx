@@ -424,6 +424,14 @@ function FunnelGroupSection({
                       )}
                     >
                       <TableCell className="align-top py-3">
+                        <Checkbox
+                          checked={isSelected(account.id)}
+                          onCheckedChange={() => onToggleSelect(account.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label={`Select ${account.name}`}
+                        />
+                      </TableCell>
+                      <TableCell className="align-top py-3">
                         <Button
                           size="icon"
                           variant="ghost"
