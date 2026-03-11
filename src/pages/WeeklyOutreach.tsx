@@ -234,7 +234,7 @@ const StalenessAlert = memo(function StalenessAlert({ accounts }: { accounts: Ac
     if (a.accountStatus === 'disqualified' || a.accountStatus === 'inactive') return false;
     if (!a.lastTouchDate) return true;
     const days = Math.floor((Date.now() - new Date(a.lastTouchDate).getTime()) / 86400000);
-    return days > 7;
+    return days > 14;
   }).length;
 
   const noNextStep = accounts.filter(a => 
@@ -253,7 +253,7 @@ const StalenessAlert = memo(function StalenessAlert({ accounts }: { accounts: Ac
         <div className="flex items-center gap-2 text-xs bg-status-red/10 border border-status-red/20 rounded-lg px-3 py-2">
           <AlertTriangle className="h-3.5 w-3.5 text-status-red shrink-0" />
           <span className="text-status-red font-medium">{staleCount} accounts</span>
-          <span className="text-muted-foreground">untouched 7+ days</span>
+          <span className="text-muted-foreground">untouched 14+ days</span>
         </div>
       )}
       {noNextStep > 0 && (
@@ -316,13 +316,13 @@ function OpportunitiesStageSummary() {
   const totalCount = Object.values(stageSummary).reduce((sum, s) => sum + s.count, 0);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 mb-4">
       <div className="flex items-center gap-4">
         <div className="text-sm text-muted-foreground">
           Active Pipeline: <span className="font-semibold text-foreground">{totalCount} opps</span> • <span className="font-mono font-semibold text-foreground">{formatCurrency(totalARR)}</span>
         </div>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3">
+      <div className="hidden sm:grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3">
         {(['', 'Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate', 'Closed Won', 'Closed Lost'] as OpportunityStage[]).map(stage => (
           <div 
             key={stage || 'no-stage'} 
@@ -458,12 +458,12 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                       </TableHead>
                       <TableHead className="w-[3%]"></TableHead>
                       <TableHead className="w-[18%]">Account</TableHead>
-                  <TableHead className="w-[12%]">Website</TableHead>
+                  <TableHead className="w-[10%]">Website</TableHead>
                   <TableHead className="w-[10%]">Status</TableHead>
                   <TableHead className="w-[5%]">ICP</TableHead>
-                  <TableHead className="w-[5%]">Acct Tier</TableHead>
+                  <TableHead className="w-[5%]">Tier</TableHead>
                   <TableHead className="w-[8%]">Contacts</TableHead>
-                  <TableHead className="w-[5%]">Priority</TableHead>
+                  <TableHead className="w-[6%]">Last Touch</TableHead>
                   {(group.status === 'prepped' || group.status === 'active') && (
                     <TableHead className="w-[8%]">Cadence</TableHead>
                   )}
@@ -551,12 +551,12 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                         />
                       </TableCell>
                       <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-                        <DisplaySelectCell
-                          value={account.tier || 'B'}
-                          options={TIER_OPTIONS}
-                          onChange={(v) => updateAccount(account.id, { tier: v as AccountTier })}
-                          badgeClassName="border"
-                        />
+                        {(() => {
+                          if (!account.lastTouchDate) return <span className="text-[10px] text-status-red">Never</span>;
+                          const days = Math.floor((Date.now() - new Date(account.lastTouchDate).getTime()) / 86400000);
+                          const color = days <= 3 ? 'text-status-green' : days <= 7 ? 'text-status-yellow' : 'text-status-red';
+                          return <span className={cn("text-[10px] font-medium", color)}>{days}d ago</span>;
+                        })()}
                       </TableCell>
                       {(group.status === 'prepped' || group.status === 'active') && (
                         <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
@@ -611,7 +611,14 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem>Edit Account</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setExpandedAccountId(expandedAccountId === account.id ? null : account.id)}>
+                              {expandedAccountId === account.id ? 'Collapse' : 'Expand Details'}
+                            </DropdownMenuItem>
+                            {account.salesforceLink && (
+                              <DropdownMenuItem onClick={() => window.open(account.salesforceLink!, '_blank')}>
+                                Open in Salesforce
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuSeparator />
                             <DropdownMenuItem 
                               className="text-destructive"
@@ -625,7 +632,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                     </TableRow>
                     {expandedAccountId === account.id && (
                       <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
-                        <TableCell colSpan={12 + summaryCustomFields.length} className="pt-0 pb-3">
+                        <TableCell colSpan={99} className="pt-0 pb-3">
                           <div className="space-y-3">
                             <SignalDetailPanel account={account} />
                             <AccountContactsField
@@ -1038,10 +1045,10 @@ export default function WeeklyOutreach() {
             <FunnelHealthBar accounts={newLogoAccounts} />
             
             {/* Actions Bar */}
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              {/* Search + Quick Filters */}
-              <div className="flex items-center gap-2 flex-wrap flex-1">
-                <div className="relative max-w-sm min-w-[200px]">
+            <div className="space-y-3">
+              {/* Search row */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="relative flex-1 min-w-0">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="Search accounts..."
@@ -1050,23 +1057,13 @@ export default function WeeklyOutreach() {
                     className="pl-9"
                   />
                 </div>
-                <Select value={filterTier} onValueChange={setFilterTier}>
-                  <SelectTrigger className="w-24">
-                    <SelectValue placeholder="Tier" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Tiers</SelectItem>
-                    <SelectItem value="A">Tier A</SelectItem>
-                    <SelectItem value="B">Tier B</SelectItem>
-                    <SelectItem value="C">Tier C</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2 shrink-0">
                 {/* Quick filter toggles */}
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
                   <Button
                     variant={filterTierAB ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs shrink-0"
+                    className="h-7 text-[11px] shrink-0"
                     aria-label="Filter Tier A and B accounts"
                     onClick={() => setFilterTierAB(!filterTierAB)}
                   >
@@ -1075,7 +1072,7 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterMissingCadence ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs shrink-0"
+                    className="h-7 text-[11px] shrink-0"
                     aria-label="Filter accounts not in cadence"
                     onClick={() => setFilterMissingCadence(!filterMissingCadence)}
                   >
@@ -1084,17 +1081,17 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterStale ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs shrink-0"
+                    className="h-7 text-[11px] shrink-0"
                     aria-label="Filter stale accounts untouched 14+ days"
                     onClick={() => setFilterStale(!filterStale)}
                   >
                     Stale 14d+
                   </Button>
-                  <span className="w-px h-5 bg-border mx-0.5" />
+                  <span className="w-px h-4 bg-border mx-0.5 shrink-0" />
                   <Button
                     variant={filterIcpTier12 ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs shrink-0"
+                    className="h-7 text-[11px] shrink-0"
                     aria-label="Filter ICP Tier 1 and 2 accounts"
                     onClick={() => setFilterIcpTier12(!filterIcpTier12)}
                   >
@@ -1103,7 +1100,7 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterHighProbability ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs shrink-0"
+                    className="h-7 text-[11px] shrink-0"
                     aria-label="Filter high probability buyers"
                     onClick={() => setFilterHighProbability(!filterHighProbability)}
                   >
@@ -1112,7 +1109,7 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterTriggered ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs shrink-0"
+                    className="h-7 text-[11px] shrink-0"
                     aria-label="Filter triggered accounts"
                     onClick={() => setFilterTriggered(!filterTriggered)}
                   >
@@ -1121,7 +1118,7 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterUnenriched ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs shrink-0"
+                    className="h-7 text-[11px] shrink-0"
                     aria-label="Filter accounts not yet enriched"
                     onClick={() => setFilterUnenriched(!filterUnenriched)}
                   >
@@ -1129,9 +1126,6 @@ export default function WeeklyOutreach() {
                   </Button>
                 </div>
               </div>
-
-              {/* Import + Add */}
-              <div className="flex items-center gap-2">
                 <ManageColumnsPopover
                   tabTarget="accounts"
                   viewKey="accounts-newlogo-funnel"
@@ -1434,6 +1428,18 @@ export default function WeeklyOutreach() {
             />
 
             {/* Funnel Grouped View */}
+            <FilterChips
+              filters={activeFilters}
+              onClearAll={() => { setSearchQuery(''); setFilterTier('all'); setFilterTierAB(false); setFilterMissingCadence(false); setFilterStale(false); setFilterIcpTier12(false); setFilterTriggered(false); setFilterHighProbability(false); setFilterUnenriched(false); }}
+            />
+            
+            {/* Filtered count indicator */}
+            {filteredAccounts.length !== newLogoAccounts.length && (
+              <div className="text-xs text-muted-foreground">
+                Showing <span className="font-semibold text-foreground">{filteredAccounts.length}</span> of {newLogoAccounts.length} accounts
+              </div>
+            )}
+
             {newLogoAccounts.length === 0 ? (
               <EmptyState
                 icon={Users}
