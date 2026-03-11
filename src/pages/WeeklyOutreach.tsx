@@ -611,7 +611,14 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem>Edit Account</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setExpandedAccountId(expandedAccountId === account.id ? null : account.id)}>
+                              {expandedAccountId === account.id ? 'Collapse' : 'Expand Details'}
+                            </DropdownMenuItem>
+                            {account.salesforceLink && (
+                              <DropdownMenuItem onClick={() => window.open(account.salesforceLink!, '_blank')}>
+                                Open in Salesforce
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuSeparator />
                             <DropdownMenuItem 
                               className="text-destructive"
