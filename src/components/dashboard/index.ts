@@ -11,3 +11,5 @@ export { CommissionPacingTile } from './CommissionPacingTile';
 export { CommissionPacingDetailModal } from './CommissionPacingDetailModal';
 export { ExpectedVsActualCard } from './ExpectedVsActualCard';
 export { UnifiedPipeline } from './UnifiedPipeline';
+export { TodayAgenda } from './TodayAgenda';
+export { MeetingPrepCard } from './MeetingPrepCard';
