@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { Account } from '@/types';
-import { useAccountEnrichment } from '@/hooks/useAccountEnrichment';
+import { useAccountEnrichment, isEnrichmentStale } from '@/hooks/useAccountEnrichment';
 
 // ── Tier Badge (for table rows) ──────────────────────────
 
