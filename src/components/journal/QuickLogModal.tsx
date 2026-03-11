@@ -46,21 +46,26 @@ export function QuickLogModal({ open, onOpenChange }: QuickLogModalProps) {
       };
       const preparedness = getDefaultPreparednessInputs();
       const recovery = getDefaultRecoveryJournalInputs();
-      const scores = calculateJournalScores(activity, preparedness, recovery, 'balanced-pd');
 
       await saveJournal.mutateAsync({
         date: today,
         activity,
         preparedness,
         recovery,
-        scores,
-        template: 'balanced-pd',
+        markAsCheckedIn: true,
       });
-      await recordCheckIn.mutateAsync({ date: today });
+
+      const scores = calculateJournalScores(activity, recovery);
+      await recordCheckIn.mutateAsync({
+        date: today,
+        method: 'quick-log' as any,
+        dailyScore: scores.dailyScore,
+        isEligible: true,
+        goalMet: scores.goalMet,
+      });
 
       toast.success('Quick log saved!');
       onOpenChange(false);
-      // Reset
       setDials(0); setConversations(0); setProspects(0); setMeetingsSet(0); setManagerMsgs(0);
     } catch (e) {
       toast.error('Failed to save');
