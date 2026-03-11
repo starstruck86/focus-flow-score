@@ -1165,6 +1165,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           </TableBody>
         </Table>
       </div>
+      )}
       
       {/* Closed Won Modal */}
       {closedWonOpportunity && (
