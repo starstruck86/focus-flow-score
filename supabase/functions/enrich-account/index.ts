@@ -104,8 +104,8 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         url: formattedUrl,
-        formats: ['extract'],
-        extract: {
+        formats: ['json'],
+        jsonOptions: {
           schema: {
             type: 'object',
             properties: {
