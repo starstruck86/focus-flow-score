@@ -9,6 +9,7 @@ import {
   Zap,
   Timer,
   ClipboardCheck,
+  Bolt,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -22,6 +23,7 @@ import { AddTranscriptModal } from './AddTranscriptModal';
 import { AddUpdateOpportunityModal } from './AddUpdateOpportunityModal';
 import { PowerHourModal } from './PowerHourModal';
 import { FocusTimerModal } from './FocusTimerModal';
+import { QuickLogModal } from '@/components/journal/QuickLogModal';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 
 interface GlobalFABProps {
