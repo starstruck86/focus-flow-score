@@ -722,13 +722,38 @@ export const useStore = create<QuotaCompassStore>()(
       },
       
       updateOpportunity: (id, updates) => {
-        set((state) => ({
-          opportunities: state.opportunities.map(o =>
-            o.id === id
-              ? { ...o, ...updates, updatedAt: new Date().toISOString() }
-              : o
-          ),
-        }));
+        set((state) => {
+          const opp = state.opportunities.find(o => o.id === id);
+          if (!opp) return state;
+          
+          const updatedOpp = { ...opp, ...updates, updatedAt: new Date().toISOString() };
+          
+          // === Auto-promote account status from opp stage changes ===
+          let updatedAccounts = state.accounts;
+          if (updates.stage && opp.accountId) {
+            const account = state.accounts.find(a => a.id === opp.accountId);
+            if (account) {
+              let newAccountStatus: AccountStatus | undefined;
+              if (updates.stage === 'Closed Won' || (typeof updates.stage === 'string' && updates.stage.includes('Closed Won'))) {
+                // Don't demote — account may have other active opps
+              } else if (updates.stage === 'Demo' || updates.stage === 'Proposal' || updates.stage === 'Negotiate') {
+                if (account.accountStatus === 'researching' || account.accountStatus === 'prepped' || account.accountStatus === 'active') {
+                  newAccountStatus = 'meeting-booked';
+                }
+              }
+              if (newAccountStatus && newAccountStatus !== account.accountStatus) {
+                updatedAccounts = state.accounts.map(a =>
+                  a.id === opp.accountId ? { ...a, accountStatus: newAccountStatus!, updatedAt: new Date().toISOString() } : a
+                );
+              }
+            }
+          }
+          
+          return {
+            opportunities: state.opportunities.map(o => o.id === id ? updatedOpp : o),
+            accounts: updatedAccounts,
+          };
+        });
       },
       
       deleteOpportunity: (id) => {
