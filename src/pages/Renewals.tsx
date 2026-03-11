@@ -910,8 +910,8 @@ export default function Renewals() {
           </div>
 
         {/* Filters */}
-        <div className="flex items-center gap-4 mb-4">
-          <div className="relative flex-1 max-w-sm">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 mb-4">
+          <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search renewals..."
@@ -921,7 +921,7 @@ export default function Renewals() {
             />
           </div>
           <Select value={currentView} onValueChange={setCurrentView}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-full sm:w-40">
               <SelectValue placeholder="View" />
             </SelectTrigger>
             <SelectContent>
@@ -931,6 +931,13 @@ export default function Renewals() {
             </SelectContent>
           </Select>
         </div>
+
+        {/* Filtered count */}
+        {filteredRenewals.length !== renewals.length && (
+          <div className="text-xs text-muted-foreground mb-3">
+            Showing <span className="font-semibold text-foreground">{filteredRenewals.length}</span> of {renewals.length} renewals
+          </div>
+        )}
 
         {/* Renewals Table - Grouped by Quarter */}
         {Object.entries(groupedRenewals).length === 0 ? (
