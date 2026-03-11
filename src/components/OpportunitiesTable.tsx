@@ -847,9 +847,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           {showChurnRisk && (
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <DisplaySelectCell
-                value={opp.churnRisk || ''}
+                value={opp.churnRisk || 'none'}
                 options={CHURN_RISK_SELECT_OPTIONS}
-                onChange={(v) => updateOpportunity(opp.id, { churnRisk: (v === '' ? undefined : v) as ChurnRisk | undefined })}
+                onChange={(v) => updateOpportunity(opp.id, { churnRisk: (v === 'none' ? undefined : v) as ChurnRisk | undefined })}
               />
             </TableCell>
           )}
