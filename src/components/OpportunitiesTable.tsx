@@ -941,7 +941,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     );
   };
 
-  const totalCols = (renewalsOnly ? (showChurnRisk ? 14 : 13) : columnOrder === 'outreach' ? 9 : (showChurnRisk ? 11 : 10)) + summaryCustomFields.length;
+  const totalCols = (renewalsOnly ? (showChurnRisk ? 14 : 13) : columnOrder === 'outreach' ? 10 : (showChurnRisk ? 11 : 10)) + summaryCustomFields.length;
 
   return (
     <div className="space-y-4">
