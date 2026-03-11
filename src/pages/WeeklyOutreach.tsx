@@ -390,8 +390,15 @@ function FunnelGroupSection({
             <Table className="min-w-[1200px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-[3%]"></TableHead>
-                  <TableHead className="w-[17%]">Account</TableHead>
+                      <TableHead className="w-[3%]">
+                        <Checkbox
+                          checked={accounts.every(a => isSelected(a.id)) && accounts.length > 0}
+                          onCheckedChange={() => accounts.forEach(a => onToggleSelect(a.id))}
+                          aria-label="Select all in group"
+                        />
+                      </TableHead>
+                      <TableHead className="w-[3%]"></TableHead>
+                      <TableHead className="w-[17%]">Account</TableHead>
                   <TableHead className="w-[15%]">Website</TableHead>
                   <TableHead className="w-[12%]">Account Status</TableHead>
                   <TableHead className="w-[10%]">Contact Status</TableHead>
