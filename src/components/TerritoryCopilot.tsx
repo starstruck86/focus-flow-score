@@ -5,7 +5,7 @@ import { Sparkles, Send, Loader2, MessageSquare, ArrowRight, Zap, RotateCcw, Sea
 import { cn } from '@/lib/utils';
 import { streamCopilot, SUGGESTED_QUESTIONS, MODE_CONFIG, type CopilotMsg, type CopilotMode } from '@/lib/territoryCopilot';
 import { useCopilot } from '@/contexts/CopilotContext';
-import { useStore } from '@/store/useStore';
+import { useCopilot } from '@/contexts/CopilotContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { toast } from 'sonner';
