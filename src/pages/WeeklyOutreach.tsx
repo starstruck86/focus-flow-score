@@ -1066,7 +1066,8 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterTierAB ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs"
+                    className="h-8 text-xs shrink-0"
+                    aria-label="Filter Tier A and B accounts"
                     onClick={() => setFilterTierAB(!filterTierAB)}
                   >
                     Tier A/B
