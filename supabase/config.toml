@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.daily-digest]
 verify_jwt = false
+
+[functions.territory-copilot]
+verify_jwt = false
