@@ -316,13 +316,13 @@ function OpportunitiesStageSummary() {
   const totalCount = Object.values(stageSummary).reduce((sum, s) => sum + s.count, 0);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 mb-4">
       <div className="flex items-center gap-4">
         <div className="text-sm text-muted-foreground">
           Active Pipeline: <span className="font-semibold text-foreground">{totalCount} opps</span> • <span className="font-mono font-semibold text-foreground">{formatCurrency(totalARR)}</span>
         </div>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3">
+      <div className="hidden sm:grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3">
         {(['', 'Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate', 'Closed Won', 'Closed Lost'] as OpportunityStage[]).map(stage => (
           <div 
             key={stage || 'no-stage'} 
