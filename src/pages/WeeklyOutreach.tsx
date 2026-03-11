@@ -652,6 +652,7 @@ function FunnelGroupSection({
 export default function WeeklyOutreach() {
   const { accounts, addAccount, updateAccount: rawUpdateAccount, deleteAccount } = useStore();
   const bulkSelection = useBulkSelection<Account>();
+  const { enrichMultiple } = useAccountEnrichment();
   
   // Wrap update with save indicator
   const updateAccount = useCallback((id: string, updates: Partial<Account>) => {
