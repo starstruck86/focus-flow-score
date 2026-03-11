@@ -1024,9 +1024,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           }}
         />
       ) : (
-
-      {/* Table */}
-      <div className="metric-card overflow-hidden p-0">
+        <div className="metric-card overflow-hidden p-0">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
