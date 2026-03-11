@@ -191,6 +191,8 @@ export default function Dashboard() {
         );
       case 'progress-tabs':
         return null; // Rendered inside commission-pacing
+      case 'smart-work-queue':
+        return <SmartWorkQueue key={widgetId} />;
       case 'today-agenda':
         return <TodayAgenda key={widgetId} />;
       case 'meeting-prep':

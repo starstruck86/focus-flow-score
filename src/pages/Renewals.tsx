@@ -538,7 +538,7 @@ export default function Renewals() {
     <Layout>
       <div className="p-6 lg:p-8">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="font-display text-2xl font-bold">Renewals</h1>
             <p className="text-sm text-muted-foreground">
@@ -547,6 +547,9 @@ export default function Renewals() {
           </div>
           <StreakChip variant="full" />
         </div>
+
+        {/* Nearest Renewal Countdown + ARR at Risk */}
+        <RenewalUrgencyHeader renewals={renewals} formatCurrency={formatCurrency} />
         
         {/* Churn Risk Summary */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">

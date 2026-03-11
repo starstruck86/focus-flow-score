@@ -923,14 +923,17 @@ export default function WeeklyOutreach() {
           </div>
         </div>
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        {/* Header + Staleness Alert */}
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="font-display text-2xl font-bold">Weekly Outreach</h1>
             <p className="text-sm text-muted-foreground">Pipeline & Account Execution</p>
           </div>
           <StreakChip variant="full" />
         </div>
+        
+        {/* Staleness & Urgency Summary */}
+        <StalenessAlert accounts={accounts} />
 
         {/* Stage Summary - Visible on both tabs */}
         <OpportunitiesStageSummary />
