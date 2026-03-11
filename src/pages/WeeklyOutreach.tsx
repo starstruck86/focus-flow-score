@@ -1259,6 +1259,11 @@ export default function WeeklyOutreach() {
               ]}
             />
 
+            <FilterChips
+              filters={activeFilters}
+              onClearAll={() => { setSearchQuery(''); setFilterTier('all'); setFilterTierAB(false); setFilterMissingCadence(false); setFilterStale(false); }}
+            />
+
             {/* Funnel Grouped View */}
             {accounts.length === 0 ? (
               <EmptyState
