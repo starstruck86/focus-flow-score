@@ -279,6 +279,7 @@ function scoreRenewal(renewal: Renewal): WorkItem | null {
     id: renewal.id,
     type: 'renewal',
     name: renewal.accountName,
+    accountId: renewal.accountId,
     score: Math.min(100, score),
     urgency,
     reason: reasons[0],
