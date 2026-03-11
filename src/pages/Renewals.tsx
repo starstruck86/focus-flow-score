@@ -1139,7 +1139,7 @@ export default function Renewals() {
                         {/* Details row - only visible when renewal is expanded */}
                         {expandedRenewalId === renewal.id && (
                           <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
-                            <TableCell colSpan={10 + summaryCustomFields.length} className="pt-0 pb-3">
+                            <TableCell colSpan={99} className="pt-0 pb-3">
                               <RenewalDetailsField
                                 renewalId={renewal.id}
                                 contacts={renewal.accountContacts || []}
