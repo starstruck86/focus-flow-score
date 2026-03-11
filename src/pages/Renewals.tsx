@@ -700,6 +700,8 @@ export default function Renewals() {
                 { key: 'renewalDue', label: 'Renewal Date' },
                 { key: 'churnRisk', label: 'Churn Risk' },
                 { key: 'arr', label: 'ARR' },
+                { key: 'icpScore', label: 'ICP Score' },
+                { key: 'icpTier', label: 'ICP Tier' },
                 { key: 'csm', label: 'CSM' },
                 { key: 'planhat', label: 'Planhat' },
                 { key: 'agreement', label: 'Agreement' },
