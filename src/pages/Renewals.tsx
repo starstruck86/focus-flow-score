@@ -1,5 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
-import { 
+import React, { useState, useRef, useMemo, useCallback, memo } from 'react';
   Plus, 
   Phone, 
   Mail, 
