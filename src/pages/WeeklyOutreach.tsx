@@ -1345,6 +1345,15 @@ export default function WeeklyOutreach() {
                   },
                 },
                 {
+                  id: 'enrich',
+                  label: 'Enrich ICP',
+                  onExecute: (ids) => {
+                    const selected = accounts.filter(a => ids.includes(a.id));
+                    enrichMultiple(selected);
+                    bulkSelection.clear();
+                  },
+                },
+                {
                   id: 'delete',
                   label: 'Delete',
                   icon: undefined,
