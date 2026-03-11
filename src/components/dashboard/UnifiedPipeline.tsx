@@ -45,6 +45,7 @@ function formatCurrency(value: number) {
 
 export function UnifiedPipeline() {
   const { opportunities, renewals } = useStore();
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<WorkstreamFilter>('all');
 
   // Active pipeline opps
