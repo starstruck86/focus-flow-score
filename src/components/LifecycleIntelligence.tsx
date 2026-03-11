@@ -217,28 +217,34 @@ export function SignalDetailPanel({ account }: { account: Account }) {
 
       {/* Signals Grid */}
       {score != null ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-          {SIGNAL_DEFS.map(({ key, label, icon: Icon, description }) => {
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {SIGNAL_DEFS.map(({ key, evidenceKey, label, icon: Icon }) => {
             const value = (account as any)[key];
             const isDetected = key === 'marketingPlatformDetected' ? !!value : value === true;
+            const evidence = account.enrichmentEvidence?.[evidenceKey];
 
             return (
               <div
                 key={key}
                 className={cn(
-                  'flex items-center gap-2 p-2 rounded-md border text-xs',
+                  'flex items-start gap-2 p-2.5 rounded-md border text-xs',
                   isDetected ? 'border-status-green/30 bg-status-green/5' : 'border-border bg-background'
                 )}
               >
-                <Icon className={cn('h-3.5 w-3.5 shrink-0', isDetected ? 'text-status-green' : 'text-muted-foreground')} />
-                <div className="min-w-0">
-                  <div className="font-medium truncate">{label}</div>
-                  {key === 'marketingPlatformDetected' && value ? (
-                    <div className="text-[10px] text-primary truncate">{value}</div>
-                  ) : (
-                    <div className={cn('text-[10px]', isDetected ? 'text-status-green' : 'text-muted-foreground')}>
-                      {isDetected ? 'Detected' : 'Not detected'}
-                    </div>
+                <Icon className={cn('h-3.5 w-3.5 shrink-0 mt-0.5', isDetected ? 'text-status-green' : 'text-muted-foreground')} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-medium">{label}</span>
+                    {key === 'marketingPlatformDetected' && value ? (
+                      <Badge variant="outline" className="text-[9px] h-4 px-1 font-mono">{value}</Badge>
+                    ) : (
+                      <span className={cn('text-[10px]', isDetected ? 'text-status-green' : 'text-muted-foreground')}>
+                        {isDetected ? '✓ Detected' : '✗ Not detected'}
+                      </span>
+                    )}
+                  </div>
+                  {evidence && (
+                    <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{evidence}</p>
                   )}
                 </div>
               </div>
@@ -247,20 +253,25 @@ export function SignalDetailPanel({ account }: { account: Account }) {
 
           {/* CRM Team Size */}
           <div className={cn(
-            'flex items-center gap-2 p-2 rounded-md border text-xs',
+            'flex items-start gap-2 p-2.5 rounded-md border text-xs',
             account.crmLifecycleTeamSize != null && account.crmLifecycleTeamSize >= 1 && account.crmLifecycleTeamSize <= 5
               ? 'border-status-green/30 bg-status-green/5'
               : 'border-border bg-background'
           )}>
-            <Users className={cn('h-3.5 w-3.5 shrink-0',
+            <Users className={cn('h-3.5 w-3.5 shrink-0 mt-0.5',
               account.crmLifecycleTeamSize != null && account.crmLifecycleTeamSize >= 1 && account.crmLifecycleTeamSize <= 5
                 ? 'text-status-green' : 'text-muted-foreground'
             )} />
-            <div className="min-w-0">
-              <div className="font-medium">CRM/Lifecycle Team</div>
-              <div className="text-[10px] text-muted-foreground">
-                {account.crmLifecycleTeamSize == null ? 'Unknown' : `~${account.crmLifecycleTeamSize} people`}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="font-medium">CRM/Lifecycle Team</span>
+                <span className="text-[10px] text-muted-foreground">
+                  {account.crmLifecycleTeamSize == null ? 'Unknown' : `~${account.crmLifecycleTeamSize} people`}
+                </span>
               </div>
+              {account.enrichmentEvidence?.crm_lifecycle_team_size && (
+                <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{account.enrichmentEvidence.crm_lifecycle_team_size}</p>
+              )}
             </div>
           </div>
         </div>
