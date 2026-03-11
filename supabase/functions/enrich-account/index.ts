@@ -179,6 +179,16 @@ Deno.serve(async (req) => {
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
         const supabase = createClient(supabaseUrl, supabaseKey);
 
+        const evidence = {
+            direct_ecommerce: signals.direct_ecommerce_evidence || '',
+            email_sms_capture: signals.email_sms_capture_evidence || '',
+            loyalty_membership: signals.loyalty_membership_evidence || '',
+            category_complexity: signals.category_complexity_evidence || '',
+            mobile_app: signals.mobile_app_evidence || '',
+            marketing_platform: signals.marketing_platform_evidence || '',
+            crm_lifecycle_team_size: signals.crm_lifecycle_team_size_evidence || '',
+          };
+
         const { error: dbError } = await supabase
           .from('accounts')
           .update({
@@ -198,6 +208,7 @@ Deno.serve(async (req) => {
             confidence_score: confidenceScore,
             last_enriched_at: new Date().toISOString(),
             enrichment_source_summary: signals.summary,
+            enrichment_evidence: evidence,
           })
           .eq('id', accountId);
 
