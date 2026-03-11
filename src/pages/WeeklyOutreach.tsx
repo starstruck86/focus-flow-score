@@ -754,19 +754,31 @@ export default function WeeklyOutreach() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Auto-expand and scroll to highlighted account from Work Queue
+  const pendingHighlightRef = useRef<string | null>(null);
+
   useEffect(() => {
     const id = searchParams.get('highlight');
     if (id) {
+      pendingHighlightRef.current = id;
       setExpandedAccountId(id);
       setHighlightId(id);
-      searchParams.delete('highlight');
-      setSearchParams(searchParams, { replace: true });
-      requestAnimationFrame(() => {
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('highlight');
+      setSearchParams(newParams, { replace: true });
+
+      // Retry scroll until element appears (max 2s)
+      let attempts = 0;
+      const scrollInterval = setInterval(() => {
         const el = document.querySelector(`[data-account-id="${id}"]`);
-        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      });
-      const timer = setTimeout(() => setHighlightId(null), 3000);
-      return () => clearTimeout(timer);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          clearInterval(scrollInterval);
+        }
+        if (++attempts > 20) clearInterval(scrollInterval);
+      }, 100);
+
+      const timer = setTimeout(() => setHighlightId(null), 4000);
+      return () => { clearTimeout(timer); clearInterval(scrollInterval); };
     }
   }, [searchParams, setSearchParams]);
   
