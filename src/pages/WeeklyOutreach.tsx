@@ -87,6 +87,8 @@ import { FilterChips, type ActiveFilter } from '@/components/table/FilterChips';
 import { useUndoDelete } from '@/hooks/useUndoDelete';
 import { emitSaveStatus } from '@/components/SaveIndicator';
 import { TouchLogButtons } from '@/components/TouchLogButtons';
+import { LifecycleTierBadge, IcpScorePill, TriggeredBadge, EnrichButton, SignalDetailPanel } from '@/components/LifecycleIntelligence';
+import { useAccountEnrichment } from '@/hooks/useAccountEnrichment';
 import { 
   sortAccountsDefault, 
   applySortWithFallback,
