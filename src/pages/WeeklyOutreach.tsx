@@ -1035,7 +1035,7 @@ export default function WeeklyOutreach() {
           {/* Accounts Tab - Funnel View */}
           <TabsContent value="accounts" className="space-y-4">
             {/* Funnel Health Bar */}
-            <FunnelHealthBar accounts={accounts} />
+            <FunnelHealthBar accounts={newLogoAccounts} />
             
             {/* Actions Bar */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
