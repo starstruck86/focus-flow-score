@@ -41,6 +41,8 @@ import {
   CommissionPacingDetailModal,
   ExpectedVsActualCard,
   UnifiedPipeline,
+  TodayAgenda,
+  MeetingPrepCard,
 } from '@/components/dashboard';
 
 export default function Dashboard() {
