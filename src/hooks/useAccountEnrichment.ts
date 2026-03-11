@@ -40,7 +40,7 @@ export function isEnrichmentStale(account: Account): boolean {
 export function useAccountEnrichment() {
   const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
   const updateAccount = useStore((s) => s.updateAccount);
-  const accounts = useStore((s) => s.accounts);
+  
 
   const enrichAccount = useCallback(async (account: Account): Promise<EnrichmentResult> => {
     if (!account.website) {
