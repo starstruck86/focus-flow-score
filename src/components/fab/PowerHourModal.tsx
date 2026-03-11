@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/select';
 import { useStore } from '@/store/useStore';
 import { supabase } from '@/integrations/supabase/client';
+import { enqueueAction } from '@/lib/offlineQueue';
 import { toast } from 'sonner';
 import { 
   Zap, 
