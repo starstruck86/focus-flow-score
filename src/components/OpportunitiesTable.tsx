@@ -567,6 +567,23 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     });
   };
 
+  // Auto-expand and scroll to highlighted opportunity
+  const [localHighlight, setLocalHighlight] = useState<string | null>(null);
+  useEffect(() => {
+    if (highlightId) {
+      setLocalHighlight(highlightId);
+      setExpandedOppIds(prev => new Set(prev).add(highlightId));
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          const el = document.querySelector(`[data-opp-id="${highlightId}"]`);
+          el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 150);
+      });
+      const timer = setTimeout(() => setLocalHighlight(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightId]);
+
   const renderOpportunityRow = (opp: Opportunity) => {
     const isExpanded = expandedOppIds.has(opp.id);
 
