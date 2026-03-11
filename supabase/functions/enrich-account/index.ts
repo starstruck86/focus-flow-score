@@ -150,7 +150,7 @@ Deno.serve(async (req) => {
     }
 
     const scrapeData = await scrapeResponse.json();
-    const signals = scrapeData?.data?.json || scrapeData?.json;
+    const signals = scrapeData?.data?.extract || scrapeData?.extract || scrapeData?.data?.json || scrapeData?.json;
 
     if (!signals || typeof signals !== 'object') {
       console.error('No JSON extraction result:', JSON.stringify(scrapeData).slice(0, 500));
