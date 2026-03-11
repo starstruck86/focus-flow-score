@@ -678,7 +678,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           </TableRow>
           {isExpanded && (
             <TableRow className="hover:bg-transparent border-b-2">
-              <TableCell colSpan={(showChurnRisk ? 13 : 12) + summaryCustomFields.length} className="pt-0 pb-3">
+              <TableCell colSpan={99} className="pt-0 pb-3">
                 <OpportunityDetailsField
                   tabTarget={oppTabTarget}
                   opportunityId={opp.id}
