@@ -1204,29 +1204,36 @@ export default function Renewals() {
                         {expandedRenewalId === renewal.id && (
                           <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
                             <TableCell colSpan={99} className="pt-0 pb-3">
-                              <RenewalDetailsField
-                                renewalId={renewal.id}
-                                contacts={renewal.accountContacts || []}
-                                onChange={(contacts) => updateRenewal(renewal.id, { accountContacts: contacts })}
-                                companyNotes={renewal.notes || ''}
-                                onCompanyNotesChange={(notes) => updateRenewal(renewal.id, { notes })}
-                                entitlements={renewal.entitlements || ''}
-                                onEntitlementsChange={(v) => updateRenewal(renewal.id, { entitlements: v })}
-                                usage={renewal.usage || ''}
-                                onUsageChange={(v) => updateRenewal(renewal.id, { usage: v })}
-                                term={renewal.term || ''}
-                                onTermChange={(v) => updateRenewal(renewal.id, { term: v })}
-                                planhatLink={renewal.planhatLink || ''}
-                                onPlanhatLinkChange={(v) => updateRenewal(renewal.id, { planhatLink: v })}
-                                currentAgreementLink={renewal.currentAgreementLink || ''}
-                                onCurrentAgreementLinkChange={(v) => updateRenewal(renewal.id, { currentAgreementLink: v })}
-                                product={renewal.product || ''}
-                                onProductChange={(v) => updateRenewal(renewal.id, { product: v })}
-                                csNotes={renewal.csNotes || ''}
-                                onCsNotesChange={(v) => updateRenewal(renewal.id, { csNotes: v })}
-                                autoRenew={renewal.autoRenew}
-                                onAutoRenewChange={(v) => updateRenewal(renewal.id, { autoRenew: v })}
-                              />
+                              <div className="space-y-3">
+                                {/* ICP Intelligence Panel */}
+                                {(() => {
+                                  const acct = getAccountForRenewal(renewal);
+                                  return acct ? <SignalDetailPanel account={acct} /> : null;
+                                })()}
+                                <RenewalDetailsField
+                                  renewalId={renewal.id}
+                                  contacts={renewal.accountContacts || []}
+                                  onChange={(contacts) => updateRenewal(renewal.id, { accountContacts: contacts })}
+                                  companyNotes={renewal.notes || ''}
+                                  onCompanyNotesChange={(notes) => updateRenewal(renewal.id, { notes })}
+                                  entitlements={renewal.entitlements || ''}
+                                  onEntitlementsChange={(v) => updateRenewal(renewal.id, { entitlements: v })}
+                                  usage={renewal.usage || ''}
+                                  onUsageChange={(v) => updateRenewal(renewal.id, { usage: v })}
+                                  term={renewal.term || ''}
+                                  onTermChange={(v) => updateRenewal(renewal.id, { term: v })}
+                                  planhatLink={renewal.planhatLink || ''}
+                                  onPlanhatLinkChange={(v) => updateRenewal(renewal.id, { planhatLink: v })}
+                                  currentAgreementLink={renewal.currentAgreementLink || ''}
+                                  onCurrentAgreementLinkChange={(v) => updateRenewal(renewal.id, { currentAgreementLink: v })}
+                                  product={renewal.product || ''}
+                                  onProductChange={(v) => updateRenewal(renewal.id, { product: v })}
+                                  csNotes={renewal.csNotes || ''}
+                                  onCsNotesChange={(v) => updateRenewal(renewal.id, { csNotes: v })}
+                                  autoRenew={renewal.autoRenew}
+                                  onAutoRenewChange={(v) => updateRenewal(renewal.id, { autoRenew: v })}
+                                />
+                              </div>
                             </TableCell>
                           </TableRow>
                         )}
