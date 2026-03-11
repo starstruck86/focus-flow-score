@@ -112,6 +112,7 @@ function storeAccountToDb(a: Account, userId: string): any {
     confidence_score: a.confidenceScore ?? null,
     last_enriched_at: a.lastEnrichedAt || null,
     enrichment_source_summary: a.enrichmentSourceSummary || null,
+    enrichment_evidence: a.enrichmentEvidence || {},
     lifecycle_override: a.lifecycleOverride ?? false,
     lifecycle_override_reason: a.lifecycleOverrideReason || null,
     icp_score_override: a.icpScoreOverride ?? null,

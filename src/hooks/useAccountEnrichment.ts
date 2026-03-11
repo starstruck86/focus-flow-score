@@ -79,6 +79,7 @@ export function useAccountEnrichment() {
         confidenceScore: result.scores!.confidence_score,
         lastEnrichedAt: new Date().toISOString(),
         enrichmentSourceSummary: result.summary,
+        enrichmentEvidence: result.evidence,
       };
 
       updateAccount(account.id, updates);
