@@ -11,6 +11,9 @@ import {
   ChevronRight,
   AlertTriangle,
   Filter,
+  Trash2,
+  ExternalLink as LinkIcon,
+  Users,
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { StreakChip } from '@/components/StreakChip';
