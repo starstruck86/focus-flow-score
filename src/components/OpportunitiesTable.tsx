@@ -995,9 +995,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           {
             id: 'change-stage',
             label: 'Change Stage',
-            options: STAGE_SELECT_OPTIONS.map(o => ({ value: o.value || '__none', label: o.label })),
+            options: STAGE_SELECT_OPTIONS.map(o => ({ value: o.value, label: o.label })),
             onExecute: (ids, value) => {
-              ids.forEach(id => updateOpportunity(id, { stage: (value === '__none' ? '' : value) as OpportunityStage }));
+              ids.forEach(id => updateOpportunity(id, { stage: (value === 'none' ? '' : value) as OpportunityStage }));
               bulkSelection.clear();
             },
           },
