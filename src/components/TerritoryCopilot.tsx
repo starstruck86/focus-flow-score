@@ -4,16 +4,12 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Sparkles, Send, Loader2, MessageSquare, ArrowRight, Zap, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { streamCopilot, SUGGESTED_QUESTIONS, type CopilotMsg } from '@/lib/territoryCopilot';
+import { useCopilot } from '@/contexts/CopilotContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-interface CopilotDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  initialQuestion?: string;
-}
-
-function CopilotDialog({ open, onOpenChange, initialQuestion }: CopilotDialogProps) {
+function CopilotDialog() {
+  const { state, setOpen, clearInitialQuestion } = useCopilot();
   const [messages, setMessages] = useState<CopilotMsg[]>([]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
@@ -21,22 +17,25 @@ function CopilotDialog({ open, onOpenChange, initialQuestion }: CopilotDialogPro
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const hasSentInitial = useRef(false);
+  const processedQuestionRef = useRef<string | null>(null);
 
   // Focus input on open
   useEffect(() => {
-    if (open) {
+    if (state.open) {
       setTimeout(() => inputRef.current?.focus(), 100);
-      // If initialQuestion provided and no messages yet
-      if (initialQuestion && !hasSentInitial.current && messages.length === 0) {
-        hasSentInitial.current = true;
-        setTimeout(() => sendMessage(initialQuestion), 200);
+      // Auto-send initial question if provided and not already processed
+      if (state.initialQuestion && processedQuestionRef.current !== state.initialQuestion) {
+        processedQuestionRef.current = state.initialQuestion;
+        // Reset messages for new context question
+        setMessages([]);
+        setTimeout(() => sendMessage(state.initialQuestion!), 200);
+        clearInitialQuestion();
       }
     } else {
       abortRef.current?.abort();
-      hasSentInitial.current = false;
+      processedQuestionRef.current = null;
     }
-  }, [open]);
+  }, [state.open, state.initialQuestion]);
 
   // Auto-scroll
   useEffect(() => {
@@ -50,37 +49,39 @@ function CopilotDialog({ open, onOpenChange, initialQuestion }: CopilotDialogPro
     
     setError(null);
     const userMsg: CopilotMsg = { role: 'user', content: text.trim() };
-    const newMessages = [...messages, userMsg];
-    setMessages(newMessages);
-    setInput('');
-    setIsStreaming(true);
+    setMessages(prev => {
+      const newMsgs = [...prev, userMsg];
 
-    const abort = new AbortController();
-    abortRef.current = abort;
+      // Start streaming with the new messages
+      setIsStreaming(true);
+      const abort = new AbortController();
+      abortRef.current = abort;
 
-    let assistantText = '';
-    const updateAssistant = (chunk: string) => {
-      assistantText += chunk;
-      setMessages(prev => {
-        const last = prev[prev.length - 1];
-        if (last?.role === 'assistant') {
-          return prev.map((m, i) => i === prev.length - 1 ? { ...m, content: assistantText } : m);
-        }
-        return [...prev, { role: 'assistant', content: assistantText }];
+      let assistantText = '';
+      streamCopilot({
+        messages: newMsgs,
+        onDelta: (chunk) => {
+          assistantText += chunk;
+          setMessages(p => {
+            const last = p[p.length - 1];
+            if (last?.role === 'assistant') {
+              return p.map((m, i) => i === p.length - 1 ? { ...m, content: assistantText } : m);
+            }
+            return [...p, { role: 'assistant', content: assistantText }];
+          });
+        },
+        onDone: () => setIsStreaming(false),
+        onError: (err) => {
+          setError(err);
+          setIsStreaming(false);
+        },
+        signal: abort.signal,
       });
-    };
 
-    await streamCopilot({
-      messages: newMessages,
-      onDelta: updateAssistant,
-      onDone: () => setIsStreaming(false),
-      onError: (err) => {
-        setError(err);
-        setIsStreaming(false);
-      },
-      signal: abort.signal,
+      return newMsgs;
     });
-  }, [messages, isStreaming]);
+    setInput('');
+  }, [isStreaming]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,7 +98,7 @@ function CopilotDialog({ open, onOpenChange, initialQuestion }: CopilotDialogPro
   const showSuggestions = messages.length === 0 && !isStreaming;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={state.open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-[640px] p-0 gap-0 max-h-[80vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border shrink-0">
@@ -195,24 +196,24 @@ function CopilotDialog({ open, onOpenChange, initialQuestion }: CopilotDialogPro
 
 // Exported component with trigger button + global keyboard shortcut
 export function TerritoryCopilot() {
-  const [open, setOpen] = useState(false);
+  const { open: openCopilot, setOpen } = useCopilot();
 
   // ⌘K shortcut
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        setOpen(prev => !prev);
+        openCopilot();
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [openCopilot]);
 
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => openCopilot()}
         className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-medium transition-colors"
       >
         <Sparkles className="h-3.5 w-3.5" />
@@ -220,26 +221,7 @@ export function TerritoryCopilot() {
         <kbd className="hidden sm:inline-flex h-4 items-center rounded bg-primary/10 px-1 font-mono text-[10px]">⌘K</kbd>
       </button>
 
-      <CopilotDialog open={open} onOpenChange={setOpen} />
+      <CopilotDialog />
     </>
   );
-}
-
-// Hook for other components to open the copilot with a pre-filled question
-export function useTerritoryCopilot() {
-  const [state, setState] = useState<{ open: boolean; question?: string }>({ open: false });
-
-  const ask = (question: string) => {
-    setState({ open: true, question });
-  };
-
-  const dialog = (
-    <CopilotDialog 
-      open={state.open} 
-      onOpenChange={(open) => setState(prev => ({ ...prev, open }))}
-      initialQuestion={state.question}
-    />
-  );
-
-  return { ask, dialog };
 }
