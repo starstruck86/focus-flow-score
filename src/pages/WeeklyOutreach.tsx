@@ -897,12 +897,18 @@ export default function WeeklyOutreach() {
   };
 
   // Apply search + quick filters
+  // Filter to new-logo accounts first, then apply user filters
+  const newLogoAccounts = useMemo(() => 
+    accounts.filter(a => a.motion === 'new-logo' || !a.motion),
+    [accounts]
+  );
+
   const filteredAccounts = useMemo(() => {
     const fourteenDaysAgo = new Date();
     fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
     const staleDate = fourteenDaysAgo.toISOString();
 
-    return accounts.filter(account => {
+    return newLogoAccounts.filter(account => {
       const matchesSearch = !searchQuery || account.name.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesTier = filterTier === 'all' || account.tier === filterTier;
       const matchesTierAB = !filterTierAB || account.tier === 'A' || account.tier === 'B';
@@ -914,7 +920,7 @@ export default function WeeklyOutreach() {
       const matchesUnenriched = !filterUnenriched || !account.lastEnrichedAt;
       return matchesSearch && matchesTier && matchesTierAB && matchesCadence && matchesStale && matchesIcpTier && matchesTriggered && matchesHighProb && matchesUnenriched;
     });
-  }, [accounts, searchQuery, filterTier, filterTierAB, filterMissingCadence, filterStale, filterIcpTier12, filterTriggered, filterHighProbability, filterUnenriched]);
+  }, [newLogoAccounts, searchQuery, filterTier, filterTierAB, filterMissingCadence, filterStale, filterIcpTier12, filterTriggered, filterHighProbability, filterUnenriched]);
 
   // Group & sort accounts by funnel status
   const groupedAccounts = useMemo(() => {
