@@ -364,7 +364,7 @@ export function useDataSync() {
     if (!userId) return;
 
     const unsub = useStore.subscribe((state) => {
-      if (_isHydrating || !prevState.current) return;
+      if (_isHydrating || !prevState.current || !hasHydrated.current) return;
 
       const prev = prevState.current;
 
