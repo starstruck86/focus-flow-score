@@ -971,10 +971,10 @@ export default function WeeklyOutreach() {
     <Layout>
       <div className="p-4 sm:p-6 lg:p-8">
         {/* Quick Links Bar */}
-        <div className="mb-6 space-y-3">
-          <div className="flex flex-wrap gap-2">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mr-2 self-center">
-              Leads & Contacts:
+        <div className="mb-4 sm:mb-6 space-y-2">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider shrink-0 self-center mr-1">
+              Leads:
             </span>
             {QUICK_LINKS.leadsContacts.map((link) => (
               <a
@@ -982,16 +982,17 @@ export default function WeeklyOutreach() {
                 href={link.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="quick-action text-xs py-1 px-2"
+                className="quick-action text-[11px] py-1 px-2 shrink-0 whitespace-nowrap"
+                aria-label={`Open ${link.label} in Salesforce`}
               >
                 {link.label}
                 <ExternalLink className="h-3 w-3" />
               </a>
             ))}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mr-2 self-center">
-              Accounts:
+          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider shrink-0 self-center mr-1">
+              Accts:
             </span>
             {QUICK_LINKS.accounts.map((link) => (
               <a
@@ -999,7 +1000,8 @@ export default function WeeklyOutreach() {
                 href={link.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="quick-action text-xs py-1 px-2"
+                className="quick-action text-[11px] py-1 px-2 shrink-0 whitespace-nowrap"
+                aria-label={`Open ${link.label} in Salesforce`}
               >
                 {link.label}
                 <ExternalLink className="h-3 w-3" />
