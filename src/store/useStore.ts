@@ -4,6 +4,7 @@ import { persist } from 'zustand/middleware';
 import type { 
   DayEntry, 
   Account, 
+  AccountStatus,
   Contact, 
   Renewal, 
   Task, 
