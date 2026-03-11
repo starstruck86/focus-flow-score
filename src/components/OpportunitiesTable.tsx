@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { LayoutGrid, List } from 'lucide-react';
 import {
   Table,
@@ -194,9 +194,10 @@ interface OpportunitiesTableProps {
   columnOrder?: 'default' | 'outreach';
   stageFilter?: OpportunityStage | null;
   onClearStageFilter?: () => void;
+  highlightId?: string | null;
 }
 
-export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, excludeRenewals = false, showChurnRisk = true, columnOrder = 'default', stageFilter, onClearStageFilter }: OpportunitiesTableProps) {
+export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, excludeRenewals = false, showChurnRisk = true, columnOrder = 'default', stageFilter, onClearStageFilter, highlightId }: OpportunitiesTableProps) {
   // Custom fields for this specific opportunities context
   const oppTabTarget = renewalsOnly ? 'opportunities-renewals' as const : 'opportunities-newlogo' as const;
   const { fields, getFieldValue } = useCustomFields();
@@ -566,6 +567,23 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     });
   };
 
+  // Auto-expand and scroll to highlighted opportunity
+  const [localHighlight, setLocalHighlight] = useState<string | null>(null);
+  useEffect(() => {
+    if (highlightId) {
+      setLocalHighlight(highlightId);
+      setExpandedOppIds(prev => new Set(prev).add(highlightId));
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          const el = document.querySelector(`[data-opp-id="${highlightId}"]`);
+          el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 150);
+      });
+      const timer = setTimeout(() => setLocalHighlight(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightId]);
+
   const renderOpportunityRow = (opp: Opportunity) => {
     const isExpanded = expandedOppIds.has(opp.id);
 
@@ -575,7 +593,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
 
       return (
         <React.Fragment key={opp.id}>
-           <TableRow className="group hover:bg-muted/30 cursor-pointer" onClick={() => toggleExpand(opp.id)}>
+           <TableRow data-opp-id={opp.id} className={cn("group hover:bg-muted/30 cursor-pointer", localHighlight === opp.id && "ring-2 ring-primary/50 bg-primary/5 animate-pulse")} onClick={() => toggleExpand(opp.id)}>
             <TableCell className="w-8 py-3" onClick={(e) => e.stopPropagation()}>
               <Checkbox checked={bulkSelection.isSelected(opp.id)} onCheckedChange={() => bulkSelection.toggle(opp.id)} />
             </TableCell>
@@ -723,7 +741,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
 
       return (
         <React.Fragment key={opp.id}>
-          <TableRow className="group hover:bg-muted/30 cursor-pointer" onClick={() => toggleExpand(opp.id)}>
+          <TableRow data-opp-id={opp.id} className={cn("group hover:bg-muted/30 cursor-pointer", localHighlight === opp.id && "ring-2 ring-primary/50 bg-primary/5 animate-pulse")} onClick={() => toggleExpand(opp.id)}>
             <TableCell className="w-8 py-3" onClick={(e) => e.stopPropagation()}>
               <Checkbox checked={bulkSelection.isSelected(opp.id)} onCheckedChange={() => bulkSelection.toggle(opp.id)} />
             </TableCell>
@@ -830,7 +848,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     // Default view (global opps tab)
     return (
       <React.Fragment key={opp.id}>
-        <TableRow className="group hover:bg-muted/30 cursor-pointer" onClick={() => toggleExpand(opp.id)}>
+        <TableRow data-opp-id={opp.id} className={cn("group hover:bg-muted/30 cursor-pointer", localHighlight === opp.id && "ring-2 ring-primary/50 bg-primary/5 animate-pulse")} onClick={() => toggleExpand(opp.id)}>
           <TableCell className="w-8 py-3" onClick={(e) => e.stopPropagation()}>
             <Checkbox checked={bulkSelection.isSelected(opp.id)} onCheckedChange={() => bulkSelection.toggle(opp.id)} />
           </TableCell>

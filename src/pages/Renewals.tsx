@@ -1,4 +1,5 @@
-import React, { useState, useRef, useMemo, useCallback, memo } from 'react';
+import React, { useState, useRef, useMemo, useCallback, memo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Plus, 
   Phone, 
@@ -212,7 +213,46 @@ export default function Renewals() {
   
   // Track which renewal is expanded to show details
   const [expandedRenewalId, setExpandedRenewalId] = useState<string | null>(null);
-  
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('renewals');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Auto-expand and scroll to highlighted record from Work Queue
+  useEffect(() => {
+    const id = searchParams.get('highlight');
+    const tab = searchParams.get('tab');
+    if (id) {
+      setHighlightId(id);
+      // Clean up URL
+      searchParams.delete('highlight');
+      searchParams.delete('tab');
+      setSearchParams(searchParams, { replace: true });
+
+      // Determine if this is a renewal or opportunity
+      const isRenewal = renewals.some(r => r.id === id);
+      if (isRenewal) {
+        setActiveTab('renewals');
+        setExpandedRenewalId(id);
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            const el = document.querySelector(`[data-renewal-id="${id}"]`);
+            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 100);
+        });
+      } else {
+        // It's an opportunity — switch to opportunities tab
+        setActiveTab('opportunities');
+      }
+
+      const timer = setTimeout(() => setHighlightId(null), 3000);
+      return () => clearTimeout(timer);
+    }
+    if (tab) {
+      setActiveTab(tab);
+      searchParams.delete('tab');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, renewals]);
   const [newRenewal, setNewRenewal] = useState<Partial<Renewal>>({
     healthStatus: 'green',
     autoRenew: false,
@@ -684,7 +724,7 @@ export default function Renewals() {
           })}
         </div>
         
-        <Tabs defaultValue="renewals" className="space-y-4">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList>
             <TabsTrigger value="renewals">Renewals</TabsTrigger>
             <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
@@ -1073,9 +1113,12 @@ export default function Renewals() {
                   <TableBody>
                     {quarterRenewals.map((renewal) => (
                       <React.Fragment key={renewal.id}>
-                        <TableRow className={cn(
+                        <TableRow 
+                          data-renewal-id={renewal.id}
+                          className={cn(
                           "hover:bg-muted/30",
-                          expandedRenewalId === renewal.id && "bg-muted/20"
+                          expandedRenewalId === renewal.id && "bg-muted/20",
+                          highlightId === renewal.id && "ring-2 ring-primary/50 bg-primary/5 animate-pulse"
                         )}>
                           <TableCell className="align-top py-3">
                             <Button
@@ -1250,7 +1293,7 @@ export default function Renewals() {
           </TabsContent>
           
           <TabsContent value="opportunities">
-            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} renewalsOnly />
+            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} renewalsOnly highlightId={highlightId} />
           </TabsContent>
           
           <OpportunityDrawer

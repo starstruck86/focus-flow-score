@@ -1,4 +1,5 @@
-import React, { useState, useRef, useMemo, useCallback, memo } from 'react';
+import React, { useState, useRef, useMemo, useCallback, memo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   ExternalLink, 
   Plus, 
@@ -446,6 +447,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
   onToggleCollapse,
   isSelected,
   onToggleSelect,
+  highlightId,
 }: {
   group: FunnelGroup;
   accounts: Account[];
@@ -457,6 +459,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
   onToggleCollapse: () => void;
   isSelected: (id: string) => boolean;
   onToggleSelect: (id: string) => void;
+  highlightId: string | null;
 }) {
   const { fields, getFieldValue } = useCustomFields();
   const [groupSort, setGroupSort] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
@@ -535,9 +538,11 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                 {sortedAccounts.map((account) => (
                   <React.Fragment key={account.id}>
                     <TableRow 
+                      data-account-id={account.id}
                       className={cn(
                         "hover:bg-muted/30",
-                        expandedAccountId === account.id && "bg-muted/20"
+                        expandedAccountId === account.id && "bg-muted/20",
+                        highlightId === account.id && "ring-2 ring-primary/50 bg-primary/5 animate-pulse"
                       )}
                     >
                       <TableCell className="align-top py-3">
@@ -745,6 +750,25 @@ export default function WeeklyOutreach() {
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [expandedAccountId, setExpandedAccountId] = useState<string | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Auto-expand and scroll to highlighted account from Work Queue
+  useEffect(() => {
+    const id = searchParams.get('highlight');
+    if (id) {
+      setExpandedAccountId(id);
+      setHighlightId(id);
+      searchParams.delete('highlight');
+      setSearchParams(searchParams, { replace: true });
+      requestAnimationFrame(() => {
+        const el = document.querySelector(`[data-account-id="${id}"]`);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+      const timer = setTimeout(() => setHighlightId(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams, setSearchParams]);
   
   // Quick filter toggles
   const [filterTierAB, setFilterTierAB] = useState(false);
@@ -1532,6 +1556,7 @@ export default function WeeklyOutreach() {
                       onToggleCollapse={() => toggleGroupCollapse(group.status)}
                       isSelected={bulkSelection.isSelected}
                       onToggleSelect={bulkSelection.toggle}
+                      highlightId={highlightId}
                     />
                   ))}
                 </div>
@@ -1553,6 +1578,7 @@ export default function WeeklyOutreach() {
                         onToggleCollapse={() => toggleGroupCollapse(group.status)}
                         isSelected={bulkSelection.isSelected}
                         onToggleSelect={bulkSelection.toggle}
+                        highlightId={highlightId}
                       />
                     ))}
                   </div>
@@ -1575,6 +1601,7 @@ export default function WeeklyOutreach() {
                         onToggleCollapse={() => toggleGroupCollapse(group.status)}
                         isSelected={bulkSelection.isSelected}
                         onToggleSelect={bulkSelection.toggle}
+                        highlightId={highlightId}
                       />
                     ))}
                   </div>
