@@ -1293,7 +1293,7 @@ export default function Renewals() {
           </TabsContent>
           
           <TabsContent value="opportunities">
-            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} renewalsOnly />
+            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} renewalsOnly highlightId={highlightId} />
           </TabsContent>
           
           <OpportunityDrawer
