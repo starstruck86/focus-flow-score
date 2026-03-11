@@ -708,6 +708,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       return (
         <React.Fragment key={opp.id}>
           <TableRow className="group hover:bg-muted/30 cursor-pointer" onClick={() => toggleExpand(opp.id)}>
+            <TableCell className="w-8 py-3" onClick={(e) => e.stopPropagation()}>
+              <Checkbox checked={bulkSelection.isSelected(opp.id)} onCheckedChange={() => bulkSelection.toggle(opp.id)} />
+            </TableCell>
             <TableCell className="w-8 py-3">
               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); toggleExpand(opp.id); }}>
                 {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
