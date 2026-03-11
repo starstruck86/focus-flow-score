@@ -507,19 +507,19 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                 <TableRow className="hover:bg-transparent">
                       <TableHead className="w-[3%]">
                         <Checkbox
-                          checked={accounts.every(a => isSelected(a.id)) && accounts.length > 0}
-                          onCheckedChange={() => accounts.forEach(a => onToggleSelect(a.id))}
+                          checked={sortedAccounts.every(a => isSelected(a.id)) && sortedAccounts.length > 0}
+                          onCheckedChange={() => sortedAccounts.forEach(a => onToggleSelect(a.id))}
                           aria-label="Select all in group"
                         />
                       </TableHead>
                       <TableHead className="w-[3%]"></TableHead>
-                      <TableHead className="w-[18%]">Account</TableHead>
+                      <SortableHeader sortKey="name" currentSort={groupSort} onSort={handleGroupSort} className="w-[18%]">Account</SortableHeader>
                   <TableHead className="w-[10%]">Website</TableHead>
-                  <TableHead className="w-[10%]">Status</TableHead>
-                  <TableHead className="w-[5%]">ICP</TableHead>
-                  <TableHead className="w-[5%]">Tier</TableHead>
-                  <TableHead className="w-[8%]">Contacts</TableHead>
-                  <TableHead className="w-[6%]">Last Touch</TableHead>
+                  <SortableHeader sortKey="accountStatus" currentSort={groupSort} onSort={handleGroupSort} className="w-[10%]">Status</SortableHeader>
+                  <SortableHeader sortKey="icpFitScore" currentSort={groupSort} onSort={handleGroupSort} className="w-[5%]">ICP</SortableHeader>
+                  <SortableHeader sortKey="tier" currentSort={groupSort} onSort={handleGroupSort} className="w-[5%]">Tier</SortableHeader>
+                  <SortableHeader sortKey="contactStatus" currentSort={groupSort} onSort={handleGroupSort} className="w-[8%]">Contacts</SortableHeader>
+                  <SortableHeader sortKey="lastTouchDate" currentSort={groupSort} onSort={handleGroupSort} className="w-[6%]">Last Touch</SortableHeader>
                   {(group.status === 'prepped' || group.status === 'active') && (
                     <TableHead className="w-[8%]">Cadence</TableHead>
                   )}
@@ -532,7 +532,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {accounts.map((account) => (
+                {sortedAccounts.map((account) => (
                   <React.Fragment key={account.id}>
                     <TableRow 
                       className={cn(
