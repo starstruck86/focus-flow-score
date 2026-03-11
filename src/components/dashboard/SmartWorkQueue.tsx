@@ -44,6 +44,7 @@ const FILTER_TILES: { type: WorkItemType | 'all'; label: string; icon: typeof Bu
 function WorkItemCard({ item, index }: { item: WorkItem; index: number }) {
   const navigate = useNavigate();
   const { setCurrentRecord } = useLinkedRecordContext();
+  const { ask } = useCopilot();
   const urgencyStyle = URGENCY_STYLES[item.urgency];
   const TypeIcon = TYPE_ICONS[item.type] || Building2;
 
