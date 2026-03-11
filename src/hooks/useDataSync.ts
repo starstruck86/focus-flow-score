@@ -274,23 +274,27 @@ export function useDataSync() {
         const dbRenewals = (renewalsRes.data || []).map(dbRenewalToStore);
 
         const store = useStore.getState();
+        
+        // UUID validation — filter out non-UUID local-only items (seed data)
+        const isUUID = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
         if (dbAccounts.length > 0 || dbOpps.length > 0 || dbRenewals.length > 0) {
           const dbAccountIds = new Set(dbAccounts.map(a => a.id));
           const dbOppIds = new Set(dbOpps.map(o => o.id));
           const dbRenewalIds = new Set(dbRenewals.map(r => r.id));
 
+          // Only merge store items that have valid UUIDs and aren't already in DB
           const mergedAccounts = [
             ...dbAccounts,
-            ...store.accounts.filter(a => !dbAccountIds.has(a.id)),
+            ...store.accounts.filter(a => !dbAccountIds.has(a.id) && isUUID(a.id)),
           ];
           const mergedOpps = [
             ...dbOpps,
-            ...store.opportunities.filter(o => !dbOppIds.has(o.id)),
+            ...store.opportunities.filter(o => !dbOppIds.has(o.id) && isUUID(o.id)),
           ];
           const mergedRenewals = [
             ...dbRenewals,
-            ...store.renewals.filter(r => !dbRenewalIds.has(r.id)),
+            ...store.renewals.filter(r => !dbRenewalIds.has(r.id) && isUUID(r.id)),
           ];
 
           useStore.setState({
@@ -299,10 +303,10 @@ export function useDataSync() {
             renewals: mergedRenewals,
           });
 
-          // Push store-only items to DB
-          const storeOnlyAccounts = store.accounts.filter(a => !dbAccountIds.has(a.id));
-          const storeOnlyOpps = store.opportunities.filter(o => !dbOppIds.has(o.id));
-          const storeOnlyRenewals = store.renewals.filter(r => !dbRenewalIds.has(r.id));
+          // Push store-only items to DB (only valid UUIDs)
+          const storeOnlyAccounts = store.accounts.filter(a => !dbAccountIds.has(a.id) && isUUID(a.id));
+          const storeOnlyOpps = store.opportunities.filter(o => !dbOppIds.has(o.id) && isUUID(o.id));
+          const storeOnlyRenewals = store.renewals.filter(r => !dbRenewalIds.has(r.id) && isUUID(r.id));
 
           if (storeOnlyAccounts.length > 0) {
             await supabase.from('accounts').upsert(
@@ -320,19 +324,24 @@ export function useDataSync() {
             );
           }
         } else if (store.accounts.length > 0 || store.opportunities.length > 0 || store.renewals.length > 0) {
-          if (store.accounts.length > 0) {
+          // Only push items with valid UUIDs
+          const validAccounts = store.accounts.filter(a => isUUID(a.id));
+          const validOpps = store.opportunities.filter(o => isUUID(o.id));
+          const validRenewals = store.renewals.filter(r => isUUID(r.id));
+          
+          if (validAccounts.length > 0) {
             await supabase.from('accounts').upsert(
-              store.accounts.map(a => storeAccountToDb(a, userId))
+              validAccounts.map(a => storeAccountToDb(a, userId))
             );
           }
-          if (store.opportunities.length > 0) {
+          if (validOpps.length > 0) {
             await supabase.from('opportunities').upsert(
-              store.opportunities.map(o => storeOpportunityToDb(o, userId))
+              validOpps.map(o => storeOpportunityToDb(o, userId))
             );
           }
-          if (store.renewals.length > 0) {
+          if (validRenewals.length > 0) {
             await supabase.from('renewals').upsert(
-              store.renewals.map(r => storeRenewalToDb(r, userId))
+              validRenewals.map(r => storeRenewalToDb(r, userId))
             );
           }
         }
