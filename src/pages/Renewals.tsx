@@ -1095,9 +1095,12 @@ export default function Renewals() {
                   <TableBody>
                     {quarterRenewals.map((renewal) => (
                       <React.Fragment key={renewal.id}>
-                        <TableRow className={cn(
+                        <TableRow 
+                          data-renewal-id={renewal.id}
+                          className={cn(
                           "hover:bg-muted/30",
-                          expandedRenewalId === renewal.id && "bg-muted/20"
+                          expandedRenewalId === renewal.id && "bg-muted/20",
+                          highlightId === renewal.id && "ring-2 ring-primary/50 bg-primary/5 animate-pulse"
                         )}>
                           <TableCell className="align-top py-3">
                             <Button

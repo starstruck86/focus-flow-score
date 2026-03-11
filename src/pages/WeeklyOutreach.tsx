@@ -746,6 +746,25 @@ export default function WeeklyOutreach() {
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [expandedAccountId, setExpandedAccountId] = useState<string | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Auto-expand and scroll to highlighted account from Work Queue
+  useEffect(() => {
+    const id = searchParams.get('highlight');
+    if (id) {
+      setExpandedAccountId(id);
+      setHighlightId(id);
+      searchParams.delete('highlight');
+      setSearchParams(searchParams, { replace: true });
+      requestAnimationFrame(() => {
+        const el = document.querySelector(`[data-account-id="${id}"]`);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+      const timer = setTimeout(() => setHighlightId(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams, setSearchParams]);
   
   // Quick filter toggles
   const [filterTierAB, setFilterTierAB] = useState(false);
