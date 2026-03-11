@@ -346,6 +346,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       filtered = filtered.filter(opp => !renewalOpportunityIds.has(opp.id));
     }
 
+    // Apply stage filter from parent (e.g., pipeline tiles)
+    if (stageFilter !== undefined && stageFilter !== null) {
+      filtered = filtered.filter(opp => (opp.stage || '') === stageFilter);
+    }
+
     switch (savedView) {
       case 'active':
         filtered = filtered.filter(o => o.status === 'active');
@@ -372,7 +377,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     }
 
     return filtered;
-  }, [opportunities, searchQuery, savedView, renewalsOnly, excludeRenewals, renewalOpportunityIds]);
+  }, [opportunities, searchQuery, savedView, renewalsOnly, excludeRenewals, renewalOpportunityIds, stageFilter]);
 
   // Sort opportunities
   const sortKeyMap: Record<string, { key: keyof Opportunity; customRank?: Record<string, number> }> = {
