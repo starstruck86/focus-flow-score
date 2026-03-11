@@ -252,7 +252,7 @@ export default function Dashboard() {
   return (
     <Layout>
       <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-        {/* Header */}
+        {/* Header with meeting count */}
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
