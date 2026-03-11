@@ -74,6 +74,9 @@ import { useCustomFields } from '@/hooks/useCustomFields';
 import { ImportModal } from '@/components/import';
 import { EditableTextCell, EditableTextareaCell, DisplaySelectCell, WebsiteLinkCell, AccountNameCell } from '@/components/table';
 import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
+import { useBulkSelection } from '@/hooks/useBulkSelection';
+import { BulkActionsBar } from '@/components/BulkActionsBar';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   sortAccountsDefault, 
   applySortWithFallback,
