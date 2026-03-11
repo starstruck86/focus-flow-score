@@ -1578,6 +1578,7 @@ export default function WeeklyOutreach() {
                         onToggleCollapse={() => toggleGroupCollapse(group.status)}
                         isSelected={bulkSelection.isSelected}
                         onToggleSelect={bulkSelection.toggle}
+                        highlightId={highlightId}
                       />
                     ))}
                   </div>
