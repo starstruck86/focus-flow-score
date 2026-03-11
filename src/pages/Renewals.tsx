@@ -178,7 +178,7 @@ const VIEWS = [
 
 
 export default function Renewals() {
-  const { renewals, addRenewal, updateRenewal, deleteRenewal, createMissingRenewalOpportunities, logCall, logManualEmail, logMeetingHeld } = useStore();
+  const { renewals, accounts, addRenewal, updateRenewal, deleteRenewal, createMissingRenewalOpportunities, logCall, logManualEmail, logMeetingHeld } = useStore();
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentView, setCurrentView] = useState('all');
