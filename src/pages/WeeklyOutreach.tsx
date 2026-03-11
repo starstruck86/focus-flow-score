@@ -520,7 +520,22 @@ function FunnelGroupSection({
                           <MetricFieldCell field={field} recordId={account.id} />
                         </TableCell>
                       ))}
-                      <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                      <TableCell className="align-top py-3 relative" onClick={(e) => e.stopPropagation()}>
+                        <RowHoverActions
+                          actions={[
+                            {
+                              icon: ExternalLink,
+                              label: 'Open in Salesforce',
+                              onClick: () => account.salesforceLink && window.open(account.salesforceLink, '_blank'),
+                            },
+                            {
+                              icon: Trash2,
+                              label: 'Delete',
+                              variant: 'destructive',
+                              onClick: () => deleteAccount(account.id),
+                            },
+                          ]}
+                        />
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button size="icon" variant="ghost" className="h-8 w-8">
