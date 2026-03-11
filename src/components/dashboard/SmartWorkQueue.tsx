@@ -1,9 +1,10 @@
 // Smart Work Queue: Prioritized action list answering "What should I work on right now?"
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useTimeAllocation, type WorkItem, type WorkItemUrgency, type WorkItemType } from '@/hooks/useTimeAllocation';
+import { useTimeAllocation, type WorkItem, type WorkItemUrgency } from '@/hooks/useTimeAllocation';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 import { 
   Crosshair, 
   Clock, 
@@ -17,7 +18,6 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 
 const URGENCY_STYLES: Record<WorkItemUrgency, { bg: string; text: string; border: string; label: string }> = {
   critical: { bg: 'bg-status-red/10', text: 'text-status-red', border: 'border-l-status-red', label: 'NOW' },
@@ -32,38 +32,16 @@ const TYPE_ICONS: Record<string, typeof Building2> = {
   renewal: RefreshCw,
 };
 
-const FILTER_TILES: { type: WorkItemType | 'all'; label: string; icon: typeof Building2 }[] = [
-  { type: 'all', label: 'All', icon: Crosshair },
-  { type: 'account', label: 'New Logo', icon: Building2 },
-  { type: 'opportunity', label: 'Pipeline', icon: TrendingUp },
-  { type: 'renewal', label: 'Renewal', icon: RefreshCw },
-];
-
 function WorkItemCard({ item, index }: { item: WorkItem; index: number }) {
   const navigate = useNavigate();
-  const { setCurrentRecord } = useLinkedRecordContext();
   const urgencyStyle = URGENCY_STYLES[item.urgency];
   const TypeIcon = TYPE_ICONS[item.type] || Building2;
 
   const formatArr = (v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`;
 
-  const handleClick = () => {
-    // Set the linked record context so the target page highlights/opens this record
-    if (item.type === 'account') {
-      setCurrentRecord({ type: 'account', id: item.id });
-      navigate('/outreach');
-    } else if (item.type === 'opportunity') {
-      setCurrentRecord({ type: 'opportunity', id: item.id });
-      navigate('/outreach');
-    } else if (item.type === 'renewal') {
-      setCurrentRecord({ type: 'renewal', id: item.id });
-      navigate('/renewals');
-    }
-  };
-
   return (
     <button
-      onClick={handleClick}
+      onClick={() => navigate(item.route)}
       className={cn(
         "w-full flex items-start gap-3 p-3 rounded-lg border-l-[3px] border border-border/50 transition-all text-left",
         "hover:bg-muted/30 hover:border-border hover:shadow-sm",
@@ -128,72 +106,45 @@ function WorkItemCard({ item, index }: { item: WorkItem; index: number }) {
   );
 }
 
-function TimeAllocationBar({ activeFilter, onFilterChange }: { 
-  activeFilter: WorkItemType | 'all';
-  onFilterChange: (type: WorkItemType | 'all') => void;
-}) {
+function TimeAllocationBar() {
   const { timeAllocation } = useTimeAllocation();
-
-  const typeMap: Record<string, WorkItemType> = {
-    'New Logo Prospecting': 'account',
-    'Pipeline Advancement': 'opportunity',
-    'Renewal Management': 'renewal',
-  };
 
   return (
     <div className="space-y-2">
-      {timeAllocation.map(t => {
-        const itemType = typeMap[t.label];
-        const isActive = activeFilter === itemType;
-        return (
-          <button
-            key={t.label}
-            onClick={() => onFilterChange(isActive ? 'all' : itemType)}
-            className={cn(
-              "w-full flex items-center gap-3 rounded-md px-1.5 py-1 transition-colors",
-              isActive ? "bg-primary/10" : "hover:bg-muted/50"
-            )}
-          >
-            <span className={cn(
-              "text-[10px] w-28 truncate text-left",
-              isActive ? "text-primary font-semibold" : "text-muted-foreground"
-            )}>{t.label}</span>
-            <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-all",
-                  t.status === 'on-track' ? "bg-status-green" :
-                  t.status === 'over' ? "bg-status-yellow" : "bg-status-red"
-                )}
-                style={{ width: `${Math.min(100, t.actualPercent)}%` }}
-              />
-            </div>
-            <span className={cn(
-              "text-[10px] font-mono w-14 text-right",
-              t.status === 'on-track' ? "text-status-green" :
-              t.status === 'over' ? "text-status-yellow" : "text-status-red"
-            )}>
-              {t.actualPercent}% / {t.targetPercent}%
-            </span>
-          </button>
-        );
-      })}
+      {timeAllocation.map(t => (
+        <div key={t.label} className="flex items-center gap-3">
+          <span className="text-[10px] text-muted-foreground w-28 truncate">{t.label}</span>
+          <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all",
+                t.status === 'on-track' ? "bg-status-green" :
+                t.status === 'over' ? "bg-status-yellow" : "bg-status-red"
+              )}
+              style={{ width: `${Math.min(100, t.actualPercent)}%` }}
+            />
+          </div>
+          <span className={cn(
+            "text-[10px] font-mono w-14 text-right",
+            t.status === 'on-track' ? "text-status-green" :
+            t.status === 'over' ? "text-status-yellow" : "text-status-red"
+          )}>
+            {t.actualPercent}% / {t.targetPercent}%
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
 
 export function SmartWorkQueue() {
-  const { topWorkItems, workQueue, totalArrAtRisk } = useTimeAllocation();
-  const [filter, setFilter] = useState<WorkItemType | 'all'>('all');
-
-  const filteredItems = filter === 'all' 
-    ? topWorkItems 
-    : workQueue.filter(w => w.type === filter).slice(0, 10);
+  const { topWorkItems, totalArrAtRisk } = useTimeAllocation();
+  const navigate = useNavigate();
 
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
 
-  if (workQueue.length === 0) {
+  if (topWorkItems.length === 0) {
     return (
       <Card className="p-4">
         <div className="flex items-center gap-2 mb-2">
@@ -205,7 +156,7 @@ export function SmartWorkQueue() {
     );
   }
 
-  const criticalCount = filteredItems.filter(w => w.urgency === 'critical').length;
+  const criticalCount = topWorkItems.filter(w => w.urgency === 'critical').length;
 
   return (
     <Card className="p-4">
@@ -229,46 +180,16 @@ export function SmartWorkQueue() {
         )}
       </div>
 
-      {/* Filter tiles */}
-      <div className="flex gap-1.5 mb-3">
-        {FILTER_TILES.map(tile => {
-          const isActive = filter === tile.type;
-          const count = tile.type === 'all' ? workQueue.length : workQueue.filter(w => w.type === tile.type).length;
-          return (
-            <button
-              key={tile.type}
-              onClick={() => setFilter(tile.type)}
-              className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-colors",
-                isActive
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-card border-border hover:bg-muted text-muted-foreground"
-              )}
-            >
-              <tile.icon className="h-3 w-3" />
-              {tile.label}
-              <span className={cn("font-mono", isActive ? "text-primary-foreground/80" : "text-muted-foreground/60")}>
-                {count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Time Allocation - clickable to filter */}
+      {/* Time Allocation */}
       <div className="mb-4">
-        <TimeAllocationBar activeFilter={filter} onFilterChange={setFilter} />
+        <TimeAllocationBar />
       </div>
 
       {/* Work Items */}
       <div className="space-y-2">
-        {filteredItems.length === 0 ? (
-          <p className="text-xs text-muted-foreground py-2">No items in this category.</p>
-        ) : (
-          filteredItems.map((item, i) => (
-            <WorkItemCard key={`${item.type}-${item.id}`} item={item} index={i} />
-          ))
-        )}
+        {topWorkItems.map((item, i) => (
+          <WorkItemCard key={`${item.type}-${item.id}`} item={item} index={i} />
+        ))}
       </div>
     </Card>
   );
