@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { Account } from '@/types';
-import { useAccountEnrichment } from '@/hooks/useAccountEnrichment';
+import { useAccountEnrichment, isEnrichmentStale } from '@/hooks/useAccountEnrichment';
 
 // ── Tier Badge (for table rows) ──────────────────────────
 
@@ -127,6 +127,8 @@ export function EnrichButton({ account, compact = false }: { account: Account; c
 
   if (!account.website) return null;
 
+  const stale = isEnrichmentStale(account);
+
   return (
     <TooltipProvider>
       <Tooltip>
@@ -134,7 +136,11 @@ export function EnrichButton({ account, compact = false }: { account: Account; c
           <Button
             size="icon"
             variant="ghost"
-            className={cn('h-7 w-7', loading && 'animate-spin')}
+            className={cn(
+              'h-7 w-7',
+              loading && 'animate-spin',
+              stale && !loading && 'text-status-yellow'
+            )}
             onClick={(e) => { e.stopPropagation(); enrichAccount(account); }}
             disabled={loading}
           >
@@ -142,7 +148,7 @@ export function EnrichButton({ account, compact = false }: { account: Account; c
           </Button>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
-          {loading ? 'Enriching...' : account.lastEnrichedAt ? 'Re-enrich account' : 'Auto-detect ICP signals'}
+          {loading ? 'Enriching...' : stale ? 'Enrichment is 90+ days old — click to refresh' : account.lastEnrichedAt ? 'Re-enrich account' : 'Auto-detect ICP signals'}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

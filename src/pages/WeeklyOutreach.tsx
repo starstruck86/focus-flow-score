@@ -683,6 +683,10 @@ export default function WeeklyOutreach() {
   const [filterTierAB, setFilterTierAB] = useState(false);
   const [filterMissingCadence, setFilterMissingCadence] = useState(false);
   const [filterStale, setFilterStale] = useState(false);
+  const [filterIcpTier12, setFilterIcpTier12] = useState(false);
+  const [filterTriggered, setFilterTriggered] = useState(false);
+  const [filterHighProbability, setFilterHighProbability] = useState(false);
+  const [filterUnenriched, setFilterUnenriched] = useState(false);
   
   // Active filter chips
   const activeFilters = useMemo(() => {
@@ -692,8 +696,12 @@ export default function WeeklyOutreach() {
     if (filterTierAB) filters.push({ key: 'tierAB', label: 'Tier', value: 'A & B only', onRemove: () => setFilterTierAB(false) });
     if (filterMissingCadence) filters.push({ key: 'cadence', label: 'Cadence', value: 'Missing', onRemove: () => setFilterMissingCadence(false) });
     if (filterStale) filters.push({ key: 'stale', label: 'Stale', value: '7+ days', onRemove: () => setFilterStale(false) });
+    if (filterIcpTier12) filters.push({ key: 'icpTier', label: 'ICP Tier', value: '1 & 2', onRemove: () => setFilterIcpTier12(false) });
+    if (filterTriggered) filters.push({ key: 'triggered', label: 'Triggered', value: 'Yes', onRemove: () => setFilterTriggered(false) });
+    if (filterHighProbability) filters.push({ key: 'highProb', label: 'High Probability', value: 'Yes', onRemove: () => setFilterHighProbability(false) });
+    if (filterUnenriched) filters.push({ key: 'unenriched', label: 'Enrichment', value: 'Not enriched', onRemove: () => setFilterUnenriched(false) });
     return filters;
-  }, [searchQuery, filterTier, filterTierAB, filterMissingCadence, filterStale]);
+  }, [searchQuery, filterTier, filterTierAB, filterMissingCadence, filterStale, filterIcpTier12, filterTriggered, filterHighProbability, filterUnenriched]);
 
   // Collapsed groups - outcomes collapsed by default
   const [collapsedGroups, setCollapsedGroups] = useState<Set<AccountStatus>>(
@@ -897,9 +905,13 @@ export default function WeeklyOutreach() {
       const matchesTierAB = !filterTierAB || account.tier === 'A' || account.tier === 'B';
       const matchesCadence = !filterMissingCadence || !account.cadenceName;
       const matchesStale = !filterStale || !account.lastTouchDate || account.lastTouchDate < staleDate;
-      return matchesSearch && matchesTier && matchesTierAB && matchesCadence && matchesStale;
+      const matchesIcpTier = !filterIcpTier12 || account.lifecycleTier === '1' || account.lifecycleTier === '2';
+      const matchesTriggered = !filterTriggered || account.triggeredAccount;
+      const matchesHighProb = !filterHighProbability || account.highProbabilityBuyer;
+      const matchesUnenriched = !filterUnenriched || !account.lastEnrichedAt;
+      return matchesSearch && matchesTier && matchesTierAB && matchesCadence && matchesStale && matchesIcpTier && matchesTriggered && matchesHighProb && matchesUnenriched;
     });
-  }, [accounts, searchQuery, filterTier, filterTierAB, filterMissingCadence, filterStale]);
+  }, [accounts, searchQuery, filterTier, filterTierAB, filterMissingCadence, filterStale, filterIcpTier12, filterTriggered, filterHighProbability, filterUnenriched]);
 
   // Group & sort accounts by funnel status
   const groupedAccounts = useMemo(() => {
@@ -1039,7 +1051,7 @@ export default function WeeklyOutreach() {
                   </SelectContent>
                 </Select>
                 {/* Quick filter toggles */}
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <Button
                     variant={filterTierAB ? "default" : "outline"}
                     size="sm"
@@ -1063,6 +1075,39 @@ export default function WeeklyOutreach() {
                     onClick={() => setFilterStale(!filterStale)}
                   >
                     Stale 14d+
+                  </Button>
+                  <span className="w-px h-5 bg-border mx-0.5" />
+                  <Button
+                    variant={filterIcpTier12 ? "default" : "outline"}
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setFilterIcpTier12(!filterIcpTier12)}
+                  >
+                    ICP T1/T2
+                  </Button>
+                  <Button
+                    variant={filterHighProbability ? "default" : "outline"}
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setFilterHighProbability(!filterHighProbability)}
+                  >
+                    High Prob
+                  </Button>
+                  <Button
+                    variant={filterTriggered ? "default" : "outline"}
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setFilterTriggered(!filterTriggered)}
+                  >
+                    ⚡ Triggered
+                  </Button>
+                  <Button
+                    variant={filterUnenriched ? "default" : "outline"}
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setFilterUnenriched(!filterUnenriched)}
+                  >
+                    Not Enriched
                   </Button>
                 </div>
               </div>
@@ -1367,7 +1412,7 @@ export default function WeeklyOutreach() {
 
             <FilterChips
               filters={activeFilters}
-              onClearAll={() => { setSearchQuery(''); setFilterTier('all'); setFilterTierAB(false); setFilterMissingCadence(false); setFilterStale(false); }}
+              onClearAll={() => { setSearchQuery(''); setFilterTier('all'); setFilterTierAB(false); setFilterMissingCadence(false); setFilterStale(false); setFilterIcpTier12(false); setFilterTriggered(false); setFilterHighProbability(false); setFilterUnenriched(false); }}
             />
 
             {/* Funnel Grouped View */}
@@ -1387,7 +1432,7 @@ export default function WeeklyOutreach() {
                 title="No matching accounts"
                 description="Try adjusting your filters or search query."
                 actionLabel="Clear Filters"
-                onAction={() => { setSearchQuery(''); setFilterTier('all'); setFilterTierAB(false); setFilterMissingCadence(false); setFilterStale(false); }}
+                onAction={() => { setSearchQuery(''); setFilterTier('all'); setFilterTierAB(false); setFilterMissingCadence(false); setFilterStale(false); setFilterIcpTier12(false); setFilterTriggered(false); setFilterHighProbability(false); setFilterUnenriched(false); }}
               />
             ) : (
               <div className="space-y-2">
