@@ -816,6 +816,11 @@ export default function Settings() {
             </div>
           </TabsContent>
           
+          {/* Notifications Tab */}
+          <TabsContent value="notifications" className="space-y-4">
+            <NotificationSettings />
+          </TabsContent>
+          
           {/* Data Tab */}
           <TabsContent value="data" className="space-y-4">
             {/* Import Section */}
