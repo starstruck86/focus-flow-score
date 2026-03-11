@@ -1,8 +1,14 @@
-// Territory Copilot - streaming chat client
+// Territory Copilot - streaming chat client with auth
+import { supabase } from '@/integrations/supabase/client';
 
-type Msg = { role: "user" | "assistant"; content: string };
+export type CopilotMsg = { role: "user" | "assistant"; content: string };
 
 const COPILOT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/territory-copilot`;
+
+async function getAuthToken(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token || null;
+}
 
 export async function streamCopilot({
   messages,
@@ -11,18 +17,25 @@ export async function streamCopilot({
   onError,
   signal,
 }: {
-  messages: Msg[];
+  messages: CopilotMsg[];
   onDelta: (text: string) => void;
   onDone: () => void;
   onError: (error: string) => void;
   signal?: AbortSignal;
 }) {
   try {
+    const token = await getAuthToken();
+    if (!token) {
+      onError("Not authenticated. Please sign in first.");
+      return;
+    }
+
     const resp = await fetch(COPILOT_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        Authorization: `Bearer ${token}`,
+        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
       },
       body: JSON.stringify({ messages }),
       signal,

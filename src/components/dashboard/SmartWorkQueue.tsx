@@ -17,6 +17,8 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useCopilot } from '@/contexts/CopilotContext';
+import { Sparkles } from 'lucide-react';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 
 const URGENCY_STYLES: Record<WorkItemUrgency, { bg: string; text: string; border: string; label: string }> = {
@@ -42,6 +44,7 @@ const FILTER_TILES: { type: WorkItemType | 'all'; label: string; icon: typeof Bu
 function WorkItemCard({ item, index }: { item: WorkItem; index: number }) {
   const navigate = useNavigate();
   const { setCurrentRecord } = useLinkedRecordContext();
+  const { ask } = useCopilot();
   const urgencyStyle = URGENCY_STYLES[item.urgency];
   const TypeIcon = TYPE_ICONS[item.type] || Building2;
 
@@ -122,6 +125,16 @@ function WorkItemCard({ item, index }: { item: WorkItem; index: number }) {
               {item.daysSinceLastTouch}d ago
             </span>
           )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              ask(`Tell me everything I need to know about ${item.name}. What signals exist, what's the risk, and what should I do next?`);
+            }}
+            className="text-[10px] text-primary/60 hover:text-primary flex items-center gap-0.5 transition-colors"
+          >
+            <Sparkles className="h-2.5 w-2.5" />
+            Ask
+          </button>
         </div>
       </div>
     </button>
