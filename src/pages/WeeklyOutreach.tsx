@@ -85,6 +85,7 @@ import { EmptyState } from '@/components/table/EmptyState';
 import { FilterChips, type ActiveFilter } from '@/components/table/FilterChips';
 import { useUndoDelete } from '@/hooks/useUndoDelete';
 import { emitSaveStatus } from '@/components/SaveIndicator';
+import { TouchLogButtons } from '@/components/TouchLogButtons';
 import { 
   sortAccountsDefault, 
   applySortWithFallback,
