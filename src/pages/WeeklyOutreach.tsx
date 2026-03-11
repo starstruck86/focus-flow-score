@@ -1051,7 +1051,7 @@ export default function WeeklyOutreach() {
                   </SelectContent>
                 </Select>
                 {/* Quick filter toggles */}
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <Button
                     variant={filterTierAB ? "default" : "outline"}
                     size="sm"
@@ -1075,6 +1075,39 @@ export default function WeeklyOutreach() {
                     onClick={() => setFilterStale(!filterStale)}
                   >
                     Stale 14d+
+                  </Button>
+                  <span className="w-px h-5 bg-border mx-0.5" />
+                  <Button
+                    variant={filterIcpTier12 ? "default" : "outline"}
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setFilterIcpTier12(!filterIcpTier12)}
+                  >
+                    ICP T1/T2
+                  </Button>
+                  <Button
+                    variant={filterHighProbability ? "default" : "outline"}
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setFilterHighProbability(!filterHighProbability)}
+                  >
+                    High Prob
+                  </Button>
+                  <Button
+                    variant={filterTriggered ? "default" : "outline"}
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setFilterTriggered(!filterTriggered)}
+                  >
+                    ⚡ Triggered
+                  </Button>
+                  <Button
+                    variant={filterUnenriched ? "default" : "outline"}
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setFilterUnenriched(!filterUnenriched)}
+                  >
+                    Not Enriched
                   </Button>
                 </div>
               </div>
