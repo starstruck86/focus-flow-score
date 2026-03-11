@@ -160,8 +160,18 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
       },
     },
     {
+      id: 'quick-log',
+      label: 'Quick Log',
+      icon: Bolt,
+      shortcut: 'Q',
+      onClick: () => {
+        setShowQuickLog(true);
+        setIsExpanded(false);
+      },
+    },
+    {
       id: 'log-day',
-      label: hasCheckedInToday ? 'Edit Today' : 'Log Day',
+      label: hasCheckedInToday ? 'Edit Today' : 'Full Check-In',
       icon: ClipboardCheck,
       variant: 'primary',
       onClick: () => {
