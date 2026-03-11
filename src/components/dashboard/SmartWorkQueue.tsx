@@ -17,6 +17,8 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useCopilot } from '@/contexts/CopilotContext';
+import { Sparkles } from 'lucide-react';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 
 const URGENCY_STYLES: Record<WorkItemUrgency, { bg: string; text: string; border: string; label: string }> = {
