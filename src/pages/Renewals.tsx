@@ -218,54 +218,63 @@ export default function Renewals() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Deep-link highlight from Work Queue
-  const highlightConsumedRef = useRef<string | null>(null);
+  const highlightTargetRef = useRef<string | null>(null);
+  const scrollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Step 1: Capture the highlight ID from URL params (runs once on navigation)
   useEffect(() => {
     const id = searchParams.get('highlight');
     const tab = searchParams.get('tab');
-    
-    if (id && highlightConsumedRef.current !== id) {
-      highlightConsumedRef.current = id;
+    if (id) {
+      highlightTargetRef.current = id;
       setHighlightId(id);
-      
-      // Clean up URL
+      // Clean up URL params
       const newParams = new URLSearchParams(searchParams);
       newParams.delete('highlight');
       newParams.delete('tab');
       setSearchParams(newParams, { replace: true });
-
-      // Determine if this is a renewal or opportunity
-      const isRenewal = renewals.some(r => r.id === id);
-      if (isRenewal) {
-        setActiveTab('renewals');
-        setExpandedRenewalId(id);
-      } else {
-        setActiveTab('opportunities');
-      }
-
-      // Retry scroll until element appears (max 3s)
-      let attempts = 0;
-      const selector = isRenewal ? `[data-renewal-id="${id}"]` : `[data-opp-id="${id}"]`;
-      const scrollInterval = setInterval(() => {
-        const el = document.querySelector(selector);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          clearInterval(scrollInterval);
-        }
-        if (++attempts > 30) clearInterval(scrollInterval);
-      }, 100);
-
-      const timer = setTimeout(() => setHighlightId(null), 4000);
-      return () => { clearTimeout(timer); clearInterval(scrollInterval); };
-    }
-    
-    if (tab && !id) {
+    } else if (tab) {
       setActiveTab(tab);
       const newParams = new URLSearchParams(searchParams);
       newParams.delete('tab');
       setSearchParams(newParams, { replace: true });
     }
-  }, [searchParams, setSearchParams, renewals]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Step 2: Once renewals are available, scroll to the target
+  useEffect(() => {
+    const id = highlightTargetRef.current;
+    if (!id || renewals.length === 0) return;
+    highlightTargetRef.current = null; // consume
+
+    // Clear any prior scroll attempts
+    if (scrollIntervalRef.current) clearInterval(scrollIntervalRef.current);
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+
+    const isRenewal = renewals.some(r => r.id === id);
+    if (isRenewal) {
+      setActiveTab('renewals');
+      setExpandedRenewalId(id);
+    } else {
+      setActiveTab('opportunities');
+    }
+
+    // Retry scroll until element appears (max 3s)
+    let attempts = 0;
+    const selector = isRenewal ? `[data-renewal-id="${id}"]` : `[data-opp-id="${id}"]`;
+    scrollIntervalRef.current = setInterval(() => {
+      const el = document.querySelector(selector);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (scrollIntervalRef.current) clearInterval(scrollIntervalRef.current);
+      }
+      if (++attempts > 30 && scrollIntervalRef.current) clearInterval(scrollIntervalRef.current);
+    }, 100);
+
+    highlightTimerRef.current = setTimeout(() => setHighlightId(null), 4000);
+  }, [renewals]);
   const [newRenewal, setNewRenewal] = useState<Partial<Renewal>>({
     healthStatus: 'green',
     autoRenew: false,
