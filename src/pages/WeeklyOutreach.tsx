@@ -969,7 +969,7 @@ export default function WeeklyOutreach() {
 
   return (
     <Layout>
-      <div className="p-6 lg:p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         {/* Quick Links Bar */}
         <div className="mb-6 space-y-3">
           <div className="flex flex-wrap gap-2">
