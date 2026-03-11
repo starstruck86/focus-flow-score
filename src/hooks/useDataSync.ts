@@ -274,23 +274,27 @@ export function useDataSync() {
         const dbRenewals = (renewalsRes.data || []).map(dbRenewalToStore);
 
         const store = useStore.getState();
+        
+        // UUID validation — filter out non-UUID local-only items (seed data)
+        const isUUID = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
         if (dbAccounts.length > 0 || dbOpps.length > 0 || dbRenewals.length > 0) {
           const dbAccountIds = new Set(dbAccounts.map(a => a.id));
           const dbOppIds = new Set(dbOpps.map(o => o.id));
           const dbRenewalIds = new Set(dbRenewals.map(r => r.id));
 
+          // Only merge store items that have valid UUIDs and aren't already in DB
           const mergedAccounts = [
             ...dbAccounts,
-            ...store.accounts.filter(a => !dbAccountIds.has(a.id)),
+            ...store.accounts.filter(a => !dbAccountIds.has(a.id) && isUUID(a.id)),
           ];
           const mergedOpps = [
             ...dbOpps,
-            ...store.opportunities.filter(o => !dbOppIds.has(o.id)),
+            ...store.opportunities.filter(o => !dbOppIds.has(o.id) && isUUID(o.id)),
           ];
           const mergedRenewals = [
             ...dbRenewals,
-            ...store.renewals.filter(r => !dbRenewalIds.has(r.id)),
+            ...store.renewals.filter(r => !dbRenewalIds.has(r.id) && isUUID(r.id)),
           ];
 
           useStore.setState({
