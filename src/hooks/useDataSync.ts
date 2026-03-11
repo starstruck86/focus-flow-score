@@ -275,8 +275,19 @@ export function useDataSync() {
 
         const store = useStore.getState();
         
-        // UUID validation — filter out non-UUID local-only items (seed data)
         const isUUID = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+        
+        // Migrate non-UUID local items by assigning new UUIDs so they sync to DB
+        const genUUID = () => typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`.replace(/\./g, '');
+        
+        const migrateId = <T extends { id: string }>(item: T): T => {
+          if (isUUID(item.id)) return item;
+          return { ...item, id: genUUID() };
+        };
+        
+        const migratedAccounts = store.accounts.map(migrateId);
+        const migratedOpps = store.opportunities.map(migrateId);
+        const migratedRenewals = store.renewals.map(migrateId);
 
         if (dbAccounts.length > 0 || dbOpps.length > 0 || dbRenewals.length > 0) {
           const dbAccountIds = new Set(dbAccounts.map(a => a.id));
