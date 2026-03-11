@@ -648,7 +648,8 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
       </CollapsibleContent>
     </Collapsible>
   );
-}
+});
+FunnelGroupSection.displayName = 'FunnelGroupSection';
 
 export default function WeeklyOutreach() {
   const { accounts, addAccount, updateAccount: rawUpdateAccount, deleteAccount } = useStore();
