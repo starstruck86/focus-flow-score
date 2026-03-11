@@ -1,17 +1,54 @@
-// Territory Copilot — ⌘K command bar for territory intelligence Q&A
+// Territory Copilot — ⌘K command bar with Quick / Deep Research / Meeting Prep modes
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Sparkles, Send, Loader2, MessageSquare, ArrowRight, Zap, RotateCcw } from 'lucide-react';
+import { Sparkles, Send, Loader2, MessageSquare, ArrowRight, Zap, RotateCcw, Search, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { streamCopilot, SUGGESTED_QUESTIONS, type CopilotMsg } from '@/lib/territoryCopilot';
+import { streamCopilot, SUGGESTED_QUESTIONS, MODE_CONFIG, type CopilotMsg, type CopilotMode } from '@/lib/territoryCopilot';
 import { useCopilot } from '@/contexts/CopilotContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+
+const MODE_ICONS: Record<CopilotMode, typeof Zap> = {
+  quick: Zap,
+  deep: Search,
+  meeting: Calendar,
+};
+
+function ModeSelector({ mode, onChange, disabled }: { mode: CopilotMode; onChange: (m: CopilotMode) => void; disabled: boolean }) {
+  return (
+    <div className="flex gap-1">
+      {(Object.keys(MODE_CONFIG) as CopilotMode[]).map((m) => {
+        const config = MODE_CONFIG[m];
+        const Icon = MODE_ICONS[m];
+        const isActive = mode === m;
+        return (
+          <button
+            key={m}
+            onClick={() => onChange(m)}
+            disabled={disabled}
+            className={cn(
+              "flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium border transition-all",
+              isActive
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-foreground/20",
+              disabled && "opacity-50 pointer-events-none"
+            )}
+            title={config.description}
+          >
+            <Icon className="h-3 w-3" />
+            {config.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function CopilotDialog() {
   const { state, setOpen, clearInitialQuestion } = useCopilot();
   const [messages, setMessages] = useState<CopilotMsg[]>([]);
   const [input, setInput] = useState('');
+  const [mode, setMode] = useState<CopilotMode>('quick');
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -19,16 +56,16 @@ function CopilotDialog() {
   const abortRef = useRef<AbortController | null>(null);
   const processedQuestionRef = useRef<string | null>(null);
 
-  // Focus input on open
   useEffect(() => {
     if (state.open) {
       setTimeout(() => inputRef.current?.focus(), 100);
-      // Auto-send initial question if provided and not already processed
       if (state.initialQuestion && processedQuestionRef.current !== state.initialQuestion) {
         processedQuestionRef.current = state.initialQuestion;
-        // Reset messages for new context question
         setMessages([]);
-        setTimeout(() => sendMessage(state.initialQuestion!), 200);
+        // Auto-detect mode from initial question
+        const detectedMode = state.mode || 'quick';
+        setMode(detectedMode);
+        setTimeout(() => sendMessage(state.initialQuestion!, detectedMode), 200);
         clearInitialQuestion();
       }
     } else {
@@ -37,22 +74,20 @@ function CopilotDialog() {
     }
   }, [state.open, state.initialQuestion]);
 
-  // Auto-scroll
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
     }
   }, [messages]);
 
-  const sendMessage = useCallback(async (text: string) => {
+  const sendMessage = useCallback(async (text: string, overrideMode?: CopilotMode) => {
     if (!text.trim() || isStreaming) return;
     
+    const activeMode = overrideMode || mode;
     setError(null);
     const userMsg: CopilotMsg = { role: 'user', content: text.trim() };
     setMessages(prev => {
       const newMsgs = [...prev, userMsg];
-
-      // Start streaming with the new messages
       setIsStreaming(true);
       const abort = new AbortController();
       abortRef.current = abort;
@@ -60,6 +95,8 @@ function CopilotDialog() {
       let assistantText = '';
       streamCopilot({
         messages: newMsgs,
+        mode: activeMode,
+        accountId: state.accountId,
         onDelta: (chunk) => {
           assistantText += chunk;
           setMessages(p => {
@@ -81,7 +118,7 @@ function CopilotDialog() {
       return newMsgs;
     });
     setInput('');
-  }, [isStreaming]);
+  }, [isStreaming, mode, state.accountId]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,39 +133,58 @@ function CopilotDialog() {
   };
 
   const showSuggestions = messages.length === 0 && !isStreaming;
+  const filteredSuggestions = SUGGESTED_QUESTIONS.filter(q => mode === 'quick' || q.mode === mode).slice(0, 6);
 
   return (
     <Dialog open={state.open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-[640px] p-0 gap-0 max-h-[80vh] flex flex-col overflow-hidden">
+      <DialogContent className="sm:max-w-[680px] p-0 gap-0 max-h-[85vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border shrink-0">
           <Sparkles className="h-4 w-4 text-primary" />
-          <span className="font-display text-sm font-bold flex-1">Territory Intelligence</span>
+          <span className="font-display text-sm font-bold">Territory Intelligence</span>
+          <div className="flex-1" />
+          <ModeSelector mode={mode} onChange={setMode} disabled={isStreaming} />
           {messages.length > 0 && (
-            <button onClick={handleClear} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+            <button onClick={handleClear} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors ml-2">
               <RotateCcw className="h-3 w-3" />
-              New chat
             </button>
           )}
         </div>
 
+        {/* Mode indicator */}
+        {mode !== 'quick' && (
+          <div className={cn(
+            "px-4 py-1.5 text-[10px] font-medium border-b border-border flex items-center gap-1.5",
+            mode === 'deep' ? "bg-primary/5 text-primary" : "bg-accent/30 text-accent-foreground"
+          )}>
+            {MODE_CONFIG[mode].icon} {MODE_CONFIG[mode].description}
+            {mode === 'deep' && " — uses Perplexity for live web search"}
+            {mode === 'meeting' && " — includes contacts, news & talking points"}
+          </div>
+        )}
+
         {/* Messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[200px] max-h-[50vh]">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[200px] max-h-[55vh]">
           {showSuggestions && (
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Zap className="h-3 w-3 text-primary" />
-                Ask anything about your territory, accounts, pipeline, or what to do next.
+                {mode === 'quick' && "Ask anything about your territory, accounts, or pipeline."}
+                {mode === 'deep' && "Deep research combines your CRM data with live web intelligence."}
+                {mode === 'meeting' && "Get a comprehensive meeting brief with contacts and talking points."}
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {SUGGESTED_QUESTIONS.slice(0, 6).map((q) => (
+                {filteredSuggestions.map((q) => (
                   <button
-                    key={q}
-                    onClick={() => sendMessage(q)}
+                    key={q.text}
+                    onClick={() => sendMessage(q.text, q.mode)}
                     className="flex items-center gap-2 text-left p-2.5 rounded-lg border border-border hover:border-primary/30 hover:bg-muted/30 transition-all group text-xs"
                   >
                     <MessageSquare className="h-3 w-3 text-muted-foreground shrink-0" />
-                    <span className="flex-1 text-foreground">{q}</span>
+                    <span className="flex-1 text-foreground">{q.text}</span>
+                    {q.mode !== 'quick' && (
+                      <span className="text-[9px] text-primary/60 shrink-0">{MODE_CONFIG[q.mode].icon}</span>
+                    )}
                     <ArrowRight className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                   </button>
                 ))}
@@ -147,7 +203,7 @@ function CopilotDialog() {
                 {msg.role === 'user' ? (
                   <p className="text-sm">{msg.content}</p>
                 ) : (
-                  <div className="prose prose-sm dark:prose-invert max-w-none [&_p]:text-sm [&_li]:text-sm [&_strong]:text-foreground [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_ul]:my-1 [&_ol]:my-1 [&_p]:my-1">
+                  <div className="prose prose-sm dark:prose-invert max-w-none [&_p]:text-sm [&_li]:text-sm [&_strong]:text-foreground [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_ul]:my-1 [&_ol]:my-1 [&_p]:my-1 [&_a]:text-primary [&_a]:underline">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {msg.content}
                     </ReactMarkdown>
@@ -160,7 +216,11 @@ function CopilotDialog() {
           {isStreaming && messages[messages.length - 1]?.role !== 'assistant' && (
             <div className="flex items-center gap-2 text-muted-foreground">
               <Loader2 className="h-3 w-3 animate-spin" />
-              <span className="text-xs">Analyzing your territory...</span>
+              <span className="text-xs">
+                {mode === 'quick' && "Analyzing your territory..."}
+                {mode === 'deep' && "Running deep research (CRM + web)..."}
+                {mode === 'meeting' && "Building your meeting brief..."}
+              </span>
             </div>
           )}
 
@@ -177,7 +237,11 @@ function CopilotDialog() {
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about your territory..."
+            placeholder={
+              mode === 'quick' ? "Ask about your territory..." :
+              mode === 'deep' ? "What do you want to research?" :
+              "Which account's meeting should I prep?"
+            }
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             disabled={isStreaming}
           />
@@ -194,11 +258,9 @@ function CopilotDialog() {
   );
 }
 
-// Exported component with trigger button + global keyboard shortcut
 export function TerritoryCopilot() {
-  const { open: openCopilot, setOpen } = useCopilot();
+  const { open: openCopilot } = useCopilot();
 
-  // ⌘K shortcut
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -220,7 +282,6 @@ export function TerritoryCopilot() {
         <span className="hidden sm:inline">Ask</span>
         <kbd className="hidden sm:inline-flex h-4 items-center rounded bg-primary/10 px-1 font-mono text-[10px]">⌘K</kbd>
       </button>
-
       <CopilotDialog />
     </>
   );
