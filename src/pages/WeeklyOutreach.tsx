@@ -446,7 +446,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
           <div className="px-4 py-3 text-xs text-muted-foreground italic">No accounts in this stage.</div>
         ) : (
           <div className="metric-card overflow-x-auto p-0 mt-1 mb-3">
-            <Table className="min-w-[1200px]">
+            <Table className="min-w-[900px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                       <TableHead className="w-[3%]">
