@@ -1434,7 +1434,7 @@ export default function WeeklyOutreach() {
             />
 
             {/* Funnel Grouped View */}
-            {accounts.length === 0 ? (
+            {newLogoAccounts.length === 0 ? (
               <EmptyState
                 icon={Users}
                 title="No accounts yet"
