@@ -724,7 +724,7 @@ export default function Renewals() {
           })}
         </div>
         
-        <Tabs defaultValue="renewals" className="space-y-4">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList>
             <TabsTrigger value="renewals">Renewals</TabsTrigger>
             <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
