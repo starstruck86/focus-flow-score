@@ -272,7 +272,8 @@ const StalenessAlert = memo(function StalenessAlert({ accounts }: { accounts: Ac
       )}
     </div>
   );
-}
+});
+StalenessAlert.displayName = 'StalenessAlert';
 
 // Stage Summary Component for Opportunities
 function OpportunitiesStageSummary() {
