@@ -80,6 +80,13 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
           setShowAddTask(true);
         }
       }
+      // Q for quick log
+      if (e.key === 'q' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const target = e.target as HTMLElement;
+        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && !target.isContentEditable) {
+          e.preventDefault();
+          setShowQuickLog(true);
+        }
       // Cmd/Ctrl + K for FAB menu
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
