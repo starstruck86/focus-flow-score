@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { StreakChip } from '@/components/StreakChip';
+import { LifecycleTierBadge, IcpScorePill, EnrichButton, SignalDetailPanel } from '@/components/LifecycleIntelligence';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -75,14 +76,17 @@ import { computeRenewalRiskScore } from '@/hooks/useTimeAllocation';
 
 // ===== RENEWAL URGENCY HEADER =====
 function RenewalUrgencyHeader({ renewals, formatCurrency }: { renewals: Renewal[]; formatCurrency: (v: number) => string }) {
-  const nearest = renewals.filter(r => r.daysToRenewal > 0).sort((a, b) => a.daysToRenewal - b.daysToRenewal)[0];
-  const atRiskArr = renewals
-    .filter(r => r.churnRisk === 'high' || r.churnRisk === 'certain' || r.healthStatus === 'red')
+  // Exclude churning/churned renewals from urgency alerts
+  const activeRenewals = renewals.filter(r => r.churnRisk !== 'certain');
+  
+  const nearest = activeRenewals.filter(r => r.daysToRenewal > 0).sort((a, b) => a.daysToRenewal - b.daysToRenewal)[0];
+  const atRiskArr = activeRenewals
+    .filter(r => r.churnRisk === 'high' || r.healthStatus === 'red')
     .reduce((sum, r) => sum + r.arr, 0);
-  const next30Arr = renewals
+  const next30Arr = activeRenewals
     .filter(r => r.daysToRenewal >= 0 && r.daysToRenewal <= 30)
     .reduce((sum, r) => sum + r.arr, 0);
-  const missingNextStep = renewals.filter(r => r.daysToRenewal <= 90 && !r.nextStep).length;
+  const missingNextStep = activeRenewals.filter(r => r.daysToRenewal <= 90 && !r.nextStep).length;
 
   if (!nearest && atRiskArr === 0) return null;
 
@@ -162,15 +166,19 @@ const VIEWS = [
   { value: '61-90', label: '61-90 Days' },
   { value: '91-180', label: '91-180 Days' },
   { value: 'at-risk', label: 'At Risk' },
+  { value: 'tier-1', label: 'Tier 1 (High Fit)' },
+  { value: 'tier-2', label: 'Tier 2' },
+  { value: 'unenriched', label: 'Not Enriched' },
   { value: 'auto-renew', label: 'Auto-Renew' },
   { value: 'no-next-step', label: 'No Next Step' },
   { value: 'missing-planhat', label: 'Missing Planhat' },
   { value: 'missing-agreement', label: 'Missing Agreement' },
+  { value: 'churning', label: 'Churning / OOB' },
 ];
 
 
 export default function Renewals() {
-  const { renewals, addRenewal, updateRenewal, deleteRenewal, createMissingRenewalOpportunities, logCall, logManualEmail, logMeetingHeld } = useStore();
+  const { renewals, accounts, addRenewal, updateRenewal, deleteRenewal, createMissingRenewalOpportunities, logCall, logManualEmail, logMeetingHeld } = useStore();
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentView, setCurrentView] = useState('all');
@@ -182,6 +190,18 @@ export default function Renewals() {
   
   // Sort hook for renewals table
   const { sortConfig: renewalSortConfig, handleSort: handleRenewalSort } = useTableSort();
+  
+  // Account lookup map for ICP intelligence
+  const accountMap = useMemo(() => {
+    const map = new Map<string, typeof accounts[number]>();
+    accounts.forEach(a => map.set(a.id, a));
+    return map;
+  }, [accounts]);
+  const getAccountForRenewal = useCallback((renewal: Renewal) => {
+    if (renewal.accountId) return accountMap.get(renewal.accountId);
+    // Fallback: match by name
+    return accounts.find(a => a.name.toLowerCase() === renewal.accountName.toLowerCase());
+  }, [accountMap, accounts]);
   
   // Custom fields for summary table
   const { getFieldsForTab } = useCustomFields();
@@ -481,6 +501,26 @@ export default function Renewals() {
       case 'at-risk':
         matchesView = renewal.healthStatus === 'red' || renewal.healthStatus === 'yellow';
         break;
+      case 'tier-1': {
+        const acct = getAccountForRenewal(renewal);
+        const tier = acct?.tierOverride || acct?.lifecycleTier;
+        matchesView = tier === '1';
+        break;
+      }
+      case 'tier-2': {
+        const acct = getAccountForRenewal(renewal);
+        const tier = acct?.tierOverride || acct?.lifecycleTier;
+        matchesView = tier === '2';
+        break;
+      }
+      case 'unenriched': {
+        const acct = getAccountForRenewal(renewal);
+        matchesView = !acct?.lastEnrichedAt && !!acct?.website;
+        break;
+      }
+      case 'churning':
+        matchesView = renewal.churnRisk === 'certain';
+        break;
       case 'auto-renew':
         matchesView = renewal.autoRenew;
         break;
@@ -660,6 +700,8 @@ export default function Renewals() {
                 { key: 'renewalDue', label: 'Renewal Date' },
                 { key: 'churnRisk', label: 'Churn Risk' },
                 { key: 'arr', label: 'ARR' },
+                { key: 'icpScore', label: 'ICP Score' },
+                { key: 'icpTier', label: 'ICP Tier' },
                 { key: 'csm', label: 'CSM' },
                 { key: 'planhat', label: 'Planhat' },
                 { key: 'agreement', label: 'Agreement' },
@@ -1000,11 +1042,13 @@ export default function Renewals() {
                       >
                         ARR
                       </SortableHeader>
+                      <TableHead className="w-[6%]">ICP Score</TableHead>
+                      <TableHead className="w-[5%]">Tier</TableHead>
                       <SortableHeader 
                         sortKey="csm" 
                         currentSort={renewalSortConfig} 
                         onSort={handleRenewalSort}
-                        className="w-[10%]"
+                        className="w-[8%]"
                       >
                         CSM
                       </SortableHeader>
@@ -1083,6 +1127,27 @@ export default function Renewals() {
                               format="currency"
                             />
                           </TableCell>
+                          {/* ICP Score + Tier from linked account */}
+                          {(() => {
+                            const acct = getAccountForRenewal(renewal);
+                            return (
+                              <>
+                                <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                                  {acct ? (
+                                    <div className="flex items-center gap-1">
+                                      <IcpScorePill account={acct} />
+                                      <EnrichButton account={acct} />
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                                  {acct ? <LifecycleTierBadge account={acct} /> : <span className="text-xs text-muted-foreground">—</span>}
+                                </TableCell>
+                              </>
+                            );
+                          })()}
                           <TableCell className="align-top py-3">
                             <EditableTextCell
                               value={renewal.csm || ''}
@@ -1141,29 +1206,36 @@ export default function Renewals() {
                         {expandedRenewalId === renewal.id && (
                           <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
                             <TableCell colSpan={99} className="pt-0 pb-3">
-                              <RenewalDetailsField
-                                renewalId={renewal.id}
-                                contacts={renewal.accountContacts || []}
-                                onChange={(contacts) => updateRenewal(renewal.id, { accountContacts: contacts })}
-                                companyNotes={renewal.notes || ''}
-                                onCompanyNotesChange={(notes) => updateRenewal(renewal.id, { notes })}
-                                entitlements={renewal.entitlements || ''}
-                                onEntitlementsChange={(v) => updateRenewal(renewal.id, { entitlements: v })}
-                                usage={renewal.usage || ''}
-                                onUsageChange={(v) => updateRenewal(renewal.id, { usage: v })}
-                                term={renewal.term || ''}
-                                onTermChange={(v) => updateRenewal(renewal.id, { term: v })}
-                                planhatLink={renewal.planhatLink || ''}
-                                onPlanhatLinkChange={(v) => updateRenewal(renewal.id, { planhatLink: v })}
-                                currentAgreementLink={renewal.currentAgreementLink || ''}
-                                onCurrentAgreementLinkChange={(v) => updateRenewal(renewal.id, { currentAgreementLink: v })}
-                                product={renewal.product || ''}
-                                onProductChange={(v) => updateRenewal(renewal.id, { product: v })}
-                                csNotes={renewal.csNotes || ''}
-                                onCsNotesChange={(v) => updateRenewal(renewal.id, { csNotes: v })}
-                                autoRenew={renewal.autoRenew}
-                                onAutoRenewChange={(v) => updateRenewal(renewal.id, { autoRenew: v })}
-                              />
+                              <div className="space-y-3">
+                                {/* ICP Intelligence Panel */}
+                                {(() => {
+                                  const acct = getAccountForRenewal(renewal);
+                                  return acct ? <SignalDetailPanel account={acct} /> : null;
+                                })()}
+                                <RenewalDetailsField
+                                  renewalId={renewal.id}
+                                  contacts={renewal.accountContacts || []}
+                                  onChange={(contacts) => updateRenewal(renewal.id, { accountContacts: contacts })}
+                                  companyNotes={renewal.notes || ''}
+                                  onCompanyNotesChange={(notes) => updateRenewal(renewal.id, { notes })}
+                                  entitlements={renewal.entitlements || ''}
+                                  onEntitlementsChange={(v) => updateRenewal(renewal.id, { entitlements: v })}
+                                  usage={renewal.usage || ''}
+                                  onUsageChange={(v) => updateRenewal(renewal.id, { usage: v })}
+                                  term={renewal.term || ''}
+                                  onTermChange={(v) => updateRenewal(renewal.id, { term: v })}
+                                  planhatLink={renewal.planhatLink || ''}
+                                  onPlanhatLinkChange={(v) => updateRenewal(renewal.id, { planhatLink: v })}
+                                  currentAgreementLink={renewal.currentAgreementLink || ''}
+                                  onCurrentAgreementLinkChange={(v) => updateRenewal(renewal.id, { currentAgreementLink: v })}
+                                  product={renewal.product || ''}
+                                  onProductChange={(v) => updateRenewal(renewal.id, { product: v })}
+                                  csNotes={renewal.csNotes || ''}
+                                  onCsNotesChange={(v) => updateRenewal(renewal.id, { csNotes: v })}
+                                  autoRenew={renewal.autoRenew}
+                                  onAutoRenewChange={(v) => updateRenewal(renewal.id, { autoRenew: v })}
+                                />
+                              </div>
                             </TableCell>
                           </TableRow>
                         )}
