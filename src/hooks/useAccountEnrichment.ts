@@ -116,27 +116,17 @@ export function useAccountEnrichment() {
   }, [enrichAccount]);
 
   // Auto-enrich when a website URL is added or changed
-  // Only track website changes — ignore other account field updates to prevent loops
-  const accountWebsites = accounts.map(a => `${a.id}:${a.website || ''}`).join('|');
-  
   useEffect(() => {
     const prev = prevWebsitesRef.current;
-    // Skip on first render (just populate ref)
-    if (prev.size === 0) {
-      const newMap = new Map<string, string | undefined>();
-      accounts.forEach(a => newMap.set(a.id, a.website));
-      prevWebsitesRef.current = newMap;
-      return;
-    }
-
     const toEnrich: Account[] = [];
 
     for (const account of accounts) {
       const prevUrl = prev.get(account.id);
       const currentUrl = account.website;
 
-      // Only trigger if website specifically changed (not other fields)
+      // Trigger if: URL was just set (from empty) or changed to a different URL
       if (currentUrl && currentUrl !== prevUrl && !enrichingIds.has(account.id)) {
+        // Only auto-enrich if not recently enriched (within 5 minutes)
         const recentlyEnriched = account.lastEnrichedAt && 
           (Date.now() - new Date(account.lastEnrichedAt).getTime()) < 300000;
         if (!recentlyEnriched) {
@@ -150,13 +140,14 @@ export function useAccountEnrichment() {
     accounts.forEach(a => newMap.set(a.id, a.website));
     prevWebsitesRef.current = newMap;
 
+    // Fire enrichments (don't await, fire and forget)
     if (toEnrich.length > 0) {
+      // Stagger to avoid hammering the API
       toEnrich.forEach((account, i) => {
         setTimeout(() => enrichAccount(account), i * 1500);
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountWebsites]);
+  }, [accounts, enrichAccount, enrichingIds]);
 
   return {
     enrichAccount,
