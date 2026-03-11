@@ -12,6 +12,8 @@ import {
   Search,
   MoreHorizontal,
 } from 'lucide-react';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
+import { SaveIndicator } from '@/components/SaveIndicator';
 import { cn } from '@/lib/utils';
 import { FocusTimer } from './FocusTimer';
 import { useAuth } from '@/contexts/AuthContext';
@@ -227,6 +229,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               )}
             </div>
             <div className="flex items-center gap-2">
+              <SaveIndicator />
               <GlobalSearch />
               <ThemeToggle />
               <WorkdayCheckInButton />
@@ -234,6 +237,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </header>
 
           {/* Main Content */}
+          <Breadcrumbs />
           <main className={cn("flex-1 overflow-auto", isMobile && "pb-16")}>
             {children}
           </main>

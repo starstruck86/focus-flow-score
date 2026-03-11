@@ -11,6 +11,9 @@ import {
   ChevronRight,
   AlertTriangle,
   Filter,
+  Trash2,
+  ExternalLink as LinkIcon,
+  Users,
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { StreakChip } from '@/components/StreakChip';
@@ -77,6 +80,11 @@ import { SortableHeader, useTableSort } from '@/components/table/SortableHeader'
 import { useBulkSelection } from '@/hooks/useBulkSelection';
 import { BulkActionsBar } from '@/components/BulkActionsBar';
 import { Checkbox } from '@/components/ui/checkbox';
+import { RowHoverActions } from '@/components/table/RowHoverActions';
+import { EmptyState } from '@/components/table/EmptyState';
+import { FilterChips, type ActiveFilter } from '@/components/table/FilterChips';
+import { useUndoDelete } from '@/hooks/useUndoDelete';
+import { emitSaveStatus } from '@/components/SaveIndicator';
 import { 
   sortAccountsDefault, 
   applySortWithFallback,
@@ -512,7 +520,22 @@ function FunnelGroupSection({
                           <MetricFieldCell field={field} recordId={account.id} />
                         </TableCell>
                       ))}
-                      <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                      <TableCell className="align-top py-3 relative" onClick={(e) => e.stopPropagation()}>
+                        <RowHoverActions
+                          actions={[
+                            {
+                              icon: ExternalLink,
+                              label: 'Open in Salesforce',
+                              onClick: () => account.salesforceLink && window.open(account.salesforceLink, '_blank'),
+                            },
+                            {
+                              icon: Trash2,
+                              label: 'Delete',
+                              variant: 'destructive',
+                              onClick: () => deleteAccount(account.id),
+                            },
+                          ]}
+                        />
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button size="icon" variant="ghost" className="h-8 w-8">
@@ -557,8 +580,23 @@ function FunnelGroupSection({
 }
 
 export default function WeeklyOutreach() {
-  const { accounts, addAccount, updateAccount, deleteAccount } = useStore();
+  const { accounts, addAccount, updateAccount: rawUpdateAccount, deleteAccount } = useStore();
   const bulkSelection = useBulkSelection<Account>();
+  
+  // Wrap update with save indicator
+  const updateAccount = useCallback((id: string, updates: Partial<Account>) => {
+    emitSaveStatus('saving');
+    rawUpdateAccount(id, updates);
+    setTimeout(() => emitSaveStatus('saved'), 300);
+  }, [rawUpdateAccount]);
+  
+  // Undo delete for accounts
+  const { deleteWithUndo } = useUndoDelete<Account>({
+    onDelete: (id) => deleteAccount(id),
+    onRestore: (item) => addAccount(item),
+    itemLabel: 'Account',
+  });
+  
   const [activeTab, setActiveTab] = useState<'accounts' | 'opportunities'>('accounts');
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -575,6 +613,17 @@ export default function WeeklyOutreach() {
   const [filterTierAB, setFilterTierAB] = useState(false);
   const [filterMissingCadence, setFilterMissingCadence] = useState(false);
   const [filterStale, setFilterStale] = useState(false);
+  
+  // Active filter chips
+  const activeFilters = useMemo(() => {
+    const filters: ActiveFilter[] = [];
+    if (searchQuery) filters.push({ key: 'search', label: 'Search', value: searchQuery, onRemove: () => setSearchQuery('') });
+    if (filterTier !== 'all') filters.push({ key: 'tier', label: 'Tier', value: filterTier, onRemove: () => setFilterTier('all') });
+    if (filterTierAB) filters.push({ key: 'tierAB', label: 'Tier', value: 'A & B only', onRemove: () => setFilterTierAB(false) });
+    if (filterMissingCadence) filters.push({ key: 'cadence', label: 'Cadence', value: 'Missing', onRemove: () => setFilterMissingCadence(false) });
+    if (filterStale) filters.push({ key: 'stale', label: 'Stale', value: '7+ days', onRemove: () => setFilterStale(false) });
+    return filters;
+  }, [searchQuery, filterTier, filterTierAB, filterMissingCadence, filterStale]);
 
   // Collapsed groups - outcomes collapsed by default
   const [collapsedGroups, setCollapsedGroups] = useState<Set<AccountStatus>>(
@@ -1232,11 +1281,30 @@ export default function WeeklyOutreach() {
               ]}
             />
 
+            <FilterChips
+              filters={activeFilters}
+              onClearAll={() => { setSearchQuery(''); setFilterTier('all'); setFilterTierAB(false); setFilterMissingCadence(false); setFilterStale(false); }}
+            />
+
             {/* Funnel Grouped View */}
             {accounts.length === 0 ? (
-              <div className="metric-card p-8 text-center text-muted-foreground">
-                No accounts yet. Add your first account to get started!
-              </div>
+              <EmptyState
+                icon={Users}
+                title="No accounts yet"
+                description="Add your first account to start building your outreach pipeline."
+                actionLabel="Add Account"
+                onAction={() => setShowAddDialog(true)}
+                secondaryActionLabel="Import CSV"
+                onSecondaryAction={() => setShowImportModal(true)}
+              />
+            ) : filteredAccounts.length === 0 ? (
+              <EmptyState
+                icon={Search}
+                title="No matching accounts"
+                description="Try adjusting your filters or search query."
+                actionLabel="Clear Filters"
+                onAction={() => { setSearchQuery(''); setFilterTier('all'); setFilterTierAB(false); setFilterMissingCadence(false); setFilterStale(false); }}
+              />
             ) : (
               <div className="space-y-2">
                 {/* Primary Funnel: 1-3 */}
@@ -1249,7 +1317,7 @@ export default function WeeklyOutreach() {
                       expandedAccountId={expandedAccountId}
                       setExpandedAccountId={setExpandedAccountId}
                       updateAccount={updateAccount}
-                      deleteAccount={deleteAccount}
+                      deleteAccount={(id) => { const acct = accounts.find(a => a.id === id); if (acct) deleteWithUndo(acct); }}
                       isCollapsed={collapsedGroups.has(group.status)}
                       onToggleCollapse={() => toggleGroupCollapse(group.status)}
                       isSelected={bulkSelection.isSelected}
@@ -1270,7 +1338,7 @@ export default function WeeklyOutreach() {
                         expandedAccountId={expandedAccountId}
                         setExpandedAccountId={setExpandedAccountId}
                         updateAccount={updateAccount}
-                        deleteAccount={deleteAccount}
+                        deleteAccount={(id) => { const acct = accounts.find(a => a.id === id); if (acct) deleteWithUndo(acct); }}
                         isCollapsed={collapsedGroups.has(group.status)}
                         onToggleCollapse={() => toggleGroupCollapse(group.status)}
                         isSelected={bulkSelection.isSelected}
@@ -1292,7 +1360,7 @@ export default function WeeklyOutreach() {
                         expandedAccountId={expandedAccountId}
                         setExpandedAccountId={setExpandedAccountId}
                         updateAccount={updateAccount}
-                        deleteAccount={deleteAccount}
+                        deleteAccount={(id) => { const acct = accounts.find(a => a.id === id); if (acct) deleteWithUndo(acct); }}
                         isCollapsed={collapsedGroups.has(group.status)}
                         onToggleCollapse={() => toggleGroupCollapse(group.status)}
                         isSelected={bulkSelection.isSelected}
