@@ -459,9 +459,21 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
   onToggleSelect: (id: string) => void;
 }) {
   const { fields, getFieldValue } = useCustomFields();
+  const [groupSort, setGroupSort] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const summaryCustomFields = fields.filter(
     f => f.tabTarget === 'accounts' && (f.placement === 'summary' || f.placement === 'both')
   );
+
+  const handleGroupSort = (key: string) => {
+    setGroupSort(prev => {
+      if (prev?.key !== key) return { key, direction: 'asc' };
+      if (prev.direction === 'asc') return { key, direction: 'desc' };
+      return null; // third click clears
+    });
+  };
+
+  const sortedAccounts = useMemo(() => sortFunnelGroup(accounts, groupSort), [accounts, groupSort]);
+
   if (accounts.length === 0 && isCollapsed) return null;
 
   return (
