@@ -580,8 +580,15 @@ function FunnelGroupSection({
 }
 
 export default function WeeklyOutreach() {
-  const { accounts, addAccount, updateAccount, deleteAccount } = useStore();
+  const { accounts, addAccount, updateAccount: rawUpdateAccount, deleteAccount } = useStore();
   const bulkSelection = useBulkSelection<Account>();
+  
+  // Wrap update with save indicator
+  const updateAccount = useCallback((id: string, updates: Partial<Account>) => {
+    emitSaveStatus('saving');
+    rawUpdateAccount(id, updates);
+    setTimeout(() => emitSaveStatus('saved'), 300);
+  }, [rawUpdateAccount]);
   
   // Undo delete for accounts
   const { deleteWithUndo } = useUndoDelete<Account>({
