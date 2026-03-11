@@ -1432,7 +1432,7 @@ export default function WeeklyOutreach() {
                 title="No matching accounts"
                 description="Try adjusting your filters or search query."
                 actionLabel="Clear Filters"
-                onAction={() => { setSearchQuery(''); setFilterTier('all'); setFilterTierAB(false); setFilterMissingCadence(false); setFilterStale(false); }}
+                onAction={() => { setSearchQuery(''); setFilterTier('all'); setFilterTierAB(false); setFilterMissingCadence(false); setFilterStale(false); setFilterIcpTier12(false); setFilterTriggered(false); setFilterHighProbability(false); setFilterUnenriched(false); }}
               />
             ) : (
               <div className="space-y-2">
