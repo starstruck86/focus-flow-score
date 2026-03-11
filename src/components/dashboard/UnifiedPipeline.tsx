@@ -1,5 +1,6 @@
 // Unified Pipeline: All opps in one view with workstream toggle
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
