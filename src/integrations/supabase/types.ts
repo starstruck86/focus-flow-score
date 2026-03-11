@@ -361,6 +361,71 @@ export type Database = {
           },
         ]
       }
+      daily_digest_items: {
+        Row: {
+          account_id: string | null
+          account_name: string
+          category: string
+          created_at: string
+          digest_date: string
+          headline: string
+          id: string
+          is_actionable: boolean | null
+          is_read: boolean | null
+          raw_data: Json | null
+          relevance_score: number | null
+          source_url: string | null
+          suggested_action: string | null
+          summary: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          account_name: string
+          category?: string
+          created_at?: string
+          digest_date?: string
+          headline: string
+          id?: string
+          is_actionable?: boolean | null
+          is_read?: boolean | null
+          raw_data?: Json | null
+          relevance_score?: number | null
+          source_url?: string | null
+          suggested_action?: string | null
+          summary?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          account_name?: string
+          category?: string
+          created_at?: string
+          digest_date?: string
+          headline?: string
+          id?: string
+          is_actionable?: boolean | null
+          is_read?: boolean | null
+          raw_data?: Json | null
+          relevance_score?: number | null
+          source_url?: string | null
+          suggested_action?: string | null
+          summary?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_digest_items_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_journal_entries: {
         Row: {
           account_deep_work_minutes: number
