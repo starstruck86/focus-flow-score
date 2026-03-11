@@ -536,9 +536,11 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                 {sortedAccounts.map((account) => (
                   <React.Fragment key={account.id}>
                     <TableRow 
+                      data-account-id={account.id}
                       className={cn(
                         "hover:bg-muted/30",
-                        expandedAccountId === account.id && "bg-muted/20"
+                        expandedAccountId === account.id && "bg-muted/20",
+                        highlightId === account.id && "ring-2 ring-primary/50 bg-primary/5 animate-pulse"
                       )}
                     >
                       <TableCell className="align-top py-3">
