@@ -14,7 +14,6 @@ import {
   Trash2,
   ExternalLink as LinkIcon,
   Users,
-  Sparkles,
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { StreakChip } from '@/components/StreakChip';
