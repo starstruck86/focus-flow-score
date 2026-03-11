@@ -632,7 +632,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                     </TableRow>
                     {expandedAccountId === account.id && (
                       <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
-                        <TableCell colSpan={12 + summaryCustomFields.length} className="pt-0 pb-3">
+                        <TableCell colSpan={99} className="pt-0 pb-3">
                           <div className="space-y-3">
                             <SignalDetailPanel account={account} />
                             <AccountContactsField
