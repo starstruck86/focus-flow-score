@@ -1412,7 +1412,7 @@ export default function WeeklyOutreach() {
 
             <FilterChips
               filters={activeFilters}
-              onClearAll={() => { setSearchQuery(''); setFilterTier('all'); setFilterTierAB(false); setFilterMissingCadence(false); setFilterStale(false); }}
+              onClearAll={() => { setSearchQuery(''); setFilterTier('all'); setFilterTierAB(false); setFilterMissingCadence(false); setFilterStale(false); setFilterIcpTier12(false); setFilterTriggered(false); setFilterHighProbability(false); setFilterUnenriched(false); }}
             />
 
             {/* Funnel Grouped View */}
