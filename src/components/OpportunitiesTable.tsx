@@ -678,7 +678,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           </TableRow>
           {isExpanded && (
             <TableRow className="hover:bg-transparent border-b-2">
-              <TableCell colSpan={(showChurnRisk ? 13 : 12) + summaryCustomFields.length} className="pt-0 pb-3">
+              <TableCell colSpan={99} className="pt-0 pb-3">
                 <OpportunityDetailsField
                   tabTarget={oppTabTarget}
                   opportunityId={opp.id}
@@ -705,6 +705,15 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
 
     // Weekly Outreach / New Logo view
     if (columnOrder === 'outreach') {
+      // Last touch indicator
+      const lastTouchDays = opp.lastTouchDate 
+        ? Math.floor((Date.now() - new Date(opp.lastTouchDate).getTime()) / 86400000)
+        : null;
+      const lastTouchColor = lastTouchDays === null ? 'text-status-red' 
+        : lastTouchDays <= 3 ? 'text-status-green' 
+        : lastTouchDays <= 7 ? 'text-status-yellow' 
+        : 'text-status-red';
+
       return (
         <React.Fragment key={opp.id}>
           <TableRow className="group hover:bg-muted/30 cursor-pointer" onClick={() => toggleExpand(opp.id)}>
@@ -758,6 +767,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 className="w-28"
               />
             </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <span className={cn("text-[10px] font-medium", lastTouchColor)}>
+                {lastTouchDays === null ? 'Never' : `${lastTouchDays}d ago`}
+              </span>
+            </TableCell>
             <NextStepTextCell opp={opp} />
             {summaryCustomFields.map(field => (
               <TableCell key={field.id} className="align-top py-2" onClick={(e) => e.stopPropagation()}>
@@ -788,7 +802,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           </TableRow>
           {isExpanded && (
             <TableRow className="hover:bg-transparent border-b-2">
-              <TableCell colSpan={8 + summaryCustomFields.length} className="pt-0 pb-3">
+              <TableCell colSpan={99} className="pt-0 pb-3">
                 <OpportunityDetailsField
                   tabTarget={oppTabTarget}
                   opportunityId={opp.id}
@@ -879,7 +893,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
         </TableRow>
         {isExpanded && (
           <TableRow className="hover:bg-transparent border-b-2">
-            <TableCell colSpan={(showChurnRisk ? 10 : 9) + summaryCustomFields.length} className="pt-0 pb-3">
+            <TableCell colSpan={99} className="pt-0 pb-3">
               <OpportunityDetailsField
                 tabTarget={oppTabTarget}
                 opportunityId={opp.id}
@@ -901,11 +915,12 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     if (opps.length === 0) return null;
 
     const statusLabel = status.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
+    const groupArr = opps.reduce((sum, o) => sum + (o.arr || 0), 0);
 
     return (
       <React.Fragment key={status}>
         <TableRow className="bg-muted/30 hover:bg-muted/30">
-          <TableCell colSpan={12} className="py-2">
+          <TableCell colSpan={99} className="py-2">
             <div className="flex items-center gap-2">
               <Badge className={cn("text-xs", STATUS_COLORS[status])}>
                 {statusLabel}
@@ -913,6 +928,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               <span className="text-xs text-muted-foreground">
                 ({opps.length})
               </span>
+              {groupArr > 0 && (
+                <span className="text-xs font-mono text-muted-foreground ml-1">
+                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(groupArr)}
+                </span>
+              )}
             </div>
           </TableCell>
         </TableRow>
@@ -921,13 +941,13 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     );
   };
 
-  const totalCols = (renewalsOnly ? (showChurnRisk ? 14 : 13) : columnOrder === 'outreach' ? 9 : (showChurnRisk ? 11 : 10)) + summaryCustomFields.length;
+  const totalCols = (renewalsOnly ? (showChurnRisk ? 14 : 13) : columnOrder === 'outreach' ? 10 : (showChurnRisk ? 11 : 10)) + summaryCustomFields.length;
 
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-3">
+        <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search opportunities..."
@@ -985,6 +1005,38 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           </Button>
         </div>
       </div>
+
+      {/* Filtered count + staleness */}
+      {filteredOpportunities.length !== opportunities.length && (
+        <div className="text-xs text-muted-foreground">
+          Showing <span className="font-semibold text-foreground">{filteredOpportunities.length}</span> of {opportunities.length} opportunities
+        </div>
+      )}
+      {(() => {
+        const staleOpps = filteredOpportunities.filter(o => {
+          if (o.status !== 'active') return false;
+          if (!o.lastTouchDate) return true;
+          return Math.floor((Date.now() - new Date(o.lastTouchDate).getTime()) / 86400000) > 14;
+        });
+        const noNextStep = filteredOpportunities.filter(o => o.status === 'active' && !o.nextStep).length;
+        if (staleOpps.length === 0 && noNextStep === 0) return null;
+        return (
+          <div className="flex flex-wrap gap-3">
+            {staleOpps.length > 0 && (
+              <div className="flex items-center gap-2 text-xs bg-status-red/10 border border-status-red/20 rounded-lg px-3 py-2">
+                <span className="text-status-red font-medium">{staleOpps.length} opps</span>
+                <span className="text-muted-foreground">untouched 14+ days</span>
+              </div>
+            )}
+            {noNextStep > 0 && (
+              <div className="flex items-center gap-2 text-xs bg-status-yellow/10 border border-status-yellow/20 rounded-lg px-3 py-2">
+                <span className="text-status-yellow font-medium">{noNextStep} active opps</span>
+                <span className="text-muted-foreground">missing next step</span>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Bulk Actions Bar */}
       <BulkActionsBar
@@ -1046,11 +1098,12 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                     />
                   </TableHead>
                   <TableHead className="w-8"></TableHead>
-                  <SortableHeader sortKey="name" currentSort={sortConfig} onSort={handleSort} className="w-[22%]">Opportunity</SortableHeader>
-                  <SortableHeader sortKey="status" currentSort={sortConfig} onSort={handleSort} className="w-[12%]">Status</SortableHeader>
-                  <SortableHeader sortKey="stage" currentSort={sortConfig} onSort={handleSort} className="w-[12%]">Stage</SortableHeader>
-                  <SortableHeader sortKey="arr" currentSort={sortConfig} onSort={handleSort} className="w-[10%]">ARR</SortableHeader>
-                  <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[12%]">Close Date</SortableHeader>
+                  <SortableHeader sortKey="name" currentSort={sortConfig} onSort={handleSort} className="w-[20%]">Opportunity</SortableHeader>
+                  <SortableHeader sortKey="status" currentSort={sortConfig} onSort={handleSort} className="w-[10%]">Status</SortableHeader>
+                  <SortableHeader sortKey="stage" currentSort={sortConfig} onSort={handleSort} className="w-[10%]">Stage</SortableHeader>
+                  <SortableHeader sortKey="arr" currentSort={sortConfig} onSort={handleSort} className="w-[9%]">ARR</SortableHeader>
+                  <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[10%]">Close Date</SortableHeader>
+                  <TableHead className="w-[7%] text-xs">Last Touch</TableHead>
                   <SortableHeader sortKey="nextStep" currentSort={sortConfig} onSort={handleSort} className="w-[18%]">Next Step</SortableHeader>
                   {summaryCustomFields.map(field => (
                     <SortableHeader key={field.id} sortKey={`custom:${field.id}`} currentSort={sortConfig} onSort={handleSort}>{field.name}</SortableHeader>
