@@ -1059,11 +1059,11 @@ export default function WeeklyOutreach() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                 {/* Quick filter toggles */}
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
                   <Button
                     variant={filterTierAB ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs shrink-0"
+                    className="h-7 text-[11px] shrink-0"
                     aria-label="Filter Tier A and B accounts"
                     onClick={() => setFilterTierAB(!filterTierAB)}
                   >
@@ -1072,7 +1072,7 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterMissingCadence ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs shrink-0"
+                    className="h-7 text-[11px] shrink-0"
                     aria-label="Filter accounts not in cadence"
                     onClick={() => setFilterMissingCadence(!filterMissingCadence)}
                   >
@@ -1081,17 +1081,17 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterStale ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs shrink-0"
+                    className="h-7 text-[11px] shrink-0"
                     aria-label="Filter stale accounts untouched 14+ days"
                     onClick={() => setFilterStale(!filterStale)}
                   >
                     Stale 14d+
                   </Button>
-                  <span className="w-px h-5 bg-border mx-0.5" />
+                  <span className="w-px h-4 bg-border mx-0.5 shrink-0" />
                   <Button
                     variant={filterIcpTier12 ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs shrink-0"
+                    className="h-7 text-[11px] shrink-0"
                     aria-label="Filter ICP Tier 1 and 2 accounts"
                     onClick={() => setFilterIcpTier12(!filterIcpTier12)}
                   >
@@ -1100,7 +1100,7 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterHighProbability ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs shrink-0"
+                    className="h-7 text-[11px] shrink-0"
                     aria-label="Filter high probability buyers"
                     onClick={() => setFilterHighProbability(!filterHighProbability)}
                   >
@@ -1109,7 +1109,7 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterTriggered ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs shrink-0"
+                    className="h-7 text-[11px] shrink-0"
                     aria-label="Filter triggered accounts"
                     onClick={() => setFilterTriggered(!filterTriggered)}
                   >
@@ -1118,7 +1118,7 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterUnenriched ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs shrink-0"
+                    className="h-7 text-[11px] shrink-0"
                     aria-label="Filter accounts not yet enriched"
                     onClick={() => setFilterUnenriched(!filterUnenriched)}
                   >
@@ -1126,9 +1126,6 @@ export default function WeeklyOutreach() {
                   </Button>
                 </div>
               </div>
-
-              {/* Import + Add */}
-              <div className="flex items-center gap-2">
                 <ManageColumnsPopover
                   tabTarget="accounts"
                   viewKey="accounts-newlogo-funnel"
