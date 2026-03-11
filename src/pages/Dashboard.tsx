@@ -40,6 +40,7 @@ import {
   CommissionPacingTile,
   CommissionPacingDetailModal,
   ExpectedVsActualCard,
+  UnifiedPipeline,
 } from '@/components/dashboard';
 
 export default function Dashboard() {
