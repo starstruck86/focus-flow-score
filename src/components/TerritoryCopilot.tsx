@@ -126,7 +126,7 @@ function CopilotDialog() {
       return newMsgs;
     });
     setInput('');
-  }, [isStreaming, mode, state.accountId, refreshAccounts]);
+  }, [isStreaming, mode, state.accountId]);
 
   const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); sendMessage(input); };
   const handleClear = () => { setMessages([]); setError(null); setUpdatesApplied(false); abortRef.current?.abort(); setIsStreaming(false); };
