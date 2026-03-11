@@ -49,6 +49,7 @@ const App = () => (
                 </JournalPromptManager>
               </BrowserRouter>
             </DataSyncProvider>
+            </CopilotProvider>
           </LinkedRecordProvider>
         </AuthProvider>
       </TooltipProvider>
