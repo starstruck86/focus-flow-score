@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useCallback, memo } from 'react';
 import { 
   Plus, 
   Phone, 
@@ -598,7 +598,7 @@ export default function Renewals() {
 
   return (
     <Layout>
-      <div className="p-6 lg:p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -614,29 +614,29 @@ export default function Renewals() {
         <RenewalUrgencyHeader renewals={renewals} formatCurrency={formatCurrency} />
         
         {/* Churn Risk Summary */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
           {(['low', 'medium', 'high', 'certain'] as ChurnRisk[]).map(risk => {
             const option = CHURN_RISK_OPTIONS.find(o => o.value === risk);
             return (
               <div 
                 key={risk} 
                 className={cn(
-                  "metric-card p-4 border-l-4",
+                  "metric-card p-3 sm:p-4 border-l-4",
                   risk === 'low' && "border-l-status-green",
                   risk === 'medium' && "border-l-status-yellow",
                   risk === 'high' && "border-l-status-red",
                   risk === 'certain' && "border-l-purple-500",
                 )}
               >
-                <div className="flex items-center justify-between mb-2">
-                  <span className={cn("text-sm font-medium", CHURN_RISK_COLORS[risk].split(' ')[1])}>
+                <div className="flex items-center justify-between mb-1 sm:mb-2">
+                  <span className={cn("text-xs sm:text-sm font-medium", CHURN_RISK_COLORS[risk].split(' ')[1])}>
                     {option?.label || risk}
                   </span>
                   <Badge variant="outline" className={cn("text-xs", CHURN_RISK_COLORS[risk])}>
                     {churnRiskSummary[risk].count}
                   </Badge>
                 </div>
-                <div className="text-xl font-bold font-mono">
+                <div className="text-lg sm:text-xl font-bold font-mono">
                   {formatCurrency(churnRiskSummary[risk].arr)}
                 </div>
               </div>
@@ -651,7 +651,7 @@ export default function Renewals() {
           </TabsList>
           
           <TabsContent value="renewals">
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4">
             {/* Manage Columns */}
             <ManageColumnsPopover
               tabTarget="renewals"
@@ -911,8 +911,8 @@ export default function Renewals() {
           </div>
 
         {/* Filters */}
-        <div className="flex items-center gap-4 mb-4">
-          <div className="relative flex-1 max-w-sm">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 mb-4">
+          <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search renewals..."
@@ -922,7 +922,7 @@ export default function Renewals() {
             />
           </div>
           <Select value={currentView} onValueChange={setCurrentView}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-full sm:w-40">
               <SelectValue placeholder="View" />
             </SelectTrigger>
             <SelectContent>
@@ -932,6 +932,13 @@ export default function Renewals() {
             </SelectContent>
           </Select>
         </div>
+
+        {/* Filtered count */}
+        {filteredRenewals.length !== renewals.length && (
+          <div className="text-xs text-muted-foreground mb-3">
+            Showing <span className="font-semibold text-foreground">{filteredRenewals.length}</span> of {renewals.length} renewals
+          </div>
+        )}
 
         {/* Renewals Table - Grouped by Quarter */}
         {Object.entries(groupedRenewals).length === 0 ? (
@@ -1133,7 +1140,7 @@ export default function Renewals() {
                         {/* Details row - only visible when renewal is expanded */}
                         {expandedRenewalId === renewal.id && (
                           <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
-                            <TableCell colSpan={10 + summaryCustomFields.length} className="pt-0 pb-3">
+                            <TableCell colSpan={99} className="pt-0 pb-3">
                               <RenewalDetailsField
                                 renewalId={renewal.id}
                                 contacts={renewal.accountContacts || []}
