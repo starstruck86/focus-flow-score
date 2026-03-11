@@ -341,6 +341,8 @@ function FunnelGroupSection({
   deleteAccount,
   isCollapsed,
   onToggleCollapse,
+  isSelected,
+  onToggleSelect,
 }: {
   group: FunnelGroup;
   accounts: Account[];
@@ -350,6 +352,8 @@ function FunnelGroupSection({
   deleteAccount: (id: string) => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  isSelected: (id: string) => boolean;
+  onToggleSelect: (id: string) => void;
 }) {
   const { fields, getFieldValue } = useCustomFields();
   const summaryCustomFields = fields.filter(
