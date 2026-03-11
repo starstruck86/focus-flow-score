@@ -1045,10 +1045,10 @@ export default function WeeklyOutreach() {
             <FunnelHealthBar accounts={newLogoAccounts} />
             
             {/* Actions Bar */}
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              {/* Search + Quick Filters */}
-              <div className="flex items-center gap-2 flex-wrap flex-1">
-                <div className="relative max-w-sm min-w-[200px]">
+            <div className="space-y-3">
+              {/* Search row */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="relative flex-1 min-w-0">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="Search accounts..."
@@ -1057,17 +1057,7 @@ export default function WeeklyOutreach() {
                     className="pl-9"
                   />
                 </div>
-                <Select value={filterTier} onValueChange={setFilterTier}>
-                  <SelectTrigger className="w-24">
-                    <SelectValue placeholder="Tier" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Tiers</SelectItem>
-                    <SelectItem value="A">Tier A</SelectItem>
-                    <SelectItem value="B">Tier B</SelectItem>
-                    <SelectItem value="C">Tier C</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2 shrink-0">
                 {/* Quick filter toggles */}
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
                   <Button
