@@ -13,6 +13,7 @@ export interface WorkItem {
   type: WorkItemType;
   name: string;
   accountName?: string;
+  accountId?: string;
   score: number; // 0-100 composite score
   urgency: WorkItemUrgency;
   reason: string; // Why this is prioritized
@@ -23,6 +24,7 @@ export interface WorkItem {
   route: string; // Where to navigate
   hasMeetingToday?: boolean;
   hasMeetingSoon?: boolean;
+  isRenewalOpp?: boolean; // Whether this opportunity is linked to a renewal
 }
 
 export interface TimeAllocationTarget {
