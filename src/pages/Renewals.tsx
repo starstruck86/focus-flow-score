@@ -166,10 +166,14 @@ const VIEWS = [
   { value: '61-90', label: '61-90 Days' },
   { value: '91-180', label: '91-180 Days' },
   { value: 'at-risk', label: 'At Risk' },
+  { value: 'tier-1', label: 'Tier 1 (High Fit)' },
+  { value: 'tier-2', label: 'Tier 2' },
+  { value: 'unenriched', label: 'Not Enriched' },
   { value: 'auto-renew', label: 'Auto-Renew' },
   { value: 'no-next-step', label: 'No Next Step' },
   { value: 'missing-planhat', label: 'Missing Planhat' },
   { value: 'missing-agreement', label: 'Missing Agreement' },
+  { value: 'churning', label: 'Churning / OOB' },
 ];
 
 
