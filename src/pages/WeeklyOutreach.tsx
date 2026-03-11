@@ -457,15 +457,17 @@ function FunnelGroupSection({
                       </TableHead>
                       <TableHead className="w-[3%]"></TableHead>
                       <TableHead className="w-[17%]">Account</TableHead>
-                  <TableHead className="w-[15%]">Website</TableHead>
-                  <TableHead className="w-[12%]">Account Status</TableHead>
-                  <TableHead className="w-[10%]">Contact Status</TableHead>
-                  <TableHead className="w-[6%]">Tier</TableHead>
+                  <TableHead className="w-[12%]">Website</TableHead>
+                  <TableHead className="w-[10%]">Account Status</TableHead>
+                  <TableHead className="w-[5%]">ICP</TableHead>
+                  <TableHead className="w-[5%]">Tier</TableHead>
+                  <TableHead className="w-[8%]">Contact Status</TableHead>
+                  <TableHead className="w-[5%]">Tier</TableHead>
                   {(group.status === 'prepped' || group.status === 'active') && (
-                    <TableHead className="w-[10%]">Cadence</TableHead>
+                    <TableHead className="w-[8%]">Cadence</TableHead>
                   )}
-                  <TableHead className="w-[16%]">MarTech</TableHead>
-                    <TableHead className="w-[16%]">Ecommerce</TableHead>
+                  <TableHead className="w-[12%]">MarTech</TableHead>
+                    <TableHead className="w-[12%]">Ecommerce</TableHead>
                     {summaryCustomFields.map(field => (
                       <TableHead key={field.id} className="w-[8%]">{field.name}</TableHead>
                     ))}
