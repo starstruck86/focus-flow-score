@@ -1075,7 +1075,8 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterMissingCadence ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs"
+                    className="h-8 text-xs shrink-0"
+                    aria-label="Filter accounts not in cadence"
                     onClick={() => setFilterMissingCadence(!filterMissingCadence)}
                   >
                     No Cadence
