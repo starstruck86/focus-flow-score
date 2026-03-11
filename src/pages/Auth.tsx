@@ -39,7 +39,7 @@ export default function Auth() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-display">Focus Flow Score</CardTitle>
+          <CardTitle className="text-2xl font-display">Quota Compass</CardTitle>
           <CardDescription>
             Sign in to access your personal productivity dashboard
           </CardDescription>
