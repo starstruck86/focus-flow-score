@@ -308,7 +308,7 @@ export function TerritoryCopilot() {
         className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-medium transition-colors"
       >
         <Sparkles className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">Ask</span>
+        <span>Ask AI</span>
         <kbd className="hidden sm:inline-flex h-4 items-center rounded bg-primary/10 px-1 font-mono text-[10px]">⌘K</kbd>
       </button>
       <CopilotDialog />
