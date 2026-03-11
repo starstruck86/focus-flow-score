@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { LayoutGrid, List } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -47,6 +48,10 @@ import { MetricFieldCell } from '@/components/table/MetricFieldCell';
 import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
 import { useCustomFields } from '@/hooks/useCustomFields';
 import { applySortWithFallback } from '@/lib/sortUtils';
+import { useBulkSelection } from '@/hooks/useBulkSelection';
+import { BulkActionsBar } from '@/components/BulkActionsBar';
+import { KanbanBoard } from '@/components/KanbanBoard';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useStore } from '@/store/useStore';
 import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
 import { format, parseISO, isToday, isPast, isThisQuarter } from 'date-fns';
@@ -290,6 +295,8 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const [closedWonOpportunity, setClosedWonOpportunity] = useState<Opportunity | null>(null);
   const [expandedOppIds, setExpandedOppIds] = useState<Set<string>>(new Set());
   const [deleteDialogOpp, setDeleteDialogOpp] = useState<Opportunity | null>(null);
+  const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
+  const bulkSelection = useBulkSelection<Opportunity>();
 
   // Get renewals that don't have linked opportunities yet (for adding new renewal opps)
   const renewalsWithoutOpps = useMemo(() => {
@@ -561,7 +568,10 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
 
       return (
         <React.Fragment key={opp.id}>
-          <TableRow className="group hover:bg-muted/30 cursor-pointer" onClick={() => toggleExpand(opp.id)}>
+           <TableRow className="group hover:bg-muted/30 cursor-pointer" onClick={() => toggleExpand(opp.id)}>
+            <TableCell className="w-8 py-3" onClick={(e) => e.stopPropagation()}>
+              <Checkbox checked={bulkSelection.isSelected(opp.id)} onCheckedChange={() => bulkSelection.toggle(opp.id)} />
+            </TableCell>
             <TableCell className="w-8 py-3">
               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); toggleExpand(opp.id); }}>
                 {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
@@ -698,6 +708,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       return (
         <React.Fragment key={opp.id}>
           <TableRow className="group hover:bg-muted/30 cursor-pointer" onClick={() => toggleExpand(opp.id)}>
+            <TableCell className="w-8 py-3" onClick={(e) => e.stopPropagation()}>
+              <Checkbox checked={bulkSelection.isSelected(opp.id)} onCheckedChange={() => bulkSelection.toggle(opp.id)} />
+            </TableCell>
             <TableCell className="w-8 py-3">
               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); toggleExpand(opp.id); }}>
                 {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
@@ -797,6 +810,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     return (
       <React.Fragment key={opp.id}>
         <TableRow className="group hover:bg-muted/30 cursor-pointer" onClick={() => toggleExpand(opp.id)}>
+          <TableCell className="w-8 py-3" onClick={(e) => e.stopPropagation()}>
+            <Checkbox checked={bulkSelection.isSelected(opp.id)} onCheckedChange={() => bulkSelection.toggle(opp.id)} />
+          </TableCell>
           <TableCell className="w-8 py-3">
             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); toggleExpand(opp.id); }}>
               {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
@@ -905,7 +921,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     );
   };
 
-  const totalCols = (renewalsOnly ? (showChurnRisk ? 13 : 12) : columnOrder === 'outreach' ? 8 : (showChurnRisk ? 10 : 9)) + summaryCustomFields.length;
+  const totalCols = (renewalsOnly ? (showChurnRisk ? 14 : 13) : columnOrder === 'outreach' ? 9 : (showChurnRisk ? 11 : 10)) + summaryCustomFields.length;
 
   return (
     <div className="space-y-4">
@@ -950,15 +966,85 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           <Plus className="h-4 w-4 mr-2" />
           Add Opportunity
         </Button>
+        <div className="flex items-center border rounded-md">
+          <Button
+            variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-8 rounded-r-none"
+            onClick={() => setViewMode('table')}
+          >
+            <List className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={viewMode === 'kanban' ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-8 rounded-l-none"
+            onClick={() => setViewMode('kanban')}
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
-      {/* Table */}
-      <div className="metric-card overflow-hidden p-0">
+      {/* Bulk Actions Bar */}
+      <BulkActionsBar
+        selectedCount={bulkSelection.selectedCount}
+        onClear={bulkSelection.clear}
+        selectedIds={bulkSelection.selectedIds}
+        actions={[
+          {
+            id: 'change-stage',
+            label: 'Change Stage',
+            options: STAGE_SELECT_OPTIONS.map(o => ({ value: o.value || '__none', label: o.label })),
+            onExecute: (ids, value) => {
+              ids.forEach(id => updateOpportunity(id, { stage: (value === '__none' ? '' : value) as OpportunityStage }));
+              bulkSelection.clear();
+            },
+          },
+          {
+            id: 'change-status',
+            label: 'Change Status',
+            options: STATUS_SELECT_OPTIONS.map(o => ({ value: o.value, label: o.label })),
+            onExecute: (ids, value) => {
+              ids.forEach(id => updateOpportunity(id, { status: value as OpportunityStatus }));
+              bulkSelection.clear();
+            },
+          },
+          {
+            id: 'delete',
+            label: 'Delete',
+            variant: 'destructive' as const,
+            onExecute: (ids) => {
+              ids.forEach(id => deleteOpportunity(id));
+              bulkSelection.clear();
+            },
+          },
+        ]}
+      />
+
+      {/* Kanban View */}
+      {viewMode === 'kanban' ? (
+        <KanbanBoard
+          opportunities={filteredOpportunities}
+          onStageChange={(id, newStage) => updateOpportunity(id, { stage: newStage })}
+          onSelect={(id) => {
+            const opp = filteredOpportunities.find(o => o.id === id);
+            if (opp) onOpenDrawer(opp);
+          }}
+        />
+      ) : (
+        <div className="metric-card overflow-hidden p-0">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               {columnOrder === 'outreach' ? (
                 <>
+                  <TableHead className="w-8">
+                    <Checkbox
+                      checked={bulkSelection.isAllSelected(filteredOpportunities)}
+                      onCheckedChange={() => bulkSelection.toggleAll(filteredOpportunities)}
+                    />
+                  </TableHead>
                   <TableHead className="w-8"></TableHead>
                   <SortableHeader sortKey="name" currentSort={sortConfig} onSort={handleSort} className="w-[22%]">Opportunity</SortableHeader>
                   <SortableHeader sortKey="status" currentSort={sortConfig} onSort={handleSort} className="w-[12%]">Status</SortableHeader>
@@ -973,6 +1059,12 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 </>
               ) : renewalsOnly ? (
                 <>
+                  <TableHead className="w-8">
+                    <Checkbox
+                      checked={bulkSelection.isAllSelected(filteredOpportunities)}
+                      onCheckedChange={() => bulkSelection.toggleAll(filteredOpportunities)}
+                    />
+                  </TableHead>
                   <TableHead className="w-8"></TableHead>
                   <SortableHeader sortKey="status" currentSort={sortConfig} onSort={handleSort} className="w-[10%]">Status</SortableHeader>
                   <SortableHeader sortKey="name" currentSort={sortConfig} onSort={handleSort} className="w-[16%]">Opportunity</SortableHeader>
@@ -991,6 +1083,12 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 </>
               ) : (
                 <>
+                  <TableHead className="w-8">
+                    <Checkbox
+                      checked={bulkSelection.isAllSelected(filteredOpportunities)}
+                      onCheckedChange={() => bulkSelection.toggleAll(filteredOpportunities)}
+                    />
+                  </TableHead>
                   <TableHead className="w-8"></TableHead>
                   <SortableHeader sortKey="status" currentSort={sortConfig} onSort={handleSort} className="w-[110px]">Status</SortableHeader>
                   <SortableHeader sortKey="name" currentSort={sortConfig} onSort={handleSort} className="w-[180px]">Opportunity</SortableHeader>
@@ -1094,6 +1192,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           </TableBody>
         </Table>
       </div>
+      )}
       
       {/* Closed Won Modal */}
       {closedWonOpportunity && (

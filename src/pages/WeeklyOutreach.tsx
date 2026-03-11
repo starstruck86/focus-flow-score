@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useCallback } from 'react';
 import { 
   ExternalLink, 
   Plus, 
@@ -74,6 +74,9 @@ import { useCustomFields } from '@/hooks/useCustomFields';
 import { ImportModal } from '@/components/import';
 import { EditableTextCell, EditableTextareaCell, DisplaySelectCell, WebsiteLinkCell, AccountNameCell } from '@/components/table';
 import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
+import { useBulkSelection } from '@/hooks/useBulkSelection';
+import { BulkActionsBar } from '@/components/BulkActionsBar';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   sortAccountsDefault, 
   applySortWithFallback,
@@ -338,6 +341,8 @@ function FunnelGroupSection({
   deleteAccount,
   isCollapsed,
   onToggleCollapse,
+  isSelected,
+  onToggleSelect,
 }: {
   group: FunnelGroup;
   accounts: Account[];
@@ -347,6 +352,8 @@ function FunnelGroupSection({
   deleteAccount: (id: string) => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  isSelected: (id: string) => boolean;
+  onToggleSelect: (id: string) => void;
 }) {
   const { fields, getFieldValue } = useCustomFields();
   const summaryCustomFields = fields.filter(
@@ -383,8 +390,15 @@ function FunnelGroupSection({
             <Table className="min-w-[1200px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-[3%]"></TableHead>
-                  <TableHead className="w-[17%]">Account</TableHead>
+                      <TableHead className="w-[3%]">
+                        <Checkbox
+                          checked={accounts.every(a => isSelected(a.id)) && accounts.length > 0}
+                          onCheckedChange={() => accounts.forEach(a => onToggleSelect(a.id))}
+                          aria-label="Select all in group"
+                        />
+                      </TableHead>
+                      <TableHead className="w-[3%]"></TableHead>
+                      <TableHead className="w-[17%]">Account</TableHead>
                   <TableHead className="w-[15%]">Website</TableHead>
                   <TableHead className="w-[12%]">Account Status</TableHead>
                   <TableHead className="w-[10%]">Contact Status</TableHead>
@@ -409,6 +423,14 @@ function FunnelGroupSection({
                         expandedAccountId === account.id && "bg-muted/20"
                       )}
                     >
+                      <TableCell className="align-top py-3">
+                        <Checkbox
+                          checked={isSelected(account.id)}
+                          onCheckedChange={() => onToggleSelect(account.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label={`Select ${account.name}`}
+                        />
+                      </TableCell>
                       <TableCell className="align-top py-3">
                         <Button
                           size="icon"
@@ -536,6 +558,7 @@ function FunnelGroupSection({
 
 export default function WeeklyOutreach() {
   const { accounts, addAccount, updateAccount, deleteAccount } = useStore();
+  const bulkSelection = useBulkSelection<Account>();
   const [activeTab, setActiveTab] = useState<'accounts' | 'opportunities'>('accounts');
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1161,6 +1184,54 @@ export default function WeeklyOutreach() {
               </div>
             </div>
 
+            {/* Bulk Actions Bar */}
+            <BulkActionsBar
+              selectedCount={bulkSelection.selectedCount}
+              onClear={bulkSelection.clear}
+              selectedIds={bulkSelection.selectedIds}
+              actions={[
+                {
+                  id: 'change-status',
+                  label: 'Change Status',
+                  options: [
+                    { value: 'researching', label: '1 - Researching' },
+                    { value: 'prepped', label: '2 - Prepped' },
+                    { value: 'active', label: '3 - Active' },
+                    { value: 'inactive', label: '4 - Inactive' },
+                    { value: 'disqualified', label: '5 - Disqualified' },
+                    { value: 'meeting-booked', label: '6 - Meeting Booked' },
+                  ],
+                  onExecute: (ids, value) => {
+                    ids.forEach(id => updateAccount(id, { accountStatus: value as AccountStatus }));
+                    bulkSelection.clear();
+                  },
+                },
+                {
+                  id: 'change-tier',
+                  label: 'Change Tier',
+                  options: [
+                    { value: 'A', label: 'Tier A' },
+                    { value: 'B', label: 'Tier B' },
+                    { value: 'C', label: 'Tier C' },
+                  ],
+                  onExecute: (ids, value) => {
+                    ids.forEach(id => updateAccount(id, { tier: value as AccountTier }));
+                    bulkSelection.clear();
+                  },
+                },
+                {
+                  id: 'delete',
+                  label: 'Delete',
+                  icon: undefined,
+                  variant: 'destructive' as const,
+                  onExecute: (ids) => {
+                    ids.forEach(id => deleteAccount(id));
+                    bulkSelection.clear();
+                  },
+                },
+              ]}
+            />
+
             {/* Funnel Grouped View */}
             {accounts.length === 0 ? (
               <div className="metric-card p-8 text-center text-muted-foreground">
@@ -1181,6 +1252,8 @@ export default function WeeklyOutreach() {
                       deleteAccount={deleteAccount}
                       isCollapsed={collapsedGroups.has(group.status)}
                       onToggleCollapse={() => toggleGroupCollapse(group.status)}
+                      isSelected={bulkSelection.isSelected}
+                      onToggleSelect={bulkSelection.toggle}
                     />
                   ))}
                 </div>
@@ -1200,6 +1273,8 @@ export default function WeeklyOutreach() {
                         deleteAccount={deleteAccount}
                         isCollapsed={collapsedGroups.has(group.status)}
                         onToggleCollapse={() => toggleGroupCollapse(group.status)}
+                        isSelected={bulkSelection.isSelected}
+                        onToggleSelect={bulkSelection.toggle}
                       />
                     ))}
                   </div>
@@ -1220,6 +1295,8 @@ export default function WeeklyOutreach() {
                         deleteAccount={deleteAccount}
                         isCollapsed={collapsedGroups.has(group.status)}
                         onToggleCollapse={() => toggleGroupCollapse(group.status)}
+                        isSelected={bulkSelection.isSelected}
+                        onToggleSelect={bulkSelection.toggle}
                       />
                     ))}
                   </div>
