@@ -624,14 +624,17 @@ function FunnelGroupSection({
                     </TableRow>
                     {expandedAccountId === account.id && (
                       <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
-                        <TableCell colSpan={10 + summaryCustomFields.length} className="pt-0 pb-3">
-                          <AccountContactsField
-                            accountId={account.id}
-                            contacts={account.accountContacts || []}
-                            onChange={(contacts) => updateAccount(account.id, { accountContacts: contacts })}
-                            companyNotes={account.notes || ''}
-                            onCompanyNotesChange={(notes) => updateAccount(account.id, { notes })}
-                          />
+                        <TableCell colSpan={12 + summaryCustomFields.length} className="pt-0 pb-3">
+                          <div className="space-y-3">
+                            <SignalDetailPanel account={account} />
+                            <AccountContactsField
+                              accountId={account.id}
+                              contacts={account.accountContacts || []}
+                              onChange={(contacts) => updateAccount(account.id, { accountContacts: contacts })}
+                              companyNotes={account.notes || ''}
+                              onCompanyNotesChange={(notes) => updateAccount(account.id, { notes })}
+                            />
+                          </div>
                         </TableCell>
                       </TableRow>
                     )}
