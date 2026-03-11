@@ -51,17 +51,9 @@ function WorkItemCard({ item, index }: { item: WorkItem; index: number }) {
   const formatArr = (v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`;
 
   const handleClick = () => {
-    // Set the linked record context so the target page highlights/opens this record
-    if (item.type === 'account') {
-      setCurrentRecord({ type: 'account', id: item.id });
-      navigate('/outreach');
-    } else if (item.type === 'opportunity') {
-      setCurrentRecord({ type: 'opportunity', id: item.id });
-      navigate('/outreach');
-    } else if (item.type === 'renewal') {
-      setCurrentRecord({ type: 'renewal', id: item.id });
-      navigate('/renewals');
-    }
+    // Use the route from the WorkItem scoring engine - it knows the correct destination
+    setCurrentRecord({ type: item.type as any, id: item.id });
+    navigate(item.route);
   };
 
   return (

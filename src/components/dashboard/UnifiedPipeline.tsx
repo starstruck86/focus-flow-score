@@ -144,7 +144,18 @@ export function UnifiedPipeline() {
           const stageArr = opps.reduce((sum, o) => sum + (o.arr || 0), 0);
           
           return (
-            <div key={stage} className={cn("rounded-lg border p-2.5", STAGE_COLORS[stage] || 'border-border')}>
+            <button
+              key={stage}
+              onClick={() => {
+                // Navigate to outreach opportunities tab with stage pre-filtered
+                navigate('/outreach?tab=opportunities&stage=' + encodeURIComponent(stage));
+              }}
+              className={cn(
+                "rounded-lg border p-2.5 text-left transition-all cursor-pointer",
+                "hover:ring-1 hover:ring-primary/40 hover:shadow-sm",
+                STAGE_COLORS[stage] || 'border-border'
+              )}
+            >
               <div className="text-[10px] font-semibold mb-1 opacity-80">{stage}</div>
               <div className="text-lg font-bold font-mono">{opps.length}</div>
               <div className="text-[10px] opacity-70 font-mono">{formatCurrency(stageArr)}</div>
@@ -162,7 +173,7 @@ export function UnifiedPipeline() {
               {opps.length > 2 && (
                 <div className="text-[9px] mt-1 opacity-50">+{opps.length - 2} more</div>
               )}
-            </div>
+            </button>
           );
         })}
       </div>
