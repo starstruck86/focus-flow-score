@@ -104,8 +104,8 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         url: formattedUrl,
-        formats: ['json'],
-        jsonOptions: {
+        formats: [{
+          type: 'json',
           schema: {
             type: 'object',
             properties: {
@@ -128,7 +128,7 @@ Deno.serve(async (req) => {
             required: ['direct_ecommerce', 'email_sms_capture', 'loyalty_membership', 'category_complexity', 'crm_lifecycle_team_size', 'mobile_app', 'marketing_platform_detected', 'summary'],
           },
           prompt: `Analyze this website for a B2B sales rep selling marketing automation / lifecycle marketing software to ${accountName || 'this company'}. Evaluate each signal carefully. For CRM team size, estimate based on job listings links, team pages, or company size indicators.`,
-        },
+        }],
         onlyMainContent: false,
         waitFor: 2000,
       }),
