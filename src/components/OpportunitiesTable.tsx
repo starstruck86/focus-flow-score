@@ -1030,6 +1030,12 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             <TableRow className="hover:bg-transparent">
               {columnOrder === 'outreach' ? (
                 <>
+                  <TableHead className="w-8">
+                    <Checkbox
+                      checked={bulkSelection.isAllSelected(filteredOpportunities)}
+                      onCheckedChange={() => bulkSelection.toggleAll(filteredOpportunities)}
+                    />
+                  </TableHead>
                   <TableHead className="w-8"></TableHead>
                   <SortableHeader sortKey="name" currentSort={sortConfig} onSort={handleSort} className="w-[22%]">Opportunity</SortableHeader>
                   <SortableHeader sortKey="status" currentSort={sortConfig} onSort={handleSort} className="w-[12%]">Status</SortableHeader>
