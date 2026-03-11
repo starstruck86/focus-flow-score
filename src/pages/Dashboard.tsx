@@ -188,6 +188,8 @@ export default function Dashboard() {
         );
       case 'progress-tabs':
         return null; // Rendered inside commission-pacing
+      case 'pipeline':
+        return <UnifiedPipeline key={widgetId} />;
       case 'pace-to-quota':
         return <PaceToQuotaCard key={widgetId} paceToQuota={paceToQuota} />;
       case 'what-to-do-next':

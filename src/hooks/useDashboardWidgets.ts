@@ -12,6 +12,7 @@ const STORAGE_KEY = 'quota-compass-dashboard-widgets';
 const DEFAULT_WIDGETS: DashboardWidget[] = [
   { id: 'commission-pacing', label: 'Commission Pacing', visible: true },
   { id: 'progress-tabs', label: 'Today / Week-to-Date', visible: true },
+  { id: 'pipeline', label: 'Unified Pipeline', visible: true },
   { id: 'pace-to-quota', label: 'Pace to Quota', visible: true },
   { id: 'what-to-do-next', label: 'What To Do Next', visible: true },
   { id: 'risk-window', label: 'Next 45 Days Risk', visible: true },
