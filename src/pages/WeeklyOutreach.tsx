@@ -85,6 +85,7 @@ import { EmptyState } from '@/components/table/EmptyState';
 import { FilterChips, type ActiveFilter } from '@/components/table/FilterChips';
 import { useUndoDelete } from '@/hooks/useUndoDelete';
 import { emitSaveStatus } from '@/components/SaveIndicator';
+import { TouchLogButtons } from '@/components/TouchLogButtons';
 import { 
   sortAccountsDefault, 
   applySortWithFallback,
@@ -454,13 +455,18 @@ function FunnelGroupSection({
                         </Button>
                       </TableCell>
                       <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-                        <AccountNameCell 
-                          name={account.name} 
-                          salesforceLink={account.salesforceLink}
-                          onNameChange={(name) => updateAccount(account.id, { name })}
-                          onSalesforceLinkChange={(link) => updateAccount(account.id, { salesforceLink: link })}
-                          className="text-sm break-words"
-                        />
+                        <div className="flex items-center gap-1">
+                          <AccountNameCell 
+                            name={account.name} 
+                            salesforceLink={account.salesforceLink}
+                            onNameChange={(name) => updateAccount(account.id, { name })}
+                            onSalesforceLinkChange={(link) => updateAccount(account.id, { salesforceLink: link })}
+                            className="text-sm break-words"
+                          />
+                          <div className="opacity-0 group-hover/row:opacity-100 transition-opacity">
+                            <TouchLogButtons accountId={account.id} compact />
+                          </div>
+                        </div>
                       </TableCell>
                       <TableCell className="align-top py-3 group" onClick={(e) => e.stopPropagation()}>
                         <WebsiteLinkCell

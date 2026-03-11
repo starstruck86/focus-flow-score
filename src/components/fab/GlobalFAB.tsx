@@ -9,6 +9,7 @@ import {
   Zap,
   Timer,
   ClipboardCheck,
+  Bolt,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -22,6 +23,7 @@ import { AddTranscriptModal } from './AddTranscriptModal';
 import { AddUpdateOpportunityModal } from './AddUpdateOpportunityModal';
 import { PowerHourModal } from './PowerHourModal';
 import { FocusTimerModal } from './FocusTimerModal';
+import { QuickLogModal } from '@/components/journal/QuickLogModal';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 
 interface GlobalFABProps {
@@ -47,6 +49,7 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
   const [showPowerHour, setShowPowerHour] = useState(false);
   const [showFocusTimer, setShowFocusTimer] = useState(false);
   const [showCheckIn, setShowCheckIn] = useState(false);
+  const [showQuickLog, setShowQuickLog] = useState(false);
   
   // Context for prefills
   const { currentRecord } = useLinkedRecordContext();
@@ -75,6 +78,14 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
         if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && !target.isContentEditable) {
           e.preventDefault();
           setShowAddTask(true);
+        }
+      }
+      // Q for quick log
+      if (e.key === 'q' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const target = e.target as HTMLElement;
+        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && !target.isContentEditable) {
+          e.preventDefault();
+          setShowQuickLog(true);
         }
       }
       // Cmd/Ctrl + K for FAB menu
@@ -157,8 +168,18 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
       },
     },
     {
+      id: 'quick-log',
+      label: 'Quick Log',
+      icon: Bolt,
+      shortcut: 'Q',
+      onClick: () => {
+        setShowQuickLog(true);
+        setIsExpanded(false);
+      },
+    },
+    {
       id: 'log-day',
-      label: hasCheckedInToday ? 'Edit Today' : 'Log Day',
+      label: hasCheckedInToday ? 'Edit Today' : 'Full Check-In',
       icon: ClipboardCheck,
       variant: 'primary',
       onClick: () => {
@@ -303,6 +324,11 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
         initialActivity={todayEntry?.activity}
         initialPreparedness={todayEntry?.preparedness}
         initialRecovery={todayEntry?.recovery}
+      />
+      
+      <QuickLogModal
+        open={showQuickLog}
+        onOpenChange={setShowQuickLog}
       />
     </>
   );

@@ -4,6 +4,7 @@ import { persist } from 'zustand/middleware';
 import type { 
   DayEntry, 
   Account, 
+  AccountStatus,
   Contact, 
   Renewal, 
   Task, 
@@ -722,13 +723,38 @@ export const useStore = create<QuotaCompassStore>()(
       },
       
       updateOpportunity: (id, updates) => {
-        set((state) => ({
-          opportunities: state.opportunities.map(o =>
-            o.id === id
-              ? { ...o, ...updates, updatedAt: new Date().toISOString() }
-              : o
-          ),
-        }));
+        set((state) => {
+          const opp = state.opportunities.find(o => o.id === id);
+          if (!opp) return state;
+          
+          const updatedOpp = { ...opp, ...updates, updatedAt: new Date().toISOString() };
+          
+          // === Auto-promote account status from opp stage changes ===
+          let updatedAccounts = state.accounts;
+          if (updates.stage && opp.accountId) {
+            const account = state.accounts.find(a => a.id === opp.accountId);
+            if (account) {
+              let newAccountStatus: AccountStatus | undefined;
+              if (updates.stage === 'Closed Won' || (typeof updates.stage === 'string' && updates.stage.includes('Closed Won'))) {
+                // Don't demote — account may have other active opps
+              } else if (updates.stage === 'Demo' || updates.stage === 'Proposal' || updates.stage === 'Negotiate') {
+                if (account.accountStatus === 'researching' || account.accountStatus === 'prepped' || account.accountStatus === 'active') {
+                  newAccountStatus = 'meeting-booked';
+                }
+              }
+              if (newAccountStatus && newAccountStatus !== account.accountStatus) {
+                updatedAccounts = state.accounts.map(a =>
+                  a.id === opp.accountId ? { ...a, accountStatus: newAccountStatus!, updatedAt: new Date().toISOString() } : a
+                );
+              }
+            }
+          }
+          
+          return {
+            opportunities: state.opportunities.map(o => o.id === id ? updatedOpp : o),
+            accounts: updatedAccounts,
+          };
+        });
       },
       
       deleteOpportunity: (id) => {
@@ -738,26 +764,56 @@ export const useStore = create<QuotaCompassStore>()(
       },
       
       logOpportunityActivity: (id, type, notes) => {
-        set((state) => ({
-          opportunities: state.opportunities.map(o =>
+        const todayStr = getTodayString();
+        set((state) => {
+          const opp = state.opportunities.find(o => o.id === id);
+          if (!opp) return state;
+          
+          // Update opportunity with activity
+          const updatedOpps = state.opportunities.map(o =>
             o.id === id
               ? {
                   ...o,
                   activityLog: [
                     ...o.activityLog,
-                    {
-                      id: generateId(),
-                      type,
-                      date: new Date().toISOString(),
-                      notes,
-                    },
+                    { id: generateId(), type, date: new Date().toISOString(), notes },
                   ],
-                  lastTouchDate: getTodayString(),
+                  lastTouchDate: todayStr,
                   updatedAt: new Date().toISOString(),
                 }
               : o
-          ),
-        }));
+          );
+          
+          // === Auto-cascade last-touch to parent account ===
+          const updatedAccounts = opp.accountId
+            ? state.accounts.map(a =>
+                a.id === opp.accountId
+                  ? { 
+                      ...a, 
+                      lastTouchDate: todayStr, 
+                      lastTouchType: type,
+                      touchesThisWeek: (a.touchesThisWeek || 0) + 1,
+                      updatedAt: new Date().toISOString(),
+                    }
+                  : a
+              )
+            : state.accounts;
+          
+          // === Auto-cascade last-touch to linked contacts ===
+          const updatedContacts = opp.linkedContactIds.length > 0
+            ? state.contacts.map(c =>
+                opp.linkedContactIds.includes(c.id)
+                  ? { ...c, lastTouchDate: todayStr, updatedAt: new Date().toISOString() }
+                  : c
+              )
+            : state.contacts;
+          
+          return {
+            opportunities: updatedOpps,
+            accounts: updatedAccounts,
+            contacts: updatedContacts,
+          };
+        });
       },
       
       // Quick Actions

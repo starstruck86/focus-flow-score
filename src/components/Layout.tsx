@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { SaveIndicator } from '@/components/SaveIndicator';
+import { useStaleItems } from '@/hooks/useStaleItems';
 import { cn } from '@/lib/utils';
 import { FocusTimer } from './FocusTimer';
 import { useAuth } from '@/contexts/AuthContext';
@@ -60,6 +61,14 @@ function AppSidebar() {
   const { user, signOut } = useAuth();
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
+  const stale = useStaleItems();
+  
+  // Map routes to badge counts
+  const badgeCounts: Record<string, number> = {
+    '/outreach': stale.staleAccounts,
+    '/renewals': stale.atRiskRenewals,
+    '/tasks': stale.oppsNoNextStep,
+  };
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border hidden md:flex">
@@ -104,7 +113,17 @@ function AppSidebar() {
                             )}
                           >
                             <item.icon className="h-5 w-5 shrink-0" />
-                            {!collapsed && <span>{item.label}</span>}
+                            {!collapsed && (
+                              <span className="flex-1">{item.label}</span>
+                            )}
+                            {!collapsed && badgeCounts[item.to] > 0 && (
+                              <span className="ml-auto min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold px-1">
+                                {badgeCounts[item.to]}
+                              </span>
+                            )}
+                            {collapsed && badgeCounts[item.to] > 0 && (
+                              <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-destructive" />
+                            )}
                           </RouterNavLink>
                         </SidebarMenuButton>
                       </TooltipTrigger>
