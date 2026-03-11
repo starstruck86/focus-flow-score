@@ -182,13 +182,15 @@ Deno.serve(async (req) => {
         const supabase = createClient(supabaseUrl, supabaseKey);
 
         const evidence = {
-            direct_ecommerce: signals.direct_ecommerce_evidence || '',
-            email_sms_capture: signals.email_sms_capture_evidence || '',
-            loyalty_membership: signals.loyalty_membership_evidence || '',
-            category_complexity: signals.category_complexity_evidence || '',
-            mobile_app: signals.mobile_app_evidence || '',
-            marketing_platform: signals.marketing_platform_evidence || '',
-            crm_lifecycle_team_size: signals.crm_lifecycle_team_size_evidence || '',
+            direct_ecommerce: signals.direct_ecommerce_details || '',
+            email_sms_capture: signals.email_sms_capture_details || '',
+            loyalty_membership: signals.loyalty_membership_details || '',
+            category_complexity: signals.category_complexity_details || '',
+            mobile_app: signals.mobile_app_details || '',
+            marketing_platform: signals.marketing_platform_details || '',
+            crm_lifecycle_team_size: signals.crm_lifecycle_team_size_details || '',
+            ecommerce_platform: signals.ecommerce_platform || '',
+            other_tech_detected: signals.other_tech_detected || '',
           };
 
         const { error: dbError } = await supabase
