@@ -93,6 +93,28 @@ function storeAccountToDb(a: Account, userId: string): any {
     ecommerce: a.ecommerce || null,
     contact_status: a.contactStatus || null,
     tags: a.tags,
+    // Lifecycle Intelligence
+    direct_ecommerce: a.directEcommerce ?? null,
+    email_sms_capture: a.emailSmsCapture ?? null,
+    loyalty_membership: a.loyaltyMembership ?? null,
+    category_complexity: a.categoryComplexity ?? null,
+    mobile_app: a.mobileApp ?? null,
+    marketing_platform_detected: a.marketingPlatformDetected || null,
+    crm_lifecycle_team_size: a.crmLifecycleTeamSize ?? null,
+    trigger_events: a.triggerEvents || [],
+    icp_fit_score: a.icpFitScore ?? null,
+    timing_score: a.timingScore ?? null,
+    priority_score: a.priorityScore ?? null,
+    lifecycle_tier: a.lifecycleTier || null,
+    high_probability_buyer: a.highProbabilityBuyer ?? false,
+    triggered_account: a.triggeredAccount ?? false,
+    confidence_score: a.confidenceScore ?? null,
+    last_enriched_at: a.lastEnrichedAt || null,
+    enrichment_source_summary: a.enrichmentSourceSummary || null,
+    lifecycle_override: a.lifecycleOverride ?? false,
+    lifecycle_override_reason: a.lifecycleOverrideReason || null,
+    icp_score_override: a.icpScoreOverride ?? null,
+    tier_override: a.tierOverride || null,
   };
 }
 
