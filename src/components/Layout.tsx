@@ -61,6 +61,14 @@ function AppSidebar() {
   const { user, signOut } = useAuth();
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
+  const stale = useStaleItems();
+  
+  // Map routes to badge counts
+  const badgeCounts: Record<string, number> = {
+    '/outreach': stale.staleAccounts,
+    '/renewals': stale.atRiskRenewals,
+    '/tasks': stale.oppsNoNextStep,
+  };
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border hidden md:flex">
