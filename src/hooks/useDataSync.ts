@@ -324,48 +324,21 @@ export function useDataSync() {
           renewals: mergedRenewals,
         });
 
-          const storeOnlyAccounts = migratedAccounts.filter(a => !dbAccountIds.has(a.id));
-          const storeOnlyOpps = migratedOpps.filter(o => !dbOppIds.has(o.id));
-          const storeOnlyRenewals = migratedRenewals.filter(r => !dbRenewalIds.has(r.id));
-
-          if (storeOnlyAccounts.length > 0) {
-            await supabase.from('accounts').upsert(
-              storeOnlyAccounts.map(a => storeAccountToDb(a, userId))
-            );
-          }
-          if (storeOnlyOpps.length > 0) {
-            await supabase.from('opportunities').upsert(
-              storeOnlyOpps.map(o => storeOpportunityToDb(o, userId))
-            );
-          }
-          if (storeOnlyRenewals.length > 0) {
-            await supabase.from('renewals').upsert(
-              storeOnlyRenewals.map(r => storeRenewalToDb(r, userId))
-            );
-          }
-        } else if (migratedAccounts.length > 0 || migratedOpps.length > 0 || migratedRenewals.length > 0) {
-          // Update store with migrated IDs
-          useStore.setState({
-            accounts: migratedAccounts,
-            opportunities: migratedOpps,
-            renewals: migratedRenewals,
-          });
-          
-          if (migratedAccounts.length > 0) {
-            await supabase.from('accounts').upsert(
-              migratedAccounts.map(a => storeAccountToDb(a, userId))
-            );
-          }
-          if (migratedOpps.length > 0) {
-            await supabase.from('opportunities').upsert(
-              migratedOpps.map(o => storeOpportunityToDb(o, userId))
-            );
-          }
-          if (migratedRenewals.length > 0) {
-            await supabase.from('renewals').upsert(
-              migratedRenewals.map(r => storeRenewalToDb(r, userId))
-            );
-          }
+        // Push any new local-only items to DB
+        if (newLocalAccounts.length > 0) {
+          await supabase.from('accounts').upsert(
+            newLocalAccounts.map(a => storeAccountToDb(a, userId))
+          );
+        }
+        if (newLocalOpps.length > 0) {
+          await supabase.from('opportunities').upsert(
+            newLocalOpps.map(o => storeOpportunityToDb(o, userId))
+          );
+        }
+        if (newLocalRenewals.length > 0) {
+          await supabase.from('renewals').upsert(
+            newLocalRenewals.map(r => storeRenewalToDb(r, userId))
+          );
         }
 
         // Snapshot current state for diffing
