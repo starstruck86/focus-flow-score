@@ -20,6 +20,7 @@ const DEFAULT_WIDGETS: DashboardWidget[] = [
   { id: 'what-to-do-next', label: 'What To Do Next', visible: true },
   { id: 'risk-window', label: 'Next 45 Days Risk', visible: true },
   { id: 'snapshots', label: 'Performance & Commission', visible: true },
+  { id: 'daily-digest', label: 'Daily Digest', visible: true },
 ];
 
 function loadWidgets(): DashboardWidget[] {

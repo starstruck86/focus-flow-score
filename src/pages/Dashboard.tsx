@@ -248,6 +248,8 @@ export default function Dashboard() {
             </CollapsibleContent>
           </Collapsible>
         );
+      case 'daily-digest':
+        return <DailyDigest key={widgetId} />;
       default:
         return null;
     }
