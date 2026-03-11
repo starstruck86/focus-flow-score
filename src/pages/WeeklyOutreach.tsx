@@ -1428,6 +1428,18 @@ export default function WeeklyOutreach() {
             />
 
             {/* Funnel Grouped View */}
+            <FilterChips
+              filters={activeFilters}
+              onClearAll={() => { setSearchQuery(''); setFilterTier('all'); setFilterTierAB(false); setFilterMissingCadence(false); setFilterStale(false); setFilterIcpTier12(false); setFilterTriggered(false); setFilterHighProbability(false); setFilterUnenriched(false); }}
+            />
+            
+            {/* Filtered count indicator */}
+            {filteredAccounts.length !== newLogoAccounts.length && (
+              <div className="text-xs text-muted-foreground">
+                Showing <span className="font-semibold text-foreground">{filteredAccounts.length}</span> of {newLogoAccounts.length} accounts
+              </div>
+            )}
+
             {newLogoAccounts.length === 0 ? (
               <EmptyState
                 icon={Users}
