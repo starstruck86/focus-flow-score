@@ -1426,12 +1426,6 @@ export default function WeeklyOutreach() {
               filters={activeFilters}
               onClearAll={() => { setSearchQuery(''); setFilterTier('all'); setFilterTierAB(false); setFilterMissingCadence(false); setFilterStale(false); setFilterIcpTier12(false); setFilterTriggered(false); setFilterHighProbability(false); setFilterUnenriched(false); }}
             />
-
-            {/* Funnel Grouped View */}
-            <FilterChips
-              filters={activeFilters}
-              onClearAll={() => { setSearchQuery(''); setFilterTier('all'); setFilterTierAB(false); setFilterMissingCadence(false); setFilterStale(false); setFilterIcpTier12(false); setFilterTriggered(false); setFilterHighProbability(false); setFilterUnenriched(false); }}
-            />
             
             {/* Filtered count indicator */}
             {filteredAccounts.length !== newLogoAccounts.length && (
