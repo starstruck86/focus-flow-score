@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LinkedRecordProvider } from "@/contexts/LinkedRecordContext";
+import { CopilotProvider } from "@/contexts/CopilotContext";
 import { DataSyncProvider } from "@/components/DataSyncProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { JournalPromptManager } from "@/components/journal";
