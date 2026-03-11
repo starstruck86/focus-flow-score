@@ -1184,6 +1184,54 @@ export default function WeeklyOutreach() {
               </div>
             </div>
 
+            {/* Bulk Actions Bar */}
+            <BulkActionsBar
+              selectedCount={bulkSelection.selectedCount}
+              onClear={bulkSelection.clear}
+              selectedIds={bulkSelection.selectedIds}
+              actions={[
+                {
+                  id: 'change-status',
+                  label: 'Change Status',
+                  options: [
+                    { value: 'researching', label: '1 - Researching' },
+                    { value: 'prepped', label: '2 - Prepped' },
+                    { value: 'active', label: '3 - Active' },
+                    { value: 'inactive', label: '4 - Inactive' },
+                    { value: 'disqualified', label: '5 - Disqualified' },
+                    { value: 'meeting-booked', label: '6 - Meeting Booked' },
+                  ],
+                  onExecute: (ids, value) => {
+                    ids.forEach(id => updateAccount(id, { accountStatus: value as AccountStatus }));
+                    bulkSelection.clear();
+                  },
+                },
+                {
+                  id: 'change-tier',
+                  label: 'Change Tier',
+                  options: [
+                    { value: 'A', label: 'Tier A' },
+                    { value: 'B', label: 'Tier B' },
+                    { value: 'C', label: 'Tier C' },
+                  ],
+                  onExecute: (ids, value) => {
+                    ids.forEach(id => updateAccount(id, { tier: value as AccountTier }));
+                    bulkSelection.clear();
+                  },
+                },
+                {
+                  id: 'delete',
+                  label: 'Delete',
+                  icon: undefined,
+                  variant: 'destructive' as const,
+                  onExecute: (ids) => {
+                    ids.forEach(id => deleteAccount(id));
+                    bulkSelection.clear();
+                  },
+                },
+              ]}
+            />
+
             {/* Funnel Grouped View */}
             {accounts.length === 0 ? (
               <div className="metric-card p-8 text-center text-muted-foreground">
@@ -1204,6 +1252,8 @@ export default function WeeklyOutreach() {
                       deleteAccount={deleteAccount}
                       isCollapsed={collapsedGroups.has(group.status)}
                       onToggleCollapse={() => toggleGroupCollapse(group.status)}
+                      isSelected={bulkSelection.isSelected}
+                      onToggleSelect={bulkSelection.toggle}
                     />
                   ))}
                 </div>
@@ -1223,6 +1273,8 @@ export default function WeeklyOutreach() {
                         deleteAccount={deleteAccount}
                         isCollapsed={collapsedGroups.has(group.status)}
                         onToggleCollapse={() => toggleGroupCollapse(group.status)}
+                        isSelected={bulkSelection.isSelected}
+                        onToggleSelect={bulkSelection.toggle}
                       />
                     ))}
                   </div>
@@ -1243,6 +1295,8 @@ export default function WeeklyOutreach() {
                         deleteAccount={deleteAccount}
                         isCollapsed={collapsedGroups.has(group.status)}
                         onToggleCollapse={() => toggleGroupCollapse(group.status)}
+                        isSelected={bulkSelection.isSelected}
+                        onToggleSelect={bulkSelection.toggle}
                       />
                     ))}
                   </div>
