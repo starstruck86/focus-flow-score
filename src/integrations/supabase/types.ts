@@ -66,15 +66,31 @@ export type Database = {
         Row: {
           account_status: string | null
           cadence_name: string | null
+          category_complexity: boolean | null
+          confidence_score: number | null
           contact_status: string | null
           created_at: string
+          crm_lifecycle_team_size: number | null
           current_agreement_link: string | null
+          direct_ecommerce: boolean | null
           ecommerce: string | null
+          email_sms_capture: boolean | null
+          enrichment_source_summary: string | null
+          high_probability_buyer: boolean | null
+          icp_fit_score: number | null
+          icp_score_override: number | null
           id: string
           industry: string | null
+          last_enriched_at: string | null
           last_touch_date: string | null
           last_touch_type: string | null
+          lifecycle_override: boolean | null
+          lifecycle_override_reason: string | null
+          lifecycle_tier: string | null
+          loyalty_membership: boolean | null
           mar_tech: string | null
+          marketing_platform_detected: string | null
+          mobile_app: boolean | null
           motion: string | null
           name: string
           next_step: string | null
@@ -83,6 +99,7 @@ export type Database = {
           outreach_status: string | null
           planhat_link: string | null
           priority: string | null
+          priority_score: number | null
           salesforce_id: string | null
           salesforce_link: string | null
           tags: string[] | null
@@ -90,7 +107,11 @@ export type Database = {
           tech_stack: string[] | null
           tech_stack_notes: string | null
           tier: string | null
+          tier_override: string | null
+          timing_score: number | null
           touches_this_week: number | null
+          trigger_events: Json | null
+          triggered_account: boolean | null
           updated_at: string
           user_id: string
           website: string | null
@@ -98,15 +119,31 @@ export type Database = {
         Insert: {
           account_status?: string | null
           cadence_name?: string | null
+          category_complexity?: boolean | null
+          confidence_score?: number | null
           contact_status?: string | null
           created_at?: string
+          crm_lifecycle_team_size?: number | null
           current_agreement_link?: string | null
+          direct_ecommerce?: boolean | null
           ecommerce?: string | null
+          email_sms_capture?: boolean | null
+          enrichment_source_summary?: string | null
+          high_probability_buyer?: boolean | null
+          icp_fit_score?: number | null
+          icp_score_override?: number | null
           id?: string
           industry?: string | null
+          last_enriched_at?: string | null
           last_touch_date?: string | null
           last_touch_type?: string | null
+          lifecycle_override?: boolean | null
+          lifecycle_override_reason?: string | null
+          lifecycle_tier?: string | null
+          loyalty_membership?: boolean | null
           mar_tech?: string | null
+          marketing_platform_detected?: string | null
+          mobile_app?: boolean | null
           motion?: string | null
           name: string
           next_step?: string | null
@@ -115,6 +152,7 @@ export type Database = {
           outreach_status?: string | null
           planhat_link?: string | null
           priority?: string | null
+          priority_score?: number | null
           salesforce_id?: string | null
           salesforce_link?: string | null
           tags?: string[] | null
@@ -122,7 +160,11 @@ export type Database = {
           tech_stack?: string[] | null
           tech_stack_notes?: string | null
           tier?: string | null
+          tier_override?: string | null
+          timing_score?: number | null
           touches_this_week?: number | null
+          trigger_events?: Json | null
+          triggered_account?: boolean | null
           updated_at?: string
           user_id: string
           website?: string | null
@@ -130,15 +172,31 @@ export type Database = {
         Update: {
           account_status?: string | null
           cadence_name?: string | null
+          category_complexity?: boolean | null
+          confidence_score?: number | null
           contact_status?: string | null
           created_at?: string
+          crm_lifecycle_team_size?: number | null
           current_agreement_link?: string | null
+          direct_ecommerce?: boolean | null
           ecommerce?: string | null
+          email_sms_capture?: boolean | null
+          enrichment_source_summary?: string | null
+          high_probability_buyer?: boolean | null
+          icp_fit_score?: number | null
+          icp_score_override?: number | null
           id?: string
           industry?: string | null
+          last_enriched_at?: string | null
           last_touch_date?: string | null
           last_touch_type?: string | null
+          lifecycle_override?: boolean | null
+          lifecycle_override_reason?: string | null
+          lifecycle_tier?: string | null
+          loyalty_membership?: boolean | null
           mar_tech?: string | null
+          marketing_platform_detected?: string | null
+          mobile_app?: boolean | null
           motion?: string | null
           name?: string
           next_step?: string | null
@@ -147,6 +205,7 @@ export type Database = {
           outreach_status?: string | null
           planhat_link?: string | null
           priority?: string | null
+          priority_score?: number | null
           salesforce_id?: string | null
           salesforce_link?: string | null
           tags?: string[] | null
@@ -154,7 +213,11 @@ export type Database = {
           tech_stack?: string[] | null
           tech_stack_notes?: string | null
           tier?: string | null
+          tier_override?: string | null
+          timing_score?: number | null
           touches_this_week?: number | null
+          trigger_events?: Json | null
+          triggered_account?: boolean | null
           updated_at?: string
           user_id?: string
           website?: string | null

@@ -86,6 +86,8 @@ import { FilterChips, type ActiveFilter } from '@/components/table/FilterChips';
 import { useUndoDelete } from '@/hooks/useUndoDelete';
 import { emitSaveStatus } from '@/components/SaveIndicator';
 import { TouchLogButtons } from '@/components/TouchLogButtons';
+import { LifecycleTierBadge, IcpScorePill, TriggeredBadge, EnrichButton, SignalDetailPanel } from '@/components/LifecycleIntelligence';
+import { useAccountEnrichment } from '@/hooks/useAccountEnrichment';
 import { 
   sortAccountsDefault, 
   applySortWithFallback,
@@ -454,15 +456,17 @@ function FunnelGroupSection({
                       </TableHead>
                       <TableHead className="w-[3%]"></TableHead>
                       <TableHead className="w-[17%]">Account</TableHead>
-                  <TableHead className="w-[15%]">Website</TableHead>
-                  <TableHead className="w-[12%]">Account Status</TableHead>
-                  <TableHead className="w-[10%]">Contact Status</TableHead>
-                  <TableHead className="w-[6%]">Tier</TableHead>
+                  <TableHead className="w-[12%]">Website</TableHead>
+                  <TableHead className="w-[10%]">Account Status</TableHead>
+                  <TableHead className="w-[5%]">ICP</TableHead>
+                  <TableHead className="w-[5%]">Tier</TableHead>
+                  <TableHead className="w-[8%]">Contact Status</TableHead>
+                  <TableHead className="w-[5%]">Tier</TableHead>
                   {(group.status === 'prepped' || group.status === 'active') && (
-                    <TableHead className="w-[10%]">Cadence</TableHead>
+                    <TableHead className="w-[8%]">Cadence</TableHead>
                   )}
-                  <TableHead className="w-[16%]">MarTech</TableHead>
-                    <TableHead className="w-[16%]">Ecommerce</TableHead>
+                  <TableHead className="w-[12%]">MarTech</TableHead>
+                    <TableHead className="w-[12%]">Ecommerce</TableHead>
                     {summaryCustomFields.map(field => (
                       <TableHead key={field.id} className="w-[8%]">{field.name}</TableHead>
                     ))}
@@ -526,6 +530,16 @@ function FunnelGroupSection({
                           options={STATUS_OPTIONS}
                           onChange={(v) => updateAccount(account.id, { accountStatus: v as AccountStatus })}
                         />
+                      </TableCell>
+                      <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1">
+                          <IcpScorePill account={account} />
+                          <EnrichButton account={account} />
+                          <TriggeredBadge account={account} />
+                        </div>
+                      </TableCell>
+                      <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                        <LifecycleTierBadge account={account} />
                       </TableCell>
                       <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                         <DisplaySelectCell
@@ -609,14 +623,17 @@ function FunnelGroupSection({
                     </TableRow>
                     {expandedAccountId === account.id && (
                       <TableRow className="hover:bg-transparent border-b-2 bg-muted/10">
-                        <TableCell colSpan={10 + summaryCustomFields.length} className="pt-0 pb-3">
-                          <AccountContactsField
-                            accountId={account.id}
-                            contacts={account.accountContacts || []}
-                            onChange={(contacts) => updateAccount(account.id, { accountContacts: contacts })}
-                            companyNotes={account.notes || ''}
-                            onCompanyNotesChange={(notes) => updateAccount(account.id, { notes })}
-                          />
+                        <TableCell colSpan={12 + summaryCustomFields.length} className="pt-0 pb-3">
+                          <div className="space-y-3">
+                            <SignalDetailPanel account={account} />
+                            <AccountContactsField
+                              accountId={account.id}
+                              contacts={account.accountContacts || []}
+                              onChange={(contacts) => updateAccount(account.id, { accountContacts: contacts })}
+                              companyNotes={account.notes || ''}
+                              onCompanyNotesChange={(notes) => updateAccount(account.id, { notes })}
+                            />
+                          </div>
                         </TableCell>
                       </TableRow>
                     )}
@@ -634,6 +651,7 @@ function FunnelGroupSection({
 export default function WeeklyOutreach() {
   const { accounts, addAccount, updateAccount: rawUpdateAccount, deleteAccount } = useStore();
   const bulkSelection = useBulkSelection<Account>();
+  const { enrichMultiple } = useAccountEnrichment();
   
   // Wrap update with save indicator
   const updateAccount = useCallback((id: string, updates: Partial<Account>) => {
@@ -1057,6 +1075,8 @@ export default function WeeklyOutreach() {
                   builtInColumns={[
                     { key: 'website', label: 'Website' },
                     { key: 'status', label: 'Account Status' },
+                    { key: 'icp', label: 'ICP Score' },
+                    { key: 'icpTier', label: 'ICP Tier' },
                     { key: 'contactStatus', label: 'Contact Status' },
                     { key: 'tier', label: 'Tier' },
                     { key: 'cadence', label: 'Cadence' },
@@ -1320,6 +1340,15 @@ export default function WeeklyOutreach() {
                   ],
                   onExecute: (ids, value) => {
                     ids.forEach(id => updateAccount(id, { tier: value as AccountTier }));
+                    bulkSelection.clear();
+                  },
+                },
+                {
+                  id: 'enrich',
+                  label: 'Enrich ICP',
+                  onExecute: (ids) => {
+                    const selected = accounts.filter(a => ids.includes(a.id));
+                    enrichMultiple(selected);
                     bulkSelection.clear();
                   },
                 },

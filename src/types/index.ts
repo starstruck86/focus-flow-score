@@ -261,6 +261,28 @@ export interface Account {
   tags: string[];
   createdAt: string;
   updatedAt: string;
+  // Lifecycle Marketing Intelligence
+  directEcommerce?: boolean;
+  emailSmsCapture?: boolean;
+  loyaltyMembership?: boolean;
+  categoryComplexity?: boolean;
+  mobileApp?: boolean;
+  marketingPlatformDetected?: string;
+  crmLifecycleTeamSize?: number;
+  triggerEvents?: Array<{ type: string; date: string; source?: string; confidence?: string; notes?: string }>;
+  icpFitScore?: number;
+  timingScore?: number;
+  priorityScore?: number;
+  lifecycleTier?: string;
+  highProbabilityBuyer?: boolean;
+  triggeredAccount?: boolean;
+  confidenceScore?: number;
+  lastEnrichedAt?: string;
+  enrichmentSourceSummary?: string;
+  lifecycleOverride?: boolean;
+  lifecycleOverrideReason?: string;
+  icpScoreOverride?: number;
+  tierOverride?: string;
 }
 
 // Contact
