@@ -1,5 +1,6 @@
 import React, { useState, useRef, useMemo, useCallback, memo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 import { 
   Plus, 
   Phone, 
@@ -217,42 +218,57 @@ export default function Renewals() {
   const [activeTab, setActiveTab] = useState('renewals');
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Auto-expand and scroll to highlighted record from Work Queue
+  // Deep-link highlight from Work Queue via LinkedRecordContext
+  const { currentRecord, clearCurrentRecord } = useLinkedRecordContext();
+  const highlightProcessedRef = useRef<string | null>(null);
+
   useEffect(() => {
-    const id = searchParams.get('highlight');
+    const urlId = searchParams.get('highlight');
     const tab = searchParams.get('tab');
-    if (id) {
-      setHighlightId(id);
-      // Clean up URL
-      searchParams.delete('highlight');
-      searchParams.delete('tab');
-      setSearchParams(searchParams, { replace: true });
-
-      // Determine if this is a renewal or opportunity
-      const isRenewal = renewals.some(r => r.id === id);
-      if (isRenewal) {
-        setActiveTab('renewals');
-        setExpandedRenewalId(id);
-        requestAnimationFrame(() => {
-          setTimeout(() => {
-            const el = document.querySelector(`[data-renewal-id="${id}"]`);
-            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }, 100);
-        });
-      } else {
-        // It's an opportunity — switch to opportunities tab
-        setActiveTab('opportunities');
-      }
-
-      const timer = setTimeout(() => setHighlightId(null), 3000);
-      return () => clearTimeout(timer);
+    const id = urlId || currentRecord.id;
+    
+    // Clean URL params if present
+    if (urlId || tab) {
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('highlight');
+      newParams.delete('tab');
+      setSearchParams(newParams, { replace: true });
     }
-    if (tab) {
+    
+    if (tab && !id) {
       setActiveTab(tab);
-      searchParams.delete('tab');
-      setSearchParams(searchParams, { replace: true });
     }
-  }, [searchParams, setSearchParams, renewals]);
+
+    if (!id || id === highlightProcessedRef.current || renewals.length === 0) return;
+    highlightProcessedRef.current = id;
+    setHighlightId(id);
+
+    const isRenewal = renewals.some(r => r.id === id);
+    if (isRenewal) {
+      setActiveTab('renewals');
+      setExpandedRenewalId(id);
+    } else {
+      setActiveTab('opportunities');
+    }
+
+    // Clear context after consuming — use setTimeout to avoid re-render killing our intervals
+    setTimeout(() => clearCurrentRecord(), 0);
+
+    // Retry scroll until element appears (max 3s)
+    let attempts = 0;
+    const selector = isRenewal ? `[data-renewal-id="${id}"]` : `[data-opp-id="${id}"]`;
+    const scrollInterval = setInterval(() => {
+      const el = document.querySelector(selector);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        clearInterval(scrollInterval);
+      }
+      if (++attempts > 30) clearInterval(scrollInterval);
+    }, 100);
+
+    setTimeout(() => setHighlightId(null), 4000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRecord.id, renewals.length]);
   const [newRenewal, setNewRenewal] = useState<Partial<Renewal>>({
     healthStatus: 'green',
     autoRenew: false,

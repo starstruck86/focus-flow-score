@@ -573,14 +573,18 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     if (highlightId) {
       setLocalHighlight(highlightId);
       setExpandedOppIds(prev => new Set(prev).add(highlightId));
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          const el = document.querySelector(`[data-opp-id="${highlightId}"]`);
-          el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 150);
-      });
-      const timer = setTimeout(() => setLocalHighlight(null), 3000);
-      return () => clearTimeout(timer);
+      // Retry scroll until element appears (max 2s)
+      let attempts = 0;
+      const scrollInterval = setInterval(() => {
+        const el = document.querySelector(`[data-opp-id="${highlightId}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          clearInterval(scrollInterval);
+        }
+        if (++attempts > 20) clearInterval(scrollInterval);
+      }, 100);
+      const timer = setTimeout(() => setLocalHighlight(null), 4000);
+      return () => { clearTimeout(timer); clearInterval(scrollInterval); };
     }
   }, [highlightId]);
 
