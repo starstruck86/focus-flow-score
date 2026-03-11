@@ -317,6 +317,11 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
         initialPreparedness={todayEntry?.preparedness}
         initialRecovery={todayEntry?.recovery}
       />
+      
+      <QuickLogModal
+        open={showQuickLog}
+        onOpenChange={setShowQuickLog}
+      />
     </>
   );
 }
