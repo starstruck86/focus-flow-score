@@ -501,6 +501,26 @@ export default function Renewals() {
       case 'at-risk':
         matchesView = renewal.healthStatus === 'red' || renewal.healthStatus === 'yellow';
         break;
+      case 'tier-1': {
+        const acct = getAccountForRenewal(renewal);
+        const tier = acct?.tierOverride || acct?.lifecycleTier;
+        matchesView = tier === '1';
+        break;
+      }
+      case 'tier-2': {
+        const acct = getAccountForRenewal(renewal);
+        const tier = acct?.tierOverride || acct?.lifecycleTier;
+        matchesView = tier === '2';
+        break;
+      }
+      case 'unenriched': {
+        const acct = getAccountForRenewal(renewal);
+        matchesView = !acct?.lastEnrichedAt && !!acct?.website;
+        break;
+      }
+      case 'churning':
+        matchesView = renewal.churnRisk === 'certain';
+        break;
       case 'auto-renew':
         matchesView = renewal.autoRenew;
         break;
