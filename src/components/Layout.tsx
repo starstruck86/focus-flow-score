@@ -237,6 +237,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </header>
 
           {/* Main Content */}
+          <Breadcrumbs />
           <main className={cn("flex-1 overflow-auto", isMobile && "pb-16")}>
             {children}
           </main>
