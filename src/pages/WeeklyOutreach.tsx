@@ -229,7 +229,7 @@ function sortFunnelGroup(accounts: Account[]): Account[] {
 }
 
 // ===== STALENESS ALERT =====
-function StalenessAlert({ accounts }: { accounts: Account[] }) {
+const StalenessAlert = memo(function StalenessAlert({ accounts }: { accounts: Account[] }) {
   const staleCount = accounts.filter(a => {
     if (a.accountStatus === 'disqualified' || a.accountStatus === 'inactive') return false;
     if (!a.lastTouchDate) return true;
