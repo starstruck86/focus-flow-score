@@ -273,6 +273,8 @@ export function useDataSync() {
         const dbOpps = (oppsRes.data || []).map(dbOpportunityToStore);
         const dbRenewals = (renewalsRes.data || []).map(dbRenewalToStore);
 
+        console.log(`[DataSync] Hydrating: ${dbAccounts.length} accounts, ${dbOpps.length} opps, ${dbRenewals.length} renewals from DB`);
+
         const store = useStore.getState();
         
         const isUUID = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -285,76 +287,58 @@ export function useDataSync() {
           return { ...item, id: genUUID() };
         };
         
-        const migratedAccounts = store.accounts.map(migrateId);
-        const migratedOpps = store.opportunities.map(migrateId);
-        const migratedRenewals = store.renewals.map(migrateId);
+        // Only migrate local items that have valid content (not empty seed data)
+        const localAccounts = store.accounts.filter(a => a.name).map(migrateId);
+        const localOpps = store.opportunities.filter(o => o.name).map(migrateId);
+        const localRenewals = store.renewals.filter(r => r.accountName).map(migrateId);
 
-        if (dbAccounts.length > 0 || dbOpps.length > 0 || dbRenewals.length > 0) {
-          const dbAccountIds = new Set(dbAccounts.map(a => a.id));
-          const dbOppIds = new Set(dbOpps.map(o => o.id));
-          const dbRenewalIds = new Set(dbRenewals.map(r => r.id));
+        // DB is the source of truth — start with DB data, then add local-only items
+        const dbAccountIds = new Set(dbAccounts.map(a => a.id));
+        const dbOppIds = new Set(dbOpps.map(o => o.id));
+        const dbRenewalIds = new Set(dbRenewals.map(r => r.id));
+        
+        // Find local items that don't exist in DB (by name match to avoid duplicates from migration)
+        const dbAccountNames = new Set(dbAccounts.map(a => a.name.toLowerCase()));
+        const dbOppNames = new Set(dbOpps.map(o => o.name.toLowerCase()));
+        const dbRenewalNames = new Set(dbRenewals.map(r => r.accountName.toLowerCase()));
+        
+        const newLocalAccounts = localAccounts.filter(a => 
+          !dbAccountIds.has(a.id) && !dbAccountNames.has(a.name.toLowerCase())
+        );
+        const newLocalOpps = localOpps.filter(o => 
+          !dbOppIds.has(o.id) && !dbOppNames.has(o.name.toLowerCase())
+        );
+        const newLocalRenewals = localRenewals.filter(r => 
+          !dbRenewalIds.has(r.id) && !dbRenewalNames.has(r.accountName.toLowerCase())
+        );
 
-          const mergedAccounts = [
-            ...dbAccounts,
-            ...migratedAccounts.filter(a => !dbAccountIds.has(a.id)),
-          ];
-          const mergedOpps = [
-            ...dbOpps,
-            ...migratedOpps.filter(o => !dbOppIds.has(o.id)),
-          ];
-          const mergedRenewals = [
-            ...dbRenewals,
-            ...migratedRenewals.filter(r => !dbRenewalIds.has(r.id)),
-          ];
+        const mergedAccounts = [...dbAccounts, ...newLocalAccounts];
+        const mergedOpps = [...dbOpps, ...newLocalOpps];
+        const mergedRenewals = [...dbRenewals, ...newLocalRenewals];
 
-          useStore.setState({
-            accounts: mergedAccounts,
-            opportunities: mergedOpps,
-            renewals: mergedRenewals,
-          });
+        console.log(`[DataSync] Merged: ${mergedAccounts.length} accounts, ${mergedOpps.length} opps, ${mergedRenewals.length} renewals`);
 
-          const storeOnlyAccounts = migratedAccounts.filter(a => !dbAccountIds.has(a.id));
-          const storeOnlyOpps = migratedOpps.filter(o => !dbOppIds.has(o.id));
-          const storeOnlyRenewals = migratedRenewals.filter(r => !dbRenewalIds.has(r.id));
+        useStore.setState({
+          accounts: mergedAccounts,
+          opportunities: mergedOpps,
+          renewals: mergedRenewals,
+        });
 
-          if (storeOnlyAccounts.length > 0) {
-            await supabase.from('accounts').upsert(
-              storeOnlyAccounts.map(a => storeAccountToDb(a, userId))
-            );
-          }
-          if (storeOnlyOpps.length > 0) {
-            await supabase.from('opportunities').upsert(
-              storeOnlyOpps.map(o => storeOpportunityToDb(o, userId))
-            );
-          }
-          if (storeOnlyRenewals.length > 0) {
-            await supabase.from('renewals').upsert(
-              storeOnlyRenewals.map(r => storeRenewalToDb(r, userId))
-            );
-          }
-        } else if (migratedAccounts.length > 0 || migratedOpps.length > 0 || migratedRenewals.length > 0) {
-          // Update store with migrated IDs
-          useStore.setState({
-            accounts: migratedAccounts,
-            opportunities: migratedOpps,
-            renewals: migratedRenewals,
-          });
-          
-          if (migratedAccounts.length > 0) {
-            await supabase.from('accounts').upsert(
-              migratedAccounts.map(a => storeAccountToDb(a, userId))
-            );
-          }
-          if (migratedOpps.length > 0) {
-            await supabase.from('opportunities').upsert(
-              migratedOpps.map(o => storeOpportunityToDb(o, userId))
-            );
-          }
-          if (migratedRenewals.length > 0) {
-            await supabase.from('renewals').upsert(
-              migratedRenewals.map(r => storeRenewalToDb(r, userId))
-            );
-          }
+        // Push any new local-only items to DB
+        if (newLocalAccounts.length > 0) {
+          await supabase.from('accounts').upsert(
+            newLocalAccounts.map(a => storeAccountToDb(a, userId))
+          );
+        }
+        if (newLocalOpps.length > 0) {
+          await supabase.from('opportunities').upsert(
+            newLocalOpps.map(o => storeOpportunityToDb(o, userId))
+          );
+        }
+        if (newLocalRenewals.length > 0) {
+          await supabase.from('renewals').upsert(
+            newLocalRenewals.map(r => storeRenewalToDb(r, userId))
+          );
         }
 
         // Snapshot current state for diffing
@@ -380,7 +364,7 @@ export function useDataSync() {
     if (!userId) return;
 
     const unsub = useStore.subscribe((state) => {
-      if (_isHydrating || !prevState.current) return;
+      if (_isHydrating || !prevState.current || !hasHydrated.current) return;
 
       const prev = prevState.current;
 
