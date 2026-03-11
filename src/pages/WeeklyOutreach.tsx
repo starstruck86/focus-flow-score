@@ -458,12 +458,12 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                       </TableHead>
                       <TableHead className="w-[3%]"></TableHead>
                       <TableHead className="w-[18%]">Account</TableHead>
-                  <TableHead className="w-[12%]">Website</TableHead>
+                  <TableHead className="w-[10%]">Website</TableHead>
                   <TableHead className="w-[10%]">Status</TableHead>
                   <TableHead className="w-[5%]">ICP</TableHead>
-                  <TableHead className="w-[5%]">Acct Tier</TableHead>
+                  <TableHead className="w-[5%]">Tier</TableHead>
                   <TableHead className="w-[8%]">Contacts</TableHead>
-                  <TableHead className="w-[5%]">Priority</TableHead>
+                  <TableHead className="w-[6%]">Last Touch</TableHead>
                   {(group.status === 'prepped' || group.status === 'active') && (
                     <TableHead className="w-[8%]">Cadence</TableHead>
                   )}
