@@ -496,7 +496,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   ];
 
   const STAGE_SELECT_OPTIONS = [
-    { value: '', label: '—', className: 'bg-muted text-muted-foreground' },
+    { value: 'none', label: '—', className: 'bg-muted text-muted-foreground' },
     { value: 'Prospect', label: '1 - Prospect', className: 'bg-blue-500/20 text-blue-400' },
     { value: 'Discover', label: '2 - Discover', className: 'bg-cyan-500/20 text-cyan-400' },
     { value: 'Demo', label: '3 - Demo', className: 'bg-status-yellow/20 text-status-yellow' },
@@ -507,7 +507,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   ];
 
   const CHURN_RISK_SELECT_OPTIONS = [
-    { value: '', label: '—', className: 'bg-muted text-muted-foreground' },
+    { value: 'none', label: '—', className: 'bg-muted text-muted-foreground' },
     { value: 'low', label: '1 - Low', className: 'bg-status-green/20 text-status-green' },
     { value: 'medium', label: '2 - Medium', className: 'bg-status-yellow/20 text-status-yellow' },
     { value: 'high', label: '3 - High', className: 'bg-status-red/20 text-status-red' },
@@ -599,9 +599,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             {showChurnRisk && (
               <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                 <DisplaySelectCell
-                  value={opp.churnRisk || ''}
+                  value={opp.churnRisk || 'none'}
                   options={CHURN_RISK_SELECT_OPTIONS}
-                  onChange={(v) => updateOpportunity(opp.id, { churnRisk: (v === '' ? undefined : v) as ChurnRisk | undefined })}
+                  onChange={(v) => updateOpportunity(opp.id, { churnRisk: (v === 'none' ? undefined : v) as ChurnRisk | undefined })}
                 />
               </TableCell>
             )}
@@ -616,9 +616,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             </TableCell>
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <DisplaySelectCell
-                value={opp.stage || ''}
+                value={opp.stage || 'none'}
                 options={STAGE_SELECT_OPTIONS}
-                onChange={(v) => updateOpportunity(opp.id, { stage: v as OpportunityStage })}
+                onChange={(v) => updateOpportunity(opp.id, { stage: (v === 'none' ? '' : v) as OpportunityStage })}
               />
             </TableCell>
             {/* ARR Breakdown columns */}
@@ -737,9 +737,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             </TableCell>
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <DisplaySelectCell
-                value={opp.stage || ''}
+                value={opp.stage || 'none'}
                 options={STAGE_SELECT_OPTIONS}
-                onChange={(v) => updateOpportunity(opp.id, { stage: v as OpportunityStage })}
+                onChange={(v) => updateOpportunity(opp.id, { stage: (v === 'none' ? '' : v) as OpportunityStage })}
               />
             </TableCell>
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
@@ -847,9 +847,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           {showChurnRisk && (
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <DisplaySelectCell
-                value={opp.churnRisk || ''}
+                value={opp.churnRisk || 'none'}
                 options={CHURN_RISK_SELECT_OPTIONS}
-                onChange={(v) => updateOpportunity(opp.id, { churnRisk: (v === '' ? undefined : v) as ChurnRisk | undefined })}
+                onChange={(v) => updateOpportunity(opp.id, { churnRisk: (v === 'none' ? undefined : v) as ChurnRisk | undefined })}
               />
             </TableCell>
           )}
@@ -864,9 +864,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           </TableCell>
           <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
             <DisplaySelectCell
-              value={opp.stage || ''}
+              value={opp.stage || 'none'}
               options={STAGE_SELECT_OPTIONS}
-              onChange={(v) => updateOpportunity(opp.id, { stage: v as OpportunityStage })}
+              onChange={(v) => updateOpportunity(opp.id, { stage: (v === 'none' ? '' : v) as OpportunityStage })}
             />
           </TableCell>
           <NextStepTextCell opp={opp} />
@@ -995,9 +995,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           {
             id: 'change-stage',
             label: 'Change Stage',
-            options: STAGE_SELECT_OPTIONS.map(o => ({ value: o.value || '__none', label: o.label })),
+            options: STAGE_SELECT_OPTIONS.map(o => ({ value: o.value, label: o.label })),
             onExecute: (ids, value) => {
-              ids.forEach(id => updateOpportunity(id, { stage: (value === '__none' ? '' : value) as OpportunityStage }));
+              ids.forEach(id => updateOpportunity(id, { stage: (value === 'none' ? '' : value) as OpportunityStage }));
               bulkSelection.clear();
             },
           },
