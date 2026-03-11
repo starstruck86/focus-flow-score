@@ -186,11 +186,15 @@ function scoreOpportunity(opp: Opportunity, accounts: Account[]): WorkItem | nul
     score >= 45 ? 'high' :
     score >= 25 ? 'medium' : 'low';
 
+  // Determine if this is a renewal-related opportunity
+  const isRenewalOpp = opp.dealType === 'renewal' || opp.dealType === 'expansion';
+
   return {
     id: opp.id,
     type: 'opportunity',
     name: opp.name,
     accountName: opp.accountName || account?.name,
+    accountId: opp.accountId,
     score: Math.min(100, score),
     urgency,
     reason: reasons[0],
@@ -198,7 +202,8 @@ function scoreOpportunity(opp: Opportunity, accounts: Account[]): WorkItem | nul
     arrAtStake: opp.arr || 0,
     daysUntilDeadline: daysToClose < 900 ? daysToClose : undefined,
     daysSinceLastTouch: daysSinceTouch,
-    route: '/outreach',
+    route: isRenewalOpp ? '/renewals' : '/outreach',
+    isRenewalOpp,
   };
 }
 
