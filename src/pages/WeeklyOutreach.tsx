@@ -214,15 +214,39 @@ const DEFAULT_TARGETS: Record<string, number> = {
   active: 30,
 };
 
-// Sort within funnel group: Tier → Last Updated desc → Name A-Z
-function sortFunnelGroup(accounts: Account[]): Account[] {
+// Sort within funnel group: Tier → ICP Score (desc) → Name A-Z
+function sortFunnelGroup(accounts: Account[], sortOverride?: { key: string; direction: 'asc' | 'desc' } | null): Account[] {
+  if (sortOverride) {
+    const customRanks: Record<string, Record<string, number>> = {
+      tier: TIER_SORT_RANK,
+      accountStatus: ACCOUNT_STATUS_SORT_RANK,
+      contactStatus: CONTACT_STATUS_SORT_RANK,
+    };
+    return [...accounts].sort((a, b) => {
+      const key = sortOverride.key as keyof Account;
+      const aVal = a[key];
+      const bVal = b[key];
+      const rank = customRanks[sortOverride.key];
+      let comparison = 0;
+      if (rank) {
+        comparison = (rank[String(aVal)] ?? 999) - (rank[String(bVal)] ?? 999);
+      } else if (typeof aVal === 'number' && typeof bVal === 'number') {
+        comparison = aVal - bVal;
+      } else {
+        comparison = String(aVal ?? '').localeCompare(String(bVal ?? ''));
+      }
+      return sortOverride.direction === 'desc' ? -comparison : comparison;
+    });
+  }
   return [...accounts].sort((a, b) => {
-    // 1) Tier
+    // 1) Tier A → B → C
     const tierA = TIER_SORT_RANK[a.tier as keyof typeof TIER_SORT_RANK] ?? 99;
     const tierB = TIER_SORT_RANK[b.tier as keyof typeof TIER_SORT_RANK] ?? 99;
     if (tierA !== tierB) return tierA - tierB;
-    // 2) Last Updated desc
-    if (a.updatedAt !== b.updatedAt) return b.updatedAt.localeCompare(a.updatedAt);
+    // 2) ICP Score descending (higher = better)
+    const icpA = a.icpFitScore ?? 0;
+    const icpB = b.icpFitScore ?? 0;
+    if (icpA !== icpB) return icpB - icpA;
     // 3) Name A-Z
     return a.name.localeCompare(b.name);
   });
