@@ -13,6 +13,7 @@ export interface WorkItem {
   type: WorkItemType;
   name: string;
   accountName?: string;
+  accountId?: string;
   score: number; // 0-100 composite score
   urgency: WorkItemUrgency;
   reason: string; // Why this is prioritized
@@ -23,6 +24,7 @@ export interface WorkItem {
   route: string; // Where to navigate
   hasMeetingToday?: boolean;
   hasMeetingSoon?: boolean;
+  isRenewalOpp?: boolean; // Whether this opportunity is linked to a renewal
 }
 
 export interface TimeAllocationTarget {
@@ -184,11 +186,15 @@ function scoreOpportunity(opp: Opportunity, accounts: Account[]): WorkItem | nul
     score >= 45 ? 'high' :
     score >= 25 ? 'medium' : 'low';
 
+  // Determine if this is a renewal-related opportunity
+  const isRenewalOpp = opp.dealType === 'renewal' || opp.dealType === 'expansion';
+
   return {
     id: opp.id,
     type: 'opportunity',
     name: opp.name,
     accountName: opp.accountName || account?.name,
+    accountId: opp.accountId,
     score: Math.min(100, score),
     urgency,
     reason: reasons[0],
@@ -196,7 +202,8 @@ function scoreOpportunity(opp: Opportunity, accounts: Account[]): WorkItem | nul
     arrAtStake: opp.arr || 0,
     daysUntilDeadline: daysToClose < 900 ? daysToClose : undefined,
     daysSinceLastTouch: daysSinceTouch,
-    route: '/outreach',
+    route: isRenewalOpp ? '/renewals' : '/outreach',
+    isRenewalOpp,
   };
 }
 
@@ -272,6 +279,7 @@ function scoreRenewal(renewal: Renewal): WorkItem | null {
     id: renewal.id,
     type: 'renewal',
     name: renewal.accountName,
+    accountId: renewal.accountId,
     score: Math.min(100, score),
     urgency,
     reason: reasons[0],
