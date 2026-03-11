@@ -952,6 +952,16 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
 
   return (
     <div className="space-y-4">
+      {/* Stage filter indicator */}
+      {stageFilter !== undefined && stageFilter !== null && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 border border-primary/20 rounded-lg text-sm">
+          <Filter className="h-3.5 w-3.5 text-primary" />
+          <span className="text-muted-foreground">Filtered to stage:</span>
+          <Badge className="text-xs">{STAGE_LABELS[stageFilter] || stageFilter || 'No Stage'}</Badge>
+          <button onClick={onClearStageFilter} className="text-xs text-primary hover:text-primary/80 underline ml-1">Clear</button>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-3">
         <div className="relative flex-1 min-w-0">
