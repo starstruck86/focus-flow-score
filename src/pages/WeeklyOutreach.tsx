@@ -1121,7 +1121,8 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterUnenriched ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs"
+                    className="h-8 text-xs shrink-0"
+                    aria-label="Filter accounts not yet enriched"
                     onClick={() => setFilterUnenriched(!filterUnenriched)}
                   >
                     Not Enriched
