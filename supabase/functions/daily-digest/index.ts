@@ -96,9 +96,9 @@ Deno.serve(async (req: Request) => {
       const accountsToScan = sorted.slice(0, 30);
 
       // Batch accounts into groups of 10 for Perplexity queries
-      const batches: typeof userAccts[] = [];
-      for (let i = 0; i < userAccts.length; i += 10) {
-        batches.push(userAccts.slice(i, i + 10));
+      const batches: typeof accountsToScan[] = [];
+      for (let i = 0; i < accountsToScan.length; i += 10) {
+        batches.push(accountsToScan.slice(i, i + 10));
       }
 
       const digestItems: any[] = [];
