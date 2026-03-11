@@ -1020,7 +1020,7 @@ export default function WeeklyOutreach() {
         </div>
         
         {/* Staleness & Urgency Summary */}
-        <StalenessAlert accounts={accounts} />
+        <StalenessAlert accounts={newLogoAccounts} />
 
         {/* Stage Summary - Visible on both tabs */}
         <OpportunitiesStageSummary />
