@@ -551,12 +551,12 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                         />
                       </TableCell>
                       <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-                        <DisplaySelectCell
-                          value={account.tier || 'B'}
-                          options={TIER_OPTIONS}
-                          onChange={(v) => updateAccount(account.id, { tier: v as AccountTier })}
-                          badgeClassName="border"
-                        />
+                        {(() => {
+                          if (!account.lastTouchDate) return <span className="text-[10px] text-status-red">Never</span>;
+                          const days = Math.floor((Date.now() - new Date(account.lastTouchDate).getTime()) / 86400000);
+                          const color = days <= 3 ? 'text-status-green' : days <= 7 ? 'text-status-yellow' : 'text-status-red';
+                          return <span className={cn("text-[10px] font-medium", color)}>{days}d ago</span>;
+                        })()}
                       </TableCell>
                       {(group.status === 'prepped' || group.status === 'active') && (
                         <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
