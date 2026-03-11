@@ -1261,9 +1261,23 @@ export default function WeeklyOutreach() {
 
             {/* Funnel Grouped View */}
             {accounts.length === 0 ? (
-              <div className="metric-card p-8 text-center text-muted-foreground">
-                No accounts yet. Add your first account to get started!
-              </div>
+              <EmptyState
+                icon={Users}
+                title="No accounts yet"
+                description="Add your first account to start building your outreach pipeline."
+                actionLabel="Add Account"
+                onAction={() => setShowAddDialog(true)}
+                secondaryActionLabel="Import CSV"
+                onSecondaryAction={() => setShowImportModal(true)}
+              />
+            ) : filteredAccounts.length === 0 ? (
+              <EmptyState
+                icon={Search}
+                title="No matching accounts"
+                description="Try adjusting your filters or search query."
+                actionLabel="Clear Filters"
+                onAction={() => { setSearchQuery(''); setFilterTier('all'); setFilterTierAB(false); setFilterMissingCadence(false); setFilterStale(false); }}
+              />
             ) : (
               <div className="space-y-2">
                 {/* Primary Funnel: 1-3 */}
