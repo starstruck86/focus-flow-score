@@ -754,34 +754,38 @@ export default function WeeklyOutreach() {
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Auto-expand and scroll to highlighted account from Work Queue
-  const pendingHighlightRef = useRef<string | null>(null);
+  // Deep-link highlight from Work Queue via LinkedRecordContext
+  const { currentRecord, clearCurrentRecord } = useLinkedRecordContext();
+  const highlightProcessedRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const id = searchParams.get('highlight');
-    if (id) {
-      pendingHighlightRef.current = id;
-      setExpandedAccountId(id);
-      setHighlightId(id);
+    const id = searchParams.get('highlight') || (currentRecord.type === 'account' ? currentRecord.id : null);
+    
+    if (searchParams.get('highlight')) {
       const newParams = new URLSearchParams(searchParams);
       newParams.delete('highlight');
       setSearchParams(newParams, { replace: true });
-
-      // Retry scroll until element appears (max 2s)
-      let attempts = 0;
-      const scrollInterval = setInterval(() => {
-        const el = document.querySelector(`[data-account-id="${id}"]`);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          clearInterval(scrollInterval);
-        }
-        if (++attempts > 20) clearInterval(scrollInterval);
-      }, 100);
-
-      const timer = setTimeout(() => setHighlightId(null), 4000);
-      return () => { clearTimeout(timer); clearInterval(scrollInterval); };
     }
-  }, [searchParams, setSearchParams]);
+
+    if (!id || id === highlightProcessedRef.current) return;
+    highlightProcessedRef.current = id;
+    setExpandedAccountId(id);
+    setHighlightId(id);
+    clearCurrentRecord();
+
+    let attempts = 0;
+    const scrollInterval = setInterval(() => {
+      const el = document.querySelector(`[data-account-id="${id}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        clearInterval(scrollInterval);
+      }
+      if (++attempts > 30) clearInterval(scrollInterval);
+    }, 100);
+
+    const timer = setTimeout(() => setHighlightId(null), 4000);
+    return () => { clearTimeout(timer); clearInterval(scrollInterval); };
+  }, [currentRecord.id, currentRecord.type, searchParams, setSearchParams, clearCurrentRecord]);
   
   // Quick filter toggles
   const [filterTierAB, setFilterTierAB] = useState(false);
