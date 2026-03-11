@@ -705,6 +705,15 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
 
     // Weekly Outreach / New Logo view
     if (columnOrder === 'outreach') {
+      // Last touch indicator
+      const lastTouchDays = opp.lastTouchDate 
+        ? Math.floor((Date.now() - new Date(opp.lastTouchDate).getTime()) / 86400000)
+        : null;
+      const lastTouchColor = lastTouchDays === null ? 'text-status-red' 
+        : lastTouchDays <= 3 ? 'text-status-green' 
+        : lastTouchDays <= 7 ? 'text-status-yellow' 
+        : 'text-status-red';
+
       return (
         <React.Fragment key={opp.id}>
           <TableRow className="group hover:bg-muted/30 cursor-pointer" onClick={() => toggleExpand(opp.id)}>
@@ -757,6 +766,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 compact
                 className="w-28"
               />
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <span className={cn("text-[10px] font-medium", lastTouchColor)}>
+                {lastTouchDays === null ? 'Never' : `${lastTouchDays}d ago`}
+              </span>
             </TableCell>
             <NextStepTextCell opp={opp} />
             {summaryCustomFields.map(field => (
