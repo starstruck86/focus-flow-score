@@ -1094,7 +1094,8 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterIcpTier12 ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs"
+                    className="h-8 text-xs shrink-0"
+                    aria-label="Filter ICP Tier 1 and 2 accounts"
                     onClick={() => setFilterIcpTier12(!filterIcpTier12)}
                   >
                     ICP T1/T2
