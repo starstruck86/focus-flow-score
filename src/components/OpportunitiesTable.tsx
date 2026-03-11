@@ -496,7 +496,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   ];
 
   const STAGE_SELECT_OPTIONS = [
-    { value: '', label: '—', className: 'bg-muted text-muted-foreground' },
+    { value: 'none', label: '—', className: 'bg-muted text-muted-foreground' },
     { value: 'Prospect', label: '1 - Prospect', className: 'bg-blue-500/20 text-blue-400' },
     { value: 'Discover', label: '2 - Discover', className: 'bg-cyan-500/20 text-cyan-400' },
     { value: 'Demo', label: '3 - Demo', className: 'bg-status-yellow/20 text-status-yellow' },
