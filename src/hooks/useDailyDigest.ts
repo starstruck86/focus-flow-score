@@ -98,8 +98,10 @@ export function useDailyDigest(date?: string) {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['daily-digest'] });
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      const updates = data?.accountsUpdated || 0;
       toast.success(`Digest generated`, {
-        description: `${data?.itemsCreated || 0} updates found`,
+        description: `${data?.itemsCreated || 0} updates found${updates > 0 ? `, ${updates} accounts enriched` : ''}`,
       });
     },
     onError: (err) => {
