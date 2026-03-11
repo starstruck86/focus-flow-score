@@ -734,6 +734,7 @@ export default function WeeklyOutreach() {
   });
   
   const [activeTab, setActiveTab] = useState<'accounts' | 'opportunities'>('accounts');
+  const [stageFilter, setStageFilter] = useState<OpportunityStage | null>(null);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTier, setFilterTier] = useState<string>('all');
