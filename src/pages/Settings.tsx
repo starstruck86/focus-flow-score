@@ -378,6 +378,7 @@ export default function Settings() {
           <TabsList>
             <TabsTrigger value="schedule">Work Schedule</TabsTrigger>
             <TabsTrigger value="appearance">Appearance</TabsTrigger>
+            <TabsTrigger value="notifications">Notifications</TabsTrigger>
             <TabsTrigger value="data">Data</TabsTrigger>
           </TabsList>
           
