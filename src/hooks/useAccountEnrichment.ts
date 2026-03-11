@@ -41,8 +41,6 @@ export function useAccountEnrichment() {
   const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
   const updateAccount = useStore((s) => s.updateAccount);
   const accounts = useStore((s) => s.accounts);
-  // Track previous website values for auto-enrich
-  const prevWebsitesRef = useRef<Map<string, string | undefined>>(new Map());
 
   const enrichAccount = useCallback(async (account: Account): Promise<EnrichmentResult> => {
     if (!account.website) {
