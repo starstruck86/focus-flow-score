@@ -567,6 +567,14 @@ function FunnelGroupSection({
 export default function WeeklyOutreach() {
   const { accounts, addAccount, updateAccount, deleteAccount } = useStore();
   const bulkSelection = useBulkSelection<Account>();
+  
+  // Undo delete for accounts
+  const { deleteWithUndo } = useUndoDelete<Account>({
+    onDelete: (id) => deleteAccount(id),
+    onRestore: (item) => addAccount(item),
+    itemLabel: 'Account',
+  });
+  
   const [activeTab, setActiveTab] = useState<'accounts' | 'opportunities'>('accounts');
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -583,6 +591,17 @@ export default function WeeklyOutreach() {
   const [filterTierAB, setFilterTierAB] = useState(false);
   const [filterMissingCadence, setFilterMissingCadence] = useState(false);
   const [filterStale, setFilterStale] = useState(false);
+  
+  // Active filter chips
+  const activeFilters = useMemo(() => {
+    const filters: ActiveFilter[] = [];
+    if (searchQuery) filters.push({ key: 'search', label: 'Search', value: searchQuery, onRemove: () => setSearchQuery('') });
+    if (filterTier !== 'all') filters.push({ key: 'tier', label: 'Tier', value: filterTier, onRemove: () => setFilterTier('all') });
+    if (filterTierAB) filters.push({ key: 'tierAB', label: 'Tier', value: 'A & B only', onRemove: () => setFilterTierAB(false) });
+    if (filterMissingCadence) filters.push({ key: 'cadence', label: 'Cadence', value: 'Missing', onRemove: () => setFilterMissingCadence(false) });
+    if (filterStale) filters.push({ key: 'stale', label: 'Stale', value: '7+ days', onRemove: () => setFilterStale(false) });
+    return filters;
+  }, [searchQuery, filterTier, filterTierAB, filterMissingCadence, filterStale]);
 
   // Collapsed groups - outcomes collapsed by default
   const [collapsedGroups, setCollapsedGroups] = useState<Set<AccountStatus>>(
