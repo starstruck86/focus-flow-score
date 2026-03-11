@@ -1,6 +1,6 @@
 // Smart Work Queue: Prioritized action list answering "What should I work on right now?"
 import { useState } from 'react';
-import { useNavigate, createSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useTimeAllocation, type WorkItem, type WorkItemUrgency, type WorkItemType } from '@/hooks/useTimeAllocation';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
