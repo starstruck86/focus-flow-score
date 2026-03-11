@@ -214,15 +214,39 @@ const DEFAULT_TARGETS: Record<string, number> = {
   active: 30,
 };
 
-// Sort within funnel group: Tier → Last Updated desc → Name A-Z
-function sortFunnelGroup(accounts: Account[]): Account[] {
+// Sort within funnel group: Tier → ICP Score (desc) → Name A-Z
+function sortFunnelGroup(accounts: Account[], sortOverride?: { key: string; direction: 'asc' | 'desc' } | null): Account[] {
+  if (sortOverride) {
+    const customRanks: Record<string, Record<string, number>> = {
+      tier: TIER_SORT_RANK,
+      accountStatus: ACCOUNT_STATUS_SORT_RANK,
+      contactStatus: CONTACT_STATUS_SORT_RANK,
+    };
+    return [...accounts].sort((a, b) => {
+      const key = sortOverride.key as keyof Account;
+      const aVal = a[key];
+      const bVal = b[key];
+      const rank = customRanks[sortOverride.key];
+      let comparison = 0;
+      if (rank) {
+        comparison = (rank[String(aVal)] ?? 999) - (rank[String(bVal)] ?? 999);
+      } else if (typeof aVal === 'number' && typeof bVal === 'number') {
+        comparison = aVal - bVal;
+      } else {
+        comparison = String(aVal ?? '').localeCompare(String(bVal ?? ''));
+      }
+      return sortOverride.direction === 'desc' ? -comparison : comparison;
+    });
+  }
   return [...accounts].sort((a, b) => {
-    // 1) Tier
+    // 1) Tier A → B → C
     const tierA = TIER_SORT_RANK[a.tier as keyof typeof TIER_SORT_RANK] ?? 99;
     const tierB = TIER_SORT_RANK[b.tier as keyof typeof TIER_SORT_RANK] ?? 99;
     if (tierA !== tierB) return tierA - tierB;
-    // 2) Last Updated desc
-    if (a.updatedAt !== b.updatedAt) return b.updatedAt.localeCompare(a.updatedAt);
+    // 2) ICP Score descending (higher = better)
+    const icpA = a.icpFitScore ?? 0;
+    const icpB = b.icpFitScore ?? 0;
+    if (icpA !== icpB) return icpB - icpA;
     // 3) Name A-Z
     return a.name.localeCompare(b.name);
   });
@@ -275,8 +299,11 @@ const StalenessAlert = memo(function StalenessAlert({ accounts }: { accounts: Ac
 });
 StalenessAlert.displayName = 'StalenessAlert';
 
-// Stage Summary Component for Opportunities
-function OpportunitiesStageSummary() {
+// Stage Summary Component for Opportunities - clickable tiles filter the table
+function OpportunitiesStageSummary({ activeStageFilter, onStageFilterChange }: {
+  activeStageFilter?: OpportunityStage | null;
+  onStageFilterChange?: (stage: OpportunityStage | null) => void;
+}) {
   const { opportunities } = useStore();
   
   const stageSummary = useMemo(() => {
@@ -321,26 +348,43 @@ function OpportunitiesStageSummary() {
         <div className="text-sm text-muted-foreground">
           Active Pipeline: <span className="font-semibold text-foreground">{totalCount} opps</span> • <span className="font-mono font-semibold text-foreground">{formatCurrency(totalARR)}</span>
         </div>
+        {activeStageFilter && (
+          <button
+            onClick={() => onStageFilterChange?.(null)}
+            className="text-[10px] text-primary hover:text-primary/80 underline"
+          >
+            Clear filter
+          </button>
+        )}
       </div>
       <div className="hidden sm:grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3">
-        {(['', 'Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate', 'Closed Won', 'Closed Lost'] as OpportunityStage[]).map(stage => (
-          <div 
-            key={stage || 'no-stage'} 
-            className={cn("metric-card p-3 border-l-4", STAGE_COLORS[stage])}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <span className={cn("text-xs font-medium", STAGE_TEXT_COLORS[stage])}>
-                {STAGE_LABELS[stage] || stage || 'No Stage'}
-              </span>
-              <Badge variant="outline" className="text-xs h-5 px-1.5">
-                {stageSummary[stage].count}
-              </Badge>
-            </div>
-            <div className="text-lg font-bold font-mono">
-              {formatCurrency(stageSummary[stage].arr)}
-            </div>
-          </div>
-        ))}
+        {(['', 'Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate', 'Closed Won', 'Closed Lost'] as OpportunityStage[]).map(stage => {
+          const isActive = activeStageFilter === stage;
+          return (
+            <button 
+              key={stage || 'no-stage'} 
+              onClick={() => onStageFilterChange?.(isActive ? null : stage)}
+              className={cn(
+                "metric-card p-3 border-l-4 text-left transition-all cursor-pointer",
+                "hover:ring-1 hover:ring-primary/40 hover:shadow-sm",
+                isActive && "ring-2 ring-primary shadow-md",
+                STAGE_COLORS[stage],
+              )}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className={cn("text-xs font-medium", STAGE_TEXT_COLORS[stage])}>
+                  {STAGE_LABELS[stage] || stage || 'No Stage'}
+                </span>
+                <Badge variant="outline" className="text-xs h-5 px-1.5">
+                  {stageSummary[stage].count}
+                </Badge>
+              </div>
+              <div className="text-lg font-bold font-mono">
+                {formatCurrency(stageSummary[stage].arr)}
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -415,9 +459,21 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
   onToggleSelect: (id: string) => void;
 }) {
   const { fields, getFieldValue } = useCustomFields();
+  const [groupSort, setGroupSort] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const summaryCustomFields = fields.filter(
     f => f.tabTarget === 'accounts' && (f.placement === 'summary' || f.placement === 'both')
   );
+
+  const handleGroupSort = (key: string) => {
+    setGroupSort(prev => {
+      if (prev?.key !== key) return { key, direction: 'asc' };
+      if (prev.direction === 'asc') return { key, direction: 'desc' };
+      return null; // third click clears
+    });
+  };
+
+  const sortedAccounts = useMemo(() => sortFunnelGroup(accounts, groupSort), [accounts, groupSort]);
+
   if (accounts.length === 0 && isCollapsed) return null;
 
   return (
@@ -451,19 +507,19 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                 <TableRow className="hover:bg-transparent">
                       <TableHead className="w-[3%]">
                         <Checkbox
-                          checked={accounts.every(a => isSelected(a.id)) && accounts.length > 0}
-                          onCheckedChange={() => accounts.forEach(a => onToggleSelect(a.id))}
+                          checked={sortedAccounts.every(a => isSelected(a.id)) && sortedAccounts.length > 0}
+                          onCheckedChange={() => sortedAccounts.forEach(a => onToggleSelect(a.id))}
                           aria-label="Select all in group"
                         />
                       </TableHead>
                       <TableHead className="w-[3%]"></TableHead>
-                      <TableHead className="w-[18%]">Account</TableHead>
+                      <SortableHeader sortKey="name" currentSort={groupSort} onSort={handleGroupSort} className="w-[18%]">Account</SortableHeader>
                   <TableHead className="w-[10%]">Website</TableHead>
-                  <TableHead className="w-[10%]">Status</TableHead>
-                  <TableHead className="w-[5%]">ICP</TableHead>
-                  <TableHead className="w-[5%]">Tier</TableHead>
-                  <TableHead className="w-[8%]">Contacts</TableHead>
-                  <TableHead className="w-[6%]">Last Touch</TableHead>
+                  <SortableHeader sortKey="accountStatus" currentSort={groupSort} onSort={handleGroupSort} className="w-[10%]">Status</SortableHeader>
+                  <SortableHeader sortKey="icpFitScore" currentSort={groupSort} onSort={handleGroupSort} className="w-[5%]">ICP</SortableHeader>
+                  <SortableHeader sortKey="tier" currentSort={groupSort} onSort={handleGroupSort} className="w-[5%]">Tier</SortableHeader>
+                  <SortableHeader sortKey="contactStatus" currentSort={groupSort} onSort={handleGroupSort} className="w-[8%]">Contacts</SortableHeader>
+                  <SortableHeader sortKey="lastTouchDate" currentSort={groupSort} onSort={handleGroupSort} className="w-[6%]">Last Touch</SortableHeader>
                   {(group.status === 'prepped' || group.status === 'active') && (
                     <TableHead className="w-[8%]">Cadence</TableHead>
                   )}
@@ -476,7 +532,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {accounts.map((account) => (
+                {sortedAccounts.map((account) => (
                   <React.Fragment key={account.id}>
                     <TableRow 
                       className={cn(
@@ -678,6 +734,7 @@ export default function WeeklyOutreach() {
   });
   
   const [activeTab, setActiveTab] = useState<'accounts' | 'opportunities'>('accounts');
+  const [stageFilter, setStageFilter] = useState<OpportunityStage | null>(null);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTier, setFilterTier] = useState<string>('all');
@@ -1029,8 +1086,14 @@ export default function WeeklyOutreach() {
         {/* Staleness & Urgency Summary */}
         <StalenessAlert accounts={newLogoAccounts} />
 
-        {/* Stage Summary - Visible on both tabs */}
-        <OpportunitiesStageSummary />
+        {/* Stage Summary - Visible on both tabs, clickable to filter */}
+        <OpportunitiesStageSummary 
+          activeStageFilter={stageFilter}
+          onStageFilterChange={(stage) => {
+            setStageFilter(stage);
+            if (stage !== null) setActiveTab('opportunities');
+          }}
+        />
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'accounts' | 'opportunities')} className="space-y-4">
@@ -1522,7 +1585,7 @@ export default function WeeklyOutreach() {
 
           {/* Opportunities Tab */}
           <TabsContent value="opportunities" className="space-y-4">
-            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} showChurnRisk={false} columnOrder="outreach" excludeRenewals />
+            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} showChurnRisk={false} columnOrder="outreach" excludeRenewals stageFilter={stageFilter} onClearStageFilter={() => setStageFilter(null)} />
           </TabsContent>
         </Tabs>
 

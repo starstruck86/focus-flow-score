@@ -192,9 +192,11 @@ interface OpportunitiesTableProps {
   excludeRenewals?: boolean;
   showChurnRisk?: boolean;
   columnOrder?: 'default' | 'outreach';
+  stageFilter?: OpportunityStage | null;
+  onClearStageFilter?: () => void;
 }
 
-export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, excludeRenewals = false, showChurnRisk = true, columnOrder = 'default' }: OpportunitiesTableProps) {
+export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, excludeRenewals = false, showChurnRisk = true, columnOrder = 'default', stageFilter, onClearStageFilter }: OpportunitiesTableProps) {
   // Custom fields for this specific opportunities context
   const oppTabTarget = renewalsOnly ? 'opportunities-renewals' as const : 'opportunities-newlogo' as const;
   const { fields, getFieldValue } = useCustomFields();
@@ -344,6 +346,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       filtered = filtered.filter(opp => !renewalOpportunityIds.has(opp.id));
     }
 
+    // Apply stage filter from parent (e.g., pipeline tiles)
+    if (stageFilter !== undefined && stageFilter !== null) {
+      filtered = filtered.filter(opp => (opp.stage || '') === stageFilter);
+    }
+
     switch (savedView) {
       case 'active':
         filtered = filtered.filter(o => o.status === 'active');
@@ -370,7 +377,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     }
 
     return filtered;
-  }, [opportunities, searchQuery, savedView, renewalsOnly, excludeRenewals, renewalOpportunityIds]);
+  }, [opportunities, searchQuery, savedView, renewalsOnly, excludeRenewals, renewalOpportunityIds, stageFilter]);
 
   // Sort opportunities
   const sortKeyMap: Record<string, { key: keyof Opportunity; customRank?: Record<string, number> }> = {
@@ -945,6 +952,16 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
 
   return (
     <div className="space-y-4">
+      {/* Stage filter indicator */}
+      {stageFilter !== undefined && stageFilter !== null && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 border border-primary/20 rounded-lg text-sm">
+          <Filter className="h-3.5 w-3.5 text-primary" />
+          <span className="text-muted-foreground">Filtered to stage:</span>
+          <Badge className="text-xs">{STAGE_LABELS[stageFilter] || stageFilter || 'No Stage'}</Badge>
+          <button onClick={onClearStageFilter} className="text-xs text-primary hover:text-primary/80 underline ml-1">Clear</button>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-3">
         <div className="relative flex-1 min-w-0">
