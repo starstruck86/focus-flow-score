@@ -1103,7 +1103,8 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterHighProbability ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs"
+                    className="h-8 text-xs shrink-0"
+                    aria-label="Filter high probability buyers"
                     onClick={() => setFilterHighProbability(!filterHighProbability)}
                   >
                     High Prob
