@@ -163,7 +163,7 @@ const ACCOUNT_TOOLS = [
               mobile_app: { type: "boolean" },
               category_complexity: { type: "boolean" },
               marketing_platform_detected: { type: "string" },
-              crm_lifecycle_team_size: { type: "integer", description: "Estimated CRM/lifecycle team headcount" },
+              crm_lifecycle_team_size: { type: "number", description: "Estimated CRM/lifecycle team headcount" },
             },
           },
           reason: { type: "string", description: "Why this update is being made (research source)" },

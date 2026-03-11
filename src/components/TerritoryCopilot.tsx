@@ -1,5 +1,5 @@
 // Territory Copilot v3 — ⌘K with Quick / Deep Research / Meeting Prep + write-back
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Sparkles, Send, Loader2, MessageSquare, ArrowRight, Zap, RotateCcw, Search, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -15,35 +15,56 @@ const MODE_ICONS: Record<CopilotMode, typeof Zap> = {
   meeting: Calendar,
 };
 
-function ModeSelector({ mode, onChange, disabled }: { mode: CopilotMode; onChange: (m: CopilotMode) => void; disabled: boolean }) {
-  return (
-    <div className="flex gap-1">
-      {(Object.keys(MODE_CONFIG) as CopilotMode[]).map((m) => {
-        const config = MODE_CONFIG[m];
-        const Icon = MODE_ICONS[m];
-        const isActive = mode === m;
-        return (
-          <button
-            key={m}
-            onClick={() => onChange(m)}
-            disabled={disabled}
-            className={cn(
-              "flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium border transition-all",
-              isActive
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-foreground/20",
-              disabled && "opacity-50 pointer-events-none"
-            )}
-            title={config.description}
-          >
-            <Icon className="h-3 w-3" />
-            {config.label}
-          </button>
-        );
-      })}
+const ModeSelector = memo(({ mode, onChange, disabled }: { mode: CopilotMode; onChange: (m: CopilotMode) => void; disabled: boolean }) => (
+  <div className="flex gap-1">
+    {(Object.keys(MODE_CONFIG) as CopilotMode[]).map((m) => {
+      const config = MODE_CONFIG[m];
+      const Icon = MODE_ICONS[m];
+      return (
+        <button
+          key={m}
+          onClick={() => onChange(m)}
+          disabled={disabled}
+          className={cn(
+            "flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium border transition-all",
+            mode === m
+              ? "bg-primary text-primary-foreground border-primary"
+              : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-foreground/20",
+            disabled && "opacity-50 pointer-events-none"
+          )}
+          title={config.description}
+        >
+          <Icon className="h-3 w-3" />
+          {config.label}
+        </button>
+      );
+    })}
+  </div>
+));
+ModeSelector.displayName = 'ModeSelector';
+
+// Memoize message bubble to avoid re-renders on every streaming token
+const MessageBubble = memo(({ msg }: { msg: CopilotMsg }) => (
+  <div className={cn("flex", msg.role === 'user' ? "justify-end" : "justify-start")}>
+    <div className={cn(
+      "rounded-xl px-3.5 py-2.5 max-w-[90%]",
+      msg.role === 'user'
+        ? "bg-primary text-primary-foreground"
+        : "bg-muted/50 border border-border"
+    )}>
+      {msg.role === 'user' ? (
+        <p className="text-sm">{msg.content}</p>
+      ) : (
+        <div className="prose prose-sm dark:prose-invert max-w-none [&_p]:text-sm [&_li]:text-sm [&_strong]:text-foreground [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_ul]:my-1 [&_ol]:my-1 [&_p]:my-1 [&_a]:text-primary [&_a]:underline [&_blockquote]:border-primary/30 [&_blockquote]:bg-primary/5 [&_blockquote]:rounded-md [&_blockquote]:py-1">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {msg.content}
+          </ReactMarkdown>
+        </div>
+      )}
     </div>
-  );
-}
+  </div>
+));
+MessageBubble.displayName = 'MessageBubble';
 
 function CopilotDialog() {
   const { state, setOpen, clearInitialQuestion } = useCopilot();
@@ -52,12 +73,11 @@ function CopilotDialog() {
   const [mode, setMode] = useState<CopilotMode>('quick');
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [updatesApplied, setUpdatesApplied] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const processedQuestionRef = useRef<string | null>(null);
-  
+  const streamingRef = useRef(false);
 
   useEffect(() => {
     if (state.open) {
@@ -65,7 +85,6 @@ function CopilotDialog() {
       if (state.initialQuestion && processedQuestionRef.current !== state.initialQuestion) {
         processedQuestionRef.current = state.initialQuestion;
         setMessages([]);
-        setUpdatesApplied(false);
         const detectedMode = state.mode || 'quick';
         setMode(detectedMode);
         setTimeout(() => sendMessage(state.initialQuestion!, detectedMode), 200);
@@ -77,58 +96,76 @@ function CopilotDialog() {
     }
   }, [state.open, state.initialQuestion]);
 
+  // Throttled scroll — only scroll every 100ms during streaming
+  const lastScrollRef = useRef(0);
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-    }
+    if (!scrollRef.current) return;
+    const now = Date.now();
+    if (now - lastScrollRef.current < 100 && streamingRef.current) return;
+    lastScrollRef.current = now;
+    scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: streamingRef.current ? 'auto' : 'smooth' });
   }, [messages]);
 
   const sendMessage = useCallback(async (text: string, overrideMode?: CopilotMode) => {
-    if (!text.trim() || isStreaming) return;
-    
+    if (!text.trim() || streamingRef.current) return;
+
     const activeMode = overrideMode || mode;
     setError(null);
-    setUpdatesApplied(false);
     const userMsg: CopilotMsg = { role: 'user', content: text.trim() };
-    setMessages(prev => {
-      const newMsgs = [...prev, userMsg];
-      setIsStreaming(true);
-      const abort = new AbortController();
-      abortRef.current = abort;
 
-      let assistantText = '';
-      streamCopilot({
-        messages: newMsgs,
-        mode: activeMode,
-        accountId: state.accountId,
-        onDelta: (chunk) => {
-          assistantText += chunk;
-          setMessages(p => {
-            const last = p[p.length - 1];
-            if (last?.role === 'assistant') {
-              return p.map((m, i) => i === p.length - 1 ? { ...m, content: assistantText } : m);
-            }
-            return [...p, { role: 'assistant', content: assistantText }];
-          });
-        },
-        onDone: () => setIsStreaming(false),
-        onError: (err) => { setError(err); setIsStreaming(false); },
-        onAccountUpdated: () => {
-          setUpdatesApplied(true);
-          toast.success('Account data updated by AI research', {
-            description: 'Your accounts have been enriched — refresh to see changes',
-          });
-        },
-        signal: abort.signal,
-      });
-
-      return newMsgs;
-    });
+    // Add user message first, then start streaming separately (no side effects in setState)
+    setMessages(prev => [...prev, userMsg]);
     setInput('');
-  }, [isStreaming, mode, state.accountId]);
+    setIsStreaming(true);
+    streamingRef.current = true;
+
+    const abort = new AbortController();
+    abortRef.current = abort;
+
+    let assistantText = '';
+    const allMessages = [...messages, userMsg]; // capture current + new
+
+    streamCopilot({
+      messages: allMessages,
+      mode: activeMode,
+      accountId: state.accountId,
+      onDelta: (chunk) => {
+        assistantText += chunk;
+        const content = assistantText; // capture for closure
+        setMessages(p => {
+          const last = p[p.length - 1];
+          if (last?.role === 'assistant') {
+            return p.map((m, i) => i === p.length - 1 ? { ...m, content } : m);
+          }
+          return [...p, { role: 'assistant', content }];
+        });
+      },
+      onDone: () => {
+        setIsStreaming(false);
+        streamingRef.current = false;
+      },
+      onError: (err) => {
+        setError(err);
+        setIsStreaming(false);
+        streamingRef.current = false;
+      },
+      onAccountUpdated: () => {
+        toast.success('Account data updated by AI research', {
+          description: 'Your accounts have been enriched — data will sync on next load',
+        });
+      },
+      signal: abort.signal,
+    });
+  }, [messages, mode, state.accountId]);
 
   const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); sendMessage(input); };
-  const handleClear = () => { setMessages([]); setError(null); setUpdatesApplied(false); abortRef.current?.abort(); setIsStreaming(false); };
+  const handleClear = useCallback(() => {
+    setMessages([]);
+    setError(null);
+    abortRef.current?.abort();
+    setIsStreaming(false);
+    streamingRef.current = false;
+  }, []);
 
   const showSuggestions = messages.length === 0 && !isStreaming;
   const filteredSuggestions = SUGGESTED_QUESTIONS.filter(q => mode === 'quick' || q.mode === mode).slice(0, 6);
@@ -156,7 +193,7 @@ function CopilotDialog() {
             mode === 'deep' ? "bg-primary/5 text-primary" : "bg-accent/30 text-accent-foreground"
           )}>
             {MODE_CONFIG[mode].icon} {MODE_CONFIG[mode].description}
-            {mode === 'deep' && <span className="ml-1 text-muted-foreground">• will auto-update accounts with findings</span>}
+            {mode === 'deep' && <span className="ml-1 text-muted-foreground">• auto-updates accounts with findings</span>}
             {mode === 'meeting' && <span className="ml-1 text-muted-foreground">• auto-enriches account intel</span>}
           </div>
         )}
@@ -190,26 +227,25 @@ function CopilotDialog() {
             </div>
           )}
 
-          {messages.map((msg, i) => (
-            <div key={i} className={cn("flex", msg.role === 'user' ? "justify-end" : "justify-start")}>
-              <div className={cn(
-                "rounded-xl px-3.5 py-2.5 max-w-[90%]",
-                msg.role === 'user' 
-                  ? "bg-primary text-primary-foreground" 
-                  : "bg-muted/50 border border-border"
-              )}>
-                {msg.role === 'user' ? (
-                  <p className="text-sm">{msg.content}</p>
-                ) : (
-                  <div className="prose prose-sm dark:prose-invert max-w-none [&_p]:text-sm [&_li]:text-sm [&_strong]:text-foreground [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_ul]:my-1 [&_ol]:my-1 [&_p]:my-1 [&_a]:text-primary [&_a]:underline [&_blockquote]:border-primary/30 [&_blockquote]:bg-primary/5 [&_blockquote]:rounded-md [&_blockquote]:py-1">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {msg.content}
-                    </ReactMarkdown>
+          {/* Render completed messages with memo, streaming message without */}
+          {messages.map((msg, i) => {
+            const isLastAssistant = i === messages.length - 1 && msg.role === 'assistant' && isStreaming;
+            if (isLastAssistant) {
+              // Don't memo the actively streaming message
+              return (
+                <div key={i} className="flex justify-start">
+                  <div className="rounded-xl px-3.5 py-2.5 max-w-[90%] bg-muted/50 border border-border">
+                    <div className="prose prose-sm dark:prose-invert max-w-none [&_p]:text-sm [&_li]:text-sm [&_strong]:text-foreground [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_ul]:my-1 [&_ol]:my-1 [&_p]:my-1 [&_a]:text-primary [&_a]:underline [&_blockquote]:border-primary/30 [&_blockquote]:bg-primary/5 [&_blockquote]:rounded-md [&_blockquote]:py-1">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
                   </div>
-                )}
-              </div>
-            </div>
-          ))}
+                </div>
+              );
+            }
+            return <MessageBubble key={i} msg={msg} />;
+          })}
 
           {isStreaming && messages[messages.length - 1]?.role !== 'assistant' && (
             <div className="flex items-center gap-2 text-muted-foreground">
@@ -235,7 +271,7 @@ function CopilotDialog() {
             onChange={(e) => setInput(e.target.value)}
             placeholder={
               mode === 'quick' ? "Ask about your territory..." :
-              mode === 'deep' ? "What do you want to research? (will auto-update accounts)" :
+              mode === 'deep' ? "What do you want to research? (auto-updates accounts)" :
               "Which account's meeting should I prep?"
             }
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
