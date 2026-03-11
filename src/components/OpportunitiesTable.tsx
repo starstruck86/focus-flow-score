@@ -957,7 +957,73 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           <Plus className="h-4 w-4 mr-2" />
           Add Opportunity
         </Button>
+        <div className="flex items-center border rounded-md">
+          <Button
+            variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-8 rounded-r-none"
+            onClick={() => setViewMode('table')}
+          >
+            <List className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={viewMode === 'kanban' ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-8 rounded-l-none"
+            onClick={() => setViewMode('kanban')}
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
+
+      {/* Bulk Actions Bar */}
+      <BulkActionsBar
+        selectedCount={bulkSelection.selectedCount}
+        onClear={bulkSelection.clear}
+        selectedIds={bulkSelection.selectedIds}
+        actions={[
+          {
+            id: 'change-stage',
+            label: 'Change Stage',
+            options: STAGE_SELECT_OPTIONS.map(o => ({ value: o.value || '__none', label: o.label })),
+            onExecute: (ids, value) => {
+              ids.forEach(id => updateOpportunity(id, { stage: (value === '__none' ? '' : value) as OpportunityStage }));
+              bulkSelection.clear();
+            },
+          },
+          {
+            id: 'change-status',
+            label: 'Change Status',
+            options: STATUS_SELECT_OPTIONS.map(o => ({ value: o.value, label: o.label })),
+            onExecute: (ids, value) => {
+              ids.forEach(id => updateOpportunity(id, { status: value as OpportunityStatus }));
+              bulkSelection.clear();
+            },
+          },
+          {
+            id: 'delete',
+            label: 'Delete',
+            variant: 'destructive' as const,
+            onExecute: (ids) => {
+              ids.forEach(id => deleteOpportunity(id));
+              bulkSelection.clear();
+            },
+          },
+        ]}
+      />
+
+      {/* Kanban View */}
+      {viewMode === 'kanban' ? (
+        <KanbanBoard
+          opportunities={filteredOpportunities}
+          onStageChange={(id, newStage) => updateOpportunity(id, { stage: newStage })}
+          onSelect={(id) => {
+            const opp = filteredOpportunities.find(o => o.id === id);
+            if (opp) onOpenDrawer(opp);
+          }}
+        />
+      ) : (
 
       {/* Table */}
       <div className="metric-card overflow-hidden p-0">
