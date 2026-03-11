@@ -128,7 +128,7 @@ function WorkItemCard({ item, index }: { item: WorkItem; index: number }) {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              ask(`Tell me everything I need to know about ${item.name}. What signals exist, what's the risk, and what should I do next?`);
+              ask(`Tell me everything I need to know about ${item.name}. What signals exist, what's the risk, and what should I do next?`, 'deep', item.id);
             }}
             className="text-[10px] text-primary/60 hover:text-primary flex items-center gap-0.5 transition-colors"
           >
