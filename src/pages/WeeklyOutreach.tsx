@@ -1112,7 +1112,8 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterTriggered ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs"
+                    className="h-8 text-xs shrink-0"
+                    aria-label="Filter triggered accounts"
                     onClick={() => setFilterTriggered(!filterTriggered)}
                   >
                     ⚡ Triggered
