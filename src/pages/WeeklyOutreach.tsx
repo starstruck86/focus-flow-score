@@ -758,35 +758,71 @@ export default function WeeklyOutreach() {
   const { currentRecord, clearCurrentRecord } = useLinkedRecordContext();
   const highlightProcessedRef = useRef<string | null>(null);
 
+  // Collapsed groups - outcomes collapsed by default (must be before highlight effect)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<AccountStatus>>(
+    new Set(['meeting-booked', 'disqualified'])
+  );
+
+  const toggleGroupCollapse = (status: AccountStatus) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status);
+      else next.add(status);
+      return next;
+    });
+  };
+
   useEffect(() => {
     const urlId = searchParams.get('highlight');
     const id = urlId || (currentRecord.type === 'account' ? currentRecord.id : null);
+
+    if (!id || id === highlightProcessedRef.current) return;
+    if (accounts.length === 0) return; // wait for data to load
+
+    // Find which group this account is in and uncollapse it
+    const targetAccount = accounts.find(a => a.id === id);
+    if (!targetAccount) return;
+
+    highlightProcessedRef.current = id;
     
+    const accountStatus = (targetAccount.accountStatus || 'inactive') as AccountStatus;
+    setCollapsedGroups(prev => {
+      if (prev.has(accountStatus)) {
+        const next = new Set(prev);
+        next.delete(accountStatus);
+        return next;
+      }
+      return prev;
+    });
+
+    setExpandedAccountId(id);
+    setHighlightId(id);
+
+    // Clean up URL and context after consuming
+    setTimeout(() => clearCurrentRecord(), 0);
     if (urlId) {
       const newParams = new URLSearchParams(searchParams);
       newParams.delete('highlight');
       setSearchParams(newParams, { replace: true });
     }
 
-    if (!id || id === highlightProcessedRef.current) return;
-    highlightProcessedRef.current = id;
-    setExpandedAccountId(id);
-    setHighlightId(id);
-    setTimeout(() => clearCurrentRecord(), 0);
-
+    // Retry scroll until element appears (max 5s)
     let attempts = 0;
     const scrollInterval = setInterval(() => {
       const el = document.querySelector(`[data-account-id="${id}"]`);
       if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         clearInterval(scrollInterval);
+        requestAnimationFrame(() => {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
       }
-      if (++attempts > 30) clearInterval(scrollInterval);
+      if (++attempts > 50) clearInterval(scrollInterval);
     }, 100);
 
-    setTimeout(() => setHighlightId(null), 4000);
+    const clearTimer = setTimeout(() => setHighlightId(null), 5000);
+    return () => { clearInterval(scrollInterval); clearTimeout(clearTimer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentRecord.id, currentRecord.type]);
+  }, [currentRecord.id, currentRecord.type, accounts.length]);
   
   // Quick filter toggles
   const [filterTierAB, setFilterTierAB] = useState(false);
@@ -812,19 +848,6 @@ export default function WeeklyOutreach() {
     return filters;
   }, [searchQuery, filterTier, filterTierAB, filterMissingCadence, filterStale, filterIcpTier12, filterTriggered, filterHighProbability, filterUnenriched]);
 
-  // Collapsed groups - outcomes collapsed by default
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<AccountStatus>>(
-    new Set(['meeting-booked', 'disqualified'])
-  );
-
-  const toggleGroupCollapse = (status: AccountStatus) => {
-    setCollapsedGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(status)) next.delete(status);
-      else next.add(status);
-      return next;
-    });
-  };
   
   const [newAccount, setNewAccount] = useState<Partial<Account>>({
     priority: 'medium',

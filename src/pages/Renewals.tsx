@@ -226,20 +226,17 @@ export default function Renewals() {
     const urlId = searchParams.get('highlight');
     const tab = searchParams.get('tab');
     const id = urlId || currentRecord.id;
-    
-    // Clean URL params if present
-    if (urlId || tab) {
+
+    if (tab && !id) {
+      setActiveTab(tab);
       const newParams = new URLSearchParams(searchParams);
-      newParams.delete('highlight');
       newParams.delete('tab');
       setSearchParams(newParams, { replace: true });
     }
-    
-    if (tab && !id) {
-      setActiveTab(tab);
-    }
 
-    if (!id || id === highlightProcessedRef.current || renewals.length === 0) return;
+    if (!id || id === highlightProcessedRef.current) return;
+    if (renewals.length === 0) return; // wait for data
+
     highlightProcessedRef.current = id;
     setHighlightId(id);
 
@@ -251,22 +248,31 @@ export default function Renewals() {
       setActiveTab('opportunities');
     }
 
-    // Clear context after consuming — use setTimeout to avoid re-render killing our intervals
+    // Clear context and URL params after consuming
     setTimeout(() => clearCurrentRecord(), 0);
+    if (urlId) {
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('highlight');
+      newParams.delete('tab');
+      setSearchParams(newParams, { replace: true });
+    }
 
-    // Retry scroll until element appears (max 3s)
-    let attempts = 0;
+    // Retry scroll until element appears (max 5s)
     const selector = isRenewal ? `[data-renewal-id="${id}"]` : `[data-opp-id="${id}"]`;
+    let attempts = 0;
     const scrollInterval = setInterval(() => {
       const el = document.querySelector(selector);
       if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         clearInterval(scrollInterval);
+        requestAnimationFrame(() => {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
       }
-      if (++attempts > 30) clearInterval(scrollInterval);
+      if (++attempts > 50) clearInterval(scrollInterval);
     }, 100);
 
-    setTimeout(() => setHighlightId(null), 4000);
+    const clearTimer = setTimeout(() => setHighlightId(null), 5000);
+    return () => { clearInterval(scrollInterval); clearTimeout(clearTimer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentRecord.id, renewals.length]);
   const [newRenewal, setNewRenewal] = useState<Partial<Renewal>>({
