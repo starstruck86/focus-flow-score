@@ -1086,8 +1086,14 @@ export default function WeeklyOutreach() {
         {/* Staleness & Urgency Summary */}
         <StalenessAlert accounts={newLogoAccounts} />
 
-        {/* Stage Summary - Visible on both tabs */}
-        <OpportunitiesStageSummary />
+        {/* Stage Summary - Visible on both tabs, clickable to filter */}
+        <OpportunitiesStageSummary 
+          activeStageFilter={stageFilter}
+          onStageFilterChange={(stage) => {
+            setStageFilter(stage);
+            if (stage !== null) setActiveTab('opportunities');
+          }}
+        />
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'accounts' | 'opportunities')} className="space-y-4">
