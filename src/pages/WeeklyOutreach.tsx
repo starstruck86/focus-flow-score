@@ -1075,6 +1075,8 @@ export default function WeeklyOutreach() {
                   builtInColumns={[
                     { key: 'website', label: 'Website' },
                     { key: 'status', label: 'Account Status' },
+                    { key: 'icp', label: 'ICP Score' },
+                    { key: 'icpTier', label: 'ICP Tier' },
                     { key: 'contactStatus', label: 'Contact Status' },
                     { key: 'tier', label: 'Tier' },
                     { key: 'cadence', label: 'Cadence' },
