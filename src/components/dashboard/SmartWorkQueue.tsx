@@ -137,6 +137,7 @@ function WorkItemCard({ item, index }: { item: WorkItem; index: number }) {
           </button>
         </div>
       </div>
+    </button>
   );
 }
 
