@@ -533,6 +533,16 @@ function FunnelGroupSection({
                         />
                       </TableCell>
                       <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1">
+                          <IcpScorePill account={account} />
+                          <EnrichButton account={account} />
+                          <TriggeredBadge account={account} />
+                        </div>
+                      </TableCell>
+                      <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+                        <LifecycleTierBadge account={account} />
+                      </TableCell>
+                      <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                         <DisplaySelectCell
                           value={account.contactStatus || 'not-started'}
                           options={CONTACT_STATUS_OPTIONS}
