@@ -20,6 +20,7 @@ import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import type { Priority, Workstream } from '@/types';
 import { ListPlus, Zap } from 'lucide-react';
+import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 
 interface QuickAddTaskModalProps {
   open: boolean;
@@ -28,6 +29,7 @@ interface QuickAddTaskModalProps {
 
 export function QuickAddTaskModal({ open, onOpenChange }: QuickAddTaskModalProps) {
   const { addTask, accounts, opportunities } = useStore();
+  const { currentRecord } = useLinkedRecordContext();
   
   const [title, setTitle] = useState('');
   const [workstream, setWorkstream] = useState<Workstream>('pg');
@@ -40,14 +42,28 @@ export function QuickAddTaskModal({ open, onOpenChange }: QuickAddTaskModalProps
   useEffect(() => {
     if (open) {
       setTitle('');
-      setWorkstream('pg');
       setPriority('P1');
       setDueDate('');
-      setAccountId('');
-      setOppId('');
       setNotes('');
+      
+      // Smart prefill from context
+      if (currentRecord.type === 'account' && currentRecord.id) {
+        setAccountId(currentRecord.id);
+        setWorkstream('pg');
+        setOppId('');
+      } else if (currentRecord.type === 'opportunity' && currentRecord.id) {
+        setOppId(currentRecord.id);
+        setAccountId(currentRecord.accountId || '');
+        // Determine workstream from opp
+        const opp = opportunities.find(o => o.id === currentRecord.id);
+        setWorkstream(opp?.dealType === 'renewal' ? 'renewals' : 'pg');
+      } else {
+        setAccountId('');
+        setOppId('');
+        setWorkstream('pg');
+      }
     }
-  }, [open]);
+  }, [open, currentRecord, opportunities]);
 
   const accountOpps = accountId
     ? opportunities.filter(o => o.accountId === accountId)
