@@ -741,7 +741,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
 
       return (
         <React.Fragment key={opp.id}>
-          <TableRow className="group hover:bg-muted/30 cursor-pointer" onClick={() => toggleExpand(opp.id)}>
+          <TableRow data-opp-id={opp.id} className={cn("group hover:bg-muted/30 cursor-pointer", localHighlight === opp.id && "ring-2 ring-primary/50 bg-primary/5 animate-pulse")} onClick={() => toggleExpand(opp.id)}>
             <TableCell className="w-8 py-3" onClick={(e) => e.stopPropagation()}>
               <Checkbox checked={bulkSelection.isSelected(opp.id)} onCheckedChange={() => bulkSelection.toggle(opp.id)} />
             </TableCell>
