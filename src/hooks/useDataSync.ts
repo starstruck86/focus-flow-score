@@ -319,24 +319,32 @@ export function useDataSync() {
       _lastSyncedHash = currentHash;
 
       // Debounce writes by entity type
-      const writeBack = (entity: string, data: any[], mapper: (item: any) => any) => {
-        if (writeTimers.current[entity]) clearTimeout(writeTimers.current[entity]);
-        writeTimers.current[entity] = setTimeout(async () => {
-          try {
-            if (data.length > 0) {
-              await supabase.from(entity).upsert(data.map(item => mapper(item)));
-            }
-          } catch (err) {
-            console.error(`[DataSync] Write-back error for ${entity}:`, err);
+      const scheduleWrite = (key: string, fn: () => Promise<void>) => {
+        if (writeTimers.current[key]) clearTimeout(writeTimers.current[key]);
+        writeTimers.current[key] = setTimeout(async () => {
+          try { await fn(); } catch (err) {
+            console.error(`[DataSync] Write-back error for ${key}:`, err);
           }
         }, 1500);
       };
 
       if (state.accounts !== prevState.accounts) {
-        writeBack('accounts', state.accounts, (a: Account) => storeAccountToDb(a, userId));
+        scheduleWrite('accounts', async () => {
+          if (state.accounts.length > 0) {
+            await supabase.from('accounts').upsert(
+              state.accounts.map(a => storeAccountToDb(a, userId))
+            );
+          }
+        });
       }
       if (state.opportunities !== prevState.opportunities) {
-        writeBack('opportunities', state.opportunities, (o: Opportunity) => storeOpportunityToDb(o, userId));
+        scheduleWrite('opportunities', async () => {
+          if (state.opportunities.length > 0) {
+            await supabase.from('opportunities').upsert(
+              state.opportunities.map(o => storeOpportunityToDb(o, userId))
+            );
+          }
+        });
       }
       if (state.renewals !== prevState.renewals) {
         writeBack('renewals', state.renewals, (r: Renewal) => storeRenewalToDb(r, userId));
