@@ -76,14 +76,17 @@ import { computeRenewalRiskScore } from '@/hooks/useTimeAllocation';
 
 // ===== RENEWAL URGENCY HEADER =====
 function RenewalUrgencyHeader({ renewals, formatCurrency }: { renewals: Renewal[]; formatCurrency: (v: number) => string }) {
-  const nearest = renewals.filter(r => r.daysToRenewal > 0).sort((a, b) => a.daysToRenewal - b.daysToRenewal)[0];
-  const atRiskArr = renewals
-    .filter(r => r.churnRisk === 'high' || r.churnRisk === 'certain' || r.healthStatus === 'red')
+  // Exclude churning/churned renewals from urgency alerts
+  const activeRenewals = renewals.filter(r => r.churnRisk !== 'certain');
+  
+  const nearest = activeRenewals.filter(r => r.daysToRenewal > 0).sort((a, b) => a.daysToRenewal - b.daysToRenewal)[0];
+  const atRiskArr = activeRenewals
+    .filter(r => r.churnRisk === 'high' || r.healthStatus === 'red')
     .reduce((sum, r) => sum + r.arr, 0);
-  const next30Arr = renewals
+  const next30Arr = activeRenewals
     .filter(r => r.daysToRenewal >= 0 && r.daysToRenewal <= 30)
     .reduce((sum, r) => sum + r.arr, 0);
-  const missingNextStep = renewals.filter(r => r.daysToRenewal <= 90 && !r.nextStep).length;
+  const missingNextStep = activeRenewals.filter(r => r.daysToRenewal <= 90 && !r.nextStep).length;
 
   if (!nearest && atRiskArr === 0) return null;
 
