@@ -758,6 +758,20 @@ export default function WeeklyOutreach() {
   const { currentRecord, clearCurrentRecord } = useLinkedRecordContext();
   const highlightProcessedRef = useRef<string | null>(null);
 
+  // Collapsed groups - outcomes collapsed by default (must be before highlight effect)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<AccountStatus>>(
+    new Set(['meeting-booked', 'disqualified'])
+  );
+
+  const toggleGroupCollapse = (status: AccountStatus) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status);
+      else next.add(status);
+      return next;
+    });
+  };
+
   useEffect(() => {
     const urlId = searchParams.get('highlight');
     const id = urlId || (currentRecord.type === 'account' ? currentRecord.id : null);
