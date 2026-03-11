@@ -43,6 +43,7 @@ import {
   UnifiedPipeline,
   TodayAgenda,
   MeetingPrepCard,
+  SmartWorkQueue,
 } from '@/components/dashboard';
 
 export default function Dashboard() {
