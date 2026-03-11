@@ -763,26 +763,56 @@ export const useStore = create<QuotaCompassStore>()(
       },
       
       logOpportunityActivity: (id, type, notes) => {
-        set((state) => ({
-          opportunities: state.opportunities.map(o =>
+        const todayStr = getTodayString();
+        set((state) => {
+          const opp = state.opportunities.find(o => o.id === id);
+          if (!opp) return state;
+          
+          // Update opportunity with activity
+          const updatedOpps = state.opportunities.map(o =>
             o.id === id
               ? {
                   ...o,
                   activityLog: [
                     ...o.activityLog,
-                    {
-                      id: generateId(),
-                      type,
-                      date: new Date().toISOString(),
-                      notes,
-                    },
+                    { id: generateId(), type, date: new Date().toISOString(), notes },
                   ],
-                  lastTouchDate: getTodayString(),
+                  lastTouchDate: todayStr,
                   updatedAt: new Date().toISOString(),
                 }
               : o
-          ),
-        }));
+          );
+          
+          // === Auto-cascade last-touch to parent account ===
+          const updatedAccounts = opp.accountId
+            ? state.accounts.map(a =>
+                a.id === opp.accountId
+                  ? { 
+                      ...a, 
+                      lastTouchDate: todayStr, 
+                      lastTouchType: type,
+                      touchesThisWeek: (a.touchesThisWeek || 0) + 1,
+                      updatedAt: new Date().toISOString(),
+                    }
+                  : a
+              )
+            : state.accounts;
+          
+          // === Auto-cascade last-touch to linked contacts ===
+          const updatedContacts = opp.linkedContactIds.length > 0
+            ? state.contacts.map(c =>
+                opp.linkedContactIds.includes(c.id)
+                  ? { ...c, lastTouchDate: todayStr, updatedAt: new Date().toISOString() }
+                  : c
+              )
+            : state.contacts;
+          
+          return {
+            opportunities: updatedOpps,
+            accounts: updatedAccounts,
+            contacts: updatedContacts,
+          };
+        });
       },
       
       // Quick Actions
