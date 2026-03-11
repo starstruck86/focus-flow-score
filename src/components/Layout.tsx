@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { SaveIndicator } from '@/components/SaveIndicator';
+import { useStaleItems } from '@/hooks/useStaleItems';
 import { cn } from '@/lib/utils';
 import { FocusTimer } from './FocusTimer';
 import { useAuth } from '@/contexts/AuthContext';
