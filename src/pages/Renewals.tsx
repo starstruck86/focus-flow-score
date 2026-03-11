@@ -650,7 +650,7 @@ export default function Renewals() {
           </TabsList>
           
           <TabsContent value="renewals">
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4">
             {/* Manage Columns */}
             <ManageColumnsPopover
               tabTarget="renewals"
