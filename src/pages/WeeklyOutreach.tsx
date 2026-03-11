@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useMemo, useCallback, memo } from 'react';
 import { 
   ExternalLink, 
   Plus, 
@@ -229,7 +229,7 @@ function sortFunnelGroup(accounts: Account[]): Account[] {
 }
 
 // ===== STALENESS ALERT =====
-function StalenessAlert({ accounts }: { accounts: Account[] }) {
+const StalenessAlert = memo(function StalenessAlert({ accounts }: { accounts: Account[] }) {
   const staleCount = accounts.filter(a => {
     if (a.accountStatus === 'disqualified' || a.accountStatus === 'inactive') return false;
     if (!a.lastTouchDate) return true;
@@ -272,7 +272,8 @@ function StalenessAlert({ accounts }: { accounts: Account[] }) {
       )}
     </div>
   );
-}
+});
+StalenessAlert.displayName = 'StalenessAlert';
 
 // Stage Summary Component for Opportunities
 function OpportunitiesStageSummary() {
@@ -321,7 +322,7 @@ function OpportunitiesStageSummary() {
           Active Pipeline: <span className="font-semibold text-foreground">{totalCount} opps</span> • <span className="font-mono font-semibold text-foreground">{formatCurrency(totalARR)}</span>
         </div>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3">
         {(['', 'Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate', 'Closed Won', 'Closed Lost'] as OpportunityStage[]).map(stage => (
           <div 
             key={stage || 'no-stage'} 
@@ -346,7 +347,7 @@ function OpportunitiesStageSummary() {
 }
 
 // ===== FUNNEL HEALTH BAR =====
-function FunnelHealthBar({ accounts }: { accounts: Account[] }) {
+const FunnelHealthBar = memo(function FunnelHealthBar({ accounts }: { accounts: Account[] }) {
   const counts: Record<string, number> = { researching: 0, prepped: 0, active: 0 };
   accounts.forEach(a => {
     if (counts[a.accountStatus] !== undefined) counts[a.accountStatus]++;
@@ -362,7 +363,7 @@ function FunnelHealthBar({ accounts }: { accounts: Account[] }) {
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
         {stages.map(s => {
           const belowTarget = s.count < s.target;
           return (
@@ -386,10 +387,11 @@ function FunnelHealthBar({ accounts }: { accounts: Account[] }) {
       </div>
     </div>
   );
-}
+});
+FunnelHealthBar.displayName = 'FunnelHealthBar';
 
 // ===== FUNNEL GROUP SECTION =====
-function FunnelGroupSection({
+const FunnelGroupSection = memo(function FunnelGroupSection({
   group,
   accounts,
   expandedAccountId,
@@ -444,7 +446,7 @@ function FunnelGroupSection({
           <div className="px-4 py-3 text-xs text-muted-foreground italic">No accounts in this stage.</div>
         ) : (
           <div className="metric-card overflow-x-auto p-0 mt-1 mb-3">
-            <Table className="min-w-[1200px]">
+            <Table className="min-w-[900px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                       <TableHead className="w-[3%]">
@@ -455,13 +457,13 @@ function FunnelGroupSection({
                         />
                       </TableHead>
                       <TableHead className="w-[3%]"></TableHead>
-                      <TableHead className="w-[17%]">Account</TableHead>
+                      <TableHead className="w-[18%]">Account</TableHead>
                   <TableHead className="w-[12%]">Website</TableHead>
-                  <TableHead className="w-[10%]">Account Status</TableHead>
+                  <TableHead className="w-[10%]">Status</TableHead>
                   <TableHead className="w-[5%]">ICP</TableHead>
-                  <TableHead className="w-[5%]">Tier</TableHead>
-                  <TableHead className="w-[8%]">Contact Status</TableHead>
-                  <TableHead className="w-[5%]">Tier</TableHead>
+                  <TableHead className="w-[5%]">Acct Tier</TableHead>
+                  <TableHead className="w-[8%]">Contacts</TableHead>
+                  <TableHead className="w-[5%]">Priority</TableHead>
                   {(group.status === 'prepped' || group.status === 'active') && (
                     <TableHead className="w-[8%]">Cadence</TableHead>
                   )}
@@ -646,7 +648,8 @@ function FunnelGroupSection({
       </CollapsibleContent>
     </Collapsible>
   );
-}
+});
+FunnelGroupSection.displayName = 'FunnelGroupSection';
 
 export default function WeeklyOutreach() {
   const { accounts, addAccount, updateAccount: rawUpdateAccount, deleteAccount } = useStore();
@@ -894,12 +897,18 @@ export default function WeeklyOutreach() {
   };
 
   // Apply search + quick filters
+  // Filter to new-logo accounts first, then apply user filters
+  const newLogoAccounts = useMemo(() => 
+    accounts.filter(a => a.motion === 'new-logo' || !a.motion),
+    [accounts]
+  );
+
   const filteredAccounts = useMemo(() => {
     const fourteenDaysAgo = new Date();
     fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
     const staleDate = fourteenDaysAgo.toISOString();
 
-    return accounts.filter(account => {
+    return newLogoAccounts.filter(account => {
       const matchesSearch = !searchQuery || account.name.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesTier = filterTier === 'all' || account.tier === filterTier;
       const matchesTierAB = !filterTierAB || account.tier === 'A' || account.tier === 'B';
@@ -911,7 +920,7 @@ export default function WeeklyOutreach() {
       const matchesUnenriched = !filterUnenriched || !account.lastEnrichedAt;
       return matchesSearch && matchesTier && matchesTierAB && matchesCadence && matchesStale && matchesIcpTier && matchesTriggered && matchesHighProb && matchesUnenriched;
     });
-  }, [accounts, searchQuery, filterTier, filterTierAB, filterMissingCadence, filterStale, filterIcpTier12, filterTriggered, filterHighProbability, filterUnenriched]);
+  }, [newLogoAccounts, searchQuery, filterTier, filterTierAB, filterMissingCadence, filterStale, filterIcpTier12, filterTriggered, filterHighProbability, filterUnenriched]);
 
   // Group & sort accounts by funnel status
   const groupedAccounts = useMemo(() => {
@@ -960,12 +969,12 @@ export default function WeeklyOutreach() {
 
   return (
     <Layout>
-      <div className="p-6 lg:p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         {/* Quick Links Bar */}
-        <div className="mb-6 space-y-3">
-          <div className="flex flex-wrap gap-2">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mr-2 self-center">
-              Leads & Contacts:
+        <div className="mb-4 sm:mb-6 space-y-2">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider shrink-0 self-center mr-1">
+              Leads:
             </span>
             {QUICK_LINKS.leadsContacts.map((link) => (
               <a
@@ -973,16 +982,17 @@ export default function WeeklyOutreach() {
                 href={link.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="quick-action text-xs py-1 px-2"
+                className="quick-action text-[11px] py-1 px-2 shrink-0 whitespace-nowrap"
+                aria-label={`Open ${link.label} in Salesforce`}
               >
                 {link.label}
                 <ExternalLink className="h-3 w-3" />
               </a>
             ))}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mr-2 self-center">
-              Accounts:
+          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider shrink-0 self-center mr-1">
+              Accts:
             </span>
             {QUICK_LINKS.accounts.map((link) => (
               <a
@@ -990,7 +1000,8 @@ export default function WeeklyOutreach() {
                 href={link.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="quick-action text-xs py-1 px-2"
+                className="quick-action text-[11px] py-1 px-2 shrink-0 whitespace-nowrap"
+                aria-label={`Open ${link.label} in Salesforce`}
               >
                 {link.label}
                 <ExternalLink className="h-3 w-3" />
@@ -1009,7 +1020,7 @@ export default function WeeklyOutreach() {
         </div>
         
         {/* Staleness & Urgency Summary */}
-        <StalenessAlert accounts={accounts} />
+        <StalenessAlert accounts={newLogoAccounts} />
 
         {/* Stage Summary - Visible on both tabs */}
         <OpportunitiesStageSummary />
@@ -1024,7 +1035,7 @@ export default function WeeklyOutreach() {
           {/* Accounts Tab - Funnel View */}
           <TabsContent value="accounts" className="space-y-4">
             {/* Funnel Health Bar */}
-            <FunnelHealthBar accounts={accounts} />
+            <FunnelHealthBar accounts={newLogoAccounts} />
             
             {/* Actions Bar */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -1051,11 +1062,12 @@ export default function WeeklyOutreach() {
                   </SelectContent>
                 </Select>
                 {/* Quick filter toggles */}
-                <div className="flex items-center gap-1.5 flex-wrap">
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
                   <Button
                     variant={filterTierAB ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs"
+                    className="h-8 text-xs shrink-0"
+                    aria-label="Filter Tier A and B accounts"
                     onClick={() => setFilterTierAB(!filterTierAB)}
                   >
                     Tier A/B
@@ -1063,7 +1075,8 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterMissingCadence ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs"
+                    className="h-8 text-xs shrink-0"
+                    aria-label="Filter accounts not in cadence"
                     onClick={() => setFilterMissingCadence(!filterMissingCadence)}
                   >
                     No Cadence
@@ -1071,7 +1084,8 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterStale ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs"
+                    className="h-8 text-xs shrink-0"
+                    aria-label="Filter stale accounts untouched 14+ days"
                     onClick={() => setFilterStale(!filterStale)}
                   >
                     Stale 14d+
@@ -1080,7 +1094,8 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterIcpTier12 ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs"
+                    className="h-8 text-xs shrink-0"
+                    aria-label="Filter ICP Tier 1 and 2 accounts"
                     onClick={() => setFilterIcpTier12(!filterIcpTier12)}
                   >
                     ICP T1/T2
@@ -1088,7 +1103,8 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterHighProbability ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs"
+                    className="h-8 text-xs shrink-0"
+                    aria-label="Filter high probability buyers"
                     onClick={() => setFilterHighProbability(!filterHighProbability)}
                   >
                     High Prob
@@ -1096,7 +1112,8 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterTriggered ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs"
+                    className="h-8 text-xs shrink-0"
+                    aria-label="Filter triggered accounts"
                     onClick={() => setFilterTriggered(!filterTriggered)}
                   >
                     ⚡ Triggered
@@ -1104,7 +1121,8 @@ export default function WeeklyOutreach() {
                   <Button
                     variant={filterUnenriched ? "default" : "outline"}
                     size="sm"
-                    className="h-8 text-xs"
+                    className="h-8 text-xs shrink-0"
+                    aria-label="Filter accounts not yet enriched"
                     onClick={() => setFilterUnenriched(!filterUnenriched)}
                   >
                     Not Enriched
@@ -1416,7 +1434,7 @@ export default function WeeklyOutreach() {
             />
 
             {/* Funnel Grouped View */}
-            {accounts.length === 0 ? (
+            {newLogoAccounts.length === 0 ? (
               <EmptyState
                 icon={Users}
                 title="No accounts yet"
