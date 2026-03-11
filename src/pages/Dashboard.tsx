@@ -1,7 +1,7 @@
 // Results-First Dashboard with Commission Pacing, Expected vs Actual, and Actionable Recommendations
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, ClipboardCheck } from 'lucide-react';
+import { Calendar, ChevronDown } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { DailyCheckInModal } from '@/components/journal';
 import { useStore } from '@/store/useStore';
@@ -26,6 +26,9 @@ import { getTemplateById, calculateWeeklyExpectations } from '@/lib/goodDayModel
 import { calculateCommissionSummary, DEFAULT_QUOTA_CONFIG } from '@/lib/commissionCalculations';
 import { DEFAULT_QUOTA_TARGETS } from '@/lib/salesAgeCalculations';
 import { format, differenceInBusinessDays, startOfWeek } from 'date-fns';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { cn } from '@/lib/utils';
 import {
   PaceToQuotaCard,
   WhatToDoNext,
@@ -41,34 +44,21 @@ import {
 export default function Dashboard() {
   const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
   const [showCommissionDetail, setShowCommissionDetail] = useState(false);
+  const [snapshotsOpen, setSnapshotsOpen] = useState(false);
   
-  // Store data
   const { opportunities, renewals, quotaConfig } = useStore();
-  
-  // Streak data hooks
   const { data: config } = useWorkScheduleConfig();
   const { data: holidays } = useHolidays();
   const { data: ptoDays } = usePtoDays();
   const { data: overrides } = useWorkdayOverrides();
   const { data: streakEvents } = useStreakEvents();
-  
-  // Journal entry for today
   const { data: todayJournalEntry, isLoading: journalLoading } = useTodayJournalEntry();
-  
-  // Commission Pacing (top tile)
   const { data: commissionPacing, isLoading: pacingLoading } = useCommissionPacing();
-  
-  // Pace to quota and recommendations
   const paceToQuota = usePaceToQuota();
-  const recommendations = useActionRecommendations();
   const { data: quotaTargets } = useQuotaTargets();
   const { data: performanceRollups, isLoading: rollupsLoading } = usePerformanceRollups();
-  
-  // Expected vs Actual metrics
   const { data: wtdMetrics, isLoading: wtdLoading } = useWeekToDateMetrics();
-  const { data: mtdMetrics, isLoading: mtdLoading } = useMonthToDateMetrics();
-  
-  // Check if today is eligible and if already checked in
+
   const today = new Date();
   const todayStr = format(today, 'yyyy-MM-dd');
   const isTodayEligible = config && holidays && ptoDays && overrides
@@ -77,11 +67,8 @@ export default function Dashboard() {
   const todayEvent = streakEvents?.find(e => e.date === todayStr);
   const todayCheckedIn = todayEvent?.checkedIn || todayJournalEntry?.checkedIn || false;
   
-  // Calculate expected vs actual for the week
   const weekStart = startOfWeek(today, { weekStartsOn: 1 });
   const daysElapsedThisWeek = Math.min(5, differenceInBusinessDays(today, weekStart) + 1);
-  
-  // Use balanced-pd as default template for expectations
   const defaultTemplate = getTemplateById('balanced-pd');
   const weeklyExpectations = calculateWeeklyExpectations(defaultTemplate, 5);
   
@@ -99,14 +86,10 @@ export default function Dashboard() {
     daysElapsedThisWeek
   ) : [];
   
-  // Commission summary for snapshot
   const effectiveConfig = quotaConfig || DEFAULT_QUOTA_CONFIG;
   const effectiveTargets = quotaTargets || DEFAULT_QUOTA_TARGETS;
   const fyStart = effectiveTargets.fiscalYearStart;
-  const dateFilter = {
-    start: fyStart,
-    end: format(today, 'yyyy-MM-dd'),
-  };
+  const dateFilter = { start: fyStart, end: format(today, 'yyyy-MM-dd') };
   const commissionSummary = calculateCommissionSummary(opportunities, {
     ...effectiveConfig,
     newArrQuota: effectiveTargets.newArrQuota,
@@ -116,7 +99,6 @@ export default function Dashboard() {
   const combinedAttainment = (commissionSummary.newArrBooked + commissionSummary.renewalArrBooked) / 
     (effectiveTargets.newArrQuota + effectiveTargets.renewalArrQuota);
   
-  // Performance targets for snapshot
   const performanceTargets = {
     dialsPerDay: effectiveTargets.targetDialsPerDay,
     connectsPerDay: effectiveTargets.targetConnectsPerDay,
@@ -129,19 +111,14 @@ export default function Dashboard() {
 
   return (
     <Layout>
-      <div className="p-6 lg:p-8 max-w-7xl mx-auto">
+      <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
         {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-center gap-2 text-muted-foreground text-sm mb-2">
+        <div>
+          <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
             <Calendar className="h-4 w-4" />
-            {today.toLocaleDateString('en-US', { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
-            })}
+            {today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
           </div>
-          <h1 className="font-display text-3xl font-bold">Dashboard</h1>
+          <h1 className="font-display text-2xl md:text-3xl font-bold">Dashboard</h1>
         </div>
         
         {/* Check-In Banner */}
@@ -153,13 +130,9 @@ export default function Dashboard() {
           confirmed={todayJournalEntry?.confirmed}
         />
         
-        {/* SECTION 1: Commission Pacing + Today + WTD (3-column tiles) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          {/* Commission Pacing Tile */}
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
+        {/* Commission Pacing + Progress (2-col on desktop) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
             <CommissionPacingTile 
               projectedQuarterCommission={commissionPacing?.projectedQuarterCommission || 0}
               weeklyPaceTrend={commissionPacing?.weeklyPaceTrend || 0}
@@ -171,117 +144,131 @@ export default function Dashboard() {
             />
           </motion.div>
           
-          {/* Today's Progress Tile */}
-          <ExpectedVsActualCard
-            title="Today's Progress"
-            subtitle={todayCheckedIn ? "Checked in" : "Not yet checked in"}
-            metrics={todayJournalEntry ? [
-              {
-                metric: 'Points',
-                expected: 8,
-                actual: todayJournalEntry.dailyScore || 0,
-                gap: 8 - (todayJournalEntry.dailyScore || 0),
-                percentComplete: (todayJournalEntry.dailyScore || 0) / 8,
-                status: (todayJournalEntry.dailyScore || 0) >= 8 ? 'ahead' : 
-                        (todayJournalEntry.dailyScore || 0) >= 6 ? 'on-track' : 'behind',
-              },
-              {
-                metric: 'Conversations',
-                expected: defaultTemplate.conversations,
-                actual: todayJournalEntry.activity.conversations,
-                gap: defaultTemplate.conversations - todayJournalEntry.activity.conversations,
-                percentComplete: todayJournalEntry.activity.conversations / defaultTemplate.conversations,
-                status: todayJournalEntry.activity.conversations >= defaultTemplate.conversations ? 'ahead' : 'behind',
-              },
-              {
-                metric: 'Prospects Added',
-                expected: defaultTemplate.prospectsAdded,
-                actual: todayJournalEntry.activity.prospectsAdded,
-                gap: defaultTemplate.prospectsAdded - todayJournalEntry.activity.prospectsAdded,
-                percentComplete: todayJournalEntry.activity.prospectsAdded / defaultTemplate.prospectsAdded,
-                status: todayJournalEntry.activity.prospectsAdded >= defaultTemplate.prospectsAdded ? 'ahead' : 'behind',
-              },
-            ] : []}
-            pointsEarned={todayJournalEntry?.dailyScore || 0}
-            pointsTarget={8}
-            isLoading={journalLoading}
-            compact
-          />
-          
-          {/* Week-to-Date Progress Tile */}
-          <ExpectedVsActualCard
-            title="Week-to-Date"
-            subtitle={`${daysElapsedThisWeek} of 5 workdays`}
-            metrics={expectedVsActualMetrics}
-            pointsEarned={wtdMetrics?.pointsEarned || 0}
-            pointsTarget={8 * daysElapsedThisWeek}
-            isLoading={wtdLoading}
-            compact
-          />
+          {/* Tabbed Today / WTD card */}
+          <div className="lg:col-span-2">
+            <Tabs defaultValue="today" className="w-full">
+              <TabsList className="w-full grid grid-cols-2">
+                <TabsTrigger value="today">Today</TabsTrigger>
+                <TabsTrigger value="wtd">Week-to-Date</TabsTrigger>
+              </TabsList>
+              <TabsContent value="today" className="mt-2">
+                <ExpectedVsActualCard
+                  title="Today's Progress"
+                  subtitle={todayCheckedIn ? "Checked in" : "Not yet checked in"}
+                  metrics={todayJournalEntry ? [
+                    {
+                      metric: 'Points',
+                      expected: 8,
+                      actual: todayJournalEntry.dailyScore || 0,
+                      gap: 8 - (todayJournalEntry.dailyScore || 0),
+                      percentComplete: (todayJournalEntry.dailyScore || 0) / 8,
+                      status: (todayJournalEntry.dailyScore || 0) >= 8 ? 'ahead' : 
+                              (todayJournalEntry.dailyScore || 0) >= 6 ? 'on-track' : 'behind',
+                    },
+                    {
+                      metric: 'Conversations',
+                      expected: defaultTemplate.conversations,
+                      actual: todayJournalEntry.activity.conversations,
+                      gap: defaultTemplate.conversations - todayJournalEntry.activity.conversations,
+                      percentComplete: todayJournalEntry.activity.conversations / defaultTemplate.conversations,
+                      status: todayJournalEntry.activity.conversations >= defaultTemplate.conversations ? 'ahead' : 'behind',
+                    },
+                    {
+                      metric: 'Prospects Added',
+                      expected: defaultTemplate.prospectsAdded,
+                      actual: todayJournalEntry.activity.prospectsAdded,
+                      gap: defaultTemplate.prospectsAdded - todayJournalEntry.activity.prospectsAdded,
+                      percentComplete: todayJournalEntry.activity.prospectsAdded / defaultTemplate.prospectsAdded,
+                      status: todayJournalEntry.activity.prospectsAdded >= defaultTemplate.prospectsAdded ? 'ahead' : 'behind',
+                    },
+                  ] : []}
+                  pointsEarned={todayJournalEntry?.dailyScore || 0}
+                  pointsTarget={8}
+                  isLoading={journalLoading}
+                  compact
+                />
+              </TabsContent>
+              <TabsContent value="wtd" className="mt-2">
+                <ExpectedVsActualCard
+                  title="Week-to-Date"
+                  subtitle={`${daysElapsedThisWeek} of 5 workdays`}
+                  metrics={expectedVsActualMetrics}
+                  pointsEarned={wtdMetrics?.pointsEarned || 0}
+                  pointsTarget={8 * daysElapsedThisWeek}
+                  isLoading={wtdLoading}
+                  compact
+                />
+              </TabsContent>
+            </Tabs>
+          </div>
         </div>
         
-        {/* SECTION 3: Pace to Quota */}
+        {/* Pace to Quota */}
         <PaceToQuotaCard paceToQuota={paceToQuota} />
         
-        {/* SECTION 4: What To Do Next */}
-        <div className="mt-6">
-          <WhatToDoNext 
-            recommendations={commissionPacing?.actionPlan.map((a, i) => ({
-              id: `action-${i}`,
-              priority: (i + 1) as 1 | 2 | 3,
-              action: a.action,
-              target: a.target,
-              timeframe: a.timeframe,
-              workflow: a.workflow as any,
-              why: `Based on current pace`,
-              impact: a.impact,
-              qpiImpact: 0.05 * (3 - i), // Decreasing impact estimate
-            })) || []} 
-            isLoading={pacingLoading}
-          />
-        </div>
+        {/* What To Do Next */}
+        <WhatToDoNext 
+          recommendations={commissionPacing?.actionPlan.map((a, i) => ({
+            id: `action-${i}`,
+            priority: (i + 1) as 1 | 2 | 3,
+            action: a.action,
+            target: a.target,
+            timeframe: a.timeframe,
+            workflow: a.workflow as any,
+            why: `Based on current pace`,
+            impact: a.impact,
+            qpiImpact: 0.05 * (3 - i),
+          })) || []} 
+          isLoading={pacingLoading}
+        />
         
-        {/* SECTION 5: Next 45 Days Risk Window */}
-        <div className="mt-6">
-          <Next45DaysRisk 
-            opportunities={opportunities} 
-            renewals={renewals} 
-          />
-        </div>
+        {/* Next 45 Days Risk Window */}
+        <Next45DaysRisk opportunities={opportunities} renewals={renewals} />
         
-        {/* SECTION 6: Performance + Commission Snapshots */}
-        <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <PerformanceSnapshot
-            wtd={performanceRollups?.wtd || {
-              dials: 0, conversations: 0, meetingsSet: 0, 
-              customerMeetingsHeld: 0, oppsCreated: 0,
-              accountsResearched: 0, contactsPrepped: 0
-            }}
-            mtd={performanceRollups?.mtd || {
-              dials: 0, conversations: 0, meetingsSet: 0, 
-              customerMeetingsHeld: 0, oppsCreated: 0,
-              accountsResearched: 0, contactsPrepped: 0
-            }}
-            wtdDays={performanceRollups?.wtdDays || 0}
-            mtdDays={performanceRollups?.mtdDays || 0}
-            targets={performanceTargets}
-            isLoading={rollupsLoading}
-          />
-          
-          <CommissionSnapshot
-            totalCommission={commissionSummary.totalCommission}
-            newArrAttainment={commissionSummary.newArrAttainment}
-            renewalArrAttainment={commissionSummary.renewalArrAttainment}
-            combinedAttainment={combinedAttainment}
-            projectedImpact={{
-              additionalNewArr: 50000,
-              additionalCommission: 50000 * effectiveConfig.newArrAcr,
-            }}
-          />
-        </div>
+        {/* Collapsible Snapshots */}
+        <Collapsible open={snapshotsOpen} onOpenChange={setSnapshotsOpen}>
+          <CollapsibleTrigger className="flex items-center gap-2 w-full text-left py-3 group">
+            <ChevronDown className={cn(
+              "h-4 w-4 text-muted-foreground transition-transform",
+              snapshotsOpen && "rotate-180"
+            )} />
+            <span className="font-display text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
+              Performance & Commission Snapshots
+            </span>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
+              <PerformanceSnapshot
+                wtd={performanceRollups?.wtd || {
+                  dials: 0, conversations: 0, meetingsSet: 0, 
+                  customerMeetingsHeld: 0, oppsCreated: 0,
+                  accountsResearched: 0, contactsPrepped: 0
+                }}
+                mtd={performanceRollups?.mtd || {
+                  dials: 0, conversations: 0, meetingsSet: 0, 
+                  customerMeetingsHeld: 0, oppsCreated: 0,
+                  accountsResearched: 0, contactsPrepped: 0
+                }}
+                wtdDays={performanceRollups?.wtdDays || 0}
+                mtdDays={performanceRollups?.mtdDays || 0}
+                targets={performanceTargets}
+                isLoading={rollupsLoading}
+              />
+              <CommissionSnapshot
+                totalCommission={commissionSummary.totalCommission}
+                newArrAttainment={commissionSummary.newArrAttainment}
+                renewalArrAttainment={commissionSummary.renewalArrAttainment}
+                combinedAttainment={combinedAttainment}
+                projectedImpact={{
+                  additionalNewArr: 50000,
+                  additionalCommission: 50000 * effectiveConfig.newArrAcr,
+                }}
+              />
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       </div>
       
-      {/* Commission Pacing Detail Modal */}
       <CommissionPacingDetailModal
         open={showCommissionDetail}
         onOpenChange={setShowCommissionDetail}
@@ -299,7 +286,6 @@ export default function Dashboard() {
         sensitivityAnalysis={commissionPacing?.sensitivityAnalysis || []}
       />
       
-      {/* Daily Check-In Modal */}
       <DailyCheckInModal
         open={showDailyCheckIn}
         onOpenChange={setShowDailyCheckIn}
