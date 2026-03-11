@@ -159,23 +159,35 @@ function MomentumHeader({ workstreamFilter }: { workstreamFilter: 'pg' | 'renewa
   };
 
   const drivers = isPG ? [
-    { key: 'prospectsAdded', label: 'Prospects/Cadence', actual: todayActuals.prospectsAdded, target: DEFAULT_DRIVER_TARGETS.prospectsAdded, icon: UserPlus },
-    { key: 'conversations', label: 'Conversations', actual: todayActuals.conversations, target: DEFAULT_DRIVER_TARGETS.conversations, icon: Phone },
-    { key: 'managerPlusMessages', label: 'Manager+ Msgs', actual: todayActuals.managerPlusMessages, target: DEFAULT_DRIVER_TARGETS.managerPlusMessages, icon: Mail },
-    { key: 'meetingsSet', label: 'Meetings Set', actual: todayActuals.meetingsSet, target: DEFAULT_DRIVER_TARGETS.meetingsSet, icon: Calendar },
-    { key: 'oppsCreated', label: 'Opps Created', actual: todayActuals.oppsCreated, target: DEFAULT_DRIVER_TARGETS.oppsCreated, icon: Target },
+    { key: 'prospectsAdded', label: 'Prospects/Cadence', actual: todayActuals.prospectsAdded, target: DEFAULT_DRIVER_TARGETS.prospectsAdded, icon: UserPlus, action: 'quick-log' },
+    { key: 'conversations', label: 'Conversations', actual: todayActuals.conversations, target: DEFAULT_DRIVER_TARGETS.conversations, icon: Phone, action: 'power-hour' },
+    { key: 'managerPlusMessages', label: 'Manager+ Msgs', actual: todayActuals.managerPlusMessages, target: DEFAULT_DRIVER_TARGETS.managerPlusMessages, icon: Mail, action: 'quick-log' },
+    { key: 'meetingsSet', label: 'Meetings Set', actual: todayActuals.meetingsSet, target: DEFAULT_DRIVER_TARGETS.meetingsSet, icon: Calendar, action: 'quick-log' },
+    { key: 'oppsCreated', label: 'Opps Created', actual: todayActuals.oppsCreated, target: DEFAULT_DRIVER_TARGETS.oppsCreated, icon: Target, action: 'add-opp' },
   ] : [
-    { key: 'conversations', label: 'Conversations', actual: todayActuals.conversations, target: DEFAULT_DRIVER_TARGETS.conversations, icon: Phone },
-    { key: 'meetingsSet', label: 'Meetings Set', actual: todayActuals.meetingsSet, target: DEFAULT_DRIVER_TARGETS.meetingsSet, icon: Calendar },
+    { key: 'conversations', label: 'Conversations', actual: todayActuals.conversations, target: DEFAULT_DRIVER_TARGETS.conversations, icon: Phone, action: 'power-hour' },
+    { key: 'meetingsSet', label: 'Meetings Set', actual: todayActuals.meetingsSet, target: DEFAULT_DRIVER_TARGETS.meetingsSet, icon: Calendar, action: 'quick-log' },
   ];
+
+  // Dispatch keyboard shortcut to open FAB actions
+  const triggerAction = (action: string) => {
+    if (action === 'quick-log') {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'q' }));
+    } else if (action === 'power-hour') {
+      // Open FAB then click power hour - for now just quick log
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'q' }));
+    } else if (action === 'add-opp') {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
+    }
+  };
 
   // Compute suggested next 3 (biggest gaps for PG drivers)
   const gaps = isPG ? [
-    { tag: 'cadence' as DriverTag, gap: Math.max(0, DEFAULT_DRIVER_TARGETS.prospectsAdded - todayActuals.prospectsAdded) },
-    { tag: 'calls' as DriverTag, gap: Math.max(0, DEFAULT_DRIVER_TARGETS.conversations - todayActuals.conversations) },
-    { tag: 'manager-outreach' as DriverTag, gap: Math.max(0, DEFAULT_DRIVER_TARGETS.managerPlusMessages - todayActuals.managerPlusMessages) },
-    { tag: 'meeting-set' as DriverTag, gap: Math.max(0, DEFAULT_DRIVER_TARGETS.meetingsSet - todayActuals.meetingsSet) },
-    { tag: 'opp-creation' as DriverTag, gap: Math.max(0, DEFAULT_DRIVER_TARGETS.oppsCreated - todayActuals.oppsCreated) },
+    { tag: 'cadence' as DriverTag, gap: Math.max(0, DEFAULT_DRIVER_TARGETS.prospectsAdded - todayActuals.prospectsAdded), action: 'quick-log' },
+    { tag: 'calls' as DriverTag, gap: Math.max(0, DEFAULT_DRIVER_TARGETS.conversations - todayActuals.conversations), action: 'power-hour' },
+    { tag: 'manager-outreach' as DriverTag, gap: Math.max(0, DEFAULT_DRIVER_TARGETS.managerPlusMessages - todayActuals.managerPlusMessages), action: 'quick-log' },
+    { tag: 'meeting-set' as DriverTag, gap: Math.max(0, DEFAULT_DRIVER_TARGETS.meetingsSet - todayActuals.meetingsSet), action: 'quick-log' },
+    { tag: 'opp-creation' as DriverTag, gap: Math.max(0, DEFAULT_DRIVER_TARGETS.oppsCreated - todayActuals.oppsCreated), action: 'add-opp' },
   ].filter(g => g.gap > 0).sort((a, b) => b.gap - a.gap).slice(0, 3) : [];
 
   const title = isPG ? 'New Logo Momentum' : 'Renewals Focus';
@@ -197,26 +209,28 @@ function MomentumHeader({ workstreamFilter }: { workstreamFilter: 'pg' | 'renewa
         </div>
       </div>
 
-      {/* Driver chips */}
+      {/* Driver chips - now clickable to launch actions */}
       <div className="flex flex-wrap gap-2 mb-2">
         {drivers.map(d => {
           const met = d.target > 0 ? d.actual >= d.target : d.actual > 0;
           const Icon = d.icon;
           return (
-            <div
+            <button
               key={d.key}
+              onClick={() => !met && triggerAction(d.action)}
               className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-colors",
+                "flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-all",
                 met
                   ? "bg-status-green/10 text-status-green border-status-green/20"
-                  : "bg-muted/50 text-muted-foreground border-border"
+                  : "bg-muted/50 text-muted-foreground border-border hover:bg-primary/10 hover:border-primary/30 hover:text-primary cursor-pointer"
               )}
+              title={met ? 'Target met!' : `Click to log ${d.label}`}
             >
               <Icon className="h-3 w-3" />
               <span>{d.label}</span>
               <span className="font-bold">{d.actual}</span>
               {d.target > 0 && <span className="opacity-60">/ {d.target}</span>}
-            </div>
+            </button>
           );
         })}
         {/* PD as secondary */}
@@ -236,11 +250,16 @@ function MomentumHeader({ workstreamFilter }: { workstreamFilter: 'pg' | 'renewa
         <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
           <Zap className="h-3.5 w-3.5 text-primary" />
           <span>No activity logged today.</span>
-          <a href="/dashboard" className="text-primary font-medium hover:underline">Log Day →</a>
+          <button
+            onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'q' }))}
+            className="text-primary font-medium hover:underline"
+          >
+            Quick Log →
+          </button>
         </div>
       )}
 
-      {/* Suggested Next 3 (one-line, only when points < 8 and PG) */}
+      {/* Suggested Next 3 - now clickable */}
       {isPG && pointsToday < 8 && gaps.length > 0 && (
         <div className="mt-2 flex items-center gap-2 text-xs bg-primary/5 rounded-lg px-3 py-2 border border-primary/10">
           <ArrowRight className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -249,10 +268,18 @@ function MomentumHeader({ workstreamFilter }: { workstreamFilter: 'pg' | 'renewa
             const meta = DRIVER_TAG_META[g.tag];
             const Icon = meta.icon;
             return (
-              <span key={g.tag} className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-medium", meta.color)}>
+              <button
+                key={g.tag}
+                onClick={() => triggerAction(g.action)}
+                className={cn(
+                  "inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity",
+                  meta.color
+                )}
+                title={`Click to log ${meta.label}`}
+              >
                 <Icon className="h-2.5 w-2.5" />
                 {meta.label}
-              </span>
+              </button>
             );
           })}
         </div>
@@ -761,6 +788,9 @@ export default function Tasks() {
 
   const activeCount = filteredTasks.filter(t => t.status !== 'done' && t.status !== 'dropped').length;
   const doneCount = filteredTasks.filter(t => t.status === 'done').length;
+  const overdueCount = filteredTasks.filter(t => 
+    t.dueDate && t.dueDate < today && t.status !== 'done' && t.status !== 'dropped'
+  ).length;
 
   return (
     <Layout>
@@ -771,7 +801,14 @@ export default function Tasks() {
         {/* Title + Add */}
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="font-display text-2xl font-bold">Tasks</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="font-display text-2xl font-bold">Tasks</h1>
+              {overdueCount > 0 && (
+                <Badge variant="destructive" className="text-[10px] h-5 px-1.5">
+                  {overdueCount} overdue
+                </Badge>
+              )}
+            </div>
             <p className="text-sm text-muted-foreground">
               {activeCount} active • {doneCount} done
             </p>
