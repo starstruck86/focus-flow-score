@@ -363,7 +363,7 @@ const FunnelHealthBar = memo(function FunnelHealthBar({ accounts }: { accounts: 
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
         {stages.map(s => {
           const belowTarget = s.count < s.target;
           return (
