@@ -1,5 +1,6 @@
 import React, { useState, useRef, useMemo, useCallback, memo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 import { 
   ExternalLink, 
   Plus, 
