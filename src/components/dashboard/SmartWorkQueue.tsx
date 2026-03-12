@@ -163,6 +163,22 @@ export function SmartWorkQueue() {
   const { addTask, tasks } = useStore();
   const [addedTasks, setAddedTasks] = useState<Set<string>>(new Set());
 
+  // Filter out items that already have linked tasks
+  const existingTaskRecordIds = useMemo(() => {
+    const ids = new Set<string>();
+    tasks.forEach(t => {
+      if (t.linkedRecordId) ids.add(t.linkedRecordId);
+      if (t.linkedAccountId) ids.add(t.linkedAccountId);
+      if (t.linkedOpportunityId) ids.add(t.linkedOpportunityId);
+    });
+    return ids;
+  }, [tasks]);
+
+  const filteredQueue = useMemo(() => 
+    workQueue.filter(item => !existingTaskRecordIds.has(item.id) && !addedTasks.has(item.id)),
+    [workQueue, existingTaskRecordIds, addedTasks]
+  );
+
   const handleAddTask = (item: WorkItem) => {
     const workstream: Workstream = item.type === 'renewal' || item.isRenewalOpp ? 'renewals' : 'pg';
     
