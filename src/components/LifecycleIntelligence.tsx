@@ -131,8 +131,6 @@ export function EnrichButton({ account, compact = false }: { account: Account; c
   const { enrichAccount, isEnriching } = useAccountEnrichment();
   const loading = isEnriching(account.id);
 
-  if (!account.website) return null;
-
   const stale = isEnrichmentStale(account);
 
   return (
@@ -154,7 +152,7 @@ export function EnrichButton({ account, compact = false }: { account: Account; c
           </Button>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
-          {loading ? 'Enriching...' : stale ? 'Enrichment is 90+ days old — click to refresh' : account.lastEnrichedAt ? 'Re-enrich account' : 'Auto-detect ICP signals'}
+          {loading ? 'Enriching...' : stale ? 'Enrichment is 90+ days old — click to refresh' : account.lastEnrichedAt ? 'Re-enrich account' : account.website ? 'Auto-detect ICP signals' : 'Auto-find website & detect ICP signals'}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -183,6 +181,86 @@ const CONFIDENCE_COLORS = {
   medium: 'text-status-yellow',
   low: 'text-muted-foreground',
 };
+
+// ── Enrichment Summary Panel (clean formatted display) ──
+
+function EnrichmentSummaryPanel({ summary, evidence }: { summary: string; evidence: Record<string, string> }) {
+  // Parse the summary into sections
+  const sections: { title: string; content: string }[] = [];
+  
+  // Extract the main summary (before any ** sections)
+  const mainMatch = summary.match(/^([\s\S]*?)(?=\n\n\*\*|$)/);
+  const mainSummary = (mainMatch?.[1] || summary).replace(/\*\*/g, '').trim();
+  
+  // Extract "How they make money" section
+  const businessMatch = summary.match(/\*\*How they make money:\*\*\n?([\s\S]*?)(?=\n\n\*\*|$)/i);
+  const businessSummary = evidence.business_summary || (businessMatch?.[1] || '').trim();
+  
+  // Extract "Recent news" section  
+  const newsMatch = summary.match(/\*\*Recent news[^*]*\*\*\n?([\s\S]*?)$/i);
+  const recentNews = evidence.recent_news || (newsMatch?.[1] || '').trim();
+
+  return (
+    <div className="space-y-2">
+      {/* Main ICP summary */}
+      {mainSummary && (
+        <div className="text-xs bg-muted/50 p-3 rounded-md border border-border/50">
+          <p className="text-foreground/80 leading-relaxed">{mainSummary}</p>
+        </div>
+      )}
+      
+      {/* Business model */}
+      {businessSummary && (
+        <div className="text-xs p-3 rounded-md border border-primary/20 bg-primary/5">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <DollarSignIcon className="h-3 w-3 text-primary" />
+            <span className="font-semibold text-primary text-[11px] uppercase tracking-wide">How They Make Money</span>
+          </div>
+          <div className="text-foreground/80 leading-relaxed whitespace-pre-line">
+            {formatBullets(businessSummary)}
+          </div>
+        </div>
+      )}
+      
+      {/* Recent news */}
+      {recentNews && recentNews !== 'No significant recent news found.' && (
+        <div className="text-xs p-3 rounded-md border border-status-yellow/20 bg-status-yellow/5">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Zap className="h-3 w-3 text-status-yellow" />
+            <span className="font-semibold text-status-yellow text-[11px] uppercase tracking-wide">Recent News & Hires</span>
+          </div>
+          <div className="text-foreground/80 leading-relaxed whitespace-pre-line">
+            {formatBullets(recentNews)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Helper: clean up bullet points for display
+function formatBullets(text: string): React.ReactNode {
+  const lines = text.split('\n').filter(l => l.trim());
+  return lines.map((line, i) => {
+    const cleaned = line.replace(/^\s*[-•*]\s*/, '').replace(/\*\*(.*?)\*\*/g, '$1').trim();
+    if (!cleaned) return null;
+    const isBullet = /^\s*[-•*]/.test(line);
+    return (
+      <div key={i} className={cn('leading-relaxed', isBullet ? 'pl-3 relative before:content-["•"] before:absolute before:left-0 before:text-muted-foreground' : i > 0 ? 'mt-1' : '')}>
+        {cleaned}
+      </div>
+    );
+  });
+}
+
+// Inline dollar sign icon to avoid adding to top-level imports
+function DollarSignIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+    </svg>
+  );
+}
 
 export function SignalDetailPanel({ account }: { account: Account }) {
   const score = account.icpScoreOverride ?? account.icpFitScore;
@@ -231,18 +309,16 @@ export function SignalDetailPanel({ account }: { account: Account }) {
             <ImagePlus className="h-3 w-3" />
             Screenshots
           </Button>
-          {account.website && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => enrichAccount(account)}
-              disabled={isEnriching(account.id)}
-              className="h-7 text-xs gap-1"
-            >
-              <RefreshCw className={cn('h-3 w-3', isEnriching(account.id) && 'animate-spin')} />
-              {account.lastEnrichedAt ? 'Re-enrich' : 'Auto-detect'}
-            </Button>
-          )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => enrichAccount(account)}
+            disabled={isEnriching(account.id)}
+            className="h-7 text-xs gap-1"
+          >
+            <RefreshCw className={cn('h-3 w-3', isEnriching(account.id) && 'animate-spin')} />
+            {account.lastEnrichedAt ? 'Re-enrich' : 'Auto-detect'}
+          </Button>
         </div>
       </div>
       
@@ -352,19 +428,16 @@ export function SignalDetailPanel({ account }: { account: Account }) {
             </div>
           </div>
 
-          {/* Enrichment Summary */}
+          {/* Enrichment Summary - structured display */}
           {account.enrichmentSourceSummary && (
-            <div className="text-xs text-muted-foreground bg-muted/50 p-2.5 rounded-md">
-              <span className="font-medium">Summary:</span> {account.enrichmentSourceSummary}
-            </div>
+            <EnrichmentSummaryPanel summary={account.enrichmentSourceSummary} evidence={evidence} />
           )}
         </div>
       ) : score == null ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
           <Info className="h-3.5 w-3.5" />
-          {account.website 
-            ? 'Click "Auto-detect" to analyze this account\'s website for ICP signals.'
-            : 'Add a website URL to enable automatic ICP detection.'}
+          Click "{account.website ? 'Auto-detect' : 'Auto-detect'}" to analyze this account for ICP signals.
+          {!account.website && ' We\'ll auto-find the website for you.'}
         </div>
       ) : null}
 

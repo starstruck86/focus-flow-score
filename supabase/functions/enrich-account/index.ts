@@ -120,6 +120,46 @@ Keep it concise and factual. Focus on information useful for a B2B sales convers
   }
 }
 
+// Auto-discover website URL using Perplexity
+async function discoverWebsite(companyName: string): Promise<string | null> {
+  const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY');
+  if (!PERPLEXITY_API_KEY || !companyName) return null;
+
+  try {
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'sonar',
+        messages: [
+          {
+            role: 'system',
+            content: 'You find company websites. Respond with ONLY the URL, nothing else. No explanation, no markdown, just the bare URL starting with https://. If you cannot find it, respond with exactly "NOTFOUND".',
+          },
+          {
+            role: 'user',
+            content: `What is the official website URL for the company "${companyName}"?`,
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) return null;
+    const data = await response.json();
+    const raw = (data.choices?.[0]?.message?.content || '').trim();
+    if (raw === 'NOTFOUND' || !raw.includes('.')) return null;
+    // Clean up - extract URL if wrapped in markdown
+    const urlMatch = raw.match(/https?:\/\/[^\s\])"'>]+/);
+    return urlMatch ? urlMatch[0].replace(/[.,;:!?)]+$/, '') : null;
+  } catch (err) {
+    console.error('Website discovery failed:', err);
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -127,13 +167,6 @@ Deno.serve(async (req) => {
 
   try {
     const { url, accountName, accountId } = await req.json();
-
-    if (!url) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'URL is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
 
     const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
     if (!FIRECRAWL_API_KEY) {
@@ -143,7 +176,27 @@ Deno.serve(async (req) => {
       );
     }
 
-    let formattedUrl = url.trim();
+    // Auto-discover website if not provided
+    let formattedUrl = (url || '').trim();
+    let discoveredUrl: string | null = null;
+    if (!formattedUrl && accountName) {
+      console.log('No URL provided, attempting auto-discovery for:', accountName);
+      discoveredUrl = await discoverWebsite(accountName);
+      if (!discoveredUrl) {
+        return new Response(
+          JSON.stringify({ success: false, error: `Could not find a website for "${accountName}". Please add a URL manually.` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      formattedUrl = discoveredUrl;
+      console.log('Discovered website:', formattedUrl);
+    } else if (!formattedUrl) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'URL or account name is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
       formattedUrl = `https://${formattedUrl}`;
     }
@@ -288,9 +341,7 @@ Deno.serve(async (req) => {
           recent_news: companyIntel?.recentNews || '',
         };
 
-        const { error: dbError } = await supabase
-          .from('accounts')
-          .update({
+        const updatePayload: Record<string, any> = {
             direct_ecommerce: signals.direct_ecommerce,
             email_sms_capture: signals.email_sms_capture,
             loyalty_membership: signals.loyalty_membership,
@@ -308,10 +359,18 @@ Deno.serve(async (req) => {
             last_enriched_at: new Date().toISOString(),
             enrichment_source_summary: enrichedSummary,
             enrichment_evidence: evidence,
-            // Populate MarTech and Ecommerce columns
             mar_tech: marTechString,
             ecommerce: ecommerceString,
-          })
+        };
+
+        // If we discovered the URL, persist it to the account
+        if (discoveredUrl) {
+          updatePayload.website = discoveredUrl;
+        }
+
+        const { error: dbError } = await supabase
+          .from('accounts')
+          .update(updatePayload)
           .eq('id', accountId);
 
         if (dbError) console.error('DB write error:', dbError);
@@ -323,6 +382,7 @@ Deno.serve(async (req) => {
 
     const result = {
       success: true,
+      discoveredUrl: discoveredUrl || null,
       signals: {
         direct_ecommerce: signals.direct_ecommerce,
         email_sms_capture: signals.email_sms_capture,
