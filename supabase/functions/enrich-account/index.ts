@@ -341,9 +341,7 @@ Deno.serve(async (req) => {
           recent_news: companyIntel?.recentNews || '',
         };
 
-        const { error: dbError } = await supabase
-          .from('accounts')
-          .update({
+        const updatePayload: Record<string, any> = {
             direct_ecommerce: signals.direct_ecommerce,
             email_sms_capture: signals.email_sms_capture,
             loyalty_membership: signals.loyalty_membership,
@@ -361,10 +359,18 @@ Deno.serve(async (req) => {
             last_enriched_at: new Date().toISOString(),
             enrichment_source_summary: enrichedSummary,
             enrichment_evidence: evidence,
-            // Populate MarTech and Ecommerce columns
             mar_tech: marTechString,
             ecommerce: ecommerceString,
-          })
+        };
+
+        // If we discovered the URL, persist it to the account
+        if (discoveredUrl) {
+          updatePayload.website = discoveredUrl;
+        }
+
+        const { error: dbError } = await supabase
+          .from('accounts')
+          .update(updatePayload)
           .eq('id', accountId);
 
         if (dbError) console.error('DB write error:', dbError);
