@@ -106,17 +106,16 @@ export function useAccountEnrichment() {
   }, [updateAccount]);
 
   const enrichMultiple = useCallback(async (accts: Account[]) => {
-    const withWebsite = accts.filter((a) => a.website);
-    if (withWebsite.length === 0) {
-      toast.error('No accounts have website URLs');
+    if (accts.length === 0) {
+      toast.error('No accounts selected');
       return;
     }
-    toast.info(`Enriching ${withWebsite.length} accounts...`);
-    for (const account of withWebsite) {
+    toast.info(`Enriching ${accts.length} accounts...`);
+    for (const account of accts) {
       await enrichAccount(account);
       await new Promise((r) => setTimeout(r, 800));
     }
-    toast.success(`Finished enriching ${withWebsite.length} accounts`);
+    toast.success(`Finished enriching ${accts.length} accounts`);
   }, [enrichAccount]);
 
   return {
