@@ -1273,6 +1273,27 @@ export default function Renewals() {
                               emptyText="Add"
                             />
                           </TableCell>
+                          <TableCell className="align-top py-3 group" onClick={(e) => e.stopPropagation()}>
+                            {(() => {
+                              const acct = getAccountForRenewal(renewal);
+                              return (
+                                <WebsiteLinkCell
+                                  value={acct?.website || ''}
+                                  onChange={(v) => {
+                                    if (acct) {
+                                      updateAccount(acct.id, { website: v });
+                                    } else if (v) {
+                                      // Auto-create account for orphan renewal
+                                      const accountId = ensureAccountForRenewal(renewal);
+                                      if (accountId) {
+                                        updateAccount(accountId, { website: v });
+                                      }
+                                    }
+                                  }}
+                                />
+                              );
+                            })()}
+                          </TableCell>
                           {/* Custom field cells */}
                           {summaryCustomFields.map(field => (
                             <TableCell key={field.id} className="align-top py-2" onClick={(e) => e.stopPropagation()}>
