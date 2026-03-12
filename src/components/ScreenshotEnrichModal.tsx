@@ -199,12 +199,65 @@ export function ScreenshotEnrichModal({ open, onOpenChange, account: preselected
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ImagePlus className="h-5 w-5 text-primary" />
-            Screenshot Enrichment — {account.name}
+            Screenshot Enrichment{account ? ` — ${account.name}` : ''}
           </DialogTitle>
           <DialogDescription>
             Upload screenshots from eTailInsights, BuiltWith, or similar tools. AI will extract MarTech and ecommerce data.
           </DialogDescription>
         </DialogHeader>
+
+        {/* Account selector (when no account pre-selected) */}
+        {!preselectedAccount && !result && (
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Select Account</label>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search accounts..."
+                value={accountSearch}
+                onChange={(e) => setAccountSearch(e.target.value)}
+                className="pl-8"
+              />
+            </div>
+            {(accountSearch || !selectedAccountId) && (
+              <div className="max-h-40 overflow-y-auto border border-border rounded-md">
+                {filteredAccounts.length === 0 ? (
+                  <p className="text-xs text-muted-foreground p-3 text-center">No accounts found</p>
+                ) : (
+                  filteredAccounts.map(a => (
+                    <button
+                      key={a.id}
+                      className={cn(
+                        "w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors",
+                        selectedAccountId === a.id && "bg-primary/10 font-medium"
+                      )}
+                      onClick={() => {
+                        setSelectedAccountId(a.id);
+                        setAccountSearch(a.name);
+                      }}
+                    >
+                      <span>{a.name}</span>
+                      {a.ecommerce && (
+                        <span className="ml-2 text-xs text-muted-foreground">{a.ecommerce}</span>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+            {selectedAccountId && account && !accountSearch && (
+              <div className="flex items-center gap-2 text-sm bg-primary/5 rounded-md px-3 py-2">
+                <span className="font-medium">{account.name}</span>
+                <button 
+                  className="text-xs text-muted-foreground hover:text-foreground ml-auto"
+                  onClick={() => { setSelectedAccountId(''); setAccountSearch(''); }}
+                >
+                  Change
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Drop zone */}
         {!result && (
