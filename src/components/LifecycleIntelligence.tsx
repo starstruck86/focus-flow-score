@@ -350,11 +350,9 @@ export function SignalDetailPanel({ account }: { account: Account }) {
             </div>
           </div>
 
-          {/* Enrichment Summary */}
+          {/* Enrichment Summary - structured display */}
           {account.enrichmentSourceSummary && (
-            <div className="text-xs text-muted-foreground bg-muted/50 p-2.5 rounded-md">
-              <span className="font-medium">Summary:</span> {account.enrichmentSourceSummary}
-            </div>
+            <EnrichmentSummaryPanel summary={account.enrichmentSourceSummary} evidence={evidence} />
           )}
         </div>
       ) : score == null ? (
