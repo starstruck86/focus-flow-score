@@ -26,6 +26,7 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/comp
 import { cn } from '@/lib/utils';
 import type { Account } from '@/types';
 import { useAccountEnrichment, isEnrichmentStale } from '@/hooks/useAccountEnrichment';
+import { ScreenshotEnrichModal } from '@/components/ScreenshotEnrichModal';
 
 // ── Tier Badge (for table rows) ──────────────────────────
 
