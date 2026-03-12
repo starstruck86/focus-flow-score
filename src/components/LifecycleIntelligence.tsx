@@ -131,8 +131,6 @@ export function EnrichButton({ account, compact = false }: { account: Account; c
   const { enrichAccount, isEnriching } = useAccountEnrichment();
   const loading = isEnriching(account.id);
 
-  if (!account.website) return null;
-
   const stale = isEnrichmentStale(account);
 
   return (
@@ -154,7 +152,7 @@ export function EnrichButton({ account, compact = false }: { account: Account; c
           </Button>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
-          {loading ? 'Enriching...' : stale ? 'Enrichment is 90+ days old — click to refresh' : account.lastEnrichedAt ? 'Re-enrich account' : 'Auto-detect ICP signals'}
+          {loading ? 'Enriching...' : stale ? 'Enrichment is 90+ days old — click to refresh' : account.lastEnrichedAt ? 'Re-enrich account' : account.website ? 'Auto-detect ICP signals' : 'Auto-find website & detect ICP signals'}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

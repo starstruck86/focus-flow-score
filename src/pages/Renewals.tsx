@@ -97,10 +97,7 @@ function RenewalEnrichButton({ renewal, ensureAccount }: { renewal: Renewal; ens
       }
       // Get fresh account from store
       const acct = store.getState().accounts.find(a => a.id === accountId);
-      if (!acct?.website) {
-        toast.error('Add a website URL first to enrich this account');
-        return;
-      }
+      if (!acct) return;
       await enrichAccount(acct);
     } finally {
       setCreating(false);
