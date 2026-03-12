@@ -147,11 +147,11 @@ export function ScreenshotEnrichModal({ open, onOpenChange, account }: Screensho
         lastEnrichedAt: new Date().toISOString(),
       };
       if (extracted.direct_ecommerce !== undefined) updates.directEcommerce = extracted.direct_ecommerce;
-      if (extracted.email_sms_capture !== undefined) updates.emailSmsCapture = extracted.email_sms_capture;
+      if (extracted.esp_platform || extracted.sms_platform) updates.emailSmsCapture = true;
       if (extracted.loyalty_membership !== undefined) updates.loyaltyMembership = extracted.loyalty_membership;
       if (extracted.mobile_app !== undefined) updates.mobileApp = extracted.mobile_app;
-      if (extracted.esp_platform || extracted.marketing_automation) {
-        updates.marketingPlatformDetected = extracted.esp_platform || extracted.marketing_automation;
+      if (extracted.esp_platform) {
+        updates.marketingPlatformDetected = extracted.esp_platform;
       }
 
       updateAccount(account.id, updates);
