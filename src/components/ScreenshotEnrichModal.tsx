@@ -51,8 +51,12 @@ export function ScreenshotEnrichModal({ open, onOpenChange, account: preselected
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [accounts, renewals]);
 
-  // Resolve the active account
-  const account = preselectedAccount || accounts.find(a => a.id === selectedAccountId);
+  // Resolve the active account — check main accounts first, then build a stub from renewal
+  const account = preselectedAccount || accounts.find(a => a.id === selectedAccountId) || (() => {
+    const renewal = renewals.find(r => r.id === selectedAccountId);
+    if (!renewal) return undefined;
+    return { id: renewal.id, name: renewal.accountName } as Account;
+  })();
 
   // Filtered accounts for selector
   const filteredAccounts = useMemo(() => {
