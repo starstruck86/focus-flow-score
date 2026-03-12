@@ -66,7 +66,7 @@ import { OpportunitiesTable } from '@/components/OpportunitiesTable';
 import { OpportunityDrawer } from '@/components/OpportunityDrawer';
 import { EditableDatePicker } from '@/components/EditableDatePicker';
 import { RenewalDetailsField } from '@/components/RenewalDetailsField';
-import { EditableTextCell, EditableNumberCell, DisplaySelectCell, PlanhatLinkCell, AgreementLinkCell, AccountNameCell } from '@/components/table';
+import { EditableTextCell, EditableNumberCell, DisplaySelectCell, PlanhatLinkCell, AgreementLinkCell, AccountNameCell, WebsiteLinkCell } from '@/components/table';
 import { ManageColumnsPopover } from '@/components/table/ManageColumnsPopover';
 import { CustomFieldCell, CustomFieldRow } from '@/components/table/CustomFieldCell';
 import { MetricFieldCell } from '@/components/table/MetricFieldCell';
@@ -180,7 +180,7 @@ const VIEWS = [
 
 
 export default function Renewals() {
-  const { renewals, accounts, addRenewal, updateRenewal, deleteRenewal, createMissingRenewalOpportunities, logCall, logManualEmail, logMeetingHeld } = useStore();
+  const { renewals, accounts, addRenewal, updateRenewal, deleteRenewal, createMissingRenewalOpportunities, logCall, logManualEmail, logMeetingHeld, addAccount, updateAccount } = useStore();
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentView, setCurrentView] = useState('all');
@@ -204,6 +204,34 @@ export default function Renewals() {
     // Fallback: match by name
     return accounts.find(a => a.name.toLowerCase() === renewal.accountName.toLowerCase());
   }, [accountMap, accounts]);
+
+  // Auto-create or get linked account for a renewal (for website/enrichment)
+  const ensureAccountForRenewal = useCallback((renewal: Renewal): string => {
+    const existing = getAccountForRenewal(renewal);
+    if (existing) return existing.id;
+    // Create a new account linked to this renewal
+    const newId = crypto.randomUUID();
+    addAccount({
+      name: renewal.accountName,
+      priority: 'medium',
+      tier: 'B',
+      accountStatus: 'active',
+      motion: 'renewal',
+      techStack: [],
+      techFitFlag: 'good',
+      outreachStatus: 'not-started',
+      tags: ['renewal-auto-created'],
+    } as any);
+    // Get the last added account (addAccount generates its own id)
+    const justAdded = useStore.getState().accounts.find(
+      a => a.name.toLowerCase() === renewal.accountName.toLowerCase()
+    );
+    if (justAdded) {
+      updateRenewal(renewal.id, { accountId: justAdded.id });
+      return justAdded.id;
+    }
+    return '';
+  }, [getAccountForRenewal, addAccount, updateRenewal]);
   
   // Custom fields for summary table
   const { getFieldsForTab } = useCustomFields();
@@ -768,6 +796,7 @@ export default function Renewals() {
                 { key: 'planhat', label: 'Planhat' },
                 { key: 'agreement', label: 'Agreement' },
                 { key: 'nextStep', label: 'Next Step' },
+                { key: 'website', label: 'Website' },
               ]}
             />
             
@@ -1116,7 +1145,8 @@ export default function Renewals() {
                       </SortableHeader>
                       <TableHead className="w-[10%]">Planhat</TableHead>
                       <TableHead className="w-[10%]">Agreement</TableHead>
-                      <TableHead className="w-[20%]">Next Step</TableHead>
+                      <TableHead className="w-[17%]">Next Step</TableHead>
+                      <TableHead className="w-[10%]">Website</TableHead>
                       {/* Custom field column headers - sortable */}
                       {summaryCustomFields.map(field => (
                         <SortableHeader
@@ -1198,14 +1228,16 @@ export default function Renewals() {
                             return (
                               <>
                                 <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-                                  {acct ? (
-                                    <div className="flex items-center gap-1">
-                                      <IcpScorePill account={acct} />
-                                      <EnrichButton account={acct} />
-                                    </div>
-                                  ) : (
-                                    <span className="text-xs text-muted-foreground">—</span>
-                                  )}
+                                  <div className="flex items-center gap-1">
+                                    {acct ? (
+                                      <>
+                                        <IcpScorePill account={acct} />
+                                        <EnrichButton account={acct} />
+                                      </>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">—</span>
+                                    )}
+                                  </div>
                                 </TableCell>
                                 <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                                   {acct ? <LifecycleTierBadge account={acct} /> : <span className="text-xs text-muted-foreground">—</span>}
@@ -1240,6 +1272,27 @@ export default function Renewals() {
                               placeholder="Add next step"
                               emptyText="Add"
                             />
+                          </TableCell>
+                          <TableCell className="align-top py-3 group" onClick={(e) => e.stopPropagation()}>
+                            {(() => {
+                              const acct = getAccountForRenewal(renewal);
+                              return (
+                                <WebsiteLinkCell
+                                  value={acct?.website || ''}
+                                  onChange={(v) => {
+                                    if (acct) {
+                                      updateAccount(acct.id, { website: v });
+                                    } else if (v) {
+                                      // Auto-create account for orphan renewal
+                                      const accountId = ensureAccountForRenewal(renewal);
+                                      if (accountId) {
+                                        updateAccount(accountId, { website: v });
+                                      }
+                                    }
+                                  }}
+                                />
+                              );
+                            })()}
                           </TableCell>
                           {/* Custom field cells */}
                           {summaryCustomFields.map(field => (
