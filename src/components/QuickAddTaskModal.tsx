@@ -175,8 +175,8 @@ export function QuickAddTaskModal({ open, onOpenChange }: QuickAddTaskModalProps
               <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">None</SelectItem>
-                {accounts.map(a => (
-                  <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                {allAccounts.map(a => (
+                  <SelectItem key={a.id} value={a.id}>{a.name}{a.isRenewal ? ' (Renewal)' : ''}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
