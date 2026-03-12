@@ -253,7 +253,7 @@ export function ScreenshotEnrichModal({ open, onOpenChange, account: preselected
                         setAccountSearch(a.name);
                       }}
                     >
-                      <span>{a.name}</span>
+                      <span>{a.name}{a.isRenewal ? ' (Renewal)' : ''}</span>
                       {a.ecommerce && (
                         <span className="ml-2 text-xs text-muted-foreground">{a.ecommerce}</span>
                       )}
