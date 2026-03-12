@@ -132,12 +132,10 @@ Combine data from ALL screenshots into a single unified result. If the same fiel
     const marTechParts: string[] = [];
     if (parsed.esp_platform) marTechParts.push(`ESP: ${parsed.esp_platform}`);
     if (parsed.sms_platform) marTechParts.push(`SMS: ${parsed.sms_platform}`);
-    if (parsed.cdp_platform) marTechParts.push(`CDP: ${parsed.cdp_platform}`);
-    if (parsed.personalization_platform) marTechParts.push(`Personalization: ${parsed.personalization_platform}`);
+    if (parsed.loyalty_platform) marTechParts.push(`Loyalty: ${parsed.loyalty_platform}`);
     if (parsed.reviews_platform) marTechParts.push(`Reviews: ${parsed.reviews_platform}`);
-    if (parsed.marketing_automation && parsed.marketing_automation !== parsed.esp_platform) {
-      marTechParts.push(`Automation: ${parsed.marketing_automation}`);
-    }
+    if (parsed.cdp_platform) marTechParts.push(`CDP: ${parsed.cdp_platform}`);
+    if (parsed.advertising_platforms) marTechParts.push(`Ads: ${parsed.advertising_platforms}`);
     const marTechString = marTechParts.join(' | ') || null;
     const ecommerceString = parsed.ecommerce_platform || null;
 
