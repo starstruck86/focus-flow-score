@@ -19,7 +19,24 @@ interface AddTaskDialogProps {
 }
 
 export function AddTaskDialog({ open, onOpenChange, defaultWorkstream }: AddTaskDialogProps) {
-  const { addTask, accounts, opportunities } = useStore();
+  const { addTask, accounts, opportunities, renewals } = useStore();
+  
+  // Merge accounts + renewal-only accounts (renewals without a linked account record)
+  const allAccounts = (() => {
+    const accountIds = new Set(accounts.map(a => a.id));
+    const renewalOnlyAccounts = renewals
+      .filter(r => !r.accountId || !accountIds.has(r.accountId))
+      .map(r => ({ id: r.id, name: r.accountName, isRenewal: true }));
+    const baseAccounts = accounts.map(a => ({ id: a.id, name: a.name, isRenewal: false }));
+    // Deduplicate by name
+    const seen = new Set<string>();
+    return [...baseAccounts, ...renewalOnlyAccounts].filter(a => {
+      const key = a.name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  })();
   const [title, setTitle] = useState('');
   const [workstream, setWorkstream] = useState<Workstream>(defaultWorkstream);
   const [priority, setPriority] = useState<Priority>('P1');
