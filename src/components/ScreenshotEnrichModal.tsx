@@ -147,11 +147,11 @@ export function ScreenshotEnrichModal({ open, onOpenChange, account }: Screensho
         lastEnrichedAt: new Date().toISOString(),
       };
       if (extracted.direct_ecommerce !== undefined) updates.directEcommerce = extracted.direct_ecommerce;
-      if (extracted.email_sms_capture !== undefined) updates.emailSmsCapture = extracted.email_sms_capture;
+      if (extracted.esp_platform || extracted.sms_platform) updates.emailSmsCapture = true;
       if (extracted.loyalty_membership !== undefined) updates.loyaltyMembership = extracted.loyalty_membership;
       if (extracted.mobile_app !== undefined) updates.mobileApp = extracted.mobile_app;
-      if (extracted.esp_platform || extracted.marketing_automation) {
-        updates.marketingPlatformDetected = extracted.esp_platform || extracted.marketing_automation;
+      if (extracted.esp_platform) {
+        updates.marketingPlatformDetected = extracted.esp_platform;
       }
 
       updateAccount(account.id, updates);
@@ -251,32 +251,71 @@ export function ScreenshotEnrichModal({ open, onOpenChange, account }: Screensho
               <CheckCircle2 className="h-4 w-4" />
               Data extracted successfully
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              {result.extracted?.esp_platform && (
-                <Field label="ESP" value={result.extracted.esp_platform} />
-              )}
-              {result.extracted?.sms_platform && (
-                <Field label="SMS" value={result.extracted.sms_platform} />
-              )}
-              {result.extracted?.ecommerce_platform && (
-                <Field label="Ecommerce" value={result.extracted.ecommerce_platform} />
-              )}
-              {result.extracted?.cdp_platform && (
-                <Field label="CDP" value={result.extracted.cdp_platform} />
-              )}
-              {result.extracted?.personalization_platform && (
-                <Field label="Personalization" value={result.extracted.personalization_platform} />
-              )}
-              {result.extracted?.reviews_platform && (
-                <Field label="Reviews" value={result.extracted.reviews_platform} />
-              )}
-              {result.extracted?.loyalty_program && (
-                <Field label="Loyalty" value={result.extracted.loyalty_program} />
-              )}
-              {result.extracted?.analytics_tools && (
-                <Field label="Analytics" value={result.extracted.analytics_tools} />
-              )}
+
+            {/* Key business metrics */}
+            {(result.extracted?.estimated_product_count || result.extracted?.estimated_aov || result.extracted?.estimated_online_sales) && (
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
+                <p className="text-xs font-semibold text-primary mb-2">Business Metrics</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {result.extracted?.estimated_product_count && (
+                    <Field label="ePC" value={result.extracted.estimated_product_count} />
+                  )}
+                  {result.extracted?.estimated_aov && (
+                    <Field label="eAOV" value={result.extracted.estimated_aov} />
+                  )}
+                  {result.extracted?.estimated_online_sales && (
+                    <Field label="Est. Sales" value={result.extracted.estimated_online_sales} />
+                  )}
+                  {result.extracted?.estimated_orders_per_day && (
+                    <Field label="Orders/Day" value={result.extracted.estimated_orders_per_day} />
+                  )}
+                  {result.extracted?.employee_count && (
+                    <Field label="Employees" value={result.extracted.employee_count} />
+                  )}
+                  {result.extracted?.annual_email_frequency && (
+                    <Field label="Emails/Year" value={result.extracted.annual_email_frequency} />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Core tech stack */}
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-2">Tech Stack</p>
+              <div className="grid grid-cols-2 gap-2">
+                {result.extracted?.ecommerce_platform && (
+                  <Field label="Commerce" value={result.extracted.ecommerce_platform} />
+                )}
+                {result.extracted?.esp_platform && (
+                  <Field label="Email (ESP)" value={result.extracted.esp_platform} />
+                )}
+                {result.extracted?.sms_platform && (
+                  <Field label="SMS / Chat" value={result.extracted.sms_platform} />
+                )}
+                {result.extracted?.loyalty_platform && (
+                  <Field label="Loyalty" value={result.extracted.loyalty_platform} />
+                )}
+                {result.extracted?.reviews_platform && (
+                  <Field label="Reviews" value={result.extracted.reviews_platform} />
+                )}
+                {result.extracted?.advertising_platforms && (
+                  <Field label="Advertising" value={result.extracted.advertising_platforms} />
+                )}
+                {result.extracted?.payment_platforms && (
+                  <Field label="Payments" value={result.extracted.payment_platforms} />
+                )}
+                {result.extracted?.analytics_tools && (
+                  <Field label="Analytics" value={result.extracted.analytics_tools} />
+                )}
+                {result.extracted?.search_platform && (
+                  <Field label="Search" value={result.extracted.search_platform} />
+                )}
+                {result.extracted?.mobile_app_platform && (
+                  <Field label="Mobile App" value={result.extracted.mobile_app_platform} />
+                )}
+              </div>
             </div>
+
             {result.extracted?.summary && (
               <p className="text-xs text-muted-foreground bg-muted/50 rounded p-2">{result.extracted.summary}</p>
             )}
