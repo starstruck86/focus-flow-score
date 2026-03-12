@@ -91,7 +91,7 @@ Combine data from ALL screenshots into a single unified result. If the same fiel
             content: [
               {
                 type: 'text',
-                text: `Extract all marketing technology, ecommerce platform, and business data from these ${imageUrls.length} screenshot(s) for the company "${accountName || 'unknown'}". Look for ESP, SMS, ecommerce platform, CDP, personalization, reviews, loyalty, and any other tech stack information visible.`,
+                text: `Extract all data from these ${imageUrls.length} eTailInsights screenshot(s) for "${accountName || 'unknown'}". Look for: Commerce Platform, Email Service Provider, SMS/Chat tech, Loyalty platform, Reviews, Advertising, Payments, Analytics, Search, CMS, Mobile App tech. Also extract Website Details: Estimated Product Count, Average Order Value, Online Sales, Orders/Day, Employee Count, Industry, Email Frequency.`,
               },
               ...imageContent,
             ],
