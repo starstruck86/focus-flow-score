@@ -10,6 +10,7 @@ import {
   Timer,
   ClipboardCheck,
   Bolt,
+  ImagePlus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -25,6 +26,7 @@ import { PowerHourModal } from './PowerHourModal';
 import { FocusTimerModal } from './FocusTimerModal';
 import { QuickLogModal } from '@/components/journal/QuickLogModal';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
+import { ScreenshotEnrichModal } from '@/components/ScreenshotEnrichModal';
 
 interface GlobalFABProps {
   position?: 'bottom-right' | 'bottom-left';
@@ -50,6 +52,7 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
   const [showFocusTimer, setShowFocusTimer] = useState(false);
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [showQuickLog, setShowQuickLog] = useState(false);
+  const [showScreenshots, setShowScreenshots] = useState(false);
   
   // Context for prefills
   const { currentRecord } = useLinkedRecordContext();
@@ -164,6 +167,15 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
       icon: Timer,
       onClick: () => {
         setShowFocusTimer(true);
+        setIsExpanded(false);
+      },
+    },
+    {
+      id: 'screenshot-enrich',
+      label: 'Screenshot Enrich',
+      icon: ImagePlus,
+      onClick: () => {
+        setShowScreenshots(true);
         setIsExpanded(false);
       },
     },
@@ -329,6 +341,11 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
       <QuickLogModal
         open={showQuickLog}
         onOpenChange={setShowQuickLog}
+      />
+      
+      <ScreenshotEnrichModal
+        open={showScreenshots}
+        onOpenChange={setShowScreenshots}
       />
     </>
   );

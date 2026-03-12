@@ -1,8 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Upload, ImagePlus, X, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Upload, ImagePlus, X, CheckCircle2, AlertCircle, Loader2, Search } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
@@ -12,7 +14,7 @@ import type { Account } from '@/types';
 interface ScreenshotEnrichModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  account: Account;
+  account?: Account;
 }
 
 type UploadStatus = 'pending' | 'uploading' | 'done' | 'error';
@@ -23,11 +25,24 @@ interface FileEntry {
   status: UploadStatus;
 }
 
-export function ScreenshotEnrichModal({ open, onOpenChange, account }: ScreenshotEnrichModalProps) {
+export function ScreenshotEnrichModal({ open, onOpenChange, account: preselectedAccount }: ScreenshotEnrichModalProps) {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [processing, setProcessing] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>(preselectedAccount?.id || '');
+  const [accountSearch, setAccountSearch] = useState('');
   const updateAccount = useStore((s) => s.updateAccount);
+  const accounts = useStore((s) => s.accounts);
+
+  // Resolve the active account
+  const account = preselectedAccount || accounts.find(a => a.id === selectedAccountId);
+
+  // Filtered accounts for selector
+  const filteredAccounts = useMemo(() => {
+    if (!accountSearch) return accounts.slice(0, 50);
+    const q = accountSearch.toLowerCase();
+    return accounts.filter(a => a.name.toLowerCase().includes(q)).slice(0, 50);
+  }, [accounts, accountSearch]);
 
   const addFiles = useCallback((newFiles: FileList | File[]) => {
     const entries = Array.from(newFiles)
@@ -68,7 +83,7 @@ export function ScreenshotEnrichModal({ open, onOpenChange, account }: Screensho
   }, [addFiles]);
 
   const processScreenshots = async () => {
-    if (files.length === 0) return;
+    if (files.length === 0 || !account) return;
     setProcessing(true);
     setResult(null);
 
@@ -172,6 +187,8 @@ export function ScreenshotEnrichModal({ open, onOpenChange, account }: Screensho
       setFiles([]);
       setResult(null);
       setProcessing(false);
+      if (!preselectedAccount) setSelectedAccountId('');
+      setAccountSearch('');
     }
     onOpenChange(open);
   };
@@ -182,12 +199,65 @@ export function ScreenshotEnrichModal({ open, onOpenChange, account }: Screensho
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ImagePlus className="h-5 w-5 text-primary" />
-            Screenshot Enrichment — {account.name}
+            Screenshot Enrichment{account ? ` — ${account.name}` : ''}
           </DialogTitle>
           <DialogDescription>
             Upload screenshots from eTailInsights, BuiltWith, or similar tools. AI will extract MarTech and ecommerce data.
           </DialogDescription>
         </DialogHeader>
+
+        {/* Account selector (when no account pre-selected) */}
+        {!preselectedAccount && !result && (
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Select Account</label>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search accounts..."
+                value={accountSearch}
+                onChange={(e) => setAccountSearch(e.target.value)}
+                className="pl-8"
+              />
+            </div>
+            {(accountSearch || !selectedAccountId) && (
+              <div className="max-h-40 overflow-y-auto border border-border rounded-md">
+                {filteredAccounts.length === 0 ? (
+                  <p className="text-xs text-muted-foreground p-3 text-center">No accounts found</p>
+                ) : (
+                  filteredAccounts.map(a => (
+                    <button
+                      key={a.id}
+                      className={cn(
+                        "w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors",
+                        selectedAccountId === a.id && "bg-primary/10 font-medium"
+                      )}
+                      onClick={() => {
+                        setSelectedAccountId(a.id);
+                        setAccountSearch(a.name);
+                      }}
+                    >
+                      <span>{a.name}</span>
+                      {a.ecommerce && (
+                        <span className="ml-2 text-xs text-muted-foreground">{a.ecommerce}</span>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+            {selectedAccountId && account && !accountSearch && (
+              <div className="flex items-center gap-2 text-sm bg-primary/5 rounded-md px-3 py-2">
+                <span className="font-medium">{account.name}</span>
+                <button 
+                  className="text-xs text-muted-foreground hover:text-foreground ml-auto"
+                  onClick={() => { setSelectedAccountId(''); setAccountSearch(''); }}
+                >
+                  Change
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Drop zone */}
         {!result && (
@@ -329,7 +399,7 @@ export function ScreenshotEnrichModal({ open, onOpenChange, account }: Screensho
           ) : (
             <Button
               onClick={processScreenshots}
-              disabled={files.length === 0 || processing}
+              disabled={files.length === 0 || processing || !account}
             >
               {processing ? (
                 <>
