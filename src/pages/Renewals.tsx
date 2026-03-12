@@ -204,6 +204,34 @@ export default function Renewals() {
     // Fallback: match by name
     return accounts.find(a => a.name.toLowerCase() === renewal.accountName.toLowerCase());
   }, [accountMap, accounts]);
+
+  // Auto-create or get linked account for a renewal (for website/enrichment)
+  const ensureAccountForRenewal = useCallback((renewal: Renewal): string => {
+    const existing = getAccountForRenewal(renewal);
+    if (existing) return existing.id;
+    // Create a new account linked to this renewal
+    const newId = crypto.randomUUID();
+    addAccount({
+      name: renewal.accountName,
+      priority: 'medium',
+      tier: 'B',
+      accountStatus: 'active',
+      motion: 'renewal',
+      techStack: [],
+      techFitFlag: 'good',
+      outreachStatus: 'not-started',
+      tags: ['renewal-auto-created'],
+    } as any);
+    // Get the last added account (addAccount generates its own id)
+    const justAdded = useStore.getState().accounts.find(
+      a => a.name.toLowerCase() === renewal.accountName.toLowerCase()
+    );
+    if (justAdded) {
+      updateRenewal(renewal.id, { accountId: justAdded.id });
+      return justAdded.id;
+    }
+    return '';
+  }, [getAccountForRenewal, addAccount, updateRenewal]);
   
   // Custom fields for summary table
   const { getFieldsForTab } = useCustomFields();
