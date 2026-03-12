@@ -201,14 +201,18 @@ export function SmartWorkQueue() {
   };
 
   // Categorize items
-  const accountItems = workQueue.filter(w => w.type === 'account');
-  const pipelineItems = workQueue.filter(w => w.type === 'opportunity' && !w.isRenewalOpp);
-  const renewalItems = workQueue.filter(w => w.type === 'renewal' || (w.type === 'opportunity' && w.isRenewalOpp));
+  const accountItems = filteredQueue.filter(w => w.type === 'account');
+  const pipelineItems = filteredQueue.filter(w => w.type === 'opportunity' && !w.isRenewalOpp);
+  const renewalItems = filteredQueue.filter(w => w.type === 'renewal' || (w.type === 'opportunity' && w.isRenewalOpp));
 
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
 
-  if (workQueue.length === 0) {
+  const totalFilteredArr = filteredQueue
+    .filter(w => w.urgency === 'critical' || w.urgency === 'high')
+    .reduce((sum, w) => sum + w.arrAtStake, 0);
+
+  if (filteredQueue.length === 0) {
     return (
       <Card className="p-4">
         <div className="flex items-center gap-2 mb-2">
@@ -220,7 +224,7 @@ export function SmartWorkQueue() {
     );
   }
 
-  const criticalCount = workQueue.filter(w => w.urgency === 'critical').length;
+  const criticalCount = filteredQueue.filter(w => w.urgency === 'critical').length;
 
   return (
     <Card className="p-4">
