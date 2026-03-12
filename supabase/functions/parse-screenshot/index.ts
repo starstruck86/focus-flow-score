@@ -154,11 +154,12 @@ Combine data from ALL screenshots into a single unified result. If the same fiel
 
         // Update boolean signals if detected
         if (parsed.direct_ecommerce !== undefined) updates.direct_ecommerce = parsed.direct_ecommerce;
-        if (parsed.email_sms_capture !== undefined) updates.email_sms_capture = parsed.email_sms_capture;
         if (parsed.loyalty_membership !== undefined) updates.loyalty_membership = parsed.loyalty_membership;
         if (parsed.mobile_app !== undefined) updates.mobile_app = parsed.mobile_app;
-        if (parsed.esp_platform || parsed.marketing_automation) {
-          updates.marketing_platform_detected = parsed.esp_platform || parsed.marketing_automation;
+        // Mark email_sms_capture true if either ESP or SMS detected
+        if (parsed.esp_platform || parsed.sms_platform) updates.email_sms_capture = true;
+        if (parsed.esp_platform) {
+          updates.marketing_platform_detected = parsed.esp_platform;
         }
 
         // Merge into enrichment_evidence
@@ -171,14 +172,26 @@ Combine data from ALL screenshots into a single unified result. If the same fiel
         const existingEvidence = (existing?.enrichment_evidence as Record<string, string>) || {};
         updates.enrichment_evidence = {
           ...existingEvidence,
+          screenshot_ecommerce_platform: parsed.ecommerce_platform || '',
           screenshot_esp_platform: parsed.esp_platform || '',
           screenshot_sms_platform: parsed.sms_platform || '',
-          screenshot_ecommerce_platform: parsed.ecommerce_platform || '',
-          screenshot_cdp_platform: parsed.cdp_platform || '',
-          screenshot_personalization: parsed.personalization_platform || '',
+          screenshot_loyalty_platform: parsed.loyalty_platform || '',
           screenshot_reviews: parsed.reviews_platform || '',
-          screenshot_loyalty: parsed.loyalty_program || '',
+          screenshot_cdp_platform: parsed.cdp_platform || '',
+          screenshot_advertising: parsed.advertising_platforms || '',
+          screenshot_payments: parsed.payment_platforms || '',
+          screenshot_analytics: parsed.analytics_tools || '',
+          screenshot_search: parsed.search_platform || '',
+          screenshot_cms: parsed.cms_platform || '',
+          screenshot_mobile_app: parsed.mobile_app_platform || '',
           screenshot_other: parsed.other_tech || '',
+          screenshot_epc: parsed.estimated_product_count || '',
+          screenshot_aov: parsed.estimated_aov || '',
+          screenshot_online_sales: parsed.estimated_online_sales || '',
+          screenshot_orders_per_day: parsed.estimated_orders_per_day || '',
+          screenshot_employee_count: parsed.employee_count || '',
+          screenshot_industry: parsed.industry || '',
+          screenshot_email_frequency: parsed.annual_email_frequency || '',
           screenshot_parsed_at: new Date().toISOString(),
         };
 
