@@ -33,16 +33,33 @@ export function ScreenshotEnrichModal({ open, onOpenChange, account: preselected
   const [accountSearch, setAccountSearch] = useState('');
   const updateAccount = useStore((s) => s.updateAccount);
   const accounts = useStore((s) => s.accounts);
+  const renewals = useStore((s) => s.renewals);
+
+  // Merge accounts + renewal-only accounts (same pattern as task selectors)
+  const allAccounts = useMemo(() => {
+    const accountIds = new Set(accounts.map(a => a.id));
+    const renewalOnlyAccounts = renewals
+      .filter(r => !r.accountId || !accountIds.has(r.accountId))
+      .map(r => ({ id: r.id, name: r.accountName, isRenewal: true, ecommerce: '' }));
+    const baseAccounts = accounts.map(a => ({ id: a.id, name: a.name, isRenewal: false, ecommerce: a.ecommerce || '' }));
+    const seen = new Set<string>();
+    return [...baseAccounts, ...renewalOnlyAccounts].filter(a => {
+      const key = a.name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  }, [accounts, renewals]);
 
   // Resolve the active account
   const account = preselectedAccount || accounts.find(a => a.id === selectedAccountId);
 
   // Filtered accounts for selector
   const filteredAccounts = useMemo(() => {
-    if (!accountSearch) return accounts.slice(0, 50);
+    if (!accountSearch) return allAccounts.slice(0, 50);
     const q = accountSearch.toLowerCase();
-    return accounts.filter(a => a.name.toLowerCase().includes(q)).slice(0, 50);
-  }, [accounts, accountSearch]);
+    return allAccounts.filter(a => a.name.toLowerCase().includes(q)).slice(0, 50);
+  }, [allAccounts, accountSearch]);
 
   const addFiles = useCallback((newFiles: FileList | File[]) => {
     const entries = Array.from(newFiles)
