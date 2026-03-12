@@ -438,9 +438,8 @@ export function SignalDetailPanel({ account }: { account: Account }) {
       ) : score == null ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
           <Info className="h-3.5 w-3.5" />
-          {account.website 
-            ? 'Click "Auto-detect" to analyze this account\'s website for ICP signals.'
-            : 'Add a website URL to enable automatic ICP detection.'}
+          Click "{account.website ? 'Auto-detect' : 'Auto-detect'}" to analyze this account for ICP signals.
+          {!account.website && ' We\'ll auto-find the website for you.'}
         </div>
       ) : null}
 
