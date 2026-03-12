@@ -21,6 +21,7 @@ import {
 import { Layout } from '@/components/Layout';
 import { StreakChip } from '@/components/StreakChip';
 import { LifecycleTierBadge, IcpScorePill, EnrichButton, SignalDetailPanel } from '@/components/LifecycleIntelligence';
+import { useAccountEnrichment } from '@/hooks/useAccountEnrichment';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -75,6 +76,58 @@ import { SortableHeader, useTableSort } from '@/components/table/SortableHeader'
 import { sortRenewalsDefault, applySortWithFallback, CHURN_RISK_SORT_RANK, CHURN_RISK_DISPLAY_LABELS } from '@/lib/sortUtils';
 import type { Renewal, HealthStatus, Opportunity, ChurnRisk } from '@/types';
 import { computeRenewalRiskScore } from '@/hooks/useTimeAllocation';
+
+// ===== RENEWAL ENRICH BUTTON (for orphan renewals without linked account) =====
+import { RefreshCw } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+
+function RenewalEnrichButton({ renewal, ensureAccount }: { renewal: Renewal; ensureAccount: (r: Renewal) => string }) {
+  const { enrichAccount, isEnriching } = useAccountEnrichment();
+  const [creating, setCreating] = useState(false);
+  const store = useStore;
+
+  const handleClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCreating(true);
+    try {
+      const accountId = ensureAccount(renewal);
+      if (!accountId) {
+        toast.error('Could not create account for this renewal');
+        return;
+      }
+      // Get fresh account from store
+      const acct = store.getState().accounts.find(a => a.id === accountId);
+      if (!acct?.website) {
+        toast.error('Add a website URL first to enrich this account');
+        return;
+      }
+      await enrichAccount(acct);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="icon"
+            variant="ghost"
+            className={cn('h-7 w-7', (creating) && 'animate-spin')}
+            onClick={handleClick}
+            disabled={creating}
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          Add website URL then click to enrich
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 // ===== RENEWAL URGENCY HEADER =====
 function RenewalUrgencyHeader({ renewals, formatCurrency }: { renewals: Renewal[]; formatCurrency: (v: number) => string }) {
@@ -1222,7 +1275,7 @@ export default function Renewals() {
                               format="currency"
                             />
                           </TableCell>
-                          {/* ICP Score + Tier from linked account */}
+                          {/* ICP Score + Enrich + Tier from linked account */}
                           {(() => {
                             const acct = getAccountForRenewal(renewal);
                             return (
@@ -1235,7 +1288,7 @@ export default function Renewals() {
                                         <EnrichButton account={acct} />
                                       </>
                                     ) : (
-                                      <span className="text-xs text-muted-foreground">—</span>
+                                      <RenewalEnrichButton renewal={renewal} ensureAccount={ensureAccountForRenewal} />
                                     )}
                                   </div>
                                 </TableCell>
