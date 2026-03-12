@@ -21,6 +21,7 @@ import {
 import { Layout } from '@/components/Layout';
 import { StreakChip } from '@/components/StreakChip';
 import { LifecycleTierBadge, IcpScorePill, EnrichButton, SignalDetailPanel } from '@/components/LifecycleIntelligence';
+import { useAccountEnrichment } from '@/hooks/useAccountEnrichment';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
