@@ -1,8 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Upload, ImagePlus, X, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Upload, ImagePlus, X, CheckCircle2, AlertCircle, Loader2, Search } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
@@ -12,7 +14,7 @@ import type { Account } from '@/types';
 interface ScreenshotEnrichModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  account: Account;
+  account?: Account;
 }
 
 type UploadStatus = 'pending' | 'uploading' | 'done' | 'error';
@@ -23,11 +25,24 @@ interface FileEntry {
   status: UploadStatus;
 }
 
-export function ScreenshotEnrichModal({ open, onOpenChange, account }: ScreenshotEnrichModalProps) {
+export function ScreenshotEnrichModal({ open, onOpenChange, account: preselectedAccount }: ScreenshotEnrichModalProps) {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [processing, setProcessing] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>(preselectedAccount?.id || '');
+  const [accountSearch, setAccountSearch] = useState('');
   const updateAccount = useStore((s) => s.updateAccount);
+  const accounts = useStore((s) => s.accounts);
+
+  // Resolve the active account
+  const account = preselectedAccount || accounts.find(a => a.id === selectedAccountId);
+
+  // Filtered accounts for selector
+  const filteredAccounts = useMemo(() => {
+    if (!accountSearch) return accounts.slice(0, 50);
+    const q = accountSearch.toLowerCase();
+    return accounts.filter(a => a.name.toLowerCase().includes(q)).slice(0, 50);
+  }, [accounts, accountSearch]);
 
   const addFiles = useCallback((newFiles: FileList | File[]) => {
     const entries = Array.from(newFiles)
