@@ -399,7 +399,7 @@ export function ScreenshotEnrichModal({ open, onOpenChange, account: preselected
           ) : (
             <Button
               onClick={processScreenshots}
-              disabled={files.length === 0 || processing}
+              disabled={files.length === 0 || processing || !account}
             >
               {processing ? (
                 <>

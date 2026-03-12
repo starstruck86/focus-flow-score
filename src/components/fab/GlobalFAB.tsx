@@ -342,6 +342,11 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
         open={showQuickLog}
         onOpenChange={setShowQuickLog}
       />
+      
+      <ScreenshotEnrichModal
+        open={showScreenshots}
+        onOpenChange={setShowScreenshots}
+      />
     </>
   );
 }
