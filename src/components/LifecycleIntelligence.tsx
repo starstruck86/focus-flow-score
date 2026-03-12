@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ShieldCheck,
   ShieldAlert,
@@ -18,6 +18,7 @@ import {
   Wrench,
   ChevronDown,
   ChevronUp,
+  ImagePlus,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,7 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/comp
 import { cn } from '@/lib/utils';
 import type { Account } from '@/types';
 import { useAccountEnrichment, isEnrichmentStale } from '@/hooks/useAccountEnrichment';
+import { ScreenshotEnrichModal } from '@/components/ScreenshotEnrichModal';
 
 // ── Tier Badge (for table rows) ──────────────────────────
 
@@ -187,6 +189,7 @@ export function SignalDetailPanel({ account }: { account: Account }) {
   const tier = account.tierOverride || account.lifecycleTier;
   const { enrichAccount, isEnriching } = useAccountEnrichment();
   const [expanded, setExpanded] = React.useState(true);
+  const [screenshotOpen, setScreenshotOpen] = useState(false);
   const evidence = account.enrichmentEvidence || {};
 
   return (
@@ -219,6 +222,15 @@ export function SignalDetailPanel({ account }: { account: Account }) {
               {expanded ? 'Collapse' : 'Expand'}
             </Button>
           )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setScreenshotOpen(true)}
+            className="h-7 text-xs gap-1"
+          >
+            <ImagePlus className="h-3 w-3" />
+            Screenshots
+          </Button>
           {account.website && (
             <Button
               size="sm"
@@ -233,6 +245,8 @@ export function SignalDetailPanel({ account }: { account: Account }) {
           )}
         </div>
       </div>
+      
+      <ScreenshotEnrichModal open={screenshotOpen} onOpenChange={setScreenshotOpen} account={account} />
 
       {/* Discovery Cards */}
       {score != null && expanded ? (
