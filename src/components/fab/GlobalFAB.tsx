@@ -171,6 +171,15 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
       },
     },
     {
+      id: 'screenshot-enrich',
+      label: 'Screenshot Enrich',
+      icon: ImagePlus,
+      onClick: () => {
+        setShowScreenshots(true);
+        setIsExpanded(false);
+      },
+    },
+    {
       id: 'quick-log',
       label: 'Quick Log',
       icon: Bolt,
