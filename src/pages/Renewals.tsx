@@ -796,6 +796,7 @@ export default function Renewals() {
                 { key: 'planhat', label: 'Planhat' },
                 { key: 'agreement', label: 'Agreement' },
                 { key: 'nextStep', label: 'Next Step' },
+                { key: 'website', label: 'Website' },
               ]}
             />
             
