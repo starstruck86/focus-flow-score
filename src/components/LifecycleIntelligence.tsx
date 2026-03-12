@@ -19,6 +19,7 @@ import {
   ChevronDown,
   ChevronUp,
   ImagePlus,
+  DollarSign,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -185,52 +186,50 @@ const CONFIDENCE_COLORS = {
 // ── Enrichment Summary Panel (clean formatted display) ──
 
 function EnrichmentSummaryPanel({ summary, evidence }: { summary: string; evidence: Record<string, string> }) {
-  // Parse the summary into sections
-  const sections: { title: string; content: string }[] = [];
-  
   // Extract the main summary (before any ** sections)
   const mainMatch = summary.match(/^([\s\S]*?)(?=\n\n\*\*|$)/);
   const mainSummary = (mainMatch?.[1] || summary).replace(/\*\*/g, '').trim();
   
-  // Extract "How they make money" section
+  // Prefer evidence fields (structured), fall back to parsing summary markdown
   const businessMatch = summary.match(/\*\*How they make money:\*\*\n?([\s\S]*?)(?=\n\n\*\*|$)/i);
   const businessSummary = evidence.business_summary || (businessMatch?.[1] || '').trim();
   
-  // Extract "Recent news" section  
   const newsMatch = summary.match(/\*\*Recent news[^*]*\*\*\n?([\s\S]*?)$/i);
   const recentNews = evidence.recent_news || (newsMatch?.[1] || '').trim();
+  const hasNews = recentNews && !/no significant recent news/i.test(recentNews) && !/nothing notable/i.test(recentNews);
 
   return (
     <div className="space-y-2">
-      {/* Main ICP summary */}
       {mainSummary && (
         <div className="text-xs bg-muted/50 p-3 rounded-md border border-border/50">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Info className="h-3 w-3 text-muted-foreground shrink-0" />
+            <span className="font-semibold text-muted-foreground text-[11px] uppercase tracking-wide">ICP Summary</span>
+          </div>
           <p className="text-foreground/80 leading-relaxed">{mainSummary}</p>
         </div>
       )}
       
-      {/* Business model */}
       {businessSummary && (
         <div className="text-xs p-3 rounded-md border border-primary/20 bg-primary/5">
           <div className="flex items-center gap-1.5 mb-1.5">
-            <DollarSignIcon className="h-3 w-3 text-primary" />
+            <DollarSign className="h-3 w-3 text-primary shrink-0" />
             <span className="font-semibold text-primary text-[11px] uppercase tracking-wide">How They Make Money</span>
           </div>
-          <div className="text-foreground/80 leading-relaxed whitespace-pre-line">
-            {formatBullets(businessSummary)}
+          <div className="text-foreground/80 leading-relaxed">
+            {formatRichText(businessSummary)}
           </div>
         </div>
       )}
       
-      {/* Recent news */}
-      {recentNews && recentNews !== 'No significant recent news found.' && (
+      {hasNews && (
         <div className="text-xs p-3 rounded-md border border-status-yellow/20 bg-status-yellow/5">
           <div className="flex items-center gap-1.5 mb-1.5">
-            <Zap className="h-3 w-3 text-status-yellow" />
+            <Zap className="h-3 w-3 text-status-yellow shrink-0" />
             <span className="font-semibold text-status-yellow text-[11px] uppercase tracking-wide">Recent News & Hires</span>
           </div>
-          <div className="text-foreground/80 leading-relaxed whitespace-pre-line">
-            {formatBullets(recentNews)}
+          <div className="text-foreground/80 leading-relaxed">
+            {formatRichText(recentNews)}
           </div>
         </div>
       )}
@@ -238,29 +237,39 @@ function EnrichmentSummaryPanel({ summary, evidence }: { summary: string; eviden
   );
 }
 
-// Helper: clean up bullet points for display
-function formatBullets(text: string): React.ReactNode {
+/** Render markdown-ish text with bold, bullets, and paragraphs */
+function formatRichText(text: string): React.ReactNode {
   const lines = text.split('\n').filter(l => l.trim());
-  return lines.map((line, i) => {
-    const cleaned = line.replace(/^\s*[-•*]\s*/, '').replace(/\*\*(.*?)\*\*/g, '$1').trim();
-    if (!cleaned) return null;
-    const isBullet = /^\s*[-•*]/.test(line);
-    return (
-      <div key={i} className={cn('leading-relaxed', isBullet ? 'pl-3 relative before:content-["•"] before:absolute before:left-0 before:text-muted-foreground' : i > 0 ? 'mt-1' : '')}>
-        {cleaned}
-      </div>
-    );
-  });
-}
-
-// Inline dollar sign icon to avoid adding to top-level imports
-function DollarSignIcon({ className }: { className?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-    </svg>
+    <div className="space-y-1">
+      {lines.map((line, i) => {
+        const isBullet = /^\s*[-•*]\s/.test(line) || /^\s*\d+[.)]\s/.test(line);
+        const cleaned = line
+          .replace(/^\s*[-•*]\s*/, '')
+          .replace(/^\s*\d+[.)]\s*/, '')
+          .trim();
+        if (!cleaned) return null;
+        
+        // Render inline bold (**text**)
+        const parts = cleaned.split(/(\*\*[^*]+\*\*)/g);
+        const rendered = parts.map((part, j) => {
+          if (part.startsWith('**') && part.endsWith('**')) {
+            return <span key={j} className="font-semibold text-foreground">{part.slice(2, -2)}</span>;
+          }
+          return part;
+        });
+
+        return (
+          <div key={i} className={cn(isBullet && 'flex gap-1.5')}>
+            {isBullet && <span className="text-muted-foreground shrink-0">•</span>}
+            <span>{rendered}</span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
+
 
 export function SignalDetailPanel({ account }: { account: Account }) {
   const score = account.icpScoreOverride ?? account.icpFitScore;
