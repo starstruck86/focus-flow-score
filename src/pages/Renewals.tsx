@@ -1222,7 +1222,7 @@ export default function Renewals() {
                               format="currency"
                             />
                           </TableCell>
-                          {/* ICP Score + Tier from linked account */}
+                          {/* ICP Score + Enrich + Tier from linked account */}
                           {(() => {
                             const acct = getAccountForRenewal(renewal);
                             return (
@@ -1235,7 +1235,7 @@ export default function Renewals() {
                                         <EnrichButton account={acct} />
                                       </>
                                     ) : (
-                                      <span className="text-xs text-muted-foreground">—</span>
+                                      <RenewalEnrichButton renewal={renewal} ensureAccount={ensureAccountForRenewal} />
                                     )}
                                   </div>
                                 </TableCell>
