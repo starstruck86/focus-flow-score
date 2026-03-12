@@ -78,8 +78,11 @@ export function useAccountEnrichment() {
         triggeredAccount: result.scores!.triggered_account,
         confidenceScore: result.scores!.confidence_score,
         lastEnrichedAt: new Date().toISOString(),
-        enrichmentSourceSummary: result.summary,
+        enrichmentSourceSummary: (data as any).summary || result.summary,
         enrichmentEvidence: result.evidence,
+        // Populate MarTech and Ecommerce columns from enrichment
+        marTech: (data as any).marTech || account.marTech,
+        ecommerce: (data as any).ecommerce || account.ecommerce,
       };
 
       updateAccount(account.id, updates);

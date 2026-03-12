@@ -28,7 +28,23 @@ interface QuickAddTaskModalProps {
 }
 
 export function QuickAddTaskModal({ open, onOpenChange }: QuickAddTaskModalProps) {
-  const { addTask, accounts, opportunities } = useStore();
+  const { addTask, accounts, opportunities, renewals } = useStore();
+  
+  // Merge accounts + renewal-only accounts
+  const allAccounts = (() => {
+    const accountIds = new Set(accounts.map(a => a.id));
+    const renewalOnlyAccounts = renewals
+      .filter(r => !r.accountId || !accountIds.has(r.accountId))
+      .map(r => ({ id: r.id, name: r.accountName, isRenewal: true }));
+    const baseAccounts = accounts.map(a => ({ id: a.id, name: a.name, isRenewal: false }));
+    const seen = new Set<string>();
+    return [...baseAccounts, ...renewalOnlyAccounts].filter(a => {
+      const key = a.name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  })();
   const { currentRecord } = useLinkedRecordContext();
   
   const [title, setTitle] = useState('');
@@ -159,8 +175,8 @@ export function QuickAddTaskModal({ open, onOpenChange }: QuickAddTaskModalProps
               <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">None</SelectItem>
-                {accounts.map(a => (
-                  <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                {allAccounts.map(a => (
+                  <SelectItem key={a.id} value={a.id}>{a.name}{a.isRenewal ? ' (Renewal)' : ''}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

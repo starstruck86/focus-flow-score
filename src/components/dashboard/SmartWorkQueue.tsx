@@ -1,27 +1,23 @@
-// Smart Work Queue: Prioritized action list answering "What should I work on right now?"
+// Smart Work Queue: Daily Action Plan with sectioned priorities and one-click task creation
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useTimeAllocation, type WorkItem, type WorkItemUrgency, type WorkItemType } from '@/hooks/useTimeAllocation';
+import { useTimeAllocation, type WorkItem, type WorkItemType } from '@/hooks/useTimeAllocation';
+import { useStore } from '@/store/useStore';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { 
-  Crosshair, 
-  Clock, 
-  DollarSign, 
-  ArrowRight, 
-  Calendar, 
-  Building2, 
-  TrendingUp,
-  AlertTriangle,
-  Zap,
-  RefreshCw,
+  Crosshair, Clock, DollarSign, ArrowRight, Calendar, Building2, 
+  TrendingUp, AlertTriangle, Zap, RefreshCw, Plus, Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCopilot } from '@/contexts/CopilotContext';
 import { Sparkles } from 'lucide-react';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
+import { toast } from 'sonner';
+import type { Workstream } from '@/types';
 
-const URGENCY_STYLES: Record<WorkItemUrgency, { bg: string; text: string; border: string; label: string }> = {
+const URGENCY_STYLES: Record<string, { bg: string; text: string; border: string; label: string }> = {
   critical: { bg: 'bg-status-red/10', text: 'text-status-red', border: 'border-l-status-red', label: 'NOW' },
   high:     { bg: 'bg-status-yellow/10', text: 'text-status-yellow', border: 'border-l-status-yellow', label: 'TODAY' },
   medium:   { bg: 'bg-primary/10', text: 'text-primary', border: 'border-l-primary', label: 'THIS WEEK' },
@@ -34,14 +30,11 @@ const TYPE_ICONS: Record<string, typeof Building2> = {
   renewal: RefreshCw,
 };
 
-const FILTER_TILES: { type: WorkItemType | 'all'; label: string; icon: typeof Building2 }[] = [
-  { type: 'all', label: 'All', icon: Crosshair },
-  { type: 'account', label: 'New Logo', icon: Building2 },
-  { type: 'opportunity', label: 'Pipeline', icon: TrendingUp },
-  { type: 'renewal', label: 'Renewal', icon: RefreshCw },
-];
-
-function WorkItemCard({ item, index }: { item: WorkItem; index: number }) {
+function ActionItemCard({ item, onAddTask, taskAdded }: { 
+  item: WorkItem; 
+  onAddTask: (item: WorkItem) => void;
+  taskAdded: boolean;
+}) {
   const navigate = useNavigate();
   const { setCurrentRecord } = useLinkedRecordContext();
   const { ask } = useCopilot();
@@ -51,11 +44,8 @@ function WorkItemCard({ item, index }: { item: WorkItem; index: number }) {
   const formatArr = (v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`;
 
   const handleClick = () => {
-    const recordType = item.type === 'renewal' ? 'renewal' 
-      : item.type === 'opportunity' ? 'opportunity' 
-      : 'account';
     setCurrentRecord({ 
-      type: recordType as any, 
+      type: item.type as any, 
       id: item.id,
       accountId: item.accountId,
     });
@@ -63,54 +53,35 @@ function WorkItemCard({ item, index }: { item: WorkItem; index: number }) {
   };
 
   return (
-    <button
-      onClick={handleClick}
-      className={cn(
-        "w-full flex items-start gap-3 p-3 rounded-lg border-l-[3px] border border-border/50 transition-all text-left",
-        "hover:bg-muted/30 hover:border-border hover:shadow-sm",
-        urgencyStyle.border,
-      )}
-    >
-      {/* Rank */}
-      <div className={cn(
-        "flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold",
-        index < 3 ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
-      )}>
-        {index + 1}
-      </div>
-
-      <div className="flex-1 min-w-0">
-        {/* Header line */}
+    <div className={cn(
+      "flex items-start gap-2 p-2.5 rounded-lg border-l-[3px] border border-border/50 transition-all",
+      "hover:bg-muted/30 hover:border-border",
+      urgencyStyle.border,
+    )}>
+      {/* Main content - clickable */}
+      <button onClick={handleClick} className="flex-1 min-w-0 text-left">
         <div className="flex items-center gap-2 mb-0.5">
           <TypeIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           <span className="text-sm font-medium truncate">{item.name}</span>
-          {item.hasMeetingToday && (
-            <Calendar className="h-3 w-3 text-primary shrink-0" />
-          )}
+          {item.hasMeetingToday && <Calendar className="h-3 w-3 text-primary shrink-0" />}
         </div>
-
-        {/* Reason + Action */}
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex items-center gap-1.5 text-xs">
           <span className="text-muted-foreground truncate">{item.reason}</span>
           <ArrowRight className="h-3 w-3 text-muted-foreground/50 shrink-0" />
           <span className="text-foreground font-medium truncate">{item.action}</span>
         </div>
-
-        {/* Bottom metadata */}
-        <div className="flex items-center gap-3 mt-1.5">
+        <div className="flex items-center gap-2 mt-1">
           <Badge className={cn("text-[9px] h-4 px-1.5 font-bold", urgencyStyle.bg, urgencyStyle.text)}>
             {urgencyStyle.label}
           </Badge>
           {item.arrAtStake > 0 && (
             <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-              <DollarSign className="h-2.5 w-2.5" />
-              {formatArr(item.arrAtStake)}
+              <DollarSign className="h-2.5 w-2.5" />{formatArr(item.arrAtStake)}
             </span>
           )}
           {item.daysUntilDeadline != null && (
             <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-              <Clock className="h-2.5 w-2.5" />
-              {item.daysUntilDeadline}d
+              <Clock className="h-2.5 w-2.5" />{item.daysUntilDeadline}d
             </span>
           )}
           {item.daysSinceLastTouch != null && (
@@ -119,87 +90,104 @@ function WorkItemCard({ item, index }: { item: WorkItem; index: number }) {
               item.daysSinceLastTouch > 14 ? "text-status-red" :
               item.daysSinceLastTouch > 7 ? "text-status-yellow" : "text-muted-foreground"
             )}>
-              <AlertTriangle className="h-2.5 w-2.5" />
-              {item.daysSinceLastTouch}d ago
+              <AlertTriangle className="h-2.5 w-2.5" />{item.daysSinceLastTouch}d ago
             </span>
           )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              ask(`Tell me everything I need to know about ${item.name}. What signals exist, what's the risk, and what should I do next?`, 'deep', item.id);
-            }}
-            className="text-[10px] text-primary/60 hover:text-primary flex items-center gap-0.5 transition-colors"
-          >
-            <Sparkles className="h-2.5 w-2.5" />
-            Ask
-          </button>
         </div>
+      </button>
+
+      {/* Action buttons */}
+      <div className="flex flex-col gap-1 shrink-0">
+        <Button
+          size="icon"
+          variant={taskAdded ? "default" : "outline"}
+          className={cn("h-7 w-7", taskAdded && "bg-status-green hover:bg-status-green")}
+          onClick={(e) => { e.stopPropagation(); if (!taskAdded) onAddTask(item); }}
+          title="Add as task"
+        >
+          {taskAdded ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+        </Button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            ask(`Tell me everything about ${item.name}. Signals, risk, and what to do next?`, 'deep', item.id);
+          }}
+          className="h-7 w-7 flex items-center justify-center text-primary/60 hover:text-primary transition-colors rounded-md hover:bg-muted"
+          title="Ask AI"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+        </button>
       </div>
-    </button>
+    </div>
   );
 }
 
-function TimeAllocationBar({ activeFilter, onFilterChange }: { 
-  activeFilter: WorkItemType | 'all';
-  onFilterChange: (type: WorkItemType | 'all') => void;
+function Section({ title, icon: Icon, items, color, addedTasks, onAddTask, maxItems = 5 }: {
+  title: string;
+  icon: typeof Building2;
+  items: WorkItem[];
+  color: string;
+  addedTasks: Set<string>;
+  onAddTask: (item: WorkItem) => void;
+  maxItems?: number;
 }) {
-  const { timeAllocation } = useTimeAllocation();
-
-  const typeMap: Record<string, WorkItemType> = {
-    'New Logo Prospecting': 'account',
-    'Pipeline Advancement': 'opportunity',
-    'Renewal Management': 'renewal',
-  };
-
+  if (items.length === 0) return null;
+  
+  const displayed = items.slice(0, maxItems);
+  
   return (
     <div className="space-y-2">
-      {timeAllocation.map(t => {
-        const itemType = typeMap[t.label];
-        const isActive = activeFilter === itemType;
-        return (
-          <button
-            key={t.label}
-            onClick={() => onFilterChange(isActive ? 'all' : itemType)}
-            className={cn(
-              "w-full flex items-center gap-3 rounded-md px-1.5 py-1 transition-colors",
-              isActive ? "bg-primary/10" : "hover:bg-muted/50"
-            )}
-          >
-            <span className={cn(
-              "text-[10px] w-28 truncate text-left",
-              isActive ? "text-primary font-semibold" : "text-muted-foreground"
-            )}>{t.label}</span>
-            <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-all",
-                  t.status === 'on-track' ? "bg-status-green" :
-                  t.status === 'over' ? "bg-status-yellow" : "bg-status-red"
-                )}
-                style={{ width: `${Math.min(100, t.actualPercent)}%` }}
-              />
-            </div>
-            <span className={cn(
-              "text-[10px] font-mono w-14 text-right",
-              t.status === 'on-track' ? "text-status-green" :
-              t.status === 'over' ? "text-status-yellow" : "text-status-red"
-            )}>
-              {t.actualPercent}% / {t.targetPercent}%
-            </span>
-          </button>
-        );
-      })}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Icon className={cn("h-3.5 w-3.5", color)} />
+          <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{title}</h4>
+          <Badge variant="outline" className="text-[10px] h-4">{items.length}</Badge>
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        {displayed.map(item => (
+          <ActionItemCard 
+            key={`${item.type}-${item.id}`} 
+            item={item} 
+            onAddTask={onAddTask}
+            taskAdded={addedTasks.has(item.id)}
+          />
+        ))}
+      </div>
     </div>
   );
 }
 
 export function SmartWorkQueue() {
-  const { topWorkItems, workQueue, totalArrAtRisk } = useTimeAllocation();
-  const [filter, setFilter] = useState<WorkItemType | 'all'>('all');
+  const { workQueue, totalArrAtRisk } = useTimeAllocation();
+  const { addTask, tasks } = useStore();
+  const [addedTasks, setAddedTasks] = useState<Set<string>>(new Set());
 
-  const filteredItems = filter === 'all' 
-    ? topWorkItems 
-    : workQueue.filter(w => w.type === filter).slice(0, 10);
+  const handleAddTask = (item: WorkItem) => {
+    const workstream: Workstream = item.type === 'renewal' || item.isRenewalOpp ? 'renewals' : 'pg';
+    
+    addTask({
+      title: `${item.action}: ${item.name}`,
+      workstream,
+      status: 'next',
+      priority: item.urgency === 'critical' ? 'P0' : item.urgency === 'high' ? 'P1' : 'P2',
+      dueDate: new Date().toISOString().split('T')[0],
+      linkedAccountId: item.accountId || (item.type === 'account' ? item.id : undefined),
+      linkedOpportunityId: item.type === 'opportunity' ? item.id : undefined,
+      notes: item.reason,
+      motion: workstream === 'renewals' ? 'renewal' : 'new-logo',
+      linkedRecordType: item.type as any,
+      linkedRecordId: item.id,
+    } as any);
+
+    setAddedTasks(prev => new Set(prev).add(item.id));
+    toast.success('Task added', { description: `${item.action}: ${item.name}` });
+  };
+
+  // Categorize items
+  const accountItems = workQueue.filter(w => w.type === 'account');
+  const pipelineItems = workQueue.filter(w => w.type === 'opportunity' && !w.isRenewalOpp);
+  const renewalItems = workQueue.filter(w => w.type === 'renewal' || (w.type === 'opportunity' && w.isRenewalOpp));
 
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
@@ -209,22 +197,22 @@ export function SmartWorkQueue() {
       <Card className="p-4">
         <div className="flex items-center gap-2 mb-2">
           <Crosshair className="h-4 w-4 text-primary" />
-          <h3 className="font-display text-sm font-bold">Work Queue</h3>
+          <h3 className="font-display text-sm font-bold">Daily Action Plan</h3>
         </div>
         <p className="text-xs text-muted-foreground">No high-priority items. You're on top of things! 🎯</p>
       </Card>
     );
   }
 
-  const criticalCount = filteredItems.filter(w => w.urgency === 'critical').length;
+  const criticalCount = workQueue.filter(w => w.urgency === 'critical').length;
 
   return (
     <Card className="p-4">
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Crosshair className="h-4 w-4 text-primary" />
-          <h3 className="font-display text-sm font-bold">Work Queue</h3>
+          <h3 className="font-display text-sm font-bold">Daily Action Plan</h3>
           {criticalCount > 0 && (
             <Badge className="bg-status-red/15 text-status-red text-[10px] h-5">
               {criticalCount} critical
@@ -240,46 +228,35 @@ export function SmartWorkQueue() {
         )}
       </div>
 
-      {/* Filter tiles */}
-      <div className="flex gap-1.5 mb-3">
-        {FILTER_TILES.map(tile => {
-          const isActive = filter === tile.type;
-          const count = tile.type === 'all' ? workQueue.length : workQueue.filter(w => w.type === tile.type).length;
-          return (
-            <button
-              key={tile.type}
-              onClick={() => setFilter(tile.type)}
-              className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-colors",
-                isActive
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-card border-border hover:bg-muted text-muted-foreground"
-              )}
-            >
-              <tile.icon className="h-3 w-3" />
-              {tile.label}
-              <span className={cn("font-mono", isActive ? "text-primary-foreground/80" : "text-muted-foreground/60")}>
-                {count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Time Allocation - clickable to filter */}
-      <div className="mb-4">
-        <TimeAllocationBar activeFilter={filter} onFilterChange={setFilter} />
-      </div>
-
-      {/* Work Items */}
-      <div className="space-y-2">
-        {filteredItems.length === 0 ? (
-          <p className="text-xs text-muted-foreground py-2">No items in this category.</p>
-        ) : (
-          filteredItems.map((item, i) => (
-            <WorkItemCard key={`${item.type}-${item.id}`} item={item} index={i} />
-          ))
-        )}
+      {/* Three sections */}
+      <div className="space-y-4">
+        <Section
+          title="Target Accounts"
+          icon={Building2}
+          items={accountItems}
+          color="text-primary"
+          addedTasks={addedTasks}
+          onAddTask={handleAddTask}
+          maxItems={5}
+        />
+        <Section
+          title="Pipeline Advancement"
+          icon={TrendingUp}
+          items={pipelineItems}
+          color="text-status-yellow"
+          addedTasks={addedTasks}
+          onAddTask={handleAddTask}
+          maxItems={5}
+        />
+        <Section
+          title="Renewal Management"
+          icon={RefreshCw}
+          items={renewalItems}
+          color="text-status-green"
+          addedTasks={addedTasks}
+          onAddTask={handleAddTask}
+          maxItems={5}
+        />
       </div>
     </Card>
   );
