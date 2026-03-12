@@ -83,7 +83,7 @@ export function ScreenshotEnrichModal({ open, onOpenChange, account: preselected
   }, [addFiles]);
 
   const processScreenshots = async () => {
-    if (files.length === 0) return;
+    if (files.length === 0 || !account) return;
     setProcessing(true);
     setResult(null);
 
