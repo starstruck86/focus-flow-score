@@ -26,6 +26,7 @@ import { PowerHourModal } from './PowerHourModal';
 import { FocusTimerModal } from './FocusTimerModal';
 import { QuickLogModal } from '@/components/journal/QuickLogModal';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
+import { ScreenshotEnrichModal } from '@/components/ScreenshotEnrichModal';
 
 interface GlobalFABProps {
   position?: 'bottom-right' | 'bottom-left';
