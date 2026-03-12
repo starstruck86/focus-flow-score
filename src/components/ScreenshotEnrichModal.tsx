@@ -187,6 +187,8 @@ export function ScreenshotEnrichModal({ open, onOpenChange, account: preselected
       setFiles([]);
       setResult(null);
       setProcessing(false);
+      if (!preselectedAccount) setSelectedAccountId('');
+      setAccountSearch('');
     }
     onOpenChange(open);
   };
