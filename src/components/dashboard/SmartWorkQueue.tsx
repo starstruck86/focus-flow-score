@@ -1,5 +1,5 @@
 // Smart Work Queue: Daily Action Plan with sectioned priorities and one-click task creation
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTimeAllocation, type WorkItem, type WorkItemType } from '@/hooks/useTimeAllocation';
 import { useStore } from '@/store/useStore';
@@ -163,6 +163,22 @@ export function SmartWorkQueue() {
   const { addTask, tasks } = useStore();
   const [addedTasks, setAddedTasks] = useState<Set<string>>(new Set());
 
+  // Filter out items that already have linked tasks
+  const existingTaskRecordIds = useMemo(() => {
+    const ids = new Set<string>();
+    tasks.forEach(t => {
+      if (t.linkedRecordId) ids.add(t.linkedRecordId);
+      if (t.linkedAccountId) ids.add(t.linkedAccountId);
+      if (t.linkedOpportunityId) ids.add(t.linkedOpportunityId);
+    });
+    return ids;
+  }, [tasks]);
+
+  const filteredQueue = useMemo(() => 
+    workQueue.filter(item => !existingTaskRecordIds.has(item.id) && !addedTasks.has(item.id)),
+    [workQueue, existingTaskRecordIds, addedTasks]
+  );
+
   const handleAddTask = (item: WorkItem) => {
     const workstream: Workstream = item.type === 'renewal' || item.isRenewalOpp ? 'renewals' : 'pg';
     
@@ -185,14 +201,18 @@ export function SmartWorkQueue() {
   };
 
   // Categorize items
-  const accountItems = workQueue.filter(w => w.type === 'account');
-  const pipelineItems = workQueue.filter(w => w.type === 'opportunity' && !w.isRenewalOpp);
-  const renewalItems = workQueue.filter(w => w.type === 'renewal' || (w.type === 'opportunity' && w.isRenewalOpp));
+  const accountItems = filteredQueue.filter(w => w.type === 'account');
+  const pipelineItems = filteredQueue.filter(w => w.type === 'opportunity' && !w.isRenewalOpp);
+  const renewalItems = filteredQueue.filter(w => w.type === 'renewal' || (w.type === 'opportunity' && w.isRenewalOpp));
 
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
 
-  if (workQueue.length === 0) {
+  const totalFilteredArr = filteredQueue
+    .filter(w => w.urgency === 'critical' || w.urgency === 'high')
+    .reduce((sum, w) => sum + w.arrAtStake, 0);
+
+  if (filteredQueue.length === 0) {
     return (
       <Card className="p-4">
         <div className="flex items-center gap-2 mb-2">
@@ -204,7 +224,7 @@ export function SmartWorkQueue() {
     );
   }
 
-  const criticalCount = workQueue.filter(w => w.urgency === 'critical').length;
+  const criticalCount = filteredQueue.filter(w => w.urgency === 'critical').length;
 
   return (
     <Card className="p-4">
@@ -219,10 +239,10 @@ export function SmartWorkQueue() {
             </Badge>
           )}
         </div>
-        {totalArrAtRisk > 0 && (
+        {totalFilteredArr > 0 && (
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Zap className="h-3 w-3 text-status-yellow" />
-            <span className="font-mono font-semibold text-foreground">{formatCurrency(totalArrAtRisk)}</span>
+            <span className="font-mono font-semibold text-foreground">{formatCurrency(totalFilteredArr)}</span>
             <span>at stake</span>
           </div>
         )}
