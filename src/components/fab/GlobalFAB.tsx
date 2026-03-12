@@ -52,6 +52,7 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
   const [showFocusTimer, setShowFocusTimer] = useState(false);
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [showQuickLog, setShowQuickLog] = useState(false);
+  const [showScreenshots, setShowScreenshots] = useState(false);
   
   // Context for prefills
   const { currentRecord } = useLinkedRecordContext();
