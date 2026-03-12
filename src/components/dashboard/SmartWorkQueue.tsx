@@ -239,10 +239,10 @@ export function SmartWorkQueue() {
             </Badge>
           )}
         </div>
-        {totalArrAtRisk > 0 && (
+        {totalFilteredArr > 0 && (
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Zap className="h-3 w-3 text-status-yellow" />
-            <span className="font-mono font-semibold text-foreground">{formatCurrency(totalArrAtRisk)}</span>
+            <span className="font-mono font-semibold text-foreground">{formatCurrency(totalFilteredArr)}</span>
             <span>at stake</span>
           </div>
         )}
