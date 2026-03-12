@@ -376,6 +376,7 @@ Deno.serve(async (req) => {
 
     const result = {
       success: true,
+      discoveredUrl: discoveredUrl || null,
       signals: {
         direct_ecommerce: signals.direct_ecommerce,
         email_sms_capture: signals.email_sms_capture,

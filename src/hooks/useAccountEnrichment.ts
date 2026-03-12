@@ -44,17 +44,18 @@ export function useAccountEnrichment() {
   
 
   const enrichAccount = useCallback(async (account: Account): Promise<EnrichmentResult> => {
-    if (!account.website) {
-      toast.error('Account needs a website URL to enrich');
-      return { success: false, error: 'No website URL' };
-    }
-
     setEnrichingIds((prev) => new Set(prev).add(account.id));
 
     try {
       const { data, error } = await supabase.functions.invoke('enrich-account', {
-        body: { url: account.website, accountName: account.name, accountId: account.id },
+        body: { url: account.website || '', accountName: account.name, accountId: account.id },
       });
+
+      // If website was auto-discovered, update the account
+      if (data?.discoveredUrl && !account.website) {
+        updateAccount(account.id, { website: data.discoveredUrl });
+        toast.success(`Found website: ${data.discoveredUrl}`, { duration: 5000 });
+      }
 
       if (error) throw new Error(error.message);
       if (!data?.success) throw new Error(data?.error || 'Enrichment failed');
