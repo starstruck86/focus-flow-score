@@ -270,8 +270,6 @@ function formatRichText(text: string): React.ReactNode {
   );
 }
 
-// Use lucide DollarSign instead of custom SVG
-import { DollarSign } from 'lucide-react';
 
 export function SignalDetailPanel({ account }: { account: Account }) {
   const score = account.icpScoreOverride ?? account.icpFitScore;
