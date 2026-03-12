@@ -49,30 +49,42 @@ Deno.serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are a data extraction assistant for B2B sales. Extract structured marketing technology and ecommerce data from screenshots of platforms like eTailInsights, BuiltWith, Wappalyzer, or similar tools.
+            content: `You are a data extraction assistant for B2B sales reps. Extract structured data from screenshots of platforms like eTailInsights, BuiltWith, Wappalyzer, or similar tools.
+
+These screenshots typically contain two sections:
+1. "Website Details" — company info, revenue estimates, product counts, order volume, social followers
+2. "Technology" — categorized list of detected platforms with first/last seen dates
 
 Return ONLY valid JSON with this exact structure (use empty string "" for unknown fields, not null):
 {
-  "esp_platform": "Email Service Provider name (e.g. Klaviyo, Mailchimp, SFMC, Braze, Iterable, Sailthru, Cordial)",
-  "sms_platform": "SMS platform name (e.g. Attentive, Postscript, Yotpo SMS, Klaviyo SMS)",
-  "ecommerce_platform": "Ecommerce platform (e.g. Shopify, Shopify Plus, BigCommerce, Magento, WooCommerce, Salesforce Commerce Cloud)",
-  "cdp_platform": "CDP name (e.g. Segment, mParticle, Tealium)",
-  "personalization_platform": "Personalization tool (e.g. Nosto, Dynamic Yield, Bloomreach)",
-  "reviews_platform": "Reviews/UGC tool (e.g. Yotpo, Bazaarvoice, PowerReviews, Stamped)",
-  "loyalty_program": "Loyalty/rewards platform or program name",
-  "marketing_automation": "Primary marketing automation platform",
-  "analytics_tools": "Analytics tools detected",
-  "other_tech": "Any other notable tech stack items",
+  "ecommerce_platform": "Commerce platform (e.g. Shopify, Shopify Plus, BigCommerce, Magento, WooCommerce, Salesforce Commerce Cloud)",
+  "esp_platform": "Email Service Provider from 'Email Service Provider(s)' row (e.g. Klaviyo, Mailchimp, SFMC, Braze, Iterable, Sailthru, Cordial, or 'In-House Solution')",
+  "sms_platform": "SMS/Chat platform from 'Chat Technologies' row (e.g. Attentive, Postscript, Yotpo SMS, Klaviyo SMS)",
+  "loyalty_platform": "Loyalty/rewards platform from 'Web Analytics' or dedicated row (e.g. LoyaltyLion, Smile.io, Yotpo Loyalty)",
+  "reviews_platform": "Reviews/UGC tool from 'Reviews' row (e.g. Yotpo, Judge.me, Bazaarvoice, PowerReviews, Stamped)",
+  "cdp_platform": "CDP name if visible (e.g. Segment, mParticle, Tealium)",
+  "advertising_platforms": "Advertising/referral platforms (e.g. Friendbuy, Refersion)",
+  "payment_platforms": "Payment methods detected (e.g. Apple Pay, Klarna, PayPal, Venmo, Afterpay)",
+  "analytics_tools": "Analytics tools (e.g. Google Tag Manager, Northbeam, Triple Whale)",
+  "search_platform": "Site search tool (e.g. Algolia, Searchspring)",
+  "cms_platform": "CMS if detected (e.g. Contentful, WordPress)",
+  "mobile_app_platform": "Mobile app tech if detected (e.g. Tapcart, React Native)",
+  "other_tech": "Any other notable tech (CDN, A/B testing, etc.)",
+  "estimated_product_count": "Number from 'Estimated Product Count' (e.g. '1,000')",
+  "estimated_aov": "Dollar amount from 'Estimated Average Order Value' (e.g. '$105.4')",
+  "estimated_online_sales": "Most recent year's estimated online sales (e.g. '$51M')",
+  "estimated_orders_per_day": "From 'Estimated Online Orders Shipped Per Day' (e.g. '1,309')",
+  "employee_count": "From 'Employee Count' (e.g. '201 - 500')",
+  "industry": "From 'Industry' field (e.g. 'Apparel, Accessories, and Shoes')",
+  "annual_email_frequency": "From 'Annual Email Send Frequency' (e.g. '239')",
+  "ships_internationally": true/false,
   "direct_ecommerce": true/false,
-  "email_sms_capture": true/false,
   "loyalty_membership": true/false,
   "mobile_app": true/false,
-  "estimated_revenue": "Revenue range if visible",
-  "employee_count": "Employee count if visible",
-  "summary": "2-3 sentence summary of what was found in the screenshots"
+  "summary": "2-3 sentence summary highlighting the most sales-relevant findings"
 }
 
-Combine data from ALL screenshots into a single unified result. If the same field appears in multiple screenshots, prefer the most specific/detailed value.`,
+Combine data from ALL screenshots into a single unified result. If the same field appears in multiple screenshots, prefer the most specific/detailed value. Pay close attention to category headers in the Technology section — they tell you what type of tool each entry is.`,
           },
           {
             role: 'user',
