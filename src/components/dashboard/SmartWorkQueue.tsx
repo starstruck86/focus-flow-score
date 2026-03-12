@@ -1,5 +1,5 @@
 // Smart Work Queue: Daily Action Plan with sectioned priorities and one-click task creation
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTimeAllocation, type WorkItem, type WorkItemType } from '@/hooks/useTimeAllocation';
 import { useStore } from '@/store/useStore';
