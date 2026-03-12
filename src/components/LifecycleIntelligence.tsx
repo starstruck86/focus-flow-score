@@ -309,18 +309,16 @@ export function SignalDetailPanel({ account }: { account: Account }) {
             <ImagePlus className="h-3 w-3" />
             Screenshots
           </Button>
-          {account.website && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => enrichAccount(account)}
-              disabled={isEnriching(account.id)}
-              className="h-7 text-xs gap-1"
-            >
-              <RefreshCw className={cn('h-3 w-3', isEnriching(account.id) && 'animate-spin')} />
-              {account.lastEnrichedAt ? 'Re-enrich' : 'Auto-detect'}
-            </Button>
-          )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => enrichAccount(account)}
+            disabled={isEnriching(account.id)}
+            className="h-7 text-xs gap-1"
+          >
+            <RefreshCw className={cn('h-3 w-3', isEnriching(account.id) && 'animate-spin')} />
+            {account.lastEnrichedAt ? 'Re-enrich' : 'Auto-detect'}
+          </Button>
         </div>
       </div>
       
