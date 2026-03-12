@@ -1145,7 +1145,8 @@ export default function Renewals() {
                       </SortableHeader>
                       <TableHead className="w-[10%]">Planhat</TableHead>
                       <TableHead className="w-[10%]">Agreement</TableHead>
-                      <TableHead className="w-[20%]">Next Step</TableHead>
+                      <TableHead className="w-[17%]">Next Step</TableHead>
+                      <TableHead className="w-[10%]">Website</TableHead>
                       {/* Custom field column headers - sortable */}
                       {summaryCustomFields.map(field => (
                         <SortableHeader
