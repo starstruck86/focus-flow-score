@@ -37,6 +37,9 @@ export function JournalPromptManager({ children }: JournalPromptManagerProps) {
     isLoading,
   } = useJournalPromptStatus();
   
+  const currentHour = new Date().getHours();
+  const autoMode = currentHour < 14 ? 'morning' as const : 'evening' as const;
+  
   const today = new Date();
   const isTodayEligible = config && holidays && ptoDays && overrides
     ? isEligibleDay(today, config, holidays, ptoDays, overrides)
@@ -48,9 +51,21 @@ export function JournalPromptManager({ children }: JournalPromptManagerProps) {
     ? isEligibleDay(yesterday, config, holidays, ptoDays, overrides)
     : false;
   
+  // Auto-show morning check-in
+  useEffect(() => {
+    if (!isLoading && isTodayEligible && !hasShownMorningToday && !showCheckIn && !showConfirm && autoMode === 'morning') {
+      const timer = setTimeout(() => {
+        setEditDate(undefined);
+        setShowCheckIn(true);
+        setHasShownMorningToday(true);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading, isTodayEligible, hasShownMorningToday, showCheckIn, showConfirm, autoMode]);
+
   // Auto-show EOD check-in
   useEffect(() => {
-    if (!isLoading && isTodayEligible && shouldShowEodCheckIn && !hasShownEodToday && !showCheckIn && !showConfirm) {
+    if (!isLoading && isTodayEligible && shouldShowEodCheckIn && !hasShownEodToday && !showCheckIn && !showConfirm && autoMode === 'evening') {
       const timer = setTimeout(() => {
         setEditDate(undefined);
         setShowCheckIn(true);
@@ -58,16 +73,12 @@ export function JournalPromptManager({ children }: JournalPromptManagerProps) {
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, [isLoading, isTodayEligible, shouldShowEodCheckIn, hasShownEodToday, showCheckIn, showConfirm]);
+  }, [isLoading, isTodayEligible, shouldShowEodCheckIn, hasShownEodToday, showCheckIn, showConfirm, autoMode]);
   
-  // Auto-show morning confirmation
+  // Auto-show morning confirmation for yesterday (only if morning mode already shown)
   useEffect(() => {
-    if (!isLoading && wasYesterdayEligible && shouldShowMorningConfirm && !hasShownMorningToday && !showCheckIn && !showConfirm && yesterdayEntry) {
-      const timer = setTimeout(() => {
-        setShowConfirm(true);
-        setHasShownMorningToday(true);
-      }, 2000);
-      return () => clearTimeout(timer);
+    if (!isLoading && wasYesterdayEligible && shouldShowMorningConfirm && hasShownMorningToday && !hasShownEodToday && !showCheckIn && !showConfirm && yesterdayEntry) {
+      // Skip confirm modal - morning check-in already shows yesterday summary
     }
   }, [isLoading, wasYesterdayEligible, shouldShowMorningConfirm, hasShownMorningToday, showCheckIn, showConfirm, yesterdayEntry]);
   
@@ -92,6 +103,7 @@ export function JournalPromptManager({ children }: JournalPromptManagerProps) {
         open={showCheckIn}
         onOpenChange={handleCloseCheckIn}
         date={editDate}
+        forceMode={editDate ? undefined : autoMode}
       />
       
       {yesterdayEntry && (
