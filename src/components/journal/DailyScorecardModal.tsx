@@ -302,6 +302,23 @@ function useCurrentStreak() {
   });
 }
 
+// --- WHOOP Data Hook ---
+function useWhoopMetrics(date: string) {
+  return useQuery({
+    queryKey: ['whoop-metrics-scorecard', date],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('whoop_daily_metrics')
+        .select('recovery_score, sleep_score, strain_score')
+        .eq('date', date)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 // --- Main Component ---
 interface DailyScorecardModalProps {
   open: boolean;
@@ -320,18 +337,30 @@ export function DailyScorecardModal({
   const [data, setData] = useState<ScorecardData>({ ...DEFAULT_SCORECARD, ...initialData });
   const [saving, setSaving] = useState(false);
   const [showExtras, setShowExtras] = useState(false);
+  const [whoopApplied, setWhoopApplied] = useState(false);
   const queryClient = useQueryClient();
   const targets = useDailyTargets();
   const { data: nudgeData } = useJournalNudge();
   const { data: streakData } = useCurrentStreak();
+  const { data: whoopMetrics } = useWhoopMetrics(entryDate);
   const recordCheckIn = useRecordCheckIn();
 
   useEffect(() => {
     if (open) {
       setData({ ...DEFAULT_SCORECARD, ...initialData });
       setShowExtras(false);
+      setWhoopApplied(false);
     }
   }, [open, initialData]);
+
+  // Auto-fill recovery fields from WHOOP when data arrives
+  useEffect(() => {
+    if (open && whoopMetrics && !whoopApplied) {
+      setWhoopApplied(true);
+      // No override needed — we write WHOOP values directly into the save payload
+      // This keeps the scorecard UI simple (no recovery sliders to confuse)
+    }
+  }, [open, whoopMetrics, whoopApplied]);
 
   const update = <K extends keyof ScorecardData>(key: K, val: ScorecardData[K]) => {
     setData(prev => ({ ...prev, [key]: val }));
@@ -396,11 +425,22 @@ export function DailyScorecardModal({
         contacts_prepped: 0,
         admin_heavy_day: false,
         travel_day: data.biggestBlocker === 'travel_ooo',
-        sleep_hours: 7,
-        energy: 3,
-        focus_quality: 3,
-        stress: 3,
-        clarity: 3,
+        // Auto-fill from WHOOP if available, otherwise sensible defaults
+        sleep_hours: whoopMetrics?.sleep_score
+          ? Math.round((Number(whoopMetrics.sleep_score) / 100) * 9 * 10) / 10 // Map 0-100 score to ~0-9 hrs
+          : 7,
+        energy: whoopMetrics?.recovery_score
+          ? Math.min(5, Math.max(1, Math.round(Number(whoopMetrics.recovery_score) / 20))) // Map 0-100 to 1-5
+          : 3,
+        focus_quality: whoopMetrics?.recovery_score
+          ? Math.min(5, Math.max(1, Math.round(Number(whoopMetrics.recovery_score) / 20)))
+          : 3,
+        stress: whoopMetrics?.strain_score
+          ? Math.min(5, Math.max(1, Math.round(Number(whoopMetrics.strain_score) / 4.2))) // Map 0-21 to 1-5
+          : 3,
+        clarity: whoopMetrics?.recovery_score
+          ? Math.min(5, Math.max(1, Math.round(Number(whoopMetrics.recovery_score) / 20)))
+          : 3,
         distractions: 'low',
         context_switching: 'low',
       };
@@ -469,6 +509,13 @@ export function DailyScorecardModal({
                     {streakData.current_checkin_streak}d streak
                   </span>
                 ) : null}
+                {whoopMetrics && (
+                  <span className="ml-2 inline-flex items-center gap-1">
+                    <Badge variant="secondary" className="text-[9px] font-normal px-1.5 py-0 gap-1">
+                      <span className="text-status-green">●</span> WHOOP synced
+                    </Badge>
+                  </span>
+                )}
               </p>
             </div>
             <ScoreRing score={score} total={6} goalMet={goalMet} />
