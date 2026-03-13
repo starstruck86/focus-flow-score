@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, ChevronDown } from 'lucide-react';
 import { Layout } from '@/components/Layout';
-import { DailyCheckInModal } from '@/components/journal';
+import { DailyScorecardModal, BackfillCards } from '@/components/journal';
 import { useStore } from '@/store/useStore';
 import { 
   useWorkScheduleConfig, 
@@ -275,6 +275,8 @@ export default function Dashboard() {
           />
         </div>
         
+        <BackfillCards />
+        
         <CheckInBanner
           checkedIn={todayCheckedIn}
           isEligibleDay={isTodayEligible}
@@ -300,12 +302,9 @@ export default function Dashboard() {
         sensitivityAnalysis={commissionPacing?.sensitivityAnalysis || []}
       />
       
-      <DailyCheckInModal
+      <DailyScorecardModal
         open={showDailyCheckIn}
         onOpenChange={setShowDailyCheckIn}
-        initialActivity={todayJournalEntry?.activity}
-        initialPreparedness={todayJournalEntry?.preparedness}
-        initialRecovery={todayJournalEntry?.recovery}
       />
     </Layout>
   );

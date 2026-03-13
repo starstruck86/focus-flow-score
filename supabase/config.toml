@@ -17,3 +17,9 @@ verify_jwt = false
 
 [functions.whoop-sync]
 verify_jwt = false
+
+[functions.analyze-sentiment]
+verify_jwt = false
+
+[functions.journal-nudge]
+verify_jwt = false

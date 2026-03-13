@@ -435,6 +435,7 @@ export type Database = {
           accounts_researched: number
           admin_heavy_day: boolean
           automated_emails: number
+          biggest_blocker: string | null
           calls_need_prep_count: number | null
           calls_prep_note: string | null
           check_in_timestamp: string | null
@@ -447,6 +448,7 @@ export type Database = {
           conversations: number
           created_at: string
           customer_meetings_held: number
+          daily_reflection: string | null
           daily_score: number | null
           date: string
           dials: number
@@ -467,14 +469,18 @@ export type Database = {
           meetings_unprepared_note: string | null
           opportunities_created: number
           personal_development: boolean
+          pipeline_moved: number | null
           prepped_for_all_calls_tomorrow: boolean | null
           prospecting_block_minutes: number
           prospects_added: number
           sales_productivity: number | null
           sales_recovery: number | null
           sales_strain: number | null
+          sentiment_label: string | null
+          sentiment_score: number | null
           sleep_hours: number | null
           stress: number | null
+          tomorrow_priority: string | null
           travel_day: boolean
           updated_at: string
           user_id: string | null
@@ -483,12 +489,14 @@ export type Database = {
           workday_end_time: string | null
           workday_focus: string | null
           workday_start_time: string | null
+          yesterday_commitment_met: boolean | null
         }
         Insert: {
           account_deep_work_minutes?: number
           accounts_researched?: number
           admin_heavy_day?: boolean
           automated_emails?: number
+          biggest_blocker?: string | null
           calls_need_prep_count?: number | null
           calls_prep_note?: string | null
           check_in_timestamp?: string | null
@@ -501,6 +509,7 @@ export type Database = {
           conversations?: number
           created_at?: string
           customer_meetings_held?: number
+          daily_reflection?: string | null
           daily_score?: number | null
           date: string
           dials?: number
@@ -521,14 +530,18 @@ export type Database = {
           meetings_unprepared_note?: string | null
           opportunities_created?: number
           personal_development?: boolean
+          pipeline_moved?: number | null
           prepped_for_all_calls_tomorrow?: boolean | null
           prospecting_block_minutes?: number
           prospects_added?: number
           sales_productivity?: number | null
           sales_recovery?: number | null
           sales_strain?: number | null
+          sentiment_label?: string | null
+          sentiment_score?: number | null
           sleep_hours?: number | null
           stress?: number | null
+          tomorrow_priority?: string | null
           travel_day?: boolean
           updated_at?: string
           user_id?: string | null
@@ -537,12 +550,14 @@ export type Database = {
           workday_end_time?: string | null
           workday_focus?: string | null
           workday_start_time?: string | null
+          yesterday_commitment_met?: boolean | null
         }
         Update: {
           account_deep_work_minutes?: number
           accounts_researched?: number
           admin_heavy_day?: boolean
           automated_emails?: number
+          biggest_blocker?: string | null
           calls_need_prep_count?: number | null
           calls_prep_note?: string | null
           check_in_timestamp?: string | null
@@ -555,6 +570,7 @@ export type Database = {
           conversations?: number
           created_at?: string
           customer_meetings_held?: number
+          daily_reflection?: string | null
           daily_score?: number | null
           date?: string
           dials?: number
@@ -575,14 +591,18 @@ export type Database = {
           meetings_unprepared_note?: string | null
           opportunities_created?: number
           personal_development?: boolean
+          pipeline_moved?: number | null
           prepped_for_all_calls_tomorrow?: boolean | null
           prospecting_block_minutes?: number
           prospects_added?: number
           sales_productivity?: number | null
           sales_recovery?: number | null
           sales_strain?: number | null
+          sentiment_label?: string | null
+          sentiment_score?: number | null
           sleep_hours?: number | null
           stress?: number | null
+          tomorrow_priority?: string | null
           travel_day?: boolean
           updated_at?: string
           user_id?: string | null
@@ -591,6 +611,7 @@ export type Database = {
           workday_end_time?: string | null
           workday_focus?: string | null
           workday_start_time?: string | null
+          yesterday_commitment_met?: boolean | null
         }
         Relationships: []
       }
