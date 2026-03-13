@@ -28,6 +28,7 @@ import { Slider } from '@/components/ui/slider';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { WhoopIntegration } from '@/components/WhoopIntegration';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -377,6 +378,7 @@ export default function Settings() {
         <Tabs defaultValue="schedule" className="space-y-6">
           <TabsList>
             <TabsTrigger value="schedule">Work Schedule</TabsTrigger>
+            <TabsTrigger value="integrations">Integrations</TabsTrigger>
             <TabsTrigger value="appearance">Appearance</TabsTrigger>
             <TabsTrigger value="notifications">Notifications</TabsTrigger>
             <TabsTrigger value="data">Data</TabsTrigger>
@@ -798,6 +800,11 @@ export default function Settings() {
                 </div>
               )}
             </div>
+          </TabsContent>
+          
+          {/* Integrations Tab */}
+          <TabsContent value="integrations" className="space-y-4">
+            <WhoopIntegration />
           </TabsContent>
           
           {/* Appearance Tab */}
