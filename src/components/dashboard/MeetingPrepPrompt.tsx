@@ -5,6 +5,7 @@ import { AlertTriangle, Building2, Clock, FileText, ChevronRight, X, Video, Chec
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { useStore } from '@/store/useStore';
 import { useRecentTranscriptsForMeetingPrep } from '@/hooks/useCallTranscripts';
+import { useResourceLinksForAccount } from '@/hooks/useResourceLinks';
 import { format, parseISO, differenceInMinutes } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { cn } from '@/lib/utils';
@@ -217,6 +218,10 @@ function MeetingCard({ meeting, isExpanded, onToggle, onDismiss, onAddPrep }: {
     isExpanded ? meeting.accountId : undefined
   );
 
+  const { data: accountResources } = useResourceLinksForAccount(
+    isExpanded ? meeting.accountId : undefined
+  );
+
   return (
     <div className={cn(
       "rounded-lg bg-card border transition-all",
@@ -307,6 +312,26 @@ function MeetingCard({ meeting, isExpanded, onToggle, onDismiss, onAddPrep }: {
               <div className="flex items-center gap-1 text-[11px] text-destructive">
                 <AlertTriangle className="h-3 w-3" />
                 <span>No touch in {daysSinceTouch} days — review recent context</span>
+              </div>
+            )}
+
+            {/* Account Resources */}
+            {accountResources && accountResources.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold text-muted-foreground">📎 Templates & Resources</p>
+                {accountResources.map((r: any) => (
+                  <a
+                    key={r.id}
+                    href={r.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-[11px] p-1.5 rounded bg-primary/5 border border-primary/10 hover:bg-primary/10 transition-colors"
+                  >
+                    <FileText className="h-3 w-3 text-primary shrink-0" />
+                    <span className="font-medium truncate text-foreground">{r.label || 'Resource'}</span>
+                    <span className="text-muted-foreground capitalize text-[9px]">{r.category}</span>
+                  </a>
+                ))}
               </div>
             )}
 

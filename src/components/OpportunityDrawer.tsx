@@ -378,7 +378,11 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
             <Separator />
 
             {/* Resources & Templates */}
-            <ResourceLinksPanel recordType="opportunity" recordId={opportunity.id} />
+            <ResourceLinksPanel
+              recordType="opportunity"
+              recordId={opportunity.id}
+              parentAccountId={opportunity.accountId}
+            />
 
             <Separator />
 

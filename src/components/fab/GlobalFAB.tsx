@@ -12,6 +12,7 @@ import {
   Bolt,
   ImagePlus,
   BookOpen,
+  Link2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -29,6 +30,7 @@ import { QuickLogModal } from '@/components/journal/QuickLogModal';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 import { ScreenshotEnrichModal } from '@/components/ScreenshotEnrichModal';
 import { TranscriptViewer } from '@/components/TranscriptViewer';
+import { ResourceLibraryModal } from '@/components/ResourceLibraryModal';
 
 interface GlobalFABProps {
   position?: 'bottom-right' | 'bottom-left';
@@ -56,6 +58,7 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
   const [showQuickLog, setShowQuickLog] = useState(false);
   const [showScreenshots, setShowScreenshots] = useState(false);
   const [showTranscriptViewer, setShowTranscriptViewer] = useState(false);
+  const [showResourceLibrary, setShowResourceLibrary] = useState(false);
   
   // Context for prefills
   const { currentRecord } = useLinkedRecordContext();
@@ -188,6 +191,15 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
       icon: ImagePlus,
       onClick: () => {
         setShowScreenshots(true);
+        setIsExpanded(false);
+      },
+    },
+    {
+      id: 'resource-library',
+      label: 'Resource Library',
+      icon: Link2,
+      onClick: () => {
+        setShowResourceLibrary(true);
         setIsExpanded(false);
       },
     },
@@ -363,6 +375,11 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
       <TranscriptViewer
         open={showTranscriptViewer}
         onOpenChange={setShowTranscriptViewer}
+      />
+      
+      <ResourceLibraryModal
+        open={showResourceLibrary}
+        onOpenChange={setShowResourceLibrary}
       />
     </>
   );
