@@ -359,6 +359,11 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
         open={showScreenshots}
         onOpenChange={setShowScreenshots}
       />
+      
+      <TranscriptViewer
+        open={showTranscriptViewer}
+        onOpenChange={setShowTranscriptViewer}
+      />
     </>
   );
 }
