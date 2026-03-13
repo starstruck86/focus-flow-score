@@ -119,6 +119,15 @@ function ActionItemCard({ item, onAddTask, taskAdded, onDismiss }: {
         >
           <Sparkles className="h-3.5 w-3.5" />
         </button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7 text-muted-foreground hover:text-status-red"
+          onClick={(e) => { e.stopPropagation(); onDismiss(item); }}
+          title="Remove from action plan"
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
       </div>
     </div>
   );
