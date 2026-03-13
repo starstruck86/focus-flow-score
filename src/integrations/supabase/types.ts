@@ -615,6 +615,33 @@ export type Database = {
         }
         Relationships: []
       }
+      dismissed_action_items: {
+        Row: {
+          dismissed_at: string
+          id: string
+          reason: string | null
+          record_id: string
+          record_type: string
+          user_id: string
+        }
+        Insert: {
+          dismissed_at?: string
+          id?: string
+          reason?: string | null
+          record_id: string
+          record_type: string
+          user_id: string
+        }
+        Update: {
+          dismissed_at?: string
+          id?: string
+          reason?: string | null
+          record_id?: string
+          record_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       holidays: {
         Row: {
           created_at: string
@@ -1255,6 +1282,96 @@ export type Database = {
           total_goals_met?: number
           updated_at?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      weekly_reviews: {
+        Row: {
+          avg_daily_score: number | null
+          avg_sentiment: number | null
+          biggest_failure: string | null
+          biggest_win: string | null
+          commitment_for_week: string | null
+          completed: boolean
+          completed_at: string | null
+          created_at: string
+          days_goal_met: number | null
+          days_logged: number | null
+          failure_change_plan: string | null
+          id: string
+          key_client_meetings: string | null
+          key_goals: Json | null
+          north_star_goals: Json | null
+          skill_development: string | null
+          total_conversations: number | null
+          total_dials: number | null
+          total_meetings_held: number | null
+          total_meetings_set: number | null
+          total_opps_created: number | null
+          total_pipeline_moved: number | null
+          total_prospects_added: number | null
+          updated_at: string
+          user_id: string
+          week_end: string
+          week_start: string
+        }
+        Insert: {
+          avg_daily_score?: number | null
+          avg_sentiment?: number | null
+          biggest_failure?: string | null
+          biggest_win?: string | null
+          commitment_for_week?: string | null
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          days_goal_met?: number | null
+          days_logged?: number | null
+          failure_change_plan?: string | null
+          id?: string
+          key_client_meetings?: string | null
+          key_goals?: Json | null
+          north_star_goals?: Json | null
+          skill_development?: string | null
+          total_conversations?: number | null
+          total_dials?: number | null
+          total_meetings_held?: number | null
+          total_meetings_set?: number | null
+          total_opps_created?: number | null
+          total_pipeline_moved?: number | null
+          total_prospects_added?: number | null
+          updated_at?: string
+          user_id: string
+          week_end: string
+          week_start: string
+        }
+        Update: {
+          avg_daily_score?: number | null
+          avg_sentiment?: number | null
+          biggest_failure?: string | null
+          biggest_win?: string | null
+          commitment_for_week?: string | null
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          days_goal_met?: number | null
+          days_logged?: number | null
+          failure_change_plan?: string | null
+          id?: string
+          key_client_meetings?: string | null
+          key_goals?: Json | null
+          north_star_goals?: Json | null
+          skill_development?: string | null
+          total_conversations?: number | null
+          total_dials?: number | null
+          total_meetings_held?: number | null
+          total_meetings_set?: number | null
+          total_opps_created?: number | null
+          total_pipeline_moved?: number | null
+          total_prospects_added?: number | null
+          updated_at?: string
+          user_id?: string
+          week_end?: string
+          week_start?: string
         }
         Relationships: []
       }
