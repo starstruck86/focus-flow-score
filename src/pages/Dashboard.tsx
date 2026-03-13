@@ -47,6 +47,7 @@ import {
   MeetingPrepCard,
   SmartWorkQueue,
   DailyDigest,
+  MeetingPrepPrompt,
 } from '@/components/dashboard';
 
 export default function Dashboard() {
@@ -279,6 +280,8 @@ export default function Dashboard() {
         </div>
         
         <BackfillCards />
+        
+        <MeetingPrepPrompt />
         
         <CheckInBanner
           checkedIn={todayCheckedIn}

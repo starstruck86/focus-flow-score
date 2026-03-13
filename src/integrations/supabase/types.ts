@@ -296,6 +296,88 @@ export type Database = {
         }
         Relationships: []
       }
+      call_transcripts: {
+        Row: {
+          account_id: string | null
+          call_date: string
+          call_type: string | null
+          content: string
+          created_at: string
+          duration_minutes: number | null
+          file_url: string | null
+          id: string
+          notes: string | null
+          opportunity_id: string | null
+          participants: string | null
+          renewal_id: string | null
+          summary: string | null
+          tags: string[] | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          call_date?: string
+          call_type?: string | null
+          content: string
+          created_at?: string
+          duration_minutes?: number | null
+          file_url?: string | null
+          id?: string
+          notes?: string | null
+          opportunity_id?: string | null
+          participants?: string | null
+          renewal_id?: string | null
+          summary?: string | null
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          call_date?: string
+          call_type?: string | null
+          content?: string
+          created_at?: string
+          duration_minutes?: number | null
+          file_url?: string | null
+          id?: string
+          notes?: string | null
+          opportunity_id?: string | null
+          participants?: string | null
+          renewal_id?: string | null
+          summary?: string | null
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_transcripts_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_transcripts_opportunity_id_fkey"
+            columns: ["opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_transcripts_renewal_id_fkey"
+            columns: ["renewal_id"]
+            isOneToOne: false
+            referencedRelation: "renewals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contacts: {
         Row: {
           account_id: string | null

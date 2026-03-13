@@ -11,6 +11,7 @@ import {
   ClipboardCheck,
   Bolt,
   ImagePlus,
+  BookOpen,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -27,6 +28,7 @@ import { FocusTimerModal } from './FocusTimerModal';
 import { QuickLogModal } from '@/components/journal/QuickLogModal';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 import { ScreenshotEnrichModal } from '@/components/ScreenshotEnrichModal';
+import { TranscriptViewer } from '@/components/TranscriptViewer';
 
 interface GlobalFABProps {
   position?: 'bottom-right' | 'bottom-left';
@@ -53,6 +55,7 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [showQuickLog, setShowQuickLog] = useState(false);
   const [showScreenshots, setShowScreenshots] = useState(false);
+  const [showTranscriptViewer, setShowTranscriptViewer] = useState(false);
   
   // Context for prefills
   const { currentRecord } = useLinkedRecordContext();
@@ -139,6 +142,15 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
       icon: FileText,
       onClick: () => {
         setShowAddTranscript(true);
+        setIsExpanded(false);
+      },
+    },
+    {
+      id: 'view-transcripts',
+      label: 'View Transcripts',
+      icon: BookOpen,
+      onClick: () => {
+        setShowTranscriptViewer(true);
         setIsExpanded(false);
       },
     },
@@ -346,6 +358,11 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
       <ScreenshotEnrichModal
         open={showScreenshots}
         onOpenChange={setShowScreenshots}
+      />
+      
+      <TranscriptViewer
+        open={showTranscriptViewer}
+        onOpenChange={setShowTranscriptViewer}
       />
     </>
   );

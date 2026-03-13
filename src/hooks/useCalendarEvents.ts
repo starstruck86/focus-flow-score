@@ -24,14 +24,14 @@ export function useCalendarEvents() {
     queryFn: async () => {
       const now = new Date().toISOString();
       const { data, error } = await supabase
-        .from('calendar_events' as never)
+        .from('calendar_events' as any)
         .select('*')
         .gte('start_time', now)
         .order('start_time', { ascending: true })
         .limit(50);
       
       if (error) throw error;
-      return data as CalendarEvent[];
+      return data as unknown as CalendarEvent[];
     },
   });
 }
