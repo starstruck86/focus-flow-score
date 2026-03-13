@@ -204,20 +204,29 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
                   {[
-                    { label: 'Dials', value: metrics?.totalDials || 0 },
-                    { label: 'Conversations', value: metrics?.totalConversations || 0 },
-                    { label: 'Meetings Set', value: metrics?.totalMeetingsSet || 0 },
-                    { label: 'Meetings Held', value: metrics?.totalMeetingsHeld || 0 },
-                    { label: 'Opps Created', value: metrics?.totalOppsCreated || 0 },
-                    { label: 'Prospects Added', value: metrics?.totalProspectsAdded || 0 },
-                    { label: 'Days Goal Met', value: `${metrics?.daysGoalMet || 0}/${metrics?.daysLogged || 0}` },
-                    { label: 'Avg Score', value: (metrics?.avgDailyScore || 0).toFixed(1) },
-                  ].map(m => (
-                    <Card key={m.label} className="p-2 text-center">
-                      <div className="text-lg font-bold font-mono">{m.value}</div>
-                      <div className="text-[10px] text-muted-foreground">{m.label}</div>
-                    </Card>
-                  ))}
+                    { label: 'Dials', value: metrics?.totalDials || 0, target: targets.targetDialsPerDay * 5 },
+                    { label: 'Conversations', value: metrics?.totalConversations || 0, target: targets.targetConnectsPerDay * 5 },
+                    { label: 'Meetings Set', value: metrics?.totalMeetingsSet || 0, target: targets.targetMeetingsSetPerWeek },
+                    { label: 'Meetings Held', value: metrics?.totalMeetingsHeld || 0, target: targets.targetCustomerMeetingsPerWeek },
+                    { label: 'Opps Created', value: metrics?.totalOppsCreated || 0, target: targets.targetOppsCreatedPerWeek },
+                    { label: 'Prospects Added', value: metrics?.totalProspectsAdded || 0, target: null },
+                    { label: 'Days Goal Met', value: `${metrics?.daysGoalMet || 0}/${metrics?.daysLogged || 0}`, target: null },
+                    { label: 'Avg Score', value: (metrics?.avgDailyScore || 0).toFixed(1), target: null },
+                  ].map(m => {
+                    const numVal = typeof m.value === 'number' ? m.value : null;
+                    const hitTarget = m.target && numVal != null ? numVal >= m.target : null;
+                    return (
+                      <Card key={m.label} className={cn("p-2 text-center", hitTarget === true && "border-status-green/30", hitTarget === false && "border-status-red/30")}>
+                        <div className="text-lg font-bold font-mono">{m.value}</div>
+                        {m.target != null && (
+                          <div className={cn("text-[9px] font-mono", hitTarget ? "text-status-green" : "text-status-red")}>
+                            / {m.target} target
+                          </div>
+                        )}
+                        <div className="text-[10px] text-muted-foreground">{m.label}</div>
+                      </Card>
+                    );
+                  })}
                 </div>
               )}
 
