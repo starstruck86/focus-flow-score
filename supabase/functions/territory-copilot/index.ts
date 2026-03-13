@@ -292,8 +292,12 @@ IMPORTANT RULES FOR UPDATES:
 
   const resourceInstructions = ctx.resources?.length ? `
 
-## USER'S FRAMEWORKS, TEMPLATES & PLAYBOOKS
-The user has linked the following resources. Reference them by name when giving advice, and recommend specific templates/frameworks when relevant to their question. If a framework like MEDDICC or Command of the Message is linked, use its methodology to structure your analysis.
+## SALES METHODOLOGY & FRAMEWORKS (Always Active)
+These are the user's core sales frameworks, playbooks, and methodology documents. They represent their OPERATING SYSTEM for selling — not tied to any single deal. ALWAYS use these as your frame of reference when analyzing ANY account, deal, or situation:
+- Apply MEDDICC scoring to every deal analysis automatically
+- Use Command of the Message principles when crafting talk tracks or positioning
+- Reference specific playbooks by name when recommending actions
+- Think of yourself as an elite enterprise sales brain that has internalized these frameworks and applies them fluidly across all situations
 
 ${ctx.resources.map(compactResource).join('\n')}
 ` : '';
@@ -307,9 +311,9 @@ ${ctx.transcripts.map(compactTranscript).join('\n\n')}
 ` : '';
 
   const modeInstructions: Record<CopilotMode, string> = {
-    quick: `You are Territory Intelligence — a chief of staff for a B2B Account Executive.
+    quick: `You are Territory Intelligence — an elite enterprise sales brain and chief of staff for a B2B Account Executive.
 Answer concisely from the data below. Bullet points. Actionable. Explain WHY using signals and scores.
-When the user has linked frameworks (MEDDICC, Command of the Message, etc.), apply those frameworks to structure your analysis.
+You have deeply internalized the user's sales frameworks and methodologies. Apply them naturally and fluidly — don't just reference them, THINK through them. Score MEDDICC gaps unprompted. Frame recommendations using Command of the Message. You are constantly learning and evolving.
 ${toolInstructions}`,
     deep: `You are Territory Intelligence running in DEEP RESEARCH mode.
 You have access to both internal CRM data AND live web research results.
@@ -488,7 +492,8 @@ Deno.serve(async (req) => {
       transcripts: transcriptsRes?.data || [],
     };
 
-    // If an account is focused, filter transcripts and resources to that account for relevance
+    // If an account is focused, filter transcripts to that account for relevance
+    // Resources are NEVER filtered — they are general methodology, always available
     let focusAccount: any = null;
     if (accountId) {
       focusAccount = ctx.accounts.find((a: any) => a.id === accountId);
@@ -507,16 +512,7 @@ Deno.serve(async (req) => {
       if (allRelevant.length > 0) {
         ctx.transcripts = allRelevant;
       }
-
-      // Filter resources to focused account
-      const accountResources = ctx.resources.filter((r: any) =>
-        r.account_id === focusAccount.id ||
-        oppIds.has(r.opportunity_id) ||
-        (!r.account_id && !r.opportunity_id && !r.renewal_id) // Global resources always included
-      );
-      if (accountResources.length > 0) {
-        ctx.resources = accountResources;
-      }
+      // Resources stay unfiltered — they are the user's general sales operating system
     }
 
     // Deep/meeting/deal-strategy: web research
