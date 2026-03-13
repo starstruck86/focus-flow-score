@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   Phone,
@@ -10,10 +10,7 @@ import {
   Plus,
   Minus,
   DollarSign,
-  ChevronRight,
   Check,
-  Lightbulb,
-  AlertCircle,
   Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -31,7 +28,6 @@ import {
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
-import { useSaveJournalEntry } from '@/hooks/useDailyJournal';
 import { useRecordCheckIn } from '@/hooks/useStreakData';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -97,7 +93,7 @@ const DEFAULT_SCORECARD: ScorecardData = {
   yesterdayCommitmentMet: null,
 };
 
-// --- Counter Component ---
+// --- Inline Editable Counter ---
 function MetricCounter({
   label,
   value,
@@ -111,7 +107,23 @@ function MetricCounter({
   onChange: (v: number) => void;
   icon: React.ElementType;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
   const atTarget = value >= target;
+
+  const startEdit = () => {
+    setEditValue(value.toString());
+    setEditing(true);
+    setTimeout(() => inputRef.current?.select(), 0);
+  };
+
+  const commitEdit = () => {
+    const num = parseInt(editValue, 10);
+    if (!isNaN(num) && num >= 0) onChange(num);
+    setEditing(false);
+  };
+
   return (
     <div className={cn(
       "flex items-center justify-between p-3 rounded-lg border transition-colors",
@@ -143,21 +155,28 @@ function MetricCounter({
         >
           <Minus className="h-3.5 w-3.5" />
         </Button>
-        <button
-          onClick={() => {
-            const input = prompt(`Enter ${label}:`, value.toString());
-            if (input !== null) {
-              const num = parseInt(input, 10);
-              if (!isNaN(num) && num >= 0) onChange(num);
-            }
-          }}
-          className={cn(
-            "w-10 text-center font-mono text-lg font-bold rounded py-0.5",
-            atTarget ? "text-status-green" : "text-foreground"
-          )}
-        >
-          {value}
-        </button>
+        {editing ? (
+          <input
+            ref={inputRef}
+            type="number"
+            min={0}
+            value={editValue}
+            onChange={e => setEditValue(e.target.value)}
+            onBlur={commitEdit}
+            onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditing(false); }}
+            className="w-12 text-center font-mono text-lg font-bold rounded py-0.5 bg-background border border-primary outline-none"
+          />
+        ) : (
+          <button
+            onClick={startEdit}
+            className={cn(
+              "w-10 text-center font-mono text-lg font-bold rounded py-0.5",
+              atTarget ? "text-status-green" : "text-foreground"
+            )}
+          >
+            {value}
+          </button>
+        )}
         <Button
           size="icon"
           variant="ghost"
@@ -232,11 +251,9 @@ export function DailyScorecardModal({
   const entryDate = date || format(new Date(), 'yyyy-MM-dd');
   const [data, setData] = useState<ScorecardData>({ ...DEFAULT_SCORECARD, ...initialData });
   const [saving, setSaving] = useState(false);
-  const [analyzingSentiment, setAnalyzingSentiment] = useState(false);
   const queryClient = useQueryClient();
   const targets = useDailyTargets();
-  const { data: nudgeData, isLoading: nudgeLoading } = useJournalNudge();
-  const saveJournal = useSaveJournalEntry();
+  const { data: nudgeData } = useJournalNudge();
   const recordCheckIn = useRecordCheckIn();
 
   useEffect(() => {
@@ -266,91 +283,67 @@ export function DailyScorecardModal({
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Analyze sentiment if reflection provided
-      let sentimentScore: number | null = null;
-      let sentimentLabel: string | null = null;
-
-      if (data.dailyReflection.trim().length >= 5) {
-        setAnalyzingSentiment(true);
-        try {
-          const { data: sentimentData, error: sentimentError } = await supabase.functions.invoke(
-            'analyze-sentiment',
-            { body: { reflection: data.dailyReflection } }
-          );
-          if (!sentimentError && sentimentData) {
-            sentimentScore = sentimentData.sentiment_score;
-            sentimentLabel = sentimentData.sentiment_label;
-          }
-        } catch {
-          // Non-blocking — proceed without sentiment
-        }
-        setAnalyzingSentiment(false);
-      }
-
-      // Save via existing hook (maps to the existing DB structure)
-      await saveJournal.mutateAsync({
-        date: entryDate,
-        activity: {
-          dials: data.dials,
-          conversations: data.conversations,
-          prospectsAdded: data.prospectsAdded,
-          managerPlusMessages: 0,
-          manualEmails: 0,
-          automatedEmails: 0,
-          meetingsSet: data.meetingsSet,
-          customerMeetingsHeld: data.customerMeetingsHeld,
-          opportunitiesCreated: data.opportunitiesCreated,
-          personalDevelopment: false,
-          prospectingBlockMinutes: data.ranProspectingBlock ? data.prospectingBlockMinutes : 0,
-          accountDeepWorkMinutes: data.didDeepWork ? data.accountDeepWorkMinutes : 0,
-          expansionTouchpoints: 0,
-          focusMode: data.focusMode,
-        },
-        preparedness: {
-          accountsResearched: 0,
-          contactsPrepped: 0,
-          preppedForAllCallsTomorrow: null,
-          callsNeedPrepCount: 0,
-          callsPrepNote: '',
-          meetingPrepDone: null,
-          meetingsUnpreparedFor: null,
-          meetingsUnpreparedNote: '',
-        },
-        recovery: {
-          sleepHours: 7,
-          energy: 3,
-          focusQuality: 3,
-          stress: 3,
-          clarity: 3,
-          distractions: 'low',
-          contextSwitching: 'low',
-          adminHeavyDay: false,
-          travelDay: data.biggestBlocker === 'travel_ooo',
-          whatDrainedYou: '',
-          whatWorkedToday: data.win,
-        },
-        markAsCheckedIn: true,
-      });
-
-      // Update new columns directly
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        await supabase
-          .from('daily_journal_entries')
-          .update({
-            pipeline_moved: data.pipelineMoved,
-            biggest_blocker: data.biggestBlocker,
-            tomorrow_priority: data.tomorrowPriority || null,
-            daily_reflection: data.dailyReflection || null,
-            sentiment_score: sentimentScore,
-            sentiment_label: sentimentLabel,
-            yesterday_commitment_met: data.yesterdayCommitmentMet,
-          } as any)
-          .eq('date', entryDate)
-          .eq('user_id', user.id);
+      if (!user) throw new Error('Not authenticated');
+
+      // Fire sentiment analysis in parallel with save (non-blocking)
+      let sentimentPromise: Promise<{ sentiment_score: number | null; sentiment_label: string | null }> | null = null;
+      if (data.dailyReflection.trim().length >= 5) {
+        sentimentPromise = supabase.functions.invoke('analyze-sentiment', {
+          body: { reflection: data.dailyReflection },
+        }).then(({ data: d }) => d).catch(() => ({ sentiment_score: null, sentiment_label: null }));
       }
 
-      // Record for streak
+      // Single upsert with ALL fields — no race condition
+      const payload = {
+        user_id: user.id,
+        date: entryDate,
+        dials: data.dials,
+        conversations: data.conversations,
+        prospects_added: data.prospectsAdded,
+        manager_plus_messages: 0,
+        manual_emails: 0,
+        automated_emails: 0,
+        meetings_set: data.meetingsSet,
+        customer_meetings_held: data.customerMeetingsHeld,
+        opportunities_created: data.opportunitiesCreated,
+        personal_development: false,
+        prospecting_block_minutes: data.ranProspectingBlock ? data.prospectingBlockMinutes : 0,
+        account_deep_work_minutes: data.didDeepWork ? data.accountDeepWorkMinutes : 0,
+        expansion_touchpoints: 0,
+        focus_mode: data.focusMode,
+        pipeline_moved: data.pipelineMoved,
+        biggest_blocker: data.biggestBlocker,
+        tomorrow_priority: data.tomorrowPriority || null,
+        daily_reflection: data.dailyReflection || null,
+        yesterday_commitment_met: data.yesterdayCommitmentMet,
+        what_worked_today: data.win || null,
+        daily_score: score,
+        sales_productivity: Math.round((score / 6) * 100),
+        goal_met: goalMet,
+        checked_in: true,
+        check_in_timestamp: new Date().toISOString(),
+        // Defaults for fields we don't collect in scorecard
+        accounts_researched: 0,
+        contacts_prepped: 0,
+        admin_heavy_day: false,
+        travel_day: data.biggestBlocker === 'travel_ooo',
+        sleep_hours: 7,
+        energy: 3,
+        focus_quality: 3,
+        stress: 3,
+        clarity: 3,
+        distractions: 'low',
+        context_switching: 'low',
+      };
+
+      const { error } = await supabase
+        .from('daily_journal_entries')
+        .upsert(payload, { onConflict: 'user_id,date' });
+
+      if (error) throw error;
+
+      // Record streak
       await recordCheckIn.mutateAsync({
         date: entryDate,
         method: 'scorecard',
@@ -360,7 +353,26 @@ export function DailyScorecardModal({
         goalMet,
       });
 
+      // Await sentiment and update if available
+      if (sentimentPromise) {
+        const sentiment = await sentimentPromise;
+        if (sentiment?.sentiment_score !== null) {
+          await supabase
+            .from('daily_journal_entries')
+            .update({
+              sentiment_score: sentiment.sentiment_score,
+              sentiment_label: sentiment.sentiment_label,
+            })
+            .eq('date', entryDate)
+            .eq('user_id', user.id);
+        }
+      }
+
+      // Invalidate relevant queries
       queryClient.invalidateQueries({ queryKey: ['journal-nudge'] });
+      queryClient.invalidateQueries({ queryKey: ['journal-entry'] });
+      queryClient.invalidateQueries({ queryKey: ['streak-events'] });
+      queryClient.invalidateQueries({ queryKey: ['streak-summary'] });
 
       toast.success('Daily scorecard saved!', {
         description: goalMet
@@ -373,7 +385,6 @@ export function DailyScorecardModal({
       toast.error('Failed to save scorecard');
     } finally {
       setSaving(false);
-      setAnalyzingSentiment(false);
     }
   };
 
@@ -636,7 +647,7 @@ export function DailyScorecardModal({
             disabled={saving}
             className="gap-1.5"
           >
-            {analyzingSentiment ? 'Analyzing…' : saving ? 'Saving…' : 'Save Scorecard'}
+            {saving ? 'Saving…' : 'Save Scorecard'}
             <Check className="h-4 w-4" />
           </Button>
         </div>
