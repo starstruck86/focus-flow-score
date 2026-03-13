@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type CopilotMode = "quick" | "deep" | "meeting";
+type CopilotMode = "quick" | "deep" | "meeting" | "deal-strategy" | "recap-email";
 
 // ─── Compact serializers ──────────────────────────────────
 function compactAccount(a: any): string {
@@ -33,7 +33,7 @@ function compactAccount(a: any): string {
 
 function compactOpp(o: any, accounts: any[]): string {
   const acct = accounts.find((a: any) => a.id === o.account_id);
-  const p = [o.name];
+  const p = [o.name, `id:${o.id}`];
   if (acct) p.push(`Acct:${acct.name}`);
   p.push(`St:${o.status || '?'}`);
   if (o.stage) p.push(`Stg:${o.stage}`);
@@ -44,6 +44,7 @@ function compactOpp(o: any, accounts: any[]): string {
   if (o.deal_type) p.push(`DT:${o.deal_type}`);
   if (o.is_new_logo) p.push('NL');
   if (o.churn_risk) p.push(`Risk:${o.churn_risk}`);
+  if (o.notes) p.push(`Notes:${o.notes.slice(0, 80)}`);
   return p.join(' | ');
 }
 
@@ -69,6 +70,21 @@ function compactContact(c: any): string {
   if (c.last_touch_date) p.push(`LT:${c.last_touch_date}`);
   if (c.notes) p.push(`N:${c.notes.slice(0, 60)}`);
   return p.join(' | ');
+}
+
+function compactTranscript(t: any): string {
+  const p = [`"${t.title || t.call_type || 'Call'}"`, `Date:${t.call_date}`];
+  if (t.participants) p.push(`With:${t.participants.slice(0, 60)}`);
+  if (t.duration_minutes) p.push(`${t.duration_minutes}min`);
+  if (t.summary) p.push(`Summary:${t.summary.slice(0, 200)}`);
+  if (t.tags?.length) p.push(`Tags:${t.tags.join(',')}`);
+  // Include content excerpt for deep modes
+  if (t.content) p.push(`Content:${t.content.slice(0, 500)}`);
+  return p.join(' | ');
+}
+
+function compactResource(r: any): string {
+  return `[${r.category.toUpperCase()}] "${r.label}" → ${r.url}${r.notes ? ` (${r.notes.slice(0, 80)})` : ''}`;
 }
 
 // ─── Perplexity web research ──────────────────────────────
@@ -148,25 +164,25 @@ const ACCOUNT_TOOLS = [
             type: "object",
             description: "Fields to update on the account",
             properties: {
-              industry: { type: "string", description: "Industry classification" },
-              tech_stack: { type: "array", items: { type: "string" }, description: "Technologies detected" },
-              notes: { type: "string", description: "Append research findings to notes" },
-              next_step: { type: "string", description: "Recommended next action" },
-              tags: { type: "array", items: { type: "string" }, description: "Tags to set" },
-              tier: { type: "string", enum: ["A", "B", "C", "D"], description: "Account tier based on potential" },
-              enrichment_source_summary: { type: "string", description: "Summary of what was discovered" },
-              mar_tech: { type: "string", description: "Marketing technology detected" },
-              ecommerce: { type: "string", description: "Ecommerce platform detected" },
+              industry: { type: "string" },
+              tech_stack: { type: "array", items: { type: "string" } },
+              notes: { type: "string" },
+              next_step: { type: "string" },
+              tags: { type: "array", items: { type: "string" } },
+              tier: { type: "string", enum: ["A", "B", "C", "D"] },
+              enrichment_source_summary: { type: "string" },
+              mar_tech: { type: "string" },
+              ecommerce: { type: "string" },
               direct_ecommerce: { type: "boolean" },
               email_sms_capture: { type: "boolean" },
               loyalty_membership: { type: "boolean" },
               mobile_app: { type: "boolean" },
               category_complexity: { type: "boolean" },
               marketing_platform_detected: { type: "string" },
-              crm_lifecycle_team_size: { type: "number", description: "Estimated CRM/lifecycle team headcount" },
+              crm_lifecycle_team_size: { type: "number" },
             },
           },
-          reason: { type: "string", description: "Why this update is being made (research source)" },
+          reason: { type: "string", description: "Why this update is being made" },
         },
         required: ["account_id", "updates", "reason"],
         additionalProperties: false,
@@ -177,7 +193,7 @@ const ACCOUNT_TOOLS = [
     type: "function",
     function: {
       name: "update_multiple_accounts",
-      description: "Batch update multiple accounts at once. Use when research reveals insights about several accounts.",
+      description: "Batch update multiple accounts at once.",
       parameters: {
         type: "object",
         properties: {
@@ -211,7 +227,6 @@ async function executeToolCalls(toolCalls: any[], supabase: any, userId: string)
 
     if (fn.name === "update_account") {
       const { account_id, updates, reason } = args;
-      // Append to notes rather than overwrite
       let finalUpdates = { ...updates };
       if (updates.notes) {
         const { data: existing } = await supabase.from("accounts").select("notes").eq("id", account_id).eq("user_id", userId).single();
@@ -221,7 +236,6 @@ async function executeToolCalls(toolCalls: any[], supabase: any, userId: string)
           ? `${existingNotes}\n\n---\n📡 AI Research (${timestamp}): ${updates.notes}`
           : `📡 AI Research (${timestamp}): ${updates.notes}`;
       }
-      // Set enrichment timestamp
       finalUpdates.last_enriched_at = new Date().toISOString();
       
       const { error } = await supabase.from("accounts").update(finalUpdates).eq("id", account_id).eq("user_id", userId);
@@ -276,19 +290,75 @@ IMPORTANT RULES FOR UPDATES:
 - After updating, tell the user exactly what you changed and why
 - Be aggressive about updating — the user wants you to maintain their data`;
 
+  const resourceInstructions = ctx.resources?.length ? `
+
+## USER'S FRAMEWORKS, TEMPLATES & PLAYBOOKS
+The user has linked the following resources. Reference them by name when giving advice, and recommend specific templates/frameworks when relevant to their question. If a framework like MEDDICC or Command of the Message is linked, use its methodology to structure your analysis.
+
+${ctx.resources.map(compactResource).join('\n')}
+` : '';
+
+  const transcriptInstructions = ctx.transcripts?.length ? `
+
+## RECENT CALL TRANSCRIPTS
+These are the user's recent call transcripts for context. Reference specific conversations when relevant.
+
+${ctx.transcripts.map(compactTranscript).join('\n\n')}
+` : '';
+
   const modeInstructions: Record<CopilotMode, string> = {
     quick: `You are Territory Intelligence — a chief of staff for a B2B Account Executive.
 Answer concisely from the data below. Bullet points. Actionable. Explain WHY using signals and scores.
+When the user has linked frameworks (MEDDICC, Command of the Message, etc.), apply those frameworks to structure your analysis.
 ${toolInstructions}`,
     deep: `You are Territory Intelligence running in DEEP RESEARCH mode.
 You have access to both internal CRM data AND live web research results.
 Synthesize internal data + web intel into actionable insights, then UPDATE accounts with what you found.
-Structure: 1. Key Findings 2. Signals Detected 3. Account Updates Applied 4. Recommended Actions
+When frameworks are available, use them to frame your findings (e.g., MEDDICC gaps, Command of the Message alignment).
+Structure: 1. Key Findings 2. Signals Detected 3. Framework Analysis (if applicable) 4. Account Updates Applied 5. Recommended Actions
 ${toolInstructions}`,
     meeting: `You are Territory Intelligence running in MEETING PREP mode.
-Create a comprehensive meeting brief. Structure:
-1. Account Overview 2. Recent Intel 3. Key Contacts 4. Our Position 5. Talking Points 6. Risk Factors 7. Success Criteria
+Create a comprehensive meeting brief. Use any linked frameworks (MEDDICC, etc.) to structure your prep.
+Reference relevant call transcripts to highlight what was discussed previously and what follow-ups are needed.
+Reference linked templates/playbooks and recommend which ones to use for this meeting.
+Structure:
+1. Account Overview & Framework Scorecard (MEDDICC/etc. if available)
+2. Previous Conversations (from transcripts)
+3. Key Contacts & Stakeholder Map
+4. Our Position & Required Outcomes
+5. Talking Points & Discovery Questions (aligned to frameworks)
+6. Relevant Templates/Resources to Reference
+7. Risk Factors & Objection Handling
+8. Success Criteria & Next Steps
 After building the brief, update the account with any new intel discovered.
+${toolInstructions}`,
+    "deal-strategy": `You are Territory Intelligence running in DEAL STRATEGY mode.
+You are an expert deal strategist. Analyze opportunities using the user's linked sales frameworks (MEDDICC, Command of the Message, Challenger, etc.).
+If MEDDICC is linked, score each letter: Metrics, Economic Buyer, Decision Criteria, Decision Process, Identify Pain, Champion.
+If Command of the Message is linked, assess: Required Capabilities, Metrics, Before/After Scenarios, Positive Business Outcomes, Negative Consequences.
+Reference specific transcript content to validate your assessment.
+Reference linked templates and recommend which to use for advancing the deal.
+
+Structure:
+1. Deal Health Assessment (framework-based scorecard)
+2. Strengths & Gaps (cite specific evidence from transcripts/notes)
+3. Stakeholder Analysis (from contacts + transcripts)
+4. Pipeline Risk Factors
+5. Specific Actions to Advance (reference templates/playbooks)
+6. Competitive Positioning
+7. Recommended Next Steps with Timeline
+${toolInstructions}`,
+    "recap-email": `You are Territory Intelligence running in RECAP EMAIL mode.
+Draft a professional follow-up/recap email based on the most recent call transcript for the specified account.
+Use the user's linked email templates/frameworks to match their communication style.
+The email should:
+- Reference specific discussion points from the transcript
+- Include clear action items and owners
+- Propose next steps aligned with the opportunity stage
+- Be concise, professional, and value-driven
+- Match the user's frameworks (e.g., Command of the Message: tie back to business outcomes)
+
+Output the email in a ready-to-send format with Subject line, Body, and a brief strategy note about why you structured it this way.
 ${toolInstructions}`,
   };
 
@@ -306,7 +376,7 @@ ${ctx.opportunities?.map((o: any) => compactOpp(o, ctx.accounts || [])).join('\n
 ## Renewals (${ctx.renewals?.length || 0})
 ${ctx.renewals?.map(compactRenewal).join('\n') || 'None'}`;
 
-  if ((mode === 'meeting' || mode === 'deep') && ctx.contacts?.length) {
+  if (ctx.contacts?.length) {
     prompt += `\n\n## Contacts (${ctx.contacts.length})\n${ctx.contacts.map(compactContact).join('\n')}`;
   }
 
@@ -318,6 +388,10 @@ ${ctx.quota ? `New ARR: $${ctx.quota.new_arr_quota} | Renewal ARR: $${ctx.quota.
 
 ## Last Check-in
 ${ctx.journal ? `${ctx.journal.date} | Dials:${ctx.journal.dials} Conv:${ctx.journal.conversations} MtgSet:${ctx.journal.meetings_set} Score:${ctx.journal.daily_score || '?'} Focus:${ctx.journal.focus_mode}` : 'None'}`;
+
+  // Add resources and transcripts
+  prompt += resourceInstructions;
+  prompt += transcriptInstructions;
 
   if (researchData) {
     prompt += `\n\n## Live Web Research Results\n${researchData}`;
@@ -373,8 +447,9 @@ Deno.serve(async (req) => {
 
     const mode: CopilotMode = requestedMode || "quick";
     const today = new Date().toISOString().split("T")[0];
+    const needsDeepContext = mode !== "quick";
 
-    // Gather DB context in parallel
+    // Gather DB context in parallel — always include resources & transcripts now
     const dbQueries: Promise<any>[] = [
       supabase.from("accounts").select("*").eq("user_id", user.id).limit(200),
       supabase.from("opportunities").select("*").eq("user_id", user.id).limit(200),
@@ -385,14 +460,21 @@ Deno.serve(async (req) => {
       supabase.from("daily_journal_entries").select("*").eq("user_id", user.id)
         .order("date", { ascending: false }).limit(1),
       supabase.from("quota_targets").select("*").eq("user_id", user.id).limit(1),
+      // Always fetch resources
+      supabase.from("resource_links").select("*").eq("user_id", user.id).limit(100),
     ];
 
-    if (mode === "deep" || mode === "meeting") {
-      dbQueries.push(supabase.from("contacts").select("*").eq("user_id", user.id).limit(500));
+    // For modes that need deep context, also fetch contacts and transcripts
+    if (needsDeepContext) {
+      dbQueries.push(
+        supabase.from("contacts").select("*").eq("user_id", user.id).limit(500),
+        supabase.from("call_transcripts").select("*").eq("user_id", user.id)
+          .order("call_date", { ascending: false }).limit(20),
+      );
     }
 
     const dbResults = await Promise.all(dbQueries);
-    const [accountsRes, oppsRes, renewalsRes, eventsRes, journalRes, quotaRes, contactsRes] = dbResults;
+    const [accountsRes, oppsRes, renewalsRes, eventsRes, journalRes, quotaRes, resourcesRes, contactsRes, transcriptsRes] = dbResults;
 
     const ctx: any = {
       accounts: accountsRes.data || [],
@@ -401,33 +483,61 @@ Deno.serve(async (req) => {
       events: eventsRes.data || [],
       journal: journalRes.data?.[0] || null,
       quota: quotaRes.data?.[0] || null,
+      resources: resourcesRes.data || [],
       contacts: contactsRes?.data || [],
+      transcripts: transcriptsRes?.data || [],
     };
 
-    // Deep/meeting: web research
+    // If an account is focused, filter transcripts and resources to that account for relevance
+    let focusAccount: any = null;
+    if (accountId) {
+      focusAccount = ctx.accounts.find((a: any) => a.id === accountId);
+    } else {
+      const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user")?.content || "";
+      focusAccount = detectAccountFocus(lastUserMsg, ctx.accounts);
+    }
+
+    if (focusAccount && needsDeepContext) {
+      // Filter transcripts to focused account (+ keep some general ones)
+      const accountTranscripts = ctx.transcripts.filter((t: any) => t.account_id === focusAccount.id);
+      const accountOpps = ctx.opportunities.filter((o: any) => o.account_id === focusAccount.id);
+      const oppIds = new Set(accountOpps.map((o: any) => o.id));
+      const oppTranscripts = ctx.transcripts.filter((t: any) => t.opportunity_id && oppIds.has(t.opportunity_id));
+      const allRelevant = [...new Map([...accountTranscripts, ...oppTranscripts].map(t => [t.id, t])).values()];
+      if (allRelevant.length > 0) {
+        ctx.transcripts = allRelevant;
+      }
+
+      // Filter resources to focused account
+      const accountResources = ctx.resources.filter((r: any) =>
+        r.account_id === focusAccount.id ||
+        oppIds.has(r.opportunity_id) ||
+        (!r.account_id && !r.opportunity_id && !r.renewal_id) // Global resources always included
+      );
+      if (accountResources.length > 0) {
+        ctx.resources = accountResources;
+      }
+    }
+
+    // Deep/meeting/deal-strategy: web research
     let researchData: string | undefined;
-    if (mode === "deep" || mode === "meeting") {
+    if (mode === "deep" || mode === "meeting" || mode === "deal-strategy") {
       const perplexityKey = Deno.env.get("PERPLEXITY_API_KEY");
       const firecrawlKey = Deno.env.get("FIRECRAWL_API_KEY");
 
-      if (perplexityKey) {
+      if (perplexityKey && focusAccount) {
+        console.log(`Deep research on: ${focusAccount.name}`);
+        researchData = await deepResearch(focusAccount.name, focusAccount.website, focusAccount.industry, perplexityKey, firecrawlKey || null);
+      } else if (perplexityKey && !focusAccount) {
         const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user")?.content || "";
-        let focusAccount = accountId
-          ? ctx.accounts.find((a: any) => a.id === accountId)
-          : detectAccountFocus(lastUserMsg, ctx.accounts);
-
-        if (focusAccount) {
-          console.log(`Deep research on: ${focusAccount.name}`);
-          researchData = await deepResearch(focusAccount.name, focusAccount.website, focusAccount.industry, perplexityKey, firecrawlKey || null);
-        } else {
-          researchData = await perplexitySearch(lastUserMsg, perplexityKey);
-        }
-      } else {
+        researchData = await perplexitySearch(lastUserMsg, perplexityKey);
+      } else if (!perplexityKey && mode !== "deal-strategy") {
         researchData = "[Deep research unavailable: Perplexity not connected.]";
       }
     }
 
-    const model = mode === "deep" ? "google/gemini-2.5-pro" : "google/gemini-3-flash-preview";
+    const useProModel = mode === "deep" || mode === "deal-strategy";
+    const model = useProModel ? "google/gemini-2.5-pro" : "google/gemini-3-flash-preview";
     const systemPrompt = buildSystemPrompt(ctx, mode, researchData);
 
     // First call: non-streaming with tools to get potential tool calls
@@ -459,7 +569,6 @@ Deno.serve(async (req) => {
 
     // If no tool calls, stream the response directly
     if (!toolCalls || toolCalls.length === 0) {
-      // Re-request with streaming for better UX
       const streamPayload = { ...aiPayload, stream: true };
       delete streamPayload.tools;
       const streamResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -490,7 +599,7 @@ Deno.serve(async (req) => {
       messages: [
         { role: "system", content: systemPrompt },
         ...messages,
-        choice.message, // assistant message with tool_calls
+        choice.message,
         ...toolMessages,
       ],
       stream: true,
@@ -503,14 +612,12 @@ Deno.serve(async (req) => {
     });
 
     if (!followUpResponse.ok) {
-      // Fallback: return the first response content + tool results as non-streaming
       const content = (choice.message.content || "") + "\n\n✅ **Account Updates Applied:**\n" +
         toolResults.map(r => `- ${r.name}: ${JSON.stringify(r.result)}`).join('\n');
       const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`;
       return new Response(sseData, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
     }
 
-    // Prepend an update notification SSE event before streaming
     const updateSummary = toolResults.map(r => {
       if (r.name === "update_account" && r.result.success) {
         return `✅ Updated account (${r.result.fields_updated.join(', ')}): ${r.result.reason}`;
@@ -526,7 +633,6 @@ Deno.serve(async (req) => {
       ? `data: ${JSON.stringify({ choices: [{ delta: { content: `> 🔄 **Data Updates Applied**\n> ${updateSummary.replace(/\n/g, '\n> ')}\n\n` } }] })}\n\n`
       : "";
 
-    // Merge notification + stream
     const encoder = new TextEncoder();
     const notifChunk = encoder.encode(notificationEvent);
     const mergedStream = new ReadableStream({
