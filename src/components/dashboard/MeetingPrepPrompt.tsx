@@ -5,6 +5,7 @@ import { AlertTriangle, Building2, Clock, FileText, ChevronRight, X, Video, Chec
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { useStore } from '@/store/useStore';
 import { useRecentTranscriptsForMeetingPrep } from '@/hooks/useCallTranscripts';
+import { useResourceLinksForAccount } from '@/hooks/useResourceLinks';
 import { format, parseISO, differenceInMinutes } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { cn } from '@/lib/utils';
