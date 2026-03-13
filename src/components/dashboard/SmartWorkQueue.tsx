@@ -31,10 +31,11 @@ const TYPE_ICONS: Record<string, typeof Building2> = {
   renewal: RefreshCw,
 };
 
-function ActionItemCard({ item, onAddTask, taskAdded }: { 
+function ActionItemCard({ item, onAddTask, taskAdded, onDismiss }: { 
   item: WorkItem; 
   onAddTask: (item: WorkItem) => void;
   taskAdded: boolean;
+  onDismiss: (item: WorkItem) => void;
 }) {
   const navigate = useNavigate();
   const { setCurrentRecord } = useLinkedRecordContext();
