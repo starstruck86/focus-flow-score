@@ -311,10 +311,10 @@ export default function Dashboard() {
         onOpenChange={setShowDailyCheckIn}
       />
       
-      {!weeklyReviewLoading && !currentWeekReview?.completed && !weeklyReviewDismissed && (
+      {!weeklyReviewLoading && !currentWeekReview?.completed && (
         <WeeklyRealignmentModal
           open={true}
-          onComplete={() => setWeeklyReviewDismissed(true)}
+          onComplete={() => {/* query invalidation in hook handles re-render */}}
         />
       )}
     </Layout>
