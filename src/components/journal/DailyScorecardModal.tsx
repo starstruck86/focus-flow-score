@@ -349,8 +349,18 @@ export function DailyScorecardModal({
     if (open) {
       setData({ ...DEFAULT_SCORECARD, ...initialData });
       setShowExtras(false);
+      setWhoopApplied(false);
     }
   }, [open, initialData]);
+
+  // Auto-fill recovery fields from WHOOP when data arrives
+  useEffect(() => {
+    if (open && whoopMetrics && !whoopApplied) {
+      setWhoopApplied(true);
+      // No override needed — we write WHOOP values directly into the save payload
+      // This keeps the scorecard UI simple (no recovery sliders to confuse)
+    }
+  }, [open, whoopMetrics, whoopApplied]);
 
   const update = <K extends keyof ScorecardData>(key: K, val: ScorecardData[K]) => {
     setData(prev => ({ ...prev, [key]: val }));
