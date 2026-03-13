@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, ChevronDown } from 'lucide-react';
 import { Layout } from '@/components/Layout';
-import { DailyCheckInModal } from '@/components/journal';
+import { DailyScorecardModal, BackfillCards } from '@/components/journal';
 import { useStore } from '@/store/useStore';
 import { 
   useWorkScheduleConfig, 
