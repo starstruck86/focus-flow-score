@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { DailyCheckInModal } from './DailyCheckInModal';
+import { DailyScorecardModal } from './DailyScorecardModal';
 import { ConfirmYesterdayModal } from './ConfirmYesterdayModal';
 import { 
   useJournalPromptStatus,
@@ -23,8 +23,7 @@ export function JournalPromptManager({ children }: JournalPromptManagerProps) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [hasShownEodToday, setHasShownEodToday] = useState(false);
   const [hasShownMorningToday, setHasShownMorningToday] = useState(false);
-  const [editMode, setEditMode] = useState(false);
-  const [editDate, setEditDate] = useState<string | null>(null);
+  const [editDate, setEditDate] = useState<string | undefined>(undefined);
   
   const { data: config } = useWorkScheduleConfig();
   const { data: holidays } = useHolidays();
@@ -35,66 +34,44 @@ export function JournalPromptManager({ children }: JournalPromptManagerProps) {
   const {
     shouldShowEodCheckIn,
     shouldShowMorningConfirm,
-    todayEntry,
-    yesterdayEntry: promptYesterday,
     isLoading,
   } = useJournalPromptStatus();
   
-  // Check if today is eligible
   const today = new Date();
   const isTodayEligible = config && holidays && ptoDays && overrides
     ? isEligibleDay(today, config, holidays, ptoDays, overrides)
     : false;
   
-  // Check if yesterday was eligible
   const yesterday = subDays(today, 1);
   const yesterdayStr = format(yesterday, 'yyyy-MM-dd');
   const wasYesterdayEligible = config && holidays && ptoDays && overrides
     ? isEligibleDay(yesterday, config, holidays, ptoDays, overrides)
     : false;
   
-  // Auto-show EOD check-in (only on eligible days)
+  // Auto-show EOD check-in
   useEffect(() => {
-    if (
-      !isLoading &&
-      isTodayEligible &&
-      shouldShowEodCheckIn &&
-      !hasShownEodToday &&
-      !showCheckIn &&
-      !showConfirm
-    ) {
-      // Small delay to avoid flashing
+    if (!isLoading && isTodayEligible && shouldShowEodCheckIn && !hasShownEodToday && !showCheckIn && !showConfirm) {
       const timer = setTimeout(() => {
+        setEditDate(undefined);
         setShowCheckIn(true);
         setHasShownEodToday(true);
       }, 2000);
-      
       return () => clearTimeout(timer);
     }
   }, [isLoading, isTodayEligible, shouldShowEodCheckIn, hasShownEodToday, showCheckIn, showConfirm]);
   
-  // Auto-show morning confirmation (only if yesterday was eligible)
+  // Auto-show morning confirmation
   useEffect(() => {
-    if (
-      !isLoading &&
-      wasYesterdayEligible &&
-      shouldShowMorningConfirm &&
-      !hasShownMorningToday &&
-      !showCheckIn &&
-      !showConfirm &&
-      yesterdayEntry
-    ) {
+    if (!isLoading && wasYesterdayEligible && shouldShowMorningConfirm && !hasShownMorningToday && !showCheckIn && !showConfirm && yesterdayEntry) {
       const timer = setTimeout(() => {
         setShowConfirm(true);
         setHasShownMorningToday(true);
       }, 2000);
-      
       return () => clearTimeout(timer);
     }
   }, [isLoading, wasYesterdayEligible, shouldShowMorningConfirm, hasShownMorningToday, showCheckIn, showConfirm, yesterdayEntry]);
   
   const handleEditYesterday = () => {
-    setEditMode(true);
     setEditDate(yesterdayStr);
     setShowConfirm(false);
     setShowCheckIn(true);
@@ -103,8 +80,7 @@ export function JournalPromptManager({ children }: JournalPromptManagerProps) {
   const handleCloseCheckIn = (open: boolean) => {
     setShowCheckIn(open);
     if (!open) {
-      setEditMode(false);
-      setEditDate(null);
+      setEditDate(undefined);
     }
   };
   
@@ -112,13 +88,10 @@ export function JournalPromptManager({ children }: JournalPromptManagerProps) {
     <>
       {children}
       
-      <DailyCheckInModal
+      <DailyScorecardModal
         open={showCheckIn}
         onOpenChange={handleCloseCheckIn}
-        date={editDate || undefined}
-        initialActivity={editMode && yesterdayEntry ? yesterdayEntry.activity : undefined}
-        initialPreparedness={editMode && yesterdayEntry ? yesterdayEntry.preparedness : undefined}
-        initialRecovery={editMode && yesterdayEntry ? yesterdayEntry.recovery : undefined}
+        date={editDate}
       />
       
       {yesterdayEntry && (

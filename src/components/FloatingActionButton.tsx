@@ -15,7 +15,7 @@ import {
   useYesterdayJournalEntry 
 } from '@/hooks/useDailyJournal';
 import { useWorkScheduleConfig, isEligibleDay, useHolidays, usePtoDays, useWorkdayOverrides } from '@/hooks/useStreakData';
-import { DailyCheckInModal, ConfirmYesterdayModal } from '@/components/journal';
+import { DailyScorecardModal, ConfirmYesterdayModal } from '@/components/journal';
 import { QuickAddTaskModal } from '@/components/QuickAddTaskModal';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
@@ -253,12 +253,9 @@ export function FloatingActionButton({
       </div>
       
       {/* Modals */}
-      <DailyCheckInModal
+      <DailyScorecardModal
         open={showCheckIn}
         onOpenChange={setShowCheckIn}
-        initialActivity={todayEntry?.activity}
-        initialPreparedness={todayEntry?.preparedness}
-        initialRecovery={todayEntry?.recovery}
       />
       
       <ConfirmYesterdayModal

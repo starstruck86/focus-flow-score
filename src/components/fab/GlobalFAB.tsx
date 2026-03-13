@@ -20,7 +20,7 @@ import {
   useTodayJournalEntry,
 } from '@/hooks/useDailyJournal';
 import { useWorkScheduleConfig, isEligibleDay, useHolidays, usePtoDays, useWorkdayOverrides } from '@/hooks/useStreakData';
-import { DailyCheckInModal } from '@/components/journal';
+import { DailyScorecardModal } from '@/components/journal';
 import { QuickAddTaskModal } from '@/components/QuickAddTaskModal';
 import { AddTranscriptModal } from './AddTranscriptModal';
 import { AddUpdateOpportunityModal } from './AddUpdateOpportunityModal';
@@ -354,12 +354,9 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
         onOpenChange={setShowFocusTimer}
       />
       
-      <DailyCheckInModal
+      <DailyScorecardModal
         open={showCheckIn}
         onOpenChange={setShowCheckIn}
-        initialActivity={todayEntry?.activity}
-        initialPreparedness={todayEntry?.preparedness}
-        initialRecovery={todayEntry?.recovery}
       />
       
       <QuickLogModal
