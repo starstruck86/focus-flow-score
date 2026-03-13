@@ -3,33 +3,30 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-async function refreshTokenIfNeeded(
-  supabase: any,
-  connection: any,
-): Promise<string> {
+async function refreshTokenIfNeeded(supabase: any, connection: any): Promise<string> {
   const now = new Date();
   const expiresAt = new Date(connection.token_expires_at);
 
-  // Refresh if token expires within 5 minutes
   if (expiresAt.getTime() - now.getTime() > 5 * 60 * 1000) {
     return connection.access_token;
   }
 
-  console.log('Refreshing WHOOP token...');
-  const WHOOP_CLIENT_ID = Deno.env.get('WHOOP_CLIENT_ID')!;
-  const WHOOP_CLIENT_SECRET = Deno.env.get('WHOOP_CLIENT_SECRET')!;
+  if (!connection.refresh_token) {
+    throw new Error('Token expired and no refresh token available. Please reconnect WHOOP.');
+  }
 
+  console.log('Refreshing WHOOP token...');
   const response = await fetch('https://api.prod.whoop.com/oauth/oauth2/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       grant_type: 'refresh_token',
       refresh_token: connection.refresh_token,
-      client_id: WHOOP_CLIENT_ID,
-      client_secret: WHOOP_CLIENT_SECRET,
+      client_id: Deno.env.get('WHOOP_CLIENT_ID')!,
+      client_secret: Deno.env.get('WHOOP_CLIENT_SECRET')!,
     }),
   });
 
@@ -64,12 +61,10 @@ serve(async (req) => {
     const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 
-    // Authenticate the user
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
@@ -81,66 +76,16 @@ serve(async (req) => {
     const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
     if (claimsError || !claimsData?.claims) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
     const userId = claimsData.claims.sub;
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-
-    // Check for action type
     const body = await req.json().catch(() => ({}));
     const action = body.action || 'sync';
 
-    // Handle "claim" action — associate pending connection with authenticated user
-    if (action === 'claim') {
-      const { whoopUserId } = body;
-      if (!whoopUserId) {
-        return new Response(JSON.stringify({ error: 'whoopUserId required' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      // Find the pending connection
-      const { data: pending } = await supabase
-        .from('whoop_connections')
-        .select('*')
-        .eq('user_id', '00000000-0000-0000-0000-000000000000')
-        .eq('whoop_user_id', whoopUserId)
-        .single();
-
-      if (!pending) {
-        return new Response(JSON.stringify({ error: 'No pending connection found' }), {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      // Delete any existing connection for this user
-      await supabase.from('whoop_connections').delete().eq('user_id', userId);
-
-      // Update the pending connection with the real user_id
-      const { error: updateError } = await supabase
-        .from('whoop_connections')
-        .update({ user_id: userId, updated_at: new Date().toISOString() })
-        .eq('id', pending.id);
-
-      if (updateError) {
-        console.error('Claim error:', updateError);
-        return new Response(JSON.stringify({ error: 'Failed to claim connection' }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Handle "disconnect" action
+    // Disconnect
     if (action === 'disconnect') {
       await supabase.from('whoop_connections').delete().eq('user_id', userId);
       await supabase.from('whoop_daily_metrics').delete().eq('user_id', userId);
@@ -149,7 +94,7 @@ serve(async (req) => {
       });
     }
 
-    // Sync action — pull latest WHOOP data
+    // Sync
     const { data: connection } = await supabase
       .from('whoop_connections')
       .select('*')
@@ -158,8 +103,7 @@ serve(async (req) => {
 
     if (!connection) {
       return new Response(JSON.stringify({ error: 'WHOOP not connected' }), {
-        status: 404,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
@@ -169,86 +113,69 @@ serve(async (req) => {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - 7);
 
-    const cyclesUrl = new URL('https://api.prod.whoop.com/developer/v1/cycle');
-    cyclesUrl.searchParams.set('start', startDate.toISOString());
-    cyclesUrl.searchParams.set('limit', '10');
+    const [cyclesResponse, recoveryResponse, sleepResponse] = await Promise.all([
+      fetch(`https://api.prod.whoop.com/developer/v1/cycle?start=${startDate.toISOString()}&limit=10`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+      }),
+      fetch(`https://api.prod.whoop.com/developer/v1/recovery?start=${startDate.toISOString()}&limit=10`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+      }),
+      fetch(`https://api.prod.whoop.com/developer/v1/activity/sleep?start=${startDate.toISOString()}&limit=10`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+      }),
+    ]);
 
-    const cyclesResponse = await fetch(cyclesUrl.toString(), {
-      headers: { 'Authorization': `Bearer ${accessToken}` },
-    });
+    const cycles = cyclesResponse.ok ? (await cyclesResponse.json()).records || [] : [];
+    const recoveries = recoveryResponse.ok ? (await recoveryResponse.json()).records || [] : [];
+    const sleeps = sleepResponse.ok ? (await sleepResponse.json()).records || [] : [];
 
     if (!cyclesResponse.ok) {
-      const errorText = await cyclesResponse.text();
-      console.error('Cycles API error:', errorText);
-      throw new Error(`WHOOP API error: ${cyclesResponse.status}`);
+      const errText = await cyclesResponse.text().catch(() => '');
+      console.error('Cycles API error:', cyclesResponse.status, errText);
+    }
+    if (!recoveryResponse.ok) {
+      const errText = await recoveryResponse.text().catch(() => '');
+      console.error('Recovery API error:', recoveryResponse.status, errText);
+    }
+    if (!sleepResponse.ok) {
+      const errText = await sleepResponse.text().catch(() => '');
+      console.error('Sleep API error:', sleepResponse.status, errText);
     }
 
-    const cyclesData = await cyclesResponse.json();
-    const cycles = cyclesData.records || [];
-
-    // Get recovery data
-    const recoveryUrl = new URL('https://api.prod.whoop.com/developer/v1/recovery');
-    recoveryUrl.searchParams.set('start', startDate.toISOString());
-    recoveryUrl.searchParams.set('limit', '10');
-
-    const recoveryResponse = await fetch(recoveryUrl.toString(), {
-      headers: { 'Authorization': `Bearer ${accessToken}` },
-    });
-
-    const recoveryData = recoveryResponse.ok ? await recoveryResponse.json() : { records: [] };
-    const recoveries = recoveryData.records || [];
-
-    // Get sleep data
-    const sleepUrl = new URL('https://api.prod.whoop.com/developer/v1/activity/sleep');
-    sleepUrl.searchParams.set('start', startDate.toISOString());
-    sleepUrl.searchParams.set('limit', '10');
-
-    const sleepResponse = await fetch(sleepUrl.toString(), {
-      headers: { 'Authorization': `Bearer ${accessToken}` },
-    });
-
-    const sleepData = sleepResponse.ok ? await sleepResponse.json() : { records: [] };
-    const sleeps = sleepData.records || [];
-
-    // Build a map of date -> metrics
+    // Build date -> metrics map
     const metricsMap: Record<string, any> = {};
 
-    // Process cycles for strain
     for (const cycle of cycles) {
-      const date = cycle.start ? cycle.start.substring(0, 10) : null;
+      const date = cycle.start?.substring(0, 10);
       if (!date) continue;
       if (!metricsMap[date]) metricsMap[date] = { raw: {} };
       metricsMap[date].strain_score = cycle.score?.strain ?? null;
       metricsMap[date].raw.cycle = cycle;
     }
 
-    // Process recoveries
     for (const rec of recoveries) {
-      const date = rec.created_at ? rec.created_at.substring(0, 10) : 
-                   rec.cycle?.start ? rec.cycle.start.substring(0, 10) : null;
+      const date = rec.created_at?.substring(0, 10) || rec.cycle?.start?.substring(0, 10);
       if (!date) continue;
       if (!metricsMap[date]) metricsMap[date] = { raw: {} };
       metricsMap[date].recovery_score = rec.score?.recovery_score ?? null;
       metricsMap[date].raw.recovery = rec;
     }
 
-    // Process sleep
     for (const slp of sleeps) {
-      const date = slp.start ? slp.start.substring(0, 10) : null;
+      const date = slp.start?.substring(0, 10);
       if (!date) continue;
       if (!metricsMap[date]) metricsMap[date] = { raw: {} };
       metricsMap[date].sleep_score = slp.score?.sleep_performance_percentage ?? slp.score?.stage_summary?.sleep_efficiency_percentage ?? null;
       metricsMap[date].raw.sleep = slp;
     }
 
-    // Upsert metrics
-    const upserts = Object.entries(metricsMap).map(([date, metrics]: [string, any]) => ({
+    const upserts = Object.entries(metricsMap).map(([date, m]: [string, any]) => ({
       user_id: userId,
       date,
-      recovery_score: metrics.recovery_score,
-      sleep_score: metrics.sleep_score,
-      strain_score: metrics.strain_score,
-      raw_payload: metrics.raw,
+      recovery_score: m.recovery_score ?? null,
+      sleep_score: m.sleep_score ?? null,
+      strain_score: m.strain_score ?? null,
+      raw_payload: m.raw,
       imported_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }));
@@ -264,14 +191,13 @@ serve(async (req) => {
       }
     }
 
-    // Update last sync time on connection
     await supabase
       .from('whoop_connections')
       .update({ updated_at: new Date().toISOString() })
       .eq('user_id', userId);
 
-    return new Response(JSON.stringify({ 
-      success: true, 
+    return new Response(JSON.stringify({
+      success: true,
       synced: upserts.length,
       dates: Object.keys(metricsMap),
     }), {
@@ -280,8 +206,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('whoop-sync error:', error);
     return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 });
