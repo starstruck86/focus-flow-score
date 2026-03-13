@@ -1,7 +1,7 @@
 // Proactive Meeting Prep Prompt - Shows a prominent banner for upcoming client meetings
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, Building2, Clock, FileText, ChevronRight, X, Video, CheckCircle2, Plus } from 'lucide-react';
+import { AlertTriangle, Building2, Clock, FileText, ChevronRight, X, Video, CheckCircle2, Plus, Target, RefreshCw } from 'lucide-react';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { useStore } from '@/store/useStore';
 import { useRecentTranscriptsForMeetingPrep } from '@/hooks/useCallTranscripts';
@@ -28,7 +28,12 @@ interface UpcomingClientMeeting {
   hasRenewals: boolean;
   hasPrepTask: boolean;
   oppCount: number;
-  totalArr: number;
+  renewalCount: number;
+  oppArr: number;
+  renewalArr: number;
+  nextStep?: string;
+  nextStepDate?: string;
+  oppStage?: string;
 }
 
 export function MeetingPrepPrompt() {
@@ -40,7 +45,6 @@ export function MeetingPrepPrompt() {
       return stored ? new Set(JSON.parse(stored)) : new Set();
     } catch { return new Set(); }
   });
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const now = toZonedTime(new Date(), TIMEZONE);
 
@@ -54,7 +58,6 @@ export function MeetingPrepPrompt() {
       const estDate = toZonedTime(utcDate, TIMEZONE);
       const minutesUntil = differenceInMinutes(estDate, now);
 
-      // Only show meetings in the next 4 hours or happening now (up to 15 min past start)
       if (minutesUntil < -15 || minutesUntil > 240) return;
 
       const titleLower = event.title.toLowerCase();
@@ -67,7 +70,11 @@ export function MeetingPrepPrompt() {
 
       const accountOpps = opportunities.filter(o => o.accountId === matchedAccount.id && o.status === 'active');
       const accountRenewals = renewals.filter(r => r.accountName === matchedAccount.name);
-      const totalArr = accountOpps.reduce((sum, o) => sum + (o.arr || 0), 0) + accountRenewals.reduce((sum, r) => sum + r.arr, 0);
+      const oppArr = accountOpps.reduce((sum, o) => sum + (o.arr || 0), 0);
+      const renewalArr = accountRenewals.reduce((sum, r) => sum + r.arr, 0);
+
+      // Get the most relevant opp's next step
+      const primaryOpp = accountOpps.sort((a, b) => (b.arr || 0) - (a.arr || 0))[0];
 
       const hasPrepTask = tasks.some(t =>
         t.linkedAccountId === matchedAccount.id &&
@@ -88,11 +95,15 @@ export function MeetingPrepPrompt() {
         hasRenewals: accountRenewals.length > 0,
         hasPrepTask,
         oppCount: accountOpps.length,
-        totalArr,
+        renewalCount: accountRenewals.length,
+        oppArr,
+        renewalArr,
+        nextStep: primaryOpp?.nextStep,
+        nextStepDate: primaryOpp?.nextStepDate,
+        oppStage: primaryOpp?.stage,
       });
     });
 
-    // Dedupe by account, keep earliest
     const byAccount = new Map<string, UpcomingClientMeeting>();
     items.forEach(item => {
       const existing = byAccount.get(item.accountId);
@@ -105,6 +116,12 @@ export function MeetingPrepPrompt() {
       .filter(m => !dismissed.has(m.eventId))
       .sort((a, b) => a.minutesUntil - b.minutesUntil);
   }, [events, accounts, opportunities, renewals, tasks, now, dismissed]);
+
+  // Auto-expand the most urgent meeting
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const autoExpandId = upcomingMeetings.length > 0 && upcomingMeetings[0].minutesUntil <= 60
+    ? upcomingMeetings[0].eventId : null;
+  const effectiveExpandedId = expandedId ?? autoExpandId;
 
   const handleDismiss = (eventId: string) => {
     const next = new Set(dismissed);
@@ -146,7 +163,6 @@ export function MeetingPrepPrompt() {
         animate={{ opacity: 1, y: 0 }}
         layout
       >
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {isUrgent ? (
@@ -166,14 +182,15 @@ export function MeetingPrepPrompt() {
           </div>
         </div>
 
-        {/* Meeting Cards */}
         <div className="space-y-2">
           {upcomingMeetings.slice(0, 4).map(meeting => (
             <MeetingCard
               key={meeting.eventId}
               meeting={meeting}
-              isExpanded={expandedId === meeting.eventId}
-              onToggle={() => setExpandedId(expandedId === meeting.eventId ? null : meeting.eventId)}
+              isExpanded={effectiveExpandedId === meeting.eventId}
+              onToggle={() => setExpandedId(
+                effectiveExpandedId === meeting.eventId ? '__none__' : meeting.eventId
+              )}
               onDismiss={() => handleDismiss(meeting.eventId)}
               onAddPrep={() => handleAddPrepTask(meeting)}
             />
@@ -193,10 +210,9 @@ function MeetingCard({ meeting, isExpanded, onToggle, onDismiss, onAddPrep }: {
 }) {
   const isUrgent = meeting.minutesUntil <= 30;
   const daysSinceTouch = meeting.lastTouchDate
-    ? Math.floor((Date.now() - new Date(meeting.lastTouchDate).getTime()) / (86400000))
+    ? Math.floor((Date.now() - new Date(meeting.lastTouchDate).getTime()) / 86400000)
     : null;
 
-  // Fetch recent transcripts for expanded view
   const { data: recentTranscripts } = useRecentTranscriptsForMeetingPrep(
     isExpanded ? meeting.accountId : undefined
   );
@@ -212,9 +228,7 @@ function MeetingCard({ meeting, isExpanded, onToggle, onDismiss, onAddPrep }: {
           <div className="flex items-center gap-2">
             <p className="text-sm font-semibold truncate">{meeting.accountName}</p>
             {meeting.accountTier && (
-              <Badge variant="outline" className="text-[9px] h-4 px-1">
-                Tier {meeting.accountTier}
-              </Badge>
+              <Badge variant="outline" className="text-[9px] h-4 px-1">Tier {meeting.accountTier}</Badge>
             )}
           </div>
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
@@ -224,7 +238,7 @@ function MeetingCard({ meeting, isExpanded, onToggle, onDismiss, onAddPrep }: {
                meeting.minutesUntil < 60 ? `In ${meeting.minutesUntil}m` :
                `In ${Math.round(meeting.minutesUntil / 60)}h`}
             </span>
-            <span>• {meeting.eventTitle}</span>
+            <span className="truncate">• {meeting.eventTitle}</span>
           </div>
         </div>
 
@@ -234,9 +248,7 @@ function MeetingCard({ meeting, isExpanded, onToggle, onDismiss, onAddPrep }: {
               <Plus className="h-3 w-3" /> Prep
             </Button>
           )}
-          {meeting.hasPrepTask && (
-            <CheckCircle2 className="h-4 w-4 text-status-green" />
-          )}
+          {meeting.hasPrepTask && <CheckCircle2 className="h-4 w-4 text-status-green" />}
           <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={e => { e.stopPropagation(); onDismiss(); }}>
             <X className="h-3 w-3" />
           </Button>
@@ -244,7 +256,6 @@ function MeetingCard({ meeting, isExpanded, onToggle, onDismiss, onAddPrep }: {
         </div>
       </div>
 
-      {/* Expanded Context */}
       <AnimatePresence>
         {isExpanded && (
           <motion.div
@@ -253,23 +264,43 @@ function MeetingCard({ meeting, isExpanded, onToggle, onDismiss, onAddPrep }: {
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
           >
-            {/* Quick Stats */}
-            <div className="grid grid-cols-3 gap-2 text-center">
+            {/* Quick Stats - separate opp vs renewal ARR */}
+            <div className="grid grid-cols-4 gap-2 text-center">
               <div className="rounded-md bg-muted/50 p-2">
-                <p className="text-[10px] text-muted-foreground">Open Opps</p>
+                <p className="text-[10px] text-muted-foreground">Opps</p>
                 <p className="text-sm font-bold">{meeting.oppCount}</p>
               </div>
               <div className="rounded-md bg-muted/50 p-2">
-                <p className="text-[10px] text-muted-foreground">Total ARR</p>
-                <p className="text-sm font-bold">${(meeting.totalArr / 1000).toFixed(0)}k</p>
+                <p className="text-[10px] text-muted-foreground">Opp ARR</p>
+                <p className="text-sm font-bold">${(meeting.oppArr / 1000).toFixed(0)}k</p>
+              </div>
+              <div className="rounded-md bg-muted/50 p-2">
+                <p className="text-[10px] text-muted-foreground">Renewals</p>
+                <p className="text-sm font-bold">{meeting.renewalCount}</p>
               </div>
               <div className="rounded-md bg-muted/50 p-2">
                 <p className="text-[10px] text-muted-foreground">Last Touch</p>
-                <p className={cn("text-sm font-bold", daysSinceTouch && daysSinceTouch > 7 ? "text-destructive" : "")}>
-                  {daysSinceTouch != null ? `${daysSinceTouch}d ago` : 'Never'}
+                <p className={cn("text-sm font-bold", daysSinceTouch != null && daysSinceTouch > 7 && "text-destructive")}>
+                  {daysSinceTouch != null ? `${daysSinceTouch}d` : '—'}
                 </p>
               </div>
             </div>
+
+            {/* Next Step from primary opp */}
+            {meeting.nextStep && (
+              <div className="flex items-start gap-2 text-[11px] p-2 rounded-md bg-primary/5 border border-primary/10">
+                <Target className="h-3 w-3 mt-0.5 text-primary shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-semibold text-primary">
+                    Next Step{meeting.oppStage ? ` (${meeting.oppStage})` : ''}
+                  </p>
+                  <p className="text-foreground">{meeting.nextStep}</p>
+                  {meeting.nextStepDate && (
+                    <p className="text-muted-foreground mt-0.5">Due: {meeting.nextStepDate}</p>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Warnings */}
             {daysSinceTouch != null && daysSinceTouch > 7 && (
