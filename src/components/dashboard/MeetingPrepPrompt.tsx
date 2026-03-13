@@ -140,7 +140,7 @@ export function MeetingPrepPrompt() {
           "rounded-xl border-2 p-4 space-y-3",
           isUrgent
             ? "border-destructive/50 bg-destructive/5"
-            : "border-amber-500/40 bg-amber-500/5"
+            : "border-primary/40 bg-primary/5"
         )}
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
