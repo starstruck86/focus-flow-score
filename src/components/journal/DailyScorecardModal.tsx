@@ -1015,6 +1015,7 @@ function EveningView({
   rollingAvg,
   quickLogMode,
   weekDaysLogged,
+  existingEntry,
 }: {
   data: ScorecardData;
   update: <K extends keyof ScorecardData>(key: K, val: ScorecardData[K]) => void;
@@ -1031,6 +1032,7 @@ function EveningView({
   rollingAvg: any;
   quickLogMode: boolean;
   weekDaysLogged: { daysLogged: number; totalDays: number } | undefined;
+  existingEntry: any;
 }) {
   const avgHint = (field: string, target: number) => {
     if (!rollingAvg) return undefined;
