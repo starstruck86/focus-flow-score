@@ -143,6 +143,31 @@ export function usePipelineForReview() {
   });
 }
 
+export function useRenewalsForReview() {
+  const { user } = useAuth();
+  const now = new Date();
+  // Current fiscal quarter (Jan-based): Q1=Jan-Mar, Q2=Apr-Jun, etc.
+  const quarterMonth = Math.floor(now.getMonth() / 3) * 3;
+  const qStart = format(new Date(now.getFullYear(), quarterMonth, 1), 'yyyy-MM-dd');
+  const qEnd = format(new Date(now.getFullYear(), quarterMonth + 3, 0), 'yyyy-MM-dd');
+
+  return useQuery({
+    queryKey: ['renewals-for-review', qStart],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('renewals')
+        .select('id, account_name, arr, csm, renewal_due, churn_risk, renewal_stage')
+        .gte('renewal_due', qStart)
+        .lte('renewal_due', qEnd)
+        .order('renewal_due', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+}
+
 export function useSaveWeeklyReview() {
   const queryClient = useQueryClient();
 

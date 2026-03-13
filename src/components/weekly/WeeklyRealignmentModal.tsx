@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -9,13 +9,14 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   Target, Trophy, TrendingUp, AlertTriangle, Calendar, BookOpen, 
-  Plus, X, Compass, DollarSign, ChevronRight
+  Plus, X, Compass, DollarSign, ChevronRight, RefreshCw, Users
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { 
   useWeeklyMetricsAggregation, 
   usePipelineForReview, 
+  useRenewalsForReview,
   useSaveWeeklyReview, 
   getCurrentWeekRange 
 } from '@/hooks/useWeeklyReview';
@@ -27,14 +28,25 @@ interface Props {
 
 const STAGE_ORDER = ['1 - Prospect', '2 - Discover', '3 - Demo', '4 - Proposal', '5 - Negotiate'];
 
+const RISK_COLORS: Record<string, string> = {
+  '1 - Low Risk': 'text-status-green',
+  '2 - Medium Risk': 'text-status-yellow',
+  '3 - High Risk': 'text-status-red',
+  '4 - OOB / Churning': 'text-status-red',
+  low: 'text-status-green',
+  medium: 'text-status-yellow',
+  high: 'text-status-red',
+};
+
 export function WeeklyRealignmentModal({ open, onComplete }: Props) {
   const { data: metrics, isLoading: metricsLoading } = useWeeklyMetricsAggregation();
   const { data: pipeline, isLoading: pipelineLoading } = usePipelineForReview();
+  const { data: renewals, isLoading: renewalsLoading } = useRenewalsForReview();
   const saveReview = useSaveWeeklyReview();
   const { weekStart, weekEnd } = getCurrentWeekRange();
 
-  // North Star goals (persistent)
-  const [northStarGoals, setNorthStarGoals] = useState<string[]>([
+  // North Star goals
+  const [northStarGoals] = useState<string[]>([
     "President's Club - 125% of quota - top rep",
     'Most Dials Every Week',
     'Most New Logo Opps + Pipeline every week',
@@ -56,6 +68,9 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
     stage,
     opps: (pipeline || []).filter(o => o.stage === stage),
   })).filter(g => g.opps.length > 0);
+
+  const totalPipelineArr = (pipeline || []).reduce((s, o) => s + (Number(o.arr) || 0), 0);
+  const totalRenewalArr = (renewals || []).reduce((s, r) => s + (Number(r.arr) || 0), 0);
 
   const handleSave = async () => {
     if (!commitment.trim()) {
@@ -91,17 +106,15 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
         skillDevelopment,
         northStarGoals,
       });
-      toast.success('Weekly realignment complete!');
+      toast.success('Weekly review complete! 🎯');
       onComplete();
     } catch {
       toast.error('Failed to save weekly review');
     }
   };
 
-  const isLoading = metricsLoading || pipelineLoading;
-
   return (
-    <Dialog open={open} onOpenChange={() => {/* Blocking - can't dismiss */}}>
+    <Dialog open={open} onOpenChange={() => {}}>
       <DialogContent className="max-w-2xl max-h-[90vh] p-0 gap-0 [&>button]:hidden" onPointerDownOutside={e => e.preventDefault()} onEscapeKeyDown={e => e.preventDefault()}>
         <DialogHeader className="p-6 pb-4 border-b border-border bg-gradient-to-r from-primary/5 to-transparent">
           <div className="flex items-center gap-3">
@@ -109,7 +122,7 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
               <Compass className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <DialogTitle className="font-display text-xl">Weekly Realignment</DialogTitle>
+              <DialogTitle className="font-display text-lg">Weekly Goals, Commitments, & Pipeline Review</DialogTitle>
               <DialogDescription className="text-xs">
                 Week of {new Date(weekStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} — Your North Star
               </DialogDescription>
@@ -137,7 +150,7 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
 
             <Separator />
 
-            {/* Commitment for the Week */}
+            {/* Commitment */}
             <section>
               <div className="flex items-center gap-2 mb-2">
                 <Trophy className="h-4 w-4 text-status-yellow" />
@@ -219,14 +232,14 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
 
             <Separator />
 
-            {/* Weekly Recap (last week auto-populated) */}
+            {/* Last Week Performance Recap */}
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <TrendingUp className="h-4 w-4 text-primary" />
-                <h3 className="font-display text-sm font-bold">Last Week Recap</h3>
+                <h3 className="font-display text-sm font-bold">Last Week Performance</h3>
                 <Badge variant="outline" className="text-[10px]">Auto-populated</Badge>
               </div>
-              {isLoading ? (
+              {metricsLoading ? (
                 <div className="text-xs text-muted-foreground">Loading metrics...</div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
@@ -248,7 +261,7 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
                 </div>
               )}
 
-              {/* Biggest Win */}
+              {/* Wins & Failures */}
               <div className="space-y-3">
                 <div>
                   <label className="text-xs font-semibold flex items-center gap-1 mb-1">
@@ -257,7 +270,7 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
                   <Textarea
                     value={biggestWin}
                     onChange={e => setBiggestWin(e.target.value)}
-                    placeholder="New opps, closed deals, big meetings..."
+                    placeholder="Where did you crush it? New Opps, closed deals, big meetings?"
                     className="min-h-[50px] text-sm"
                   />
                 </div>
@@ -268,7 +281,7 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
                   <Textarea
                     value={biggestFailure}
                     onChange={e => setBiggestFailure(e.target.value)}
-                    placeholder="Where did you fall short?"
+                    placeholder="Where did you fall short + what are you going to change?"
                     className="min-h-[50px] text-sm"
                   />
                 </div>
@@ -278,7 +291,7 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
                     <Textarea
                       value={failureChange}
                       onChange={e => setFailureChange(e.target.value)}
-                      placeholder="Concrete change you'll make..."
+                      placeholder="Concrete change you'll make this week..."
                       className="min-h-[40px] text-sm"
                     />
                   </div>
@@ -288,12 +301,60 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
 
             <Separator />
 
+            {/* Renewal Opportunities This Quarter */}
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <RefreshCw className="h-4 w-4 text-status-green" />
+                <h3 className="font-display text-sm font-bold">Renewal Opportunities Due This Quarter</h3>
+                <Badge variant="outline" className="text-[10px]">Auto-populated</Badge>
+                {totalRenewalArr > 0 && (
+                  <span className="text-xs font-mono text-muted-foreground ml-auto">{formatCurrency(totalRenewalArr)} ARR</span>
+                )}
+              </div>
+              {renewalsLoading ? (
+                <div className="text-xs text-muted-foreground">Loading renewals...</div>
+              ) : !renewals?.length ? (
+                <p className="text-xs text-muted-foreground">No renewals due this quarter.</p>
+              ) : (
+                <div className="border border-border rounded-lg overflow-hidden">
+                  <div className="grid grid-cols-[1fr_90px_80px_90px] gap-2 px-3 py-1.5 bg-muted/50 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <span>Account</span>
+                    <span className="text-right">ARR</span>
+                    <span>CSM</span>
+                    <span>Due Date</span>
+                  </div>
+                  {renewals.map(r => (
+                    <div key={r.id} className="grid grid-cols-[1fr_90px_80px_90px] gap-2 px-3 py-2 border-t border-border text-xs items-center">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-medium truncate">{r.account_name}</span>
+                        {r.churn_risk && (
+                          <span className={cn("text-[10px] shrink-0", RISK_COLORS[r.churn_risk] || 'text-muted-foreground')}>
+                            ●
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-mono text-right">{formatCurrency(Number(r.arr))}</span>
+                      <span className="text-muted-foreground truncate">{r.csm || '—'}</span>
+                      <span className="text-muted-foreground">
+                        {new Date(r.renewal_due + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <Separator />
+
             {/* Pipeline Overview */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <DollarSign className="h-4 w-4 text-status-green" />
+                <DollarSign className="h-4 w-4 text-primary" />
                 <h3 className="font-display text-sm font-bold">Pipeline Overview</h3>
                 <Badge variant="outline" className="text-[10px]">Auto-populated</Badge>
+                {totalPipelineArr > 0 && (
+                  <span className="text-xs font-mono text-muted-foreground ml-auto">{formatCurrency(totalPipelineArr)} total</span>
+                )}
               </div>
               {pipelineLoading ? (
                 <div className="text-xs text-muted-foreground">Loading pipeline...</div>
@@ -303,7 +364,12 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
                 <div className="space-y-3">
                   {pipelineByStage.map(({ stage, opps }) => (
                     <div key={stage}>
-                      <h4 className="text-xs font-bold mb-1">{stage} <span className="text-muted-foreground font-normal">({opps.length})</span></h4>
+                      <h4 className="text-xs font-bold mb-1">
+                        {stage} <span className="text-muted-foreground font-normal">({opps.length})</span>
+                        <span className="font-mono text-muted-foreground ml-2">
+                          {formatCurrency(opps.reduce((s, o) => s + (Number(o.arr) || 0), 0))}
+                        </span>
+                      </h4>
                       <div className="space-y-1 ml-3">
                         {opps.map(o => (
                           <div key={o.id} className="flex items-center gap-2 text-xs">
@@ -322,8 +388,8 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
         </ScrollArea>
 
         <div className="p-4 border-t border-border flex justify-end">
-          <Button onClick={handleSave} disabled={saveReview.isPending} className="min-w-[140px]">
-            {saveReview.isPending ? 'Saving...' : 'Complete Realignment'}
+          <Button onClick={handleSave} disabled={saveReview.isPending} className="min-w-[160px]">
+            {saveReview.isPending ? 'Saving...' : 'Complete Weekly Review'}
           </Button>
         </div>
       </DialogContent>
