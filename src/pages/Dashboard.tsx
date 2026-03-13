@@ -47,6 +47,7 @@ import {
   MeetingPrepCard,
   SmartWorkQueue,
   DailyDigest,
+  MeetingPrepPrompt,
 } from '@/components/dashboard';
 
 export default function Dashboard() {
