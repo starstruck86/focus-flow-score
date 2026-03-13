@@ -276,6 +276,7 @@ export function SmartWorkQueue() {
           color="text-primary"
           addedTasks={addedTasks}
           onAddTask={handleAddTask}
+          onDismiss={handleDismiss}
           maxItems={5}
         />
         <Section
@@ -285,6 +286,7 @@ export function SmartWorkQueue() {
           color="text-status-yellow"
           addedTasks={addedTasks}
           onAddTask={handleAddTask}
+          onDismiss={handleDismiss}
           maxItems={5}
         />
         <Section
@@ -294,6 +296,7 @@ export function SmartWorkQueue() {
           color="text-status-green"
           addedTasks={addedTasks}
           onAddTask={handleAddTask}
+          onDismiss={handleDismiss}
           maxItems={5}
         />
       </div>
