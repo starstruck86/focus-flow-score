@@ -87,6 +87,26 @@ export function useCurrentWeekReview() {
   });
 }
 
+export function usePreviousWeekReview() {
+  const { user } = useAuth();
+  const { weekStart } = getCurrentWeekRange();
+  const prevWeekStart = format(new Date(new Date(weekStart).getTime() - 7 * 86400000), 'yyyy-MM-dd');
+
+  return useQuery({
+    queryKey: ['weekly-review', prevWeekStart],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('weekly_reviews')
+        .select('*')
+        .eq('week_start', prevWeekStart)
+        .maybeSingle();
+      if (error) throw error;
+      return data ? mapRow(data) : null;
+    },
+    enabled: !!user,
+  });
+}
+
 export function useWeeklyMetricsAggregation() {
   const { user } = useAuth();
   const { weekStart, weekEnd } = getCurrentWeekRange();

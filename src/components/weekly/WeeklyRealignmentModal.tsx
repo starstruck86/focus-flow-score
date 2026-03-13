@@ -7,9 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Target, Trophy, TrendingUp, AlertTriangle, Calendar, BookOpen, 
-  Plus, X, Compass, DollarSign, ChevronRight, RefreshCw, Users
+  Plus, X, Compass, DollarSign, ChevronRight, RefreshCw, CheckCircle2, XCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -17,6 +18,7 @@ import {
   useWeeklyMetricsAggregation, 
   usePipelineForReview, 
   useRenewalsForReview,
+  usePreviousWeekReview,
   useSaveWeeklyReview, 
   getCurrentWeekRange 
 } from '@/hooks/useWeeklyReview';
@@ -24,6 +26,12 @@ import {
 interface Props {
   open: boolean;
   onComplete: () => void;
+}
+
+interface ClientMeeting {
+  date: string;
+  client: string;
+  goal: string;
 }
 
 const STAGE_ORDER = ['1 - Prospect', '2 - Discover', '3 - Demo', '4 - Proposal', '5 - Negotiate'];
@@ -42,24 +50,34 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
   const { data: metrics, isLoading: metricsLoading } = useWeeklyMetricsAggregation();
   const { data: pipeline, isLoading: pipelineLoading } = usePipelineForReview();
   const { data: renewals, isLoading: renewalsLoading } = useRenewalsForReview();
+  const { data: prevReview, isLoading: prevLoading } = usePreviousWeekReview();
   const saveReview = useSaveWeeklyReview();
   const { weekStart, weekEnd } = getCurrentWeekRange();
 
-  // North Star goals
   const [northStarGoals] = useState<string[]>([
     "President's Club - 125% of quota - top rep",
     'Most Dials Every Week',
     'Most New Logo Opps + Pipeline every week',
   ]);
 
-  // User inputs
+  // This week planning
   const [commitment, setCommitment] = useState('');
   const [keyGoals, setKeyGoals] = useState<string[]>(['', '', '']);
-  const [keyMeetings, setKeyMeetings] = useState('');
+  const [clientMeetings, setClientMeetings] = useState<ClientMeeting[]>([
+    { date: '', client: '', goal: '' },
+    { date: '', client: '', goal: '' },
+  ]);
   const [skillDevelopment, setSkillDevelopment] = useState('');
+
+  // Last week accountability
   const [biggestWin, setBiggestWin] = useState('');
   const [biggestFailure, setBiggestFailure] = useState('');
   const [failureChange, setFailureChange] = useState('');
+  const [prevGoalsAchieved, setPrevGoalsAchieved] = useState<Record<number, boolean>>({});
+  const [prevMeetingOutcomes, setPrevMeetingOutcomes] = useState<Record<number, string>>({});
+  const [prevCommitmentMet, setPrevCommitmentMet] = useState<boolean | null>(null);
+  const [prevCommitmentReflection, setPrevCommitmentReflection] = useState('');
+  const [prevLearningFollowThrough, setPrevLearningFollowThrough] = useState<boolean | null>(null);
 
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
@@ -71,6 +89,22 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
 
   const totalPipelineArr = (pipeline || []).reduce((s, o) => s + (Number(o.arr) || 0), 0);
   const totalRenewalArr = (renewals || []).reduce((s, r) => s + (Number(r.arr) || 0), 0);
+
+  // Parse previous week's client meetings
+  const prevClientMeetings: ClientMeeting[] = (() => {
+    try {
+      const parsed = JSON.parse(prevReview?.keyClientMeetings || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  })();
+
+  const updateMeeting = (index: number, field: keyof ClientMeeting, value: string) => {
+    const next = [...clientMeetings];
+    next[index] = { ...next[index], [field]: value };
+    setClientMeetings(next);
+  };
 
   const handleSave = async () => {
     if (!commitment.trim()) {
@@ -102,7 +136,7 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
         failureChangePlan: failureChange,
         commitmentForWeek: commitment,
         keyGoals: keyGoals.filter(g => g.trim()),
-        keyClientMeetings: keyMeetings,
+        keyClientMeetings: JSON.stringify(clientMeetings.filter(m => m.client.trim())),
         skillDevelopment,
         northStarGoals,
       });
@@ -112,6 +146,8 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
       toast.error('Failed to save weekly review');
     }
   };
+
+  const hasPrevReview = !!prevReview;
 
   return (
     <Dialog open={open} onOpenChange={() => {}}>
@@ -132,7 +168,7 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
 
         <ScrollArea className="max-h-[calc(90vh-180px)]">
           <div className="p-6 space-y-6">
-            {/* North Star Goals */}
+            {/* ===== NORTH STAR GOALS ===== */}
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <Target className="h-4 w-4 text-primary" />
@@ -150,97 +186,17 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
 
             <Separator />
 
-            {/* Commitment */}
+            {/* ===== LAST WEEK ACCOUNTABILITY ===== */}
             <section>
-              <div className="flex items-center gap-2 mb-2">
-                <Trophy className="h-4 w-4 text-status-yellow" />
-                <h3 className="font-display text-sm font-bold">Commitment for the Week</h3>
+              <div className="flex items-center gap-2 mb-4">
+                <CheckCircle2 className="h-4 w-4 text-primary" />
+                <h3 className="font-display text-sm font-bold">Last Week Accountability</h3>
+                <Badge variant="outline" className="text-[10px]">How did you perform?</Badge>
               </div>
-              <Textarea
-                value={commitment}
-                onChange={e => setCommitment(e.target.value)}
-                placeholder="What is your #1 commitment this week?"
-                className="min-h-[60px] text-sm"
-              />
-            </section>
 
-            {/* Key Goals */}
-            <section>
-              <div className="flex items-center gap-2 mb-2">
-                <ChevronRight className="h-4 w-4 text-primary" />
-                <h3 className="font-display text-sm font-bold">Key Goals for This Week</h3>
-                <span className="text-xs text-muted-foreground italic">(Key outcomes)</span>
-              </div>
-              <div className="space-y-2">
-                {keyGoals.map((g, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground w-4">{i + 1}.</span>
-                    <Input
-                      value={g}
-                      onChange={e => {
-                        const next = [...keyGoals];
-                        next[i] = e.target.value;
-                        setKeyGoals(next);
-                      }}
-                      placeholder={`Goal ${i + 1}`}
-                      className="text-sm h-8"
-                    />
-                    {keyGoals.length > 1 && (
-                      <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" onClick={() => setKeyGoals(keyGoals.filter((_, j) => j !== i))}>
-                        <X className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
-                {keyGoals.length < 5 && (
-                  <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => setKeyGoals([...keyGoals, ''])}>
-                    <Plus className="h-3 w-3 mr-1" /> Add goal
-                  </Button>
-                )}
-              </div>
-            </section>
-
-            {/* Key Client Meetings */}
-            <section>
-              <div className="flex items-center gap-2 mb-2">
-                <Calendar className="h-4 w-4 text-status-green" />
-                <h3 className="font-display text-sm font-bold">Key Client Meetings This Week</h3>
-                <span className="text-xs text-muted-foreground italic">(deal progression, new opps, etc)</span>
-              </div>
-              <Textarea
-                value={keyMeetings}
-                onChange={e => setKeyMeetings(e.target.value)}
-                placeholder="List key meetings and their purpose..."
-                className="min-h-[60px] text-sm"
-              />
-            </section>
-
-            {/* Skill Development */}
-            <section>
-              <div className="flex items-center gap-2 mb-2">
-                <BookOpen className="h-4 w-4 text-accent-foreground" />
-                <h3 className="font-display text-sm font-bold">How I'm Up-Leveling My Skills</h3>
-                <span className="text-xs text-muted-foreground italic">(Podcasts, books, training, etc)</span>
-              </div>
-              <Textarea
-                value={skillDevelopment}
-                onChange={e => setSkillDevelopment(e.target.value)}
-                placeholder="What are you learning this week?"
-                className="min-h-[50px] text-sm"
-              />
-            </section>
-
-            <Separator />
-
-            {/* Last Week Performance Recap */}
-            <section>
-              <div className="flex items-center gap-2 mb-3">
-                <TrendingUp className="h-4 w-4 text-primary" />
-                <h3 className="font-display text-sm font-bold">Last Week Performance</h3>
-                <Badge variant="outline" className="text-[10px]">Auto-populated</Badge>
-              </div>
+              {/* Auto-populated metrics */}
               {metricsLoading ? (
-                <div className="text-xs text-muted-foreground">Loading metrics...</div>
+                <div className="text-xs text-muted-foreground mb-4">Loading metrics...</div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
                   {[
@@ -258,6 +214,110 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
                       <div className="text-[10px] text-muted-foreground">{m.label}</div>
                     </Card>
                   ))}
+                </div>
+              )}
+
+              {/* Previous commitment accountability */}
+              {hasPrevReview && prevReview.commitmentForWeek && (
+                <div className="space-y-3 mb-4">
+                  <div className="rounded-lg border border-border p-3 bg-muted/30">
+                    <label className="text-xs font-semibold mb-1 block text-muted-foreground">Last week's commitment:</label>
+                    <p className="text-sm font-medium mb-2">"{prevReview.commitmentForWeek}"</p>
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="text-xs font-semibold">Did you achieve it?</span>
+                      <Button
+                        size="sm" variant={prevCommitmentMet === true ? 'default' : 'outline'}
+                        className={cn("h-7 text-xs", prevCommitmentMet === true && "bg-status-green hover:bg-status-green")}
+                        onClick={() => setPrevCommitmentMet(true)}
+                      >
+                        <CheckCircle2 className="h-3 w-3 mr-1" /> Yes
+                      </Button>
+                      <Button
+                        size="sm" variant={prevCommitmentMet === false ? 'default' : 'outline'}
+                        className={cn("h-7 text-xs", prevCommitmentMet === false && "bg-status-red hover:bg-status-red")}
+                        onClick={() => setPrevCommitmentMet(false)}
+                      >
+                        <XCircle className="h-3 w-3 mr-1" /> No
+                      </Button>
+                    </div>
+                    {prevCommitmentMet === false && (
+                      <Textarea
+                        value={prevCommitmentReflection}
+                        onChange={e => setPrevCommitmentReflection(e.target.value)}
+                        placeholder="What got in the way?"
+                        className="min-h-[40px] text-sm mt-1"
+                      />
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Previous key goals accountability */}
+              {hasPrevReview && prevReview.keyGoals.length > 0 && (
+                <div className="mb-4">
+                  <label className="text-xs font-semibold mb-2 block">Last week's key goals — did you achieve them?</label>
+                  <div className="space-y-1.5">
+                    {prevReview.keyGoals.map((goal, i) => (
+                      <div key={i} className="flex items-center gap-2 rounded-lg border border-border p-2 bg-muted/20">
+                        <Checkbox
+                          checked={prevGoalsAchieved[i] || false}
+                          onCheckedChange={(checked) => setPrevGoalsAchieved(prev => ({ ...prev, [i]: !!checked }))}
+                        />
+                        <span className={cn("text-sm flex-1", prevGoalsAchieved[i] && "line-through text-muted-foreground")}>{goal}</span>
+                        {prevGoalsAchieved[i] ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-status-green shrink-0" />
+                        ) : (
+                          <XCircle className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Previous client meeting outcomes */}
+              {prevClientMeetings.length > 0 && (
+                <div className="mb-4">
+                  <label className="text-xs font-semibold mb-2 block">Client meeting outcomes — what happened?</label>
+                  <div className="space-y-2">
+                    {prevClientMeetings.map((m, i) => (
+                      <div key={i} className="rounded-lg border border-border p-2.5 bg-muted/20 space-y-1.5">
+                        <div className="flex items-center gap-2 text-xs">
+                          <Calendar className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-muted-foreground">{m.date || 'No date'}</span>
+                          <span className="font-semibold">{m.client}</span>
+                          <span className="text-muted-foreground">— {m.goal}</span>
+                        </div>
+                        <Input
+                          value={prevMeetingOutcomes[i] || ''}
+                          onChange={e => setPrevMeetingOutcomes(prev => ({ ...prev, [i]: e.target.value }))}
+                          placeholder="What was the outcome?"
+                          className="text-sm h-7"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Learning follow-through */}
+              {hasPrevReview && prevReview.skillDevelopment && (
+                <div className="rounded-lg border border-border p-3 bg-muted/20 mb-4">
+                  <label className="text-xs font-semibold mb-1 block text-muted-foreground">Last week's learning plan:</label>
+                  <p className="text-sm mb-2">"{prevReview.skillDevelopment}"</p>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-semibold">Did you follow through?</span>
+                    <Button
+                      size="sm" variant={prevLearningFollowThrough === true ? 'default' : 'outline'}
+                      className={cn("h-7 text-xs", prevLearningFollowThrough === true && "bg-status-green hover:bg-status-green")}
+                      onClick={() => setPrevLearningFollowThrough(true)}
+                    >Yes</Button>
+                    <Button
+                      size="sm" variant={prevLearningFollowThrough === false ? 'default' : 'outline'}
+                      className={cn("h-7 text-xs", prevLearningFollowThrough === false && "bg-status-red hover:bg-status-red")}
+                      onClick={() => setPrevLearningFollowThrough(false)}
+                    >No</Button>
+                  </div>
                 </div>
               )}
 
@@ -301,7 +361,125 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
 
             <Separator />
 
-            {/* Renewal Opportunities This Quarter */}
+            {/* ===== THIS WEEK PLANNING ===== */}
+            <section>
+              <div className="flex items-center gap-2 mb-4">
+                <Compass className="h-4 w-4 text-primary" />
+                <h3 className="font-display text-sm font-bold">This Week's Plan</h3>
+              </div>
+
+              {/* Commitment */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Trophy className="h-3.5 w-3.5 text-status-yellow" />
+                  <label className="text-xs font-semibold">Commitment for the Week</label>
+                </div>
+                <Textarea
+                  value={commitment}
+                  onChange={e => setCommitment(e.target.value)}
+                  placeholder="What is your #1 commitment this week?"
+                  className="min-h-[60px] text-sm"
+                />
+              </div>
+
+              {/* Key Goals */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <ChevronRight className="h-3.5 w-3.5 text-primary" />
+                  <label className="text-xs font-semibold">Key Goals for This Week</label>
+                  <span className="text-[10px] text-muted-foreground italic">(Key outcomes)</span>
+                </div>
+                <div className="space-y-2">
+                  {keyGoals.map((g, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground w-4">{i + 1}.</span>
+                      <Input
+                        value={g}
+                        onChange={e => {
+                          const next = [...keyGoals];
+                          next[i] = e.target.value;
+                          setKeyGoals(next);
+                        }}
+                        placeholder={`Goal ${i + 1}`}
+                        className="text-sm h-8"
+                      />
+                      {keyGoals.length > 1 && (
+                        <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" onClick={() => setKeyGoals(keyGoals.filter((_, j) => j !== i))}>
+                          <X className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                  {keyGoals.length < 5 && (
+                    <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => setKeyGoals([...keyGoals, ''])}>
+                      <Plus className="h-3 w-3 mr-1" /> Add goal
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Key Client Meetings — structured */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Calendar className="h-3.5 w-3.5 text-status-green" />
+                  <label className="text-xs font-semibold">Key Client Meetings This Week</label>
+                  <span className="text-[10px] text-muted-foreground italic">(deal progression, new opps, etc)</span>
+                </div>
+                <div className="space-y-2">
+                  {clientMeetings.map((m, i) => (
+                    <div key={i} className="grid grid-cols-[90px_1fr_1fr_28px] gap-2 items-center">
+                      <Input
+                        type="date"
+                        value={m.date}
+                        onChange={e => updateMeeting(i, 'date', e.target.value)}
+                        className="text-xs h-8"
+                      />
+                      <Input
+                        value={m.client}
+                        onChange={e => updateMeeting(i, 'client', e.target.value)}
+                        placeholder="Client"
+                        className="text-sm h-8"
+                      />
+                      <Input
+                        value={m.goal}
+                        onChange={e => updateMeeting(i, 'goal', e.target.value)}
+                        placeholder="Goal / Purpose"
+                        className="text-sm h-8"
+                      />
+                      {clientMeetings.length > 1 && (
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setClientMeetings(clientMeetings.filter((_, j) => j !== i))}>
+                          <X className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                  {clientMeetings.length < 8 && (
+                    <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => setClientMeetings([...clientMeetings, { date: '', client: '', goal: '' }])}>
+                      <Plus className="h-3 w-3 mr-1" /> Add meeting
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Skill Development */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <BookOpen className="h-3.5 w-3.5 text-accent-foreground" />
+                  <label className="text-xs font-semibold">How I'm Up-Leveling My Skills</label>
+                  <span className="text-[10px] text-muted-foreground italic">(Podcasts, books, training, etc)</span>
+                </div>
+                <Textarea
+                  value={skillDevelopment}
+                  onChange={e => setSkillDevelopment(e.target.value)}
+                  placeholder="What are you learning this week?"
+                  className="min-h-[50px] text-sm"
+                />
+              </div>
+            </section>
+
+            <Separator />
+
+            {/* ===== RENEWALS THIS QUARTER ===== */}
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <RefreshCw className="h-4 w-4 text-status-green" />
@@ -328,9 +506,7 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="font-medium truncate">{r.account_name}</span>
                         {r.churn_risk && (
-                          <span className={cn("text-[10px] shrink-0", RISK_COLORS[r.churn_risk] || 'text-muted-foreground')}>
-                            ●
-                          </span>
+                          <span className={cn("text-[10px] shrink-0", RISK_COLORS[r.churn_risk] || 'text-muted-foreground')}>●</span>
                         )}
                       </div>
                       <span className="font-mono text-right">{formatCurrency(Number(r.arr))}</span>
@@ -346,7 +522,7 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
 
             <Separator />
 
-            {/* Pipeline Overview */}
+            {/* ===== PIPELINE OVERVIEW ===== */}
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <DollarSign className="h-4 w-4 text-primary" />
