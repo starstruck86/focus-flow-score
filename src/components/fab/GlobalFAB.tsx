@@ -195,7 +195,15 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
       },
     },
     {
-      id: 'quick-log',
+      id: 'resource-library',
+      label: 'Resource Library',
+      icon: Link2,
+      onClick: () => {
+        setShowResourceLibrary(true);
+        setIsExpanded(false);
+      },
+    },
+    {
       label: 'Quick Log',
       icon: Bolt,
       shortcut: 'Q',
