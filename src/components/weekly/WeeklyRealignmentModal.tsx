@@ -22,6 +22,8 @@ import {
   useSaveWeeklyReview, 
   getCurrentWeekRange 
 } from '@/hooks/useWeeklyReview';
+import { useQuotaTargets } from '@/hooks/useSalesAge';
+import { DEFAULT_QUOTA_TARGETS } from '@/lib/salesAgeCalculations';
 
 interface Props {
   open: boolean;
