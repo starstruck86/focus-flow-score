@@ -1,8 +1,8 @@
-// Territory Copilot v3 - streaming chat client with auth, modes, and write-back actions
+// Territory Copilot v4 - streaming chat client with auth, modes, frameworks, and write-back actions
 import { supabase } from '@/integrations/supabase/client';
 
 export type CopilotMsg = { role: "user" | "assistant"; content: string };
-export type CopilotMode = "quick" | "deep" | "meeting";
+export type CopilotMode = "quick" | "deep" | "meeting" | "deal-strategy" | "recap-email";
 
 const COPILOT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/territory-copilot`;
 
@@ -90,7 +90,6 @@ export async function streamCopilot({
           const content = parsed.choices?.[0]?.delta?.content;
           if (content) {
             onDelta(content);
-            // Detect if updates were applied
             if (content.includes("🔄 **Data Updates Applied**") || content.includes("✅ Updated")) {
               detectedUpdate = true;
             }
@@ -128,17 +127,21 @@ export async function streamCopilot({
 
 export const SUGGESTED_QUESTIONS: { text: string; mode: CopilotMode }[] = [
   { text: "What should I work on right now?", mode: "quick" },
+  { text: "Run MEDDICC analysis on my top deal", mode: "deal-strategy" },
   { text: "Which accounts show new buying signals?", mode: "quick" },
   { text: "Which renewals are at risk this quarter?", mode: "quick" },
-  { text: "What should I know before my next meeting?", mode: "meeting" },
+  { text: "Prep me for my next client meeting", mode: "meeting" },
+  { text: "Draft a recap email for my last call", mode: "recap-email" },
   { text: "Research & update my top pipeline accounts", mode: "deep" },
-  { text: "Which Tier 1 accounts are underworked?", mode: "quick" },
-  { text: "Deep research and enrich my top 3 accounts", mode: "deep" },
+  { text: "Analyze pipeline gaps using my frameworks", mode: "deal-strategy" },
   { text: "What changed in my territory this week?", mode: "deep" },
+  { text: "Which deals need champion development?", mode: "deal-strategy" },
 ];
 
 export const MODE_CONFIG: Record<CopilotMode, { label: string; description: string; icon: string }> = {
   quick: { label: "Quick", description: "Fast answers from your CRM data", icon: "⚡" },
   deep: { label: "Deep Research", description: "CRM + web intel → auto-updates accounts", icon: "🔬" },
-  meeting: { label: "Meeting Prep", description: "Full brief + auto-enriches account data", icon: "📋" },
+  meeting: { label: "Meeting Prep", description: "Full brief using your frameworks + transcripts", icon: "📋" },
+  "deal-strategy": { label: "Deal Strategy", description: "Framework-based deal analysis (MEDDICC, etc.)", icon: "🎯" },
+  "recap-email": { label: "Recap Email", description: "Draft follow-up emails from call transcripts", icon: "✉️" },
 };

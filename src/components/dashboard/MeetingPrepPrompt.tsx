@@ -1,11 +1,12 @@
 // Proactive Meeting Prep Prompt - Shows a prominent banner for upcoming client meetings
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, Building2, Clock, FileText, ChevronRight, X, Video, CheckCircle2, Plus, Target, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Building2, Clock, FileText, ChevronRight, X, Video, CheckCircle2, Plus, Target, RefreshCw, Sparkles, Mail } from 'lucide-react';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { useStore } from '@/store/useStore';
 import { useRecentTranscriptsForMeetingPrep } from '@/hooks/useCallTranscripts';
 import { useResourceLinksForAccount } from '@/hooks/useResourceLinks';
+import { useCopilot } from '@/contexts/CopilotContext';
 import { format, parseISO, differenceInMinutes } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { cn } from '@/lib/utils';
@@ -209,6 +210,7 @@ function MeetingCard({ meeting, isExpanded, onToggle, onDismiss, onAddPrep }: {
   onDismiss: () => void;
   onAddPrep: () => void;
 }) {
+  const { ask } = useCopilot();
   const isUrgent = meeting.minutesUntil <= 30;
   const daysSinceTouch = meeting.lastTouchDate
     ? Math.floor((Date.now() - new Date(meeting.lastTouchDate).getTime()) / 86400000)
@@ -355,6 +357,21 @@ function MeetingCard({ meeting, isExpanded, onToggle, onDismiss, onAddPrep }: {
             {recentTranscripts && recentTranscripts.length === 0 && (
               <p className="text-[11px] text-muted-foreground italic">No call transcripts for this account yet</p>
             )}
+
+            {/* AI Actions */}
+            <div className="flex gap-1.5 pt-1 border-t border-border/30">
+              <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-1" onClick={e => { e.stopPropagation(); ask(`Prep me for my meeting with ${meeting.accountName}`, 'meeting', meeting.accountId); }}>
+                <Sparkles className="h-3 w-3" /> AI Meeting Brief
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-1" onClick={e => { e.stopPropagation(); ask(`Analyze my deal with ${meeting.accountName} using my frameworks`, 'deal-strategy', meeting.accountId); }}>
+                <Target className="h-3 w-3" /> Deal Strategy
+              </Button>
+              {recentTranscripts && recentTranscripts.length > 0 && (
+                <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-1" onClick={e => { e.stopPropagation(); ask(`Draft a recap email for my last call with ${meeting.accountName}`, 'recap-email', meeting.accountId); }}>
+                  <Mail className="h-3 w-3" /> Recap Email
+                </Button>
+              )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
