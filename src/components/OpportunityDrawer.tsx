@@ -377,6 +377,11 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
 
             <Separator />
 
+            {/* Resources & Templates */}
+            <ResourceLinksPanel recordType="opportunity" recordId={opportunity.id} />
+
+            <Separator />
+
             {/* Activity Log */}
             <div className="space-y-2">
               <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
