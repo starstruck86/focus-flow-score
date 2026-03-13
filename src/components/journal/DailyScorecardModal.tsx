@@ -21,9 +21,10 @@ import {
   Sun,
   Moon,
   Target,
-  Zap,
   ArrowRight,
-  Trophy,
+  Clock,
+  MapPin,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,9 +41,8 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useRecordCheckIn } from '@/hooks/useStreakData';
-import { format, subDays, eachDayOfInterval, isToday, isSameDay } from 'date-fns';
+import { format, subDays, eachDayOfInterval, isToday, isSameDay, startOfDay, endOfDay, differenceInCalendarDays } from 'date-fns';
 import { toast } from 'sonner';
-import { RingGauge } from '@/components/RingGauge';
 
 // --- Types ---
 type JournalMode = 'morning' | 'evening';
@@ -124,6 +124,7 @@ function MetricCounter({
   onChange,
   icon: Icon,
   compact = false,
+  hint,
 }: {
   label: string;
   value: number;
@@ -131,6 +132,7 @@ function MetricCounter({
   onChange: (v: number) => void;
   icon: React.ElementType;
   compact?: boolean;
+  hint?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
@@ -181,7 +183,7 @@ function MetricCounter({
               "text-[10px] transition-colors",
               atTarget ? "text-status-green" : "text-muted-foreground"
             )}>
-              {atTarget ? '✓ Hit' : `Target: ${target}`}
+              {atTarget ? '✓ Hit' : hint ? hint : `Target: ${target}`}
             </span>
           </div>
         </div>
@@ -307,7 +309,10 @@ function ModeToggle({ mode, onToggle }: { mode: JournalMode; onToggle: (m: Journ
   );
 }
 
-// --- Hooks ---
+// ============================
+// DATA HOOKS
+// ============================
+
 function usePowerHourTotals(date: string) {
   return useQuery({
     queryKey: ['power-hour-totals', date],
@@ -358,6 +363,101 @@ function useYesterdayEntry() {
       if (error) throw error;
       return data;
     },
+  });
+}
+
+// #1 - Calendar-aware meeting count for a date
+function useCalendarMeetingCount(date: string) {
+  return useQuery({
+    queryKey: ['calendar-meeting-count', date],
+    queryFn: async () => {
+      const dayStart = startOfDay(new Date(date + 'T12:00:00')).toISOString();
+      const dayEnd = endOfDay(new Date(date + 'T12:00:00')).toISOString();
+      const { data, error } = await supabase
+        .from('calendar_events')
+        .select('id, title, start_time, end_time, location')
+        .gte('start_time', dayStart)
+        .lte('start_time', dayEnd)
+        .order('start_time', { ascending: true });
+      if (error) throw error;
+      // Filter for likely customer meetings (exclude internal/admin-sounding events)
+      const internalKeywords = ['standup', 'stand-up', '1:1', '1-1', 'team sync', 'all hands', 'sprint', 'retro', 'planning', 'internal', 'lunch', 'break'];
+      const meetings = (data || []).filter(e => {
+        const title = e.title.toLowerCase();
+        return !internalKeywords.some(kw => title.includes(kw)) && !e.all_day;
+      });
+      return { totalEvents: data?.length || 0, customerMeetings: meetings, customerMeetingCount: meetings.length };
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+// #2 - 7-day rolling average for smart defaults
+function useRollingAverage() {
+  return useQuery({
+    queryKey: ['journal-rolling-avg'],
+    queryFn: async () => {
+      const weekAgo = format(subDays(new Date(), 7), 'yyyy-MM-dd');
+      const { data, error } = await supabase
+        .from('daily_journal_entries')
+        .select('dials, conversations, prospects_added, meetings_set, customer_meetings_held, opportunities_created, accounts_researched, contacts_prepped')
+        .gte('date', weekAgo)
+        .eq('checked_in', true);
+      if (error) throw error;
+      if (!data || data.length === 0) return null;
+      const n = data.length;
+      return {
+        dials: Math.round(data.reduce((s, r) => s + (r.dials || 0), 0) / n),
+        conversations: Math.round(data.reduce((s, r) => s + (r.conversations || 0), 0) / n),
+        prospectsAdded: Math.round(data.reduce((s, r) => s + (r.prospects_added || 0), 0) / n),
+        meetingsSet: Math.round(data.reduce((s, r) => s + (r.meetings_set || 0), 0) / n),
+        customerMeetingsHeld: Math.round(data.reduce((s, r) => s + (r.customer_meetings_held || 0), 0) / n),
+        opportunitiesCreated: Math.round(data.reduce((s, r) => s + (r.opportunities_created || 0), 0) / n),
+        accountsResearched: Math.round(data.reduce((s, r) => s + (r.accounts_researched || 0), 0) / n),
+        contactsPrepped: Math.round(data.reduce((s, r) => s + (r.contacts_prepped || 0), 0) / n),
+        dayCount: n,
+      };
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+}
+
+// #3 - Today's calendar events for morning view
+function useTodayCalendarEvents() {
+  return useQuery({
+    queryKey: ['today-calendar-events'],
+    queryFn: async () => {
+      const dayStart = startOfDay(new Date()).toISOString();
+      const dayEnd = endOfDay(new Date()).toISOString();
+      const { data, error } = await supabase
+        .from('calendar_events')
+        .select('id, title, start_time, end_time, location')
+        .gte('start_time', dayStart)
+        .lte('start_time', dayEnd)
+        .order('start_time', { ascending: true });
+      if (error) throw error;
+      return (data || []) as Array<{ id: string; title: string; start_time: string; end_time: string | null; location: string | null }>;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+// #10 - Last journal entry (for PTO/gap carryover)
+function useLastJournalEntry() {
+  return useQuery({
+    queryKey: ['last-journal-entry'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('daily_journal_entries')
+        .select('date, tomorrow_priority, what_worked_today, daily_score, goal_met, dials, conversations, meetings_set')
+        .eq('checked_in', true)
+        .order('date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -466,7 +566,49 @@ function useWhoopMetrics(date: string) {
   });
 }
 
-// --- Morning Check-in View ---
+// ============================
+// #4 - Streak-break notification scheduler
+// ============================
+function useStreakBreakNotification(todayCheckedIn: boolean) {
+  const scheduledRef = useRef(false);
+
+  useEffect(() => {
+    if (scheduledRef.current || todayCheckedIn) return;
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
+
+    const now = new Date();
+    const fivePM = new Date();
+    fivePM.setHours(17, 0, 0, 0);
+
+    // Only schedule if before 5pm
+    if (now >= fivePM) return;
+
+    const msUntil5pm = fivePM.getTime() - now.getTime();
+    scheduledRef.current = true;
+
+    // Request permission early
+    if (Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    const timer = setTimeout(() => {
+      if (Notification.permission === 'granted') {
+        new Notification('🔥 Don\'t break your streak!', {
+          body: 'Your daily journal is waiting. Quick-log your activity to keep your streak alive.',
+          icon: '/pwa-192x192.png',
+          tag: 'streak-break',
+          requireInteraction: true,
+        });
+      }
+    }, msUntil5pm);
+
+    return () => clearTimeout(timer);
+  }, [todayCheckedIn]);
+}
+
+// ============================
+// MORNING VIEW
+// ============================
 function MorningView({
   yesterdayEntry,
   weeklyReview,
@@ -476,6 +618,8 @@ function MorningView({
   data,
   update,
   onSwitchToEvening,
+  todayEvents,
+  lastEntry,
 }: {
   yesterdayEntry: any;
   weeklyReview: any;
@@ -485,6 +629,8 @@ function MorningView({
   data: ScorecardData;
   update: <K extends keyof ScorecardData>(key: K, val: ScorecardData[K]) => void;
   onSwitchToEvening: () => void;
+  todayEvents: Array<{ id: string; title: string; start_time: string; end_time: string | null; location: string | null }> | undefined;
+  lastEntry: any;
 }) {
   const weeklyGoals = weeklyReview?.key_goals ? (
     Array.isArray(weeklyReview.key_goals) ? weeklyReview.key_goals : []
@@ -493,8 +639,46 @@ function MorningView({
     Array.isArray(weeklyReview.north_star_goals) ? weeklyReview.north_star_goals : []
   ) : [];
 
+  // #10 - Detect gap (PTO/weekend) — show carryover if last entry was 2+ days ago
+  const daysSinceLastEntry = lastEntry?.date
+    ? differenceInCalendarDays(new Date(), new Date(lastEntry.date + 'T12:00:00'))
+    : 0;
+  const isReturningFromGap = daysSinceLastEntry >= 2 && !yesterdayEntry;
+  const carryoverCommitment = lastEntry?.tomorrow_priority;
+
   return (
     <div className="space-y-4">
+      {/* #10 - PTO/Weekend Carryover Banner */}
+      {isReturningFromGap && (
+        <motion.div
+          initial={{ opacity: 0, y: -5 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-3 rounded-xl bg-gradient-to-r from-accent/10 to-primary/5 border border-accent/20"
+        >
+          <div className="flex items-start gap-2.5">
+            <div className="w-6 h-6 rounded-full bg-accent/15 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <AlertTriangle className="h-3 w-3 text-accent-foreground" />
+            </div>
+            <div className="flex-1">
+              <p className="text-xs font-semibold text-foreground mb-1">
+                Welcome back! {daysSinceLastEntry} days since your last log.
+              </p>
+              {lastEntry && (
+                <p className="text-xs text-muted-foreground">
+                  Last logged: {format(new Date(lastEntry.date + 'T12:00:00'), 'EEEE, MMM d')} — {lastEntry.goal_met ? '✓ Goal met' : '✗ Goal missed'} ({lastEntry.daily_score || 0}/6)
+                </p>
+              )}
+              {carryoverCommitment && (
+                <div className="mt-2 p-2 rounded-lg bg-background/60 border border-border/30">
+                  <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-widest">Last commitment</span>
+                  <p className="text-sm text-foreground/80 mt-0.5">"{carryoverCommitment}"</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {/* WHOOP Recovery Banner */}
       {whoopMetrics && (
         <motion.div
@@ -529,8 +713,8 @@ function MorningView({
         </motion.div>
       )}
 
-      {/* Yesterday Summary */}
-      {yesterdayEntry && (
+      {/* Yesterday Summary (only if not returning from gap) */}
+      {yesterdayEntry && !isReturningFromGap && (
         <div className="space-y-2">
           <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold flex items-center gap-1.5">
             <CalendarDays className="h-3 w-3" />
@@ -575,7 +759,7 @@ function MorningView({
       )}
 
       {/* Yesterday's Commitment Check */}
-      {nudgeData?.yesterdayCommitment && (
+      {nudgeData?.yesterdayCommitment && !isReturningFromGap && (
         <div className="p-3 rounded-xl bg-secondary/40 border border-border/50">
           <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
             Yesterday's commitment
@@ -602,6 +786,43 @@ function MorningView({
         </div>
       )}
 
+      {/* #3 - Today's Calendar */}
+      {todayEvents && todayEvents.length > 0 && (
+        <div className="space-y-2">
+          <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold flex items-center gap-1.5">
+            <Calendar className="h-3 w-3" />
+            Today's Schedule ({todayEvents.length})
+          </Label>
+          <div className="space-y-1">
+            {todayEvents.slice(0, 6).map(event => (
+              <div key={event.id} className="flex items-center gap-2.5 p-2 rounded-lg bg-secondary/20 border border-border/30">
+                <div className="w-5 h-5 rounded flex items-center justify-center bg-primary/10 flex-shrink-0">
+                  <Clock className="h-3 w-3 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium truncate">{event.title}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {format(new Date(event.start_time), 'h:mm a')}
+                    {event.end_time && ` – ${format(new Date(event.end_time), 'h:mm a')}`}
+                    {event.location && (
+                      <span className="inline-flex items-center gap-0.5 ml-1.5">
+                        <MapPin className="h-2.5 w-2.5" />
+                        {event.location.length > 20 ? event.location.slice(0, 20) + '…' : event.location}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            ))}
+            {todayEvents.length > 6 && (
+              <p className="text-[10px] text-muted-foreground text-center py-1">
+                +{todayEvents.length - 6} more events
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Weekly Goals & Commitment */}
       <div className="space-y-2">
         <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold flex items-center gap-1.5">
@@ -609,7 +830,6 @@ function MorningView({
           This Week's Focus
         </Label>
         <div className="p-3 rounded-xl bg-gradient-to-br from-primary/5 to-accent/5 border border-primary/10 space-y-3">
-          {/* North Star */}
           {northStarGoals.length > 0 && (
             <div>
               <span className="text-[9px] font-semibold text-primary uppercase tracking-widest">North Star</span>
@@ -621,7 +841,6 @@ function MorningView({
             </div>
           )}
           
-          {/* Weekly Commitment */}
           {weeklyReview?.commitment_for_week && (
             <div>
               <span className="text-[9px] font-semibold text-primary uppercase tracking-widest">Weekly Commitment</span>
@@ -629,7 +848,6 @@ function MorningView({
             </div>
           )}
 
-          {/* Key Outcomes */}
           {weeklyGoals.length > 0 && (
             <div>
               <span className="text-[9px] font-semibold text-primary uppercase tracking-widest">Key Outcomes</span>
@@ -681,14 +899,15 @@ function MorningView({
   );
 }
 
-// --- Evening / EOD View ---
+// ============================
+// EVENING VIEW
+// ============================
 function EveningView({
   data,
   update,
   targets,
   score,
   goalMet,
-  nudgeData,
   showExtras,
   setShowExtras,
   showLeading,
@@ -696,13 +915,13 @@ function EveningView({
   showInsights,
   setShowInsights,
   weeklyInsights,
+  rollingAvg,
 }: {
   data: ScorecardData;
   update: <K extends keyof ScorecardData>(key: K, val: ScorecardData[K]) => void;
   targets: DailyTargets;
   score: number;
   goalMet: boolean;
-  nudgeData: any;
   showExtras: boolean;
   setShowExtras: (v: boolean) => void;
   showLeading: boolean;
@@ -710,9 +929,28 @@ function EveningView({
   showInsights: boolean;
   setShowInsights: (v: boolean) => void;
   weeklyInsights: any;
+  rollingAvg: any;
 }) {
+  // Generate hints from rolling average
+  const avgHint = (field: string, target: number) => {
+    if (!rollingAvg) return undefined;
+    const avg = rollingAvg[field];
+    if (avg === undefined || avg === 0) return undefined;
+    return `Target: ${target} · Avg: ${avg}`;
+  };
+
   return (
     <div className="space-y-4">
+      {/* Rolling Average Banner */}
+      {rollingAvg && rollingAvg.dayCount >= 3 && (
+        <div className="flex items-center gap-2 p-2 rounded-lg bg-secondary/20 border border-border/30">
+          <Sparkles className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+          <p className="text-[10px] text-muted-foreground">
+            Smart defaults from your {rollingAvg.dayCount}-day average. Adjust as needed.
+          </p>
+        </div>
+      )}
+
       {/* Core Metrics */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
@@ -727,12 +965,12 @@ function EveningView({
           </span>
         </div>
         <div className="space-y-1.5">
-          <MetricCounter label="Dials" value={data.dials} target={targets.dials} onChange={v => update('dials', v)} icon={Phone} />
-          <MetricCounter label="Conversations" value={data.conversations} target={targets.conversations} onChange={v => update('conversations', v)} icon={MessageSquare} />
-          <MetricCounter label="Prospects Added" value={data.prospectsAdded} target={targets.prospectsAdded} onChange={v => update('prospectsAdded', v)} icon={Users} />
-          <MetricCounter label="Meetings Set" value={data.meetingsSet} target={targets.meetingsSet} onChange={v => update('meetingsSet', v)} icon={Calendar} />
-          <MetricCounter label="Meetings Held" value={data.customerMeetingsHeld} target={targets.customerMeetings} onChange={v => update('customerMeetingsHeld', v)} icon={Calendar} />
-          <MetricCounter label="Opps Created" value={data.opportunitiesCreated} target={targets.oppsCreated} onChange={v => update('opportunitiesCreated', v)} icon={TrendingUp} />
+          <MetricCounter label="Dials" value={data.dials} target={targets.dials} onChange={v => update('dials', v)} icon={Phone} hint={avgHint('dials', targets.dials)} />
+          <MetricCounter label="Conversations" value={data.conversations} target={targets.conversations} onChange={v => update('conversations', v)} icon={MessageSquare} hint={avgHint('conversations', targets.conversations)} />
+          <MetricCounter label="Prospects Added" value={data.prospectsAdded} target={targets.prospectsAdded} onChange={v => update('prospectsAdded', v)} icon={Users} hint={avgHint('prospectsAdded', targets.prospectsAdded)} />
+          <MetricCounter label="Meetings Set" value={data.meetingsSet} target={targets.meetingsSet} onChange={v => update('meetingsSet', v)} icon={Calendar} hint={avgHint('meetingsSet', targets.meetingsSet)} />
+          <MetricCounter label="Meetings Held" value={data.customerMeetingsHeld} target={targets.customerMeetings} onChange={v => update('customerMeetingsHeld', v)} icon={Calendar} hint={avgHint('customerMeetingsHeld', targets.customerMeetings)} />
+          <MetricCounter label="Opps Created" value={data.opportunitiesCreated} target={targets.oppsCreated} onChange={v => update('opportunitiesCreated', v)} icon={TrendingUp} hint={avgHint('opportunitiesCreated', targets.oppsCreated)} />
         </div>
       </div>
 
@@ -941,7 +1179,9 @@ function EveningView({
   );
 }
 
-// --- Main Component ---
+// ============================
+// MAIN COMPONENT
+// ============================
 interface DailyScorecardModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -966,6 +1206,8 @@ export function DailyScorecardModal({
   const [showLeading, setShowLeading] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
   const [powerHourApplied, setPowerHourApplied] = useState(false);
+  const [calendarApplied, setCalendarApplied] = useState(false);
+  const [avgApplied, setAvgApplied] = useState(false);
   const queryClient = useQueryClient();
   const targets = useDailyTargets();
   const { data: nudgeData } = useJournalNudge();
@@ -976,7 +1218,14 @@ export function DailyScorecardModal({
   const { data: weeklyInsights } = useWeeklyInsights();
   const { data: yesterdayEntry } = useYesterdayEntry();
   const { data: weeklyReview } = useCurrentWeeklyReview();
+  const { data: calendarData } = useCalendarMeetingCount(entryDate);
+  const { data: rollingAvg } = useRollingAverage();
+  const { data: todayEvents } = useTodayCalendarEvents();
+  const { data: lastEntry } = useLastJournalEntry();
   const recordCheckIn = useRecordCheckIn();
+
+  // #4 - Schedule streak-break notification
+  useStreakBreakNotification(!!existingEntry?.checked_in);
 
   // Reset when opened
   useEffect(() => {
@@ -984,6 +1233,8 @@ export function DailyScorecardModal({
       setSelectedDate(date ? new Date(date + 'T12:00:00') : new Date());
       setMode(forceMode || getDefaultMode());
       setPowerHourApplied(false);
+      setCalendarApplied(false);
+      setAvgApplied(false);
       setShowExtras(false);
       setShowLeading(false);
       setShowInsights(false);
@@ -1016,13 +1267,35 @@ export function DailyScorecardModal({
         yesterdayCommitmentMet: existingEntry.yesterday_commitment_met,
       });
       setPowerHourApplied(true);
+      setCalendarApplied(true);
+      setAvgApplied(true);
     } else {
       setData({ ...DEFAULT_SCORECARD, ...initialData });
       setPowerHourApplied(false);
+      setCalendarApplied(false);
+      setAvgApplied(false);
     }
   }, [open, existingEntry, entryDate]);
 
-  // Auto-populate from Power Hour sessions
+  // #2 - Auto-populate from rolling average (only for brand new entries)
+  useEffect(() => {
+    if (open && rollingAvg && !avgApplied && !existingEntry && rollingAvg.dayCount >= 3) {
+      setAvgApplied(true);
+      setData(prev => ({
+        ...prev,
+        dials: prev.dials || rollingAvg.dials,
+        conversations: prev.conversations || rollingAvg.conversations,
+        prospectsAdded: prev.prospectsAdded || rollingAvg.prospectsAdded,
+        meetingsSet: prev.meetingsSet || rollingAvg.meetingsSet,
+        customerMeetingsHeld: prev.customerMeetingsHeld || rollingAvg.customerMeetingsHeld,
+        opportunitiesCreated: prev.opportunitiesCreated || rollingAvg.opportunitiesCreated,
+        accountsResearched: prev.accountsResearched || rollingAvg.accountsResearched,
+        contactsPrepped: prev.contactsPrepped || rollingAvg.contactsPrepped,
+      }));
+    }
+  }, [open, rollingAvg, avgApplied, existingEntry]);
+
+  // Auto-populate from Power Hour sessions (additive on top of avg)
   useEffect(() => {
     if (open && powerHourTotals && !powerHourApplied && !existingEntry) {
       setPowerHourApplied(true);
@@ -1037,6 +1310,20 @@ export function DailyScorecardModal({
       });
     }
   }, [open, powerHourTotals, powerHourApplied, existingEntry]);
+
+  // #1 - Auto-populate customer meetings from calendar
+  useEffect(() => {
+    if (open && calendarData && !calendarApplied && !existingEntry && calendarData.customerMeetingCount > 0) {
+      setCalendarApplied(true);
+      setData(prev => ({
+        ...prev,
+        customerMeetingsHeld: Math.max(prev.customerMeetingsHeld, calendarData.customerMeetingCount),
+      }));
+      toast.info(`${calendarData.customerMeetingCount} meeting${calendarData.customerMeetingCount > 1 ? 's' : ''} detected from calendar`, {
+        description: calendarData.customerMeetings.slice(0, 3).map((m: any) => m.title).join(', '),
+      });
+    }
+  }, [open, calendarData, calendarApplied, existingEntry]);
 
   const update = <K extends keyof ScorecardData>(key: K, val: ScorecardData[K]) => {
     setData(prev => ({ ...prev, [key]: val }));
@@ -1173,8 +1460,7 @@ export function DailyScorecardModal({
   };
 
   const headerTitle = mode === 'morning' ? 'Morning Check-in' : 'Daily Journal';
-  const headerIcon = mode === 'morning' ? Sun : Moon;
-  const HeaderIcon = headerIcon;
+  const HeaderIcon = mode === 'morning' ? Sun : Moon;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1184,7 +1470,7 @@ export function DailyScorecardModal({
           <div className="flex items-center justify-between mb-3">
             <div>
               <DialogTitle className="font-display text-lg mb-0.5 flex items-center gap-2">
-                <HeaderIcon className="h-4.5 w-4.5" />
+                <HeaderIcon className="h-4 w-4" />
                 {headerTitle}
                 {isEditMode && (
                   <Badge variant="secondary" className="text-[9px] font-normal">Editing</Badge>
@@ -1205,6 +1491,11 @@ export function DailyScorecardModal({
                 {powerHourTotals && mode === 'evening' && (
                   <Badge variant="secondary" className="text-[9px] font-normal px-1.5 py-0 gap-1">
                     <span className="text-status-yellow">⚡</span> Power Hour data
+                  </Badge>
+                )}
+                {calendarData && calendarData.customerMeetingCount > 0 && mode === 'evening' && (
+                  <Badge variant="secondary" className="text-[9px] font-normal px-1.5 py-0 gap-1">
+                    <span className="text-primary">📅</span> {calendarData.customerMeetingCount} mtgs
                   </Badge>
                 )}
               </div>
@@ -1245,6 +1536,8 @@ export function DailyScorecardModal({
                   data={data}
                   update={update}
                   onSwitchToEvening={() => setMode('evening')}
+                  todayEvents={todayEvents}
+                  lastEntry={lastEntry}
                 />
               </motion.div>
             ) : (
@@ -1261,7 +1554,6 @@ export function DailyScorecardModal({
                   targets={targets}
                   score={score}
                   goalMet={goalMet}
-                  nudgeData={nudgeData}
                   showExtras={showExtras}
                   setShowExtras={setShowExtras}
                   showLeading={showLeading}
@@ -1269,6 +1561,7 @@ export function DailyScorecardModal({
                   showInsights={showInsights}
                   setShowInsights={setShowInsights}
                   weeklyInsights={weeklyInsights}
+                  rollingAvg={rollingAvg}
                 />
               </motion.div>
             )}
