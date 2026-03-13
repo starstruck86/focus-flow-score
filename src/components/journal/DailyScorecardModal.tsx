@@ -509,6 +509,13 @@ export function DailyScorecardModal({
                     {streakData.current_checkin_streak}d streak
                   </span>
                 ) : null}
+                {whoopMetrics && (
+                  <span className="ml-2 inline-flex items-center gap-1">
+                    <Badge variant="secondary" className="text-[9px] font-normal px-1.5 py-0 gap-1">
+                      <span className="text-status-green">●</span> WHOOP synced
+                    </Badge>
+                  </span>
+                )}
               </p>
             </div>
             <ScoreRing score={score} total={6} goalMet={goalMet} />
