@@ -45,16 +45,60 @@ export function useResourceLinks(filters?: Filters) {
       if (error) throw error;
       return (data || []) as unknown as ResourceLink[];
     },
-    enabled: !!user,
+    enabled: !!user && !!filters, // Only fetch when filters are provided
   });
 }
 
-export function useResourceLinksForRecord(recordType: 'account' | 'opportunity' | 'renewal', recordId?: string) {
+// Fetch links for a specific record + also its parent account links for opps/renewals
+export function useResourceLinksForRecord(
+  recordType: 'account' | 'opportunity' | 'renewal',
+  recordId?: string,
+  parentAccountId?: string
+) {
   const filters: Filters = {};
   if (recordType === 'account') filters.accountId = recordId;
   if (recordType === 'opportunity') filters.opportunityId = recordId;
   if (recordType === 'renewal') filters.renewalId = recordId;
-  return useResourceLinks(recordId ? filters : undefined);
+
+  const directLinks = useResourceLinks(recordId ? filters : undefined);
+
+  // Also fetch account-level links for opps/renewals
+  const accountFilters: Filters | undefined =
+    parentAccountId && recordType !== 'account' ? { accountId: parentAccountId } : undefined;
+  const accountLinks = useResourceLinks(accountFilters);
+
+  return {
+    data: [
+      ...(directLinks.data || []),
+      ...(accountLinks.data || []).map(l => ({ ...l, _inherited: true as const })),
+    ],
+    isLoading: directLinks.isLoading || accountLinks.isLoading,
+  };
+}
+
+// Fetch all resource links for global library view
+export function useAllResourceLinks() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ['resource-links', 'all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('resource_links' as any)
+        .select('*')
+        .order('category', { ascending: true })
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      return (data || []) as unknown as ResourceLink[];
+    },
+    enabled: !!user,
+  });
+}
+
+// Fetch resource links for a specific account (used in meeting prep)
+export function useResourceLinksForAccount(accountId?: string) {
+  return useResourceLinks(accountId ? { accountId } : undefined);
 }
 
 export function useAddResourceLink() {
@@ -66,6 +110,21 @@ export function useAddResourceLink() {
       const { error } = await supabase
         .from('resource_links' as any)
         .insert({ ...link, user_id: user!.id } as any);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['resource-links'] }),
+  });
+}
+
+export function useUpdateResourceLink() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: Partial<ResourceLink> & { id: string }) => {
+      const { error } = await supabase
+        .from('resource_links' as any)
+        .update({ ...updates, updated_at: new Date().toISOString() } as any)
+        .eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['resource-links'] }),
@@ -85,4 +144,52 @@ export function useDeleteResourceLink() {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['resource-links'] }),
   });
+}
+
+// --- Utility: Auto-detect info from URL ---
+
+export interface UrlMeta {
+  suggestedLabel: string;
+  suggestedCategory: ResourceCategory;
+  docType: 'google-doc' | 'google-sheet' | 'google-slides' | 'google-form' | 'google-drive' | 'notion' | 'figma' | 'miro' | 'generic';
+  favicon?: string;
+}
+
+export function detectUrlMeta(url: string): UrlMeta {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase();
+    const path = u.pathname.toLowerCase();
+
+    // Google suite
+    if (host.includes('docs.google.com')) {
+      if (path.includes('/document/')) return { suggestedLabel: 'Google Doc', suggestedCategory: 'template', docType: 'google-doc' };
+      if (path.includes('/spreadsheets/')) return { suggestedLabel: 'Google Sheet', suggestedCategory: 'reference', docType: 'google-sheet' };
+      if (path.includes('/presentation/')) return { suggestedLabel: 'Google Slides', suggestedCategory: 'framework', docType: 'google-slides' };
+      if (path.includes('/forms/')) return { suggestedLabel: 'Google Form', suggestedCategory: 'other', docType: 'google-form' };
+    }
+    if (host.includes('drive.google.com')) return { suggestedLabel: 'Google Drive', suggestedCategory: 'reference', docType: 'google-drive' };
+
+    // Notion
+    if (host.includes('notion.so') || host.includes('notion.site')) return { suggestedLabel: 'Notion Page', suggestedCategory: 'playbook', docType: 'notion' };
+
+    // Figma
+    if (host.includes('figma.com')) return { suggestedLabel: 'Figma Design', suggestedCategory: 'template', docType: 'figma' };
+
+    // Miro
+    if (host.includes('miro.com')) return { suggestedLabel: 'Miro Board', suggestedCategory: 'framework', docType: 'miro' };
+
+    return { suggestedLabel: host.replace('www.', ''), suggestedCategory: 'reference', docType: 'generic' };
+  } catch {
+    return { suggestedLabel: 'Link', suggestedCategory: 'other', docType: 'generic' };
+  }
+}
+
+export function isValidUrl(str: string): boolean {
+  try {
+    const u = new URL(str);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
