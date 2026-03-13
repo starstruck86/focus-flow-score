@@ -73,7 +73,7 @@ export function DailyCheckInModal({
   const [recovery, setRecovery] = useState<RecoveryJournalInputs>(
     initialRecovery || getDefaultRecoveryJournalInputs()
   );
-  const [selectedTemplate, setSelectedTemplate] = useState<DayTypeTemplate>('balanced-pd');
+  
   
   const entryDate = date || format(new Date(), 'yyyy-MM-dd');
   const saveJournal = useSaveJournalEntry();
