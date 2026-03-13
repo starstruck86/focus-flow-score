@@ -223,8 +223,9 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
     },
     {
       id: 'log-day',
-      label: hasCheckedInToday ? 'Edit Today' : 'Full Check-In',
+      label: hasCheckedInToday ? 'Edit Journal' : 'Daily Journal',
       icon: ClipboardCheck,
+      shortcut: 'J',
       variant: 'primary',
       onClick: () => {
         setShowCheckIn(true);
