@@ -218,6 +218,10 @@ function MeetingCard({ meeting, isExpanded, onToggle, onDismiss, onAddPrep }: {
     isExpanded ? meeting.accountId : undefined
   );
 
+  const { data: accountResources } = useResourceLinksForAccount(
+    isExpanded ? meeting.accountId : undefined
+  );
+
   return (
     <div className={cn(
       "rounded-lg bg-card border transition-all",
