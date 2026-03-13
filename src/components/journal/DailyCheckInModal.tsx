@@ -36,7 +36,6 @@ import {
   getDefaultPreparednessInputs,
   getDefaultRecoveryJournalInputs,
 } from '@/types/journal';
-import { type DayTypeTemplate } from '@/lib/goodDayModel';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
