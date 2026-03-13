@@ -1,6 +1,6 @@
 // Streak & Gamification Types
 
-export type CheckInMethod = 'daily_input' | 'task_complete' | 'focus_timer' | 'manual' | 'journal' | 'scorecard' | 'backfill';
+export type CheckInMethod = 'daily_input' | 'task_complete' | 'focus_timer' | 'manual' | 'journal' | 'scorecard' | 'backfill' | 'edit';
 
 export type BadgeType = 
   | 'first_week'
