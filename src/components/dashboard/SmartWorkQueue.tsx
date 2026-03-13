@@ -133,13 +133,14 @@ function ActionItemCard({ item, onAddTask, taskAdded, onDismiss }: {
   );
 }
 
-function Section({ title, icon: Icon, items, color, addedTasks, onAddTask, maxItems = 5 }: {
+function Section({ title, icon: Icon, items, color, addedTasks, onAddTask, onDismiss, maxItems = 5 }: {
   title: string;
   icon: typeof Building2;
   items: WorkItem[];
   color: string;
   addedTasks: Set<string>;
   onAddTask: (item: WorkItem) => void;
+  onDismiss: (item: WorkItem) => void;
   maxItems?: number;
 }) {
   if (items.length === 0) return null;
@@ -162,6 +163,7 @@ function Section({ title, icon: Icon, items, color, addedTasks, onAddTask, maxIt
             item={item} 
             onAddTask={onAddTask}
             taskAdded={addedTasks.has(item.id)}
+            onDismiss={onDismiss}
           />
         ))}
       </div>
