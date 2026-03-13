@@ -206,12 +206,12 @@ function useDailyTargets(): DailyTargets {
   });
 
   return {
-    dials: parseFloat(data?.target_dials_per_day ?? '60'),
-    conversations: parseFloat(data?.target_connects_per_day ?? '6'),
-    meetingsSet: Math.ceil(parseFloat(data?.target_meetings_set_per_week ?? '3') / 5),
-    customerMeetings: Math.ceil(parseFloat(data?.target_customer_meetings_per_week ?? '8') / 5),
-    oppsCreated: Math.ceil(parseFloat(data?.target_opps_created_per_week ?? '1') / 5),
-    prospectsAdded: parseFloat(data?.target_accounts_researched_per_day ?? '10'),
+    dials: Number(data?.target_dials_per_day ?? 60),
+    conversations: Number(data?.target_connects_per_day ?? 6),
+    meetingsSet: Math.ceil(Number(data?.target_meetings_set_per_week ?? 3) / 5),
+    customerMeetings: Math.ceil(Number(data?.target_customer_meetings_per_week ?? 8) / 5),
+    oppsCreated: Math.ceil(Number(data?.target_opps_created_per_week ?? 1) / 5),
+    prospectsAdded: Number(data?.target_accounts_researched_per_day ?? 10),
   };
 }
 
