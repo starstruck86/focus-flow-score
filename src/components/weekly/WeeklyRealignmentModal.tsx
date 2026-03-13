@@ -55,6 +55,8 @@ export function WeeklyRealignmentModal({ open, onComplete }: Props) {
   const { data: prevReview, isLoading: prevLoading } = usePreviousWeekReview();
   const saveReview = useSaveWeeklyReview();
   const { weekStart, weekEnd } = getCurrentWeekRange();
+  const { data: quotaTargets } = useQuotaTargets();
+  const targets = quotaTargets || DEFAULT_QUOTA_TARGETS;
 
   const [northStarGoals] = useState<string[]>([
     "President's Club - 125% of quota - top rep",
