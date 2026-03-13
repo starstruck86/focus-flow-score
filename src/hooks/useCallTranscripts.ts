@@ -68,7 +68,7 @@ export function useTranscriptsForAccount(accountId: string | undefined) {
         .order('call_date', { ascending: false })
         .limit(20);
       if (error) throw error;
-      return (data || []) as CallTranscript[];
+      return (data || []) as unknown as CallTranscript[];
     },
     enabled: !!accountId,
   });
