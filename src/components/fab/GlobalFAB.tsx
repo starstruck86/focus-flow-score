@@ -11,6 +11,7 @@ import {
   ClipboardCheck,
   Bolt,
   ImagePlus,
+  BookOpen,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
