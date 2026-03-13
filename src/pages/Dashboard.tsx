@@ -310,6 +310,13 @@ export default function Dashboard() {
         open={showDailyCheckIn}
         onOpenChange={setShowDailyCheckIn}
       />
+      
+      {!weeklyReviewLoading && !currentWeekReview?.completed && !weeklyReviewDismissed && (
+        <WeeklyRealignmentModal
+          open={true}
+          onComplete={() => setWeeklyReviewDismissed(true)}
+        />
+      )}
     </Layout>
   );
 }
