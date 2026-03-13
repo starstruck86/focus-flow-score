@@ -802,6 +802,11 @@ export default function Settings() {
             </div>
           </TabsContent>
           
+          {/* Integrations Tab */}
+          <TabsContent value="integrations" className="space-y-4">
+            <WhoopIntegration />
+          </TabsContent>
+          
           {/* Appearance Tab */}
           <TabsContent value="appearance" className="space-y-4">
             <div className="metric-card">
