@@ -146,6 +146,15 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
       },
     },
     {
+      id: 'view-transcripts',
+      label: 'View Transcripts',
+      icon: BookOpen,
+      onClick: () => {
+        setShowTranscriptViewer(true);
+        setIsExpanded(false);
+      },
+    },
+    {
       id: 'add-update-opp',
       label: 'Add/Update Opp',
       icon: Target,
