@@ -337,10 +337,12 @@ export function DailyScorecardModal({
   const [data, setData] = useState<ScorecardData>({ ...DEFAULT_SCORECARD, ...initialData });
   const [saving, setSaving] = useState(false);
   const [showExtras, setShowExtras] = useState(false);
+  const [whoopApplied, setWhoopApplied] = useState(false);
   const queryClient = useQueryClient();
   const targets = useDailyTargets();
   const { data: nudgeData } = useJournalNudge();
   const { data: streakData } = useCurrentStreak();
+  const { data: whoopMetrics } = useWhoopMetrics(entryDate);
   const recordCheckIn = useRecordCheckIn();
 
   useEffect(() => {
