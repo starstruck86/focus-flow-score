@@ -1,7 +1,7 @@
 // Territory Copilot v3 — ⌘K with Quick / Deep Research / Meeting Prep + write-back
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Sparkles, Send, Loader2, MessageSquare, ArrowRight, Zap, RotateCcw, Search, Calendar } from 'lucide-react';
+import { Sparkles, Send, Loader2, MessageSquare, ArrowRight, Zap, RotateCcw, Search, Calendar, Target, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { streamCopilot, SUGGESTED_QUESTIONS, MODE_CONFIG, type CopilotMsg, type CopilotMode } from '@/lib/territoryCopilot';
 import { useCopilot } from '@/contexts/CopilotContext';
@@ -13,6 +13,8 @@ const MODE_ICONS: Record<CopilotMode, typeof Zap> = {
   quick: Zap,
   deep: Search,
   meeting: Calendar,
+  "deal-strategy": Target,
+  "recap-email": Mail,
 };
 
 const ModeSelector = memo(({ mode, onChange, disabled }: { mode: CopilotMode; onChange: (m: CopilotMode) => void; disabled: boolean }) => (
