@@ -1242,7 +1242,7 @@ export type Database = {
           access_token: string
           created_at: string
           id: string
-          refresh_token: string
+          refresh_token: string | null
           scopes: string | null
           token_expires_at: string
           updated_at: string
@@ -1253,7 +1253,7 @@ export type Database = {
           access_token: string
           created_at?: string
           id?: string
-          refresh_token: string
+          refresh_token?: string | null
           scopes?: string | null
           token_expires_at: string
           updated_at?: string
@@ -1264,7 +1264,7 @@ export type Database = {
           access_token?: string
           created_at?: string
           id?: string
-          refresh_token?: string
+          refresh_token?: string | null
           scopes?: string | null
           token_expires_at?: string
           updated_at?: string

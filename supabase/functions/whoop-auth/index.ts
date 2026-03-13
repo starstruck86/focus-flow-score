@@ -1,8 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 serve(async (req) => {
@@ -12,23 +13,38 @@ serve(async (req) => {
 
   try {
     const WHOOP_CLIENT_ID = Deno.env.get('WHOOP_CLIENT_ID');
-    if (!WHOOP_CLIENT_ID) {
-      throw new Error('WHOOP_CLIENT_ID not configured');
+    if (!WHOOP_CLIENT_ID) throw new Error('WHOOP_CLIENT_ID not configured');
+
+    // Authenticate user
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
+
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+    const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const userClient = createClient(SUPABASE_URL, ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const userId = claimsData.claims.sub;
 
     const { redirectUri } = await req.json();
-    if (!redirectUri) {
-      throw new Error('redirectUri is required');
-    }
+    if (!redirectUri) throw new Error('redirectUri is required');
 
-    const CALLBACK_URL = `${Deno.env.get('SUPABASE_URL')}/functions/v1/whoop-callback`;
+    const CALLBACK_URL = `${SUPABASE_URL}/functions/v1/whoop-callback`;
 
-    // Generate a random state for CSRF protection
-    const state = crypto.randomUUID();
-
-    // Store the state and redirectUri temporarily — we encode them in state param
-    // Format: state|redirectUri (the callback will parse this)
-    const encodedState = btoa(JSON.stringify({ state, redirectUri }));
+    // Encode userId + redirectUri in state so the callback knows which user to associate
+    const encodedState = btoa(JSON.stringify({ userId, redirectUri, nonce: crypto.randomUUID() }));
 
     const scopes = 'read:recovery read:sleep read:workout read:cycles read:profile';
 
@@ -45,8 +61,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('whoop-auth error:', error);
     return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 });

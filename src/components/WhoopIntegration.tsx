@@ -4,7 +4,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, RefreshCw, Link2, Unlink, Activity, Moon, Zap, CheckCircle2, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -22,7 +21,6 @@ interface WhoopMetric {
   recovery_score: number | null;
   sleep_score: number | null;
   strain_score: number | null;
-  imported_at: string;
 }
 
 export function WhoopIntegration() {
@@ -35,30 +33,23 @@ export function WhoopIntegration() {
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
 
-  // Handle OAuth callback
+  // Handle OAuth callback result
   useEffect(() => {
     const whoopStatus = searchParams.get('whoop');
-    const whoopUserId = searchParams.get('whoop_user_id');
-
-    if (whoopStatus === 'success' && whoopUserId && user) {
-      // Claim the connection
-      claimConnection(whoopUserId);
-      // Clean URL
-      searchParams.delete('whoop');
-      searchParams.delete('whoop_user_id');
-      setSearchParams(searchParams, { replace: true });
-    } else if (whoopStatus === 'error') {
-      toast.error('Failed to connect WHOOP');
+    if (whoopStatus === 'success') {
+      toast.success('WHOOP connected successfully!');
       searchParams.delete('whoop');
       setSearchParams(searchParams, { replace: true });
-    }
-  }, [searchParams, user]);
-
-  // Load connection and metrics
-  useEffect(() => {
-    if (user) {
       loadData();
+    } else if (whoopStatus === 'error') {
+      toast.error('Failed to connect WHOOP. Please try again.');
+      searchParams.delete('whoop');
+      setSearchParams(searchParams, { replace: true });
     }
+  }, []);
+
+  useEffect(() => {
+    if (user) loadData();
   }, [user]);
 
   async function loadData() {
@@ -75,40 +66,18 @@ export function WhoopIntegration() {
       if (conn) {
         const { data: metricsData } = await supabase
           .from('whoop_daily_metrics')
-          .select('id, date, recovery_score, sleep_score, strain_score, imported_at')
+          .select('id, date, recovery_score, sleep_score, strain_score')
           .eq('user_id', user!.id)
           .order('date', { ascending: false })
           .limit(7);
-
         setMetrics(metricsData || []);
+      } else {
+        setMetrics([]);
       }
     } catch (err) {
       console.error('Failed to load WHOOP data:', err);
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function claimConnection(whoopUserId: string) {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const response = await supabase.functions.invoke('whoop-sync', {
-        body: { action: 'claim', whoopUserId },
-      });
-
-      if (response.error) {
-        throw new Error(response.error.message);
-      }
-
-      toast.success('WHOOP connected successfully!');
-      await loadData();
-      // Auto-sync after connecting
-      await syncData();
-    } catch (err: any) {
-      console.error('Claim error:', err);
-      toast.error('Failed to link WHOOP account');
     }
   }
 
@@ -118,12 +87,8 @@ export function WhoopIntegration() {
       const response = await supabase.functions.invoke('whoop-auth', {
         body: { redirectUri: window.location.origin },
       });
-
       if (response.error) throw new Error(response.error.message);
-      const { authUrl } = response.data;
-      
-      // Redirect to WHOOP OAuth
-      window.location.href = authUrl;
+      window.location.href = response.data.authUrl;
     } catch (err: any) {
       console.error('Connect error:', err);
       toast.error('Failed to start WHOOP connection');
@@ -137,15 +102,13 @@ export function WhoopIntegration() {
       const response = await supabase.functions.invoke('whoop-sync', {
         body: { action: 'sync' },
       });
-
       if (response.error) throw new Error(response.error.message);
-      
       const { synced } = response.data;
       toast.success(`Synced ${synced} day(s) of WHOOP data`);
       await loadData();
     } catch (err: any) {
       console.error('Sync error:', err);
-      toast.error('Failed to sync WHOOP data');
+      toast.error(err.message || 'Failed to sync WHOOP data');
     } finally {
       setSyncing(false);
     }
@@ -157,9 +120,7 @@ export function WhoopIntegration() {
       const response = await supabase.functions.invoke('whoop-sync', {
         body: { action: 'disconnect' },
       });
-
       if (response.error) throw new Error(response.error.message);
-
       setConnection(null);
       setMetrics([]);
       toast.success('WHOOP disconnected');
@@ -171,20 +132,19 @@ export function WhoopIntegration() {
     }
   }
 
-  const latestMetric = metrics[0];
-
   function scoreColor(score: number | null, type: 'recovery' | 'sleep' | 'strain') {
-    if (score === null || score === undefined) return 'text-muted-foreground';
+    if (score == null) return 'text-muted-foreground';
     if (type === 'strain') {
       if (score >= 18) return 'text-destructive';
       if (score >= 14) return 'text-yellow-500';
       return 'text-green-500';
     }
-    // recovery & sleep: higher = better
     if (score >= 67) return 'text-green-500';
     if (score >= 34) return 'text-yellow-500';
     return 'text-destructive';
   }
+
+  const latestMetric = metrics[0];
 
   if (loading) {
     return (
@@ -199,7 +159,6 @@ export function WhoopIntegration() {
 
   return (
     <div className="space-y-4">
-      {/* Connection Status Card */}
       <div className="metric-card">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
@@ -227,7 +186,6 @@ export function WhoopIntegration() {
           </Button>
         ) : (
           <div className="space-y-4">
-            {/* Latest Scores */}
             {latestMetric && (
               <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-lg border bg-card p-3 text-center">
@@ -254,7 +212,6 @@ export function WhoopIntegration() {
               </div>
             )}
 
-            {/* Last Sync & Actions */}
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">
                 Last sync: {format(parseISO(connection.updated_at), 'MMM d, h:mm a')}
@@ -271,7 +228,6 @@ export function WhoopIntegration() {
               </div>
             </div>
 
-            {/* Recent Metrics Table */}
             {metrics.length > 0 && (
               <div className="rounded-lg border overflow-hidden">
                 <Table>
@@ -303,6 +259,12 @@ export function WhoopIntegration() {
                   </TableBody>
                 </Table>
               </div>
+            )}
+
+            {metrics.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-2">
+                No metrics yet. Click "Sync Now" to pull your WHOOP data.
+              </p>
             )}
           </div>
         )}
