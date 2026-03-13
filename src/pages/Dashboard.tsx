@@ -302,12 +302,9 @@ export default function Dashboard() {
         sensitivityAnalysis={commissionPacing?.sensitivityAnalysis || []}
       />
       
-      <DailyCheckInModal
+      <DailyScorecardModal
         open={showDailyCheckIn}
         onOpenChange={setShowDailyCheckIn}
-        initialActivity={todayJournalEntry?.activity}
-        initialPreparedness={todayJournalEntry?.preparedness}
-        initialRecovery={todayJournalEntry?.recovery}
       />
     </Layout>
   );
