@@ -205,8 +205,6 @@ export function DailyCheckInModal({
                 <ActivityStep 
                   activity={activity} 
                   onChange={setActivity}
-                  selectedTemplate={selectedTemplate}
-                  onTemplateChange={setSelectedTemplate}
                 />
               )}
               {currentStep === 2 && (
