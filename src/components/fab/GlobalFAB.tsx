@@ -89,6 +89,14 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
           setShowAddTask(true);
         }
       }
+      // J for Daily Journal
+      if (e.key === 'j' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const target = e.target as HTMLElement;
+        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && !target.isContentEditable) {
+          e.preventDefault();
+          setShowCheckIn(true);
+        }
+      }
       // Q for quick log
       if (e.key === 'q' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const target = e.target as HTMLElement;
