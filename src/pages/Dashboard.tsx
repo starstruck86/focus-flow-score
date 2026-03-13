@@ -4,6 +4,8 @@ import { motion } from 'framer-motion';
 import { Calendar, ChevronDown } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { DailyScorecardModal, BackfillCards } from '@/components/journal';
+import { WeeklyRealignmentModal } from '@/components/weekly/WeeklyRealignmentModal';
+import { useCurrentWeekReview } from '@/hooks/useWeeklyReview';
 import { useStore } from '@/store/useStore';
 import { 
   useWorkScheduleConfig, 
@@ -51,7 +53,9 @@ export default function Dashboard() {
   const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
   const [showCommissionDetail, setShowCommissionDetail] = useState(false);
   const [snapshotsOpen, setSnapshotsOpen] = useState(false);
+  const [weeklyReviewDismissed, setWeeklyReviewDismissed] = useState(false);
   const { widgets, toggleWidget, moveWidget, resetWidgets } = useDashboardWidgets();
+  const { data: currentWeekReview, isLoading: weeklyReviewLoading } = useCurrentWeekReview();
   
   const { opportunities, renewals, quotaConfig } = useStore();
   const { data: config } = useWorkScheduleConfig();
@@ -306,6 +310,13 @@ export default function Dashboard() {
         open={showDailyCheckIn}
         onOpenChange={setShowDailyCheckIn}
       />
+      
+      {!weeklyReviewLoading && !currentWeekReview?.completed && !weeklyReviewDismissed && (
+        <WeeklyRealignmentModal
+          open={true}
+          onComplete={() => setWeeklyReviewDismissed(true)}
+        />
+      )}
     </Layout>
   );
 }

@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
   Crosshair, Clock, DollarSign, ArrowRight, Calendar, Building2, 
-  TrendingUp, AlertTriangle, Zap, RefreshCw, Plus, Check,
+  TrendingUp, AlertTriangle, Zap, RefreshCw, Plus, Check, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCopilot } from '@/contexts/CopilotContext';
@@ -16,6 +16,7 @@ import { Sparkles } from 'lucide-react';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 import { toast } from 'sonner';
 import type { Workstream } from '@/types';
+import { useDismissedItems } from '@/hooks/useWeeklyReview';
 
 const URGENCY_STYLES: Record<string, { bg: string; text: string; border: string; label: string }> = {
   critical: { bg: 'bg-status-red/10', text: 'text-status-red', border: 'border-l-status-red', label: 'NOW' },
@@ -30,10 +31,11 @@ const TYPE_ICONS: Record<string, typeof Building2> = {
   renewal: RefreshCw,
 };
 
-function ActionItemCard({ item, onAddTask, taskAdded }: { 
+function ActionItemCard({ item, onAddTask, taskAdded, onDismiss }: { 
   item: WorkItem; 
   onAddTask: (item: WorkItem) => void;
   taskAdded: boolean;
+  onDismiss: (item: WorkItem) => void;
 }) {
   const navigate = useNavigate();
   const { setCurrentRecord } = useLinkedRecordContext();
@@ -117,18 +119,28 @@ function ActionItemCard({ item, onAddTask, taskAdded }: {
         >
           <Sparkles className="h-3.5 w-3.5" />
         </button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7 text-muted-foreground hover:text-status-red"
+          onClick={(e) => { e.stopPropagation(); onDismiss(item); }}
+          title="Remove from action plan"
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
       </div>
     </div>
   );
 }
 
-function Section({ title, icon: Icon, items, color, addedTasks, onAddTask, maxItems = 5 }: {
+function Section({ title, icon: Icon, items, color, addedTasks, onAddTask, onDismiss, maxItems = 5 }: {
   title: string;
   icon: typeof Building2;
   items: WorkItem[];
   color: string;
   addedTasks: Set<string>;
   onAddTask: (item: WorkItem) => void;
+  onDismiss: (item: WorkItem) => void;
   maxItems?: number;
 }) {
   if (items.length === 0) return null;
@@ -151,6 +163,7 @@ function Section({ title, icon: Icon, items, color, addedTasks, onAddTask, maxIt
             item={item} 
             onAddTask={onAddTask}
             taskAdded={addedTasks.has(item.id)}
+            onDismiss={onDismiss}
           />
         ))}
       </div>
@@ -162,6 +175,7 @@ export function SmartWorkQueue() {
   const { workQueue, totalArrAtRisk } = useTimeAllocation();
   const { addTask, tasks } = useStore();
   const [addedTasks, setAddedTasks] = useState<Set<string>>(new Set());
+  const { dismissedIds, dismiss: dismissItem } = useDismissedItems();
 
   // Filter out items that already have linked tasks
   const existingTaskRecordIds = useMemo(() => {
@@ -175,9 +189,14 @@ export function SmartWorkQueue() {
   }, [tasks]);
 
   const filteredQueue = useMemo(() => 
-    workQueue.filter(item => !existingTaskRecordIds.has(item.id) && !addedTasks.has(item.id)),
-    [workQueue, existingTaskRecordIds, addedTasks]
+    workQueue.filter(item => !existingTaskRecordIds.has(item.id) && !addedTasks.has(item.id) && !dismissedIds.has(item.id)),
+    [workQueue, existingTaskRecordIds, addedTasks, dismissedIds]
   );
+
+  const handleDismiss = (item: WorkItem) => {
+    dismissItem({ recordId: item.id, recordType: item.type });
+    toast('Removed from action plan', { description: item.name });
+  };
 
   const handleAddTask = (item: WorkItem) => {
     const workstream: Workstream = item.type === 'renewal' || item.isRenewalOpp ? 'renewals' : 'pg';
@@ -257,6 +276,7 @@ export function SmartWorkQueue() {
           color="text-primary"
           addedTasks={addedTasks}
           onAddTask={handleAddTask}
+          onDismiss={handleDismiss}
           maxItems={5}
         />
         <Section
@@ -266,6 +286,7 @@ export function SmartWorkQueue() {
           color="text-status-yellow"
           addedTasks={addedTasks}
           onAddTask={handleAddTask}
+          onDismiss={handleDismiss}
           maxItems={5}
         />
         <Section
@@ -275,6 +296,7 @@ export function SmartWorkQueue() {
           color="text-status-green"
           addedTasks={addedTasks}
           onAddTask={handleAddTask}
+          onDismiss={handleDismiss}
           maxItems={5}
         />
       </div>
