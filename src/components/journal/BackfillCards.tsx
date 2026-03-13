@@ -208,7 +208,7 @@ export function BackfillCards() {
       className="mb-4"
     >
       <div className="flex items-center gap-2 mb-2">
-        <Clock className="h-4 w-4 text-amber-500" />
+        <Clock className="h-4 w-4 text-status-yellow" />
         <span className="text-sm font-medium">
           {missedDays.length} day{missedDays.length > 1 ? 's' : ''} unlogged
         </span>
