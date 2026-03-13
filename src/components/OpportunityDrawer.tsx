@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { ResourceLinksPanel } from '@/components/ResourceLinksPanel';
 import {
   Phone,
   Mail,
@@ -373,6 +374,11 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
                 />
               </div>
             </div>
+
+            <Separator />
+
+            {/* Resources & Templates */}
+            <ResourceLinksPanel recordType="opportunity" recordId={opportunity.id} />
 
             <Separator />
 

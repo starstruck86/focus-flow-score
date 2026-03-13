@@ -1187,6 +1187,70 @@ export type Database = {
           },
         ]
       }
+      resource_links: {
+        Row: {
+          account_id: string | null
+          category: string
+          created_at: string
+          id: string
+          label: string
+          notes: string | null
+          opportunity_id: string | null
+          renewal_id: string | null
+          updated_at: string
+          url: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          category?: string
+          created_at?: string
+          id?: string
+          label?: string
+          notes?: string | null
+          opportunity_id?: string | null
+          renewal_id?: string | null
+          updated_at?: string
+          url: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          category?: string
+          created_at?: string
+          id?: string
+          label?: string
+          notes?: string | null
+          opportunity_id?: string | null
+          renewal_id?: string | null
+          updated_at?: string
+          url?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resource_links_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resource_links_opportunity_id_fkey"
+            columns: ["opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resource_links_renewal_id_fkey"
+            columns: ["renewal_id"]
+            isOneToOne: false
+            referencedRelation: "renewals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sales_age_snapshots: {
         Row: {
           benchmark_30d_qpi: number | null
