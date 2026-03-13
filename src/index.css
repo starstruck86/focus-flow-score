@@ -125,6 +125,12 @@
     --status-yellow-foreground: 0 0% 10%;
     --status-red: 0 72% 51%;
     --status-red-foreground: 0 0% 100%;
+    --status-orange: 24 95% 53%;
+
+    --circadian-morning-from: 38 80% 55%;
+    --circadian-morning-to: 24 70% 50%;
+    --circadian-evening-from: 230 50% 45%;
+    --circadian-evening-to: 260 40% 40%;
 
     --sidebar-background: 220 20% 8%;
     --sidebar-foreground: 0 0% 85%;
