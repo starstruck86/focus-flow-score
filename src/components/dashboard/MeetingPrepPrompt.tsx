@@ -152,11 +152,11 @@ export function MeetingPrepPrompt() {
             {isUrgent ? (
               <AlertTriangle className="h-5 w-5 text-destructive animate-pulse" />
             ) : (
-              <Video className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              <Video className="h-5 w-5 text-primary" />
             )}
             <h3 className={cn(
               "font-display text-sm font-bold",
-              isUrgent ? "text-destructive" : "text-amber-700 dark:text-amber-300"
+              isUrgent ? "text-destructive" : "text-foreground"
             )}>
               {isUrgent ? '⚡ Meeting Starting Soon!' : 'Upcoming Client Meetings'}
             </h3>

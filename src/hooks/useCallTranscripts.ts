@@ -86,7 +86,7 @@ export function useRecentTranscriptsForMeetingPrep(accountId: string | undefined
         .order('call_date', { ascending: false })
         .limit(3);
       if (error) throw error;
-      return (data || []) as Partial<CallTranscript>[];
+      return (data || []) as unknown as Partial<CallTranscript>[];
     },
     enabled: !!accountId,
   });
