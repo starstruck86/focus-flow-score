@@ -175,6 +175,7 @@ export function SmartWorkQueue() {
   const { workQueue, totalArrAtRisk } = useTimeAllocation();
   const { addTask, tasks } = useStore();
   const [addedTasks, setAddedTasks] = useState<Set<string>>(new Set());
+  const { dismissedIds, dismiss: dismissItem } = useDismissedItems();
 
   // Filter out items that already have linked tasks
   const existingTaskRecordIds = useMemo(() => {
@@ -188,9 +189,14 @@ export function SmartWorkQueue() {
   }, [tasks]);
 
   const filteredQueue = useMemo(() => 
-    workQueue.filter(item => !existingTaskRecordIds.has(item.id) && !addedTasks.has(item.id)),
-    [workQueue, existingTaskRecordIds, addedTasks]
+    workQueue.filter(item => !existingTaskRecordIds.has(item.id) && !addedTasks.has(item.id) && !dismissedIds.has(item.id)),
+    [workQueue, existingTaskRecordIds, addedTasks, dismissedIds]
   );
+
+  const handleDismiss = (item: WorkItem) => {
+    dismissItem({ recordId: item.id, recordType: item.type });
+    toast('Removed from action plan', { description: item.name });
+  };
 
   const handleAddTask = (item: WorkItem) => {
     const workstream: Workstream = item.type === 'renewal' || item.isRenewalOpp ? 'renewals' : 'pg';
