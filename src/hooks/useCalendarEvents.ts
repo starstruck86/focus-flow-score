@@ -24,7 +24,7 @@ export function useCalendarEvents() {
     queryFn: async () => {
       const now = new Date().toISOString();
       const { data, error } = await supabase
-        .from('calendar_events' as never)
+        .from('calendar_events' as any)
         .select('*')
         .gte('start_time', now)
         .order('start_time', { ascending: true })
