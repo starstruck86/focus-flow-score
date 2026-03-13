@@ -1015,6 +1015,7 @@ function EveningView({
   rollingAvg,
   quickLogMode,
   weekDaysLogged,
+  existingEntry,
 }: {
   data: ScorecardData;
   update: <K extends keyof ScorecardData>(key: K, val: ScorecardData[K]) => void;
@@ -1031,6 +1032,7 @@ function EveningView({
   rollingAvg: any;
   quickLogMode: boolean;
   weekDaysLogged: { daysLogged: number; totalDays: number } | undefined;
+  existingEntry: any;
 }) {
   const avgHint = (field: string, target: number) => {
     if (!rollingAvg) return undefined;
@@ -1244,6 +1246,39 @@ function EveningView({
                 )}
               </AnimatePresence>
             </>
+          )}
+
+          {/* Phone Distraction Tracker (read-only, logged via Shortcut) */}
+          {existingEntry && (existingEntry.distracted_minutes > 0 || existingEntry.phone_pickups > 0) && (
+            <div className="p-3 rounded-xl border border-border/50 bg-secondary/20 space-y-2">
+              <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold flex items-center gap-1.5">
+                📱 Phone Focus
+                <Badge
+                  variant="secondary"
+                  className={cn("text-[9px] font-normal px-1.5 py-0", {
+                    'bg-status-green/20 text-status-green': existingEntry.focus_label === 'Focus Day',
+                    'bg-status-yellow/20 text-status-yellow': existingEntry.focus_label === 'Normal Day',
+                    'bg-destructive/20 text-destructive': existingEntry.focus_label === 'Drift Day',
+                  })}
+                >
+                  {existingEntry.focus_label || 'No data'}
+                </Badge>
+              </Label>
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div>
+                  <p className="text-lg font-mono font-bold">{existingEntry.distracted_minutes}</p>
+                  <p className="text-[10px] text-muted-foreground">min distracted</p>
+                </div>
+                <div>
+                  <p className="text-lg font-mono font-bold">{existingEntry.phone_pickups}</p>
+                  <p className="text-[10px] text-muted-foreground">phone pickups</p>
+                </div>
+                <div>
+                  <p className="text-lg font-mono font-bold">{Number(existingEntry.focus_score).toFixed(1)}</p>
+                  <p className="text-[10px] text-muted-foreground">focus score</p>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Accountability Section */}
@@ -1757,6 +1792,7 @@ export function DailyScorecardModal({
                   rollingAvg={rollingAvg}
                   quickLogMode={quickLogMode}
                   weekDaysLogged={weekDaysLogged}
+                  existingEntry={existingEntry}
                 />
               </motion.div>
             )}

@@ -534,13 +534,16 @@ export type Database = {
           daily_score: number | null
           date: string
           dials: number
+          distracted_minutes: number | null
           distractions: string | null
           energy: number | null
           expansion_touchpoints: number
           first_call_logged: boolean | null
           first_call_time: string | null
+          focus_label: string | null
           focus_mode: string
           focus_quality: number | null
+          focus_score: number | null
           goal_met: boolean
           id: string
           manager_plus_messages: number
@@ -551,6 +554,7 @@ export type Database = {
           meetings_unprepared_note: string | null
           opportunities_created: number
           personal_development: boolean
+          phone_pickups: number | null
           pipeline_moved: number | null
           prepped_for_all_calls_tomorrow: boolean | null
           prospecting_block_minutes: number
@@ -595,13 +599,16 @@ export type Database = {
           daily_score?: number | null
           date: string
           dials?: number
+          distracted_minutes?: number | null
           distractions?: string | null
           energy?: number | null
           expansion_touchpoints?: number
           first_call_logged?: boolean | null
           first_call_time?: string | null
+          focus_label?: string | null
           focus_mode?: string
           focus_quality?: number | null
+          focus_score?: number | null
           goal_met?: boolean
           id?: string
           manager_plus_messages?: number
@@ -612,6 +619,7 @@ export type Database = {
           meetings_unprepared_note?: string | null
           opportunities_created?: number
           personal_development?: boolean
+          phone_pickups?: number | null
           pipeline_moved?: number | null
           prepped_for_all_calls_tomorrow?: boolean | null
           prospecting_block_minutes?: number
@@ -656,13 +664,16 @@ export type Database = {
           daily_score?: number | null
           date?: string
           dials?: number
+          distracted_minutes?: number | null
           distractions?: string | null
           energy?: number | null
           expansion_touchpoints?: number
           first_call_logged?: boolean | null
           first_call_time?: string | null
+          focus_label?: string | null
           focus_mode?: string
           focus_quality?: number | null
+          focus_score?: number | null
           goal_met?: boolean
           id?: string
           manager_plus_messages?: number
@@ -673,6 +684,7 @@ export type Database = {
           meetings_unprepared_note?: string | null
           opportunities_created?: number
           personal_development?: boolean
+          phone_pickups?: number | null
           pipeline_moved?: number | null
           prepped_for_all_calls_tomorrow?: boolean | null
           prospecting_block_minutes?: number

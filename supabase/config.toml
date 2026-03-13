@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.journal-nudge]
 verify_jwt = false
+
+[functions.log-workday-focus]
+verify_jwt = false
