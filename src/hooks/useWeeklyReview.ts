@@ -107,6 +107,7 @@ export function usePreviousWeekReview() {
   });
 }
 
+export function useWeeklyMetricsAggregation() {
   const { user } = useAuth();
   const { weekStart, weekEnd } = getCurrentWeekRange();
 
