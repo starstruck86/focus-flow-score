@@ -292,8 +292,12 @@ IMPORTANT RULES FOR UPDATES:
 
   const resourceInstructions = ctx.resources?.length ? `
 
-## USER'S FRAMEWORKS, TEMPLATES & PLAYBOOKS
-The user has linked the following resources. Reference them by name when giving advice, and recommend specific templates/frameworks when relevant to their question. If a framework like MEDDICC or Command of the Message is linked, use its methodology to structure your analysis.
+## SALES METHODOLOGY & FRAMEWORKS (Always Active)
+These are the user's core sales frameworks, playbooks, and methodology documents. They represent their OPERATING SYSTEM for selling — not tied to any single deal. ALWAYS use these as your frame of reference when analyzing ANY account, deal, or situation:
+- Apply MEDDICC scoring to every deal analysis automatically
+- Use Command of the Message principles when crafting talk tracks or positioning
+- Reference specific playbooks by name when recommending actions
+- Think of yourself as an elite enterprise sales brain that has internalized these frameworks and applies them fluidly across all situations
 
 ${ctx.resources.map(compactResource).join('\n')}
 ` : '';
