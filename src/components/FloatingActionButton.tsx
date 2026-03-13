@@ -253,12 +253,9 @@ export function FloatingActionButton({
       </div>
       
       {/* Modals */}
-      <DailyCheckInModal
+      <DailyScorecardModal
         open={showCheckIn}
         onOpenChange={setShowCheckIn}
-        initialActivity={todayEntry?.activity}
-        initialPreparedness={todayEntry?.preparedness}
-        initialRecovery={todayEntry?.recovery}
       />
       
       <ConfirmYesterdayModal

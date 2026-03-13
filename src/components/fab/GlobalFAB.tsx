@@ -354,12 +354,9 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
         onOpenChange={setShowFocusTimer}
       />
       
-      <DailyCheckInModal
+      <DailyScorecardModal
         open={showCheckIn}
         onOpenChange={setShowCheckIn}
-        initialActivity={todayEntry?.activity}
-        initialPreparedness={todayEntry?.preparedness}
-        initialRecovery={todayEntry?.recovery}
       />
       
       <QuickLogModal
