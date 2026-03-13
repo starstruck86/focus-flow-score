@@ -1,0 +1,307 @@
+// Proactive Meeting Prep Prompt - Shows a prominent banner for upcoming client meetings
+import { useState, useMemo, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { AlertTriangle, Building2, Clock, FileText, ChevronRight, X, Video, CheckCircle2, Plus } from 'lucide-react';
+import { useCalendarEvents } from '@/hooks/useCalendarEvents';
+import { useStore } from '@/store/useStore';
+import { useRecentTranscriptsForMeetingPrep } from '@/hooks/useCallTranscripts';
+import { format, parseISO, differenceInMinutes } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { toast } from 'sonner';
+
+const TIMEZONE = 'America/New_York';
+const DISMISSED_KEY = 'meeting_prep_dismissed';
+
+interface UpcomingClientMeeting {
+  eventId: string;
+  eventTitle: string;
+  meetingTime: Date;
+  minutesUntil: number;
+  accountId: string;
+  accountName: string;
+  accountTier?: string;
+  lastTouchDate?: string;
+  hasOpenOpps: boolean;
+  hasRenewals: boolean;
+  hasPrepTask: boolean;
+  oppCount: number;
+  totalArr: number;
+}
+
+export function MeetingPrepPrompt() {
+  const { data: events } = useCalendarEvents();
+  const { tasks, accounts, opportunities, renewals, addTask } = useStore();
+  const [dismissed, setDismissed] = useState<Set<string>>(() => {
+    try {
+      const stored = sessionStorage.getItem(DISMISSED_KEY);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch { return new Set(); }
+  });
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const now = toZonedTime(new Date(), TIMEZONE);
+
+  const upcomingMeetings = useMemo(() => {
+    if (!events) return [];
+    const items: UpcomingClientMeeting[] = [];
+
+    events.forEach(event => {
+      if (event.all_day) return;
+      const utcDate = parseISO(event.start_time);
+      const estDate = toZonedTime(utcDate, TIMEZONE);
+      const minutesUntil = differenceInMinutes(estDate, now);
+
+      // Only show meetings in the next 4 hours or happening now (up to 15 min past start)
+      if (minutesUntil < -15 || minutesUntil > 240) return;
+
+      const titleLower = event.title.toLowerCase();
+      const matchedAccount = accounts.find(a =>
+        titleLower.includes(a.name.toLowerCase()) ||
+        a.name.toLowerCase().split(' ').some(word => word.length > 3 && titleLower.includes(word))
+      );
+
+      if (!matchedAccount) return;
+
+      const accountOpps = opportunities.filter(o => o.accountId === matchedAccount.id && o.status === 'active');
+      const accountRenewals = renewals.filter(r => r.accountName === matchedAccount.name);
+      const totalArr = accountOpps.reduce((sum, o) => sum + (o.arr || 0), 0) + accountRenewals.reduce((sum, r) => sum + r.arr, 0);
+
+      const hasPrepTask = tasks.some(t =>
+        t.linkedAccountId === matchedAccount.id &&
+        t.status !== 'done' && t.status !== 'dropped' &&
+        (t.title.toLowerCase().includes('prep') || t.title.toLowerCase().includes('research'))
+      );
+
+      items.push({
+        eventId: event.id,
+        eventTitle: event.title,
+        meetingTime: estDate,
+        minutesUntil,
+        accountId: matchedAccount.id,
+        accountName: matchedAccount.name,
+        accountTier: matchedAccount.tier,
+        lastTouchDate: matchedAccount.lastTouchDate,
+        hasOpenOpps: accountOpps.length > 0,
+        hasRenewals: accountRenewals.length > 0,
+        hasPrepTask,
+        oppCount: accountOpps.length,
+        totalArr,
+      });
+    });
+
+    // Dedupe by account, keep earliest
+    const byAccount = new Map<string, UpcomingClientMeeting>();
+    items.forEach(item => {
+      const existing = byAccount.get(item.accountId);
+      if (!existing || item.meetingTime < existing.meetingTime) {
+        byAccount.set(item.accountId, item);
+      }
+    });
+
+    return Array.from(byAccount.values())
+      .filter(m => !dismissed.has(m.eventId))
+      .sort((a, b) => a.minutesUntil - b.minutesUntil);
+  }, [events, accounts, opportunities, renewals, tasks, now, dismissed]);
+
+  const handleDismiss = (eventId: string) => {
+    const next = new Set(dismissed);
+    next.add(eventId);
+    setDismissed(next);
+    sessionStorage.setItem(DISMISSED_KEY, JSON.stringify([...next]));
+  };
+
+  const handleAddPrepTask = (meeting: UpcomingClientMeeting) => {
+    addTask({
+      title: `Prep for ${meeting.eventTitle}`,
+      workstream: 'pg',
+      status: 'next',
+      priority: meeting.minutesUntil < 60 ? 'P0' : 'P1',
+      dueDate: format(new Date(), 'yyyy-MM-dd'),
+      linkedAccountId: meeting.accountId,
+      motion: 'new-logo',
+      linkedRecordType: 'account',
+      linkedRecordId: meeting.accountId,
+    } as any);
+    toast.success(`Prep task created for ${meeting.accountName}`);
+  };
+
+  if (upcomingMeetings.length === 0) return null;
+
+  const urgentMeeting = upcomingMeetings[0];
+  const isUrgent = urgentMeeting.minutesUntil <= 30;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        className={cn(
+          "rounded-xl border-2 p-4 space-y-3",
+          isUrgent
+            ? "border-destructive/50 bg-destructive/5"
+            : "border-amber-500/40 bg-amber-500/5"
+        )}
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        layout
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {isUrgent ? (
+              <AlertTriangle className="h-5 w-5 text-destructive animate-pulse" />
+            ) : (
+              <Video className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+            )}
+            <h3 className={cn(
+              "font-display text-sm font-bold",
+              isUrgent ? "text-destructive" : "text-amber-700 dark:text-amber-300"
+            )}>
+              {isUrgent ? '⚡ Meeting Starting Soon!' : 'Upcoming Client Meetings'}
+            </h3>
+            <Badge variant="outline" className="text-[10px] h-5">
+              {upcomingMeetings.length} meeting{upcomingMeetings.length !== 1 ? 's' : ''}
+            </Badge>
+          </div>
+        </div>
+
+        {/* Meeting Cards */}
+        <div className="space-y-2">
+          {upcomingMeetings.slice(0, 4).map(meeting => (
+            <MeetingCard
+              key={meeting.eventId}
+              meeting={meeting}
+              isExpanded={expandedId === meeting.eventId}
+              onToggle={() => setExpandedId(expandedId === meeting.eventId ? null : meeting.eventId)}
+              onDismiss={() => handleDismiss(meeting.eventId)}
+              onAddPrep={() => handleAddPrepTask(meeting)}
+            />
+          ))}
+        </div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+function MeetingCard({ meeting, isExpanded, onToggle, onDismiss, onAddPrep }: {
+  meeting: UpcomingClientMeeting;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onDismiss: () => void;
+  onAddPrep: () => void;
+}) {
+  const isUrgent = meeting.minutesUntil <= 30;
+  const daysSinceTouch = meeting.lastTouchDate
+    ? Math.floor((Date.now() - new Date(meeting.lastTouchDate).getTime()) / (86400000))
+    : null;
+
+  // Fetch recent transcripts for expanded view
+  const { data: recentTranscripts } = useRecentTranscriptsForMeetingPrep(
+    isExpanded ? meeting.accountId : undefined
+  );
+
+  return (
+    <div className={cn(
+      "rounded-lg bg-card border transition-all",
+      isUrgent ? "border-destructive/30" : "border-border/50"
+    )}>
+      <div className="flex items-center gap-3 px-3 py-2.5 cursor-pointer" onClick={onToggle}>
+        <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold truncate">{meeting.accountName}</p>
+            {meeting.accountTier && (
+              <Badge variant="outline" className="text-[9px] h-4 px-1">
+                Tier {meeting.accountTier}
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
+            <Clock className="h-3 w-3" />
+            <span className={cn(isUrgent && "text-destructive font-semibold")}>
+              {meeting.minutesUntil <= 0 ? 'Happening now' :
+               meeting.minutesUntil < 60 ? `In ${meeting.minutesUntil}m` :
+               `In ${Math.round(meeting.minutesUntil / 60)}h`}
+            </span>
+            <span>• {meeting.eventTitle}</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          {!meeting.hasPrepTask && (
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={e => { e.stopPropagation(); onAddPrep(); }}>
+              <Plus className="h-3 w-3" /> Prep
+            </Button>
+          )}
+          {meeting.hasPrepTask && (
+            <CheckCircle2 className="h-4 w-4 text-status-green" />
+          )}
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={e => { e.stopPropagation(); onDismiss(); }}>
+            <X className="h-3 w-3" />
+          </Button>
+          <ChevronRight className={cn("h-4 w-4 transition-transform text-muted-foreground", isExpanded && "rotate-90")} />
+        </div>
+      </div>
+
+      {/* Expanded Context */}
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            className="px-3 pb-3 space-y-2 border-t border-border/50 pt-2"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+          >
+            {/* Quick Stats */}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-md bg-muted/50 p-2">
+                <p className="text-[10px] text-muted-foreground">Open Opps</p>
+                <p className="text-sm font-bold">{meeting.oppCount}</p>
+              </div>
+              <div className="rounded-md bg-muted/50 p-2">
+                <p className="text-[10px] text-muted-foreground">Total ARR</p>
+                <p className="text-sm font-bold">${(meeting.totalArr / 1000).toFixed(0)}k</p>
+              </div>
+              <div className="rounded-md bg-muted/50 p-2">
+                <p className="text-[10px] text-muted-foreground">Last Touch</p>
+                <p className={cn("text-sm font-bold", daysSinceTouch && daysSinceTouch > 7 ? "text-destructive" : "")}>
+                  {daysSinceTouch != null ? `${daysSinceTouch}d ago` : 'Never'}
+                </p>
+              </div>
+            </div>
+
+            {/* Warnings */}
+            {daysSinceTouch != null && daysSinceTouch > 7 && (
+              <div className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="h-3 w-3" />
+                <span>No touch in {daysSinceTouch} days — review recent context</span>
+              </div>
+            )}
+
+            {/* Recent Transcripts */}
+            {recentTranscripts && recentTranscripts.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold text-muted-foreground">Recent Call Transcripts</p>
+                {recentTranscripts.map(t => (
+                  <div key={t.id} className="flex items-start gap-2 text-[11px] p-1.5 rounded bg-muted/30">
+                    <FileText className="h-3 w-3 mt-0.5 text-muted-foreground shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{t.title || t.call_type || 'Call'}</p>
+                      <p className="text-muted-foreground">{t.call_date} • {t.participants || 'No participants listed'}</p>
+                      {t.summary && <p className="text-muted-foreground line-clamp-2 mt-0.5">{t.summary}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {recentTranscripts && recentTranscripts.length === 0 && (
+              <p className="text-[11px] text-muted-foreground italic">No call transcripts for this account yet</p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}

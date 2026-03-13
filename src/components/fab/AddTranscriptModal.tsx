@@ -1,350 +1,308 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from '@/components/ui/command';
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
+  Popover, PopoverContent, PopoverTrigger,
 } from '@/components/ui/popover';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useStore } from '@/store/useStore';
+import { useSaveTranscript } from '@/hooks/useCallTranscripts';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { FileText, Target, Check, ChevronsUpDown, Copy, Upload } from 'lucide-react';
+import { FileText, Target, Check, ChevronsUpDown, Copy, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AddTranscriptModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   prefillOpportunityId?: string;
-}
-
-interface Transcript {
-  id: string;
-  opportunityId: string;
-  content: string;
-  date: string;
-  participants?: string;
-  callType?: string;
-  tags?: string[];
-  notes?: string;
-  createdAt: string;
+  prefillAccountId?: string;
+  prefillRenewalId?: string;
 }
 
 const CALL_TYPES = [
-  'Discovery Call',
-  'Demo',
-  'Technical Review',
-  'Executive Meeting',
-  'Pricing Discussion',
-  'Contract Review',
-  'Follow-up',
-  'Other',
+  'Discovery Call', 'Demo', 'Technical Review', 'Executive Meeting',
+  'Pricing Discussion', 'Contract Review', 'Renewal Check-in',
+  'QBR', 'Follow-up', 'Other',
 ];
 
 export function AddTranscriptModal({
-  open,
-  onOpenChange,
-  prefillOpportunityId,
+  open, onOpenChange, prefillOpportunityId, prefillAccountId, prefillRenewalId,
 }: AddTranscriptModalProps) {
-  const { opportunities, updateOpportunity } = useStore();
-  
+  const { opportunities, renewals, accounts } = useStore();
+  const saveTranscript = useSaveTranscript();
+
+  const [linkType, setLinkType] = useState<'opportunity' | 'renewal'>('opportunity');
   const [oppSelectOpen, setOppSelectOpen] = useState(false);
-  const [selectedOppId, setSelectedOppId] = useState<string>('');
+  const [renewalSelectOpen, setRenewalSelectOpen] = useState(false);
+  const [selectedOppId, setSelectedOppId] = useState('');
+  const [selectedRenewalId, setSelectedRenewalId] = useState('');
+  const [title, setTitle] = useState('');
   const [transcript, setTranscript] = useState('');
   const [transcriptDate, setTranscriptDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [participants, setParticipants] = useState('');
   const [callType, setCallType] = useState('');
   const [tags, setTags] = useState('');
   const [notes, setNotes] = useState('');
-  
-  // Reset form when modal opens
+  const [summary, setSummary] = useState('');
+  const [duration, setDuration] = useState('');
+
   useEffect(() => {
     if (open) {
       setSelectedOppId(prefillOpportunityId || '');
+      setSelectedRenewalId(prefillRenewalId || '');
+      setLinkType(prefillRenewalId ? 'renewal' : 'opportunity');
+      setTitle('');
       setTranscript('');
       setTranscriptDate(format(new Date(), 'yyyy-MM-dd'));
       setParticipants('');
       setCallType('');
       setTags('');
       setNotes('');
+      setSummary('');
+      setDuration('');
     }
-  }, [open, prefillOpportunityId]);
-  
-  const selectedOpp = useMemo(() => 
-    opportunities.find(o => o.id === selectedOppId),
-    [opportunities, selectedOppId]
-  );
-  
-  const handleCopyTranscript = () => {
-    navigator.clipboard.writeText(transcript);
-    toast.success('Transcript copied to clipboard');
-  };
-  
-  const handleCopySummaryStarter = () => {
-    const oppName = selectedOpp?.name || 'Opportunity';
-    const starter = `## ${oppName} - Call Summary (${transcriptDate})
+  }, [open, prefillOpportunityId, prefillRenewalId]);
 
-**Participants:** ${participants || 'TBD'}
-**Call Type:** ${callType || 'N/A'}
+  const selectedOpp = useMemo(() => opportunities.find(o => o.id === selectedOppId), [opportunities, selectedOppId]);
+  const selectedRenewal = useMemo(() => renewals.find(r => r.id === selectedRenewalId), [renewals, selectedRenewalId]);
 
-### Key Points:
-- 
+  // Derive account_id from linked record
+  const derivedAccountId = useMemo(() => {
+    if (prefillAccountId) return prefillAccountId;
+    if (linkType === 'opportunity' && selectedOpp?.accountId) return selectedOpp.accountId;
+    if (linkType === 'renewal' && selectedRenewal) {
+      const acc = accounts.find(a => a.name === selectedRenewal.accountName);
+      return acc?.id;
+    }
+    return undefined;
+  }, [linkType, selectedOpp, selectedRenewal, accounts, prefillAccountId]);
 
-### Next Steps:
-- 
-
-### Notes:
-${notes || ''}
-
----
-*Full transcript attached*`;
-    
-    navigator.clipboard.writeText(starter);
-    toast.success('Summary starter copied to clipboard');
-  };
-  
-  const handleSave = () => {
-    if (!selectedOppId) {
+  const handleSave = async () => {
+    if (linkType === 'opportunity' && !selectedOppId) {
       toast.error('Please select an opportunity');
       return;
     }
-    
+    if (linkType === 'renewal' && !selectedRenewalId) {
+      toast.error('Please select a renewal');
+      return;
+    }
     if (!transcript.trim()) {
       toast.error('Please paste or enter a transcript');
       return;
     }
-    
-    // In a real app, you'd store transcripts in a dedicated table
-    // For now, we'll add it to the opportunity's notes or a custom field
-    const transcriptEntry: Transcript = {
-      id: Math.random().toString(36).substring(2, 15),
-      opportunityId: selectedOppId,
-      content: transcript.trim(),
-      date: transcriptDate,
-      participants: participants.trim() || undefined,
-      callType: callType || undefined,
-      tags: tags.trim() ? tags.split(',').map(t => t.trim()) : undefined,
-      notes: notes.trim() || undefined,
-      createdAt: new Date().toISOString(),
-    };
-    
-    // Append to opportunity notes (or could be a separate transcripts array)
-    const currentNotes = selectedOpp?.notes || '';
-    const transcriptNote = `\n\n---\n📝 Transcript (${transcriptDate})\nParticipants: ${participants || 'N/A'}\nType: ${callType || 'N/A'}\n\n${transcript.substring(0, 500)}${transcript.length > 500 ? '...' : ''}`;
-    
-    updateOpportunity(selectedOppId, {
-      notes: currentNotes + transcriptNote,
-      lastTouchDate: format(new Date(), 'yyyy-MM-dd'),
-    });
-    
-    toast.success('Transcript saved', {
-      description: `Added to ${selectedOpp?.name}`,
-    });
-    
-    onOpenChange(false);
+
+    const autoTitle = title.trim() || `${callType || 'Call'} - ${linkType === 'opportunity' ? selectedOpp?.name : selectedRenewal?.accountName} (${transcriptDate})`;
+
+    try {
+      await saveTranscript.mutateAsync({
+        title: autoTitle,
+        content: transcript.trim(),
+        summary: summary.trim() || undefined,
+        call_date: transcriptDate,
+        call_type: callType || undefined,
+        participants: participants.trim() || undefined,
+        tags: tags.trim() ? tags.split(',').map(t => t.trim()) : undefined,
+        notes: notes.trim() || undefined,
+        opportunity_id: linkType === 'opportunity' ? selectedOppId : undefined,
+        renewal_id: linkType === 'renewal' ? selectedRenewalId : undefined,
+        account_id: derivedAccountId,
+        duration_minutes: duration ? parseInt(duration) : undefined,
+      });
+      toast.success('Transcript saved to database');
+      onOpenChange(false);
+    } catch (err: any) {
+      toast.error('Failed to save transcript', { description: err.message });
+    }
   };
-  
+
+  const handleCopySummaryStarter = () => {
+    const name = linkType === 'opportunity' ? selectedOpp?.name : selectedRenewal?.accountName;
+    const starter = `## ${name || 'Call'} - Summary (${transcriptDate})\n\n**Participants:** ${participants || 'TBD'}\n**Call Type:** ${callType || 'N/A'}\n\n### Key Points:\n- \n\n### Next Steps:\n- \n\n### Action Items:\n- `;
+    navigator.clipboard.writeText(starter);
+    toast.success('Summary starter copied');
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-primary" />
-            Add Transcript
+            Add Call Transcript
           </DialogTitle>
         </DialogHeader>
-        
+
         <div className="space-y-4 py-4">
+          {/* Link Type Tabs */}
+          <Tabs value={linkType} onValueChange={v => setLinkType(v as any)}>
+            <TabsList className="w-full grid grid-cols-2">
+              <TabsTrigger value="opportunity">New Logo Opp</TabsTrigger>
+              <TabsTrigger value="renewal">Renewal</TabsTrigger>
+            </TabsList>
+          </Tabs>
+
           {/* Opportunity Selector */}
+          {linkType === 'opportunity' && (
+            <div className="space-y-2">
+              <Label>Link to Opportunity *</Label>
+              <Popover open={oppSelectOpen} onOpenChange={setOppSelectOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" role="combobox" className="w-full justify-between">
+                    {selectedOpp ? (
+                      <span className="flex items-center gap-2 truncate">
+                        <Target className="h-4 w-4 text-muted-foreground" />
+                        {selectedOpp.name}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">Select opportunity...</span>
+                    )}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[350px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search opportunities..." />
+                    <CommandList>
+                      <CommandEmpty>No opportunities found.</CommandEmpty>
+                      <CommandGroup>
+                        {opportunities.map(opp => (
+                          <CommandItem key={opp.id} value={opp.name} onSelect={() => { setSelectedOppId(opp.id); setOppSelectOpen(false); }}>
+                            <Target className="h-4 w-4 mr-2 text-muted-foreground" />
+                            <span className="truncate">{opp.name}</span>
+                            {opp.accountName && <span className="ml-1 text-xs text-muted-foreground">({opp.accountName})</span>}
+                            <Check className={cn("ml-auto h-4 w-4", selectedOppId === opp.id ? "opacity-100" : "opacity-0")} />
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+          )}
+
+          {/* Renewal Selector */}
+          {linkType === 'renewal' && (
+            <div className="space-y-2">
+              <Label>Link to Renewal *</Label>
+              <Popover open={renewalSelectOpen} onOpenChange={setRenewalSelectOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" role="combobox" className="w-full justify-between">
+                    {selectedRenewal ? (
+                      <span className="flex items-center gap-2 truncate">
+                        <RefreshCw className="h-4 w-4 text-muted-foreground" />
+                        {selectedRenewal.accountName}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">Select renewal...</span>
+                    )}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[350px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search renewals..." />
+                    <CommandList>
+                      <CommandEmpty>No renewals found.</CommandEmpty>
+                      <CommandGroup>
+                        {renewals.map(r => (
+                          <CommandItem key={r.id} value={r.accountName} onSelect={() => { setSelectedRenewalId(r.id); setRenewalSelectOpen(false); }}>
+                            <RefreshCw className="h-4 w-4 mr-2 text-muted-foreground" />
+                            <span className="truncate">{r.accountName}</span>
+                            <span className="ml-1 text-xs text-muted-foreground">${(r.arr / 1000).toFixed(0)}k</span>
+                            <Check className={cn("ml-auto h-4 w-4", selectedRenewalId === r.id ? "opacity-100" : "opacity-0")} />
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+          )}
+
+          {/* Title */}
           <div className="space-y-2">
-            <Label>Link to Opportunity *</Label>
-            <Popover open={oppSelectOpen} onOpenChange={setOppSelectOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={oppSelectOpen}
-                  className="w-full justify-between"
-                >
-                  {selectedOpp ? (
-                    <span className="flex items-center gap-2 truncate">
-                      <Target className="h-4 w-4 text-muted-foreground" />
-                      {selectedOpp.name}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">Select opportunity...</span>
-                  )}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[350px] p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="Search opportunities..." />
-                  <CommandList>
-                    <CommandEmpty>No opportunities found.</CommandEmpty>
-                    <CommandGroup>
-                      {opportunities.map(opp => (
-                        <CommandItem
-                          key={opp.id}
-                          value={opp.name}
-                          onSelect={() => {
-                            setSelectedOppId(opp.id);
-                            setOppSelectOpen(false);
-                          }}
-                        >
-                          <Target className="h-4 w-4 mr-2 text-muted-foreground" />
-                          <span className="truncate">{opp.name}</span>
-                          {opp.accountName && (
-                            <span className="ml-1 text-xs text-muted-foreground">
-                              ({opp.accountName})
-                            </span>
-                          )}
-                          <Check
-                            className={cn(
-                              "ml-auto h-4 w-4",
-                              selectedOppId === opp.id ? "opacity-100" : "opacity-0"
-                            )}
-                          />
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+            <Label>Title <span className="text-muted-foreground text-xs">(auto-generated if blank)</span></Label>
+            <Input placeholder="e.g., Discovery Call - Acme Corp" value={title} onChange={e => setTitle(e.target.value)} />
           </div>
-          
-          {/* Transcript Textarea (Paste-first) */}
+
+          {/* Transcript */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>Transcript *</Label>
-              <div className="flex gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs gap-1"
-                  onClick={handleCopyTranscript}
-                  disabled={!transcript.trim()}
-                >
-                  <Copy className="h-3 w-3" />
-                  Copy
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs gap-1"
-                  onClick={handleCopySummaryStarter}
-                  disabled={!transcript.trim()}
-                >
-                  <Copy className="h-3 w-3" />
-                  Summary Starter
-                </Button>
-              </div>
+              <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={handleCopySummaryStarter} disabled={!transcript.trim()}>
+                <Copy className="h-3 w-3" /> Summary Starter
+              </Button>
             </div>
-            <Textarea
-              placeholder="Paste your transcript here..."
-              value={transcript}
-              onChange={(e) => setTranscript(e.target.value)}
-              rows={8}
-              className="font-mono text-sm"
-              autoFocus
-            />
-            <p className="text-xs text-muted-foreground">
-              Paste from Zoom, Teams, Gong, or any transcription service
-            </p>
+            <Textarea placeholder="Paste your transcript here..." value={transcript} onChange={e => setTranscript(e.target.value)} rows={8} className="font-mono text-sm" autoFocus />
+            <p className="text-xs text-muted-foreground">Paste from Zoom, Teams, Gong, or any transcription service</p>
           </div>
-          
-          {/* Date & Call Type Row */}
-          <div className="grid grid-cols-2 gap-4">
+
+          {/* Summary */}
+          <div className="space-y-2">
+            <Label>Summary <span className="text-muted-foreground text-xs">(for quick reference)</span></Label>
+            <Textarea placeholder="Key takeaways, decisions made, next steps..." value={summary} onChange={e => setSummary(e.target.value)} rows={3} />
+          </div>
+
+          {/* Date, Call Type, Duration */}
+          <div className="grid grid-cols-3 gap-3">
             <div className="space-y-2">
               <Label>Date</Label>
-              <Input
-                type="date"
-                value={transcriptDate}
-                onChange={(e) => setTranscriptDate(e.target.value)}
-              />
+              <Input type="date" value={transcriptDate} onChange={e => setTranscriptDate(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label>Call Type</Label>
               <Select value={callType} onValueChange={setCallType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select type..." />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Type..." /></SelectTrigger>
                 <SelectContent>
-                  {CALL_TYPES.map(type => (
-                    <SelectItem key={type} value={type}>{type}</SelectItem>
-                  ))}
+                  {CALL_TYPES.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label>Duration (min)</Label>
+              <Input type="number" placeholder="30" value={duration} onChange={e => setDuration(e.target.value)} />
+            </div>
           </div>
-          
+
           {/* Participants */}
           <div className="space-y-2">
             <Label>Participants</Label>
-            <Input
-              placeholder="e.g., John Smith (VP Sales), Jane Doe (CTO)"
-              value={participants}
-              onChange={(e) => setParticipants(e.target.value)}
-            />
+            <Input placeholder="e.g., John Smith (VP Sales), Jane Doe (CTO)" value={participants} onChange={e => setParticipants(e.target.value)} />
           </div>
-          
+
           {/* Tags */}
           <div className="space-y-2">
             <Label>Tags</Label>
-            <Input
-              placeholder="e.g., pricing, objection-handling, technical"
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-            />
+            <Input placeholder="e.g., pricing, objection-handling, technical" value={tags} onChange={e => setTags(e.target.value)} />
             <p className="text-xs text-muted-foreground">Comma-separated</p>
           </div>
-          
+
           {/* Notes */}
           <div className="space-y-2">
             <Label>Notes</Label>
-            <Textarea
-              placeholder="Quick notes about this call..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-            />
+            <Textarea placeholder="Quick notes about this call..." value={notes} onChange={e => setNotes(e.target.value)} rows={2} />
           </div>
         </div>
-        
+
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} className="gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saveTranscript.isPending} className="gap-2">
             <FileText className="h-4 w-4" />
-            Save Transcript
+            {saveTranscript.isPending ? 'Saving...' : 'Save Transcript'}
           </Button>
         </DialogFooter>
       </DialogContent>
