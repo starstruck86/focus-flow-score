@@ -378,6 +378,7 @@ export default function Settings() {
         <Tabs defaultValue="schedule" className="space-y-6">
           <TabsList>
             <TabsTrigger value="schedule">Work Schedule</TabsTrigger>
+            <TabsTrigger value="integrations">Integrations</TabsTrigger>
             <TabsTrigger value="appearance">Appearance</TabsTrigger>
             <TabsTrigger value="notifications">Notifications</TabsTrigger>
             <TabsTrigger value="data">Data</TabsTrigger>
