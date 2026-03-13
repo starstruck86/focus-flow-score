@@ -1237,6 +1237,78 @@ export type Database = {
         }
         Relationships: []
       }
+      whoop_connections: {
+        Row: {
+          access_token: string
+          created_at: string
+          id: string
+          refresh_token: string
+          scopes: string | null
+          token_expires_at: string
+          updated_at: string
+          user_id: string
+          whoop_user_id: string | null
+        }
+        Insert: {
+          access_token: string
+          created_at?: string
+          id?: string
+          refresh_token: string
+          scopes?: string | null
+          token_expires_at: string
+          updated_at?: string
+          user_id: string
+          whoop_user_id?: string | null
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          id?: string
+          refresh_token?: string
+          scopes?: string | null
+          token_expires_at?: string
+          updated_at?: string
+          user_id?: string
+          whoop_user_id?: string | null
+        }
+        Relationships: []
+      }
+      whoop_daily_metrics: {
+        Row: {
+          date: string
+          id: string
+          imported_at: string
+          raw_payload: Json | null
+          recovery_score: number | null
+          sleep_score: number | null
+          strain_score: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          date: string
+          id?: string
+          imported_at?: string
+          raw_payload?: Json | null
+          recovery_score?: number | null
+          sleep_score?: number | null
+          strain_score?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          date?: string
+          id?: string
+          imported_at?: string
+          raw_payload?: Json | null
+          recovery_score?: number | null
+          sleep_score?: number | null
+          strain_score?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       work_schedule_config: {
         Row: {
           created_at: string
