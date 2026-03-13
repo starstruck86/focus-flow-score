@@ -75,14 +75,10 @@ export function JournalPromptManager({ children }: JournalPromptManagerProps) {
     }
   }, [isLoading, isTodayEligible, shouldShowEodCheckIn, hasShownEodToday, showCheckIn, showConfirm, autoMode]);
   
-  // Auto-show morning confirmation
+  // Auto-show morning confirmation for yesterday (only if morning mode already shown)
   useEffect(() => {
-    if (!isLoading && wasYesterdayEligible && shouldShowMorningConfirm && !hasShownMorningToday && !showCheckIn && !showConfirm && yesterdayEntry) {
-      const timer = setTimeout(() => {
-        setShowConfirm(true);
-        setHasShownMorningToday(true);
-      }, 2000);
-      return () => clearTimeout(timer);
+    if (!isLoading && wasYesterdayEligible && shouldShowMorningConfirm && hasShownMorningToday && !hasShownEodToday && !showCheckIn && !showConfirm && yesterdayEntry) {
+      // Skip confirm modal - morning check-in already shows yesterday summary
     }
   }, [isLoading, wasYesterdayEligible, shouldShowMorningConfirm, hasShownMorningToday, showCheckIn, showConfirm, yesterdayEntry]);
   
