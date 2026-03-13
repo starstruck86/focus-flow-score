@@ -425,11 +425,22 @@ export function DailyScorecardModal({
         contacts_prepped: 0,
         admin_heavy_day: false,
         travel_day: data.biggestBlocker === 'travel_ooo',
-        sleep_hours: 7,
-        energy: 3,
-        focus_quality: 3,
-        stress: 3,
-        clarity: 3,
+        // Auto-fill from WHOOP if available, otherwise sensible defaults
+        sleep_hours: whoopMetrics?.sleep_score
+          ? Math.round((Number(whoopMetrics.sleep_score) / 100) * 9 * 10) / 10 // Map 0-100 score to ~0-9 hrs
+          : 7,
+        energy: whoopMetrics?.recovery_score
+          ? Math.min(5, Math.max(1, Math.round(Number(whoopMetrics.recovery_score) / 20))) // Map 0-100 to 1-5
+          : 3,
+        focus_quality: whoopMetrics?.recovery_score
+          ? Math.min(5, Math.max(1, Math.round(Number(whoopMetrics.recovery_score) / 20)))
+          : 3,
+        stress: whoopMetrics?.strain_score
+          ? Math.min(5, Math.max(1, Math.round(Number(whoopMetrics.strain_score) / 4.2))) // Map 0-21 to 1-5
+          : 3,
+        clarity: whoopMetrics?.recovery_score
+          ? Math.min(5, Math.max(1, Math.round(Number(whoopMetrics.recovery_score) / 20)))
+          : 3,
         distractions: 'low',
         context_switching: 'low',
       };
