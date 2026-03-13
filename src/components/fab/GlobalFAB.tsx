@@ -375,6 +375,11 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
         open={showTranscriptViewer}
         onOpenChange={setShowTranscriptViewer}
       />
+      
+      <ResourceLibraryModal
+        open={showResourceLibrary}
+        onOpenChange={setShowResourceLibrary}
+      />
     </>
   );
 }
