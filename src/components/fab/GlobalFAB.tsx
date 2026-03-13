@@ -28,6 +28,7 @@ import { FocusTimerModal } from './FocusTimerModal';
 import { QuickLogModal } from '@/components/journal/QuickLogModal';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 import { ScreenshotEnrichModal } from '@/components/ScreenshotEnrichModal';
+import { TranscriptViewer } from '@/components/TranscriptViewer';
 
 interface GlobalFABProps {
   position?: 'bottom-right' | 'bottom-left';
