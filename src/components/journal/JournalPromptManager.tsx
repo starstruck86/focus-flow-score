@@ -51,9 +51,21 @@ export function JournalPromptManager({ children }: JournalPromptManagerProps) {
     ? isEligibleDay(yesterday, config, holidays, ptoDays, overrides)
     : false;
   
+  // Auto-show morning check-in
+  useEffect(() => {
+    if (!isLoading && isTodayEligible && !hasShownMorningToday && !showCheckIn && !showConfirm && autoMode === 'morning') {
+      const timer = setTimeout(() => {
+        setEditDate(undefined);
+        setShowCheckIn(true);
+        setHasShownMorningToday(true);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading, isTodayEligible, hasShownMorningToday, showCheckIn, showConfirm, autoMode]);
+
   // Auto-show EOD check-in
   useEffect(() => {
-    if (!isLoading && isTodayEligible && shouldShowEodCheckIn && !hasShownEodToday && !showCheckIn && !showConfirm) {
+    if (!isLoading && isTodayEligible && shouldShowEodCheckIn && !hasShownEodToday && !showCheckIn && !showConfirm && autoMode === 'evening') {
       const timer = setTimeout(() => {
         setEditDate(undefined);
         setShowCheckIn(true);
@@ -61,7 +73,7 @@ export function JournalPromptManager({ children }: JournalPromptManagerProps) {
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, [isLoading, isTodayEligible, shouldShowEodCheckIn, hasShownEodToday, showCheckIn, showConfirm]);
+  }, [isLoading, isTodayEligible, shouldShowEodCheckIn, hasShownEodToday, showCheckIn, showConfirm, autoMode]);
   
   // Auto-show morning confirmation
   useEffect(() => {
