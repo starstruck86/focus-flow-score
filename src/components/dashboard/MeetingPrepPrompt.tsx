@@ -1,11 +1,12 @@
 // Proactive Meeting Prep Prompt - Shows a prominent banner for upcoming client meetings
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, Building2, Clock, FileText, ChevronRight, X, Video, CheckCircle2, Plus, Target, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Building2, Clock, FileText, ChevronRight, X, Video, CheckCircle2, Plus, Target, RefreshCw, Sparkles, Mail } from 'lucide-react';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { useStore } from '@/store/useStore';
 import { useRecentTranscriptsForMeetingPrep } from '@/hooks/useCallTranscripts';
 import { useResourceLinksForAccount } from '@/hooks/useResourceLinks';
+import { useCopilot } from '@/contexts/CopilotContext';
 import { format, parseISO, differenceInMinutes } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { cn } from '@/lib/utils';
