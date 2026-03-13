@@ -275,6 +275,8 @@ export default function Dashboard() {
           />
         </div>
         
+        <BackfillCards />
+        
         <CheckInBanner
           checkedIn={todayCheckedIn}
           isEligibleDay={isTodayEligible}
