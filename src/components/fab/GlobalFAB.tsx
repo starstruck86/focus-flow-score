@@ -30,6 +30,7 @@ import { QuickLogModal } from '@/components/journal/QuickLogModal';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 import { ScreenshotEnrichModal } from '@/components/ScreenshotEnrichModal';
 import { TranscriptViewer } from '@/components/TranscriptViewer';
+import { ResourceLibraryModal } from '@/components/ResourceLibraryModal';
 
 interface GlobalFABProps {
   position?: 'bottom-right' | 'bottom-left';
