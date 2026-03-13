@@ -273,7 +273,7 @@ function MeetingCard({ meeting, isExpanded, onToggle, onDismiss, onAddPrep }: {
 
             {/* Warnings */}
             {daysSinceTouch != null && daysSinceTouch > 7 && (
-              <div className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400">
+              <div className="flex items-center gap-1 text-[11px] text-destructive">
                 <AlertTriangle className="h-3 w-3" />
                 <span>No touch in {daysSinceTouch} days — review recent context</span>
               </div>
