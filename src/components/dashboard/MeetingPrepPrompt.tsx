@@ -315,6 +315,26 @@ function MeetingCard({ meeting, isExpanded, onToggle, onDismiss, onAddPrep }: {
               </div>
             )}
 
+            {/* Account Resources */}
+            {accountResources && accountResources.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold text-muted-foreground">📎 Templates & Resources</p>
+                {accountResources.map((r: any) => (
+                  <a
+                    key={r.id}
+                    href={r.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-[11px] p-1.5 rounded bg-primary/5 border border-primary/10 hover:bg-primary/10 transition-colors"
+                  >
+                    <FileText className="h-3 w-3 text-primary shrink-0" />
+                    <span className="font-medium truncate text-foreground">{r.label || 'Resource'}</span>
+                    <span className="text-muted-foreground capitalize text-[9px]">{r.category}</span>
+                  </a>
+                ))}
+              </div>
+            )}
+
             {/* Recent Transcripts */}
             {recentTranscripts && recentTranscripts.length > 0 && (
               <div className="space-y-1">
