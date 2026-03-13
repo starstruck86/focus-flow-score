@@ -53,7 +53,6 @@ export default function Dashboard() {
   const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
   const [showCommissionDetail, setShowCommissionDetail] = useState(false);
   const [snapshotsOpen, setSnapshotsOpen] = useState(false);
-  const [weeklyReviewDismissed, setWeeklyReviewDismissed] = useState(false);
   const { widgets, toggleWidget, moveWidget, resetWidgets } = useDashboardWidgets();
   const { data: currentWeekReview, isLoading: weeklyReviewLoading } = useCurrentWeekReview();
   
@@ -311,10 +310,10 @@ export default function Dashboard() {
         onOpenChange={setShowDailyCheckIn}
       />
       
-      {!weeklyReviewLoading && !currentWeekReview?.completed && !weeklyReviewDismissed && (
+      {!weeklyReviewLoading && !currentWeekReview?.completed && (
         <WeeklyRealignmentModal
           open={true}
-          onComplete={() => setWeeklyReviewDismissed(true)}
+          onComplete={() => {/* query invalidation in hook handles re-render */}}
         />
       )}
     </Layout>

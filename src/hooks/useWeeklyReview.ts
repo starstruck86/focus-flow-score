@@ -125,6 +125,7 @@ export function useWeeklyMetricsAggregation() {
         .lte('date', lastWeekEnd);
 
       const rows = entries || [];
+      const sentimentRows = rows.filter(r => r.sentiment_score != null);
       return {
         totalDials: rows.reduce((s, r) => s + (r.dials || 0), 0),
         totalConversations: rows.reduce((s, r) => s + (r.conversations || 0), 0),
@@ -136,8 +137,8 @@ export function useWeeklyMetricsAggregation() {
         daysLogged: rows.length,
         daysGoalMet: rows.filter(r => r.goal_met).length,
         avgDailyScore: rows.length > 0 ? rows.reduce((s, r) => s + (r.daily_score || 0), 0) / rows.length : 0,
-        avgSentiment: rows.filter(r => r.sentiment_score != null).length > 0
-          ? rows.filter(r => r.sentiment_score != null).reduce((s, r) => s + Number(r.sentiment_score), 0) / rows.filter(r => r.sentiment_score != null).length
+        avgSentiment: sentimentRows.length > 0
+          ? sentimentRows.reduce((s, r) => s + Number(r.sentiment_score), 0) / sentimentRows.length
           : null,
       };
     },
