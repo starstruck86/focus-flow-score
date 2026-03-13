@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
   Crosshair, Clock, DollarSign, ArrowRight, Calendar, Building2, 
-  TrendingUp, AlertTriangle, Zap, RefreshCw, Plus, Check,
+  TrendingUp, AlertTriangle, Zap, RefreshCw, Plus, Check, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCopilot } from '@/contexts/CopilotContext';
@@ -16,6 +16,7 @@ import { Sparkles } from 'lucide-react';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 import { toast } from 'sonner';
 import type { Workstream } from '@/types';
+import { useDismissedItems } from '@/hooks/useWeeklyReview';
 
 const URGENCY_STYLES: Record<string, { bg: string; text: string; border: string; label: string }> = {
   critical: { bg: 'bg-status-red/10', text: 'text-status-red', border: 'border-l-status-red', label: 'NOW' },
