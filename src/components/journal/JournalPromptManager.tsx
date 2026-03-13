@@ -103,6 +103,7 @@ export function JournalPromptManager({ children }: JournalPromptManagerProps) {
         open={showCheckIn}
         onOpenChange={handleCloseCheckIn}
         date={editDate}
+        forceMode={editDate ? undefined : autoMode}
       />
       
       {yesterdayEntry && (
