@@ -37,6 +37,9 @@ export function JournalPromptManager({ children }: JournalPromptManagerProps) {
     isLoading,
   } = useJournalPromptStatus();
   
+  const currentHour = new Date().getHours();
+  const autoMode = currentHour < 14 ? 'morning' as const : 'evening' as const;
+  
   const today = new Date();
   const isTodayEligible = config && holidays && ptoDays && overrides
     ? isEligibleDay(today, config, holidays, ptoDays, overrides)

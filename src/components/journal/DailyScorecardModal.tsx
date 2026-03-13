@@ -18,6 +18,12 @@ import {
   BookOpen,
   Search,
   CalendarDays,
+  Sun,
+  Moon,
+  Target,
+  Zap,
+  ArrowRight,
+  Trophy,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,8 +42,11 @@ import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useRecordCheckIn } from '@/hooks/useStreakData';
 import { format, subDays, eachDayOfInterval, isToday, isSameDay } from 'date-fns';
 import { toast } from 'sonner';
+import { RingGauge } from '@/components/RingGauge';
 
 // --- Types ---
+type JournalMode = 'morning' | 'evening';
+
 interface ScorecardData {
   dials: number;
   conversations: number;
@@ -101,6 +110,11 @@ const DEFAULT_SCORECARD: ScorecardData = {
   dailyReflection: '',
   yesterdayCommitmentMet: null,
 };
+
+function getDefaultMode(): JournalMode {
+  const hour = new Date().getHours();
+  return hour < 14 ? 'morning' : 'evening';
+}
 
 // --- Inline Editable Counter ---
 function MetricCounter({
@@ -261,7 +275,39 @@ function DayStrip({ selectedDate, onSelect }: { selectedDate: Date; onSelect: (d
   );
 }
 
-// --- Power Hour Auto-populate Hook ---
+// --- Mode Toggle ---
+function ModeToggle({ mode, onToggle }: { mode: JournalMode; onToggle: (m: JournalMode) => void }) {
+  return (
+    <div className="flex rounded-lg bg-secondary/50 p-0.5 border border-border/50">
+      <button
+        onClick={() => onToggle('morning')}
+        className={cn(
+          "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+          mode === 'morning'
+            ? "bg-background text-foreground shadow-sm"
+            : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        <Sun className="h-3.5 w-3.5" />
+        Morning
+      </button>
+      <button
+        onClick={() => onToggle('evening')}
+        className={cn(
+          "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+          mode === 'evening'
+            ? "bg-background text-foreground shadow-sm"
+            : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        <Moon className="h-3.5 w-3.5" />
+        End of Day
+      </button>
+    </div>
+  );
+}
+
+// --- Hooks ---
 function usePowerHourTotals(date: string) {
   return useQuery({
     queryKey: ['power-hour-totals', date],
@@ -284,7 +330,6 @@ function usePowerHourTotals(date: string) {
   });
 }
 
-// --- Existing Entry Hook ---
 function useExistingEntry(date: string) {
   return useQuery({
     queryKey: ['journal-entry', date],
@@ -300,7 +345,22 @@ function useExistingEntry(date: string) {
   });
 }
 
-// --- Nudge Hook ---
+function useYesterdayEntry() {
+  const yesterday = format(subDays(new Date(), 1), 'yyyy-MM-dd');
+  return useQuery({
+    queryKey: ['journal-entry', yesterday],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('daily_journal_entries')
+        .select('*')
+        .eq('date', yesterday)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
 function useJournalNudge() {
   return useQuery({
     queryKey: ['journal-nudge'],
@@ -319,7 +379,6 @@ function useJournalNudge() {
   });
 }
 
-// --- Weekly Insights Hook ---
 function useWeeklyInsights() {
   return useQuery({
     queryKey: ['weekly-patterns'],
@@ -332,7 +391,23 @@ function useWeeklyInsights() {
   });
 }
 
-// --- Targets Hook ---
+function useCurrentWeeklyReview() {
+  return useQuery({
+    queryKey: ['current-weekly-review'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('weekly_reviews')
+        .select('*')
+        .order('week_start', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 function useDailyTargets(): DailyTargets {
   const { data } = useQuery({
     queryKey: ['quota-targets-scorecard'],
@@ -359,7 +434,6 @@ function useDailyTargets(): DailyTargets {
   };
 }
 
-// --- Streak Hook ---
 function useCurrentStreak() {
   return useQuery({
     queryKey: ['streak-summary-scorecard'],
@@ -376,7 +450,6 @@ function useCurrentStreak() {
   });
 }
 
-// --- WHOOP Data Hook ---
 function useWhoopMetrics(date: string) {
   return useQuery({
     queryKey: ['whoop-metrics-scorecard', date],
@@ -393,12 +466,488 @@ function useWhoopMetrics(date: string) {
   });
 }
 
+// --- Morning Check-in View ---
+function MorningView({
+  yesterdayEntry,
+  weeklyReview,
+  nudgeData,
+  whoopMetrics,
+  streakData,
+  data,
+  update,
+  onSwitchToEvening,
+}: {
+  yesterdayEntry: any;
+  weeklyReview: any;
+  nudgeData: any;
+  whoopMetrics: any;
+  streakData: any;
+  data: ScorecardData;
+  update: <K extends keyof ScorecardData>(key: K, val: ScorecardData[K]) => void;
+  onSwitchToEvening: () => void;
+}) {
+  const weeklyGoals = weeklyReview?.key_goals ? (
+    Array.isArray(weeklyReview.key_goals) ? weeklyReview.key_goals : []
+  ) : [];
+  const northStarGoals = weeklyReview?.north_star_goals ? (
+    Array.isArray(weeklyReview.north_star_goals) ? weeklyReview.north_star_goals : []
+  ) : [];
+
+  return (
+    <div className="space-y-4">
+      {/* WHOOP Recovery Banner */}
+      {whoopMetrics && (
+        <motion.div
+          initial={{ opacity: 0, y: -5 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-3 rounded-xl border border-border/50"
+          style={{
+            background: Number(whoopMetrics.recovery_score) >= 67
+              ? 'hsl(var(--status-green) / 0.06)'
+              : Number(whoopMetrics.recovery_score) >= 34
+                ? 'hsl(var(--status-yellow) / 0.06)'
+                : 'hsl(var(--status-red) / 0.06)',
+          }}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex gap-2">
+                <div className="text-center">
+                  <span className="text-lg font-bold font-mono text-foreground">{Math.round(Number(whoopMetrics.recovery_score))}%</span>
+                  <p className="text-[9px] text-muted-foreground uppercase">Recovery</p>
+                </div>
+                <div className="text-center">
+                  <span className="text-lg font-bold font-mono text-foreground">{Math.round(Number(whoopMetrics.sleep_score))}</span>
+                  <p className="text-[9px] text-muted-foreground uppercase">Sleep</p>
+                </div>
+              </div>
+            </div>
+            <Badge variant="secondary" className="text-[9px] font-normal gap-1">
+              <span className="text-status-green">●</span> WHOOP
+            </Badge>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Yesterday Summary */}
+      {yesterdayEntry && (
+        <div className="space-y-2">
+          <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold flex items-center gap-1.5">
+            <CalendarDays className="h-3 w-3" />
+            Yesterday's Results
+          </Label>
+          <div className="p-3 rounded-xl bg-secondary/30 border border-border/40">
+            <div className="flex items-center justify-between mb-3">
+              <span className={cn(
+                "text-sm font-semibold",
+                yesterdayEntry.goal_met ? "text-status-green" : "text-muted-foreground"
+              )}>
+                {yesterdayEntry.goal_met ? '✓ Goal Met' : '✗ Goal Missed'} — {yesterdayEntry.daily_score || 0}/6
+              </span>
+              {streakData?.current_checkin_streak ? (
+                <span className="inline-flex items-center gap-1 text-xs text-status-orange">
+                  <Flame className="h-3 w-3" />
+                  {streakData.current_checkin_streak}d
+                </span>
+              ) : null}
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="p-2 rounded-lg bg-background/50">
+                <span className="text-base font-bold font-mono">{yesterdayEntry.dials}</span>
+                <p className="text-[9px] text-muted-foreground">Dials</p>
+              </div>
+              <div className="p-2 rounded-lg bg-background/50">
+                <span className="text-base font-bold font-mono">{yesterdayEntry.conversations}</span>
+                <p className="text-[9px] text-muted-foreground">Convos</p>
+              </div>
+              <div className="p-2 rounded-lg bg-background/50">
+                <span className="text-base font-bold font-mono">{yesterdayEntry.meetings_set}</span>
+                <p className="text-[9px] text-muted-foreground">Mtgs Set</p>
+              </div>
+            </div>
+            {yesterdayEntry.what_worked_today && (
+              <p className="text-xs text-foreground/70 mt-2 leading-relaxed italic">
+                "{yesterdayEntry.what_worked_today}"
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Yesterday's Commitment Check */}
+      {nudgeData?.yesterdayCommitment && (
+        <div className="p-3 rounded-xl bg-secondary/40 border border-border/50">
+          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+            Yesterday's commitment
+          </span>
+          <p className="text-sm mt-1.5 mb-2.5 text-foreground/80">"{nudgeData.yesterdayCommitment}"</p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant={data.yesterdayCommitmentMet === true ? 'default' : 'outline'}
+              onClick={() => update('yesterdayCommitmentMet', true)}
+              className="gap-1 text-xs h-7"
+            >
+              <Check className="h-3 w-3" /> Did it
+            </Button>
+            <Button
+              size="sm"
+              variant={data.yesterdayCommitmentMet === false ? 'secondary' : 'outline'}
+              onClick={() => update('yesterdayCommitmentMet', false)}
+              className="text-xs h-7"
+            >
+              Missed it
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Weekly Goals & Commitment */}
+      <div className="space-y-2">
+        <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold flex items-center gap-1.5">
+          <Target className="h-3 w-3" />
+          This Week's Focus
+        </Label>
+        <div className="p-3 rounded-xl bg-gradient-to-br from-primary/5 to-accent/5 border border-primary/10 space-y-3">
+          {/* North Star */}
+          {northStarGoals.length > 0 && (
+            <div>
+              <span className="text-[9px] font-semibold text-primary uppercase tracking-widest">North Star</span>
+              {northStarGoals.map((goal: any, i: number) => (
+                <p key={i} className="text-sm text-foreground/90 mt-0.5">
+                  {typeof goal === 'string' ? goal : goal?.text || goal?.goal || JSON.stringify(goal)}
+                </p>
+              ))}
+            </div>
+          )}
+          
+          {/* Weekly Commitment */}
+          {weeklyReview?.commitment_for_week && (
+            <div>
+              <span className="text-[9px] font-semibold text-primary uppercase tracking-widest">Weekly Commitment</span>
+              <p className="text-sm text-foreground/90 mt-0.5">"{weeklyReview.commitment_for_week}"</p>
+            </div>
+          )}
+
+          {/* Key Outcomes */}
+          {weeklyGoals.length > 0 && (
+            <div>
+              <span className="text-[9px] font-semibold text-primary uppercase tracking-widest">Key Outcomes</span>
+              <ul className="mt-1 space-y-1">
+                {weeklyGoals.slice(0, 5).map((goal: any, i: number) => (
+                  <li key={i} className="text-xs text-foreground/80 flex items-start gap-1.5">
+                    <span className="text-primary mt-0.5">•</span>
+                    {typeof goal === 'string' ? goal : goal?.text || goal?.goal || JSON.stringify(goal)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {!weeklyReview && (
+            <p className="text-xs text-muted-foreground italic">
+              No weekly review found. Complete your weekly review to see goals here.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* AI Nudge */}
+      {nudgeData?.nudge && (
+        <motion.div
+          initial={{ opacity: 0, y: -5 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-3 rounded-xl bg-gradient-to-r from-primary/5 to-primary/10 border border-primary/15"
+        >
+          <div className="flex items-start gap-2.5">
+            <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Sparkles className="h-3 w-3 text-primary" />
+            </div>
+            <p className="text-sm text-foreground/90 leading-relaxed">{nudgeData.nudge}</p>
+          </div>
+        </motion.div>
+      )}
+
+      {/* CTA to switch to EOD */}
+      <Button
+        onClick={onSwitchToEvening}
+        variant="outline"
+        className="w-full gap-2 text-xs h-9 border-dashed"
+      >
+        Ready to log activity? Switch to End of Day
+        <ArrowRight className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  );
+}
+
+// --- Evening / EOD View ---
+function EveningView({
+  data,
+  update,
+  targets,
+  score,
+  goalMet,
+  nudgeData,
+  showExtras,
+  setShowExtras,
+  showLeading,
+  setShowLeading,
+  showInsights,
+  setShowInsights,
+  weeklyInsights,
+}: {
+  data: ScorecardData;
+  update: <K extends keyof ScorecardData>(key: K, val: ScorecardData[K]) => void;
+  targets: DailyTargets;
+  score: number;
+  goalMet: boolean;
+  nudgeData: any;
+  showExtras: boolean;
+  setShowExtras: (v: boolean) => void;
+  showLeading: boolean;
+  setShowLeading: (v: boolean) => void;
+  showInsights: boolean;
+  setShowInsights: (v: boolean) => void;
+  weeklyInsights: any;
+}) {
+  return (
+    <div className="space-y-4">
+      {/* Core Metrics */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+            Activity — Actual vs Target
+          </Label>
+          <span className={cn(
+            "text-xs font-mono font-bold",
+            goalMet ? "text-status-green" : "text-muted-foreground"
+          )}>
+            {score}/6 hit
+          </span>
+        </div>
+        <div className="space-y-1.5">
+          <MetricCounter label="Dials" value={data.dials} target={targets.dials} onChange={v => update('dials', v)} icon={Phone} />
+          <MetricCounter label="Conversations" value={data.conversations} target={targets.conversations} onChange={v => update('conversations', v)} icon={MessageSquare} />
+          <MetricCounter label="Prospects Added" value={data.prospectsAdded} target={targets.prospectsAdded} onChange={v => update('prospectsAdded', v)} icon={Users} />
+          <MetricCounter label="Meetings Set" value={data.meetingsSet} target={targets.meetingsSet} onChange={v => update('meetingsSet', v)} icon={Calendar} />
+          <MetricCounter label="Meetings Held" value={data.customerMeetingsHeld} target={targets.customerMeetings} onChange={v => update('customerMeetingsHeld', v)} icon={Calendar} />
+          <MetricCounter label="Opps Created" value={data.opportunitiesCreated} target={targets.oppsCreated} onChange={v => update('opportunitiesCreated', v)} icon={TrendingUp} />
+        </div>
+      </div>
+
+      {/* Leading Indicators */}
+      <button
+        onClick={() => setShowLeading(!showLeading)}
+        className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {showLeading ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        {showLeading ? 'Hide' : 'Show'} leading indicators
+      </button>
+
+      <AnimatePresence>
+        {showLeading && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden space-y-1.5"
+          >
+            <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+              Preparedness
+            </Label>
+            <MetricCounter label="Accounts Researched" value={data.accountsResearched} target={targets.accountsResearched} onChange={v => update('accountsResearched', v)} icon={Search} compact />
+            <MetricCounter label="Contacts Prepped" value={data.contactsPrepped} target={targets.contactsPrepped} onChange={v => update('contactsPrepped', v)} icon={BookOpen} compact />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Expandable extras */}
+      <button
+        onClick={() => setShowExtras(!showExtras)}
+        className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {showExtras ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        {showExtras ? 'Hide' : 'Show'} focus time, pipeline & blockers
+      </button>
+
+      <AnimatePresence>
+        {showExtras && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden space-y-3"
+          >
+            <div className="p-3 rounded-xl bg-secondary/30 space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="flex items-center gap-2 text-sm">
+                  <Timer className="h-4 w-4 text-primary" />
+                  Prospecting block?
+                </Label>
+                <Switch checked={data.ranProspectingBlock} onCheckedChange={v => update('ranProspectingBlock', v)} />
+              </div>
+              {data.ranProspectingBlock && (
+                <div className="flex gap-1.5 pt-1">
+                  {TIME_CHIPS.map(min => (
+                    <Button key={min} size="sm"
+                      variant={data.prospectingBlockMinutes === min ? 'default' : 'outline'}
+                      onClick={() => update('prospectingBlockMinutes', min)}
+                      className="text-xs h-7 flex-1"
+                    >{min}m</Button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-3 rounded-xl bg-secondary/30 space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="flex items-center gap-2 text-sm">
+                  <Timer className="h-4 w-4 text-primary" />
+                  Account deep work?
+                </Label>
+                <Switch checked={data.didDeepWork} onCheckedChange={v => update('didDeepWork', v)} />
+              </div>
+              {data.didDeepWork && (
+                <div className="flex gap-1.5 pt-1">
+                  {TIME_CHIPS.map(min => (
+                    <Button key={min} size="sm"
+                      variant={data.accountDeepWorkMinutes === min ? 'default' : 'outline'}
+                      onClick={() => update('accountDeepWorkMinutes', min)}
+                      className="text-xs h-7 flex-1"
+                    >{min}m</Button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-3 rounded-xl bg-secondary/30">
+              <div className="flex items-center justify-between">
+                <Label className="flex items-center gap-2 text-sm">
+                  <DollarSign className="h-4 w-4 text-primary" />
+                  Pipeline moved ($)
+                </Label>
+                <Input
+                  type="number" min={0}
+                  value={data.pipelineMoved || ''}
+                  onChange={e => update('pipelineMoved', parseFloat(e.target.value) || 0)}
+                  placeholder="0"
+                  className="w-28 text-right font-mono text-sm h-8"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+                Biggest blocker
+              </Label>
+              <div className="flex flex-wrap gap-1.5">
+                {BLOCKER_OPTIONS.map(opt => (
+                  <Button key={opt.value} size="sm"
+                    variant={data.biggestBlocker === opt.value ? 'default' : 'outline'}
+                    onClick={() => update('biggestBlocker', data.biggestBlocker === opt.value ? null : opt.value)}
+                    className="text-xs h-7 gap-1"
+                  >
+                    <span>{opt.emoji}</span> {opt.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Weekly Insights */}
+      {weeklyInsights?.insights && weeklyInsights.insights.length > 0 && (
+        <>
+          <button
+            onClick={() => setShowInsights(!showInsights)}
+            className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            {showInsights ? 'Hide' : 'View'} weekly patterns
+          </button>
+          <AnimatePresence>
+            {showInsights && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="p-3 rounded-xl bg-gradient-to-br from-primary/5 to-accent/10 border border-primary/10 space-y-2">
+                  <Label className="text-[10px] uppercase tracking-widest text-primary font-semibold flex items-center gap-1.5">
+                    <CalendarDays className="h-3 w-3" />
+                    AI Weekly Patterns
+                  </Label>
+                  {weeklyInsights.insights.map((insight: string, i: number) => (
+                    <p key={i} className="text-xs text-foreground/80 leading-relaxed flex items-start gap-2">
+                      <span className="text-primary mt-0.5">•</span>
+                      {insight}
+                    </p>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </>
+      )}
+
+      {/* Accountability Section */}
+      <div className="space-y-3 pt-1">
+        <div className="space-y-1.5">
+          <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+            #1 Win today
+          </Label>
+          <Input
+            value={data.win}
+            onChange={e => update('win', e.target.value)}
+            placeholder="Best thing that happened…"
+            className="text-sm h-9 bg-secondary/20 border-border/50"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold flex items-center gap-1.5">
+            Reflection
+            <Badge variant="secondary" className="text-[9px] font-normal px-1.5 py-0">AI analyzed</Badge>
+          </Label>
+          <Textarea
+            value={data.dailyReflection}
+            onChange={e => update('dailyReflection', e.target.value)}
+            placeholder="How did today go? Be honest — this is for you..."
+            rows={2}
+            className="text-sm bg-secondary/20 border-border/50 resize-none"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+            Tomorrow's #1 commitment
+          </Label>
+          <Textarea
+            value={data.tomorrowPriority}
+            onChange={e => update('tomorrowPriority', e.target.value)}
+            placeholder="What's the one thing you MUST do tomorrow?"
+            rows={2}
+            className="text-sm bg-secondary/20 border-border/50 resize-none"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- Main Component ---
 interface DailyScorecardModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   date?: string;
   initialData?: Partial<ScorecardData>;
+  forceMode?: JournalMode;
 }
 
 export function DailyScorecardModal({
@@ -406,10 +955,12 @@ export function DailyScorecardModal({
   onOpenChange,
   date,
   initialData,
+  forceMode,
 }: DailyScorecardModalProps) {
   const [selectedDate, setSelectedDate] = useState<Date>(date ? new Date(date + 'T12:00:00') : new Date());
   const entryDate = format(selectedDate, 'yyyy-MM-dd');
   const [data, setData] = useState<ScorecardData>({ ...DEFAULT_SCORECARD, ...initialData });
+  const [mode, setMode] = useState<JournalMode>(forceMode || getDefaultMode());
   const [saving, setSaving] = useState(false);
   const [showExtras, setShowExtras] = useState(false);
   const [showLeading, setShowLeading] = useState(false);
@@ -423,18 +974,21 @@ export function DailyScorecardModal({
   const { data: powerHourTotals } = usePowerHourTotals(entryDate);
   const { data: existingEntry } = useExistingEntry(entryDate);
   const { data: weeklyInsights } = useWeeklyInsights();
+  const { data: yesterdayEntry } = useYesterdayEntry();
+  const { data: weeklyReview } = useCurrentWeeklyReview();
   const recordCheckIn = useRecordCheckIn();
 
   // Reset when opened
   useEffect(() => {
     if (open) {
       setSelectedDate(date ? new Date(date + 'T12:00:00') : new Date());
+      setMode(forceMode || getDefaultMode());
       setPowerHourApplied(false);
       setShowExtras(false);
       setShowLeading(false);
       setShowInsights(false);
     }
-  }, [open, date]);
+  }, [open, date, forceMode]);
 
   // Load existing entry or defaults when date changes
   useEffect(() => {
@@ -461,14 +1015,14 @@ export function DailyScorecardModal({
         dailyReflection: existingEntry.daily_reflection || '',
         yesterdayCommitmentMet: existingEntry.yesterday_commitment_met,
       });
-      setPowerHourApplied(true); // Don't override existing data
+      setPowerHourApplied(true);
     } else {
       setData({ ...DEFAULT_SCORECARD, ...initialData });
       setPowerHourApplied(false);
     }
   }, [open, existingEntry, entryDate]);
 
-  // Auto-populate from Power Hour sessions (only for new entries)
+  // Auto-populate from Power Hour sessions
   useEffect(() => {
     if (open && powerHourTotals && !powerHourApplied && !existingEntry) {
       setPowerHourApplied(true);
@@ -488,7 +1042,6 @@ export function DailyScorecardModal({
     setData(prev => ({ ...prev, [key]: val }));
   };
 
-  // Calculate score: how many of 6 core metrics hit target
   const score = useMemo(() => {
     let hit = 0;
     if (data.dials >= targets.dials) hit++;
@@ -602,11 +1155,14 @@ export function DailyScorecardModal({
       queryClient.invalidateQueries({ queryKey: ['streak-summary'] });
       queryClient.invalidateQueries({ queryKey: ['backfill-missed-days'] });
 
-      toast.success(isEditMode ? 'Journal updated!' : 'Daily journal saved!', {
-        description: goalMet
-          ? `🔥 ${score}/6 targets hit! Streak continues.`
-          : `${score}/6 targets hit. Keep pushing!`,
-      });
+      toast.success(
+        mode === 'morning' ? 'Morning check-in saved!' : (isEditMode ? 'Journal updated!' : 'Daily journal saved!'),
+        {
+          description: mode === 'evening'
+            ? (goalMet ? `🔥 ${score}/6 targets hit! Streak continues.` : `${score}/6 targets hit. Keep pushing!`)
+            : 'Your commitment has been logged.',
+        }
+      );
       onOpenChange(false);
     } catch (error) {
       console.error('Save failed:', error);
@@ -616,6 +1172,10 @@ export function DailyScorecardModal({
     }
   };
 
+  const headerTitle = mode === 'morning' ? 'Morning Check-in' : 'Daily Journal';
+  const headerIcon = mode === 'morning' ? Sun : Moon;
+  const HeaderIcon = headerIcon;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[92vh] overflow-hidden flex flex-col p-0 gap-0">
@@ -624,7 +1184,8 @@ export function DailyScorecardModal({
           <div className="flex items-center justify-between mb-3">
             <div>
               <DialogTitle className="font-display text-lg mb-0.5 flex items-center gap-2">
-                Daily Journal
+                <HeaderIcon className="h-4.5 w-4.5" />
+                {headerTitle}
                 {isEditMode && (
                   <Badge variant="secondary" className="text-[9px] font-normal">Editing</Badge>
                 )}
@@ -636,308 +1197,105 @@ export function DailyScorecardModal({
                     {streakData.current_checkin_streak}d streak
                   </span>
                 ) : null}
-                {whoopMetrics && (
+                {whoopMetrics && mode === 'evening' && (
                   <Badge variant="secondary" className="text-[9px] font-normal px-1.5 py-0 gap-1">
                     <span className="text-status-green">●</span> WHOOP synced
                   </Badge>
                 )}
-                {powerHourTotals && (
+                {powerHourTotals && mode === 'evening' && (
                   <Badge variant="secondary" className="text-[9px] font-normal px-1.5 py-0 gap-1">
                     <span className="text-status-yellow">⚡</span> Power Hour data
                   </Badge>
                 )}
               </div>
             </div>
-            <ScoreRing score={score} total={6} goalMet={goalMet} />
+            {mode === 'evening' ? (
+              <ScoreRing score={score} total={6} goalMet={goalMet} />
+            ) : (
+              <ModeToggle mode={mode} onToggle={setMode} />
+            )}
           </div>
 
-          {/* Day Strip */}
-          <DayStrip selectedDate={selectedDate} onSelect={setSelectedDate} />
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex-1">
+              <DayStrip selectedDate={selectedDate} onSelect={setSelectedDate} />
+            </div>
+            {mode === 'morning' ? null : (
+              <ModeToggle mode={mode} onToggle={setMode} />
+            )}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 pb-5 space-y-4 pt-4">
-          {/* AI Nudge (only for today) */}
-          {isToday(selectedDate) && nudgeData?.nudge && (
-            <motion.div
-              initial={{ opacity: 0, y: -5 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="p-3 rounded-xl bg-gradient-to-r from-primary/5 to-primary/10 border border-primary/15"
-            >
-              <div className="flex items-start gap-2.5">
-                <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <Sparkles className="h-3 w-3 text-primary" />
-                </div>
-                <p className="text-sm text-foreground/90 leading-relaxed">{nudgeData.nudge}</p>
-              </div>
-            </motion.div>
-          )}
-
-          {/* Yesterday's Commitment Chain */}
-          {isToday(selectedDate) && nudgeData?.yesterdayCommitment && (
-            <div className="p-3 rounded-xl bg-secondary/40 border border-border/50">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
-                Yesterday's commitment
-              </span>
-              <p className="text-sm mt-1.5 mb-2.5 text-foreground/80">"{nudgeData.yesterdayCommitment}"</p>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant={data.yesterdayCommitmentMet === true ? 'default' : 'outline'}
-                  onClick={() => update('yesterdayCommitmentMet', true)}
-                  className="gap-1 text-xs h-7"
-                >
-                  <Check className="h-3 w-3" /> Did it
-                </Button>
-                <Button
-                  size="sm"
-                  variant={data.yesterdayCommitmentMet === false ? 'secondary' : 'outline'}
-                  onClick={() => update('yesterdayCommitmentMet', false)}
-                  className="text-xs h-7"
-                >
-                  Missed it
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Core Metrics */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
-                Activity — Actual vs Target
-              </Label>
-              <span className={cn(
-                "text-xs font-mono font-bold",
-                goalMet ? "text-status-green" : "text-muted-foreground"
-              )}>
-                {score}/6 hit
-              </span>
-            </div>
-            <div className="space-y-1.5">
-              <MetricCounter label="Dials" value={data.dials} target={targets.dials} onChange={v => update('dials', v)} icon={Phone} />
-              <MetricCounter label="Conversations" value={data.conversations} target={targets.conversations} onChange={v => update('conversations', v)} icon={MessageSquare} />
-              <MetricCounter label="Prospects Added" value={data.prospectsAdded} target={targets.prospectsAdded} onChange={v => update('prospectsAdded', v)} icon={Users} />
-              <MetricCounter label="Meetings Set" value={data.meetingsSet} target={targets.meetingsSet} onChange={v => update('meetingsSet', v)} icon={Calendar} />
-              <MetricCounter label="Meetings Held" value={data.customerMeetingsHeld} target={targets.customerMeetings} onChange={v => update('customerMeetingsHeld', v)} icon={Calendar} />
-              <MetricCounter label="Opps Created" value={data.opportunitiesCreated} target={targets.oppsCreated} onChange={v => update('opportunitiesCreated', v)} icon={TrendingUp} />
-            </div>
-          </div>
-
-          {/* Leading Indicators (Preparedness) */}
-          <button
-            onClick={() => setShowLeading(!showLeading)}
-            className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {showLeading ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            {showLeading ? 'Hide' : 'Show'} leading indicators
-          </button>
-
-          <AnimatePresence>
-            {showLeading && (
+          <AnimatePresence mode="wait">
+            {mode === 'morning' ? (
               <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
+                key="morning"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
                 transition={{ duration: 0.2 }}
-                className="overflow-hidden space-y-1.5"
               >
-                <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
-                  Preparedness
-                </Label>
-                <MetricCounter label="Accounts Researched" value={data.accountsResearched} target={targets.accountsResearched} onChange={v => update('accountsResearched', v)} icon={Search} compact />
-                <MetricCounter label="Contacts Prepped" value={data.contactsPrepped} target={targets.contactsPrepped} onChange={v => update('contactsPrepped', v)} icon={BookOpen} compact />
+                <MorningView
+                  yesterdayEntry={yesterdayEntry}
+                  weeklyReview={weeklyReview}
+                  nudgeData={nudgeData}
+                  whoopMetrics={whoopMetrics}
+                  streakData={streakData}
+                  data={data}
+                  update={update}
+                  onSwitchToEvening={() => setMode('evening')}
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="evening"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <EveningView
+                  data={data}
+                  update={update}
+                  targets={targets}
+                  score={score}
+                  goalMet={goalMet}
+                  nudgeData={nudgeData}
+                  showExtras={showExtras}
+                  setShowExtras={setShowExtras}
+                  showLeading={showLeading}
+                  setShowLeading={setShowLeading}
+                  showInsights={showInsights}
+                  setShowInsights={setShowInsights}
+                  weeklyInsights={weeklyInsights}
+                />
               </motion.div>
             )}
           </AnimatePresence>
-
-          {/* Expandable extras */}
-          <button
-            onClick={() => setShowExtras(!showExtras)}
-            className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {showExtras ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            {showExtras ? 'Hide' : 'Show'} focus time, pipeline & blockers
-          </button>
-
-          <AnimatePresence>
-            {showExtras && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden space-y-3"
-              >
-                <div className="p-3 rounded-xl bg-secondary/30 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="flex items-center gap-2 text-sm">
-                      <Timer className="h-4 w-4 text-primary" />
-                      Prospecting block?
-                    </Label>
-                    <Switch checked={data.ranProspectingBlock} onCheckedChange={v => update('ranProspectingBlock', v)} />
-                  </div>
-                  {data.ranProspectingBlock && (
-                    <div className="flex gap-1.5 pt-1">
-                      {TIME_CHIPS.map(min => (
-                        <Button key={min} size="sm"
-                          variant={data.prospectingBlockMinutes === min ? 'default' : 'outline'}
-                          onClick={() => update('prospectingBlockMinutes', min)}
-                          className="text-xs h-7 flex-1"
-                        >{min}m</Button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="p-3 rounded-xl bg-secondary/30 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="flex items-center gap-2 text-sm">
-                      <Timer className="h-4 w-4 text-primary" />
-                      Account deep work?
-                    </Label>
-                    <Switch checked={data.didDeepWork} onCheckedChange={v => update('didDeepWork', v)} />
-                  </div>
-                  {data.didDeepWork && (
-                    <div className="flex gap-1.5 pt-1">
-                      {TIME_CHIPS.map(min => (
-                        <Button key={min} size="sm"
-                          variant={data.accountDeepWorkMinutes === min ? 'default' : 'outline'}
-                          onClick={() => update('accountDeepWorkMinutes', min)}
-                          className="text-xs h-7 flex-1"
-                        >{min}m</Button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="p-3 rounded-xl bg-secondary/30">
-                  <div className="flex items-center justify-between">
-                    <Label className="flex items-center gap-2 text-sm">
-                      <DollarSign className="h-4 w-4 text-primary" />
-                      Pipeline moved ($)
-                    </Label>
-                    <Input
-                      type="number" min={0}
-                      value={data.pipelineMoved || ''}
-                      onChange={e => update('pipelineMoved', parseFloat(e.target.value) || 0)}
-                      placeholder="0"
-                      className="w-28 text-right font-mono text-sm h-8"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
-                    Biggest blocker
-                  </Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {BLOCKER_OPTIONS.map(opt => (
-                      <Button key={opt.value} size="sm"
-                        variant={data.biggestBlocker === opt.value ? 'default' : 'outline'}
-                        onClick={() => update('biggestBlocker', data.biggestBlocker === opt.value ? null : opt.value)}
-                        className="text-xs h-7 gap-1"
-                      >
-                        <span>{opt.emoji}</span> {opt.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Weekly Insights */}
-          {weeklyInsights?.insights && weeklyInsights.insights.length > 0 && (
-            <>
-              <button
-                onClick={() => setShowInsights(!showInsights)}
-                className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                {showInsights ? 'Hide' : 'View'} weekly patterns
-              </button>
-              <AnimatePresence>
-                {showInsights && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="p-3 rounded-xl bg-gradient-to-br from-primary/5 to-accent/10 border border-primary/10 space-y-2">
-                      <Label className="text-[10px] uppercase tracking-widest text-primary font-semibold flex items-center gap-1.5">
-                        <CalendarDays className="h-3 w-3" />
-                        AI Weekly Patterns
-                      </Label>
-                      {weeklyInsights.insights.map((insight, i) => (
-                        <p key={i} className="text-xs text-foreground/80 leading-relaxed flex items-start gap-2">
-                          <span className="text-primary mt-0.5">•</span>
-                          {insight}
-                        </p>
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </>
-          )}
-
-          {/* Accountability Section */}
-          <div className="space-y-3 pt-1">
-            <div className="space-y-1.5">
-              <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
-                #1 Win today
-              </Label>
-              <Input
-                value={data.win}
-                onChange={e => update('win', e.target.value)}
-                placeholder="Best thing that happened…"
-                className="text-sm h-9 bg-secondary/20 border-border/50"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold flex items-center gap-1.5">
-                Reflection
-                <Badge variant="secondary" className="text-[9px] font-normal px-1.5 py-0">AI analyzed</Badge>
-              </Label>
-              <Textarea
-                value={data.dailyReflection}
-                onChange={e => update('dailyReflection', e.target.value)}
-                placeholder="How did today go? Be honest — this is for you..."
-                rows={2}
-                className="text-sm bg-secondary/20 border-border/50 resize-none"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
-                Tomorrow's #1 commitment
-              </Label>
-              <Textarea
-                value={data.tomorrowPriority}
-                onChange={e => update('tomorrowPriority', e.target.value)}
-                placeholder="What's the one thing you MUST do tomorrow?"
-                rows={2}
-                className="text-sm bg-secondary/20 border-border/50 resize-none"
-              />
-            </div>
-          </div>
         </div>
 
         {/* Footer */}
         <div className="flex-shrink-0 px-5 py-3 border-t border-border/50 flex items-center justify-between bg-background/80 backdrop-blur-sm">
           <div className="flex items-center gap-2">
-            <span className={cn(
-              "text-lg font-bold font-mono",
-              goalMet ? "text-status-green" : "text-muted-foreground"
-            )}>
-              {score}/6
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {goalMet ? '✓ Goal met' : `Need ${Math.max(0, 4 - score)} more`}
-            </span>
+            {mode === 'evening' ? (
+              <>
+                <span className={cn(
+                  "text-lg font-bold font-mono",
+                  goalMet ? "text-status-green" : "text-muted-foreground"
+                )}>
+                  {score}/6
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {goalMet ? '✓ Goal met' : `Need ${Math.max(0, 4 - score)} more`}
+                </span>
+              </>
+            ) : (
+              <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Sun className="h-3.5 w-3.5" />
+                Set your intention for the day
+              </span>
+            )}
           </div>
           <Button
             onClick={handleSave}
@@ -945,7 +1303,7 @@ export function DailyScorecardModal({
             className="gap-1.5 px-5"
             size="sm"
           >
-            {saving ? 'Saving…' : isEditMode ? 'Update' : 'Save'}
+            {saving ? 'Saving…' : mode === 'morning' ? 'Check In' : (isEditMode ? 'Update' : 'Save')}
             <Check className="h-4 w-4" />
           </Button>
         </div>
