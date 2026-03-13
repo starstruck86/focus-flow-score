@@ -375,15 +375,14 @@ function useCalendarMeetingCount(date: string) {
       const dayEnd = endOfDay(new Date(date + 'T12:00:00')).toISOString();
       const { data, error } = await supabase
         .from('calendar_events')
-        .select('id, title, start_time, end_time, location')
+        .select('id, title, start_time, end_time, location, all_day')
         .gte('start_time', dayStart)
         .lte('start_time', dayEnd)
         .order('start_time', { ascending: true });
       if (error) throw error;
-      // Filter for likely customer meetings (exclude internal/admin-sounding events)
       const internalKeywords = ['standup', 'stand-up', '1:1', '1-1', 'team sync', 'all hands', 'sprint', 'retro', 'planning', 'internal', 'lunch', 'break'];
-      const meetings = (data || []).filter(e => {
-        const title = e.title.toLowerCase();
+      const meetings = (data || []).filter((e: any) => {
+        const title = (e.title || '').toLowerCase();
         return !internalKeywords.some(kw => title.includes(kw)) && !e.all_day;
       });
       return { totalEvents: data?.length || 0, customerMeetings: meetings, customerMeetingCount: meetings.length };
