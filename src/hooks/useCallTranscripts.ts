@@ -121,7 +121,7 @@ export function useSaveTranscript() {
         .select()
         .single();
       if (error) throw error;
-      return data as CallTranscript;
+      return data as unknown as CallTranscript;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['call-transcripts'] });
