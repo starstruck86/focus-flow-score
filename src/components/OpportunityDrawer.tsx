@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { ResourceLinksPanel } from '@/components/ResourceLinksPanel';
 import {
   Phone,
   Mail,
