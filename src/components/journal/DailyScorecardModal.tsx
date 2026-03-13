@@ -302,6 +302,23 @@ function useCurrentStreak() {
   });
 }
 
+// --- WHOOP Data Hook ---
+function useWhoopMetrics(date: string) {
+  return useQuery({
+    queryKey: ['whoop-metrics-scorecard', date],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('whoop_daily_metrics')
+        .select('recovery_score, sleep_score, strain_score')
+        .eq('date', date)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 // --- Main Component ---
 interface DailyScorecardModalProps {
   open: boolean;
