@@ -1792,6 +1792,7 @@ export function DailyScorecardModal({
                   rollingAvg={rollingAvg}
                   quickLogMode={quickLogMode}
                   weekDaysLogged={weekDaysLogged}
+                  existingEntry={existingEntry}
                 />
               </motion.div>
             )}
