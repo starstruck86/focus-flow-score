@@ -4,6 +4,8 @@ import { motion } from 'framer-motion';
 import { Calendar, ChevronDown } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { DailyScorecardModal, BackfillCards } from '@/components/journal';
+import { WeeklyRealignmentModal } from '@/components/weekly/WeeklyRealignmentModal';
+import { useCurrentWeekReview } from '@/hooks/useWeeklyReview';
 import { useStore } from '@/store/useStore';
 import { 
   useWorkScheduleConfig, 
