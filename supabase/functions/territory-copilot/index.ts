@@ -492,7 +492,8 @@ Deno.serve(async (req) => {
       transcripts: transcriptsRes?.data || [],
     };
 
-    // If an account is focused, filter transcripts and resources to that account for relevance
+    // If an account is focused, filter transcripts to that account for relevance
+    // Resources are NEVER filtered — they are general methodology, always available
     let focusAccount: any = null;
     if (accountId) {
       focusAccount = ctx.accounts.find((a: any) => a.id === accountId);
@@ -511,16 +512,7 @@ Deno.serve(async (req) => {
       if (allRelevant.length > 0) {
         ctx.transcripts = allRelevant;
       }
-
-      // Filter resources to focused account
-      const accountResources = ctx.resources.filter((r: any) =>
-        r.account_id === focusAccount.id ||
-        oppIds.has(r.opportunity_id) ||
-        (!r.account_id && !r.opportunity_id && !r.renewal_id) // Global resources always included
-      );
-      if (accountResources.length > 0) {
-        ctx.resources = accountResources;
-      }
+      // Resources stay unfiltered — they are the user's general sales operating system
     }
 
     // Deep/meeting/deal-strategy: web research
