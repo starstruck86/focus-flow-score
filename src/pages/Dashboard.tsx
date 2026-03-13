@@ -281,6 +281,8 @@ export default function Dashboard() {
         
         <BackfillCards />
         
+        <MeetingPrepPrompt />
+        
         <CheckInBanner
           checkedIn={todayCheckedIn}
           isEligibleDay={isTodayEligible}
