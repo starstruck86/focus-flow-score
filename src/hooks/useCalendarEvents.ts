@@ -31,7 +31,7 @@ export function useCalendarEvents() {
         .limit(50);
       
       if (error) throw error;
-      return data as CalendarEvent[];
+      return data as unknown as CalendarEvent[];
     },
   });
 }
