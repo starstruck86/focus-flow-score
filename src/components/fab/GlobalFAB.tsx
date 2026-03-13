@@ -204,6 +204,7 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
       },
     },
     {
+      id: 'quick-log',
       label: 'Quick Log',
       icon: Bolt,
       shortcut: 'Q',
