@@ -159,15 +159,16 @@ export function AddTranscriptModal({
           addTask({
             title: t.title,
             priority: t.priority || 'P2',
-            status: 'next',
+            status: 'next' as const,
             dueDate: t.due_date,
             notes: t.notes ? `[From transcript] ${t.notes}` : '[Auto-extracted from call transcript]',
             category: t.category || 'call',
-            motion: linkType === 'renewal' ? 'renewal' : 'new-logo',
-            linkedRecordType: linkType === 'opportunity' ? 'opportunity' : 'renewal',
+            motion: linkType === 'renewal' ? 'renewal' as const : 'new-logo' as const,
+            workstream: linkType === 'renewal' ? 'renewals' as const : 'pg' as const,
+            linkedRecordType: linkType === 'opportunity' ? 'opportunity' as const : 'renewal' as const,
             linkedRecordId: linkType === 'opportunity' ? selectedOppId : selectedRenewalId,
             linkedAccountId: derivedAccountId,
-          });
+          } as any);
         });
         toast.success(`${data.tasks.length} tasks auto-created from transcript`, {
           description: 'Check your Tasks page to review them',
