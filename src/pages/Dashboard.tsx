@@ -296,6 +296,12 @@ export default function Dashboard() {
         return <CalendarIntelligence key={widgetId} />;
       case 'daily-time-blocks':
         return <DailyTimeBlocks key={widgetId} />;
+      case 'pclub-math':
+        return <PClubMathCard key={widgetId} />;
+      case 'weekly-battle-plan':
+        return <WeeklyBattlePlanCard key={widgetId} />;
+      case 'pipeline-hygiene':
+        return <PipelineHygieneCard key={widgetId} />;
       default:
         return null;
     }
