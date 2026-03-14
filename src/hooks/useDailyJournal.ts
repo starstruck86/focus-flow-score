@@ -330,6 +330,7 @@ function parseTimeToMinutes(time: string): number {
 
 // Hook to check if prompts should show
 export function useJournalPromptStatus() {
+  const { user } = useAuth();
   const { data: today, isLoading: loadingToday } = useTodayJournalEntry();
   const { data: yesterday, isLoading: loadingYesterday } = useYesterdayJournalEntry();
   
