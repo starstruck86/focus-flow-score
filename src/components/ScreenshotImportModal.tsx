@@ -200,7 +200,7 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
             owner: '',
           });
         } else {
-          const newAccount = await addAccount({
+          await addAccount({
             name: acc.name,
             website: acc.website || undefined,
             industry: acc.industry || undefined,
@@ -219,10 +219,6 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
             outreachStatus: 'not-started' as const,
             tags: [],
           });
-          // Try to get the account ID for contact linking
-          if (newAccount && typeof newAccount === 'object' && 'id' in newAccount) {
-            accountId = (newAccount as any).id;
-          }
         }
 
         // FIX: Save extracted contacts to account_contacts table
