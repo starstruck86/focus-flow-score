@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, ChevronDown } from 'lucide-react';
+import { StreakChip } from '@/components/StreakChip';
 import { Layout } from '@/components/Layout';
 import { DailyScorecardModal, BackfillCards, JournalDashboardCard } from '@/components/journal';
 import { WeeklyRealignmentModal } from '@/components/weekly/WeeklyRealignmentModal';
@@ -325,12 +326,15 @@ export default function Dashboard() {
             </div>
             <h1 className="font-display text-2xl md:text-3xl font-bold">Dashboard</h1>
           </div>
-          <WidgetCustomizer
-            widgets={widgets}
-            onToggle={toggleWidget}
-            onMove={moveWidget}
-            onReset={resetWidgets}
-          />
+          <div className="flex items-center gap-2">
+            <StreakChip />
+            <WidgetCustomizer
+              widgets={widgets}
+              onToggle={toggleWidget}
+              onMove={moveWidget}
+              onReset={resetWidgets}
+            />
+          </div>
         </div>
         
         {/* Weekly Review Banner — non-blocking prompt */}
