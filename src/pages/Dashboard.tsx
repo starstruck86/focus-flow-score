@@ -261,6 +261,8 @@ export default function Dashboard() {
         return <AIAccountPrioritizer key={widgetId} />;
       case 'calendar-intelligence':
         return <CalendarIntelligence key={widgetId} />;
+      case 'daily-time-blocks':
+        return <DailyTimeBlocks key={widgetId} />;
       default:
         return null;
     }
