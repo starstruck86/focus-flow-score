@@ -1,6 +1,7 @@
 // Sales Age and Quota Pace hooks
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { format, subDays, subMonths, startOfWeek, endOfWeek } from 'date-fns';
 import { useStore } from '@/store/useStore';
 import { 
@@ -57,6 +58,7 @@ function transformJournalToMetrics(entry: any): DailyMetrics {
 
 // Fetch quota targets
 export function useQuotaTargets() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['quota-targets'],
     queryFn: async () => {
@@ -68,6 +70,7 @@ export function useQuotaTargets() {
       if (error) throw error;
       return data ? transformQuotaTargets(data) : DEFAULT_QUOTA_TARGETS;
     },
+    enabled: !!user,
   });
 }
 
@@ -117,6 +120,7 @@ export function useSaveQuotaTargets() {
 
 // Fetch daily journal entries for metrics calculation
 export function useJournalMetrics(days: number) {
+  const { user } = useAuth();
   const startDate = format(subDays(new Date(), days), 'yyyy-MM-dd');
   
   return useQuery({
@@ -131,11 +135,13 @@ export function useJournalMetrics(days: number) {
       if (error) throw error;
       return (data || []).map(transformJournalToMetrics);
     },
+    enabled: !!user,
   });
 }
 
 // Fetch prior sales age snapshot
 export function usePriorSalesAgeSnapshot() {
+  const { user } = useAuth();
   const priorWeekEnding = format(subDays(new Date(), 7), 'yyyy-MM-dd');
   
   return useQuery({
@@ -152,11 +158,13 @@ export function usePriorSalesAgeSnapshot() {
       if (error) throw error;
       return data;
     },
+    enabled: !!user,
   });
 }
 
 // Fetch sales age snapshot history
 export function useSalesAgeHistory(weeks: number = 12) {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['sales-age-history', weeks],
     queryFn: async () => {
@@ -169,6 +177,7 @@ export function useSalesAgeHistory(weeks: number = 12) {
       if (error) throw error;
       return data || [];
     },
+    enabled: !!user,
   });
 }
 
@@ -355,6 +364,7 @@ export function useSaveSalesAgeSnapshot() {
 
 // Performance rollups (WTD, MTD, QTD)
 export function usePerformanceRollups() {
+  const { user } = useAuth();
   const now = new Date();
   const weekStart = format(startOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd');
   const monthStart = format(new Date(now.getFullYear(), now.getMonth(), 1), 'yyyy-MM-dd');
@@ -397,5 +407,6 @@ export function usePerformanceRollups() {
       
       return { wtd, mtd, wtdDays: wtdEntries.length, mtdDays: entries.length };
     },
+    enabled: !!user,
   });
 }

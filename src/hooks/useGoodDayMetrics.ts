@@ -1,6 +1,7 @@
 // Good Day Metrics hooks - Expected vs Actual tracking
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { format, startOfWeek, endOfWeek, startOfMonth, subDays } from 'date-fns';
 import { 
   calculateGoodDayPoints, 
@@ -41,6 +42,7 @@ export function useEligibleWorkdays(startDate: Date, endDate: Date) {
 
 // Get week-to-date journal entries and calculate rollups
 export function useWeekToDateMetrics() {
+  const { user } = useAuth();
   const today = new Date();
   const weekStart = startOfWeek(today, { weekStartsOn: 1 }); // Monday start
   
@@ -100,11 +102,13 @@ export function useWeekToDateMetrics() {
         today,
       };
     },
+    enabled: !!user,
   });
 }
 
 // Get month-to-date metrics
 export function useMonthToDateMetrics() {
+  const { user } = useAuth();
   const today = new Date();
   const monthStart = startOfMonth(today);
   
@@ -159,11 +163,13 @@ export function useMonthToDateMetrics() {
         today,
       };
     },
+    enabled: !!user,
   });
 }
 
 // Get rolling averages (30D and 6M)
 export function useRollingAverages() {
+  const { user } = useAuth();
   const today = new Date();
   const start30d = subDays(today, 30);
   const start6m = subDays(today, 180);
@@ -224,6 +230,7 @@ export function useRollingAverages() {
         count6m: entries6m?.length || 0,
       };
     },
+    enabled: !!user,
   });
 }
 

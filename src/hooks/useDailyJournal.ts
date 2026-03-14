@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { format, subDays } from 'date-fns';
 import type {
   DailyJournalEntry,
@@ -151,6 +152,7 @@ export function calculateJournalScores(
 
 // Hooks
 export function useTodayJournalEntry() {
+  const { user } = useAuth();
   const today = format(new Date(), 'yyyy-MM-dd');
   
   return useQuery({
@@ -165,10 +167,12 @@ export function useTodayJournalEntry() {
       if (error) throw error;
       return data ? transformJournalEntry(data) : null;
     },
+    enabled: !!user,
   });
 }
 
 export function useYesterdayJournalEntry() {
+  const { user } = useAuth();
   const yesterday = format(subDays(new Date(), 1), 'yyyy-MM-dd');
   
   return useQuery({
@@ -183,6 +187,7 @@ export function useYesterdayJournalEntry() {
       if (error) throw error;
       return data ? transformJournalEntry(data) : null;
     },
+    enabled: !!user,
   });
 }
 
@@ -325,6 +330,7 @@ function parseTimeToMinutes(time: string): number {
 
 // Hook to check if prompts should show
 export function useJournalPromptStatus() {
+  const { user } = useAuth();
   const { data: today, isLoading: loadingToday } = useTodayJournalEntry();
   const { data: yesterday, isLoading: loadingYesterday } = useYesterdayJournalEntry();
   
@@ -339,7 +345,6 @@ export function useJournalPromptStatus() {
         .maybeSingle();
       
       if (error) throw error;
-      // Return defaults if no config exists
       return {
         eodCheckinTime: data?.eod_checkin_time || '16:30:00',
         eodReminderTime: data?.eod_reminder_time || '18:30:00',
@@ -347,6 +352,7 @@ export function useJournalPromptStatus() {
         graceWindowEndTime: data?.grace_window_end_time || '02:00:00',
       };
     },
+    enabled: !!user,
   });
   
   const now = new Date();

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { 
   WorkScheduleConfig, 
   Holiday, 
@@ -75,6 +76,7 @@ function transformBadge(data: any): BadgeEarned {
 }
 
 export function useWorkScheduleConfig() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['work-schedule-config'],
     queryFn: async () => {
@@ -105,10 +107,12 @@ export function useWorkScheduleConfig() {
       }
       return transformConfig(data);
     },
+    enabled: !!user,
   });
 }
 
 export function useHolidays() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['holidays'],
     queryFn: async () => {
@@ -125,10 +129,12 @@ export function useHolidays() {
         createdAt: h.created_at,
       })) as Holiday[];
     },
+    enabled: !!user,
   });
 }
 
 export function usePtoDays() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['pto-days'],
     queryFn: async () => {
@@ -145,10 +151,12 @@ export function usePtoDays() {
         createdAt: p.created_at,
       })) as PtoDay[];
     },
+    enabled: !!user,
   });
 }
 
 export function useWorkdayOverrides() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['workday-overrides'],
     queryFn: async () => {
@@ -166,58 +174,41 @@ export function useWorkdayOverrides() {
         createdAt: o.created_at,
       })) as WorkdayOverride[];
     },
+    enabled: !!user,
   });
 }
 
 export function useStreakEvents() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['streak-events'],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return [];
-      
       const { data, error } = await supabase
         .from('streak_events')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', user!.id)
         .order('date', { ascending: false });
       
       if (error) throw error;
       return data.map(transformStreakEvent);
     },
+    enabled: !!user,
   });
 }
 
 export function useStreakSummary() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['streak-summary'],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        return {
-          id: '',
-          currentCheckinStreak: 0,
-          currentPerformanceStreak: 0,
-          longestCheckinStreak: 0,
-          longestPerformanceStreak: 0,
-          totalEligibleDays: 0,
-          totalCheckins: 0,
-          totalGoalsMet: 0,
-          checkinLevel: 1,
-          performanceLevel: 1,
-          updatedAt: new Date().toISOString(),
-        } as StreakSummary;
-      }
-      
       const { data, error } = await supabase
         .from('streak_summary')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', user!.id)
         .limit(1)
         .maybeSingle();
       
       if (error) throw error;
-      // Return defaults if no summary exists
       if (!data) {
         return {
           id: '',
@@ -235,10 +226,12 @@ export function useStreakSummary() {
       }
       return transformSummary(data);
     },
+    enabled: !!user,
   });
 }
 
 export function useBadgesEarned() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['badges-earned'],
     queryFn: async () => {
@@ -250,8 +243,10 @@ export function useBadgesEarned() {
       if (error) throw error;
       return data.map(transformBadge);
     },
+    enabled: !!user,
   });
 }
+
 
 // Check if a date is an eligible workday
 export function isEligibleDay(
