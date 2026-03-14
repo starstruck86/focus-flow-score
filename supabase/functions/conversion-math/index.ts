@@ -123,10 +123,18 @@ serve(async (req) => {
     const meetingGap = meetingsPerWeek - actualPace.meetingsPerWeek;
     const onPace = dialGap <= 0 && meetingGap <= 0;
 
-    // FIX: Pipeline coverage against TOTAL gap (new + renewal), not just new logo
-    const activePipelineArr = opps
-      .filter((o: any) => o.status === "active")
-      .reduce((s: number, o: any) => s + (parseFloat(o.arr) || 0), 0);
+    // FIX: Pipeline coverage — for renewal opps, only count expansion ARR
+    const activeOpps = opps.filter((o: any) => o.status === "active");
+    const activePipelineArr = activeOpps.reduce((s: number, o: any) => {
+      const arr = parseFloat(o.arr) || 0;
+      if (o.is_new_logo === true) return s + arr;
+      // Renewal opp: only expansion counts
+      const priorArr = parseFloat(o.prior_contract_arr) || 0;
+      const renewalArr = parseFloat(o.renewal_arr) || arr;
+      const expansion = Math.max(0, renewalArr - priorArr);
+      // If no expansion, assume 4% of prior spend
+      return s + (expansion > 0 ? expansion : priorArr * 0.04);
+    }, 0);
     const coverageDenominator = totalGap > 0 ? totalGap : 1;
     const pipelineCoverage = totalGap > 0 ? activePipelineArr / coverageDenominator : (activePipelineArr > 0 ? 999 : 0);
 
