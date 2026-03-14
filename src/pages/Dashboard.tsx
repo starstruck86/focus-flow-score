@@ -50,6 +50,7 @@ import {
   MeetingPrepPrompt,
   AIAccountPrioritizer,
   CalendarIntelligence,
+  DailyTimeBlocks,
 } from '@/components/dashboard';
 
 export default function Dashboard() {
