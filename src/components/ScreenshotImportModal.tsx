@@ -54,8 +54,16 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
   const accounts = useStore(s => s.accounts);
 
   const addFiles = useCallback((newFiles: FileList | File[]) => {
+    const MAX_SIZE = 10 * 1024 * 1024; // 10MB per file
     const entries = Array.from(newFiles)
-      .filter(f => f.type.startsWith('image/'))
+      .filter(f => {
+        if (!f.type.startsWith('image/')) return false;
+        if (f.size > MAX_SIZE) {
+          toast.error(`${f.name} is too large (max 10MB)`);
+          return false;
+        }
+        return true;
+      })
       .slice(0, 10)
       .map(file => ({ file, preview: URL.createObjectURL(file) }));
     setFiles(prev => [...prev, ...entries].slice(0, 10));
