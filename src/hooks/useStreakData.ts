@@ -246,9 +246,7 @@ export function useBadgesEarned() {
     enabled: !!user,
   });
 }
-    },
-  });
-}
+
 
 // Check if a date is an eligible workday
 export function isEligibleDay(
