@@ -150,6 +150,115 @@ function DataImportSection() {
   );
 }
 
+// Data Export Section Component
+function DataExportSection() {
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportJSON = async () => {
+    setExporting(true);
+    try {
+      const { useStore } = await import('@/store/useStore');
+      const state = useStore.getState();
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        version: 1,
+        accounts: state.accounts,
+        contacts: state.contacts,
+        opportunities: state.opportunities,
+        renewals: state.renewals,
+        tasks: state.tasks,
+        days: state.days,
+        recurringTemplates: state.recurringTemplates,
+        quotaConfig: state.quotaConfig,
+      };
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `quota-compass-backup-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Backup downloaded successfully');
+    } catch (e) {
+      toast.error('Export failed');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportCSV = async () => {
+    setExporting(true);
+    try {
+      const { useStore } = await import('@/store/useStore');
+      const state = useStore.getState();
+      
+      // Accounts CSV
+      const accountHeaders = ['Name', 'Website', 'Industry', 'Tier', 'Status', 'Motion', 'Outreach Status', 'Last Touch', 'Next Step', 'Notes'];
+      const accountRows = state.accounts.map(a => [
+        a.name, a.website || '', a.industry || '', a.tier, a.accountStatus, a.motion,
+        a.outreachStatus, a.lastTouchDate || '', a.nextStep || '', (a.notes || '').replace(/"/g, '""'),
+      ].map(v => `"${v}"`).join(','));
+      
+      // Opportunities CSV
+      const oppHeaders = ['Name', 'Stage', 'Status', 'ARR', 'Close Date', 'Next Step', 'Deal Type', 'Notes'];
+      const oppRows = state.opportunities.map(o => [
+        o.name, o.stage, o.status, o.arr || '', o.closeDate || '', o.nextStep || '',
+        o.dealType || '', (o.notes || '').replace(/"/g, '""'),
+      ].map(v => `"${v}"`).join(','));
+
+      const csv = [
+        '--- ACCOUNTS ---',
+        accountHeaders.join(','),
+        ...accountRows,
+        '',
+        '--- OPPORTUNITIES ---',
+        oppHeaders.join(','),
+        ...oppRows,
+      ].join('\n');
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `quota-compass-export-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('CSV exported successfully');
+    } catch (e) {
+      toast.error('Export failed');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="metric-card">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+          <Download className="h-5 w-5 text-primary" />
+        </div>
+        <div>
+          <h3 className="font-semibold">Export & Backup</h3>
+          <p className="text-sm text-muted-foreground">Download your data for safekeeping</p>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        <Button onClick={handleExportJSON} disabled={exporting} variant="outline">
+          <Download className="h-4 w-4 mr-2" />
+          Full Backup (JSON)
+        </Button>
+        <Button onClick={handleExportCSV} disabled={exporting} variant="outline">
+          <FileSpreadsheet className="h-4 w-4 mr-2" />
+          Export CSV
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground mt-3">
+        JSON backup includes all data and can be used to restore your workspace. CSV is for spreadsheet viewing.
+      </p>
+    </div>
+  );
+}
+
 // Import Mappings Section Component
 function ImportMappingsSection() {
   const { data: headerMappings = [] } = useHeaderMappings();
