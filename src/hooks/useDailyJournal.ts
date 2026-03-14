@@ -344,7 +344,6 @@ export function useJournalPromptStatus() {
         .maybeSingle();
       
       if (error) throw error;
-      // Return defaults if no config exists
       return {
         eodCheckinTime: data?.eod_checkin_time || '16:30:00',
         eodReminderTime: data?.eod_reminder_time || '18:30:00',
@@ -352,6 +351,7 @@ export function useJournalPromptStatus() {
         graceWindowEndTime: data?.grace_window_end_time || '02:00:00',
       };
     },
+    enabled: !!user,
   });
   
   const now = new Date();
