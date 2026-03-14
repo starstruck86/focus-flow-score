@@ -37,7 +37,7 @@ export function AIAccountPrioritizer() {
   const [loading, setLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const navigate = useNavigate();
-  const { openRecord } = useLinkedRecordContext();
+  const { setCurrentRecord } = useLinkedRecordContext();
 
   const fetchPriorities = async () => {
     setLoading(true);
