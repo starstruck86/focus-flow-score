@@ -74,7 +74,7 @@ import { MetricFieldCell } from '@/components/table/MetricFieldCell';
 import { useCustomFields } from '@/hooks/useCustomFields';
 import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
 import { sortRenewalsDefault, applySortWithFallback, CHURN_RISK_SORT_RANK, CHURN_RISK_DISPLAY_LABELS } from '@/lib/sortUtils';
-import type { Renewal, HealthStatus, Opportunity, ChurnRisk } from '@/types';
+import type { Renewal, HealthStatus, Opportunity, ChurnRisk, OpportunityStage } from '@/types';
 import { computeRenewalRiskScore } from '@/hooks/useTimeAllocation';
 
 // ===== RENEWAL ENRICH BUTTON (for orphan renewals without linked account) =====
