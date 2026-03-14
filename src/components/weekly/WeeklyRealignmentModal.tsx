@@ -28,6 +28,7 @@ import { DEFAULT_QUOTA_TARGETS } from '@/lib/salesAgeCalculations';
 interface Props {
   open: boolean;
   onComplete: () => void;
+  onOpenChange?: (open: boolean) => void;
 }
 
 interface ClientMeeting {
