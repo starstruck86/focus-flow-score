@@ -58,6 +58,7 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [showQuickLog, setShowQuickLog] = useState(false);
   const [showScreenshots, setShowScreenshots] = useState(false);
+  const [showScreenshotImport, setShowScreenshotImport] = useState(false);
   const [showTranscriptViewer, setShowTranscriptViewer] = useState(false);
   const [showResourceLibrary, setShowResourceLibrary] = useState(false);
   
