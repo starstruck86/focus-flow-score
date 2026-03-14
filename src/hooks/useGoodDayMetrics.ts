@@ -169,6 +169,7 @@ export function useMonthToDateMetrics() {
 
 // Get rolling averages (30D and 6M)
 export function useRollingAverages() {
+  const { user } = useAuth();
   const today = new Date();
   const start30d = subDays(today, 30);
   const start6m = subDays(today, 180);
