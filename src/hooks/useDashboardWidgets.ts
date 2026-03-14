@@ -10,6 +10,7 @@ export interface DashboardWidget {
 const STORAGE_KEY = 'quota-compass-dashboard-widgets';
 
 const DEFAULT_WIDGETS: DashboardWidget[] = [
+  { id: 'daily-time-blocks', label: 'Daily Game Plan', visible: true },
   { id: 'commission-pacing', label: 'Commission Pacing', visible: true },
   { id: 'progress-tabs', label: 'Today / Week-to-Date', visible: true },
   { id: 'ai-prioritizer', label: 'AI Focus Recommender', visible: true },

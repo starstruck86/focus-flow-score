@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.search-context]
 verify_jwt = false
+
+[functions.generate-time-blocks]
+verify_jwt = false
