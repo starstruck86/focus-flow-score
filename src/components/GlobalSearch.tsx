@@ -84,15 +84,18 @@ export function GlobalSearch() {
       // Search opportunities
       const { data: opps } = await supabase
         .from('opportunities')
-        .select('id, name, stage, arr')
+        .select('id, name, stage, arr, deal_type')
         .ilike('name', `%${q}%`)
         .limit(5);
 
-      opps?.forEach(o => searchResults.push({
-        id: o.id, type: 'opportunity', name: o.name,
-        subtitle: `$${(o.arr || 0).toLocaleString()} · ${o.stage || 'No stage'}`,
-        route: '/renewals',
-      }));
+      opps?.forEach(o => {
+        const isRenewalOpp = o.deal_type === 'renewal' || o.deal_type === 'expansion';
+        searchResults.push({
+          id: o.id, type: 'opportunity', name: o.name,
+          subtitle: `$${(o.arr || 0).toLocaleString()} · ${o.stage || 'No stage'}`,
+          route: isRenewalOpp ? '/renewals' : '/outreach',
+        });
+      });
 
       // Search contacts
       const { data: contacts } = await supabase

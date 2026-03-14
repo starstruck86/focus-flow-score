@@ -142,6 +142,7 @@ export function AddTranscriptModal({
             <FileText className="h-5 w-5 text-primary" />
             Add Call Transcript
           </DialogTitle>
+          <p className="text-sm text-muted-foreground">Paste a call transcript to save it to your records.</p>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
