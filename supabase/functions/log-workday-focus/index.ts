@@ -64,13 +64,13 @@ Deno.serve(async (req) => {
 
     // Parse & validate body
     const body = await req.json();
-    const { date, distracted_minutes, phone_pickups } = body;
+    const { distracted_minutes, phone_pickups } = body;
 
+    // Auto-default to today's date if not provided or invalid
+    let date = body.date;
     if (!date || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return new Response(JSON.stringify({ error: 'Invalid date. Use YYYY-MM-DD.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      const now = new Date();
+      date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     }
 
     const dm = typeof distracted_minutes === 'number' ? Math.max(0, Math.round(distracted_minutes)) : 0;
