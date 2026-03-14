@@ -48,6 +48,8 @@ import {
   SmartWorkQueue,
   DailyDigest,
   MeetingPrepPrompt,
+  AIAccountPrioritizer,
+  CalendarIntelligence,
 } from '@/components/dashboard';
 
 export default function Dashboard() {
