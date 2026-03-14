@@ -309,8 +309,13 @@ export default function Renewals() {
 
     if (tab && !id) {
       setActiveTab(tab);
+      const stage = searchParams.get('stage');
+      if (tab === 'opportunities' && stage) {
+        setRenewalStageFilter(stage as OpportunityStage);
+      }
       const newParams = new URLSearchParams(searchParams);
       newParams.delete('tab');
+      newParams.delete('stage');
       setSearchParams(newParams, { replace: true });
     }
 
