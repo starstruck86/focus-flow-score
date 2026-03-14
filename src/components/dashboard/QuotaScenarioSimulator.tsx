@@ -5,10 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useStore } from '@/store/useStore';
 import { useConversionMath } from '@/hooks/useCoachingEngine';
-import { Calculator, Plus, X, TrendingUp, Target, Trophy } from 'lucide-react';
+import { Calculator, Plus, X, Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ScenarioDeal {
@@ -25,6 +24,22 @@ function formatCurrency(n: number) {
   return `$${n.toFixed(0)}`;
 }
 
+// FIX: Proper stage-to-probability mapping matching actual app stages
+const STAGE_PROBABILITY: Record<string, number> = {
+  'Prospect': 10,
+  'Discover': 20,
+  'Demo': 40,
+  'Proposal': 60,
+  'Negotiate': 80,
+  'Closed Won': 100,
+  'Closed Lost': 0,
+};
+
+function stageToProbability(stage: string | undefined | null): number {
+  if (!stage) return 15;
+  return STAGE_PROBABILITY[stage] ?? 15;
+}
+
 export function QuotaScenarioSimulator() {
   const { data: conversionData } = useConversionMath();
   const opportunities = useStore(s => s.opportunities);
@@ -32,15 +47,16 @@ export function QuotaScenarioSimulator() {
   const [expanded, setExpanded] = useState(false);
 
   // Start from active pipeline
-  const activePipelineDeals = useMemo(() => 
+  const activePipelineDeals = useMemo(() =>
     opportunities
       .filter(o => o.status === 'active' && o.arr)
       .map(o => ({
         id: o.id,
         name: o.name,
         arr: o.arr || 0,
-        probability: o.stage === 'Negotiate' ? 80 : o.stage === 'Proposal' ? 60 : o.stage === 'Demo' ? 40 : 20,
-        type: (o.isNewLogo ? 'new-logo' : 'renewal') as 'new-logo' | 'renewal',
+        probability: stageToProbability(o.stage),
+        // FIX: handle null isNewLogo explicitly
+        type: (o.isNewLogo === true ? 'new-logo' : 'renewal') as 'new-logo' | 'renewal',
       })),
     [opportunities]
   );
@@ -54,19 +70,16 @@ export function QuotaScenarioSimulator() {
     const totalQuota = quota.newArrQuota + quota.renewalArrQuota;
     const currentClosed = quota.newArrClosed + quota.renewalArrClosed;
 
-    // Best case: all deals close
     const bestCase = allDeals.reduce((s, d) => s + d.arr, 0) + currentClosed;
-    // Weighted case: probability-weighted
     const weightedCase = allDeals.reduce((s, d) => s + d.arr * (d.probability / 100), 0) + currentClosed;
-    // Worst case: only high-probability deals (>70%)
     const worstCase = allDeals.filter(d => d.probability >= 70).reduce((s, d) => s + d.arr, 0) + currentClosed;
 
     return {
       totalQuota,
       currentClosed,
-      bestCase: { total: bestCase, attainment: bestCase / totalQuota, pclub: bestCase >= totalQuota },
-      weightedCase: { total: weightedCase, attainment: weightedCase / totalQuota, pclub: weightedCase >= totalQuota },
-      worstCase: { total: worstCase, attainment: worstCase / totalQuota, pclub: worstCase >= totalQuota },
+      bestCase: { total: bestCase, attainment: totalQuota > 0 ? bestCase / totalQuota : 0, pclub: bestCase >= totalQuota },
+      weightedCase: { total: weightedCase, attainment: totalQuota > 0 ? weightedCase / totalQuota : 0, pclub: weightedCase >= totalQuota },
+      worstCase: { total: worstCase, attainment: totalQuota > 0 ? worstCase / totalQuota : 0, pclub: worstCase >= totalQuota },
       gapToClose: totalQuota - weightedCase,
     };
   }, [allDeals, conversionData]);
@@ -140,6 +153,24 @@ export function QuotaScenarioSimulator() {
               Pipeline ({activePipelineDeals.length} active) + Scenarios ({scenarioDeals.length})
             </div>
 
+            {/* Active pipeline summary */}
+            {activePipelineDeals.length > 0 && (
+              <div className="space-y-1 mb-2">
+                {activePipelineDeals.slice(0, 5).map(deal => (
+                  <div key={deal.id} className="flex items-center justify-between text-xs p-1.5 rounded bg-muted/10">
+                    <span className="truncate flex-1">{deal.name}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-muted-foreground">{deal.probability}%</span>
+                      <span className="font-mono">{formatCurrency(deal.arr)}</span>
+                    </div>
+                  </div>
+                ))}
+                {activePipelineDeals.length > 5 && (
+                  <p className="text-[10px] text-muted-foreground text-center">+{activePipelineDeals.length - 5} more</p>
+                )}
+              </div>
+            )}
+
             {/* Scenario deals */}
             {scenarioDeals.map(deal => (
               <div key={deal.id} className="flex items-center gap-2 p-2 rounded-lg bg-muted/20 border border-border/30">
@@ -182,8 +213,8 @@ export function QuotaScenarioSimulator() {
   );
 }
 
-function ScenarioBar({ label, value, pclub, amount, highlight }: { 
-  label: string; value: number; pclub: boolean; amount: number; highlight?: boolean 
+function ScenarioBar({ label, value, pclub, amount, highlight }: {
+  label: string; value: number; pclub: boolean; amount: number; highlight?: boolean
 }) {
   const pct = Math.min(value * 100, 150);
   return (

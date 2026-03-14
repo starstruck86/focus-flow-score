@@ -185,8 +185,9 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
 
     for (const acc of toImport) {
       try {
+        let accountId: string | undefined;
+
         if (acc.motion === 'renewal' && acc.renewal_due) {
-          // Create as renewal
           await addRenewal({
             accountName: acc.name,
             arr: acc.arr || 0,
@@ -199,7 +200,6 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
             owner: '',
           });
         } else {
-          // Create as account
           await addAccount({
             name: acc.name,
             website: acc.website || undefined,
@@ -220,6 +220,24 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
             tags: [],
           });
         }
+
+        // FIX: Save extracted contacts to account_contacts table
+        if (acc.contacts && acc.contacts.length > 0 && user) {
+          for (const contact of acc.contacts) {
+            try {
+              await supabase.from('account_contacts').insert({
+                user_id: user.id,
+                account_id: accountId || null,
+                name: contact.name,
+                title: contact.title || null,
+                notes: contact.email ? `Email: ${contact.email}` : null,
+              });
+            } catch {
+              // Non-critical — continue
+            }
+          }
+        }
+
         imported++;
       } catch (err) {
         console.error(`Failed to import ${acc.name}:`, err);

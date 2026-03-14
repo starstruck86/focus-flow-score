@@ -39,7 +39,19 @@ export function ConversionBenchmarksSettings() {
   }, [saved]);
 
   const handleSave = () => {
-    upsert.mutate(form);
+    // FIX: Validate rates are between 0 and 1
+    const validated = {
+      ...form,
+      dials_to_connect_rate: Math.min(1, Math.max(0.01, form.dials_to_connect_rate)),
+      connect_to_meeting_rate: Math.min(1, Math.max(0.01, form.connect_to_meeting_rate)),
+      meeting_to_opp_rate: Math.min(1, Math.max(0.01, form.meeting_to_opp_rate)),
+      opp_to_close_rate: Math.min(1, Math.max(0.01, form.opp_to_close_rate)),
+      avg_new_logo_arr: Math.max(1, form.avg_new_logo_arr),
+      avg_renewal_arr: Math.max(1, form.avg_renewal_arr),
+      avg_sales_cycle_days: Math.max(1, form.avg_sales_cycle_days),
+    };
+    setForm(validated);
+    upsert.mutate(validated);
     setEditing(false);
   };
 

@@ -8,7 +8,7 @@ import { usePipelineHygiene, useConversionMath } from '@/hooks/useCoachingEngine
 import { useTodayJournalEntry } from '@/hooks/useDailyJournal';
 import { 
   Brain, AlertTriangle, TrendingDown, TrendingUp, 
-  Target, Calendar, Zap, Clock
+  Target, Calendar, Clock, CheckCircle2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { differenceInDays, parseISO } from 'date-fns';
@@ -19,7 +19,7 @@ interface CoachingAlert {
   icon: React.ElementType;
   title: string;
   detail: string;
-  priority: number; // 1 = highest
+  priority: number;
 }
 
 export function CoachingFeed() {
@@ -134,8 +134,6 @@ export function CoachingFeed() {
     return items.sort((a, b) => a.priority - b.priority);
   }, [convMath, hygiene, todayEntry, opportunities, renewals]);
 
-  if (alerts.length === 0) return null;
-
   const typeStyles = {
     warning: 'border-l-strain text-strain',
     insight: 'border-l-primary text-primary',
@@ -143,38 +141,48 @@ export function CoachingFeed() {
     win: 'border-l-recovery text-recovery',
   };
 
+  // FIX: Show positive "all clear" state instead of returning null
   return (
     <Card className="metric-card">
       <CardHeader className="pb-2">
         <CardTitle className="text-base font-display flex items-center gap-2">
           <Brain className="h-4 w-4 text-primary" />
           Coach
-          <Badge variant="outline" className="text-[10px] ml-auto">{alerts.length}</Badge>
+          {alerts.length > 0 && (
+            <Badge variant="outline" className="text-[10px] ml-auto">{alerts.length}</Badge>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <ScrollArea className="max-h-[300px]">
-          <div className="space-y-2">
-            {alerts.slice(0, 6).map(alert => {
-              const Icon = alert.icon;
-              return (
-                <div
-                  key={alert.id}
-                  className={cn(
-                    "border-l-2 pl-3 py-2 rounded-r-md bg-muted/20",
-                    typeStyles[alert.type]
-                  )}
-                >
-                  <div className="flex items-center gap-1.5">
-                    <Icon className="h-3.5 w-3.5 shrink-0" />
-                    <span className="text-xs font-semibold text-foreground">{alert.title}</span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mt-0.5 pl-5">{alert.detail}</p>
-                </div>
-              );
-            })}
+        {alerts.length === 0 ? (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-recovery/10 text-recovery">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span className="text-sm font-medium">All clear — you're in good shape today.</span>
           </div>
-        </ScrollArea>
+        ) : (
+          <ScrollArea className="max-h-[300px]">
+            <div className="space-y-2">
+              {alerts.slice(0, 6).map(alert => {
+                const Icon = alert.icon;
+                return (
+                  <div
+                    key={alert.id}
+                    className={cn(
+                      "border-l-2 pl-3 py-2 rounded-r-md bg-muted/20",
+                      typeStyles[alert.type]
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Icon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="text-xs font-semibold text-foreground">{alert.title}</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 pl-5">{alert.detail}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        )}
       </CardContent>
     </Card>
   );

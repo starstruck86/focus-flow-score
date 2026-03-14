@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS pipeline_hygiene_scans_user_date_idx ON public.pipeline_hygiene_scans (user_id, scan_date);
