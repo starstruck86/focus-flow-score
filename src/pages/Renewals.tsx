@@ -622,8 +622,18 @@ export default function Renewals() {
     URL.revokeObjectURL(url);
   };
 
+  // Get unique CSMs for filter
+  const uniqueCsms = useMemo(() => {
+    const csms = new Set<string>();
+    renewals.forEach(r => { if (r.csm) csms.add(r.csm); });
+    return Array.from(csms).sort();
+  }, [renewals]);
+
   const filteredRenewals = renewals.filter(renewal => {
     const matchesSearch = renewal.accountName.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    // CSM filter
+    if (csmFilter !== 'all' && renewal.csm !== csmFilter) return false;
     
     let matchesView = true;
     switch (currentView) {
