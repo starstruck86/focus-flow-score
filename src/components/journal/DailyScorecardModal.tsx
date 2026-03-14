@@ -532,6 +532,7 @@ function useLastJournalEntry() {
 }
 
 function useJournalNudge() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['journal-nudge'],
     queryFn: async () => {
@@ -545,6 +546,7 @@ function useJournalNudge() {
         stats: { streak: number; goalMetRate: number; topGap: string | null };
       };
     },
+    enabled: !!user,
     staleTime: 5 * 60 * 1000,
   });
 }
