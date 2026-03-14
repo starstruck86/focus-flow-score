@@ -59,7 +59,7 @@ export function AIAccountPrioritizer() {
 
   const handleAccountClick = (rec: Recommendation) => {
     if (rec.account_id) {
-      openRecord('account', rec.account_id);
+      setCurrentRecord({ type: 'account', id: rec.account_id });
     }
     navigate('/outreach');
   };
