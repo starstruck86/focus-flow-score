@@ -155,8 +155,8 @@ export function WeeklyRealignmentModal({ open, onComplete, onOpenChange }: Props
   const hasPrevReview = !!prevReview;
 
   return (
-    <Dialog open={open} onOpenChange={() => {}}>
-      <DialogContent className="max-w-2xl max-h-[90vh] p-0 gap-0 [&>button]:hidden" onPointerDownOutside={e => e.preventDefault()} onEscapeKeyDown={e => e.preventDefault()}>
+    <Dialog open={open} onOpenChange={onOpenChange || (() => {})}>
+      <DialogContent className="max-w-2xl max-h-[90vh] p-0 gap-0" onPointerDownOutside={e => e.preventDefault()}>
         <DialogHeader className="p-6 pb-4 border-b border-border bg-gradient-to-r from-primary/5 to-transparent">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
