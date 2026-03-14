@@ -353,23 +353,21 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
         });
 
         // Push local-only items to DB
-        const pushPromises: Promise<any>[] = [];
         if (newLocalAccounts.length > 0) {
-          pushPromises.push(supabase.from('accounts').upsert(newLocalAccounts.map(a => storeAccountToDb(a, userId))));
+          await supabase.from('accounts').upsert(newLocalAccounts.map(a => storeAccountToDb(a, userId)));
         }
         if (newLocalOpps.length > 0) {
-          pushPromises.push(supabase.from('opportunities').upsert(newLocalOpps.map(o => storeOpportunityToDb(o, userId))));
+          await supabase.from('opportunities').upsert(newLocalOpps.map(o => storeOpportunityToDb(o, userId)));
         }
         if (newLocalRenewals.length > 0) {
-          pushPromises.push(supabase.from('renewals').upsert(newLocalRenewals.map(r => storeRenewalToDb(r, userId))));
+          await supabase.from('renewals').upsert(newLocalRenewals.map(r => storeRenewalToDb(r, userId)));
         }
         if (newLocalContacts.length > 0) {
-          pushPromises.push(supabase.from('contacts').upsert(newLocalContacts.map(c => storeContactToDb(c, userId))));
+          await supabase.from('contacts').upsert(newLocalContacts.map(c => storeContactToDb(c, userId)));
         }
         if (newLocalTasks.length > 0) {
-          pushPromises.push(supabase.from('tasks').upsert(newLocalTasks.map(t => storeTaskToDb(t, userId)) as any));
+          await supabase.from('tasks').upsert(newLocalTasks.map(t => storeTaskToDb(t, userId)) as any);
         }
-        if (pushPromises.length > 0) await Promise.all(pushPromises);
 
         // Snapshot for diffing
         const currentState = useStore.getState();
