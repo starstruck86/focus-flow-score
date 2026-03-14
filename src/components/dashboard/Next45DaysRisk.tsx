@@ -179,11 +179,14 @@ function OpportunitiesTable({ opportunities }: { opportunities: Opportunity[] })
                 <TableCell className="max-w-[200px]">
                   {opp.nextStep ? (
                     <div className="text-xs truncate">
-                      {opp.nextStepDate && (
-                        <span className="text-muted-foreground">
-                          {format(parseISO(opp.nextStepDate), 'M/d')}: 
-                        </span>
-                      )}
+                      {(() => {
+                        const nextStepDate = parseIsoDateSafe(opp.nextStepDate);
+                        return nextStepDate ? (
+                          <span className="text-muted-foreground">
+                            {format(nextStepDate, 'M/d')}: 
+                          </span>
+                        ) : null;
+                      })()}
                       {opp.nextStep}
                     </div>
                   ) : (
