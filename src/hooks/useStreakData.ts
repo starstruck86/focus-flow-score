@@ -179,21 +179,20 @@ export function useWorkdayOverrides() {
 }
 
 export function useStreakEvents() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['streak-events'],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return [];
-      
       const { data, error } = await supabase
         .from('streak_events')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', user!.id)
         .order('date', { ascending: false });
       
       if (error) throw error;
       return data.map(transformStreakEvent);
     },
+    enabled: !!user,
   });
 }
 
