@@ -9,26 +9,28 @@ export interface DashboardWidget {
 
 const STORAGE_KEY = 'quota-compass-dashboard-widgets';
 
+// FIX: Sensible defaults — only high-value widgets visible on first load
+// Users can enable more via the customizer
 const DEFAULT_WIDGETS: DashboardWidget[] = [
-  { id: 'daily-time-blocks', label: 'Daily Game Plan', visible: true },
-  { id: 'pclub-math', label: 'P-Club Math', visible: true },
-  { id: 'weekly-battle-plan', label: 'Weekly Battle Plan', visible: true },
   { id: 'coaching-feed', label: 'AI Coach', visible: true },
-  { id: 'scenario-simulator', label: 'Scenario Simulator', visible: true },
+  { id: 'pclub-math', label: 'P-Club Math', visible: true },
+  { id: 'daily-time-blocks', label: 'Daily Game Plan', visible: true },
   { id: 'commission-pacing', label: 'Commission Pacing', visible: true },
   { id: 'progress-tabs', label: 'Today / Week-to-Date', visible: true },
+  { id: 'weekly-battle-plan', label: 'Weekly Battle Plan', visible: true },
   { id: 'pipeline-hygiene', label: 'Pipeline Health', visible: true },
-  { id: 'ai-prioritizer', label: 'AI Focus Recommender', visible: true },
   { id: 'smart-work-queue', label: 'Smart Work Queue', visible: true },
   { id: 'today-agenda', label: "Today's Agenda", visible: true },
-  { id: 'meeting-prep', label: 'Meeting Prep', visible: true },
-  { id: 'calendar-intelligence', label: 'Calendar Intelligence', visible: true },
-  { id: 'pipeline', label: 'Unified Pipeline', visible: true },
-  { id: 'pace-to-quota', label: 'Pace to Quota', visible: true },
-  { id: 'what-to-do-next', label: 'What To Do Next', visible: true },
-  { id: 'risk-window', label: 'Next 45 Days Risk', visible: true },
-  { id: 'snapshots', label: 'Performance & Commission', visible: true },
-  { id: 'daily-digest', label: 'Daily Digest', visible: true },
+  { id: 'scenario-simulator', label: 'Scenario Simulator', visible: false },
+  { id: 'meeting-prep', label: 'Meeting Prep', visible: false },
+  { id: 'ai-prioritizer', label: 'AI Focus Recommender', visible: false },
+  { id: 'calendar-intelligence', label: 'Calendar Intelligence', visible: false },
+  { id: 'pipeline', label: 'Unified Pipeline', visible: false },
+  { id: 'pace-to-quota', label: 'Pace to Quota', visible: false },
+  { id: 'what-to-do-next', label: 'What To Do Next', visible: false },
+  { id: 'risk-window', label: 'Next 45 Days Risk', visible: false },
+  { id: 'snapshots', label: 'Performance & Commission', visible: false },
+  { id: 'daily-digest', label: 'Daily Digest', visible: false },
 ];
 
 function loadWidgets(): DashboardWidget[] {
@@ -36,9 +38,25 @@ function loadWidgets(): DashboardWidget[] {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved) as DashboardWidget[];
-      // Merge with defaults to handle new widgets
+      // Merge with defaults to handle new widgets added over time
       const savedMap = new Map(parsed.map(w => [w.id, w]));
-      return DEFAULT_WIDGETS.map(def => savedMap.get(def.id) || def);
+      const mergedIds = new Set<string>();
+      const result: DashboardWidget[] = [];
+      
+      // First add saved widgets in their saved order
+      for (const w of parsed) {
+        if (DEFAULT_WIDGETS.some(d => d.id === w.id)) {
+          result.push(w);
+          mergedIds.add(w.id);
+        }
+      }
+      // Then add any new widgets that weren't in saved state
+      for (const def of DEFAULT_WIDGETS) {
+        if (!mergedIds.has(def.id)) {
+          result.push(def);
+        }
+      }
+      return result;
     }
   } catch {}
   return DEFAULT_WIDGETS;

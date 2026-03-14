@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS weekly_battle_plans_user_week_idx ON public.weekly_battle_plans (user_id, week_start);

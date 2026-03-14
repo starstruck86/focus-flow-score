@@ -5,10 +5,12 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { usePipelineHygiene, useRunHygieneScan } from '@/hooks/useCoachingEngine';
-import { ShieldAlert, RefreshCw, AlertTriangle, Info, CheckCircle2 } from 'lucide-react';
+import { ShieldAlert, RefreshCw, AlertTriangle, Info, CheckCircle2, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useNavigate } from 'react-router-dom';
 
 function formatCurrency(n: number) {
+  if (n < 0) return `-${formatCurrency(Math.abs(n))}`;
   if (n >= 1000000) return `$${(n / 1000000).toFixed(1)}M`;
   if (n >= 1000) return `$${(n / 1000).toFixed(0)}K`;
   return `$${n.toFixed(0)}`;
@@ -17,6 +19,7 @@ function formatCurrency(n: number) {
 export function PipelineHygieneCard() {
   const { data, isLoading } = usePipelineHygiene();
   const runScan = useRunHygieneScan();
+  const navigate = useNavigate();
 
   if (isLoading) {
     return (
@@ -36,6 +39,17 @@ export function PipelineHygieneCard() {
   const summary = (data?.summary as any) || {};
   const criticalIssues = issues.filter(i => i.severity === 'critical');
   const warningIssues = issues.filter(i => i.severity === 'warning');
+
+  // Navigate to the appropriate page when clicking an issue
+  const handleIssueClick = (issue: any) => {
+    if (issue.record_type === 'opportunity') {
+      navigate('/quota');
+    } else if (issue.record_type === 'renewal') {
+      navigate('/renewals');
+    } else if (issue.record_type === 'account') {
+      navigate('/weekly-outreach');
+    }
+  };
 
   return (
     <Card className={cn("metric-card", healthScore < 50 && "border-destructive/30")}>
@@ -76,7 +90,7 @@ export function PipelineHygieneCard() {
                 </span>
               )}
               {warningIssues.length > 0 && (
-                <span className="flex items-center gap-1 text-yellow-500">
+                <span className="flex items-center gap-1 text-status-yellow">
                   <Info className="h-3 w-3" />
                   {warningIssues.length} warnings
                 </span>
@@ -92,10 +106,12 @@ export function PipelineHygieneCard() {
             <ScrollArea className="max-h-64">
               <div className="space-y-2">
                 {issues.slice(0, 8).map((issue, idx) => (
-                  <div
+                  <button
                     key={idx}
+                    onClick={() => handleIssueClick(issue)}
                     className={cn(
-                      "p-2.5 rounded-lg text-sm",
+                      "p-2.5 rounded-lg text-sm w-full text-left transition-colors cursor-pointer",
+                      "hover:ring-1 hover:ring-primary/30",
                       issue.severity === 'critical' ? 'bg-destructive/5 border border-destructive/20' : 'bg-muted/30'
                     )}
                   >
@@ -106,6 +122,7 @@ export function PipelineHygieneCard() {
                             {issue.record_type}
                           </Badge>
                           <span className="font-medium truncate text-xs">{issue.record_name}</span>
+                          <ExternalLink className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
                         </div>
                         <p className="text-xs text-muted-foreground">{issue.message}</p>
                         <p className="text-xs text-primary mt-1">{issue.suggested_action}</p>
@@ -116,7 +133,7 @@ export function PipelineHygieneCard() {
                         </span>
                       )}
                     </div>
-                  </div>
+                  </button>
                 ))}
                 {issues.length > 8 && (
                   <p className="text-xs text-muted-foreground text-center py-1">
@@ -133,7 +150,7 @@ export function PipelineHygieneCard() {
 }
 
 function HealthBadge({ score }: { score: number }) {
-  const color = score >= 80 ? 'text-recovery bg-recovery/10' : score >= 50 ? 'text-yellow-500 bg-yellow-500/10' : 'text-destructive bg-destructive/10';
+  const color = score >= 80 ? 'text-recovery bg-recovery/10' : score >= 50 ? 'text-status-yellow bg-status-yellow/10' : 'text-destructive bg-destructive/10';
   return (
     <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full", color)}>
       {score}/100

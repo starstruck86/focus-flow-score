@@ -61,7 +61,7 @@ import {
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 
 export default function Dashboard() {
-  console.log('[Dashboard] render start');
+  // Dashboard state
   const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
   const [showCommissionDetail, setShowCommissionDetail] = useState(false);
   const [showWeeklyReview, setShowWeeklyReview] = useState(false);
@@ -149,7 +149,7 @@ export default function Dashboard() {
       accountsResearchedPerDay: effectiveTargets.targetAccountsResearchedPerDay,
       contactsPreppedPerDay: effectiveTargets.targetContactsPreppedPerDay,
     };
-    console.log('[Dashboard] calculations complete');
+    // calculations complete
   } catch (err) {
     console.error('[Dashboard] calculation crash:', err);
     today = new Date();

@@ -34,56 +34,59 @@ serve(async (req) => {
     friday.setDate(monday.getDate() + 4);
     const weekEnd = friday.toISOString().split("T")[0];
 
-    // Gather context in parallel
-    const [oppsRes, renewalsRes, accountsRes, quotaRes, benchmarksRes, journalRes, hygieneRes] = await Promise.all([
-      supabase.from("opportunities").select("*").eq("status", "active"),
+    // FIX: Fetch ALL opps (not just active) so we can calculate closed ARR properly
+    const [oppsRes, renewalsRes, accountsRes, quotaRes, benchmarksRes, journalRes, hygieneRes, existingPlanRes] = await Promise.all([
+      supabase.from("opportunities").select("*"),
       supabase.from("renewals").select("*"),
       supabase.from("accounts").select("id, name, tier, account_status, last_touch_date, priority_score, icp_fit_score")
         .in("account_status", ["active", "prepped", "researching", "1-researching", "2-prepped", "3-active", "4-meeting_booked", "5-opportunity"])
         .order("priority_score", { ascending: false }).limit(20),
       supabase.from("quota_targets").select("*").maybeSingle(),
       supabase.from("conversion_benchmarks").select("*").maybeSingle(),
-      // Last 5 journal entries for activity pace
       supabase.from("daily_journal_entries").select("date, dials, conversations, meetings_set, opportunities_created, daily_score")
         .order("date", { ascending: false }).limit(5),
-      // Latest hygiene scan
       supabase.from("pipeline_hygiene_scans").select("*").order("scan_date", { ascending: false }).limit(1).maybeSingle(),
+      // FIX: Check for existing plan to preserve moves_completed
+      supabase.from("weekly_battle_plans").select("moves_completed").eq("user_id", user.id).eq("week_start", weekStart).maybeSingle(),
     ]);
 
-    const opps = oppsRes.data || [];
+    const allOpps = oppsRes.data || [];
     const renewals = renewalsRes.data || [];
     const accounts = accountsRes.data || [];
     const quota = quotaRes.data;
     const benchmarks = benchmarksRes.data;
     const recentJournal = journalRes.data || [];
     const hygiene = hygieneRes.data;
+    const existingPlan = existingPlanRes.data;
 
-    // Calculate quota gap
+    // FIX: Proper closed-won detection matching actual stages
+    const isClosedWon = (o: any) =>
+      o.status === "closed-won" || o.stage?.toLowerCase() === "closed won";
+
     const totalQuota = (quota ? parseFloat(quota.new_arr_quota) + parseFloat(quota.renewal_arr_quota) : 1322542);
-    const closedWonOpps = opps.filter((o: any) => o.stage?.toLowerCase().includes("closed won") || o.stage?.includes("7-"));
-    const closedArr = closedWonOpps.reduce((sum: number, o: any) => sum + (parseFloat(o.arr) || 0), 0);
-    const renewalClosedArr = renewals.filter(r => r.renewal_stage?.toLowerCase().includes("closed") || r.renewal_stage?.includes("renewed")).reduce((sum: number, r: any) => sum + (parseFloat(r.arr) || 0), 0);
+    const closedArr = allOpps.filter(isClosedWon)
+      .filter((o: any) => o.is_new_logo === true)
+      .reduce((sum: number, o: any) => sum + (parseFloat(o.arr) || 0), 0);
+    const renewalClosedArr = renewals
+      .filter(r => r.renewal_stage?.toLowerCase().includes("closed") || r.renewal_stage?.toLowerCase().includes("renewed"))
+      .reduce((sum: number, r: any) => sum + (parseFloat(r.arr) || 0), 0);
     const totalClosed = closedArr + renewalClosedArr;
-    const quotaGap = totalQuota - totalClosed;
+    const quotaGap = Math.max(0, totalQuota - totalClosed);
 
-    // Days remaining in FY
     const fyEnd = quota ? new Date(quota.fiscal_year_end) : new Date("2026-06-30");
     const daysRemaining = Math.max(0, Math.floor((fyEnd.getTime() - Date.now()) / 86400000));
 
-    // Build funnel context
     const funnelContext = benchmarks
       ? `Conversion Rates: ${(benchmarks.dials_to_connect_rate * 100).toFixed(0)}% dial→connect, ${(benchmarks.connect_to_meeting_rate * 100).toFixed(0)}% connect→meeting, ${(benchmarks.meeting_to_opp_rate * 100).toFixed(0)}% meeting→opp, ${(benchmarks.opp_to_close_rate * 100).toFixed(0)}% opp→close. Avg deal: $${benchmarks.avg_new_logo_arr}. Cycle: ${benchmarks.avg_sales_cycle_days}d.`
       : "Using default conversion estimates (10% dial→connect, 25% connect→meeting, 40% meeting→opp, 25% opp→close).";
 
-    // Activity pace
     const avgDials = recentJournal.length > 0 ? Math.round(recentJournal.reduce((s: number, j: any) => s + (j.dials || 0), 0) / recentJournal.length) : 0;
     const avgConvos = recentJournal.length > 0 ? (recentJournal.reduce((s: number, j: any) => s + (j.conversations || 0), 0) / recentJournal.length).toFixed(1) : "0";
 
-    // Pipeline summary
-    const activeOpps = opps.filter((o: any) => !o.stage?.toLowerCase().includes("closed"));
+    // FIX: Use active opps for pipeline context (not closed ones)
+    const activeOpps = allOpps.filter((o: any) => o.status === "active");
     const pipelineArr = activeOpps.reduce((sum: number, o: any) => sum + (parseFloat(o.arr) || 0), 0);
 
-    // Upcoming renewals
     const upcomingRenewals = renewals.filter(r => {
       const d = Math.floor((new Date(r.renewal_due).getTime() - Date.now()) / 86400000);
       return d > 0 && d <= 60;
@@ -107,7 +110,7 @@ ${activeOpps.slice(0, 8).map((o: any) => `- ${o.name}: $${o.arr || 0} ARR, Stage
 UPCOMING RENEWALS (60d window):
 ${upcomingRenewals.slice(0, 5).map((r: any) => `- ${r.account_name}: $${r.arr} ARR, Due: ${r.renewal_due}, Risk: ${r.churn_risk}`).join("\n") || "None"}
 
-${hygiene ? `PIPELINE HEALTH: Score ${hygiene.health_score}/100, ${hygiene.critical_issues} critical issues, $${hygiene.summary?.total_arr_at_risk || 0} ARR at risk` : ""}
+${hygiene ? `PIPELINE HEALTH: Score ${hygiene.health_score}/100, ${hygiene.critical_issues} critical issues, $${(hygiene.summary as any)?.total_arr_at_risk || 0} ARR at risk` : ""}
 
 RULES:
 1. Each move must be specific (name the account/opp), actionable (what exactly to do), and time-bound (which day this week)
@@ -172,7 +175,9 @@ RULES:
 
     if (!aiResponse.ok) {
       const status = aiResponse.status;
-      if (status === 429) return new Response(JSON.stringify({ error: "Rate limit exceeded" }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const errText = await aiResponse.text();
+      console.error("AI gateway error:", status, errText);
+      if (status === 429) return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again in a minute." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       if (status === 402) return new Response(JSON.stringify({ error: "AI credits exhausted" }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       throw new Error(`AI gateway error: ${status}`);
     }
@@ -182,6 +187,9 @@ RULES:
     if (!toolCall) throw new Error("No tool call in AI response");
 
     const plan = JSON.parse(toolCall.function.arguments);
+
+    // FIX: Preserve existing moves_completed if regenerating mid-week
+    const preservedCompleted = existingPlan?.moves_completed || [];
 
     const { data: saved, error: saveError } = await supabase
       .from("weekly_battle_plans")
@@ -193,6 +201,7 @@ RULES:
         strategy_summary: plan.strategy_summary,
         quota_gap: quotaGap,
         days_remaining: daysRemaining,
+        // Reset completed since moves changed, but log old count
         moves_completed: [],
       }, { onConflict: "user_id,week_start" })
       .select()
