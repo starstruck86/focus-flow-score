@@ -74,7 +74,7 @@ import { MetricFieldCell } from '@/components/table/MetricFieldCell';
 import { useCustomFields } from '@/hooks/useCustomFields';
 import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
 import { sortRenewalsDefault, applySortWithFallback, CHURN_RISK_SORT_RANK, CHURN_RISK_DISPLAY_LABELS } from '@/lib/sortUtils';
-import type { Renewal, HealthStatus, Opportunity, ChurnRisk } from '@/types';
+import type { Renewal, HealthStatus, Opportunity, ChurnRisk, OpportunityStage } from '@/types';
 import { computeRenewalRiskScore } from '@/hooks/useTimeAllocation';
 
 // ===== RENEWAL ENRICH BUTTON (for orphan renewals without linked account) =====
@@ -234,6 +234,7 @@ export default function Renewals() {
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentView, setCurrentView] = useState('all');
+  const [csmFilter, setCsmFilter] = useState<string>('all');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showBulkImportDialog, setShowBulkImportDialog] = useState(false);
   const [importPreview, setImportPreview] = useState<Partial<Renewal>[]>([]);
@@ -294,6 +295,7 @@ export default function Renewals() {
   const [expandedRenewalId, setExpandedRenewalId] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('renewals');
+  const [renewalStageFilter, setRenewalStageFilter] = useState<OpportunityStage | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Deep-link highlight from Work Queue via LinkedRecordContext
@@ -307,8 +309,13 @@ export default function Renewals() {
 
     if (tab && !id) {
       setActiveTab(tab);
+      const stage = searchParams.get('stage');
+      if (tab === 'opportunities' && stage) {
+        setRenewalStageFilter(stage as OpportunityStage);
+      }
       const newParams = new URLSearchParams(searchParams);
       newParams.delete('tab');
+      newParams.delete('stage');
       setSearchParams(newParams, { replace: true });
     }
 
@@ -621,8 +628,18 @@ export default function Renewals() {
     URL.revokeObjectURL(url);
   };
 
+  // Get unique CSMs for filter
+  const uniqueCsms = useMemo(() => {
+    const csms = new Set<string>();
+    renewals.forEach(r => { if (r.csm) csms.add(r.csm); });
+    return Array.from(csms).sort();
+  }, [renewals]);
+
   const filteredRenewals = renewals.filter(renewal => {
     const matchesSearch = renewal.accountName.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    // CSM filter
+    if (csmFilter !== 'all' && renewal.csm !== csmFilter) return false;
     
     let matchesView = true;
     switch (currentView) {
@@ -1114,6 +1131,19 @@ export default function Renewals() {
               ))}
             </SelectContent>
           </Select>
+          {uniqueCsms.length > 0 && (
+            <Select value={csmFilter} onValueChange={setCsmFilter}>
+              <SelectTrigger className="w-full sm:w-40">
+                <SelectValue placeholder="CSM" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All CSMs</SelectItem>
+                {uniqueCsms.map(csm => (
+                  <SelectItem key={csm} value={csm}>{csm}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         {/* Filtered count */}
@@ -1418,7 +1448,7 @@ export default function Renewals() {
           </TabsContent>
           
           <TabsContent value="opportunities">
-            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} renewalsOnly highlightId={highlightId} />
+            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} renewalsOnly highlightId={highlightId} stageFilter={renewalStageFilter} onClearStageFilter={() => setRenewalStageFilter(null)} />
           </TabsContent>
           
           <OpportunityDrawer

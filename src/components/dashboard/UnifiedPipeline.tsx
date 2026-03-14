@@ -48,20 +48,38 @@ export function UnifiedPipeline() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<WorkstreamFilter>('all');
 
+  // Identify renewal vs new-logo opps
+  const renewalOppIds = useMemo(() => {
+    const ids = new Set<string>();
+    renewals.map(r => r.linkedOpportunityId).filter(Boolean).forEach(id => ids.add(id!));
+    opportunities.filter(o => o.dealType === 'renewal').forEach(o => ids.add(o.id));
+    return ids;
+  }, [renewals, opportunities]);
+
   // Active pipeline opps
   const activeOpps = useMemo(() => {
     let opps = opportunities.filter(o => o.status === 'active' || o.status === 'stalled');
     
     if (filter === 'new-logo') {
-      const renewalOppIds = new Set(renewals.map(r => r.linkedOpportunityId).filter(Boolean));
-      opps = opps.filter(o => !renewalOppIds.has(o.id) && o.dealType !== 'renewal');
+      opps = opps.filter(o => !renewalOppIds.has(o.id));
     } else if (filter === 'renewal') {
-      const renewalOppIds = new Set(renewals.map(r => r.linkedOpportunityId).filter(Boolean));
-      opps = opps.filter(o => renewalOppIds.has(o.id) || o.dealType === 'renewal');
+      opps = opps.filter(o => renewalOppIds.has(o.id));
     }
     
     return opps;
-  }, [opportunities, renewals, filter]);
+  }, [opportunities, renewalOppIds, filter]);
+
+  // Calculate pipeline ARR — for renewal opps, only count new/expansion ARR
+  const getPipelineArr = (opp: typeof opportunities[0]) => {
+    if (!renewalOppIds.has(opp.id)) return opp.arr || 0;
+    // Renewal opp: only expansion (new ARR above prior contract) counts
+    const priorArr = opp.priorContractArr || 0;
+    const renewalArr = opp.renewalArr || opp.arr || 0;
+    const expansion = Math.max(0, renewalArr - priorArr);
+    // If no expansion forecasted, assume 4% of current spend
+    if (expansion === 0 && priorArr > 0) return priorArr * 0.04;
+    return expansion;
+  };
 
   // Group by stage
   const stageGroups = useMemo(() => {
@@ -81,7 +99,9 @@ export function UnifiedPipeline() {
     return groups;
   }, [activeOpps]);
 
-  const totalArr = activeOpps.reduce((sum, o) => sum + (o.arr || 0), 0);
+  const totalArr = activeOpps.reduce((sum, o) => sum + getPipelineArr(o), 0);
+  const newLogoArr = activeOpps.filter(o => !renewalOppIds.has(o.id)).reduce((sum, o) => sum + (o.arr || 0), 0);
+  const renewalExpansionArr = activeOpps.filter(o => renewalOppIds.has(o.id)).reduce((sum, o) => sum + getPipelineArr(o), 0);
   const stalledCount = activeOpps.filter(o => o.status === 'stalled').length;
   const noNextStep = activeOpps.filter(o => !o.nextStep && !o.nextStepDate).length;
 
@@ -92,7 +112,7 @@ export function UnifiedPipeline() {
         <div className="flex items-center gap-3">
           <h3 className="font-display text-sm font-bold">Pipeline</h3>
           <span className="text-xs text-muted-foreground font-mono font-semibold">
-            {activeOpps.length} opps • {formatCurrency(totalArr)}
+            {activeOpps.length} opps • {formatCurrency(totalArr)} pipeline
           </span>
         </div>
         
@@ -137,18 +157,36 @@ export function UnifiedPipeline() {
         </div>
       )}
 
+      {/* Pipeline breakdown */}
+      {filter === 'all' && (
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <div className="rounded-lg border border-border p-2.5 flex items-center justify-between">
+            <span className="text-[10px] font-medium text-muted-foreground">New Logo</span>
+            <span className="text-sm font-bold font-mono">{formatCurrency(newLogoArr)}</span>
+          </div>
+          <div className="rounded-lg border border-border p-2.5 flex items-center justify-between">
+            <span className="text-[10px] font-medium text-muted-foreground">Renewal Expansion</span>
+            <span className="text-sm font-bold font-mono">{formatCurrency(renewalExpansionArr)}</span>
+          </div>
+        </div>
+      )}
+
       {/* Stage summary bars */}
       <div className="grid grid-cols-5 gap-2">
         {STAGE_ORDER.map(stage => {
           const opps = stageGroups[stage] || [];
-          const stageArr = opps.reduce((sum, o) => sum + (o.arr || 0), 0);
+          const stageArr = opps.reduce((sum, o) => sum + getPipelineArr(o), 0);
           
           return (
             <button
               key={stage}
               onClick={() => {
-                // Navigate to outreach opportunities tab with stage pre-filtered
-                navigate('/outreach?tab=opportunities&stage=' + encodeURIComponent(stage));
+                // Navigate based on current filter
+                if (filter === 'renewal') {
+                  navigate('/renewals?tab=opportunities&stage=' + encodeURIComponent(stage));
+                } else {
+                  navigate('/outreach?tab=opportunities&stage=' + encodeURIComponent(stage));
+                }
               }}
               className={cn(
                 "rounded-lg border p-2.5 text-left transition-all cursor-pointer",

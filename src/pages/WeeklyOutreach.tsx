@@ -823,8 +823,23 @@ export default function WeeklyOutreach() {
     return () => { clearInterval(scrollInterval); clearTimeout(clearTimer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentRecord.id, currentRecord.type, accounts.length]);
-  
-  // Quick filter toggles
+
+  // Handle tab/stage query params from navigation (e.g. from Pipeline widget)
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    const stage = searchParams.get('stage');
+    if (tab === 'opportunities') {
+      setActiveTab('opportunities');
+      if (stage) {
+        setStageFilter(stage as OpportunityStage);
+      }
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('tab');
+      newParams.delete('stage');
+      setSearchParams(newParams, { replace: true });
+    }
+  }, []);
+
   const [filterTierAB, setFilterTierAB] = useState(false);
   const [filterMissingCadence, setFilterMissingCadence] = useState(false);
   const [filterStale, setFilterStale] = useState(false);
