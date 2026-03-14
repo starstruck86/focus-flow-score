@@ -108,6 +108,7 @@ export function useWeekToDateMetrics() {
 
 // Get month-to-date metrics
 export function useMonthToDateMetrics() {
+  const { user } = useAuth();
   const today = new Date();
   const monthStart = startOfMonth(today);
   
