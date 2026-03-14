@@ -21,7 +21,11 @@ function getQueue(): QueuedAction[] {
 }
 
 function saveQueue(queue: QueuedAction[]) {
-  localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  try {
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  } catch (err) {
+    console.error('[OfflineQueue] localStorage write failed:', err);
+  }
 }
 
 export function enqueueAction(table: string, action: 'insert' | 'update' | 'delete', data: Record<string, any>) {
