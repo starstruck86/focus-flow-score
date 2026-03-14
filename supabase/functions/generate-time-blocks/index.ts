@@ -34,6 +34,7 @@ serve(async (req) => {
       workQueueRes,
       feedbackRes,
       quotaRes,
+      prevPlansRes,
     ] = await Promise.all([
       supabase.from("calendar_events").select("*")
         .gte("start_time", `${targetDate}T00:00:00`)
