@@ -197,35 +197,18 @@ export function useStreakEvents() {
 }
 
 export function useStreakSummary() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['streak-summary'],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        return {
-          id: '',
-          currentCheckinStreak: 0,
-          currentPerformanceStreak: 0,
-          longestCheckinStreak: 0,
-          longestPerformanceStreak: 0,
-          totalEligibleDays: 0,
-          totalCheckins: 0,
-          totalGoalsMet: 0,
-          checkinLevel: 1,
-          performanceLevel: 1,
-          updatedAt: new Date().toISOString(),
-        } as StreakSummary;
-      }
-      
       const { data, error } = await supabase
         .from('streak_summary')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', user!.id)
         .limit(1)
         .maybeSingle();
       
       if (error) throw error;
-      // Return defaults if no summary exists
       if (!data) {
         return {
           id: '',
@@ -243,10 +226,12 @@ export function useStreakSummary() {
       }
       return transformSummary(data);
     },
+    enabled: !!user,
   });
 }
 
 export function useBadgesEarned() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['badges-earned'],
     queryFn: async () => {
@@ -257,6 +242,10 @@ export function useBadgesEarned() {
       
       if (error) throw error;
       return data.map(transformBadge);
+    },
+    enabled: !!user,
+  });
+}
     },
   });
 }
