@@ -52,6 +52,9 @@ import {
   AIAccountPrioritizer,
   CalendarIntelligence,
   DailyTimeBlocks,
+  PClubMathCard,
+  PipelineHygieneCard,
+  WeeklyBattlePlanCard,
 } from '@/components/dashboard';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 
