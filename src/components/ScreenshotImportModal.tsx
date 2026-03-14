@@ -185,6 +185,10 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
             renewalDue: acc.renewal_due,
             notes: acc.notes || undefined,
             product: undefined,
+            autoRenew: false,
+            healthStatus: 'green' as const,
+            churnRisk: 'low' as const,
+            owner: '',
           });
         } else {
           // Create as account
@@ -200,7 +204,12 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
             salesforceLink: acc.salesforce_link || undefined,
             planhatLink: acc.planhat_link || undefined,
             notes: acc.notes || undefined,
-            accountStatus: 'inactive',
+            accountStatus: 'inactive' as const,
+            priority: 'medium' as const,
+            techStack: [],
+            techFitFlag: 'good' as const,
+            outreachStatus: 'not-started' as const,
+            tags: [],
           });
         }
         imported++;

@@ -29,6 +29,7 @@ import { FocusTimerModal } from './FocusTimerModal';
 import { QuickLogModal } from '@/components/journal/QuickLogModal';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 import { ScreenshotEnrichModal } from '@/components/ScreenshotEnrichModal';
+import { ScreenshotImportModal } from '@/components/ScreenshotImportModal';
 import { TranscriptViewer } from '@/components/TranscriptViewer';
 import { ResourceLibraryModal } from '@/components/ResourceLibraryModal';
 
