@@ -1,5 +1,5 @@
 // Data Sync Bridge: Hydrates Zustand from DB on load, writes mutations back
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStore } from '@/store/useStore';
 import { supabase } from '@/integrations/supabase/client';
