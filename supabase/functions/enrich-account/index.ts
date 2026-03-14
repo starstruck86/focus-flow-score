@@ -775,6 +775,7 @@ Deno.serve(async (req) => {
         other_tech_detected: signals.other_tech_detected || '',
         business_summary: companyIntel?.businessSummary || '',
         recent_news: companyIntel?.recentNews || '',
+        case_studies: caseStudies || '',
       },
       scores: {
         icp_fit_score: icpFitScore,
@@ -788,6 +789,7 @@ Deno.serve(async (req) => {
       marTech: marTechString,
       ecommerce: ecommerceString,
       summary: enrichedSummary,
+      caseStudies: caseStudies || null,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error) {
     console.error('Enrichment error:', error);
