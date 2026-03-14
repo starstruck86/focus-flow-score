@@ -112,7 +112,7 @@ export function UnifiedPipeline() {
         <div className="flex items-center gap-3">
           <h3 className="font-display text-sm font-bold">Pipeline</h3>
           <span className="text-xs text-muted-foreground font-mono font-semibold">
-            {activeOpps.length} opps • {formatCurrency(totalArr)}
+            {activeOpps.length} opps • {formatCurrency(totalArr)} pipeline
           </span>
         </div>
         
