@@ -75,6 +75,7 @@ function transformBadge(data: any): BadgeEarned {
 }
 
 export function useWorkScheduleConfig() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['work-schedule-config'],
     queryFn: async () => {
@@ -105,6 +106,7 @@ export function useWorkScheduleConfig() {
       }
       return transformConfig(data);
     },
+    enabled: !!user,
   });
 }
 
