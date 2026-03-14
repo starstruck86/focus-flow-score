@@ -120,6 +120,7 @@ export function useSaveQuotaTargets() {
 
 // Fetch daily journal entries for metrics calculation
 export function useJournalMetrics(days: number) {
+  const { user } = useAuth();
   const startDate = format(subDays(new Date(), days), 'yyyy-MM-dd');
   
   return useQuery({
@@ -134,6 +135,7 @@ export function useJournalMetrics(days: number) {
       if (error) throw error;
       return (data || []).map(transformJournalToMetrics);
     },
+    enabled: !!user,
   });
 }
 
