@@ -1125,6 +1125,19 @@ export default function Renewals() {
               ))}
             </SelectContent>
           </Select>
+          {uniqueCsms.length > 0 && (
+            <Select value={csmFilter} onValueChange={setCsmFilter}>
+              <SelectTrigger className="w-full sm:w-40">
+                <SelectValue placeholder="CSM" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All CSMs</SelectItem>
+                {uniqueCsms.map(csm => (
+                  <SelectItem key={csm} value={csm}>{csm}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         {/* Filtered count */}
