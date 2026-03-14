@@ -54,8 +54,16 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
   const accounts = useStore(s => s.accounts);
 
   const addFiles = useCallback((newFiles: FileList | File[]) => {
+    const MAX_SIZE = 10 * 1024 * 1024; // 10MB per file
     const entries = Array.from(newFiles)
-      .filter(f => f.type.startsWith('image/'))
+      .filter(f => {
+        if (!f.type.startsWith('image/')) return false;
+        if (f.size > MAX_SIZE) {
+          toast.error(`${f.name} is too large (max 10MB)`);
+          return false;
+        }
+        return true;
+      })
       .slice(0, 10)
       .map(file => ({ file, preview: URL.createObjectURL(file) }));
     setFiles(prev => [...prev, ...entries].slice(0, 10));
@@ -306,7 +314,10 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
               </div>
             )}
 
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                Supports CRM screenshots, LinkedIn, spreadsheets, emails
+              </p>
               <Button onClick={extractFromScreenshots} disabled={files.length === 0 || processing}>
                 {processing ? (
                   <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Extracting...</>

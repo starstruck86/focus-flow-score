@@ -119,6 +119,9 @@ export function useRunHygieneScan() {
       qc.invalidateQueries({ queryKey: ['pipeline-hygiene'] });
       toast.success('Pipeline scan complete');
     },
+    onError: (err: Error) => {
+      toast.error('Pipeline scan failed', { description: err.message });
+    },
   });
 }
 
@@ -159,6 +162,9 @@ export function useGenerateBattlePlan() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['weekly-battle-plan'] });
       toast.success('Battle plan generated');
+    },
+    onError: (err: Error) => {
+      toast.error('Failed to generate battle plan', { description: err.message });
     },
   });
 }

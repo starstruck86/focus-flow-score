@@ -89,7 +89,23 @@ export function QuotaScenarioSimulator() {
     setScenarioDeals(prev => prev.map(d => d.id === id ? { ...d, [field]: value } : d));
   };
 
-  if (!conversionData || !scenarios) return null;
+  if (!conversionData || !scenarios) {
+    return (
+      <Card className="metric-card">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-display flex items-center gap-2">
+            <Calculator className="h-4 w-4 text-primary" />
+            Scenario Simulator
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-muted-foreground text-center py-4">
+            Set up your quota targets and conversion benchmarks in Settings to enable scenario modeling.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="metric-card">
