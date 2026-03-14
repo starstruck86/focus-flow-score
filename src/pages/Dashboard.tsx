@@ -317,6 +317,13 @@ export default function Dashboard() {
           />
         </div>
         
+        {/* Weekly Review Banner — non-blocking prompt */}
+        {!weeklyReviewLoading && !currentWeekReview?.completed && (
+          <WidgetErrorBoundary widgetId="weekly-review-banner">
+            <WeeklyReviewBanner onOpen={() => setShowWeeklyReview(true)} />
+          </WidgetErrorBoundary>
+        )}
+        
         <WidgetErrorBoundary widgetId="backfill-cards">
           <BackfillCards />
         </WidgetErrorBoundary>
@@ -361,14 +368,12 @@ export default function Dashboard() {
         onOpenChange={setShowDailyCheckIn}
       />
       
-      {!weeklyReviewLoading && !currentWeekReview?.completed && (
-        <WidgetErrorBoundary widgetId="weekly-realignment">
-          <WeeklyRealignmentModal
-            open={true}
-            onComplete={() => {/* query invalidation in hook handles re-render */}}
-          />
-        </WidgetErrorBoundary>
-      )}
+      <WidgetErrorBoundary widgetId="weekly-realignment">
+        <WeeklyRealignmentModal
+          open={showWeeklyReview}
+          onComplete={() => setShowWeeklyReview(false)}
+        />
+      </WidgetErrorBoundary>
     </Layout>
   );
 }
