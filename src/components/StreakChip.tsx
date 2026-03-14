@@ -92,6 +92,3 @@ export function StreakChip({ variant = 'compact', className }: StreakChipProps) 
     </>
   );
 }
-    </div>
-  );
-}
