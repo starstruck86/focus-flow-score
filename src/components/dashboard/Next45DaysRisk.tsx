@@ -23,6 +23,12 @@ interface Next45DaysRiskProps {
   renewals: Renewal[];
 }
 
+function parseIsoDateSafe(value?: string | null): Date | null {
+  if (!value) return null;
+  const parsed = parseISO(value);
+  return isValid(parsed) ? parsed : null;
+}
+
 function RiskBadges({ 
   missingNextStep, 
   stalled, 
