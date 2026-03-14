@@ -86,14 +86,18 @@ function OpportunitiesTable({ opportunities }: { opportunities: Opportunity[] })
       o.closeDate
     )
     .filter(o => {
-      const closeDate = parseISO(o.closeDate!);
-      return closeDate <= fortyFiveDaysFromNow && closeDate >= today;
+      const closeDate = parseIsoDateSafe(o.closeDate);
+      return closeDate ? closeDate <= fortyFiveDaysFromNow && closeDate >= today : false;
     })
     .sort((a, b) => {
       // Sort by close date, then ARR
-      if (a.closeDate !== b.closeDate) {
-        return a.closeDate!.localeCompare(b.closeDate!);
+      const aClose = parseIsoDateSafe(a.closeDate);
+      const bClose = parseIsoDateSafe(b.closeDate);
+
+      if (aClose && bClose && aClose.getTime() !== bClose.getTime()) {
+        return aClose.getTime() - bClose.getTime();
       }
+
       return (b.arr || 0) - (a.arr || 0);
     });
 
