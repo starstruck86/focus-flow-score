@@ -302,7 +302,11 @@ export default function Dashboard() {
         />
         
         {/* Render widgets in user-defined order */}
-        {widgets.filter(w => w.visible).map(w => renderWidget(w.id))}
+        {widgets.filter(w => w.visible).map(w => (
+          <WidgetErrorBoundary key={`eb-${w.id}`} widgetId={w.id}>
+            {renderWidget(w.id)}
+          </WidgetErrorBoundary>
+        ))}
       </div>
       
       <CommissionPacingDetailModal
