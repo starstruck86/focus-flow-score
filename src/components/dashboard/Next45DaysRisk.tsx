@@ -352,18 +352,16 @@ export function Next45DaysRisk({ opportunities, renewals }: Next45DaysRiskProps)
   const today = new Date();
   const fortyFiveDaysFromNow = addDays(today, 45);
   
-  const oppsCount = opportunities.filter(o => 
-    o.status !== 'closed-won' && 
-    o.status !== 'closed-lost' && 
-    o.closeDate &&
-    parseISO(o.closeDate) <= fortyFiveDaysFromNow &&
-    parseISO(o.closeDate) >= today
-  ).length;
+  const oppsCount = opportunities.filter(o => {
+    if (o.status === 'closed-won' || o.status === 'closed-lost') return false;
+    const closeDate = parseIsoDateSafe(o.closeDate);
+    return closeDate ? closeDate <= fortyFiveDaysFromNow && closeDate >= today : false;
+  }).length;
   
-  const renewalsCount = renewals.filter(r => 
-    parseISO(r.renewalDue) <= fortyFiveDaysFromNow &&
-    parseISO(r.renewalDue) >= today
-  ).length;
+  const renewalsCount = renewals.filter(r => {
+    const renewalDate = parseIsoDateSafe(r.renewalDue);
+    return renewalDate ? renewalDate <= fortyFiveDaysFromNow && renewalDate >= today : false;
+  }).length;
 
   return (
     <motion.div 
