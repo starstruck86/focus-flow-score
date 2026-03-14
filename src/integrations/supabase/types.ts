@@ -227,6 +227,39 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_feedback: {
+        Row: {
+          ai_suggestion_summary: string | null
+          context_date: string | null
+          created_at: string
+          feature: string
+          feedback_text: string | null
+          id: string
+          rating: number | null
+          user_id: string
+        }
+        Insert: {
+          ai_suggestion_summary?: string | null
+          context_date?: string | null
+          created_at?: string
+          feature: string
+          feedback_text?: string | null
+          id?: string
+          rating?: number | null
+          user_id: string
+        }
+        Update: {
+          ai_suggestion_summary?: string | null
+          context_date?: string | null
+          created_at?: string
+          feature?: string
+          feedback_text?: string | null
+          id?: string
+          rating?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       badges_earned: {
         Row: {
           badge_name: string
@@ -706,6 +739,51 @@ export type Database = {
           workday_focus?: string | null
           workday_start_time?: string | null
           yesterday_commitment_met?: boolean | null
+        }
+        Relationships: []
+      }
+      daily_time_blocks: {
+        Row: {
+          ai_reasoning: string | null
+          blocks: Json
+          created_at: string
+          feedback_rating: number | null
+          feedback_submitted_at: string | null
+          feedback_text: string | null
+          focus_hours_available: number | null
+          id: string
+          meeting_load_hours: number | null
+          plan_date: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_reasoning?: string | null
+          blocks?: Json
+          created_at?: string
+          feedback_rating?: number | null
+          feedback_submitted_at?: string | null
+          feedback_text?: string | null
+          focus_hours_available?: number | null
+          id?: string
+          meeting_load_hours?: number | null
+          plan_date: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai_reasoning?: string | null
+          blocks?: Json
+          created_at?: string
+          feedback_rating?: number | null
+          feedback_submitted_at?: string | null
+          feedback_text?: string | null
+          focus_hours_available?: number | null
+          id?: string
+          meeting_load_hours?: number | null
+          plan_date?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
