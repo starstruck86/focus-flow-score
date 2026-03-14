@@ -52,8 +52,10 @@ import {
   CalendarIntelligence,
   DailyTimeBlocks,
 } from '@/components/dashboard';
+import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 
 export default function Dashboard() {
+  console.log('[Dashboard] render start');
   const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
   const [showCommissionDetail, setShowCommissionDetail] = useState(false);
   const [snapshotsOpen, setSnapshotsOpen] = useState(false);
@@ -288,20 +290,30 @@ export default function Dashboard() {
           />
         </div>
         
-        <BackfillCards />
+        <WidgetErrorBoundary widgetId="backfill-cards">
+          <BackfillCards />
+        </WidgetErrorBoundary>
         
-        <MeetingPrepPrompt />
+        <WidgetErrorBoundary widgetId="meeting-prep-prompt">
+          <MeetingPrepPrompt />
+        </WidgetErrorBoundary>
         
-        <CheckInBanner
-          checkedIn={todayCheckedIn}
-          isEligibleDay={isTodayEligible}
-          onStartCheckIn={() => setShowDailyCheckIn(true)}
-          onEditCheckIn={() => setShowDailyCheckIn(true)}
-          confirmed={todayJournalEntry?.confirmed}
-        />
+        <WidgetErrorBoundary widgetId="check-in-banner">
+          <CheckInBanner
+            checkedIn={todayCheckedIn}
+            isEligibleDay={isTodayEligible}
+            onStartCheckIn={() => setShowDailyCheckIn(true)}
+            onEditCheckIn={() => setShowDailyCheckIn(true)}
+            confirmed={todayJournalEntry?.confirmed}
+          />
+        </WidgetErrorBoundary>
         
         {/* Render widgets in user-defined order */}
-        {widgets.filter(w => w.visible).map(w => renderWidget(w.id))}
+        {widgets.filter(w => w.visible).map(w => (
+          <WidgetErrorBoundary key={`eb-${w.id}`} widgetId={w.id}>
+            {renderWidget(w.id)}
+          </WidgetErrorBoundary>
+        ))}
       </div>
       
       <CommissionPacingDetailModal
@@ -323,10 +335,12 @@ export default function Dashboard() {
       />
       
       {!weeklyReviewLoading && !currentWeekReview?.completed && (
-        <WeeklyRealignmentModal
-          open={true}
-          onComplete={() => {/* query invalidation in hook handles re-render */}}
-        />
+        <WidgetErrorBoundary widgetId="weekly-realignment">
+          <WeeklyRealignmentModal
+            open={true}
+            onComplete={() => {/* query invalidation in hook handles re-render */}}
+          />
+        </WidgetErrorBoundary>
       )}
     </Layout>
   );
