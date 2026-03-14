@@ -43,6 +43,7 @@ import {
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/contexts/AuthContext';
 import { useRecordCheckIn } from '@/hooks/useStreakData';
 import { format, subDays, eachDayOfInterval, isToday, isSameDay, startOfDay, endOfDay, differenceInCalendarDays, startOfWeek, endOfWeek } from 'date-fns';
 import { toast } from 'sonner';
@@ -531,6 +532,7 @@ function useLastJournalEntry() {
 }
 
 function useJournalNudge() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['journal-nudge'],
     queryFn: async () => {
@@ -544,11 +546,13 @@ function useJournalNudge() {
         stats: { streak: number; goalMetRate: number; topGap: string | null };
       };
     },
+    enabled: !!user,
     staleTime: 5 * 60 * 1000,
   });
 }
 
 function useWeeklyInsights() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['weekly-patterns'],
     queryFn: async () => {
@@ -556,6 +560,7 @@ function useWeeklyInsights() {
       if (error) throw error;
       return data as { insights: string[] } | null;
     },
+    enabled: !!user,
     staleTime: 30 * 60 * 1000,
   });
 }
