@@ -247,7 +247,7 @@ function storeRenewalToDb(r: Renewal, userId: string): any {
 
 let _isHydrating = false;
 
-export function useDataSync() {
+export function useDataSync(onHydrated?: (v: boolean) => void) {
   const { user } = useAuth();
   const userId = user?.id;
   const hasHydrated = useRef(false);
