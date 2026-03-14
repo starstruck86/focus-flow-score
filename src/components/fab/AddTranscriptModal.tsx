@@ -305,7 +305,13 @@ export function AddTranscriptModal({
               </Button>
             </div>
             <Textarea placeholder="Paste your transcript here..." value={transcript} onChange={e => setTranscript(e.target.value)} rows={8} className="font-mono text-sm" autoFocus />
-            <p className="text-xs text-muted-foreground">Paste from Zoom, Teams, Gong, or any transcription service</p>
+            <div className="flex items-center gap-2 mt-1">
+              <Checkbox id="auto-extract" checked={autoExtractTasks} onCheckedChange={(v) => setAutoExtractTasks(!!v)} />
+              <label htmlFor="auto-extract" className="text-xs text-muted-foreground flex items-center gap-1 cursor-pointer">
+                <Sparkles className="h-3 w-3 text-primary" /> Auto-extract action items as tasks
+              </label>
+              {extracting && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
+            </div>
           </div>
 
           {/* Summary */}
