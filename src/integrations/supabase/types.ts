@@ -745,13 +745,16 @@ export type Database = {
       daily_time_blocks: {
         Row: {
           ai_reasoning: string | null
+          block_feedback: Json | null
           blocks: Json
+          completed_goals: Json | null
           created_at: string
           feedback_rating: number | null
           feedback_submitted_at: string | null
           feedback_text: string | null
           focus_hours_available: number | null
           id: string
+          key_metric_targets: Json | null
           meeting_load_hours: number | null
           plan_date: string
           updated_at: string
@@ -759,13 +762,16 @@ export type Database = {
         }
         Insert: {
           ai_reasoning?: string | null
+          block_feedback?: Json | null
           blocks?: Json
+          completed_goals?: Json | null
           created_at?: string
           feedback_rating?: number | null
           feedback_submitted_at?: string | null
           feedback_text?: string | null
           focus_hours_available?: number | null
           id?: string
+          key_metric_targets?: Json | null
           meeting_load_hours?: number | null
           plan_date: string
           updated_at?: string
@@ -773,13 +779,16 @@ export type Database = {
         }
         Update: {
           ai_reasoning?: string | null
+          block_feedback?: Json | null
           blocks?: Json
+          completed_goals?: Json | null
           created_at?: string
           feedback_rating?: number | null
           feedback_submitted_at?: string | null
           feedback_text?: string | null
           focus_hours_available?: number | null
           id?: string
+          key_metric_targets?: Json | null
           meeting_load_hours?: number | null
           plan_date?: string
           updated_at?: string
