@@ -326,12 +326,15 @@ export default function Dashboard() {
             </div>
             <h1 className="font-display text-2xl md:text-3xl font-bold">Dashboard</h1>
           </div>
-          <WidgetCustomizer
-            widgets={widgets}
-            onToggle={toggleWidget}
-            onMove={moveWidget}
-            onReset={resetWidgets}
-          />
+          <div className="flex items-center gap-2">
+            <StreakChip />
+            <WidgetCustomizer
+              widgets={widgets}
+              onToggle={toggleWidget}
+              onMove={moveWidget}
+              onReset={resetWidgets}
+            />
+          </div>
         </div>
         
         {/* Weekly Review Banner — non-blocking prompt */}
