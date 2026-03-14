@@ -26,22 +26,12 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ background: '#0f1419', color: '#f2f2f2' }}>
-          <h1 style={{ fontFamily: 'Space Grotesk, system-ui, sans-serif', fontSize: '1.5rem', fontWeight: 700 }}>
-            Quota Compass
-          </h1>
-          <p style={{ color: '#888', fontSize: '0.875rem' }}>Something went wrong.</p>
+        <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background px-4 text-center">
+          <h1 className="text-2xl font-bold font-display text-foreground">Quota Compass</h1>
+          <p className="text-sm text-muted-foreground">Something went wrong.</p>
           <button
             onClick={() => window.location.reload()}
-            style={{
-              padding: '8px 20px',
-              borderRadius: '8px',
-              background: 'hsl(210 100% 55%)',
-              color: '#fff',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '0.875rem',
-            }}
+            className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90"
           >
             Reload App
           </button>
