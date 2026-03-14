@@ -1620,6 +1620,90 @@ export type Database = {
         }
         Relationships: []
       }
+      tasks: {
+        Row: {
+          category: string | null
+          completed_at: string | null
+          created_at: string
+          due_date: string | null
+          estimated_minutes: number | null
+          id: string
+          linked_account_id: string | null
+          linked_contact_id: string | null
+          linked_opportunity_id: string | null
+          linked_record_id: string | null
+          linked_record_type: string | null
+          motion: string | null
+          notes: string | null
+          priority: string
+          status: string
+          subtasks: Json | null
+          title: string
+          updated_at: string
+          user_id: string
+          workstream: string
+        }
+        Insert: {
+          category?: string | null
+          completed_at?: string | null
+          created_at?: string
+          due_date?: string | null
+          estimated_minutes?: number | null
+          id?: string
+          linked_account_id?: string | null
+          linked_contact_id?: string | null
+          linked_opportunity_id?: string | null
+          linked_record_id?: string | null
+          linked_record_type?: string | null
+          motion?: string | null
+          notes?: string | null
+          priority?: string
+          status?: string
+          subtasks?: Json | null
+          title: string
+          updated_at?: string
+          user_id: string
+          workstream?: string
+        }
+        Update: {
+          category?: string | null
+          completed_at?: string | null
+          created_at?: string
+          due_date?: string | null
+          estimated_minutes?: number | null
+          id?: string
+          linked_account_id?: string | null
+          linked_contact_id?: string | null
+          linked_opportunity_id?: string | null
+          linked_record_id?: string | null
+          linked_record_type?: string | null
+          motion?: string | null
+          notes?: string | null
+          priority?: string
+          status?: string
+          subtasks?: Json | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+          workstream?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_linked_account_id_fkey"
+            columns: ["linked_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_linked_opportunity_id_fkey"
+            columns: ["linked_opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       weekly_battle_plans: {
         Row: {
           created_at: string
