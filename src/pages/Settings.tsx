@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ConversionBenchmarksSettings } from '@/components/settings/ConversionBenchmarksSettings';
 import { NotificationSettings } from '@/components/NotificationSettings';
 import { Layout } from '@/components/Layout';
 import { 
