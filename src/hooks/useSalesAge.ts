@@ -1,6 +1,7 @@
 // Sales Age and Quota Pace hooks
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { format, subDays, subMonths, startOfWeek, endOfWeek } from 'date-fns';
 import { useStore } from '@/store/useStore';
 import { 
