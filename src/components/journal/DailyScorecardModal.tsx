@@ -45,7 +45,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRecordCheckIn } from '@/hooks/useStreakData';
-import { format, subDays, eachDayOfInterval, isToday, isSameDay, startOfDay, endOfDay, differenceInCalendarDays, startOfWeek, endOfWeek } from 'date-fns';
+import { format, subDays, eachDayOfInterval, isToday, isSameDay, startOfDay, endOfDay, differenceInCalendarDays, startOfWeek, endOfWeek, isValid } from 'date-fns';
 import { toast } from 'sonner';
 import confetti from 'canvas-confetti';
 

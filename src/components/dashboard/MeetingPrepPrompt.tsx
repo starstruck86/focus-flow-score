@@ -7,7 +7,7 @@ import { useStore } from '@/store/useStore';
 import { useRecentTranscriptsForMeetingPrep } from '@/hooks/useCallTranscripts';
 import { useResourceLinksForAccount } from '@/hooks/useResourceLinks';
 import { useCopilot } from '@/contexts/CopilotContext';
-import { format, parseISO, differenceInMinutes } from 'date-fns';
+import { format, parseISO, differenceInMinutes, isValid } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';

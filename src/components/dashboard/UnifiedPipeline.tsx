@@ -13,7 +13,7 @@ import {
   ArrowUpRight,
 } from 'lucide-react';
 import type { Opportunity, OpportunityStage, DealType } from '@/types';
-import { format, differenceInDays, parseISO } from 'date-fns';
+import { format, differenceInDays, parseISO, isValid } from 'date-fns';
 
 const STAGE_ORDER: OpportunityStage[] = ['Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate'];
 

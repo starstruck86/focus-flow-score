@@ -1,4 +1,4 @@
-import { format } from 'date-fns';
+import { format, isValid } from 'date-fns';
 import { useYesterdayJournalEntry, useConfirmJournalEntry } from '@/hooks/useDailyJournal';
 import {
   Dialog,
