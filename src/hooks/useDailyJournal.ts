@@ -172,6 +172,7 @@ export function useTodayJournalEntry() {
 }
 
 export function useYesterdayJournalEntry() {
+  const { user } = useAuth();
   const yesterday = format(subDays(new Date(), 1), 'yyyy-MM-dd');
   
   return useQuery({
@@ -186,6 +187,7 @@ export function useYesterdayJournalEntry() {
       if (error) throw error;
       return data ? transformJournalEntry(data) : null;
     },
+    enabled: !!user,
   });
 }
 
