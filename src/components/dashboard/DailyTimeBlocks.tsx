@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -7,15 +7,17 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Progress } from '@/components/ui/progress';
 import { 
   Clock, Zap, Phone, Users, BookOpen, Coffee, 
   BriefcaseBusiness, Target, RefreshCw, Star,
-  ChevronDown, ChevronUp, MessageSquare, Lightbulb
+  ChevronDown, ChevronUp, MessageSquare, Lightbulb,
+  ThumbsUp, ThumbsDown, RotateCcw, CheckCircle2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 interface TimeBlock {
   start_time: string;
@@ -33,13 +35,9 @@ interface DailyPlan {
   meeting_load_hours: number;
   focus_hours_available: number;
   ai_reasoning: string;
-  day_strategy?: string;
-  key_metric_targets?: {
-    dials?: number;
-    conversations?: number;
-    accounts_researched?: number;
-    contacts_prepped?: number;
-  };
+  key_metric_targets?: Record<string, number>;
+  completed_goals?: string[]; // "blockIdx-goalIdx" format
+  block_feedback?: { blockIdx: number; thumbs: 'up' | 'down' }[];
   feedback_rating?: number;
   feedback_text?: string;
 }
@@ -71,6 +69,12 @@ function getCurrentBlockIndex(blocks: TimeBlock[]): number {
   });
 }
 
+function getBlockDurationMinutes(block: TimeBlock): number {
+  const [sh, sm] = block.start_time.split(':').map(Number);
+  const [eh, em] = block.end_time.split(':').map(Number);
+  return (eh * 60 + em) - (sh * 60 + sm);
+}
+
 export function DailyTimeBlocks() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -79,8 +83,9 @@ export function DailyTimeBlocks() {
   const [feedbackRating, setFeedbackRating] = useState(0);
   const [feedbackText, setFeedbackText] = useState('');
   const [expanded, setExpanded] = useState(true);
+  const [currentIdx, setCurrentIdx] = useState(-1);
 
-  const { data: plan, isLoading, error } = useQuery({
+  const { data: plan, isLoading } = useQuery({
     queryKey: ['daily-time-blocks', todayStr],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -93,6 +98,16 @@ export function DailyTimeBlocks() {
     },
     enabled: !!user,
   });
+
+  // Auto-refresh current block indicator every 60s
+  useEffect(() => {
+    if (!plan?.blocks) return;
+    setCurrentIdx(getCurrentBlockIndex(plan.blocks));
+    const interval = setInterval(() => {
+      setCurrentIdx(getCurrentBlockIndex(plan.blocks));
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [plan?.blocks]);
 
   const generateMutation = useMutation({
     mutationFn: async () => {
@@ -114,7 +129,6 @@ export function DailyTimeBlocks() {
   const feedbackMutation = useMutation({
     mutationFn: async () => {
       if (!plan) return;
-      // Save feedback to ai_feedback table
       const { error: fbError } = await supabase
         .from('ai_feedback' as any)
         .insert({
@@ -126,7 +140,6 @@ export function DailyTimeBlocks() {
           ai_suggestion_summary: plan.ai_reasoning || plan.blocks?.map((b: TimeBlock) => b.label).join(', '),
         });
       if (fbError) throw fbError;
-      // Also update the plan record
       const { error } = await supabase
         .from('daily_time_blocks' as any)
         .update({
@@ -140,13 +153,78 @@ export function DailyTimeBlocks() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['daily-time-blocks'] });
       setShowFeedback(false);
-      toast.success('Feedback saved — I\'ll learn from this!');
+      setFeedbackRating(0);
+      setFeedbackText('');
+      toast.success("Feedback saved — tomorrow's plan will be better!");
     },
   });
 
-  const currentIdx = plan?.blocks ? getCurrentBlockIndex(plan.blocks) : -1;
+  // Toggle goal completion
+  const toggleGoal = useCallback(async (blockIdx: number, goalIdx: number) => {
+    if (!plan) return;
+    const goalKey = `${blockIdx}-${goalIdx}`;
+    const current = (plan.completed_goals || []) as string[];
+    const updated = current.includes(goalKey)
+      ? current.filter(g => g !== goalKey)
+      : [...current, goalKey];
 
-  // No plan yet - show generate button
+    // Optimistic update
+    queryClient.setQueryData(['daily-time-blocks', todayStr], {
+      ...plan,
+      completed_goals: updated,
+    });
+
+    await supabase
+      .from('daily_time_blocks' as any)
+      .update({ completed_goals: updated })
+      .eq('id', plan.id);
+  }, [plan, todayStr, queryClient]);
+
+  // Per-block thumbs feedback
+  const thumbsBlock = useCallback(async (blockIdx: number, thumbs: 'up' | 'down') => {
+    if (!plan) return;
+    const current = (plan.block_feedback || []) as { blockIdx: number; thumbs: string }[];
+    const existing = current.findIndex(f => f.blockIdx === blockIdx);
+    const updated = [...current];
+    if (existing >= 0) {
+      updated[existing] = { blockIdx, thumbs };
+    } else {
+      updated.push({ blockIdx, thumbs });
+    }
+
+    queryClient.setQueryData(['daily-time-blocks', todayStr], {
+      ...plan,
+      block_feedback: updated,
+    });
+
+    await supabase
+      .from('daily_time_blocks' as any)
+      .update({ block_feedback: updated })
+      .eq('id', plan.id);
+  }, [plan, todayStr, queryClient]);
+
+  // Calculate progress
+  const blocks = (plan?.blocks || []) as TimeBlock[];
+  const totalGoals = blocks.reduce((s, b) => s + b.goals.length, 0);
+  const completedGoals = ((plan?.completed_goals || []) as string[]).length;
+  const progressPct = totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0;
+
+  // Visual timeline: how far through the day
+  const dayProgressPct = (() => {
+    if (blocks.length === 0) return 0;
+    const now = new Date();
+    const mins = now.getHours() * 60 + now.getMinutes();
+    const [fh, fm] = blocks[0].start_time.split(':').map(Number);
+    const lastBlock = blocks[blocks.length - 1];
+    const [lh, lm] = lastBlock.end_time.split(':').map(Number);
+    const start = fh * 60 + fm;
+    const end = lh * 60 + lm;
+    if (mins <= start) return 0;
+    if (mins >= end) return 100;
+    return Math.round(((mins - start) / (end - start)) * 100);
+  })();
+
+  // Empty state
   if (!plan && !isLoading) {
     return (
       <Card className="overflow-hidden">
@@ -163,8 +241,11 @@ export function DailyTimeBlocks() {
         </div>
         <div className="p-6 text-center">
           <Zap className="h-8 w-8 text-primary mx-auto mb-3 opacity-60" />
-          <p className="text-sm text-muted-foreground mb-4">
-            Generate a realistic, impact-maximizing schedule based on today's meetings and priorities.
+          <p className="text-sm text-muted-foreground mb-1">
+            Build a realistic schedule based on today's meetings &amp; priorities.
+          </p>
+          <p className="text-[11px] text-muted-foreground mb-4">
+            Learns from your feedback to get smarter every day.
           </p>
           <Button onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending} size="sm">
             {generateMutation.isPending ? (
@@ -191,7 +272,9 @@ export function DailyTimeBlocks() {
 
   if (!plan) return null;
 
-  const blocks = (plan.blocks || []) as TimeBlock[];
+  const blockFeedbackMap = new Map(
+    ((plan.block_feedback || []) as { blockIdx: number; thumbs: string }[]).map(f => [f.blockIdx, f.thumbs])
+  );
 
   return (
     <Card className="overflow-hidden">
@@ -204,33 +287,55 @@ export function DailyTimeBlocks() {
             </div>
             <div>
               <h3 className="text-sm font-semibold">Daily Game Plan</h3>
-              <p className="text-[11px] text-muted-foreground">
-                {plan.meeting_load_hours}h meetings · {plan.focus_hours_available}h focus time
-              </p>
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <span>{plan.meeting_load_hours}h meetings</span>
+                <span>·</span>
+                <span>{plan.focus_hours_available}h focus</span>
+                {completedGoals > 0 && (
+                  <>
+                    <span>·</span>
+                    <span className="text-primary font-medium">
+                      <CheckCircle2 className="h-3 w-3 inline mr-0.5" />
+                      {completedGoals}/{totalGoals}
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             <Button
-              variant="ghost" size="sm"
-              className="h-7 text-xs"
+              variant="ghost" size="sm" className="h-7 text-xs"
               onClick={() => setShowFeedback(!showFeedback)}
+              title="Rate today's plan"
             >
               <MessageSquare className="h-3.5 w-3.5 mr-1" />
               {plan.feedback_rating ? `${plan.feedback_rating}/5` : 'Rate'}
             </Button>
             <Button
-              variant="ghost" size="sm"
-              className="h-7 text-xs"
+              variant="ghost" size="sm" className="h-7 text-xs"
               onClick={() => generateMutation.mutate()}
               disabled={generateMutation.isPending}
+              title="Regenerate plan"
             >
-              <RefreshCw className={cn("h-3.5 w-3.5", generateMutation.isPending && "animate-spin")} />
+              <RotateCcw className={cn("h-3.5 w-3.5", generateMutation.isPending && "animate-spin")} />
             </Button>
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setExpanded(!expanded)}>
               {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </Button>
           </div>
         </div>
+
+        {/* Day progress bar */}
+        {expanded && (
+          <div className="mt-2.5 space-y-1">
+            <div className="flex justify-between text-[10px] text-muted-foreground">
+              <span>Day progress</span>
+              <span>{dayProgressPct}%</span>
+            </div>
+            <Progress value={dayProgressPct} className="h-1.5" />
+          </div>
+        )}
       </div>
 
       {/* Strategy banner */}
@@ -251,7 +356,7 @@ export function DailyTimeBlocks() {
                 onClick={() => setFeedbackRating(n)}
                 className={cn(
                   "p-1 rounded transition-colors",
-                  feedbackRating >= n ? "text-amber-400" : "text-muted-foreground/30 hover:text-muted-foreground/60"
+                  feedbackRating >= n ? "text-primary" : "text-muted-foreground/30 hover:text-muted-foreground/60"
                 )}
               >
                 <Star className="h-5 w-5" fill={feedbackRating >= n ? "currentColor" : "none"} />
@@ -259,18 +364,26 @@ export function DailyTimeBlocks() {
             ))}
           </div>
           <Textarea
-            placeholder="What worked? What didn't? Be specific — I'll adjust tomorrow."
+            placeholder="What worked? What didn't? Be specific — I'll adjust tomorrow's plan."
             value={feedbackText}
             onChange={e => setFeedbackText(e.target.value)}
             className="text-xs h-16 resize-none"
           />
-          <Button
-            size="sm" className="text-xs h-7"
-            onClick={() => feedbackMutation.mutate()}
-            disabled={feedbackRating === 0 || feedbackMutation.isPending}
-          >
-            Submit Feedback
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              size="sm" className="text-xs h-7"
+              onClick={() => feedbackMutation.mutate()}
+              disabled={feedbackRating === 0 || feedbackMutation.isPending}
+            >
+              Submit Feedback
+            </Button>
+            <Button
+              variant="ghost" size="sm" className="text-xs h-7"
+              onClick={() => setShowFeedback(false)}
+            >
+              Cancel
+            </Button>
+          </div>
         </div>
       )}
 
@@ -281,7 +394,10 @@ export function DailyTimeBlocks() {
             const config = TYPE_CONFIG[block.type] || TYPE_CONFIG.admin;
             const Icon = config.icon;
             const isCurrent = i === currentIdx;
-            const isPast = currentIdx > i;
+            const isPast = currentIdx >= 0 && i < currentIdx;
+            const duration = getBlockDurationMinutes(block);
+            const blockThumb = blockFeedbackMap.get(i);
+            const completedSet = new Set(plan.completed_goals as string[] || []);
 
             return (
               <div
@@ -293,9 +409,10 @@ export function DailyTimeBlocks() {
                 )}
               >
                 {/* Time column */}
-                <div className="w-[72px] shrink-0 text-[11px] text-muted-foreground pt-0.5">
+                <div className="w-[68px] shrink-0 text-[11px] text-muted-foreground pt-0.5">
                   <div className="font-medium">{formatTime(block.start_time)}</div>
                   <div>{formatTime(block.end_time)}</div>
+                  <div className="text-[10px] mt-0.5">{duration}m</div>
                 </div>
 
                 {/* Content */}
@@ -310,24 +427,61 @@ export function DailyTimeBlocks() {
                     </Badge>
                     <span className="text-sm font-medium truncate">{block.label}</span>
                     {isCurrent && (
-                      <Badge className="text-[9px] px-1.5 py-0 h-4 bg-primary/20 text-primary border-0">NOW</Badge>
+                      <Badge className="text-[9px] px-1.5 py-0 h-4 bg-primary/20 text-primary border-0 animate-pulse">NOW</Badge>
                     )}
                   </div>
 
-                  {/* Goals */}
-                  <ul className="space-y-0.5">
-                    {block.goals.map((goal, gi) => (
-                      <li key={gi} className="text-[12px] text-muted-foreground flex items-start gap-1.5">
-                        <span className="text-primary/60 mt-0.5">→</span>
-                        <span>{goal}</span>
-                      </li>
-                    ))}
+                  {/* Goals with checkboxes */}
+                  <ul className="space-y-1 mt-1">
+                    {block.goals.map((goal, gi) => {
+                      const goalKey = `${i}-${gi}`;
+                      const isCompleted = completedSet.has(goalKey);
+                      return (
+                        <li key={gi} className="flex items-start gap-2 group/goal">
+                          <Checkbox
+                            checked={isCompleted}
+                            onCheckedChange={() => toggleGoal(i, gi)}
+                            className="mt-0.5 h-3.5 w-3.5"
+                          />
+                          <span className={cn(
+                            "text-[12px] text-muted-foreground transition-all",
+                            isCompleted && "line-through opacity-60"
+                          )}>
+                            {goal}
+                          </span>
+                        </li>
+                      );
+                    })}
                   </ul>
 
-                  {/* Reasoning (subtle) */}
-                  {block.reasoning && (
-                    <p className="text-[10px] text-muted-foreground/60 mt-1 italic">{block.reasoning}</p>
-                  )}
+                  {/* Per-block thumbs + reasoning */}
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <div className="flex gap-0.5">
+                      <button
+                        onClick={() => thumbsBlock(i, 'up')}
+                        className={cn(
+                          "p-0.5 rounded transition-colors",
+                          blockThumb === 'up' ? "text-green-500" : "text-muted-foreground/25 hover:text-muted-foreground/50"
+                        )}
+                        title="Good block suggestion"
+                      >
+                        <ThumbsUp className="h-3 w-3" />
+                      </button>
+                      <button
+                        onClick={() => thumbsBlock(i, 'down')}
+                        className={cn(
+                          "p-0.5 rounded transition-colors",
+                          blockThumb === 'down' ? "text-red-500" : "text-muted-foreground/25 hover:text-muted-foreground/50"
+                        )}
+                        title="Not useful"
+                      >
+                        <ThumbsDown className="h-3 w-3" />
+                      </button>
+                    </div>
+                    {block.reasoning && (
+                      <p className="text-[10px] text-muted-foreground/50 italic truncate">{block.reasoning}</p>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -336,9 +490,9 @@ export function DailyTimeBlocks() {
       )}
 
       {/* Metric targets footer */}
-      {expanded && plan.key_metric_targets && (
-        <div className="px-4 py-2.5 bg-muted/20 border-t border-border/30 flex items-center gap-4 text-[11px] text-muted-foreground">
-          <span className="font-medium text-foreground">Today's realistic targets:</span>
+      {expanded && plan.key_metric_targets && Object.keys(plan.key_metric_targets).length > 0 && (
+        <div className="px-4 py-2.5 bg-muted/20 border-t border-border/30 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+          <span className="font-medium text-foreground">Today's targets:</span>
           {plan.key_metric_targets.dials != null && <span>{plan.key_metric_targets.dials} dials</span>}
           {plan.key_metric_targets.conversations != null && <span>{plan.key_metric_targets.conversations} convos</span>}
           {plan.key_metric_targets.accounts_researched != null && <span>{plan.key_metric_targets.accounts_researched} researched</span>}

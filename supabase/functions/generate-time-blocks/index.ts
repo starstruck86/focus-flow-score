@@ -208,7 +208,7 @@ Also provide an overall "day_strategy" (2-3 sentences on the day's theme/approac
 
     const plan = JSON.parse(toolCall.function.arguments);
 
-    // Upsert the plan
+    // Upsert the plan with all data persisted
     const { data: saved, error: saveError } = await supabase
       .from("daily_time_blocks")
       .upsert({
@@ -218,17 +218,16 @@ Also provide an overall "day_strategy" (2-3 sentences on the day's theme/approac
         meeting_load_hours: meetingHours,
         focus_hours_available: focusHoursAvailable,
         ai_reasoning: plan.day_strategy,
+        key_metric_targets: plan.key_metric_targets || {},
+        completed_goals: [],
+        block_feedback: [],
       }, { onConflict: "user_id,plan_date" })
       .select()
       .single();
 
     if (saveError) throw saveError;
 
-    return new Response(JSON.stringify({
-      ...saved,
-      day_strategy: plan.day_strategy,
-      key_metric_targets: plan.key_metric_targets,
-    }), {
+    return new Response(JSON.stringify(saved), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
