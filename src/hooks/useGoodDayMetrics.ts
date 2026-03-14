@@ -1,6 +1,7 @@
 // Good Day Metrics hooks - Expected vs Actual tracking
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { format, startOfWeek, endOfWeek, startOfMonth, subDays } from 'date-fns';
 import { 
   calculateGoodDayPoints, 
