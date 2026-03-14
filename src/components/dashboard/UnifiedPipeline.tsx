@@ -99,7 +99,9 @@ export function UnifiedPipeline() {
     return groups;
   }, [activeOpps]);
 
-  const totalArr = activeOpps.reduce((sum, o) => sum + (o.arr || 0), 0);
+  const totalArr = activeOpps.reduce((sum, o) => sum + getPipelineArr(o), 0);
+  const newLogoArr = activeOpps.filter(o => !renewalOppIds.has(o.id)).reduce((sum, o) => sum + (o.arr || 0), 0);
+  const renewalExpansionArr = activeOpps.filter(o => renewalOppIds.has(o.id)).reduce((sum, o) => sum + getPipelineArr(o), 0);
   const stalledCount = activeOpps.filter(o => o.status === 'stalled').length;
   const noNextStep = activeOpps.filter(o => !o.nextStep && !o.nextStepDate).length;
 
