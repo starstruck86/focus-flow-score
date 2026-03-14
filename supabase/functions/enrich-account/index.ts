@@ -445,6 +445,64 @@ Keep it concise and factual.`,
   }
 }
 
+// Search for martech case studies related to this company via Perplexity
+async function fetchMartechCaseStudies(companyName: string, websiteUrl: string, espPlatform?: string): Promise<string | null> {
+  const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY');
+  if (!PERPLEXITY_API_KEY) return null;
+
+  const platformHint = espPlatform ? ` They may use ${espPlatform}.` : '';
+  try {
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'sonar-pro',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a martech research specialist. Find real, published case studies and success stories. Only include results you can verify with sources. Be concise — bullet points with links when available.',
+          },
+          {
+            role: 'user',
+            content: `Find marketing technology case studies, success stories, or published results involving "${companyName}" (${websiteUrl}).${platformHint}
+
+Search for:
+- Case studies published by ESPs (Klaviyo, Mailchimp, HubSpot, Braze, SFMC, Iterable, etc.) featuring this company
+- Case studies from SMS platforms (Attentive, Postscript, etc.) featuring this company  
+- Case studies from loyalty/rewards platforms (Yotpo, Smile.io, LoyaltyLion, etc.)
+- Case studies from ecommerce platforms (Shopify Plus, BigCommerce, etc.)
+- Case studies from CDPs, personalization tools, or review platforms
+- Blog posts, webinars, or conference talks by this company about their marketing stack
+- Any published ROI metrics, email/SMS revenue numbers, or retention statistics
+
+For each case study found, include:
+- The platform/vendor that published it
+- Key results or metrics mentioned
+- URL if available
+
+If no case studies are found, say "No published case studies found" and suggest which platforms would likely have them based on the company's profile.`,
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('CaseStudy search error:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    return content.trim() || null;
+  } catch (err) {
+    console.error('CaseStudy search exception:', err);
+    return null;
+  }
+}
+
 // Auto-discover website URL using Perplexity
 async function discoverWebsite(companyName: string, industry?: string): Promise<string | null> {
   const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY');
@@ -528,9 +586,11 @@ Deno.serve(async (req) => {
 
     console.log('Enriching:', formattedUrl, 'for:', accountName);
 
-    // ─── Multi-channel waterfall + parallel company intel ───
-    // Company intelligence runs in parallel with signal extraction
+    // ─── Multi-channel waterfall + parallel intelligence ───
+    // Company intelligence and case study search run in parallel with signal extraction
     const companyIntelPromise = fetchCompanyIntelligence(accountName || '', formattedUrl);
+    // Case study search starts immediately (doesn't need signal results)
+    const caseStudyPromise = fetchMartechCaseStudies(accountName || '', formattedUrl);
 
     // Try channels in priority order — stop at first success
     let signalResult: { signals: any; source: string } | null = null;
@@ -556,7 +616,7 @@ Deno.serve(async (req) => {
       signalResult = await tryLovableAIOnly(accountName || '', formattedUrl);
     }
 
-    const companyIntel = await companyIntelPromise;
+    const [companyIntel, caseStudies] = await Promise.all([companyIntelPromise, caseStudyPromise]);
 
     // If ALL channels failed, return error with company intel if available
     if (!signalResult) {
@@ -565,7 +625,6 @@ Deno.serve(async (req) => {
         : null;
 
       if (fallbackSummary) {
-        // Return partial result with just company intel
         return new Response(JSON.stringify({
           success: true,
           partial: true,
@@ -573,10 +632,11 @@ Deno.serve(async (req) => {
           discoveredUrl: discoveredUrl || null,
           signals: { direct_ecommerce: false, email_sms_capture: false, loyalty_membership: false, category_complexity: false, mobile_app: false, marketing_platform_detected: null, crm_lifecycle_team_size: 0 },
           confidence: {},
-          evidence: { business_summary: companyIntel!.businessSummary, recent_news: companyIntel!.recentNews },
+          evidence: { business_summary: companyIntel!.businessSummary, recent_news: companyIntel!.recentNews, case_studies: caseStudies || '' },
           scores: { icp_fit_score: 0, timing_score: 0, priority_score: 0, lifecycle_tier: '4', high_probability_buyer: false, triggered_account: false, confidence_score: 0 },
           marTech: null, ecommerce: null,
           summary: fallbackSummary,
+          caseStudies: caseStudies || null,
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
@@ -612,6 +672,9 @@ Deno.serve(async (req) => {
       if (companyIntel.businessSummary) enrichedSummary += `\n\n**How they make money:**\n${companyIntel.businessSummary}`;
       if (companyIntel.recentNews) enrichedSummary += `\n\n**Recent news & hires:**\n${companyIntel.recentNews}`;
     }
+    if (caseStudies) {
+      enrichedSummary += `\n\n**MarTech Case Studies:**\n${caseStudies}`;
+    }
 
     // Write to DB
     if (accountId) {
@@ -637,6 +700,7 @@ Deno.serve(async (req) => {
           other_tech_detected: signals.other_tech_detected || '',
           business_summary: companyIntel?.businessSummary || '',
           recent_news: companyIntel?.recentNews || '',
+          case_studies: caseStudies || '',
           enrichment_source: source,
         };
 
@@ -711,6 +775,7 @@ Deno.serve(async (req) => {
         other_tech_detected: signals.other_tech_detected || '',
         business_summary: companyIntel?.businessSummary || '',
         recent_news: companyIntel?.recentNews || '',
+        case_studies: caseStudies || '',
       },
       scores: {
         icp_fit_score: icpFitScore,
@@ -724,6 +789,7 @@ Deno.serve(async (req) => {
       marTech: marTechString,
       ecommerce: ecommerceString,
       summary: enrichedSummary,
+      caseStudies: caseStudies || null,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error) {
     console.error('Enrichment error:', error);
