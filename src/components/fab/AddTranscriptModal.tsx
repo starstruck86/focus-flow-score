@@ -16,11 +16,14 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from '@/components/ui/popover';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useStore } from '@/store/useStore';
 import { useSaveTranscript } from '@/hooks/useCallTranscripts';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { FileText, Target, Check, ChevronsUpDown, Copy, RefreshCw } from 'lucide-react';
+import { FileText, Target, Check, ChevronsUpDown, Copy, RefreshCw, Sparkles, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AddTranscriptModalProps {
@@ -121,9 +124,62 @@ export function AddTranscriptModal({
         duration_minutes: duration ? parseInt(duration) : undefined,
       });
       toast.success('Transcript saved to database');
+      
+      // Auto-extract tasks from transcript
+      if (autoExtractTasks) {
+        extractTasksFromTranscript(autoTitle);
+      }
+      
       onOpenChange(false);
     } catch (err: any) {
       toast.error('Failed to save transcript', { description: err.message });
+    }
+  };
+
+  const [autoExtractTasks, setAutoExtractTasks] = useState(true);
+  const [extractedTasks, setExtractedTasks] = useState<any[]>([]);
+  const [extracting, setExtracting] = useState(false);
+
+  const extractTasksFromTranscript = async (transcriptTitle: string) => {
+    setExtracting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('extract-tasks', {
+        body: {
+          transcript_content: transcript.trim(),
+          transcript_title: transcriptTitle,
+          account_id: derivedAccountId,
+          opportunity_id: linkType === 'opportunity' ? selectedOppId : undefined,
+          renewal_id: linkType === 'renewal' ? selectedRenewalId : undefined,
+        },
+      });
+      if (error) throw error;
+      if (data?.tasks?.length > 0) {
+        const { addTask } = useStore.getState();
+        data.tasks.forEach((t: any) => {
+          addTask({
+            title: t.title,
+            priority: t.priority || 'P2',
+            status: 'next' as const,
+            dueDate: t.due_date,
+            notes: t.notes ? `[From transcript] ${t.notes}` : '[Auto-extracted from call transcript]',
+            category: t.category || 'call',
+            motion: linkType === 'renewal' ? 'renewal' as const : 'new-logo' as const,
+            workstream: linkType === 'renewal' ? 'renewals' as const : 'pg' as const,
+            linkedRecordType: linkType === 'opportunity' ? 'opportunity' as const : 'renewal' as const,
+            linkedRecordId: linkType === 'opportunity' ? selectedOppId : selectedRenewalId,
+            linkedAccountId: derivedAccountId,
+          } as any);
+        });
+        toast.success(`${data.tasks.length} tasks auto-created from transcript`, {
+          description: 'Check your Tasks page to review them',
+        });
+      } else {
+        toast.info('No action items found in transcript');
+      }
+    } catch (err: any) {
+      toast.error('Could not extract tasks', { description: err.message });
+    } finally {
+      setExtracting(false);
     }
   };
 
@@ -142,6 +198,7 @@ export function AddTranscriptModal({
             <FileText className="h-5 w-5 text-primary" />
             Add Call Transcript
           </DialogTitle>
+          <p className="text-sm text-muted-foreground">Paste a call transcript to save it to your records.</p>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
@@ -248,7 +305,13 @@ export function AddTranscriptModal({
               </Button>
             </div>
             <Textarea placeholder="Paste your transcript here..." value={transcript} onChange={e => setTranscript(e.target.value)} rows={8} className="font-mono text-sm" autoFocus />
-            <p className="text-xs text-muted-foreground">Paste from Zoom, Teams, Gong, or any transcription service</p>
+            <div className="flex items-center gap-2 mt-1">
+              <Checkbox id="auto-extract" checked={autoExtractTasks} onCheckedChange={(v) => setAutoExtractTasks(!!v)} />
+              <label htmlFor="auto-extract" className="text-xs text-muted-foreground flex items-center gap-1 cursor-pointer">
+                <Sparkles className="h-3 w-3 text-primary" /> Auto-extract action items as tasks
+              </label>
+              {extracting && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
+            </div>
           </div>
 
           {/* Summary */}

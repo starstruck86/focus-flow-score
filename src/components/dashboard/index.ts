@@ -16,3 +16,5 @@ export { MeetingPrepCard } from './MeetingPrepCard';
 export { SmartWorkQueue } from './SmartWorkQueue';
 export { DailyDigest } from './DailyDigest';
 export { MeetingPrepPrompt } from './MeetingPrepPrompt';
+export { AIAccountPrioritizer } from './AIAccountPrioritizer';
+export { CalendarIntelligence } from './CalendarIntelligence';

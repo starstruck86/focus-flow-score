@@ -26,3 +26,24 @@ verify_jwt = false
 
 [functions.log-workday-focus]
 verify_jwt = false
+
+[functions.weekly-patterns]
+verify_jwt = false
+
+[functions.weekly-digest]
+verify_jwt = false
+
+[functions.sync-calendar]
+verify_jwt = false
+
+[functions.parse-screenshot]
+verify_jwt = false
+
+[functions.extract-tasks]
+verify_jwt = false
+
+[functions.prioritize-accounts]
+verify_jwt = false
+
+[functions.search-context]
+verify_jwt = false
