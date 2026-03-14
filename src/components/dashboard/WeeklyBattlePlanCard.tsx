@@ -5,8 +5,9 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useWeeklyBattlePlan, useGenerateBattlePlan, useCompleteBattleMove } from '@/hooks/useCoachingEngine';
-import { Swords, Sparkles, RefreshCw } from 'lucide-react';
+import { Swords, Sparkles, RefreshCw, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 const categoryColors: Record<string, string> = {
   deal_progression: 'bg-primary/10 text-primary',
@@ -25,6 +26,7 @@ const categoryLabels: Record<string, string> = {
 };
 
 function formatCurrency(n: number) {
+  if (n < 0) return `-${formatCurrency(Math.abs(n))}`;
   if (n >= 1000000) return `$${(n / 1000000).toFixed(1)}M`;
   if (n >= 1000) return `$${(n / 1000).toFixed(0)}K`;
   return `$${n.toFixed(0)}`;
@@ -52,6 +54,20 @@ export function WeeklyBattlePlanCard() {
   const completed = (plan?.moves_completed as number[]) || [];
   const completedCount = completed.length;
 
+  // FIX: Warn before regenerating if there are completed moves
+  const handleGenerate = () => {
+    if (completedCount > 0) {
+      toast(`Regenerating will reset ${completedCount} completed move(s)`, {
+        action: {
+          label: 'Regenerate',
+          onClick: () => generate.mutate(),
+        },
+      });
+    } else {
+      generate.mutate();
+    }
+  };
+
   return (
     <Card className="metric-card border-primary/20">
       <CardHeader className="pb-2">
@@ -67,7 +83,7 @@ export function WeeklyBattlePlanCard() {
             <Button
               variant={moves.length === 0 ? "default" : "ghost"}
               size="sm"
-              onClick={() => generate.mutate()}
+              onClick={handleGenerate}
               disabled={generate.isPending}
               className={cn(moves.length === 0 && "gap-1.5")}
             >

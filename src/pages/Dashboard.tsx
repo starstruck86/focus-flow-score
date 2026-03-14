@@ -149,7 +149,7 @@ export default function Dashboard() {
       accountsResearchedPerDay: effectiveTargets.targetAccountsResearchedPerDay,
       contactsPreppedPerDay: effectiveTargets.targetContactsPreppedPerDay,
     };
-    console.log('[Dashboard] calculations complete');
+    // calculations complete
   } catch (err) {
     console.error('[Dashboard] calculation crash:', err);
     today = new Date();
