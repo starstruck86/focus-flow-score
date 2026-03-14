@@ -767,7 +767,10 @@ function MorningView({
               </p>
               {lastEntry && (
                 <p className="text-xs text-muted-foreground">
-                  Last logged: {format(new Date(lastEntry.date + 'T12:00:00'), 'EEEE, MMM d')} — {lastEntry.goal_met ? '✓ Goal met' : '✗ Goal missed'} ({lastEntry.daily_score || 0}/6)
+                  Last logged: {(() => {
+                    const lastLoggedDate = new Date(lastEntry.date + 'T12:00:00');
+                    return isValid(lastLoggedDate) ? format(lastLoggedDate, 'EEEE, MMM d') : 'recently';
+                  })()} — {lastEntry.goal_met ? '✓ Goal met' : '✗ Goal missed'} ({lastEntry.daily_score || 0}/6)
                 </p>
               )}
               {carryoverCommitment && (
