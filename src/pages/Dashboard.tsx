@@ -256,6 +256,10 @@ export default function Dashboard() {
         );
       case 'daily-digest':
         return <DailyDigest key={widgetId} />;
+      case 'ai-prioritizer':
+        return <AIAccountPrioritizer key={widgetId} />;
+      case 'calendar-intelligence':
+        return <CalendarIntelligence key={widgetId} />;
       default:
         return null;
     }
