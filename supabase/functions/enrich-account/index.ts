@@ -445,6 +445,64 @@ Keep it concise and factual.`,
   }
 }
 
+// Search for martech case studies related to this company via Perplexity
+async function fetchMartechCaseStudies(companyName: string, websiteUrl: string, espPlatform?: string): Promise<string | null> {
+  const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY');
+  if (!PERPLEXITY_API_KEY) return null;
+
+  const platformHint = espPlatform ? ` They may use ${espPlatform}.` : '';
+  try {
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'sonar-pro',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a martech research specialist. Find real, published case studies and success stories. Only include results you can verify with sources. Be concise — bullet points with links when available.',
+          },
+          {
+            role: 'user',
+            content: `Find marketing technology case studies, success stories, or published results involving "${companyName}" (${websiteUrl}).${platformHint}
+
+Search for:
+- Case studies published by ESPs (Klaviyo, Mailchimp, HubSpot, Braze, SFMC, Iterable, etc.) featuring this company
+- Case studies from SMS platforms (Attentive, Postscript, etc.) featuring this company  
+- Case studies from loyalty/rewards platforms (Yotpo, Smile.io, LoyaltyLion, etc.)
+- Case studies from ecommerce platforms (Shopify Plus, BigCommerce, etc.)
+- Case studies from CDPs, personalization tools, or review platforms
+- Blog posts, webinars, or conference talks by this company about their marketing stack
+- Any published ROI metrics, email/SMS revenue numbers, or retention statistics
+
+For each case study found, include:
+- The platform/vendor that published it
+- Key results or metrics mentioned
+- URL if available
+
+If no case studies are found, say "No published case studies found" and suggest which platforms would likely have them based on the company's profile.`,
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('CaseStudy search error:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    return content.trim() || null;
+  } catch (err) {
+    console.error('CaseStudy search exception:', err);
+    return null;
+  }
+}
+
 // Auto-discover website URL using Perplexity
 async function discoverWebsite(companyName: string, industry?: string): Promise<string | null> {
   const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY');
