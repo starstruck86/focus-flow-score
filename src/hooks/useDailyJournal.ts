@@ -152,6 +152,7 @@ export function calculateJournalScores(
 
 // Hooks
 export function useTodayJournalEntry() {
+  const { user } = useAuth();
   const today = format(new Date(), 'yyyy-MM-dd');
   
   return useQuery({
@@ -166,6 +167,7 @@ export function useTodayJournalEntry() {
       if (error) throw error;
       return data ? transformJournalEntry(data) : null;
     },
+    enabled: !!user,
   });
 }
 
