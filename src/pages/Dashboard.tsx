@@ -75,55 +75,81 @@ export default function Dashboard() {
   const { data: performanceRollups, isLoading: rollupsLoading } = usePerformanceRollups();
   const { data: wtdMetrics, isLoading: wtdLoading } = useWeekToDateMetrics();
 
-  const today = new Date();
-  const todayStr = format(today, 'yyyy-MM-dd');
-  const isTodayEligible = config && holidays && ptoDays && overrides
-    ? isEligibleDay(today, config, holidays, ptoDays, overrides)
-    : false;
-  const todayEvent = streakEvents?.find(e => e.date === todayStr);
-  const todayCheckedIn = todayEvent?.checkedIn || todayJournalEntry?.checkedIn || false;
-  
-  const weekStart = startOfWeek(today, { weekStartsOn: 1 });
-  const daysElapsedThisWeek = Math.min(5, differenceInBusinessDays(today, weekStart) + 1);
-  const defaultTemplate = getTemplateById('balanced-pd');
-  const weeklyExpectations = calculateWeeklyExpectations(defaultTemplate, 5);
-  
-  const expectedVsActualMetrics = wtdMetrics ? calculateExpectedVsActual(
-    weeklyExpectations,
-    {
-      prospectsAdded: wtdMetrics.prospectsAdded,
-      conversations: wtdMetrics.conversations,
-      managerPlusMessages: wtdMetrics.managerPlusMessages,
-      meetingsSet: wtdMetrics.meetingsSet,
-      oppsCreated: wtdMetrics.oppsCreated,
-      personalDevelopmentDays: wtdMetrics.personalDevelopmentDays,
-      pointsEarned: wtdMetrics.pointsEarned,
-    },
-    daysElapsedThisWeek
-  ) : [];
-  
-  const effectiveConfig = quotaConfig || DEFAULT_QUOTA_CONFIG;
-  const effectiveTargets = quotaTargets || DEFAULT_QUOTA_TARGETS;
-  const fyStart = effectiveTargets.fiscalYearStart;
-  const dateFilter = { start: fyStart, end: format(today, 'yyyy-MM-dd') };
-  const commissionSummary = calculateCommissionSummary(opportunities, {
-    ...effectiveConfig,
-    newArrQuota: effectiveTargets.newArrQuota,
-    renewalArrQuota: effectiveTargets.renewalArrQuota,
-  }, dateFilter);
-  
-  const combinedAttainment = (commissionSummary.newArrBooked + commissionSummary.renewalArrBooked) / 
-    (effectiveTargets.newArrQuota + effectiveTargets.renewalArrQuota);
-  
-  const performanceTargets = {
-    dialsPerDay: effectiveTargets.targetDialsPerDay,
-    connectsPerDay: effectiveTargets.targetConnectsPerDay,
-    meetingsPerWeek: effectiveTargets.targetMeetingsSetPerWeek,
-    oppsPerWeek: effectiveTargets.targetOppsCreatedPerWeek,
-    customerMeetingsPerWeek: effectiveTargets.targetCustomerMeetingsPerWeek,
-    accountsResearchedPerDay: effectiveTargets.targetAccountsResearchedPerDay,
-    contactsPreppedPerDay: effectiveTargets.targetContactsPreppedPerDay,
-  };
+  // Wrap all derived calculations in try-catch to prevent render crashes
+  let today: Date;
+  let todayStr: string;
+  let isTodayEligible = false;
+  let todayCheckedIn = false;
+  let daysElapsedThisWeek = 1;
+  let defaultTemplate: ReturnType<typeof getTemplateById>;
+  let weeklyExpectations: ReturnType<typeof calculateWeeklyExpectations>;
+  let expectedVsActualMetrics: any[] = [];
+  let effectiveConfig = quotaConfig || DEFAULT_QUOTA_CONFIG;
+  let effectiveTargets = quotaTargets || DEFAULT_QUOTA_TARGETS;
+  let commissionSummary: any = { newArrBooked: 0, renewalArrBooked: 0, newArrAttainment: 0, renewalArrAttainment: 0, totalCommission: 0 };
+  let combinedAttainment = 0;
+  let performanceTargets: any = {};
+
+  try {
+    today = new Date();
+    todayStr = format(today, 'yyyy-MM-dd');
+    isTodayEligible = config && holidays && ptoDays && overrides
+      ? isEligibleDay(today, config, holidays, ptoDays, overrides)
+      : false;
+    const todayEvent = streakEvents?.find(e => e.date === todayStr);
+    todayCheckedIn = todayEvent?.checkedIn || todayJournalEntry?.checkedIn || false;
+    
+    const weekStart = startOfWeek(today, { weekStartsOn: 1 });
+    daysElapsedThisWeek = Math.min(5, differenceInBusinessDays(today, weekStart) + 1);
+    defaultTemplate = getTemplateById('balanced-pd');
+    weeklyExpectations = calculateWeeklyExpectations(defaultTemplate, 5);
+    
+    expectedVsActualMetrics = wtdMetrics ? calculateExpectedVsActual(
+      weeklyExpectations,
+      {
+        prospectsAdded: wtdMetrics.prospectsAdded,
+        conversations: wtdMetrics.conversations,
+        managerPlusMessages: wtdMetrics.managerPlusMessages,
+        meetingsSet: wtdMetrics.meetingsSet,
+        oppsCreated: wtdMetrics.oppsCreated,
+        personalDevelopmentDays: wtdMetrics.personalDevelopmentDays,
+        pointsEarned: wtdMetrics.pointsEarned,
+      },
+      daysElapsedThisWeek
+    ) : [];
+    
+    effectiveConfig = quotaConfig || DEFAULT_QUOTA_CONFIG;
+    effectiveTargets = quotaTargets || DEFAULT_QUOTA_TARGETS;
+    const fyStart = effectiveTargets.fiscalYearStart;
+    const dateFilter = { start: fyStart, end: format(today, 'yyyy-MM-dd') };
+    commissionSummary = calculateCommissionSummary(opportunities, {
+      ...effectiveConfig,
+      newArrQuota: effectiveTargets.newArrQuota,
+      renewalArrQuota: effectiveTargets.renewalArrQuota,
+    }, dateFilter);
+    
+    const totalQuota = (effectiveTargets.newArrQuota || 0) + (effectiveTargets.renewalArrQuota || 0);
+    combinedAttainment = totalQuota > 0
+      ? (commissionSummary.newArrBooked + commissionSummary.renewalArrBooked) / totalQuota
+      : 0;
+    
+    performanceTargets = {
+      dialsPerDay: effectiveTargets.targetDialsPerDay,
+      connectsPerDay: effectiveTargets.targetConnectsPerDay,
+      meetingsPerWeek: effectiveTargets.targetMeetingsSetPerWeek,
+      oppsPerWeek: effectiveTargets.targetOppsCreatedPerWeek,
+      customerMeetingsPerWeek: effectiveTargets.targetCustomerMeetingsPerWeek,
+      accountsResearchedPerDay: effectiveTargets.targetAccountsResearchedPerDay,
+      contactsPreppedPerDay: effectiveTargets.targetContactsPreppedPerDay,
+    };
+    console.log('[Dashboard] calculations complete');
+  } catch (err) {
+    console.error('[Dashboard] calculation crash:', err);
+    today = new Date();
+    todayStr = format(today, 'yyyy-MM-dd');
+    defaultTemplate = getTemplateById('balanced-pd');
+    weeklyExpectations = calculateWeeklyExpectations(defaultTemplate, 5);
+  }
 
   const isWidgetVisible = (id: string) => widgets.find(w => w.id === id)?.visible !== false;
 
