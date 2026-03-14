@@ -4,7 +4,6 @@ import { usePerformanceProfile } from '@/hooks/usePerformanceProfile';
 import { useSalesAge } from '@/hooks/useSalesAge';
 import { getLevelTitle, getProgressToNextLevel } from '@/types/streak';
 import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
 import { 
   Flame, Target, Zap, Phone, Users, CalendarCheck, 
   Briefcase, Trophy, TrendingUp, Clock, Star, Award
