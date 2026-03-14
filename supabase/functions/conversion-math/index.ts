@@ -24,19 +24,16 @@ serve(async (req) => {
       });
     }
 
-    // Fetch benchmarks, quota, and current closed deals in parallel
     const [benchmarksRes, quotaRes, oppsRes, renewalsRes, journalRes] = await Promise.all([
       supabase.from("conversion_benchmarks").select("*").maybeSingle(),
       supabase.from("quota_targets").select("*").maybeSingle(),
       supabase.from("opportunities").select("arr, stage, status, close_date, is_new_logo"),
       supabase.from("renewals").select("arr, renewal_stage, renewal_due"),
-      // Last 30 days of journal for actual pace
       supabase.from("daily_journal_entries").select("date, dials, conversations, meetings_set, opportunities_created")
         .gte("date", new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0])
         .order("date", { ascending: false }),
     ]);
 
-    // Defaults
     const benchmarks = benchmarksRes.data || {
       dials_to_connect_rate: 0.10,
       connect_to_meeting_rate: 0.25,
@@ -52,19 +49,30 @@ serve(async (req) => {
     const renewalArrQuota = quota ? parseFloat(quota.renewal_arr_quota) : 822542;
     const fyEnd = quota ? new Date(quota.fiscal_year_end) : new Date("2026-06-30");
 
-    // Calculate closed ARR
+    // Calculate closed ARR — FIX: explicit is_new_logo checks
     const opps = oppsRes.data || [];
-    const closedWonOpps = opps.filter((o: any) => 
-      o.status === "closed-won" || o.stage?.toLowerCase().includes("closed won") || o.stage?.includes("7-")
-    );
+    const isClosedWon = (o: any) =>
+      o.status === "closed-won" ||
+      o.stage?.toLowerCase() === "closed won";
+
+    const closedWonOpps = opps.filter(isClosedWon);
+
+    // FIX: Only count as new logo if explicitly marked true
     const newArrClosed = closedWonOpps
-      .filter((o: any) => o.is_new_logo !== false)
+      .filter((o: any) => o.is_new_logo === true)
       .reduce((s: number, o: any) => s + (parseFloat(o.arr) || 0), 0);
-    
+
+    // FIX: Opps with is_new_logo === false or null that are closed won count toward renewal-type
+    const oppRenewalArrClosed = closedWonOpps
+      .filter((o: any) => o.is_new_logo === false)
+      .reduce((s: number, o: any) => s + (parseFloat(o.arr) || 0), 0);
+
     const renewals = renewalsRes.data || [];
-    const renewalArrClosed = renewals
-      .filter((r: any) => r.renewal_stage?.toLowerCase().includes("closed") || r.renewal_stage?.includes("renewed"))
+    const renewalTableArrClosed = renewals
+      .filter((r: any) => r.renewal_stage?.toLowerCase().includes("closed") || r.renewal_stage?.toLowerCase().includes("renewed"))
       .reduce((s: number, r: any) => s + (parseFloat(r.arr) || 0), 0);
+
+    const renewalArrClosed = renewalTableArrClosed + oppRenewalArrClosed;
 
     // Gaps
     const newArrGap = Math.max(0, newArrQuota - newArrClosed);
@@ -73,32 +81,32 @@ serve(async (req) => {
 
     // Time remaining
     const daysRemaining = Math.max(1, Math.floor((fyEnd.getTime() - Date.now()) / 86400000));
-    const weeksRemaining = Math.ceil(daysRemaining / 7);
-    const workdaysRemaining = Math.ceil(daysRemaining * 5 / 7);
+    const weeksRemaining = Math.max(1, Math.ceil(daysRemaining / 7));
+    const workdaysRemaining = Math.max(1, Math.ceil(daysRemaining * 5 / 7));
 
     // Reverse-engineer funnel from benchmarks
     const b = benchmarks;
-    const dialsToConnect = parseFloat(b.dials_to_connect_rate) || 0.10;
-    const connectToMeeting = parseFloat(b.connect_to_meeting_rate) || 0.25;
-    const meetingToOpp = parseFloat(b.meeting_to_opp_rate) || 0.40;
-    const oppToClose = parseFloat(b.opp_to_close_rate) || 0.25;
-    const avgDealSize = parseFloat(b.avg_new_logo_arr) || 50000;
+    const dialsToConnect = Math.min(1, Math.max(0.01, parseFloat(b.dials_to_connect_rate) || 0.10));
+    const connectToMeeting = Math.min(1, Math.max(0.01, parseFloat(b.connect_to_meeting_rate) || 0.25));
+    const meetingToOpp = Math.min(1, Math.max(0.01, parseFloat(b.meeting_to_opp_rate) || 0.40));
+    const oppToClose = Math.min(1, Math.max(0.01, parseFloat(b.opp_to_close_rate) || 0.25));
+    const avgDealSize = Math.max(1, parseFloat(b.avg_new_logo_arr) || 50000);
 
-    // How many deals needed to close the gap
-    const dealsNeeded = Math.ceil(newArrGap / avgDealSize);
-    
+    // How many deals needed to close the new logo gap
+    const dealsNeeded = newArrGap > 0 ? Math.ceil(newArrGap / avgDealSize) : 0;
+
     // Reverse funnel
-    const oppsNeeded = Math.ceil(dealsNeeded / oppToClose);
-    const meetingsNeeded = Math.ceil(oppsNeeded / meetingToOpp);
-    const connectsNeeded = Math.ceil(meetingsNeeded / connectToMeeting);
-    const dialsNeeded = Math.ceil(connectsNeeded / dialsToConnect);
+    const oppsNeeded = dealsNeeded > 0 ? Math.ceil(dealsNeeded / oppToClose) : 0;
+    const meetingsNeeded = oppsNeeded > 0 ? Math.ceil(oppsNeeded / meetingToOpp) : 0;
+    const connectsNeeded = meetingsNeeded > 0 ? Math.ceil(meetingsNeeded / connectToMeeting) : 0;
+    const dialsNeeded = connectsNeeded > 0 ? Math.ceil(connectsNeeded / dialsToConnect) : 0;
 
     // Per-week and per-day targets
-    const dealsPerWeek = Math.ceil(dealsNeeded / Math.max(1, weeksRemaining));
-    const oppsPerWeek = Math.ceil(oppsNeeded / Math.max(1, weeksRemaining));
-    const meetingsPerWeek = Math.ceil(meetingsNeeded / Math.max(1, weeksRemaining));
-    const connectsPerDay = Math.ceil(connectsNeeded / Math.max(1, workdaysRemaining));
-    const dialsPerDay = Math.ceil(dialsNeeded / Math.max(1, workdaysRemaining));
+    const dealsPerWeek = Math.ceil(dealsNeeded / weeksRemaining);
+    const oppsPerWeek = Math.ceil(oppsNeeded / weeksRemaining);
+    const meetingsPerWeek = Math.ceil(meetingsNeeded / weeksRemaining);
+    const connectsPerDay = Math.ceil(connectsNeeded / workdaysRemaining);
+    const dialsPerDay = Math.ceil(dialsNeeded / workdaysRemaining);
 
     // Current activity pace (last 30 days)
     const journal = journalRes.data || [];
@@ -110,36 +118,33 @@ serve(async (req) => {
       oppsPerWeek: Math.round(journal.reduce((s: number, j: any) => s + (j.opportunities_created || 0), 0) / journalDays * 5 * 10) / 10,
     };
 
-    // Gap analysis — are you on pace?
+    // Gap analysis
     const dialGap = dialsPerDay - actualPace.dialsPerDay;
     const meetingGap = meetingsPerWeek - actualPace.meetingsPerWeek;
     const onPace = dialGap <= 0 && meetingGap <= 0;
 
-    // Active pipeline coverage
+    // FIX: Pipeline coverage against TOTAL gap (new + renewal), not just new logo
     const activePipelineArr = opps
       .filter((o: any) => o.status === "active")
       .reduce((s: number, o: any) => s + (parseFloat(o.arr) || 0), 0);
-    const pipelineCoverage = newArrGap > 0 ? activePipelineArr / newArrGap : 999;
+    const coverageDenominator = totalGap > 0 ? totalGap : 1;
+    const pipelineCoverage = totalGap > 0 ? activePipelineArr / coverageDenominator : (activePipelineArr > 0 ? 999 : 0);
 
     const result = {
-      // Quota status
       quota: {
         newArrQuota, renewalArrQuota,
-        newArrClosed, renewalArrClosed: renewalArrClosed,
+        newArrClosed, renewalArrClosed,
         newArrGap, renewalArrGap, totalGap,
         newArrAttainment: newArrQuota > 0 ? newArrClosed / newArrQuota : 0,
         renewalArrAttainment: renewalArrQuota > 0 ? renewalArrClosed / renewalArrQuota : 0,
       },
-      // Time
       timeline: { daysRemaining, weeksRemaining, workdaysRemaining, fyEnd: fyEnd.toISOString().split("T")[0] },
-      // Funnel math
       funnel: {
         benchmarks: { dialsToConnect, connectToMeeting, meetingToOpp, oppToClose, avgDealSize },
         totalNeeded: { deals: dealsNeeded, opps: oppsNeeded, meetings: meetingsNeeded, connects: connectsNeeded, dials: dialsNeeded },
         weeklyTargets: { deals: dealsPerWeek, opps: oppsPerWeek, meetings: meetingsPerWeek },
         dailyTargets: { dials: dialsPerDay, connects: connectsPerDay },
       },
-      // Current pace vs required
       pace: {
         actual: actualPace,
         required: { dialsPerDay, connectsPerDay, meetingsPerWeek, oppsPerWeek },
@@ -147,7 +152,6 @@ serve(async (req) => {
         onPace,
         dataPoints: journalDays,
       },
-      // Pipeline health
       pipeline: {
         activePipelineArr,
         pipelineCoverage: Math.round(pipelineCoverage * 100) / 100,

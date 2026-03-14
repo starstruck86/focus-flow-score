@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useConversionMath } from '@/hooks/useCoachingEngine';
-import { Target, TrendingUp, TrendingDown, ArrowRight, Calculator, ChevronDown, ChevronUp } from 'lucide-react';
+import { TrendingUp, TrendingDown, ArrowRight, Calculator, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 function formatCurrency(n: number) {
@@ -15,7 +15,7 @@ function formatCurrency(n: number) {
 }
 
 export function PClubMathCard() {
-  const { data, isLoading } = useConversionMath();
+  const { data, isLoading, isError } = useConversionMath();
   const [expanded, setExpanded] = useState(false);
 
   if (isLoading) {
@@ -27,6 +27,25 @@ export function PClubMathCard() {
         <CardContent className="space-y-3">
           <Skeleton className="h-16 w-full" />
           <Skeleton className="h-12 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // FIX: Add error state instead of silent fallback
+  if (isError) {
+    return (
+      <Card className="metric-card border-destructive/20">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-display flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-destructive" />
+            P-Club Math
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-muted-foreground text-center py-4">
+            Unable to load coaching data. Check your connection and try again.
+          </p>
         </CardContent>
       </Card>
     );
@@ -70,7 +89,9 @@ export function PClubMathCard() {
         <div className="grid grid-cols-3 gap-3">
           <div className="text-center p-2 rounded-lg bg-muted/30">
             <div className="text-xs text-muted-foreground">Quota Gap</div>
-            <div className="font-display font-bold text-lg text-destructive">{formatCurrency(quota.totalGap)}</div>
+            <div className={cn("font-display font-bold text-lg", quota.totalGap > 0 ? "text-destructive" : "text-recovery")}>
+              {formatCurrency(quota.totalGap)}
+            </div>
           </div>
           <div className="text-center p-2 rounded-lg bg-muted/30">
             <div className="text-xs text-muted-foreground">Days Left</div>
@@ -88,28 +109,19 @@ export function PClubMathCard() {
         <div className="space-y-2">
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Daily Targets to Hit Number</div>
           <div className="grid grid-cols-2 gap-2">
-            <ActivityRow
-              label="Dials"
-              required={funnel.dailyTargets.dials}
-              actual={pace.actual.dialsPerDay}
-            />
-            <ActivityRow
-              label="Connects"
-              required={funnel.dailyTargets.connects}
-              actual={Math.round(pace.actual.conversationsPerDay)}
-            />
-            <ActivityRow
-              label="Meetings/wk"
-              required={funnel.weeklyTargets.meetings}
-              actual={pace.actual.meetingsPerWeek}
-            />
-            <ActivityRow
-              label="Opps/wk"
-              required={funnel.weeklyTargets.opps}
-              actual={pace.actual.oppsPerWeek}
-            />
+            <ActivityRow label="Dials" required={funnel.dailyTargets.dials} actual={pace.actual.dialsPerDay} />
+            <ActivityRow label="Connects" required={funnel.dailyTargets.connects} actual={Math.round(pace.actual.conversationsPerDay)} />
+            <ActivityRow label="Meetings/wk" required={funnel.weeklyTargets.meetings} actual={pace.actual.meetingsPerWeek} />
+            <ActivityRow label="Opps/wk" required={funnel.weeklyTargets.opps} actual={pace.actual.oppsPerWeek} />
           </div>
         </div>
+
+        {/* Data quality note */}
+        {pace.dataPoints < 5 && (
+          <p className="text-[10px] text-muted-foreground italic text-center">
+            ⚠️ Only {pace.dataPoints} day(s) of data — pace accuracy improves with more journal entries.
+          </p>
+        )}
 
         {/* Expandable Funnel Detail */}
         <Button
@@ -124,8 +136,9 @@ export function PClubMathCard() {
 
         {expanded && (
           <div className="space-y-3 pt-2 border-t border-border/50">
-            {/* Funnel visualization */}
-            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Reverse Funnel to {formatCurrency(quota.newArrGap)} New ARR</div>
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Reverse Funnel to {formatCurrency(quota.newArrGap)} New ARR
+            </div>
             <div className="flex flex-col gap-1">
               <FunnelStep label="Dials" value={funnel.totalNeeded.dials} rate={`${(funnel.benchmarks.dialsToConnect * 100).toFixed(0)}%`} />
               <FunnelArrow />
@@ -138,7 +151,6 @@ export function PClubMathCard() {
               <FunnelStep label="Deals Won" value={funnel.totalNeeded.deals} rate={`@ ${formatCurrency(funnel.benchmarks.avgDealSize)} avg`} highlight />
             </div>
 
-            {/* Quota breakdown */}
             <div className="grid grid-cols-2 gap-3 pt-2">
               <div className="p-2 rounded-lg bg-muted/30">
                 <div className="text-xs text-muted-foreground">New Logo</div>
