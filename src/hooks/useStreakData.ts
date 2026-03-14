@@ -133,6 +133,7 @@ export function useHolidays() {
 }
 
 export function usePtoDays() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['pto-days'],
     queryFn: async () => {
@@ -149,6 +150,7 @@ export function usePtoDays() {
         createdAt: p.created_at,
       })) as PtoDay[];
     },
+    enabled: !!user,
   });
 }
 
