@@ -5,6 +5,7 @@ import { Calendar, ChevronDown } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { DailyScorecardModal, BackfillCards } from '@/components/journal';
 import { WeeklyRealignmentModal } from '@/components/weekly/WeeklyRealignmentModal';
+import { WeeklyReviewBanner } from '@/components/dashboard/WeeklyReviewBanner';
 import { useCurrentWeekReview } from '@/hooks/useWeeklyReview';
 import { useStore } from '@/store/useStore';
 import { 
@@ -58,6 +59,7 @@ export default function Dashboard() {
   console.log('[Dashboard] render start');
   const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
   const [showCommissionDetail, setShowCommissionDetail] = useState(false);
+  const [showWeeklyReview, setShowWeeklyReview] = useState(false);
   const [snapshotsOpen, setSnapshotsOpen] = useState(false);
   const { widgets, toggleWidget, moveWidget, resetWidgets } = useDashboardWidgets();
   const { data: currentWeekReview, isLoading: weeklyReviewLoading } = useCurrentWeekReview();
@@ -316,6 +318,13 @@ export default function Dashboard() {
           />
         </div>
         
+        {/* Weekly Review Banner — non-blocking prompt */}
+        {!weeklyReviewLoading && !currentWeekReview?.completed && (
+          <WidgetErrorBoundary widgetId="weekly-review-banner">
+            <WeeklyReviewBanner onOpen={() => setShowWeeklyReview(true)} />
+          </WidgetErrorBoundary>
+        )}
+        
         <WidgetErrorBoundary widgetId="backfill-cards">
           <BackfillCards />
         </WidgetErrorBoundary>
@@ -360,14 +369,13 @@ export default function Dashboard() {
         onOpenChange={setShowDailyCheckIn}
       />
       
-      {!weeklyReviewLoading && !currentWeekReview?.completed && (
-        <WidgetErrorBoundary widgetId="weekly-realignment">
-          <WeeklyRealignmentModal
-            open={true}
-            onComplete={() => {/* query invalidation in hook handles re-render */}}
-          />
-        </WidgetErrorBoundary>
-      )}
+      <WidgetErrorBoundary widgetId="weekly-realignment">
+        <WeeklyRealignmentModal
+          open={showWeeklyReview}
+          onOpenChange={setShowWeeklyReview}
+          onComplete={() => setShowWeeklyReview(false)}
+        />
+      </WidgetErrorBoundary>
     </Layout>
   );
 }
