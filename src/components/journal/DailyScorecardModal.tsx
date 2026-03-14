@@ -552,6 +552,7 @@ function useJournalNudge() {
 }
 
 function useWeeklyInsights() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['weekly-patterns'],
     queryFn: async () => {
@@ -559,6 +560,7 @@ function useWeeklyInsights() {
       if (error) throw error;
       return data as { insights: string[] } | null;
     },
+    enabled: !!user,
     staleTime: 30 * 60 * 1000,
   });
 }
