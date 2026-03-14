@@ -52,6 +52,7 @@ import {
   CalendarIntelligence,
   DailyTimeBlocks,
 } from '@/components/dashboard';
+import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 
 export default function Dashboard() {
   const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
