@@ -48,20 +48,38 @@ export function UnifiedPipeline() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<WorkstreamFilter>('all');
 
+  // Identify renewal vs new-logo opps
+  const renewalOppIds = useMemo(() => {
+    const ids = new Set<string>();
+    renewals.map(r => r.linkedOpportunityId).filter(Boolean).forEach(id => ids.add(id!));
+    opportunities.filter(o => o.dealType === 'renewal').forEach(o => ids.add(o.id));
+    return ids;
+  }, [renewals, opportunities]);
+
   // Active pipeline opps
   const activeOpps = useMemo(() => {
     let opps = opportunities.filter(o => o.status === 'active' || o.status === 'stalled');
     
     if (filter === 'new-logo') {
-      const renewalOppIds = new Set(renewals.map(r => r.linkedOpportunityId).filter(Boolean));
-      opps = opps.filter(o => !renewalOppIds.has(o.id) && o.dealType !== 'renewal');
+      opps = opps.filter(o => !renewalOppIds.has(o.id));
     } else if (filter === 'renewal') {
-      const renewalOppIds = new Set(renewals.map(r => r.linkedOpportunityId).filter(Boolean));
-      opps = opps.filter(o => renewalOppIds.has(o.id) || o.dealType === 'renewal');
+      opps = opps.filter(o => renewalOppIds.has(o.id));
     }
     
     return opps;
-  }, [opportunities, renewals, filter]);
+  }, [opportunities, renewalOppIds, filter]);
+
+  // Calculate pipeline ARR — for renewal opps, only count new/expansion ARR
+  const getPipelineArr = (opp: typeof opportunities[0]) => {
+    if (!renewalOppIds.has(opp.id)) return opp.arr || 0;
+    // Renewal opp: only expansion (new ARR above prior contract) counts
+    const priorArr = opp.priorContractArr || 0;
+    const renewalArr = opp.renewalArr || opp.arr || 0;
+    const expansion = Math.max(0, renewalArr - priorArr);
+    // If no expansion forecasted, assume 4% of current spend
+    if (expansion === 0 && priorArr > 0) return priorArr * 0.04;
+    return expansion;
+  };
 
   // Group by stage
   const stageGroups = useMemo(() => {
