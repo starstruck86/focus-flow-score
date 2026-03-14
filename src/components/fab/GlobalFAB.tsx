@@ -390,6 +390,11 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
         onOpenChange={setShowScreenshots}
       />
       
+      <ScreenshotImportModal
+        open={showScreenshotImport}
+        onOpenChange={setShowScreenshotImport}
+      />
+      
       <TranscriptViewer
         open={showTranscriptViewer}
         onOpenChange={setShowTranscriptViewer}
