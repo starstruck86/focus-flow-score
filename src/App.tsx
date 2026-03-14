@@ -10,6 +10,7 @@ import { CopilotProvider } from "@/contexts/CopilotContext";
 import { DataSyncProvider } from "@/components/DataSyncProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { JournalPromptManager } from "@/components/journal";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import Dashboard from "./pages/Dashboard";
 import WeeklyOutreach from "./pages/WeeklyOutreach";
 import Renewals from "./pages/Renewals";
@@ -21,7 +22,20 @@ import Settings from "./pages/Settings";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 2,
+      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+    },
+    mutations: {
+      retry: 1,
+      retryDelay: 1000,
+    },
+  },
+});
 
 const ProtectedPage = ({ children }: { children: React.ReactNode }) => (
   <ProtectedRoute>
@@ -39,6 +53,7 @@ const App = () => (
             <DataSyncProvider>
               <Toaster />
               <Sonner />
+              <OfflineBanner />
               <BrowserRouter>
                 <Routes>
                   <Route path="/auth" element={<Auth />} />

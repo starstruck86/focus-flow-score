@@ -247,7 +247,7 @@ function storeRenewalToDb(r: Renewal, userId: string): any {
 
 let _isHydrating = false;
 
-export function useDataSync() {
+export function useDataSync(onHydrated?: (v: boolean) => void) {
   const { user } = useAuth();
   const userId = user?.id;
   const hasHydrated = useRef(false);
@@ -351,6 +351,7 @@ export function useDataSync() {
           renewals: currentState.renewals,
         };
         hasHydrated.current = true;
+        onHydrated?.(true);
       } catch (err) {
         console.error('[DataSync] Hydration error:', err);
       } finally {
@@ -375,6 +376,13 @@ export function useDataSync() {
         writeTimers.current[key] = setTimeout(async () => {
           try { await fn(); } catch (err) {
             console.error(`[DataSync] Write-back error for ${key}:`, err);
+            // Import toast dynamically to avoid circular deps
+            const { toast } = await import('@/hooks/use-toast');
+            toast({
+              title: 'Sync failed',
+              description: `Your ${key} changes couldn't save. They're preserved locally and will retry.`,
+              variant: 'destructive',
+            });
           }
         }, 1500);
       };

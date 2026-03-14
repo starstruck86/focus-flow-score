@@ -881,6 +881,7 @@ export const useStore = create<QuotaCompassStore>()(
     }),
     {
       name: 'quota-compass-storage',
+      version: 1,
       partialize: (state) => ({
         days: state.days,
         accounts: state.accounts,
@@ -892,6 +893,26 @@ export const useStore = create<QuotaCompassStore>()(
         opportunities: state.opportunities,
         quotaConfig: state.quotaConfig,
       }),
+      storage: {
+        getItem: (name) => {
+          try {
+            const raw = localStorage.getItem(name);
+            return raw ? JSON.parse(raw) : null;
+          } catch (err) {
+            console.error('[Store] Corrupt localStorage, resetting:', err);
+            localStorage.removeItem(name);
+            return null;
+          }
+        },
+        setItem: (name, value) => {
+          try {
+            localStorage.setItem(name, JSON.stringify(value));
+          } catch (err) {
+            console.error('[Store] localStorage write failed (quota?):', err);
+          }
+        },
+        removeItem: (name) => localStorage.removeItem(name),
+      },
     }
   )
 );
