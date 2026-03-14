@@ -13,7 +13,7 @@ import {
   ArrowUpRight,
 } from 'lucide-react';
 import type { Opportunity, OpportunityStage, DealType } from '@/types';
-import { format, differenceInDays, parseISO } from 'date-fns';
+import { format, differenceInDays, parseISO, isValid } from 'date-fns';
 
 const STAGE_ORDER: OpportunityStage[] = ['Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate'];
 
@@ -163,11 +163,14 @@ export function UnifiedPipeline() {
               {opps.slice(0, 2).map(o => (
                 <div key={o.id} className="mt-1.5 text-[10px] truncate opacity-80">
                   {o.name}
-                  {o.closeDate && (
-                    <span className="ml-1 opacity-60">
-                      {differenceInDays(parseISO(o.closeDate), new Date())}d
-                    </span>
-                  )}
+                  {o.closeDate && (() => {
+                    const closeDate = parseISO(o.closeDate);
+                    return isValid(closeDate) ? (
+                      <span className="ml-1 opacity-60">
+                        {differenceInDays(closeDate, new Date())}d
+                      </span>
+                    ) : null;
+                  })()}
                 </div>
               ))}
               {opps.length > 2 && (

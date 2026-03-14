@@ -45,7 +45,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRecordCheckIn } from '@/hooks/useStreakData';
-import { format, subDays, eachDayOfInterval, isToday, isSameDay, startOfDay, endOfDay, differenceInCalendarDays, startOfWeek, endOfWeek } from 'date-fns';
+import { format, subDays, eachDayOfInterval, isToday, isSameDay, startOfDay, endOfDay, differenceInCalendarDays, startOfWeek, endOfWeek, isValid } from 'date-fns';
 import { toast } from 'sonner';
 import confetti from 'canvas-confetti';
 
@@ -767,7 +767,10 @@ function MorningView({
               </p>
               {lastEntry && (
                 <p className="text-xs text-muted-foreground">
-                  Last logged: {format(new Date(lastEntry.date + 'T12:00:00'), 'EEEE, MMM d')} — {lastEntry.goal_met ? '✓ Goal met' : '✗ Goal missed'} ({lastEntry.daily_score || 0}/6)
+                  Last logged: {(() => {
+                    const lastLoggedDate = new Date(lastEntry.date + 'T12:00:00');
+                    return isValid(lastLoggedDate) ? format(lastLoggedDate, 'EEEE, MMM d') : 'recently';
+                  })()} — {lastEntry.goal_met ? '✓ Goal met' : '✗ Goal missed'} ({lastEntry.daily_score || 0}/6)
                 </p>
               )}
               {carryoverCommitment && (
@@ -904,8 +907,14 @@ function MorningView({
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium truncate">{event.title}</p>
                   <p className="text-[10px] text-muted-foreground">
-                    {format(new Date(event.start_time), 'h:mm a')}
-                    {event.end_time && ` – ${format(new Date(event.end_time), 'h:mm a')}`}
+                    {(() => {
+                      const start = new Date(event.start_time);
+                      return isValid(start) ? format(start, 'h:mm a') : 'Time TBD';
+                    })()}
+                    {event.end_time ? (() => {
+                      const end = new Date(event.end_time);
+                      return isValid(end) ? ` – ${format(end, 'h:mm a')}` : '';
+                    })() : ''}
                     {event.location && (
                       <span className="inline-flex items-center gap-0.5 ml-1.5">
                         <MapPin className="h-2.5 w-2.5" />

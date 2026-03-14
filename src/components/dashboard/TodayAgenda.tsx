@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { Calendar, Clock, MapPin, CheckSquare, Building2, Video, AlertTriangle, Zap } from 'lucide-react';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { useStore } from '@/store/useStore';
-import { format, parseISO, differenceInMinutes } from 'date-fns';
+import { format, parseISO, differenceInMinutes, isValid } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -44,7 +44,11 @@ export function TodayAgenda() {
     if (events) {
       events.forEach(event => {
         const utcDate = parseISO(event.start_time);
+        if (!isValid(utcDate)) return;
+
         const estDate = toZonedTime(utcDate, TIMEZONE);
+        if (!isValid(estDate)) return;
+
         const eventDateStr = format(estDate, 'yyyy-MM-dd');
         
         if (eventDateStr !== todayStr) return;

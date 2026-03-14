@@ -5,7 +5,7 @@ import { useStore } from '@/store/useStore';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Calendar, Users, Clock, TrendingUp, AlertTriangle, Zap } from 'lucide-react';
-import { parseISO, format, getHours, differenceInMinutes, startOfWeek, endOfWeek, isWithinInterval } from 'date-fns';
+import { parseISO, format, getHours, differenceInMinutes, startOfWeek, endOfWeek, isWithinInterval, isValid } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 interface CalendarInsight {
@@ -30,7 +30,7 @@ export function CalendarIntelligence() {
     // Filter to this week's events
     const thisWeekEvents = events.filter(e => {
       const start = parseISO(e.start_time);
-      return isWithinInterval(start, { start: weekStart, end: weekEnd });
+      return isValid(start) && isWithinInterval(start, { start: weekStart, end: weekEnd });
     });
 
     const nonAllDay = thisWeekEvents.filter(e => !e.all_day && e.end_time);
@@ -38,7 +38,12 @@ export function CalendarIntelligence() {
     // Total meeting minutes
     const totalMeetingMinutes = nonAllDay.reduce((sum, e) => {
       if (!e.end_time) return sum;
-      return sum + Math.max(0, differenceInMinutes(parseISO(e.end_time), parseISO(e.start_time)));
+
+      const end = parseISO(e.end_time);
+      const start = parseISO(e.start_time);
+      if (!isValid(start) || !isValid(end)) return sum;
+
+      return sum + Math.max(0, differenceInMinutes(end, start));
     }, 0);
 
     const meetingHours = Math.round(totalMeetingMinutes / 60 * 10) / 10;
@@ -62,7 +67,10 @@ export function CalendarIntelligence() {
     let morningMeetings = 0;
     let afternoonMeetings = 0;
     nonAllDay.forEach(e => {
-      const hour = getHours(parseISO(e.start_time));
+      const start = parseISO(e.start_time);
+      if (!isValid(start)) return;
+
+      const hour = getHours(start);
       if (hour < 12) morningMeetings++;
       else afternoonMeetings++;
     });

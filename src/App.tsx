@@ -23,6 +23,12 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+const ProtectedPage = ({ children }: { children: React.ReactNode }) => (
+  <ProtectedRoute>
+    <JournalPromptManager>{children}</JournalPromptManager>
+  </ProtectedRoute>
+);
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
@@ -34,20 +40,18 @@ const App = () => (
               <Toaster />
               <Sonner />
               <BrowserRouter>
-                <JournalPromptManager>
-                  <Routes>
-                    <Route path="/auth" element={<Auth />} />
-                    <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                    <Route path="/outreach" element={<ProtectedRoute><WeeklyOutreach /></ProtectedRoute>} />
-                    <Route path="/renewals" element={<ProtectedRoute><Renewals /></ProtectedRoute>} />
-                    <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
-                    <Route path="/recurring" element={<ProtectedRoute><RecurringTasks /></ProtectedRoute>} />
-                    <Route path="/trends" element={<ProtectedRoute><Trends /></ProtectedRoute>} />
-                    <Route path="/quota" element={<ProtectedRoute><Quota /></ProtectedRoute>} />
-                    <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-                    <Route path="*" element={<NotFound />} />
-                  </Routes>
-                </JournalPromptManager>
+                <Routes>
+                  <Route path="/auth" element={<Auth />} />
+                  <Route path="/" element={<ProtectedPage><Dashboard /></ProtectedPage>} />
+                  <Route path="/outreach" element={<ProtectedPage><WeeklyOutreach /></ProtectedPage>} />
+                  <Route path="/renewals" element={<ProtectedPage><Renewals /></ProtectedPage>} />
+                  <Route path="/tasks" element={<ProtectedPage><Tasks /></ProtectedPage>} />
+                  <Route path="/recurring" element={<ProtectedPage><RecurringTasks /></ProtectedPage>} />
+                  <Route path="/trends" element={<ProtectedPage><Trends /></ProtectedPage>} />
+                  <Route path="/quota" element={<ProtectedPage><Quota /></ProtectedPage>} />
+                  <Route path="/settings" element={<ProtectedPage><Settings /></ProtectedPage>} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
               </BrowserRouter>
             </DataSyncProvider>
             </CopilotProvider>

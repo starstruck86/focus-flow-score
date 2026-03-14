@@ -7,7 +7,7 @@ import { useStore } from '@/store/useStore';
 import { useRecentTranscriptsForMeetingPrep } from '@/hooks/useCallTranscripts';
 import { useResourceLinksForAccount } from '@/hooks/useResourceLinks';
 import { useCopilot } from '@/contexts/CopilotContext';
-import { format, parseISO, differenceInMinutes } from 'date-fns';
+import { format, parseISO, differenceInMinutes, isValid } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -57,7 +57,11 @@ export function MeetingPrepPrompt() {
     events.forEach(event => {
       if (event.all_day) return;
       const utcDate = parseISO(event.start_time);
+      if (!isValid(utcDate)) return;
+
       const estDate = toZonedTime(utcDate, TIMEZONE);
+      if (!isValid(estDate)) return;
+
       const minutesUntil = differenceInMinutes(estDate, now);
 
       if (minutesUntil < -15 || minutesUntil > 240) return;

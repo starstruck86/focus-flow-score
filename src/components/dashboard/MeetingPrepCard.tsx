@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { AlertTriangle, Building2, Clock, Plus, CheckCircle2 } from 'lucide-react';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { useStore } from '@/store/useStore';
-import { format, parseISO, differenceInMinutes } from 'date-fns';
+import { format, parseISO, differenceInMinutes, isValid } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -39,7 +39,11 @@ export function MeetingPrepCard() {
       if (event.all_day) return;
       
       const utcDate = parseISO(event.start_time);
+      if (!isValid(utcDate)) return;
+
       const estDate = toZonedTime(utcDate, TIMEZONE);
+      if (!isValid(estDate)) return;
+
       const eventDateStr = format(estDate, 'yyyy-MM-dd');
       
       // Only today + tomorrow

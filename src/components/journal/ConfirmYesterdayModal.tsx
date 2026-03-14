@@ -1,4 +1,4 @@
-import { format } from 'date-fns';
+import { format, isValid } from 'date-fns';
 import { useYesterdayJournalEntry, useConfirmJournalEntry } from '@/hooks/useDailyJournal';
 import {
   Dialog,
@@ -65,7 +65,8 @@ export function ConfirmYesterdayModal({
     return null;
   }
   
-  const dateDisplay = format(new Date(entry.date + 'T12:00:00'), 'EEEE, MMMM d');
+  const parsedDate = new Date(entry.date + 'T12:00:00');
+  const dateDisplay = isValid(parsedDate) ? format(parsedDate, 'EEEE, MMMM d') : 'yesterday';
   const strainBand = (entry.salesStrain || 0) <= 6 ? 'low' : (entry.salesStrain || 0) <= 11 ? 'moderate' : 'high';
   const recoveryBand = (entry.salesRecovery || 0) >= 67 ? 'green' : (entry.salesRecovery || 0) >= 34 ? 'yellow' : 'red';
   
