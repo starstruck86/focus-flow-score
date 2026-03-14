@@ -479,6 +479,57 @@ export type Database = {
           },
         ]
       }
+      conversion_benchmarks: {
+        Row: {
+          avg_new_logo_arr: number
+          avg_renewal_arr: number
+          avg_sales_cycle_days: number
+          confidence_level: string
+          connect_to_meeting_rate: number
+          created_at: string
+          data_points: number
+          dials_to_connect_rate: number
+          id: string
+          meeting_to_opp_rate: number
+          opp_to_close_rate: number
+          source: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avg_new_logo_arr?: number
+          avg_renewal_arr?: number
+          avg_sales_cycle_days?: number
+          confidence_level?: string
+          connect_to_meeting_rate?: number
+          created_at?: string
+          data_points?: number
+          dials_to_connect_rate?: number
+          id?: string
+          meeting_to_opp_rate?: number
+          opp_to_close_rate?: number
+          source?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avg_new_logo_arr?: number
+          avg_renewal_arr?: number
+          avg_sales_cycle_days?: number
+          confidence_level?: string
+          connect_to_meeting_rate?: number
+          created_at?: string
+          data_points?: number
+          dials_to_connect_rate?: number
+          id?: string
+          meeting_to_opp_rate?: number
+          opp_to_close_rate?: number
+          source?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       daily_digest_items: {
         Row: {
           account_id: string | null
@@ -1040,6 +1091,45 @@ export type Database = {
           },
         ]
       }
+      pipeline_hygiene_scans: {
+        Row: {
+          created_at: string
+          critical_issues: number
+          health_score: number
+          id: string
+          issues: Json
+          scan_date: string
+          summary: Json
+          total_issues: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          critical_issues?: number
+          health_score?: number
+          id?: string
+          issues?: Json
+          scan_date?: string
+          summary?: Json
+          total_issues?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          critical_issues?: number
+          health_score?: number
+          id?: string
+          issues?: Json
+          scan_date?: string
+          summary?: Json
+          total_issues?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       power_hour_sessions: {
         Row: {
           connects: number
@@ -1527,6 +1617,48 @@ export type Database = {
           total_goals_met?: number
           updated_at?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      weekly_battle_plans: {
+        Row: {
+          created_at: string
+          days_remaining: number | null
+          id: string
+          moves: Json
+          moves_completed: Json
+          quota_gap: number | null
+          strategy_summary: string | null
+          updated_at: string
+          user_id: string
+          week_end: string
+          week_start: string
+        }
+        Insert: {
+          created_at?: string
+          days_remaining?: number | null
+          id?: string
+          moves?: Json
+          moves_completed?: Json
+          quota_gap?: number | null
+          strategy_summary?: string | null
+          updated_at?: string
+          user_id: string
+          week_end: string
+          week_start: string
+        }
+        Update: {
+          created_at?: string
+          days_remaining?: number | null
+          id?: string
+          moves?: Json
+          moves_completed?: Json
+          quota_gap?: number | null
+          strategy_summary?: string | null
+          updated_at?: string
+          user_id?: string
+          week_end?: string
+          week_start?: string
         }
         Relationships: []
       }

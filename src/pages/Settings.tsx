@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ConversionBenchmarksSettings } from '@/components/settings/ConversionBenchmarksSettings';
 import { NotificationSettings } from '@/components/NotificationSettings';
 import { Layout } from '@/components/Layout';
 import { 
@@ -376,8 +377,9 @@ export default function Settings() {
         </div>
 
         <Tabs defaultValue="schedule" className="space-y-6">
-          <TabsList>
+          <TabsList className="flex-wrap">
             <TabsTrigger value="schedule">Work Schedule</TabsTrigger>
+            <TabsTrigger value="coaching">Coaching</TabsTrigger>
             <TabsTrigger value="integrations">Integrations</TabsTrigger>
             <TabsTrigger value="appearance">Appearance</TabsTrigger>
             <TabsTrigger value="notifications">Notifications</TabsTrigger>
@@ -800,6 +802,11 @@ export default function Settings() {
                 </div>
               )}
             </div>
+          </TabsContent>
+          
+          {/* Coaching Tab */}
+          <TabsContent value="coaching" className="space-y-4">
+            <ConversionBenchmarksSettings />
           </TabsContent>
           
           {/* Integrations Tab */}
