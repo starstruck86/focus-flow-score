@@ -111,6 +111,7 @@ export function useWorkScheduleConfig() {
 }
 
 export function useHolidays() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['holidays'],
     queryFn: async () => {
@@ -127,6 +128,7 @@ export function useHolidays() {
         createdAt: h.created_at,
       })) as Holiday[];
     },
+    enabled: !!user,
   });
 }
 
