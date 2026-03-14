@@ -68,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const initializedUserRef = useRef<string | null>(null);
+  const hasBootstrappedRef = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -80,21 +81,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }, 0);
     };
 
-    // Set up auth listener BEFORE checking session
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
-      if (!isMounted || event === 'INITIAL_SESSION') return;
-
+    const applySessionState = (nextSession: Session | null) => {
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
       setLoading(false);
 
-      if (event === 'SIGNED_IN' && nextSession?.user) {
+      if (nextSession?.user) {
         initializeIfNeeded(nextSession.user.id);
-      }
-
-      if (event === 'SIGNED_OUT') {
+      } else {
         initializedUserRef.current = null;
       }
+    };
+
+    // Set up auth listener BEFORE checking session
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (!isMounted || event === 'INITIAL_SESSION') return;
+
+      // Prevent early auth events from racing ahead of session restoration.
+      if (!hasBootstrappedRef.current) return;
+
+      applySessionState(nextSession);
     });
 
     const bootstrapAuth = async () => {
@@ -102,30 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data: { session: initialSession } } = await supabase.auth.getSession();
         if (!isMounted) return;
 
-        if (!initialSession) {
-          initializedUserRef.current = null;
-          setSession(null);
-          setUser(null);
-          setLoading(false);
-          return;
-        }
-
-        const { data: userResult, error: userError } = await supabase.auth.getUser(initialSession.access_token);
-        if (!isMounted) return;
-
-        if (userError || !userResult.user) {
-          initializedUserRef.current = null;
-          await supabase.auth.signOut();
-          setSession(null);
-          setUser(null);
-          setLoading(false);
-          return;
-        }
-
-        setSession(initialSession);
-        setUser(userResult.user);
-        setLoading(false);
-        initializeIfNeeded(userResult.user.id);
+        applySessionState(initialSession ?? null);
       } catch (error) {
         console.error('Auth bootstrap failed:', error);
         if (!isMounted) return;
@@ -133,6 +116,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(null);
         setUser(null);
         setLoading(false);
+      } finally {
+        hasBootstrappedRef.current = true;
       }
     };
 
