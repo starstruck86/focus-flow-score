@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, ChevronDown } from 'lucide-react';
 import { Layout } from '@/components/Layout';
-import { DailyScorecardModal, BackfillCards } from '@/components/journal';
+import { DailyScorecardModal, BackfillCards, JournalDashboardCard } from '@/components/journal';
 import { WeeklyRealignmentModal } from '@/components/weekly/WeeklyRealignmentModal';
 import { WeeklyReviewBanner } from '@/components/dashboard/WeeklyReviewBanner';
 import { useCurrentWeekReview } from '@/hooks/useWeeklyReview';
@@ -340,8 +340,8 @@ export default function Dashboard() {
           </WidgetErrorBoundary>
         )}
         
-        <WidgetErrorBoundary widgetId="backfill-cards">
-          <BackfillCards />
+        <WidgetErrorBoundary widgetId="journal-dashboard-card">
+          <JournalDashboardCard />
         </WidgetErrorBoundary>
         
         <WidgetErrorBoundary widgetId="meeting-prep-prompt">

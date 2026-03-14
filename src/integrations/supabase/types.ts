@@ -598,6 +598,7 @@ export type Database = {
       daily_journal_entries: {
         Row: {
           account_deep_work_minutes: number
+          accountability_habits: Json | null
           accounts_researched: number
           admin_heavy_day: boolean
           automated_emails: number
@@ -663,6 +664,7 @@ export type Database = {
         }
         Insert: {
           account_deep_work_minutes?: number
+          accountability_habits?: Json | null
           accounts_researched?: number
           admin_heavy_day?: boolean
           automated_emails?: number
@@ -728,6 +730,7 @@ export type Database = {
         }
         Update: {
           account_deep_work_minutes?: number
+          accountability_habits?: Json | null
           accounts_researched?: number
           admin_heavy_day?: boolean
           automated_emails?: number
