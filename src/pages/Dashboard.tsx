@@ -340,8 +340,8 @@ export default function Dashboard() {
           </WidgetErrorBoundary>
         )}
         
-        <WidgetErrorBoundary widgetId="backfill-cards">
-          <BackfillCards />
+        <WidgetErrorBoundary widgetId="journal-dashboard-card">
+          <JournalDashboardCard />
         </WidgetErrorBoundary>
         
         <WidgetErrorBoundary widgetId="meeting-prep-prompt">

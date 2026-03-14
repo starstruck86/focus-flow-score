@@ -3,3 +3,6 @@ export { BackfillCards } from './BackfillCards';
 export { ConfirmYesterdayModal } from './ConfirmYesterdayModal';
 export { JournalPromptManager, useJournalModal } from './JournalPromptManager';
 export { QuickLogModal } from './QuickLogModal';
+export { WeekStrip } from './WeekStrip';
+export { AccountabilityToggles } from './AccountabilityToggles';
+export { JournalDashboardCard } from './JournalDashboardCard';
