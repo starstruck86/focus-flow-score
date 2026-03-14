@@ -295,6 +295,7 @@ export default function Renewals() {
   const [expandedRenewalId, setExpandedRenewalId] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('renewals');
+  const [renewalStageFilter, setRenewalStageFilter] = useState<OpportunityStage | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Deep-link highlight from Work Queue via LinkedRecordContext
