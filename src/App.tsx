@@ -11,7 +11,6 @@ import { DataSyncProvider } from "@/components/DataSyncProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { JournalPromptManager } from "@/components/journal";
 import { OfflineBanner } from "@/components/OfflineBanner";
-import { JournalPromptManager } from "@/components/journal";
 import Dashboard from "./pages/Dashboard";
 import WeeklyOutreach from "./pages/WeeklyOutreach";
 import Renewals from "./pages/Renewals";
