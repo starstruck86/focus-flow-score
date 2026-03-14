@@ -58,6 +58,7 @@ export default function Dashboard() {
   console.log('[Dashboard] render start');
   const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
   const [showCommissionDetail, setShowCommissionDetail] = useState(false);
+  const [showWeeklyReview, setShowWeeklyReview] = useState(false);
   const [snapshotsOpen, setSnapshotsOpen] = useState(false);
   const { widgets, toggleWidget, moveWidget, resetWidgets } = useDashboardWidgets();
   const { data: currentWeekReview, isLoading: weeklyReviewLoading } = useCurrentWeekReview();
