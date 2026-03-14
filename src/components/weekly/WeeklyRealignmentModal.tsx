@@ -49,7 +49,7 @@ const RISK_COLORS: Record<string, string> = {
   high: 'text-status-red',
 };
 
-export function WeeklyRealignmentModal({ open, onComplete }: Props) {
+export function WeeklyRealignmentModal({ open, onComplete, onOpenChange }: Props) {
   const { data: metrics, isLoading: metricsLoading } = useWeeklyMetricsAggregation();
   const { data: pipeline, isLoading: pipelineLoading } = usePipelineForReview();
   const { data: renewals, isLoading: renewalsLoading } = useRenewalsForReview();
