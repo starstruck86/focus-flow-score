@@ -155,6 +155,7 @@ export function usePtoDays() {
 }
 
 export function useWorkdayOverrides() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['workday-overrides'],
     queryFn: async () => {
@@ -172,6 +173,7 @@ export function useWorkdayOverrides() {
         createdAt: o.created_at,
       })) as WorkdayOverride[];
     },
+    enabled: !!user,
   });
 }
 
