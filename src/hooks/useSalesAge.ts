@@ -407,5 +407,6 @@ export function usePerformanceRollups() {
       
       return { wtd, mtd, wtdDays: wtdEntries.length, mtdDays: entries.length };
     },
+    enabled: !!user,
   });
 }
