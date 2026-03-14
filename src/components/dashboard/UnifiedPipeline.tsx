@@ -157,11 +157,25 @@ export function UnifiedPipeline() {
         </div>
       )}
 
+      {/* Pipeline breakdown */}
+      {filter === 'all' && (
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <div className="rounded-lg border border-border p-2.5 flex items-center justify-between">
+            <span className="text-[10px] font-medium text-muted-foreground">New Logo</span>
+            <span className="text-sm font-bold font-mono">{formatCurrency(newLogoArr)}</span>
+          </div>
+          <div className="rounded-lg border border-border p-2.5 flex items-center justify-between">
+            <span className="text-[10px] font-medium text-muted-foreground">Renewal Expansion</span>
+            <span className="text-sm font-bold font-mono">{formatCurrency(renewalExpansionArr)}</span>
+          </div>
+        </div>
+      )}
+
       {/* Stage summary bars */}
       <div className="grid grid-cols-5 gap-2">
         {STAGE_ORDER.map(stage => {
           const opps = stageGroups[stage] || [];
-          const stageArr = opps.reduce((sum, o) => sum + (o.arr || 0), 0);
+          const stageArr = opps.reduce((sum, o) => sum + getPipelineArr(o), 0);
           
           return (
             <button
