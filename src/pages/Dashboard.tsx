@@ -335,10 +335,12 @@ export default function Dashboard() {
       />
       
       {!weeklyReviewLoading && !currentWeekReview?.completed && (
-        <WeeklyRealignmentModal
-          open={true}
-          onComplete={() => {/* query invalidation in hook handles re-render */}}
-        />
+        <WidgetErrorBoundary widgetId="weekly-realignment">
+          <WeeklyRealignmentModal
+            open={true}
+            onComplete={() => {/* query invalidation in hook handles re-render */}}
+          />
+        </WidgetErrorBoundary>
       )}
     </Layout>
   );
