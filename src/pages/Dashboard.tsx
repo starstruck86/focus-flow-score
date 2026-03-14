@@ -55,6 +55,7 @@ import {
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 
 export default function Dashboard() {
+  console.log('[Dashboard] render start');
   const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
   const [showCommissionDetail, setShowCommissionDetail] = useState(false);
   const [snapshotsOpen, setSnapshotsOpen] = useState(false);
