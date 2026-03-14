@@ -216,14 +216,18 @@ function RenewalsTable({ renewals }: { renewals: Renewal[] }) {
   // Filter to next 45 days
   const filtered = renewals
     .filter(r => {
-      const renewalDate = parseISO(r.renewalDue);
-      return renewalDate <= fortyFiveDaysFromNow && renewalDate >= today;
+      const renewalDate = parseIsoDateSafe(r.renewalDue);
+      return renewalDate ? renewalDate <= fortyFiveDaysFromNow && renewalDate >= today : false;
     })
     .sort((a, b) => {
       // Sort by renewal date, then ARR
-      if (a.renewalDue !== b.renewalDue) {
-        return a.renewalDue.localeCompare(b.renewalDue);
+      const aRenewal = parseIsoDateSafe(a.renewalDue);
+      const bRenewal = parseIsoDateSafe(b.renewalDue);
+
+      if (aRenewal && bRenewal && aRenewal.getTime() !== bRenewal.getTime()) {
+        return aRenewal.getTime() - bRenewal.getTime();
       }
+
       return b.arr - a.arr;
     });
 
