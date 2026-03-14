@@ -119,6 +119,9 @@ export function useRunHygieneScan() {
       qc.invalidateQueries({ queryKey: ['pipeline-hygiene'] });
       toast.success('Pipeline scan complete');
     },
+    onError: (err: Error) => {
+      toast.error('Pipeline scan failed', { description: err.message });
+    },
   });
 }
 
