@@ -42,6 +42,7 @@ export function useEligibleWorkdays(startDate: Date, endDate: Date) {
 
 // Get week-to-date journal entries and calculate rollups
 export function useWeekToDateMetrics() {
+  const { user } = useAuth();
   const today = new Date();
   const weekStart = startOfWeek(today, { weekStartsOn: 1 }); // Monday start
   
