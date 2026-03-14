@@ -127,7 +127,9 @@ function OpportunitiesTable({ opportunities }: { opportunities: Opportunity[] })
         </TableHeader>
         <TableBody>
           {filtered.map(opp => {
-            const closeDate = parseISO(opp.closeDate!);
+            const closeDate = parseIsoDateSafe(opp.closeDate);
+            if (!closeDate) return null;
+
             const daysUntil = differenceInDays(closeDate, today);
             const closingSoon = daysUntil <= 14;
             const stalled = opp.status === 'stalled';
