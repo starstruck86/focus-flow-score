@@ -803,6 +803,11 @@ export default function Settings() {
             </div>
           </TabsContent>
           
+          {/* Coaching Tab */}
+          <TabsContent value="coaching" className="space-y-4">
+            <ConversionBenchmarksSettings />
+          </TabsContent>
+          
           {/* Integrations Tab */}
           <TabsContent value="integrations" className="space-y-4">
             <WhoopIntegration />
