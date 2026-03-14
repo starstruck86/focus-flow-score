@@ -25,7 +25,7 @@ const queryClient = new QueryClient();
 
 const ProtectedPage = ({ children }: { children: React.ReactNode }) => (
   <ProtectedRoute>
-    <JournalPromptManager>{children}</JournalPromptManager>
+    <JournalPromptManager>{children}
   </ProtectedRoute>
 );
 

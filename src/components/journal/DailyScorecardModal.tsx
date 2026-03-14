@@ -907,8 +907,14 @@ function MorningView({
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium truncate">{event.title}</p>
                   <p className="text-[10px] text-muted-foreground">
-                    {format(new Date(event.start_time), 'h:mm a')}
-                    {event.end_time && ` – ${format(new Date(event.end_time), 'h:mm a')}`}
+                    {(() => {
+                      const start = new Date(event.start_time);
+                      return isValid(start) ? format(start, 'h:mm a') : 'Time TBD';
+                    })()}
+                    {event.end_time ? (() => {
+                      const end = new Date(event.end_time);
+                      return isValid(end) ? ` – ${format(end, 'h:mm a')}` : '';
+                    })() : ''}
                     {event.location && (
                       <span className="inline-flex items-center gap-0.5 ml-1.5">
                         <MapPin className="h-2.5 w-2.5" />

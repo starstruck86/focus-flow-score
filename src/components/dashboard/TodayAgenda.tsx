@@ -44,7 +44,11 @@ export function TodayAgenda() {
     if (events) {
       events.forEach(event => {
         const utcDate = parseISO(event.start_time);
+        if (!isValid(utcDate)) return;
+
         const estDate = toZonedTime(utcDate, TIMEZONE);
+        if (!isValid(estDate)) return;
+
         const eventDateStr = format(estDate, 'yyyy-MM-dd');
         
         if (eventDateStr !== todayStr) return;

@@ -67,7 +67,10 @@ export function CalendarIntelligence() {
     let morningMeetings = 0;
     let afternoonMeetings = 0;
     nonAllDay.forEach(e => {
-      const hour = getHours(parseISO(e.start_time));
+      const start = parseISO(e.start_time);
+      if (!isValid(start)) return;
+
+      const hour = getHours(start);
       if (hour < 12) morningMeetings++;
       else afternoonMeetings++;
     });

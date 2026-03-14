@@ -163,11 +163,14 @@ export function UnifiedPipeline() {
               {opps.slice(0, 2).map(o => (
                 <div key={o.id} className="mt-1.5 text-[10px] truncate opacity-80">
                   {o.name}
-                  {o.closeDate && (
-                    <span className="ml-1 opacity-60">
-                      {differenceInDays(parseISO(o.closeDate), new Date())}d
-                    </span>
-                  )}
+                  {o.closeDate && (() => {
+                    const closeDate = parseISO(o.closeDate);
+                    return isValid(closeDate) ? (
+                      <span className="ml-1 opacity-60">
+                        {differenceInDays(closeDate, new Date())}d
+                      </span>
+                    ) : null;
+                  })()}
                 </div>
               ))}
               {opps.length > 2 && (

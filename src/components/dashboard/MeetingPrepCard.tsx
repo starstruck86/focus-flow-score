@@ -39,7 +39,11 @@ export function MeetingPrepCard() {
       if (event.all_day) return;
       
       const utcDate = parseISO(event.start_time);
+      if (!isValid(utcDate)) return;
+
       const estDate = toZonedTime(utcDate, TIMEZONE);
+      if (!isValid(estDate)) return;
+
       const eventDateStr = format(estDate, 'yyyy-MM-dd');
       
       // Only today + tomorrow
