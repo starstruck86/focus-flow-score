@@ -372,7 +372,9 @@ export default function Dashboard() {
       <WidgetErrorBoundary widgetId="weekly-realignment">
         <WeeklyRealignmentModal
           open={showWeeklyReview}
+          onOpenChange={setShowWeeklyReview}
           onComplete={() => setShowWeeklyReview(false)}
+        />
         />
       </WidgetErrorBoundary>
     </Layout>
