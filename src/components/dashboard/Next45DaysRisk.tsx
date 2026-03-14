@@ -257,7 +257,9 @@ function RenewalsTable({ renewals }: { renewals: Renewal[] }) {
         </TableHeader>
         <TableBody>
           {filtered.map(renewal => {
-            const renewalDate = parseISO(renewal.renewalDue);
+            const renewalDate = parseIsoDateSafe(renewal.renewalDue);
+            if (!renewalDate) return null;
+
             const daysUntil = differenceInDays(renewalDate, today);
             const closingSoon = daysUntil <= 14;
             const missingPlanhat = !renewal.planhatLink;
