@@ -375,7 +375,6 @@ export default function Dashboard() {
           onOpenChange={setShowWeeklyReview}
           onComplete={() => setShowWeeklyReview(false)}
         />
-        />
       </WidgetErrorBoundary>
     </Layout>
   );
