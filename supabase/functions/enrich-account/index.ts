@@ -616,7 +616,7 @@ Deno.serve(async (req) => {
       signalResult = await tryLovableAIOnly(accountName || '', formattedUrl);
     }
 
-    const companyIntel = await companyIntelPromise;
+    const [companyIntel, caseStudies] = await Promise.all([companyIntelPromise, caseStudyPromise]);
 
     // If ALL channels failed, return error with company intel if available
     if (!signalResult) {
@@ -625,7 +625,6 @@ Deno.serve(async (req) => {
         : null;
 
       if (fallbackSummary) {
-        // Return partial result with just company intel
         return new Response(JSON.stringify({
           success: true,
           partial: true,
@@ -633,10 +632,11 @@ Deno.serve(async (req) => {
           discoveredUrl: discoveredUrl || null,
           signals: { direct_ecommerce: false, email_sms_capture: false, loyalty_membership: false, category_complexity: false, mobile_app: false, marketing_platform_detected: null, crm_lifecycle_team_size: 0 },
           confidence: {},
-          evidence: { business_summary: companyIntel!.businessSummary, recent_news: companyIntel!.recentNews },
+          evidence: { business_summary: companyIntel!.businessSummary, recent_news: companyIntel!.recentNews, case_studies: caseStudies || '' },
           scores: { icp_fit_score: 0, timing_score: 0, priority_score: 0, lifecycle_tier: '4', high_probability_buyer: false, triggered_account: false, confidence_score: 0 },
           marTech: null, ecommerce: null,
           summary: fallbackSummary,
+          caseStudies: caseStudies || null,
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
@@ -672,6 +672,9 @@ Deno.serve(async (req) => {
       if (companyIntel.businessSummary) enrichedSummary += `\n\n**How they make money:**\n${companyIntel.businessSummary}`;
       if (companyIntel.recentNews) enrichedSummary += `\n\n**Recent news & hires:**\n${companyIntel.recentNews}`;
     }
+    if (caseStudies) {
+      enrichedSummary += `\n\n**MarTech Case Studies:**\n${caseStudies}`;
+    }
 
     // Write to DB
     if (accountId) {
@@ -697,6 +700,7 @@ Deno.serve(async (req) => {
           other_tech_detected: signals.other_tech_detected || '',
           business_summary: companyIntel?.businessSummary || '',
           recent_news: companyIntel?.recentNews || '',
+          case_studies: caseStudies || '',
           enrichment_source: source,
         };
 
