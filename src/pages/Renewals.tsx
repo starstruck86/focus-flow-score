@@ -234,6 +234,7 @@ export default function Renewals() {
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentView, setCurrentView] = useState('all');
+  const [csmFilter, setCsmFilter] = useState<string>('all');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showBulkImportDialog, setShowBulkImportDialog] = useState(false);
   const [importPreview, setImportPreview] = useState<Partial<Renewal>[]>([]);
