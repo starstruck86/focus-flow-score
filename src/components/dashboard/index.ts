@@ -19,3 +19,6 @@ export { MeetingPrepPrompt } from './MeetingPrepPrompt';
 export { AIAccountPrioritizer } from './AIAccountPrioritizer';
 export { CalendarIntelligence } from './CalendarIntelligence';
 export { DailyTimeBlocks } from './DailyTimeBlocks';
+export { PClubMathCard } from './PClubMathCard';
+export { PipelineHygieneCard } from './PipelineHygieneCard';
+export { WeeklyBattlePlanCard } from './WeeklyBattlePlanCard';

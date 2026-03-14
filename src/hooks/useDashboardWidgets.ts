@@ -11,8 +11,11 @@ const STORAGE_KEY = 'quota-compass-dashboard-widgets';
 
 const DEFAULT_WIDGETS: DashboardWidget[] = [
   { id: 'daily-time-blocks', label: 'Daily Game Plan', visible: true },
+  { id: 'pclub-math', label: 'P-Club Math', visible: true },
+  { id: 'weekly-battle-plan', label: 'Weekly Battle Plan', visible: true },
   { id: 'commission-pacing', label: 'Commission Pacing', visible: true },
   { id: 'progress-tabs', label: 'Today / Week-to-Date', visible: true },
+  { id: 'pipeline-hygiene', label: 'Pipeline Health', visible: true },
   { id: 'ai-prioritizer', label: 'AI Focus Recommender', visible: true },
   { id: 'smart-work-queue', label: 'Smart Work Queue', visible: true },
   { id: 'today-agenda', label: "Today's Agenda", visible: true },
