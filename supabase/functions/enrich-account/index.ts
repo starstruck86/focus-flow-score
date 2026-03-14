@@ -586,9 +586,11 @@ Deno.serve(async (req) => {
 
     console.log('Enriching:', formattedUrl, 'for:', accountName);
 
-    // ─── Multi-channel waterfall + parallel company intel ───
-    // Company intelligence runs in parallel with signal extraction
+    // ─── Multi-channel waterfall + parallel intelligence ───
+    // Company intelligence and case study search run in parallel with signal extraction
     const companyIntelPromise = fetchCompanyIntelligence(accountName || '', formattedUrl);
+    // Case study search starts immediately (doesn't need signal results)
+    const caseStudyPromise = fetchMartechCaseStudies(accountName || '', formattedUrl);
 
     // Try channels in priority order — stop at first success
     let signalResult: { signals: any; source: string } | null = null;
