@@ -13,6 +13,8 @@ const DEFAULT_WIDGETS: DashboardWidget[] = [
   { id: 'daily-time-blocks', label: 'Daily Game Plan', visible: true },
   { id: 'pclub-math', label: 'P-Club Math', visible: true },
   { id: 'weekly-battle-plan', label: 'Weekly Battle Plan', visible: true },
+  { id: 'coaching-feed', label: 'AI Coach', visible: true },
+  { id: 'scenario-simulator', label: 'Scenario Simulator', visible: true },
   { id: 'commission-pacing', label: 'Commission Pacing', visible: true },
   { id: 'progress-tabs', label: 'Today / Week-to-Date', visible: true },
   { id: 'pipeline-hygiene', label: 'Pipeline Health', visible: true },

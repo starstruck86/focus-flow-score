@@ -55,6 +55,8 @@ import {
   PClubMathCard,
   PipelineHygieneCard,
   WeeklyBattlePlanCard,
+  QuotaScenarioSimulator,
+  CoachingFeed,
 } from '@/components/dashboard';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 
@@ -302,6 +304,10 @@ export default function Dashboard() {
         return <WeeklyBattlePlanCard key={widgetId} />;
       case 'pipeline-hygiene':
         return <PipelineHygieneCard key={widgetId} />;
+      case 'coaching-feed':
+        return <CoachingFeed key={widgetId} />;
+      case 'scenario-simulator':
+        return <QuotaScenarioSimulator key={widgetId} />;
       default:
         return null;
     }

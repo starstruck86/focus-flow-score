@@ -13,6 +13,7 @@ import {
   ImagePlus,
   BookOpen,
   Link2,
+  Camera,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -29,6 +30,7 @@ import { FocusTimerModal } from './FocusTimerModal';
 import { QuickLogModal } from '@/components/journal/QuickLogModal';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 import { ScreenshotEnrichModal } from '@/components/ScreenshotEnrichModal';
+import { ScreenshotImportModal } from '@/components/ScreenshotImportModal';
 import { TranscriptViewer } from '@/components/TranscriptViewer';
 import { ResourceLibraryModal } from '@/components/ResourceLibraryModal';
 
@@ -57,6 +59,7 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [showQuickLog, setShowQuickLog] = useState(false);
   const [showScreenshots, setShowScreenshots] = useState(false);
+  const [showScreenshotImport, setShowScreenshotImport] = useState(false);
   const [showTranscriptViewer, setShowTranscriptViewer] = useState(false);
   const [showResourceLibrary, setShowResourceLibrary] = useState(false);
   
@@ -199,6 +202,15 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
       icon: ImagePlus,
       onClick: () => {
         setShowScreenshots(true);
+        setIsExpanded(false);
+      },
+    },
+    {
+      id: 'screenshot-import',
+      label: 'Screenshot Import',
+      icon: Camera,
+      onClick: () => {
+        setShowScreenshotImport(true);
         setIsExpanded(false);
       },
     },
@@ -376,6 +388,11 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
       <ScreenshotEnrichModal
         open={showScreenshots}
         onOpenChange={setShowScreenshots}
+      />
+      
+      <ScreenshotImportModal
+        open={showScreenshotImport}
+        onOpenChange={setShowScreenshotImport}
       />
       
       <TranscriptViewer
