@@ -102,6 +102,7 @@ export function useWeekToDateMetrics() {
         today,
       };
     },
+    enabled: !!user,
   });
 }
 
