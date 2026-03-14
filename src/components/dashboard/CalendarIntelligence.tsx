@@ -38,7 +38,12 @@ export function CalendarIntelligence() {
     // Total meeting minutes
     const totalMeetingMinutes = nonAllDay.reduce((sum, e) => {
       if (!e.end_time) return sum;
-      return sum + Math.max(0, differenceInMinutes(parseISO(e.end_time), parseISO(e.start_time)));
+
+      const end = parseISO(e.end_time);
+      const start = parseISO(e.start_time);
+      if (!isValid(start) || !isValid(end)) return sum;
+
+      return sum + Math.max(0, differenceInMinutes(end, start));
     }, 0);
 
     const meetingHours = Math.round(totalMeetingMinutes / 60 * 10) / 10;
