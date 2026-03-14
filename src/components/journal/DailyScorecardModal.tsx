@@ -1628,6 +1628,7 @@ export function DailyScorecardModal({
 
       queryClient.invalidateQueries({ queryKey: ['journal-nudge'] });
       queryClient.invalidateQueries({ queryKey: ['journal-entry'] });
+      queryClient.invalidateQueries({ queryKey: ['journal-entry-raw'] });
       queryClient.invalidateQueries({ queryKey: ['streak-events'] });
       queryClient.invalidateQueries({ queryKey: ['streak-summary'] });
       queryClient.invalidateQueries({ queryKey: ['backfill-missed-days'] });
@@ -1659,6 +1660,7 @@ export function DailyScorecardModal({
                       .eq('date', savedDate)
                       .eq('user_id', u.id);
                     queryClient.invalidateQueries({ queryKey: ['journal-entry'] });
+                    queryClient.invalidateQueries({ queryKey: ['journal-entry-raw'] });
                     queryClient.invalidateQueries({ queryKey: ['streak-events'] });
                     queryClient.invalidateQueries({ queryKey: ['streak-summary'] });
                     queryClient.invalidateQueries({ queryKey: ['week-days-logged'] });
