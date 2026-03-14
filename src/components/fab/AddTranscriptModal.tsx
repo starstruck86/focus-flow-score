@@ -124,9 +124,61 @@ export function AddTranscriptModal({
         duration_minutes: duration ? parseInt(duration) : undefined,
       });
       toast.success('Transcript saved to database');
+      
+      // Auto-extract tasks from transcript
+      if (autoExtractTasks) {
+        extractTasksFromTranscript(autoTitle);
+      }
+      
       onOpenChange(false);
     } catch (err: any) {
       toast.error('Failed to save transcript', { description: err.message });
+    }
+  };
+
+  const [autoExtractTasks, setAutoExtractTasks] = useState(true);
+  const [extractedTasks, setExtractedTasks] = useState<any[]>([]);
+  const [extracting, setExtracting] = useState(false);
+
+  const extractTasksFromTranscript = async (transcriptTitle: string) => {
+    setExtracting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('extract-tasks', {
+        body: {
+          transcript_content: transcript.trim(),
+          transcript_title: transcriptTitle,
+          account_id: derivedAccountId,
+          opportunity_id: linkType === 'opportunity' ? selectedOppId : undefined,
+          renewal_id: linkType === 'renewal' ? selectedRenewalId : undefined,
+        },
+      });
+      if (error) throw error;
+      if (data?.tasks?.length > 0) {
+        const { addTask } = useStore.getState();
+        data.tasks.forEach((t: any) => {
+          addTask({
+            title: t.title,
+            priority: t.priority || 'P2',
+            status: 'next',
+            dueDate: t.due_date,
+            notes: t.notes ? `[From transcript] ${t.notes}` : '[Auto-extracted from call transcript]',
+            category: t.category || 'call',
+            motion: linkType === 'renewal' ? 'renewal' : 'new-logo',
+            linkedRecordType: linkType === 'opportunity' ? 'opportunity' : 'renewal',
+            linkedRecordId: linkType === 'opportunity' ? selectedOppId : selectedRenewalId,
+            linkedAccountId: derivedAccountId,
+          });
+        });
+        toast.success(`${data.tasks.length} tasks auto-created from transcript`, {
+          description: 'Check your Tasks page to review them',
+        });
+      } else {
+        toast.info('No action items found in transcript');
+      }
+    } catch (err: any) {
+      toast.error('Could not extract tasks', { description: err.message });
+    } finally {
+      setExtracting(false);
     }
   };
 
