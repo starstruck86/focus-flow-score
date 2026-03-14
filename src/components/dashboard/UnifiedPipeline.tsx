@@ -181,8 +181,12 @@ export function UnifiedPipeline() {
             <button
               key={stage}
               onClick={() => {
-                // Navigate to outreach opportunities tab with stage pre-filtered
-                navigate('/outreach?tab=opportunities&stage=' + encodeURIComponent(stage));
+                // Navigate based on current filter
+                if (filter === 'renewal') {
+                  navigate('/renewals?tab=opportunities&stage=' + encodeURIComponent(stage));
+                } else {
+                  navigate('/outreach?tab=opportunities&stage=' + encodeURIComponent(stage));
+                }
               }}
               className={cn(
                 "rounded-lg border p-2.5 text-left transition-all cursor-pointer",
