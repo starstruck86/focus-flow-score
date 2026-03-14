@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Users, Target, FileText, CheckSquare } from 'lucide-react';
+import { Search, Users, Target, FileText, CheckSquare, Sparkles, Loader2 } from 'lucide-react';
 import {
   CommandDialog,
   CommandEmpty,
@@ -13,6 +13,8 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useStore } from '@/store/useStore';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
+import { cn } from '@/lib/utils';
 
 interface SearchResult {
   id: string;
@@ -20,15 +22,25 @@ interface SearchResult {
   name: string;
   subtitle?: string;
   route: string;
+  contextSnippet?: string;
+}
+
+interface SearchContext {
+  type: string;
+  snippet: string;
+  [key: string]: any;
 }
 
 export function GlobalSearch() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [contexts, setContexts] = useState<Record<string, SearchContext>>({});
+  const [loadingContext, setLoadingContext] = useState(false);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  const { opportunities } = useStore();
+  const { setCurrentRecord } = useLinkedRecordContext();
+  const contextAbort = useRef<AbortController | null>(null);
 
   // Keyboard shortcut
   useEffect(() => {
@@ -48,6 +60,7 @@ export function GlobalSearch() {
   useEffect(() => {
     if (!query || query.length < 2) {
       setResults([]);
+      setContexts({});
       return;
     }
 
@@ -111,10 +124,46 @@ export function GlobalSearch() {
       }));
 
       setResults(searchResults);
+
+      // Fetch AI context for results
+      if (searchResults.length > 0) {
+        fetchContexts(searchResults);
+      }
     }, 200);
 
     return () => clearTimeout(searchTimeout);
   }, [query]);
+
+  const fetchContexts = async (searchResults: SearchResult[]) => {
+    // Cancel previous request
+    if (contextAbort.current) contextAbort.current.abort();
+    contextAbort.current = new AbortController();
+
+    const accountIds = searchResults.filter(r => r.type === 'account').map(r => r.id);
+    const opportunityIds = searchResults.filter(r => r.type === 'opportunity').map(r => r.id);
+    const renewalIds = searchResults.filter(r => r.type === 'renewal').map(r => r.id);
+
+    if (accountIds.length === 0 && opportunityIds.length === 0 && renewalIds.length === 0) return;
+
+    setLoadingContext(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('search-context', {
+        body: { account_ids: accountIds, opportunity_ids: opportunityIds, renewal_ids: renewalIds },
+      });
+      if (!error && data?.contexts) {
+        setContexts(data.contexts);
+      }
+    } catch {
+      // Silently fail - context is enhancement only
+    } finally {
+      setLoadingContext(false);
+    }
+  };
+
+  const getContext = (result: SearchResult): string | undefined => {
+    const key = `${result.type}:${result.id}`;
+    return contexts[key]?.snippet;
+  };
 
   const iconForType = (type: string) => {
     switch (type) {
@@ -127,6 +176,13 @@ export function GlobalSearch() {
   };
 
   const handleSelect = (result: SearchResult) => {
+    if (result.type === 'account') {
+      setCurrentRecord({ type: 'account', id: result.id });
+    } else if (result.type === 'opportunity') {
+      setCurrentRecord({ type: 'opportunity', id: result.id });
+    } else if (result.type === 'renewal') {
+      setCurrentRecord({ type: 'renewal', id: result.id });
+    }
     navigate(result.route);
     setOpen(false);
     setQuery('');
@@ -172,21 +228,36 @@ export function GlobalSearch() {
                               type === 'renewal' ? 'Renewals' : 'Contacts';
                 return (
                   <CommandGroup key={type} heading={label}>
-                    {typeResults.map(result => (
-                      <CommandItem
-                        key={result.id}
-                        onSelect={() => handleSelect(result)}
-                        className="flex items-center gap-3"
-                      >
-                        {iconForType(result.type)}
-                        <div className="min-w-0">
-                          <div className="font-medium truncate">{result.name}</div>
-                          {result.subtitle && (
-                            <div className="text-xs text-muted-foreground truncate">{result.subtitle}</div>
-                          )}
-                        </div>
-                      </CommandItem>
-                    ))}
+                    {typeResults.map(result => {
+                      const context = getContext(result);
+                      return (
+                        <CommandItem
+                          key={result.id}
+                          onSelect={() => handleSelect(result)}
+                          className="flex items-start gap-3 py-2.5"
+                        >
+                          <span className="mt-0.5">{iconForType(result.type)}</span>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium truncate">{result.name}</div>
+                            {result.subtitle && (
+                              <div className="text-xs text-muted-foreground truncate">{result.subtitle}</div>
+                            )}
+                            {context && (
+                              <div className="flex items-center gap-1 mt-0.5">
+                                <Sparkles className="h-3 w-3 text-primary shrink-0" />
+                                <span className="text-[11px] text-primary/80 truncate">{context}</span>
+                              </div>
+                            )}
+                            {loadingContext && !context && type !== 'contact' && (
+                              <div className="flex items-center gap-1 mt-0.5">
+                                <Loader2 className="h-3 w-3 text-muted-foreground animate-spin" />
+                                <span className="text-[11px] text-muted-foreground">Loading context...</span>
+                              </div>
+                            )}
+                          </div>
+                        </CommandItem>
+                      );
+                    })}
                   </CommandGroup>
                 );
               })}
