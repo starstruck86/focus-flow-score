@@ -376,6 +376,13 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
         writeTimers.current[key] = setTimeout(async () => {
           try { await fn(); } catch (err) {
             console.error(`[DataSync] Write-back error for ${key}:`, err);
+            // Import toast dynamically to avoid circular deps
+            const { toast } = await import('@/hooks/use-toast');
+            toast({
+              title: 'Sync failed',
+              description: `Your ${key} changes couldn't save. They're preserved locally and will retry.`,
+              variant: 'destructive',
+            });
           }
         }, 1500);
       };

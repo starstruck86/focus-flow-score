@@ -54,6 +54,7 @@ const App = () => (
             <DataSyncProvider>
               <Toaster />
               <Sonner />
+              <OfflineBanner />
               <BrowserRouter>
                 <Routes>
                   <Route path="/auth" element={<Auth />} />
