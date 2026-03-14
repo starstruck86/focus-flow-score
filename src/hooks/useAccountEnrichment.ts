@@ -48,7 +48,7 @@ export function useAccountEnrichment() {
 
     try {
       const { data, error } = await supabase.functions.invoke('enrich-account', {
-        body: { url: account.website || '', accountName: account.name, accountId: account.id },
+        body: { url: account.website || '', accountName: account.name, accountId: account.id, industry: account.industry || '' },
       });
 
       // If website was auto-discovered, update the account

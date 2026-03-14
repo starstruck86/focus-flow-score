@@ -85,7 +85,9 @@ async function fetchCompanyIntelligence(companyName: string, websiteUrl: string)
           },
           {
             role: 'user',
-            content: `Research "${companyName}" (${websiteUrl}). Provide:
+            content: `Research the company whose official website is ${websiteUrl} (company name: "${companyName}"). Make sure you are researching THIS SPECIFIC company at this URL, not a different company with a similar name.
+
+Provide:
 
 1. BUSINESS MODEL (2-3 sentences): How does this company make money? What do they sell, to whom, and through what channels?
 
@@ -99,7 +101,8 @@ Keep it concise and factual. Focus on information useful for a B2B sales convers
     });
 
     if (!response.ok) {
-      console.error('Perplexity error:', response.status);
+      const errBody = await response.text();
+      console.error('Perplexity error:', response.status, errBody);
       return null;
     }
 
@@ -120,10 +123,12 @@ Keep it concise and factual. Focus on information useful for a B2B sales convers
   }
 }
 
-// Auto-discover website URL using Perplexity
-async function discoverWebsite(companyName: string): Promise<string | null> {
+// Auto-discover website URL using Perplexity with disambiguation
+async function discoverWebsite(companyName: string, industry?: string): Promise<string | null> {
   const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY');
   if (!PERPLEXITY_API_KEY || !companyName) return null;
+
+  const industryHint = industry ? ` in the ${industry} industry` : '';
 
   try {
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
@@ -137,17 +142,21 @@ async function discoverWebsite(companyName: string): Promise<string | null> {
         messages: [
           {
             role: 'system',
-            content: 'You find company websites. Respond with ONLY the URL, nothing else. No explanation, no markdown, just the bare URL starting with https://. If you cannot find it, respond with exactly "NOTFOUND".',
+            content: `You find company websites. Respond with ONLY the URL, nothing else. No explanation, no markdown, just the bare URL starting with https://. If you cannot confidently identify the company, respond with exactly "NOTFOUND". Do NOT guess — only return a URL if you are confident it is the correct company.`,
           },
           {
             role: 'user',
-            content: `What is the official website URL for the company "${companyName}"?`,
+            content: `What is the official website URL for the company "${companyName}"${industryHint}? This is a brand/retailer that sells products or services to consumers. Return their main corporate or ecommerce website.`,
           },
         ],
       }),
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      const errBody = await response.text();
+      console.error('Website discovery API error:', response.status, errBody);
+      return null;
+    }
     const data = await response.json();
     const raw = (data.choices?.[0]?.message?.content || '').trim();
     if (raw === 'NOTFOUND' || !raw.includes('.')) return null;
@@ -160,18 +169,43 @@ async function discoverWebsite(companyName: string): Promise<string | null> {
   }
 }
 
+// Retry helper for transient failures
+async function fetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const response = await fetch(url, options);
+      // Don't retry client errors (4xx) except 429 (rate limit)
+      if (response.ok || (response.status >= 400 && response.status < 500 && response.status !== 429)) {
+        return response;
+      }
+      if (i < retries) {
+        const delay = (i + 1) * 2000; // 2s, 4s
+        console.log(`Retry ${i + 1}/${retries} after ${delay}ms (status ${response.status})`);
+        await new Promise(r => setTimeout(r, delay));
+      } else {
+        return response;
+      }
+    } catch (err) {
+      if (i === retries) throw err;
+      console.log(`Retry ${i + 1}/${retries} after network error:`, err);
+      await new Promise(r => setTimeout(r, (i + 1) * 2000));
+    }
+  }
+  throw new Error('Exhausted retries');
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { url, accountName, accountId } = await req.json();
+    const { url, accountName, accountId, industry } = await req.json();
 
     const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
     if (!FIRECRAWL_API_KEY) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Firecrawl not configured' }),
+        JSON.stringify({ success: false, error: 'Firecrawl not configured. Please connect Firecrawl in Settings.' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -181,10 +215,10 @@ Deno.serve(async (req) => {
     let discoveredUrl: string | null = null;
     if (!formattedUrl && accountName) {
       console.log('No URL provided, attempting auto-discovery for:', accountName);
-      discoveredUrl = await discoverWebsite(accountName);
+      discoveredUrl = await discoverWebsite(accountName, industry);
       if (!discoveredUrl) {
         return new Response(
-          JSON.stringify({ success: false, error: `Could not find a website for "${accountName}". Please add a URL manually.` }),
+          JSON.stringify({ success: false, error: `Could not confidently identify a website for "${accountName}". Please add a URL manually and retry.` }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -201,11 +235,59 @@ Deno.serve(async (req) => {
       formattedUrl = `https://${formattedUrl}`;
     }
 
+    // Validate URL format
+    try {
+      new URL(formattedUrl);
+    } catch {
+      return new Response(
+        JSON.stringify({ success: false, error: `Invalid URL: "${formattedUrl}". Please check the website address.` }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     console.log('Enriching:', formattedUrl, 'for account:', accountName);
+
+    const jsonSchema = {
+      type: 'object',
+      properties: {
+        direct_ecommerce: { type: 'boolean', description: 'Can customers buy products, tickets, or services directly online? Look for cart, checkout, buy buttons, ticket purchasing, donation flows.' },
+        direct_ecommerce_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+        direct_ecommerce_details: { type: 'string', description: 'What was found: name the ecommerce platform (Shopify, WooCommerce, BigCommerce, custom), list specific purchase flows observed.' },
+        email_sms_capture: { type: 'boolean', description: 'Does the site actively capture email/SMS subscribers? Look for newsletter signups, popup forms, SMS opt-in.' },
+        email_sms_capture_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+        email_sms_capture_details: { type: 'string', description: 'What was found: describe each capture method observed — popup type, footer form, inline form, SMS opt-in. List ALL methods found.' },
+        loyalty_membership: { type: 'boolean', description: 'Does the company run loyalty, rewards, membership, VIP, or perks programs?' },
+        loyalty_membership_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+        loyalty_membership_details: { type: 'string', description: 'What was found: name the program, describe the structure.' },
+        category_complexity: { type: 'boolean', description: 'Does the navigation show 5+ top-level categories?' },
+        category_complexity_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+        category_complexity_details: { type: 'string', description: 'List ALL top-level navigation categories verbatim.' },
+        crm_lifecycle_team_size: { type: 'integer', description: 'Estimated CRM/lifecycle/retention/email marketing team size. 0 if no evidence.' },
+        crm_lifecycle_team_size_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+        crm_lifecycle_team_size_details: { type: 'string', description: 'List specific roles, job postings, or team indicators.' },
+        mobile_app: { type: 'boolean', description: 'Has mobile app? Look for app store links.' },
+        mobile_app_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+        mobile_app_details: { type: 'string', description: 'Name the app, list store links.' },
+        esp_platform: { type: 'string', description: 'Email Service Provider detected (e.g. Klaviyo, Mailchimp, HubSpot, SFMC, Braze, Iterable, Sailthru, Cordial, Ometria, Dotdigital, Emarsys). Empty string if none detected.' },
+        sms_platform: { type: 'string', description: 'SMS marketing platform detected (e.g. Attentive, Postscript, Yotpo SMS, Klaviyo SMS, Twilio). Empty string if none detected.' },
+        ecommerce_platform: { type: 'string', description: 'Ecommerce platform detected (e.g. Shopify, Shopify Plus, WooCommerce, BigCommerce, Magento, Salesforce Commerce Cloud, custom). Empty string if none.' },
+        marketing_platform_detected: { type: 'string', description: 'Primary marketing automation / email platform detected. Empty string if none.' },
+        marketing_platform_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+        marketing_platform_details: { type: 'string', description: 'Name EVERY marketing tool/script detected with specifics. List ALL marketing tech observed.' },
+        cdp_platform: { type: 'string', description: 'Customer Data Platform detected (e.g. Segment, mParticle, Tealium, Treasure Data). Empty string if none.' },
+        personalization_platform: { type: 'string', description: 'Personalization/recommendation engine detected (e.g. Nosto, Dynamic Yield, Bloomreach, Certona). Empty string if none.' },
+        reviews_platform: { type: 'string', description: 'Reviews/UGC platform detected (e.g. Yotpo, Bazaarvoice, PowerReviews, Stamped, Judge.me). Empty string if none.' },
+        other_tech_detected: { type: 'string', description: 'Any other notable technology detected (chat widgets, BNPL, analytics). List everything notable.' },
+        summary: { type: 'string', description: '2-3 sentence summary of lifecycle marketing maturity findings with specific observations.' },
+      },
+      required: ['direct_ecommerce', 'email_sms_capture', 'loyalty_membership', 'category_complexity', 'crm_lifecycle_team_size', 'mobile_app', 'marketing_platform_detected', 'esp_platform', 'sms_platform', 'ecommerce_platform', 'summary'],
+    };
+
+    const scrapePrompt = `Analyze this website for a B2B sales rep selling marketing automation / lifecycle marketing software to ${accountName || 'this company'}. For EVERY signal, report exactly what you discovered — name specific platforms, programs, tools, page elements. Be thorough about detecting marketing technology: look at page source for scripts like Klaviyo, Attentive, Mailchimp, HubSpot, etc. Check for Shopify/WooCommerce indicators. The rep needs to know exactly what MarTech stack this company uses.`;
 
     // Run Firecrawl and Perplexity in parallel
     const [scrapeResponse, companyIntel] = await Promise.all([
-      fetch(FIRECRAWL_URL, {
+      fetchWithRetry(FIRECRAWL_URL, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
@@ -215,46 +297,12 @@ Deno.serve(async (req) => {
           url: formattedUrl,
           formats: ['json'],
           jsonOptions: {
-            schema: {
-              type: 'object',
-              properties: {
-                direct_ecommerce: { type: 'boolean', description: 'Can customers buy products, tickets, or services directly online? Look for cart, checkout, buy buttons, ticket purchasing, donation flows.' },
-                direct_ecommerce_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
-                direct_ecommerce_details: { type: 'string', description: 'What was found: name the ecommerce platform (Shopify, WooCommerce, BigCommerce, custom), list specific purchase flows observed.' },
-                email_sms_capture: { type: 'boolean', description: 'Does the site actively capture email/SMS subscribers? Look for newsletter signups, popup forms, SMS opt-in.' },
-                email_sms_capture_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
-                email_sms_capture_details: { type: 'string', description: 'What was found: describe each capture method observed — popup type, footer form, inline form, SMS opt-in. List ALL methods found.' },
-                loyalty_membership: { type: 'boolean', description: 'Does the company run loyalty, rewards, membership, VIP, or perks programs?' },
-                loyalty_membership_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
-                loyalty_membership_details: { type: 'string', description: 'What was found: name the program, describe the structure.' },
-                category_complexity: { type: 'boolean', description: 'Does the navigation show 5+ top-level categories?' },
-                category_complexity_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
-                category_complexity_details: { type: 'string', description: 'List ALL top-level navigation categories verbatim.' },
-                crm_lifecycle_team_size: { type: 'integer', description: 'Estimated CRM/lifecycle/retention/email marketing team size. 0 if no evidence.' },
-                crm_lifecycle_team_size_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
-                crm_lifecycle_team_size_details: { type: 'string', description: 'List specific roles, job postings, or team indicators.' },
-                mobile_app: { type: 'boolean', description: 'Has mobile app? Look for app store links.' },
-                mobile_app_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
-                mobile_app_details: { type: 'string', description: 'Name the app, list store links.' },
-                // Marketing tech - specific platform names
-                esp_platform: { type: 'string', description: 'Email Service Provider detected (e.g. Klaviyo, Mailchimp, HubSpot, SFMC, Braze, Iterable, Sailthru, Cordial, Ometria, Dotdigital, Emarsys). Empty string if none detected.' },
-                sms_platform: { type: 'string', description: 'SMS marketing platform detected (e.g. Attentive, Postscript, Yotpo SMS, Klaviyo SMS, Twilio). Empty string if none detected.' },
-                ecommerce_platform: { type: 'string', description: 'Ecommerce platform detected (e.g. Shopify, Shopify Plus, WooCommerce, BigCommerce, Magento, Salesforce Commerce Cloud, custom). Empty string if none.' },
-                marketing_platform_detected: { type: 'string', description: 'Primary marketing automation / email platform detected. Empty string if none.' },
-                marketing_platform_confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
-                marketing_platform_details: { type: 'string', description: 'Name EVERY marketing tool/script detected with specifics. List ALL marketing tech observed.' },
-                cdp_platform: { type: 'string', description: 'Customer Data Platform detected (e.g. Segment, mParticle, Tealium, Treasure Data). Empty string if none.' },
-                personalization_platform: { type: 'string', description: 'Personalization/recommendation engine detected (e.g. Nosto, Dynamic Yield, Bloomreach, Certona). Empty string if none.' },
-                reviews_platform: { type: 'string', description: 'Reviews/UGC platform detected (e.g. Yotpo, Bazaarvoice, PowerReviews, Stamped, Judge.me). Empty string if none.' },
-                other_tech_detected: { type: 'string', description: 'Any other notable technology detected (chat widgets, BNPL, analytics). List everything notable.' },
-                summary: { type: 'string', description: '2-3 sentence summary of lifecycle marketing maturity findings with specific observations.' },
-              },
-              required: ['direct_ecommerce', 'email_sms_capture', 'loyalty_membership', 'category_complexity', 'crm_lifecycle_team_size', 'mobile_app', 'marketing_platform_detected', 'esp_platform', 'sms_platform', 'ecommerce_platform', 'summary'],
-            },
-            prompt: `Analyze this website for a B2B sales rep selling marketing automation / lifecycle marketing software to ${accountName || 'this company'}. For EVERY signal, report exactly what you discovered — name specific platforms, programs, tools, page elements. Be thorough about detecting marketing technology: look at page source for scripts like Klaviyo, Attentive, Mailchimp, HubSpot, etc. Check for Shopify/WooCommerce indicators. The rep needs to know exactly what MarTech stack this company uses.`,
+            schema: jsonSchema,
+            prompt: scrapePrompt,
           },
           onlyMainContent: false,
           waitFor: 3000,
+          timeout: 30000,
         }),
       }),
       fetchCompanyIntelligence(accountName || '', formattedUrl),
@@ -269,24 +317,81 @@ Deno.serve(async (req) => {
           { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+      if (scrapeResponse.status === 429) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Rate limited by Firecrawl. Please wait a moment and try again.' }),
+          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      // Provide actionable error message
+      let errorDetail = `Website scrape failed (${scrapeResponse.status})`;
+      try {
+        const errJson = JSON.parse(errText);
+        if (errJson.error) errorDetail = errJson.error;
+      } catch { /* ignore parse error */ }
       return new Response(
-        JSON.stringify({ success: false, error: `Scrape failed: ${scrapeResponse.status}` }),
+        JSON.stringify({ success: false, error: `${errorDetail}. The site may be blocking automated access or the URL may be incorrect.` }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const scrapeData = await scrapeResponse.json();
-    const signals = scrapeData?.data?.json || scrapeData?.data?.extract || scrapeData?.extract || scrapeData?.json;
+    
+    // Firecrawl v1 nests data — check multiple paths
+    const signals = scrapeData?.data?.json || scrapeData?.data?.extract || scrapeData?.json || scrapeData?.extract || null;
 
     if (!signals || typeof signals !== 'object') {
-      console.error('No JSON extraction result:', JSON.stringify(scrapeData).slice(0, 500));
+      console.error('No JSON extraction result. Response keys:', Object.keys(scrapeData || {}), 'data keys:', Object.keys(scrapeData?.data || {}));
+      console.error('Raw response (truncated):', JSON.stringify(scrapeData).slice(0, 1000));
+      
+      // Fallback: if we got markdown but no structured data, return partial success
+      const markdown = scrapeData?.data?.markdown || scrapeData?.markdown || '';
+      if (markdown && companyIntel) {
+        console.log('Falling back to Perplexity-only enrichment');
+        // Return minimal result with just Perplexity intelligence
+        const fallbackResult = {
+          success: true,
+          partial: true,
+          discoveredUrl: discoveredUrl || null,
+          signals: {
+            direct_ecommerce: false,
+            email_sms_capture: false,
+            loyalty_membership: false,
+            category_complexity: false,
+            mobile_app: false,
+            marketing_platform_detected: null,
+            crm_lifecycle_team_size: 0,
+          },
+          confidence: {},
+          evidence: {
+            business_summary: companyIntel?.businessSummary || '',
+            recent_news: companyIntel?.recentNews || '',
+          },
+          scores: {
+            icp_fit_score: 0,
+            timing_score: 0,
+            priority_score: 0,
+            lifecycle_tier: '4',
+            high_probability_buyer: false,
+            triggered_account: false,
+            confidence_score: 0,
+          },
+          marTech: null,
+          ecommerce: null,
+          summary: companyIntel ? `**How they make money:**\n${companyIntel.businessSummary}\n\n**Recent news & hires:**\n${companyIntel.recentNews}` : 'Structured extraction failed. Try adding a more specific URL (e.g. the homepage).',
+        };
+        return new Response(JSON.stringify(fallbackResult), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       return new Response(
-        JSON.stringify({ success: false, error: 'Failed to extract signals from website. The site may be blocking automated access.' }),
+        JSON.stringify({ success: false, error: 'Failed to extract structured data from the website. Try a different URL (e.g. the homepage) or check that the site is publicly accessible.' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('Signals extracted:', JSON.stringify(signals));
+    console.log('Signals extracted successfully for:', accountName);
 
     // Build MarTech string from detected platforms
     const marTechParts: string[] = [];
@@ -442,7 +547,7 @@ Deno.serve(async (req) => {
     console.error('Enrichment error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return new Response(
-      JSON.stringify({ success: false, error: errorMessage }),
+      JSON.stringify({ success: false, error: `Enrichment failed: ${errorMessage}. Please try again.` }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
