@@ -70,12 +70,28 @@ serve(async (req) => {
     const meetingHours = Math.round(meetingMinutes / 60 * 10) / 10;
     const focusHoursAvailable = Math.max(0, 8 - meetingHours);
 
-    // Build feedback context
-    const feedbackContext = recentFeedback.length > 0
-      ? `\n\nRECENT USER FEEDBACK ON TIME BLOCKS (learn from this):\n${recentFeedback.map((f: any) =>
-          `- Date: ${f.context_date}, Rating: ${f.rating}/5, Feedback: "${f.feedback_text}", Plan was: "${f.ai_suggestion_summary}"`
-        ).join("\n")}`
-      : "";
+    // Build feedback context (day-level + block-level)
+    const prevPlans = prevPlansRes.data || [];
+    let feedbackContext = "";
+    if (recentFeedback.length > 0) {
+      feedbackContext += `\n\nRECENT USER FEEDBACK ON TIME BLOCKS (learn from this - adjust accordingly):\n${recentFeedback.map((f: any) =>
+        `- Date: ${f.context_date}, Rating: ${f.rating}/5, Feedback: "${f.feedback_text}"`
+      ).join("\n")}`;
+    }
+    // Include block-level thumbs up/down from recent plans
+    const plansWithBlockFb = prevPlans.filter((p: any) => p.block_feedback?.length > 0);
+    if (plansWithBlockFb.length > 0) {
+      feedbackContext += `\n\nBLOCK-LEVEL FEEDBACK (thumbs up/down on specific blocks):\n`;
+      plansWithBlockFb.forEach((p: any) => {
+        const blocks = p.blocks || [];
+        (p.block_feedback || []).forEach((fb: any) => {
+          const block = blocks[fb.blockIdx];
+          if (block) {
+            feedbackContext += `- ${p.plan_date}: "${block.label}" (${block.type}) got 👎${fb.thumbs === 'down' ? ' DISLIKED' : ' 👍 LIKED'}\n`;
+          }
+        });
+      });
+    }
 
     // Build calendar context
     const calendarContext = meetings.length > 0
