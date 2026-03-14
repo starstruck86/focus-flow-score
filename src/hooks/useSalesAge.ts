@@ -164,6 +164,7 @@ export function usePriorSalesAgeSnapshot() {
 
 // Fetch sales age snapshot history
 export function useSalesAgeHistory(weeks: number = 12) {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['sales-age-history', weeks],
     queryFn: async () => {
@@ -176,6 +177,7 @@ export function useSalesAgeHistory(weeks: number = 12) {
       if (error) throw error;
       return data || [];
     },
+    enabled: !!user,
   });
 }
 
