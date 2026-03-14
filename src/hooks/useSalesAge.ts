@@ -141,6 +141,7 @@ export function useJournalMetrics(days: number) {
 
 // Fetch prior sales age snapshot
 export function usePriorSalesAgeSnapshot() {
+  const { user } = useAuth();
   const priorWeekEnding = format(subDays(new Date(), 7), 'yyyy-MM-dd');
   
   return useQuery({
@@ -157,6 +158,7 @@ export function usePriorSalesAgeSnapshot() {
       if (error) throw error;
       return data;
     },
+    enabled: !!user,
   });
 }
 
