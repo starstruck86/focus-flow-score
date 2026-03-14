@@ -30,7 +30,7 @@ export function CalendarIntelligence() {
     // Filter to this week's events
     const thisWeekEvents = events.filter(e => {
       const start = parseISO(e.start_time);
-      return isWithinInterval(start, { start: weekStart, end: weekEnd });
+      return isValid(start) && isWithinInterval(start, { start: weekStart, end: weekEnd });
     });
 
     const nonAllDay = thisWeekEvents.filter(e => !e.all_day && e.end_time);
