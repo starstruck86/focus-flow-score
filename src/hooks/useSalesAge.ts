@@ -58,6 +58,7 @@ function transformJournalToMetrics(entry: any): DailyMetrics {
 
 // Fetch quota targets
 export function useQuotaTargets() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['quota-targets'],
     queryFn: async () => {
@@ -69,6 +70,7 @@ export function useQuotaTargets() {
       if (error) throw error;
       return data ? transformQuotaTargets(data) : DEFAULT_QUOTA_TARGETS;
     },
+    enabled: !!user,
   });
 }
 

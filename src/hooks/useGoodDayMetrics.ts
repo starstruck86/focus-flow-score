@@ -230,6 +230,7 @@ export function useRollingAverages() {
         count6m: entries6m?.length || 0,
       };
     },
+    enabled: !!user,
   });
 }
 
