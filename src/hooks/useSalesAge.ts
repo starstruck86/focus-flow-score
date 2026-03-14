@@ -364,6 +364,7 @@ export function useSaveSalesAgeSnapshot() {
 
 // Performance rollups (WTD, MTD, QTD)
 export function usePerformanceRollups() {
+  const { user } = useAuth();
   const now = new Date();
   const weekStart = format(startOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd');
   const monthStart = format(new Date(now.getFullYear(), now.getMonth(), 1), 'yyyy-MM-dd');
