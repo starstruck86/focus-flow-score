@@ -55,6 +55,8 @@ import {
   PClubMathCard,
   PipelineHygieneCard,
   WeeklyBattlePlanCard,
+  QuotaScenarioSimulator,
+  CoachingFeed,
 } from '@/components/dashboard';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 
