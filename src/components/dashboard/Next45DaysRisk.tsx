@@ -1,7 +1,7 @@
 // Next 45 Days Risk Window - Opportunities + Renewals tables
 import { motion } from 'framer-motion';
 import { AlertTriangle, Calendar, ExternalLink, FileText, Link2 } from 'lucide-react';
-import { format, differenceInDays, parseISO, addDays } from 'date-fns';
+import { format, differenceInDays, parseISO, addDays, isValid } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { ClickableName } from '@/components/ClickableName';
 import { formatCurrency } from '@/lib/commissionCalculations';
@@ -21,6 +21,12 @@ import type { Opportunity, Renewal } from '@/types';
 interface Next45DaysRiskProps {
   opportunities: Opportunity[];
   renewals: Renewal[];
+}
+
+function parseIsoDateSafe(value?: string | null): Date | null {
+  if (!value) return null;
+  const parsed = parseISO(value);
+  return isValid(parsed) ? parsed : null;
 }
 
 function RiskBadges({ 
@@ -80,14 +86,18 @@ function OpportunitiesTable({ opportunities }: { opportunities: Opportunity[] })
       o.closeDate
     )
     .filter(o => {
-      const closeDate = parseISO(o.closeDate!);
-      return closeDate <= fortyFiveDaysFromNow && closeDate >= today;
+      const closeDate = parseIsoDateSafe(o.closeDate);
+      return closeDate ? closeDate <= fortyFiveDaysFromNow && closeDate >= today : false;
     })
     .sort((a, b) => {
       // Sort by close date, then ARR
-      if (a.closeDate !== b.closeDate) {
-        return a.closeDate!.localeCompare(b.closeDate!);
+      const aClose = parseIsoDateSafe(a.closeDate);
+      const bClose = parseIsoDateSafe(b.closeDate);
+
+      if (aClose && bClose && aClose.getTime() !== bClose.getTime()) {
+        return aClose.getTime() - bClose.getTime();
       }
+
       return (b.arr || 0) - (a.arr || 0);
     });
 
@@ -117,7 +127,9 @@ function OpportunitiesTable({ opportunities }: { opportunities: Opportunity[] })
         </TableHeader>
         <TableBody>
           {filtered.map(opp => {
-            const closeDate = parseISO(opp.closeDate!);
+            const closeDate = parseIsoDateSafe(opp.closeDate);
+            if (!closeDate) return null;
+
             const daysUntil = differenceInDays(closeDate, today);
             const closingSoon = daysUntil <= 14;
             const stalled = opp.status === 'stalled';
@@ -167,11 +179,14 @@ function OpportunitiesTable({ opportunities }: { opportunities: Opportunity[] })
                 <TableCell className="max-w-[200px]">
                   {opp.nextStep ? (
                     <div className="text-xs truncate">
-                      {opp.nextStepDate && (
-                        <span className="text-muted-foreground">
-                          {format(parseISO(opp.nextStepDate), 'M/d')}: 
-                        </span>
-                      )}
+                      {(() => {
+                        const nextStepDate = parseIsoDateSafe(opp.nextStepDate);
+                        return nextStepDate ? (
+                          <span className="text-muted-foreground">
+                            {format(nextStepDate, 'M/d')}: 
+                          </span>
+                        ) : null;
+                      })()}
                       {opp.nextStep}
                     </div>
                   ) : (
@@ -201,14 +216,18 @@ function RenewalsTable({ renewals }: { renewals: Renewal[] }) {
   // Filter to next 45 days
   const filtered = renewals
     .filter(r => {
-      const renewalDate = parseISO(r.renewalDue);
-      return renewalDate <= fortyFiveDaysFromNow && renewalDate >= today;
+      const renewalDate = parseIsoDateSafe(r.renewalDue);
+      return renewalDate ? renewalDate <= fortyFiveDaysFromNow && renewalDate >= today : false;
     })
     .sort((a, b) => {
       // Sort by renewal date, then ARR
-      if (a.renewalDue !== b.renewalDue) {
-        return a.renewalDue.localeCompare(b.renewalDue);
+      const aRenewal = parseIsoDateSafe(a.renewalDue);
+      const bRenewal = parseIsoDateSafe(b.renewalDue);
+
+      if (aRenewal && bRenewal && aRenewal.getTime() !== bRenewal.getTime()) {
+        return aRenewal.getTime() - bRenewal.getTime();
       }
+
       return b.arr - a.arr;
     });
 
@@ -238,7 +257,9 @@ function RenewalsTable({ renewals }: { renewals: Renewal[] }) {
         </TableHeader>
         <TableBody>
           {filtered.map(renewal => {
-            const renewalDate = parseISO(renewal.renewalDue);
+            const renewalDate = parseIsoDateSafe(renewal.renewalDue);
+            if (!renewalDate) return null;
+
             const daysUntil = differenceInDays(renewalDate, today);
             const closingSoon = daysUntil <= 14;
             const missingPlanhat = !renewal.planhatLink;
@@ -331,18 +352,16 @@ export function Next45DaysRisk({ opportunities, renewals }: Next45DaysRiskProps)
   const today = new Date();
   const fortyFiveDaysFromNow = addDays(today, 45);
   
-  const oppsCount = opportunities.filter(o => 
-    o.status !== 'closed-won' && 
-    o.status !== 'closed-lost' && 
-    o.closeDate &&
-    parseISO(o.closeDate) <= fortyFiveDaysFromNow &&
-    parseISO(o.closeDate) >= today
-  ).length;
+  const oppsCount = opportunities.filter(o => {
+    if (o.status === 'closed-won' || o.status === 'closed-lost') return false;
+    const closeDate = parseIsoDateSafe(o.closeDate);
+    return closeDate ? closeDate <= fortyFiveDaysFromNow && closeDate >= today : false;
+  }).length;
   
-  const renewalsCount = renewals.filter(r => 
-    parseISO(r.renewalDue) <= fortyFiveDaysFromNow &&
-    parseISO(r.renewalDue) >= today
-  ).length;
+  const renewalsCount = renewals.filter(r => {
+    const renewalDate = parseIsoDateSafe(r.renewalDue);
+    return renewalDate ? renewalDate <= fortyFiveDaysFromNow && renewalDate >= today : false;
+  }).length;
 
   return (
     <motion.div 
