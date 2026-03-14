@@ -32,7 +32,23 @@ export function PClubMathCard() {
     );
   }
 
-  if (!data) return null;
+  if (!data) {
+    return (
+      <Card className="metric-card border-primary/20">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-display flex items-center gap-2">
+            <Calculator className="h-4 w-4 text-primary" />
+            P-Club Math
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-muted-foreground text-center py-4">
+            Configure your quota and conversion benchmarks in Settings → Coaching to see your path to P-Club.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const { quota, timeline, funnel, pace, pipeline } = data;
 

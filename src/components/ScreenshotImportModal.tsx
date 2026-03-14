@@ -314,7 +314,10 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
               </div>
             )}
 
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                Supports CRM screenshots, LinkedIn, spreadsheets, emails
+              </p>
               <Button onClick={extractFromScreenshots} disabled={files.length === 0 || processing}>
                 {processing ? (
                   <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Extracting...</>

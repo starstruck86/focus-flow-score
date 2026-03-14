@@ -163,6 +163,9 @@ export function useGenerateBattlePlan() {
       qc.invalidateQueries({ queryKey: ['weekly-battle-plan'] });
       toast.success('Battle plan generated');
     },
+    onError: (err: Error) => {
+      toast.error('Failed to generate battle plan', { description: err.message });
+    },
   });
 }
 
