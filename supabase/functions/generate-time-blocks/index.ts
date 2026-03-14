@@ -34,6 +34,7 @@ serve(async (req) => {
       workQueueRes,
       feedbackRes,
       quotaRes,
+      prevPlansRes,
     ] = await Promise.all([
       supabase.from("calendar_events").select("*")
         .gte("start_time", `${targetDate}T00:00:00`)
@@ -45,11 +46,14 @@ serve(async (req) => {
       supabase.from("accounts").select("id, name, tier, account_status, last_touch_date, cadence_name, contact_status")
         .in("account_status", ["active", "prepped", "researching"])
         .order("priority_score", { ascending: false }).limit(15),
-      // Last 7 days of time block feedback
+      // Last 10 time block feedbacks (both day-level and block-level)
       supabase.from("ai_feedback").select("*")
         .eq("feature", "time_blocks")
         .order("created_at", { ascending: false }).limit(10),
       supabase.from("quota_targets").select("*").maybeSingle(),
+      // Previous day's block-level feedback
+      supabase.from("daily_time_blocks").select("blocks, block_feedback, feedback_rating, feedback_text, plan_date")
+        .order("plan_date", { ascending: false }).limit(3),
     ]);
 
     const events = calendarRes.data || [];
@@ -66,12 +70,28 @@ serve(async (req) => {
     const meetingHours = Math.round(meetingMinutes / 60 * 10) / 10;
     const focusHoursAvailable = Math.max(0, 8 - meetingHours);
 
-    // Build feedback context
-    const feedbackContext = recentFeedback.length > 0
-      ? `\n\nRECENT USER FEEDBACK ON TIME BLOCKS (learn from this):\n${recentFeedback.map((f: any) =>
-          `- Date: ${f.context_date}, Rating: ${f.rating}/5, Feedback: "${f.feedback_text}", Plan was: "${f.ai_suggestion_summary}"`
-        ).join("\n")}`
-      : "";
+    // Build feedback context (day-level + block-level)
+    const prevPlans = prevPlansRes.data || [];
+    let feedbackContext = "";
+    if (recentFeedback.length > 0) {
+      feedbackContext += `\n\nRECENT USER FEEDBACK ON TIME BLOCKS (learn from this - adjust accordingly):\n${recentFeedback.map((f: any) =>
+        `- Date: ${f.context_date}, Rating: ${f.rating}/5, Feedback: "${f.feedback_text}"`
+      ).join("\n")}`;
+    }
+    // Include block-level thumbs up/down from recent plans
+    const plansWithBlockFb = prevPlans.filter((p: any) => p.block_feedback?.length > 0);
+    if (plansWithBlockFb.length > 0) {
+      feedbackContext += `\n\nBLOCK-LEVEL FEEDBACK (thumbs up/down on specific blocks):\n`;
+      plansWithBlockFb.forEach((p: any) => {
+        const blocks = p.blocks || [];
+        (p.block_feedback || []).forEach((fb: any) => {
+          const block = blocks[fb.blockIdx];
+          if (block) {
+            feedbackContext += `- ${p.plan_date}: "${block.label}" (${block.type}) got 👎${fb.thumbs === 'down' ? ' DISLIKED' : ' 👍 LIKED'}\n`;
+          }
+        });
+      });
+    }
 
     // Build calendar context
     const calendarContext = meetings.length > 0
@@ -208,7 +228,7 @@ Also provide an overall "day_strategy" (2-3 sentences on the day's theme/approac
 
     const plan = JSON.parse(toolCall.function.arguments);
 
-    // Upsert the plan
+    // Upsert the plan with all data persisted
     const { data: saved, error: saveError } = await supabase
       .from("daily_time_blocks")
       .upsert({
@@ -218,17 +238,16 @@ Also provide an overall "day_strategy" (2-3 sentences on the day's theme/approac
         meeting_load_hours: meetingHours,
         focus_hours_available: focusHoursAvailable,
         ai_reasoning: plan.day_strategy,
+        key_metric_targets: plan.key_metric_targets || {},
+        completed_goals: [],
+        block_feedback: [],
       }, { onConflict: "user_id,plan_date" })
       .select()
       .single();
 
     if (saveError) throw saveError;
 
-    return new Response(JSON.stringify({
-      ...saved,
-      day_strategy: plan.day_strategy,
-      key_metric_targets: plan.key_metric_targets,
-    }), {
+    return new Response(JSON.stringify(saved), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
