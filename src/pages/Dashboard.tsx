@@ -290,17 +290,23 @@ export default function Dashboard() {
           />
         </div>
         
-        <BackfillCards />
+        <WidgetErrorBoundary widgetId="backfill-cards">
+          <BackfillCards />
+        </WidgetErrorBoundary>
         
-        <MeetingPrepPrompt />
+        <WidgetErrorBoundary widgetId="meeting-prep-prompt">
+          <MeetingPrepPrompt />
+        </WidgetErrorBoundary>
         
-        <CheckInBanner
-          checkedIn={todayCheckedIn}
-          isEligibleDay={isTodayEligible}
-          onStartCheckIn={() => setShowDailyCheckIn(true)}
-          onEditCheckIn={() => setShowDailyCheckIn(true)}
-          confirmed={todayJournalEntry?.confirmed}
-        />
+        <WidgetErrorBoundary widgetId="check-in-banner">
+          <CheckInBanner
+            checkedIn={todayCheckedIn}
+            isEligibleDay={isTodayEligible}
+            onStartCheckIn={() => setShowDailyCheckIn(true)}
+            onEditCheckIn={() => setShowDailyCheckIn(true)}
+            confirmed={todayJournalEntry?.confirmed}
+          />
+        </WidgetErrorBoundary>
         
         {/* Render widgets in user-defined order */}
         {widgets.filter(w => w.visible).map(w => (
