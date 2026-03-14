@@ -844,20 +844,7 @@ export default function Settings() {
             <ImportMappingsSection />
             
             {/* Export Section */}
-            <div className="metric-card">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Download className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Export Data</h3>
-                  <p className="text-sm text-muted-foreground">Download your data as CSV</p>
-                </div>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Your data is stored in the cloud. Export features coming soon.
-              </p>
-            </div>
+            <DataExportSection />
           </TabsContent>
         </Tabs>
       </div>
