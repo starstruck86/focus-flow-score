@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -67,38 +67,81 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const initializedUserRef = useRef<string | null>(null);
 
   useEffect(() => {
-    // Set up auth state listener BEFORE checking session
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-        
-        // Initialize user data on sign in
-        if (event === 'SIGNED_IN' && session?.user) {
-          // Use setTimeout to avoid blocking the auth flow
-          setTimeout(() => {
-            initializeUserData(session.user.id);
-          }, 0);
-        }
-      }
-    );
+    let isMounted = true;
 
-    // Then check for existing session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    const initializeIfNeeded = (userId: string) => {
+      if (initializedUserRef.current === userId) return;
+      initializedUserRef.current = userId;
+      setTimeout(() => {
+        initializeUserData(userId);
+      }, 0);
+    };
+
+    // Set up auth listener BEFORE checking session
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (!isMounted || event === 'INITIAL_SESSION') return;
+
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
       setLoading(false);
-      
-      // Also initialize on existing session (in case it was missed)
-      if (session?.user) {
-        initializeUserData(session.user.id);
+
+      if (event === 'SIGNED_IN' && nextSession?.user) {
+        initializeIfNeeded(nextSession.user.id);
+      }
+
+      if (event === 'SIGNED_OUT') {
+        initializedUserRef.current = null;
       }
     });
 
-    return () => subscription.unsubscribe();
+    const bootstrapAuth = async () => {
+      try {
+        const { data: { session: initialSession } } = await supabase.auth.getSession();
+        if (!isMounted) return;
+
+        if (!initialSession) {
+          initializedUserRef.current = null;
+          setSession(null);
+          setUser(null);
+          setLoading(false);
+          return;
+        }
+
+        const { data: userResult, error: userError } = await supabase.auth.getUser(initialSession.access_token);
+        if (!isMounted) return;
+
+        if (userError || !userResult.user) {
+          initializedUserRef.current = null;
+          await supabase.auth.signOut();
+          setSession(null);
+          setUser(null);
+          setLoading(false);
+          return;
+        }
+
+        setSession(initialSession);
+        setUser(userResult.user);
+        setLoading(false);
+        initializeIfNeeded(userResult.user.id);
+      } catch (error) {
+        console.error('Auth bootstrap failed:', error);
+        if (!isMounted) return;
+        initializedUserRef.current = null;
+        setSession(null);
+        setUser(null);
+        setLoading(false);
+      }
+    };
+
+    bootstrapAuth();
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signOut = async () => {

@@ -8,13 +8,13 @@ import { toast } from 'sonner';
 
 export default function Auth() {
   const navigate = useNavigate();
-  const { session, loading } = useAuth();
+  const { session, user, loading } = useAuth();
 
   useEffect(() => {
-    if (!loading && session) {
+    if (!loading && session && user) {
       navigate('/');
     }
-  }, [session, loading, navigate]);
+  }, [session, user, loading, navigate]);
 
   const handleGoogleSignIn = async () => {
     const { error } = await lovable.auth.signInWithOAuth('google', {
