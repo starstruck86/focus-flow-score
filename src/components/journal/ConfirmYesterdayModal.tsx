@@ -69,6 +69,16 @@ export function ConfirmYesterdayModal({
   const dateDisplay = isValid(parsedDate) ? format(parsedDate, 'EEEE, MMMM d') : 'yesterday';
   const strainBand = (entry.salesStrain || 0) <= 6 ? 'low' : (entry.salesStrain || 0) <= 11 ? 'moderate' : 'high';
   const recoveryBand = (entry.salesRecovery || 0) >= 67 ? 'green' : (entry.salesRecovery || 0) >= 34 ? 'yellow' : 'red';
+  const legacyEntry = entry as Partial<{
+    conversations: number;
+    meetingsSet: number;
+    meetings_set: number;
+    sleepHours: number;
+    sleep_hours: number;
+  }>;
+  const conversations = entry.activity?.conversations ?? legacyEntry.conversations ?? 0;
+  const meetingsSet = entry.activity?.meetingsSet ?? legacyEntry.meetingsSet ?? legacyEntry.meetings_set ?? 0;
+  const sleepHours = entry.recovery?.sleepHours ?? legacyEntry.sleepHours ?? legacyEntry.sleep_hours ?? 0;
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -157,15 +167,15 @@ export function ConfirmYesterdayModal({
             </div>
             <div className="p-2 bg-secondary/30 rounded flex justify-between">
               <span className="text-muted-foreground">Conversations</span>
-              <span className="font-mono font-medium">{entry.activity.conversations}</span>
+              <span className="font-mono font-medium">{conversations}</span>
             </div>
             <div className="p-2 bg-secondary/30 rounded flex justify-between">
               <span className="text-muted-foreground">Meetings Set</span>
-              <span className="font-mono font-medium">{entry.activity.meetingsSet}</span>
+              <span className="font-mono font-medium">{meetingsSet}</span>
             </div>
             <div className="p-2 bg-secondary/30 rounded flex justify-between">
               <span className="text-muted-foreground">Sleep</span>
-              <span className="font-mono font-medium">{entry.recovery.sleepHours}hrs</span>
+              <span className="font-mono font-medium">{sleepHours}hrs</span>
             </div>
           </div>
         </div>

@@ -412,7 +412,7 @@ function usePowerHourTotals(date: string) {
 
 function useExistingEntry(date: string) {
   return useQuery({
-    queryKey: ['journal-entry', date],
+    queryKey: ['journal-entry-raw', date],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('daily_journal_entries')
@@ -428,7 +428,7 @@ function useExistingEntry(date: string) {
 function useYesterdayEntry() {
   const yesterday = format(subDays(new Date(), 1), 'yyyy-MM-dd');
   return useQuery({
-    queryKey: ['journal-entry', yesterday],
+    queryKey: ['journal-entry-raw', yesterday],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('daily_journal_entries')
@@ -1628,6 +1628,7 @@ export function DailyScorecardModal({
 
       queryClient.invalidateQueries({ queryKey: ['journal-nudge'] });
       queryClient.invalidateQueries({ queryKey: ['journal-entry'] });
+      queryClient.invalidateQueries({ queryKey: ['journal-entry-raw'] });
       queryClient.invalidateQueries({ queryKey: ['streak-events'] });
       queryClient.invalidateQueries({ queryKey: ['streak-summary'] });
       queryClient.invalidateQueries({ queryKey: ['backfill-missed-days'] });
@@ -1659,6 +1660,7 @@ export function DailyScorecardModal({
                       .eq('date', savedDate)
                       .eq('user_id', u.id);
                     queryClient.invalidateQueries({ queryKey: ['journal-entry'] });
+                    queryClient.invalidateQueries({ queryKey: ['journal-entry-raw'] });
                     queryClient.invalidateQueries({ queryKey: ['streak-events'] });
                     queryClient.invalidateQueries({ queryKey: ['streak-summary'] });
                     queryClient.invalidateQueries({ queryKey: ['week-days-logged'] });
