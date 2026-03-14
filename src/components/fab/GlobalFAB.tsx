@@ -205,6 +205,15 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
       },
     },
     {
+      id: 'screenshot-import',
+      label: 'Screenshot Import',
+      icon: Camera,
+      onClick: () => {
+        setShowScreenshotImport(true);
+        setIsExpanded(false);
+      },
+    },
+    {
       id: 'resource-library',
       label: 'Resource Library',
       icon: Link2,
