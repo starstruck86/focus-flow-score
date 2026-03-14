@@ -163,6 +163,7 @@ export function useMonthToDateMetrics() {
         today,
       };
     },
+    enabled: !!user,
   });
 }
 
