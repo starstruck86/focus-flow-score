@@ -351,6 +351,7 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
           renewals: currentState.renewals,
         };
         hasHydrated.current = true;
+        onHydrated?.(true);
       } catch (err) {
         console.error('[DataSync] Hydration error:', err);
       } finally {
