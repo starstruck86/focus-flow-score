@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { Flame, Zap } from 'lucide-react';
 import { useStreakSummary } from '@/hooks/useStreakData';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { getLevelTitle } from '@/types/streak';
+import { PerformanceProfileSheet } from '@/components/PerformanceProfileSheet';
 
 interface StreakChipProps {
   variant?: 'compact' | 'full';
@@ -11,6 +13,7 @@ interface StreakChipProps {
 
 export function StreakChip({ variant = 'compact', className }: StreakChipProps) {
   const { data: summary, isLoading } = useStreakSummary();
+  const [profileOpen, setProfileOpen] = useState(false);
   
   if (isLoading || !summary) {
     return (

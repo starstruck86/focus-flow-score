@@ -25,7 +25,7 @@ export function PerformanceProfileSheet({ open, onOpenChange }: PerformanceProfi
   const level = summary?.checkinLevel || 0;
   const levelTitle = getLevelTitle(level);
   const progress = getProgressToNextLevel(summary?.currentCheckinStreak || 0);
-  const salesAge = salesAgeData?.[0]?.sales_age || 45;
+  const salesAge = salesAgeData?.salesAge ?? 45;
 
   const statItems = records ? [
     { label: 'Most Dials', value: records.mostDialsInDay, icon: Phone, color: 'text-strain' },
