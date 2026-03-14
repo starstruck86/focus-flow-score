@@ -29,8 +29,10 @@ export default function Auth() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
+        <h1 className="text-2xl font-bold text-foreground font-display">Quota Compass</h1>
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent" />
+        <p className="text-sm text-muted-foreground">Loading...</p>
       </div>
     );
   }
