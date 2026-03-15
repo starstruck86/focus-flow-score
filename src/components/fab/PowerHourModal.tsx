@@ -115,15 +115,12 @@ export function PowerHourModal({ open, onOpenChange }: PowerHourModalProps) {
   };
   
   const applyToDaily = async () => {
-    // Apply to local store
-    for (let i = 0; i < dials; i++) {
-      logCall(i < connects);
-    }
-    if (meetingsSet > 0) {
-      updateRawInputs({
-        initialMeetingsSet: (currentDay?.rawInputs.initialMeetingsSet || 0) + meetingsSet,
-      });
-    }
+    // Sync aggregate metrics to daily journal (SF is system of record for individual activities)
+    updateRawInputs({
+      initialDials: (currentDay?.rawInputs.initialDials || 0) + dials,
+      initialConversations: (currentDay?.rawInputs.initialConversations || 0) + connects,
+      initialMeetingsSet: (currentDay?.rawInputs.initialMeetingsSet || 0) + meetingsSet,
+    });
     
     // Persist to database — falls back to offline queue if no connectivity
     const sessionData = {

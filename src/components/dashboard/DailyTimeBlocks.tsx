@@ -504,8 +504,9 @@ export function DailyTimeBlocks() {
                       onClick={() => {
                         const action = BLOCK_ACTIONS[block.type];
                         if (action.dispatch === 'power-hour') {
-                          // Dispatch keyboard shortcut to open FAB power hour
                           window.dispatchEvent(new CustomEvent('open-power-hour'));
+                        } else if (action.dispatch === 'scroll-meeting-prep') {
+                          document.getElementById('meeting-prep-section')?.scrollIntoView({ behavior: 'smooth' });
                         } else if (action.route) {
                           navigate(action.route);
                         }

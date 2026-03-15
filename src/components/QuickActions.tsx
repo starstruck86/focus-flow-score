@@ -1,105 +1,60 @@
 import { 
   Phone, 
-  Mail, 
-  MailCheck,
-  Users, 
-  MessageSquare 
+  MessageSquare,
+  Users,
+  Minus,
+  Plus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 
+/**
+ * Quick metric counters — Salesforce is the system of record for individual activities.
+ * This only tracks aggregate daily numbers for coaching & accountability.
+ */
 export function QuickActions() {
-  const { logCall, logManualEmail, logAutomatedEmail, logMeetingHeld, logProspectsAdded } = useStore();
-  const [showConversationDialog, setShowConversationDialog] = useState(false);
+  const { updateRawInputs, currentDay } = useStore();
 
-  const handleLogCall = (hadConversation: boolean) => {
-    logCall(hadConversation);
-    setShowConversationDialog(false);
-    toast.success(hadConversation ? 'Call + Conversation logged!' : 'Dial logged!');
-  };
+  const metrics = [
+    { key: 'initialDials', label: 'Dials', icon: Phone, value: currentDay?.rawInputs.initialDials || 0 },
+    { key: 'initialConversations', label: 'Convos', icon: MessageSquare, value: currentDay?.rawInputs.initialConversations || 0 },
+    { key: 'initialMeetingsSet', label: 'Meetings Set', icon: Users, value: currentDay?.rawInputs.initialMeetingsSet || 0 },
+  ] as const;
 
-  const handleManualEmail = () => {
-    logManualEmail();
-    toast.success('Manual email logged!');
-  };
-
-  const handleAutomatedEmail = () => {
-    logAutomatedEmail();
-    toast.success('Automated email logged!');
-  };
-
-  const handleMeeting = () => {
-    logMeetingHeld();
-    toast.success('Customer meeting logged!');
-  };
-
-  const handleProspects = (count: number) => {
-    logProspectsAdded(count);
-    toast.success(`${count} prospect(s) added!`);
-  };
+  const adjust = useCallback((key: string, delta: number) => {
+    const current = (currentDay?.rawInputs as any)?.[key] || 0;
+    const newVal = Math.max(0, current + delta);
+    updateRawInputs({ [key]: newVal } as any);
+    if (delta > 0) toast.success(`+1 logged`);
+  }, [currentDay, updateRawInputs]);
 
   return (
     <div className="metric-card">
-      <h3 className="font-display text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">
-        Quick Actions
+      <h3 className="font-display text-sm font-semibold mb-1 text-muted-foreground uppercase tracking-wider">
+        Today's Metrics
       </h3>
+      <p className="text-[11px] text-muted-foreground mb-3">Log activity here — details live in Salesforce</p>
       
-      <div className="grid grid-cols-2 gap-2">
-        <Dialog open={showConversationDialog} onOpenChange={setShowConversationDialog}>
-          <DialogTrigger asChild>
-            <button className="quick-action justify-center">
-              <Phone className="h-4 w-4" />
-              <span>Log Call</span>
-            </button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Log Call</DialogTitle>
-              <DialogDescription>
-                Did you have a conversation?
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter className="flex gap-2 sm:gap-0">
-              <Button variant="outline" onClick={() => handleLogCall(false)}>
-                No Conversation
+      <div className="space-y-2">
+        {metrics.map(({ key, label, icon: Icon, value }) => (
+          <div key={key} className="flex items-center justify-between bg-secondary/50 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2">
+              <Icon className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">{label}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => adjust(key, -1)}>
+                <Minus className="h-3.5 w-3.5" />
               </Button>
-              <Button onClick={() => handleLogCall(true)}>
-                Yes, Conversation!
+              <span className="w-8 text-center text-lg font-bold tabular-nums">{value}</span>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => adjust(key, 1)}>
+                <Plus className="h-3.5 w-3.5" />
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <button className="quick-action justify-center" onClick={handleManualEmail}>
-          <Mail className="h-4 w-4" />
-          <span>Manual Email</span>
-        </button>
-
-        <button className="quick-action justify-center" onClick={handleAutomatedEmail}>
-          <MailCheck className="h-4 w-4" />
-          <span>Auto Email</span>
-        </button>
-
-        <button className="quick-action justify-center" onClick={handleMeeting}>
-          <MessageSquare className="h-4 w-4" />
-          <span>Meeting Held</span>
-        </button>
-
-        <button className="quick-action justify-center col-span-2" onClick={() => handleProspects(10)}>
-          <Users className="h-4 w-4" />
-          <span>+10 Prospects</span>
-        </button>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
