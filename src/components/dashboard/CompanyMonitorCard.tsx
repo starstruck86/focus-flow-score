@@ -85,6 +85,7 @@ export function CompanyMonitorCard() {
         const { data: newItems } = await supabase
           .from('daily_digest_items')
           .select('*')
+          .eq('user_id', user!.id)
           .eq('digest_date', new Date().toISOString().split('T')[0])
           .eq('is_actionable', true);
 

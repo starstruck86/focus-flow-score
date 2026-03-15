@@ -37,13 +37,14 @@ export function useSignalTriggeredTasks() {
   ) => {
     if (!user || !triggerEvents?.length) return 0;
 
-    // Get existing tasks to avoid duplicates
+    // Get existing tasks to avoid duplicates (14-day window for better dedup)
     const today = new Date().toISOString().split('T')[0];
     const { data: existingTasks } = await supabase
       .from('tasks')
       .select('title')
+      .eq('user_id', user.id)
       .eq('linked_account_id', accountId)
-      .gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString());
+      .gte('created_at', new Date(Date.now() - 14 * 86400000).toISOString());
 
     const existingTitles = new Set((existingTasks || []).map((t: any) => t.title.toLowerCase()));
 

@@ -23,7 +23,7 @@ export class WidgetErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error(`[Widget "${this.props.widgetId}" crashed]`, error.message, errorInfo.componentStack);
+    console.error(`[Widget "${this.props.widgetId}" crashed]`, error.message, errorInfo.componentStack?.slice(0, 500));
   }
 
   handleRetry = () => {

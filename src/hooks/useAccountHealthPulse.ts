@@ -28,11 +28,12 @@ export function useAccountHealthPulse() {
   return useQuery({
     queryKey: ['account-health-pulse', user?.id],
     queryFn: async (): Promise<AccountHealthPulse[]> => {
-      // Fetch accounts + contacts + recent digest items in parallel
+      if (!user) return [];
+      // Fetch accounts + contacts + recent digest items in parallel (explicit user_id for defense-in-depth)
       const [accountsRes, contactsRes, digestRes] = await Promise.all([
-        supabase.from('accounts').select('id, name, icp_fit_score, timing_score, last_touch_date, trigger_events, marketing_platform_detected, last_enriched_at, tier'),
-        supabase.from('contacts').select('account_id, buyer_role, influence_level'),
-        supabase.from('daily_digest_items').select('account_id, relevance_score, is_actionable, digest_date').gte('digest_date', new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0]),
+        supabase.from('accounts').select('id, name, icp_fit_score, timing_score, last_touch_date, trigger_events, marketing_platform_detected, last_enriched_at, tier').eq('user_id', user.id),
+        supabase.from('contacts').select('account_id, buyer_role, influence_level').eq('user_id', user.id),
+        supabase.from('daily_digest_items').select('account_id, relevance_score, is_actionable, digest_date').eq('user_id', user.id).gte('digest_date', new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0]),
       ]);
 
       const accounts = accountsRes.data || [];

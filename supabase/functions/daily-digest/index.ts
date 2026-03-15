@@ -38,6 +38,13 @@ Deno.serve(async (req: Request) => {
       const body = await req.json();
       targetUserId = body?.userId || null;
       forceRegenerate = !!targetUserId;
+      // Validate userId format to prevent injection
+      if (targetUserId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetUserId)) {
+        return new Response(
+          JSON.stringify({ error: "Invalid userId format" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     } catch { /* no body = process all */ }
 
     let query = supabase

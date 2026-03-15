@@ -371,12 +371,16 @@ export default function Dashboard() {
           />
         </WidgetErrorBoundary>
         
-        {/* Render widgets in user-defined order */}
-        {widgets.filter(w => w.visible).map(w => (
-          <WidgetErrorBoundary key={`eb-${w.id}`} widgetId={w.id}>
-            {renderWidget(w.id)}
-          </WidgetErrorBoundary>
-        ))}
+        {/* Render widgets in user-defined order, skip null-returning ones */}
+        {widgets.filter(w => w.visible).map(w => {
+          const content = renderWidget(w.id);
+          if (!content) return null;
+          return (
+            <WidgetErrorBoundary key={`eb-${w.id}`} widgetId={w.id}>
+              {content}
+            </WidgetErrorBoundary>
+          );
+        })}
       </div>
       
       <CommissionPacingDetailModal
