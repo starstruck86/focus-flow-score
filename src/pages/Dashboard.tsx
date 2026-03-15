@@ -55,7 +55,7 @@ export default function Dashboard() {
   const { widgets, toggleWidget, moveWidget, resetWidgets } = useDashboardWidgets();
   const { data: currentWeekReview, isLoading: weeklyReviewLoading } = useCurrentWeekReview();
   
-  const { opportunities, renewals, quotaConfig } = useStore();
+  const { quotaConfig } = useStore();
   const { data: config } = useWorkScheduleConfig();
   const { data: holidays } = useHolidays();
   const { data: ptoDays } = usePtoDays();
