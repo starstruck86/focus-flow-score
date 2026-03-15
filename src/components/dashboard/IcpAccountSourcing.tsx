@@ -63,7 +63,7 @@ export function IcpAccountSourcing() {
   const promoteAndEnrich = useMutation({
     mutationFn: async (account: any) => {
       if (!user) throw new Error('Not authenticated');
-      setPromotingIds(prev => new Set(prev).add(account.id));
+      setPromotingIds((prev: Set<string>) => new Set(prev).add(account.id));
 
       // 1. Create account in CRM
       const { data: newAccount, error: insertErr } = await supabase.from('accounts').insert({
