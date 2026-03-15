@@ -19,6 +19,7 @@ interface ClickableNameCellProps {
   salesforceLink?: string;
   onNameChange?: (name: string) => void;
   onSalesforceLinkChange: (link: string) => void;
+  onOpenDetails?: () => void;
   className?: string;
   fontWeight?: 'normal' | 'medium' | 'semibold';
 }
