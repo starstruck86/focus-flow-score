@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useCallback, memo, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 import { 
   ExternalLink, 
@@ -76,7 +76,7 @@ import { ManageColumnsPopover } from '@/components/table/ManageColumnsPopover';
 import { CustomFieldCell, CustomFieldRow } from '@/components/table/CustomFieldCell';
 import { MetricFieldCell } from '@/components/table/MetricFieldCell';
 import { useCustomFields } from '@/hooks/useCustomFields';
-import { ImportModal } from '@/components/import';
+import { ImportModal, ClaudeImportModal } from '@/components/import';
 import { EditableTextCell, EditableTextareaCell, DisplaySelectCell, WebsiteLinkCell, AccountNameCell } from '@/components/table';
 import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
 import { useBulkSelection } from '@/hooks/useBulkSelection';
@@ -449,6 +449,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
   isSelected,
   onToggleSelect,
   highlightId,
+  onOpenAccountDetail,
 }: {
   group: FunnelGroup;
   accounts: Account[];
@@ -461,6 +462,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
   isSelected: (id: string) => boolean;
   onToggleSelect: (id: string) => void;
   highlightId: string | null;
+  onOpenAccountDetail: (id: string) => void;
 }) {
   const { fields, getFieldValue } = useCustomFields();
   const [groupSort, setGroupSort] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
@@ -575,6 +577,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                             salesforceLink={account.salesforceLink}
                             onNameChange={(name) => updateAccount(account.id, { name })}
                             onSalesforceLinkChange={(link) => updateAccount(account.id, { salesforceLink: link })}
+                            onOpenDetails={() => onOpenAccountDetail(account.id)}
                             className="text-sm break-words"
                           />
                           <div className="opacity-0 group-hover/row:opacity-100 transition-opacity">
@@ -747,6 +750,8 @@ export default function WeeklyOutreach() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showBulkImportDialog, setShowBulkImportDialog] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showClaudeImport, setShowClaudeImport] = useState(false);
+  const navigate = useNavigate();
   const [importPreview, setImportPreview] = useState<Partial<Account>[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1288,6 +1293,10 @@ export default function WeeklyOutreach() {
                   <FileSpreadsheet className="h-4 w-4 mr-2" />
                   Import
                 </Button>
+                <Button variant="outline" onClick={() => setShowClaudeImport(true)}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Claude Import
+                </Button>
                 
                 <Dialog open={showBulkImportDialog} onOpenChange={(open) => {
                   setShowBulkImportDialog(open);
@@ -1613,6 +1622,7 @@ export default function WeeklyOutreach() {
                       isSelected={bulkSelection.isSelected}
                       onToggleSelect={bulkSelection.toggle}
                       highlightId={highlightId}
+                      onOpenAccountDetail={(id) => navigate(`/accounts/${id}`)}
                     />
                   ))}
                 </div>
@@ -1635,6 +1645,7 @@ export default function WeeklyOutreach() {
                         isSelected={bulkSelection.isSelected}
                         onToggleSelect={bulkSelection.toggle}
                         highlightId={highlightId}
+                        onOpenAccountDetail={(id) => navigate(`/accounts/${id}`)}
                       />
                     ))}
                   </div>
@@ -1658,6 +1669,7 @@ export default function WeeklyOutreach() {
                         isSelected={bulkSelection.isSelected}
                         onToggleSelect={bulkSelection.toggle}
                         highlightId={highlightId}
+                        onOpenAccountDetail={(id) => navigate(`/accounts/${id}`)}
                       />
                     ))}
                   </div>
@@ -1680,6 +1692,7 @@ export default function WeeklyOutreach() {
         
         {/* Import Modal */}
         <ImportModal open={showImportModal} onOpenChange={setShowImportModal} />
+        <ClaudeImportModal open={showClaudeImport} onClose={() => setShowClaudeImport(false)} />
       </div>
     </Layout>
   );

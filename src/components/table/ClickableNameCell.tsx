@@ -3,7 +3,7 @@
 // - If SFDC link missing: clicking name opens popover to add link
 // - Pencil icon to edit the name text itself
 import { useState, useEffect, useRef } from 'react';
-import { ExternalLink, Plus, Pencil, Link } from 'lucide-react';
+import { ExternalLink, Plus, Pencil, Link, ArrowUpRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -19,6 +19,7 @@ interface ClickableNameCellProps {
   salesforceLink?: string;
   onNameChange?: (name: string) => void;
   onSalesforceLinkChange: (link: string) => void;
+  onOpenDetails?: () => void;
   className?: string;
   fontWeight?: 'normal' | 'medium' | 'semibold';
 }
@@ -47,6 +48,7 @@ export function ClickableNameCell({
   salesforceLink,
   onNameChange,
   onSalesforceLinkChange,
+  onOpenDetails,
   className,
   fontWeight = 'medium',
 }: ClickableNameCellProps) {
@@ -217,6 +219,22 @@ export function ClickableNameCell({
             <Pencil className="h-3 w-3" />
           </Button>
         )}
+
+        {/* Open detail page */}
+        {onOpenDetails && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5 opacity-0 group-hover:opacity-70 hover:!opacity-100 transition-opacity"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenDetails();
+            }}
+            title="Open Details"
+          >
+            <ArrowUpRight className="h-3 w-3" />
+          </Button>
+        )}
       </div>
     );
   }
@@ -303,12 +321,14 @@ export function AccountNameCell({
   salesforceLink,
   onNameChange,
   onSalesforceLinkChange,
+  onOpenDetails,
   className,
 }: {
   name: string;
   salesforceLink?: string;
   onNameChange?: (name: string) => void;
   onSalesforceLinkChange: (link: string) => void;
+  onOpenDetails?: () => void;
   className?: string;
 }) {
   return (
@@ -317,6 +337,7 @@ export function AccountNameCell({
       salesforceLink={salesforceLink}
       onNameChange={onNameChange}
       onSalesforceLinkChange={onSalesforceLinkChange}
+      onOpenDetails={onOpenDetails}
       fontWeight="medium"
       className={className}
     />

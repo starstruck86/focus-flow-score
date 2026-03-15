@@ -19,6 +19,8 @@ import RecurringTasks from "./pages/RecurringTasks";
 import Trends from "./pages/Trends";
 import Quota from "./pages/Quota";
 import Settings from "./pages/Settings";
+import AccountDetail from "./pages/AccountDetail";
+import OpportunityDetail from "./pages/OpportunityDetail";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -59,6 +61,8 @@ const App = () => (
                   <Route path="/auth" element={<Auth />} />
                   <Route path="/" element={<ProtectedPage><Dashboard /></ProtectedPage>} />
                   <Route path="/outreach" element={<ProtectedPage><WeeklyOutreach /></ProtectedPage>} />
+                  <Route path="/accounts/:id" element={<ProtectedPage><AccountDetail /></ProtectedPage>} />
+                  <Route path="/opportunities/:id" element={<ProtectedPage><OpportunityDetail /></ProtectedPage>} />
                   <Route path="/renewals" element={<ProtectedPage><Renewals /></ProtectedPage>} />
                   <Route path="/tasks" element={<ProtectedPage><Tasks /></ProtectedPage>} />
                   <Route path="/recurring" element={<ProtectedPage><RecurringTasks /></ProtectedPage>} />
