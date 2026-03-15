@@ -83,6 +83,7 @@ const BLOCK_ACTIONS: Record<string, { label: string; route?: string; dispatch?: 
   research: { label: '→ Open Accounts', route: '/outreach' },
   pipeline: { label: '→ Open Pipeline', route: '/quota' },
   prep: { label: '→ Open Accounts', route: '/outreach' },
+  meeting: { label: '→ Meeting Prep', dispatch: 'scroll-meeting-prep' },
 };
 
 export function DailyTimeBlocks() {
