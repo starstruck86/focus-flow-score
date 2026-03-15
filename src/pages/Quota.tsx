@@ -35,9 +35,23 @@ import {
   formatCurrency,
 } from '@/lib/commissionCalculations';
 import type { QuotaConfig, Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
-import { DollarSign, Target, FileText, Settings2, AlertTriangle, Pencil } from 'lucide-react';
+import { DollarSign, Target, FileText, Settings2, AlertTriangle, Pencil, ChevronDown } from 'lucide-react';
 import { useDbOpportunities, useUpdateOpportunity, type DbOpportunity } from '@/hooks/useAccountsData';
 import { toast } from 'sonner';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { cn } from '@/lib/utils';
+import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
+import {
+  PipelineHygieneCard,
+  QuotaScenarioSimulator,
+  UnifiedPipeline,
+  PaceToQuotaCard,
+  PerformanceSnapshot,
+  CommissionSnapshot,
+  Next45DaysRisk,
+} from '@/components/dashboard';
+import { usePaceToQuota, usePerformanceRollups, useQuotaTargets } from '@/hooks/useSalesAge';
+import { DEFAULT_QUOTA_TARGETS } from '@/lib/salesAgeCalculations';
 
 // Normalize status based on stage (e.g., stage="Closed Won" but status="active")
 function normalizeOppStatus(status: OpportunityStatus, stage: OpportunityStage): OpportunityStatus {
