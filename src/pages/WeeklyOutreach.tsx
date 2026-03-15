@@ -1290,6 +1290,10 @@ export default function WeeklyOutreach() {
                   <FileSpreadsheet className="h-4 w-4 mr-2" />
                   Import
                 </Button>
+                <Button variant="outline" onClick={() => setShowClaudeImport(true)}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Claude Import
+                </Button>
                 
                 <Dialog open={showBulkImportDialog} onOpenChange={(open) => {
                   setShowBulkImportDialog(open);
