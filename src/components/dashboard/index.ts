@@ -27,3 +27,4 @@ export { CoachingFeed } from './CoachingFeed';
 export { IcpAccountSourcing } from './IcpAccountSourcing';
 export { CompanyMonitorCard } from './CompanyMonitorCard';
 export { EnrichmentTimeline } from './EnrichmentTimeline';
+export { AccountHealthPulseCard } from './AccountHealthPulseCard';
