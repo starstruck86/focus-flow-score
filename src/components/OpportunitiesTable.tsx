@@ -599,6 +599,8 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
 
   const renderOpportunityRow = (opp: Opportunity) => {
     const isExpanded = expandedOppIds.has(opp.id);
+    const linkedAccount = opp.accountId ? accountMap.get(opp.accountId) : undefined;
+    const stakeholderAccountName = linkedAccount?.name ?? opp.accountName;
 
     if (renewalsOnly) {
       const expansion = (opp.renewalArr || 0) - (opp.priorContractArr || 0);
