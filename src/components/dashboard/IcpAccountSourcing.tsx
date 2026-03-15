@@ -131,12 +131,14 @@ export function IcpAccountSourcing() {
       });
     },
     onError: (err: Error) => toast.error('Promote failed', { description: err.message }),
-    onSettled: (_, __, account) => {
-      setPromotingIds(prev => {
-        const next = new Set(prev);
-        next.delete(account.id);
-        return next;
-      });
+    onSettled: (_: any, __: any, account: any) => {
+      if (account?.id) {
+        setPromotingIds((prev: Set<string>) => {
+          const next = new Set(prev);
+          next.delete(account.id);
+          return next;
+        });
+      }
     },
   });
 
