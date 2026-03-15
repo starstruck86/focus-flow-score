@@ -138,9 +138,6 @@ export default function Quota() {
     contactsPreppedPerDay: effectiveTargets.targetContactsPreppedPerDay,
   };
   const totalQuota = (effectiveTargets.newArrQuota || 0) + (effectiveTargets.renewalArrQuota || 0);
-  const combinedAttainment = totalQuota > 0
-    ? (summary?.newArrBooked + summary?.renewalArrBooked) / totalQuota
-    : 0;
   // Calculate date filter based on time view
   const dateFilter = useMemo(() => {
     const now = new Date();
