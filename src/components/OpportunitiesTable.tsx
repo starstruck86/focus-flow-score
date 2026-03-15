@@ -953,6 +953,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 onLastTouchDateChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
                 notes={opp.notes}
                 onNotesChange={(v) => updateOpportunity(opp.id, { notes: v })}
+                accountId={opp.accountId}
+                accountName={stakeholderAccountName}
+                accountWebsite={linkedAccount?.website}
+                accountIndustry={linkedAccount?.industry}
+                opportunityContext={`${opp.name} - ${opp.stage} - $${opp.arr || 0} ARR`}
               />
             </TableCell>
           </TableRow>
