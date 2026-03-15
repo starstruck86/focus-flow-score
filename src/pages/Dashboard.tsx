@@ -52,7 +52,6 @@ export default function Dashboard() {
   const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
   const [showCommissionDetail, setShowCommissionDetail] = useState(false);
   const [showWeeklyReview, setShowWeeklyReview] = useState(false);
-  const [snapshotsOpen, setSnapshotsOpen] = useState(false);
   const { widgets, toggleWidget, moveWidget, resetWidgets } = useDashboardWidgets();
   const { data: currentWeekReview, isLoading: weeklyReviewLoading } = useCurrentWeekReview();
   
@@ -64,9 +63,8 @@ export default function Dashboard() {
   const { data: streakEvents } = useStreakEvents();
   const { data: todayJournalEntry, isLoading: journalLoading } = useTodayJournalEntry();
   const { data: commissionPacing, isLoading: pacingLoading } = useCommissionPacing();
-  const paceToQuota = usePaceToQuota();
   const { data: quotaTargets } = useQuotaTargets();
-  const { data: performanceRollups, isLoading: rollupsLoading } = usePerformanceRollups();
+  const { data: wtdMetrics, isLoading: wtdLoading } = useWeekToDateMetrics();
   const { data: wtdMetrics, isLoading: wtdLoading } = useWeekToDateMetrics();
 
   // Wrap all derived calculations in try-catch to prevent render crashes
