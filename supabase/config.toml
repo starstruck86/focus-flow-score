@@ -50,3 +50,24 @@ verify_jwt = false
 
 [functions.generate-time-blocks]
 verify_jwt = false
+
+[functions.discover-contacts]
+verify_jwt = false
+
+[functions.conversion-math]
+verify_jwt = false
+
+[functions.parse-account-screenshot]
+verify_jwt = false
+
+[functions.parse-claude-import]
+verify_jwt = false
+
+[functions.pipeline-hygiene]
+verify_jwt = false
+
+[functions.source-icp-accounts]
+verify_jwt = false
+
+[functions.weekly-battle-plan]
+verify_jwt = false
