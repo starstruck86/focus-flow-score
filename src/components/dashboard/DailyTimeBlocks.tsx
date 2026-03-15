@@ -83,6 +83,7 @@ const BLOCK_ACTIONS: Record<string, { label: string; route?: string; dispatch?: 
   research: { label: '→ Open Accounts', route: '/outreach' },
   pipeline: { label: '→ Open Pipeline', route: '/quota' },
   prep: { label: '→ Open Accounts', route: '/outreach' },
+  meeting: { label: '→ Meeting Prep', dispatch: 'scroll-meeting-prep' },
 };
 
 export function DailyTimeBlocks() {
@@ -503,8 +504,9 @@ export function DailyTimeBlocks() {
                       onClick={() => {
                         const action = BLOCK_ACTIONS[block.type];
                         if (action.dispatch === 'power-hour') {
-                          // Dispatch keyboard shortcut to open FAB power hour
                           window.dispatchEvent(new CustomEvent('open-power-hour'));
+                        } else if (action.dispatch === 'scroll-meeting-prep') {
+                          document.getElementById('meeting-prep-section')?.scrollIntoView({ behavior: 'smooth' });
                         } else if (action.route) {
                           navigate(action.route);
                         }

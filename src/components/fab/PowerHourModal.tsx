@@ -49,7 +49,7 @@ const DURATION_PRESETS = [
 type SessionState = 'setup' | 'running' | 'paused' | 'completed';
 
 export function PowerHourModal({ open, onOpenChange }: PowerHourModalProps) {
-  const { logCall, updateRawInputs, currentDay, initializeToday } = useStore();
+  const { updateRawInputs, updateActivityInputs, currentDay, initializeToday } = useStore();
   
   const [duration, setDuration] = useState(60);
   const [focus, setFocus] = useState<Motion>('new-logo');
@@ -115,15 +115,14 @@ export function PowerHourModal({ open, onOpenChange }: PowerHourModalProps) {
   };
   
   const applyToDaily = async () => {
-    // Apply to local store
-    for (let i = 0; i < dials; i++) {
-      logCall(i < connects);
-    }
-    if (meetingsSet > 0) {
-      updateRawInputs({
-        initialMeetingsSet: (currentDay?.rawInputs.initialMeetingsSet || 0) + meetingsSet,
-      });
-    }
+    // Sync aggregate metrics to daily journal (SF is system of record for individual activities)
+    updateActivityInputs({
+      dials: (currentDay?.activityInputs.dials || 0) + dials,
+    });
+    updateRawInputs({
+      coldCallsWithConversations: (currentDay?.rawInputs.coldCallsWithConversations || 0) + connects,
+      initialMeetingsSet: (currentDay?.rawInputs.initialMeetingsSet || 0) + meetingsSet,
+    });
     
     // Persist to database — falls back to offline queue if no connectivity
     const sessionData = {

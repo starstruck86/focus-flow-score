@@ -184,9 +184,11 @@ export default function Dashboard() {
         </WidgetErrorBoundary>
 
         {/* === SECTION 2: WHAT'S NEXT — Imminent meetings needing prep === */}
+        <div id="meeting-prep-section">
         <WidgetErrorBoundary widgetId="meeting-prep-prompt">
           <MeetingPrepPrompt />
         </WidgetErrorBoundary>
+        </div>
 
         {/* === SECTION 3: COACH + ACCOUNTABILITY === */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

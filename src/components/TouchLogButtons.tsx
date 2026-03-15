@@ -19,7 +19,7 @@ const TOUCH_TYPES: { type: TouchType; icon: typeof Phone; label: string; hasConv
 ];
 
 export function TouchLogButtons({ accountId, compact }: TouchLogButtonsProps) {
-  const { updateAccount, accounts, logCall, logManualEmail, logMeetingHeld } = useStore();
+  const { updateAccount, accounts } = useStore();
 
   const handleTouch = (touchType: TouchType) => {
     const today = new Date().toISOString().split('T')[0];
@@ -28,19 +28,12 @@ export function TouchLogButtons({ accountId, compact }: TouchLogButtonsProps) {
 
     emitSaveStatus('saving');
 
-    // Update account touch tracking
+    // Update account touch tracking only — SF is system of record for activities
     updateAccount(accountId, {
       lastTouchDate: today,
       lastTouchType: touchType,
       touchesThisWeek: (account.touchesThisWeek || 0) + 1,
     });
-
-    // Also log to daily metrics
-    switch (touchType) {
-      case 'call': logCall(true); break;
-      case 'manual-email': logManualEmail(); break;
-      case 'meeting': logMeetingHeld(); break;
-    }
 
     setTimeout(() => emitSaveStatus('saved'), 300);
     toast.success(`${touchType.replace('-', ' ')} logged for ${account.name}`, { duration: 2000 });
