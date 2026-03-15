@@ -22,6 +22,7 @@ import { GlobalSearch } from '@/components/GlobalSearch';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { TerritoryCopilot } from '@/components/TerritoryCopilot';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { BackToToday } from '@/components/BackToToday';
 
 const navItems = [
   { to: '/', label: 'Today', icon: LayoutDashboard },
