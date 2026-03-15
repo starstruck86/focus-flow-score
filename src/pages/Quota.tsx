@@ -123,6 +123,24 @@ export default function Quota() {
   const [timeView, setTimeView] = useState<TimeView>('ytd');
   const [fixingDeal, setFixingDeal] = useState<(Opportunity & { missingFields: string[] }) | null>(null);
   const updateOpportunityMutation = useUpdateOpportunity();
+  const { renewals } = useStore();
+  const paceToQuota = usePaceToQuota();
+  const { data: quotaTargets } = useQuotaTargets();
+  const { data: performanceRollups, isLoading: rollupsLoading } = usePerformanceRollups();
+  const effectiveTargets = quotaTargets || DEFAULT_QUOTA_TARGETS;
+  const performanceTargets = {
+    dialsPerDay: effectiveTargets.targetDialsPerDay,
+    connectsPerDay: effectiveTargets.targetConnectsPerDay,
+    meetingsPerWeek: effectiveTargets.targetMeetingsSetPerWeek,
+    oppsPerWeek: effectiveTargets.targetOppsCreatedPerWeek,
+    customerMeetingsPerWeek: effectiveTargets.targetCustomerMeetingsPerWeek,
+    accountsResearchedPerDay: effectiveTargets.targetAccountsResearchedPerDay,
+    contactsPreppedPerDay: effectiveTargets.targetContactsPreppedPerDay,
+  };
+  const totalQuota = (effectiveTargets.newArrQuota || 0) + (effectiveTargets.renewalArrQuota || 0);
+  const combinedAttainment = totalQuota > 0
+    ? (summary?.newArrBooked + summary?.renewalArrBooked) / totalQuota
+    : 0;
   // Calculate date filter based on time view
   const dateFilter = useMemo(() => {
     const now = new Date();
