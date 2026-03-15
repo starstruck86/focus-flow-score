@@ -1646,6 +1646,7 @@ export default function WeeklyOutreach() {
                         onToggleSelect={bulkSelection.toggle}
                         highlightId={highlightId}
                         onOpenAccountDetail={(id) => navigate(`/accounts/${id}`)}
+                      />
                     ))}
                   </div>
                 </div>
