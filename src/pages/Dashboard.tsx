@@ -60,6 +60,7 @@ import {
   CoachingFeed,
   IcpAccountSourcing,
   CompanyMonitorCard,
+  AccountHealthPulseCard,
 } from '@/components/dashboard';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 
