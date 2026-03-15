@@ -106,7 +106,7 @@ export default function Quota() {
   const dbOpps = useMemo(() => dbOpportunities.map(dbToUiOpportunity), [dbOpportunities]);
   
   // Also merge any Zustand-only opportunities (for backward compat) — normalize status there too
-  const { opportunities: rawStoreOpps, quotaConfig, setQuotaConfig } = useStore();
+  const { opportunities: rawStoreOpps, renewals, quotaConfig, setQuotaConfig } = useStore();
   const storeOpps = useMemo(() => rawStoreOpps.map(o => ({
     ...o,
     status: normalizeOppStatus(o.status, o.stage),
