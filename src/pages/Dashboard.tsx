@@ -1,7 +1,7 @@
 // Results-First Dashboard with customizable widget layout
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, ChevronDown } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import { StreakChip } from '@/components/StreakChip';
 import { Layout } from '@/components/Layout';
 import { DailyScorecardModal, BackfillCards, JournalDashboardCard } from '@/components/journal';
