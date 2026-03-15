@@ -46,11 +46,13 @@ export function CompanyMonitorCard() {
   const { data: digestItems, isLoading } = useQuery({
     queryKey: ['company-monitor', user?.id],
     queryFn: async () => {
+      if (!user) return [];
       const weekAgo = new Date();
       weekAgo.setDate(weekAgo.getDate() - 7);
       const { data, error } = await supabase
         .from('daily_digest_items')
         .select('*')
+        .eq('user_id', user.id)
         .gte('digest_date', weekAgo.toISOString().split('T')[0])
         .order('relevance_score', { ascending: false })
         .limit(20);
@@ -83,6 +85,7 @@ export function CompanyMonitorCard() {
         const { data: newItems } = await supabase
           .from('daily_digest_items')
           .select('*')
+          .eq('user_id', user!.id)
           .eq('digest_date', new Date().toISOString().split('T')[0])
           .eq('is_actionable', true);
 

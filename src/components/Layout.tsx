@@ -38,7 +38,7 @@ function BottomNav() {
   const { signOut } = useAuth();
   
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-md border-t border-border safe-area-bottom">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-md border-t border-border pb-[env(safe-area-inset-bottom)]">
       <div className="flex items-center justify-around h-14 max-w-3xl mx-auto px-1">
         {navItems.map((item) => {
           const isActive = item.to === '/' 
