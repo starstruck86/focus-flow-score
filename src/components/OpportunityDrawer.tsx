@@ -378,6 +378,20 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
 
             <Separator />
 
+            {/* Stakeholder / Buyer Map */}
+            {opportunity.accountId && linkedAccount && (
+              <>
+                <StakeholderMap
+                  accountId={opportunity.accountId}
+                  accountName={linkedAccount.name}
+                  website={linkedAccount.website}
+                  industry={linkedAccount.industry}
+                  opportunityContext={`${opportunity.name} - ${opportunity.stage} - $${opportunity.arr || 0} ARR`}
+                />
+                <Separator />
+              </>
+            )}
+
             {/* Resources & Templates */}
             <ResourceLinksPanel
               recordType="opportunity"
