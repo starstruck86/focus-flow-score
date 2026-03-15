@@ -232,60 +232,8 @@ export default function Dashboard() {
         return <TodayAgenda key={widgetId} />;
       case 'meeting-prep':
         return <MeetingPrepCard key={widgetId} />;
-      case 'pipeline':
-        return <UnifiedPipeline key={widgetId} />;
-      case 'pace-to-quota':
-        return <PaceToQuotaCard key={widgetId} paceToQuota={paceToQuota} />;
-      case 'what-to-do-next':
-        return (
-          <WhatToDoNext 
-            key={widgetId}
-            recommendations={commissionPacing?.actionPlan.map((a, i) => ({
-              id: `action-${i}`,
-              priority: (i + 1) as 1 | 2 | 3,
-              action: a.action, target: a.target, timeframe: a.timeframe,
-              workflow: a.workflow as any, why: `Based on current pace`,
-              impact: a.impact, qpiImpact: 0.05 * (3 - i),
-            })) || []} 
-            isLoading={pacingLoading}
-          />
-        );
-      case 'risk-window':
-        return <Next45DaysRisk key={widgetId} opportunities={opportunities} renewals={renewals} />;
-      case 'snapshots':
-        return (
-          <Collapsible key={widgetId} open={snapshotsOpen} onOpenChange={setSnapshotsOpen}>
-            <CollapsibleTrigger className="flex items-center gap-2 w-full text-left py-3 group">
-              <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", snapshotsOpen && "rotate-180")} />
-              <span className="font-display text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
-                Performance & Commission Snapshots
-              </span>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
-                <PerformanceSnapshot
-                  wtd={performanceRollups?.wtd || { dials: 0, conversations: 0, meetingsSet: 0, customerMeetingsHeld: 0, oppsCreated: 0, accountsResearched: 0, contactsPrepped: 0 }}
-                  mtd={performanceRollups?.mtd || { dials: 0, conversations: 0, meetingsSet: 0, customerMeetingsHeld: 0, oppsCreated: 0, accountsResearched: 0, contactsPrepped: 0 }}
-                  wtdDays={performanceRollups?.wtdDays || 0}
-                  mtdDays={performanceRollups?.mtdDays || 0}
-                  targets={performanceTargets}
-                  isLoading={rollupsLoading}
-                />
-                <CommissionSnapshot
-                  totalCommission={commissionSummary.totalCommission}
-                  newArrAttainment={commissionSummary.newArrAttainment}
-                  renewalArrAttainment={commissionSummary.renewalArrAttainment}
-                  combinedAttainment={combinedAttainment}
-                  projectedImpact={{ additionalNewArr: 50000, additionalCommission: 50000 * effectiveConfig.newArrAcr }}
-                />
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-        );
       case 'daily-digest':
         return <DailyDigest key={widgetId} />;
-      case 'ai-prioritizer':
-        return <AIAccountPrioritizer key={widgetId} />;
       case 'calendar-intelligence':
         return <CalendarIntelligence key={widgetId} />;
       case 'daily-time-blocks':
@@ -294,18 +242,8 @@ export default function Dashboard() {
         return <PClubMathCard key={widgetId} />;
       case 'weekly-battle-plan':
         return <WeeklyBattlePlanCard key={widgetId} />;
-      case 'pipeline-hygiene':
-        return <PipelineHygieneCard key={widgetId} />;
       case 'coaching-feed':
         return <CoachingFeed key={widgetId} />;
-      case 'scenario-simulator':
-        return <QuotaScenarioSimulator key={widgetId} />;
-      case 'icp-sourcing':
-        return <IcpAccountSourcing key={widgetId} />;
-      case 'company-monitor':
-        return <CompanyMonitorCard key={widgetId} />;
-      case 'account-health-pulse':
-        return <AccountHealthPulseCard key={widgetId} />;
       default:
         return null;
     }

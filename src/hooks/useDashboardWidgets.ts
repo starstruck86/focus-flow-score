@@ -18,22 +18,11 @@ const DEFAULT_WIDGETS: DashboardWidget[] = [
   { id: 'commission-pacing', label: 'Commission Pacing', visible: true },
   { id: 'progress-tabs', label: 'Today / Week-to-Date', visible: true },
   { id: 'weekly-battle-plan', label: 'Weekly Battle Plan', visible: true },
-  { id: 'pipeline-hygiene', label: 'Pipeline Health', visible: true },
   { id: 'smart-work-queue', label: 'Smart Work Queue', visible: true },
   { id: 'today-agenda', label: "Today's Agenda", visible: true },
-  { id: 'scenario-simulator', label: 'Scenario Simulator', visible: false },
   { id: 'meeting-prep', label: 'Meeting Prep', visible: false },
-  { id: 'ai-prioritizer', label: 'AI Focus Recommender', visible: false },
   { id: 'calendar-intelligence', label: 'Calendar Intelligence', visible: false },
-  { id: 'pipeline', label: 'Unified Pipeline', visible: false },
-  { id: 'pace-to-quota', label: 'Pace to Quota', visible: false },
-  { id: 'what-to-do-next', label: 'What To Do Next', visible: false },
-  { id: 'risk-window', label: 'Next 45 Days Risk', visible: false },
-  { id: 'snapshots', label: 'Performance & Commission', visible: false },
   { id: 'daily-digest', label: 'Daily Digest', visible: false },
-  { id: 'icp-sourcing', label: 'ICP Account Sourcing', visible: true },
-  { id: 'company-monitor', label: 'Company Intel Monitor', visible: true },
-  { id: 'account-health-pulse', label: 'Account Health Pulse', visible: true },
 ];
 
 function loadWidgets(): DashboardWidget[] {
