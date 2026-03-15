@@ -74,7 +74,7 @@ export function ResearchChecklist() {
 
   return (
     <motion.div
-      className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"
+      className="rounded-xl border border-status-yellow/30 bg-status-yellow/5 p-4"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
     >
