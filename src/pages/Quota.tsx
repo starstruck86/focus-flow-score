@@ -100,6 +100,7 @@ function dbToUiOpportunity(db: DbOpportunity): Opportunity {
 type TimeView = 'ytd' | 'qtd' | 'mtd';
 
 export default function Quota() {
+  const [strategicOpen, setStrategicOpen] = useState(true);
   // Use DB hooks for opportunities (source of truth)
   const { data: dbOpportunities = [] } = useDbOpportunities();
   const dbOpps = useMemo(() => dbOpportunities.map(dbToUiOpportunity), [dbOpportunities]);
