@@ -19,6 +19,8 @@ import RecurringTasks from "./pages/RecurringTasks";
 import Trends from "./pages/Trends";
 import Quota from "./pages/Quota";
 import Settings from "./pages/Settings";
+import AccountDetail from "./pages/AccountDetail";
+import OpportunityDetail from "./pages/OpportunityDetail";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
