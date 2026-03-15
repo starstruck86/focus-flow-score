@@ -165,7 +165,7 @@ export default function AccountDetail() {
                     <Badge className={cn("text-[10px]", STATUS_COLORS[account.accountStatus])}>
                       {account.accountStatus}
                     </Badge>
-                    {account.icpFitScore !== undefined && <IcpScorePill score={account.icpFitScore} />}
+                    <IcpScorePill account={account} />
                     {account.motion && (
                       <Badge variant="outline" className="text-[10px]">{account.motion}</Badge>
                     )}
