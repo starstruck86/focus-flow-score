@@ -77,8 +77,17 @@ function getBlockDurationMinutes(block: TimeBlock): number {
   return (eh * 60 + em) - (sh * 60 + sm);
 }
 
+// Map block types to quick actions
+const BLOCK_ACTIONS: Record<string, { label: string; route?: string; dispatch?: string }> = {
+  prospecting: { label: '⚡ Start Power Hour', dispatch: 'power-hour' },
+  research: { label: '→ Open Accounts', route: '/outreach' },
+  pipeline: { label: '→ Open Pipeline', route: '/quota' },
+  prep: { label: '→ Open Accounts', route: '/outreach' },
+};
+
 export function DailyTimeBlocks() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const [showFeedback, setShowFeedback] = useState(false);
