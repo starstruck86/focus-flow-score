@@ -466,13 +466,13 @@ export function DailyTimeBlocks() {
                   </ul>
 
                   {/* Per-block thumbs + reasoning */}
-                  <div className="flex items-center gap-2 mt-1.5">
+                   <div className="flex items-center gap-2 mt-1.5">
                     <div className="flex gap-0.5">
                       <button
                         onClick={() => thumbsBlock(i, 'up')}
                         className={cn(
                           "p-0.5 rounded transition-colors",
-                          blockThumb === 'up' ? "text-green-500" : "text-muted-foreground/25 hover:text-muted-foreground/50"
+                          blockThumb === 'up' ? "text-status-green" : "text-muted-foreground/25 hover:text-muted-foreground/50"
                         )}
                         title="Good block suggestion"
                       >
@@ -482,7 +482,7 @@ export function DailyTimeBlocks() {
                         onClick={() => thumbsBlock(i, 'down')}
                         className={cn(
                           "p-0.5 rounded transition-colors",
-                          blockThumb === 'down' ? "text-red-500" : "text-muted-foreground/25 hover:text-muted-foreground/50"
+                          blockThumb === 'down' ? "text-status-red" : "text-muted-foreground/25 hover:text-muted-foreground/50"
                         )}
                         title="Not useful"
                       >
@@ -493,6 +493,27 @@ export function DailyTimeBlocks() {
                       <p className="text-[10px] text-muted-foreground/50 italic truncate">{block.reasoning}</p>
                     )}
                   </div>
+
+                  {/* Contextual action button */}
+                  {isCurrent && BLOCK_ACTIONS[block.type] && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-2 h-6 text-[11px] gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                      onClick={() => {
+                        const action = BLOCK_ACTIONS[block.type];
+                        if (action.dispatch === 'power-hour') {
+                          // Dispatch keyboard shortcut to open FAB power hour
+                          window.dispatchEvent(new CustomEvent('open-power-hour'));
+                        } else if (action.route) {
+                          navigate(action.route);
+                        }
+                      }}
+                    >
+                      <ArrowRight className="h-3 w-3" />
+                      {BLOCK_ACTIONS[block.type].label}
+                    </Button>
+                  )}
                 </div>
               </div>
             );
