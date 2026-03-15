@@ -33,6 +33,7 @@ const DEFAULT_WIDGETS: DashboardWidget[] = [
   { id: 'daily-digest', label: 'Daily Digest', visible: false },
   { id: 'icp-sourcing', label: 'ICP Account Sourcing', visible: true },
   { id: 'company-monitor', label: 'Company Intel Monitor', visible: true },
+  { id: 'account-health-pulse', label: 'Account Health Pulse', visible: true },
 ];
 
 function loadWidgets(): DashboardWidget[] {
