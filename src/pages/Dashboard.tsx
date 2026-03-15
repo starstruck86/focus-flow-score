@@ -1,7 +1,7 @@
 // Results-First Dashboard with customizable widget layout
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, ChevronDown } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import { StreakChip } from '@/components/StreakChip';
 import { Layout } from '@/components/Layout';
 import { DailyScorecardModal, BackfillCards, JournalDashboardCard } from '@/components/journal';
@@ -18,49 +18,32 @@ import {
   isEligibleDay 
 } from '@/hooks/useStreakData';
 import { useTodayJournalEntry } from '@/hooks/useDailyJournal';
-import { 
-  usePaceToQuota, 
-  usePerformanceRollups,
-  useQuotaTargets,
-} from '@/hooks/useSalesAge';
+import { useQuotaTargets } from '@/hooks/useSalesAge';
 import { useCommissionPacing } from '@/hooks/useCommissionPacing';
 import { useWeekToDateMetrics, calculateExpectedVsActual } from '@/hooks/useGoodDayMetrics';
 import { getTemplateById, calculateWeeklyExpectations } from '@/lib/goodDayModel';
-import { calculateCommissionSummary, DEFAULT_QUOTA_CONFIG } from '@/lib/commissionCalculations';
+import { DEFAULT_QUOTA_CONFIG } from '@/lib/commissionCalculations';
 import { DEFAULT_QUOTA_TARGETS } from '@/lib/salesAgeCalculations';
 import { format, differenceInBusinessDays, startOfWeek } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { useDashboardWidgets } from '@/hooks/useDashboardWidgets';
 import { WidgetCustomizer } from '@/components/dashboard/WidgetCustomizer';
 import {
-  PaceToQuotaCard,
-  WhatToDoNext,
-  Next45DaysRisk,
-  PerformanceSnapshot,
-  CommissionSnapshot,
   CheckInBanner,
   CommissionPacingTile,
   CommissionPacingDetailModal,
   ExpectedVsActualCard,
-  UnifiedPipeline,
   TodayAgenda,
   MeetingPrepCard,
   SmartWorkQueue,
   DailyDigest,
   MeetingPrepPrompt,
-  AIAccountPrioritizer,
   CalendarIntelligence,
   DailyTimeBlocks,
   PClubMathCard,
-  PipelineHygieneCard,
   WeeklyBattlePlanCard,
-  QuotaScenarioSimulator,
   CoachingFeed,
-  IcpAccountSourcing,
-  CompanyMonitorCard,
-  AccountHealthPulseCard,
 } from '@/components/dashboard';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 
@@ -69,11 +52,10 @@ export default function Dashboard() {
   const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
   const [showCommissionDetail, setShowCommissionDetail] = useState(false);
   const [showWeeklyReview, setShowWeeklyReview] = useState(false);
-  const [snapshotsOpen, setSnapshotsOpen] = useState(false);
   const { widgets, toggleWidget, moveWidget, resetWidgets } = useDashboardWidgets();
   const { data: currentWeekReview, isLoading: weeklyReviewLoading } = useCurrentWeekReview();
   
-  const { opportunities, renewals, quotaConfig } = useStore();
+  const { quotaConfig } = useStore();
   const { data: config } = useWorkScheduleConfig();
   const { data: holidays } = useHolidays();
   const { data: ptoDays } = usePtoDays();
@@ -81,9 +63,7 @@ export default function Dashboard() {
   const { data: streakEvents } = useStreakEvents();
   const { data: todayJournalEntry, isLoading: journalLoading } = useTodayJournalEntry();
   const { data: commissionPacing, isLoading: pacingLoading } = useCommissionPacing();
-  const paceToQuota = usePaceToQuota();
   const { data: quotaTargets } = useQuotaTargets();
-  const { data: performanceRollups, isLoading: rollupsLoading } = usePerformanceRollups();
   const { data: wtdMetrics, isLoading: wtdLoading } = useWeekToDateMetrics();
 
   // Wrap all derived calculations in try-catch to prevent render crashes
@@ -97,9 +77,6 @@ export default function Dashboard() {
   let expectedVsActualMetrics: any[] = [];
   let effectiveConfig = quotaConfig || DEFAULT_QUOTA_CONFIG;
   let effectiveTargets = quotaTargets || DEFAULT_QUOTA_TARGETS;
-  let commissionSummary: any = { newArrBooked: 0, renewalArrBooked: 0, newArrAttainment: 0, renewalArrAttainment: 0, totalCommission: 0 };
-  let combinedAttainment = 0;
-  let performanceTargets: any = {};
 
   try {
     today = new Date();
@@ -131,28 +108,6 @@ export default function Dashboard() {
     
     effectiveConfig = quotaConfig || DEFAULT_QUOTA_CONFIG;
     effectiveTargets = quotaTargets || DEFAULT_QUOTA_TARGETS;
-    const fyStart = effectiveTargets.fiscalYearStart;
-    const dateFilter = { start: fyStart, end: format(today, 'yyyy-MM-dd') };
-    commissionSummary = calculateCommissionSummary(opportunities, {
-      ...effectiveConfig,
-      newArrQuota: effectiveTargets.newArrQuota,
-      renewalArrQuota: effectiveTargets.renewalArrQuota,
-    }, dateFilter);
-    
-    const totalQuota = (effectiveTargets.newArrQuota || 0) + (effectiveTargets.renewalArrQuota || 0);
-    combinedAttainment = totalQuota > 0
-      ? (commissionSummary.newArrBooked + commissionSummary.renewalArrBooked) / totalQuota
-      : 0;
-    
-    performanceTargets = {
-      dialsPerDay: effectiveTargets.targetDialsPerDay,
-      connectsPerDay: effectiveTargets.targetConnectsPerDay,
-      meetingsPerWeek: effectiveTargets.targetMeetingsSetPerWeek,
-      oppsPerWeek: effectiveTargets.targetOppsCreatedPerWeek,
-      customerMeetingsPerWeek: effectiveTargets.targetCustomerMeetingsPerWeek,
-      accountsResearchedPerDay: effectiveTargets.targetAccountsResearchedPerDay,
-      contactsPreppedPerDay: effectiveTargets.targetContactsPreppedPerDay,
-    };
     // calculations complete
   } catch (err) {
     console.error('[Dashboard] calculation crash:', err);
@@ -244,60 +199,8 @@ export default function Dashboard() {
         return <TodayAgenda key={widgetId} />;
       case 'meeting-prep':
         return <MeetingPrepCard key={widgetId} />;
-      case 'pipeline':
-        return <UnifiedPipeline key={widgetId} />;
-      case 'pace-to-quota':
-        return <PaceToQuotaCard key={widgetId} paceToQuota={paceToQuota} />;
-      case 'what-to-do-next':
-        return (
-          <WhatToDoNext 
-            key={widgetId}
-            recommendations={commissionPacing?.actionPlan.map((a, i) => ({
-              id: `action-${i}`,
-              priority: (i + 1) as 1 | 2 | 3,
-              action: a.action, target: a.target, timeframe: a.timeframe,
-              workflow: a.workflow as any, why: `Based on current pace`,
-              impact: a.impact, qpiImpact: 0.05 * (3 - i),
-            })) || []} 
-            isLoading={pacingLoading}
-          />
-        );
-      case 'risk-window':
-        return <Next45DaysRisk key={widgetId} opportunities={opportunities} renewals={renewals} />;
-      case 'snapshots':
-        return (
-          <Collapsible key={widgetId} open={snapshotsOpen} onOpenChange={setSnapshotsOpen}>
-            <CollapsibleTrigger className="flex items-center gap-2 w-full text-left py-3 group">
-              <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", snapshotsOpen && "rotate-180")} />
-              <span className="font-display text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
-                Performance & Commission Snapshots
-              </span>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
-                <PerformanceSnapshot
-                  wtd={performanceRollups?.wtd || { dials: 0, conversations: 0, meetingsSet: 0, customerMeetingsHeld: 0, oppsCreated: 0, accountsResearched: 0, contactsPrepped: 0 }}
-                  mtd={performanceRollups?.mtd || { dials: 0, conversations: 0, meetingsSet: 0, customerMeetingsHeld: 0, oppsCreated: 0, accountsResearched: 0, contactsPrepped: 0 }}
-                  wtdDays={performanceRollups?.wtdDays || 0}
-                  mtdDays={performanceRollups?.mtdDays || 0}
-                  targets={performanceTargets}
-                  isLoading={rollupsLoading}
-                />
-                <CommissionSnapshot
-                  totalCommission={commissionSummary.totalCommission}
-                  newArrAttainment={commissionSummary.newArrAttainment}
-                  renewalArrAttainment={commissionSummary.renewalArrAttainment}
-                  combinedAttainment={combinedAttainment}
-                  projectedImpact={{ additionalNewArr: 50000, additionalCommission: 50000 * effectiveConfig.newArrAcr }}
-                />
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-        );
       case 'daily-digest':
         return <DailyDigest key={widgetId} />;
-      case 'ai-prioritizer':
-        return <AIAccountPrioritizer key={widgetId} />;
       case 'calendar-intelligence':
         return <CalendarIntelligence key={widgetId} />;
       case 'daily-time-blocks':
@@ -306,18 +209,8 @@ export default function Dashboard() {
         return <PClubMathCard key={widgetId} />;
       case 'weekly-battle-plan':
         return <WeeklyBattlePlanCard key={widgetId} />;
-      case 'pipeline-hygiene':
-        return <PipelineHygieneCard key={widgetId} />;
       case 'coaching-feed':
         return <CoachingFeed key={widgetId} />;
-      case 'scenario-simulator':
-        return <QuotaScenarioSimulator key={widgetId} />;
-      case 'icp-sourcing':
-        return <IcpAccountSourcing key={widgetId} />;
-      case 'company-monitor':
-        return <CompanyMonitorCard key={widgetId} />;
-      case 'account-health-pulse':
-        return <AccountHealthPulseCard key={widgetId} />;
       default:
         return null;
     }

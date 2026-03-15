@@ -35,9 +35,23 @@ import {
   formatCurrency,
 } from '@/lib/commissionCalculations';
 import type { QuotaConfig, Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
-import { DollarSign, Target, FileText, Settings2, AlertTriangle, Pencil } from 'lucide-react';
+import { DollarSign, Target, FileText, Settings2, AlertTriangle, Pencil, ChevronDown } from 'lucide-react';
 import { useDbOpportunities, useUpdateOpportunity, type DbOpportunity } from '@/hooks/useAccountsData';
 import { toast } from 'sonner';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { cn } from '@/lib/utils';
+import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
+import {
+  PipelineHygieneCard,
+  QuotaScenarioSimulator,
+  UnifiedPipeline,
+  PaceToQuotaCard,
+  PerformanceSnapshot,
+  CommissionSnapshot,
+  Next45DaysRisk,
+} from '@/components/dashboard';
+import { usePaceToQuota, usePerformanceRollups, useQuotaTargets } from '@/hooks/useSalesAge';
+import { DEFAULT_QUOTA_TARGETS } from '@/lib/salesAgeCalculations';
 
 // Normalize status based on stage (e.g., stage="Closed Won" but status="active")
 function normalizeOppStatus(status: OpportunityStatus, stage: OpportunityStage): OpportunityStatus {
@@ -86,12 +100,13 @@ function dbToUiOpportunity(db: DbOpportunity): Opportunity {
 type TimeView = 'ytd' | 'qtd' | 'mtd';
 
 export default function Quota() {
+  const [strategicOpen, setStrategicOpen] = useState(true);
   // Use DB hooks for opportunities (source of truth)
   const { data: dbOpportunities = [] } = useDbOpportunities();
   const dbOpps = useMemo(() => dbOpportunities.map(dbToUiOpportunity), [dbOpportunities]);
   
   // Also merge any Zustand-only opportunities (for backward compat) — normalize status there too
-  const { opportunities: rawStoreOpps, quotaConfig, setQuotaConfig } = useStore();
+  const { opportunities: rawStoreOpps, renewals, quotaConfig, setQuotaConfig } = useStore();
   const storeOpps = useMemo(() => rawStoreOpps.map(o => ({
     ...o,
     status: normalizeOppStatus(o.status, o.stage),
@@ -108,6 +123,20 @@ export default function Quota() {
   const [timeView, setTimeView] = useState<TimeView>('ytd');
   const [fixingDeal, setFixingDeal] = useState<(Opportunity & { missingFields: string[] }) | null>(null);
   const updateOpportunityMutation = useUpdateOpportunity();
+  const paceToQuota = usePaceToQuota();
+  const { data: quotaTargets } = useQuotaTargets();
+  const { data: performanceRollups, isLoading: rollupsLoading } = usePerformanceRollups();
+  const effectiveTargets = quotaTargets || DEFAULT_QUOTA_TARGETS;
+  const performanceTargets = {
+    dialsPerDay: effectiveTargets.targetDialsPerDay,
+    connectsPerDay: effectiveTargets.targetConnectsPerDay,
+    meetingsPerWeek: effectiveTargets.targetMeetingsSetPerWeek,
+    oppsPerWeek: effectiveTargets.targetOppsCreatedPerWeek,
+    customerMeetingsPerWeek: effectiveTargets.targetCustomerMeetingsPerWeek,
+    accountsResearchedPerDay: effectiveTargets.targetAccountsResearchedPerDay,
+    contactsPreppedPerDay: effectiveTargets.targetContactsPreppedPerDay,
+  };
+  const totalQuota = (effectiveTargets.newArrQuota || 0) + (effectiveTargets.renewalArrQuota || 0);
   // Calculate date filter based on time view
   const dateFilter = useMemo(() => {
     const now = new Date();
@@ -140,6 +169,11 @@ export default function Quota() {
   const summary = useMemo(() => {
     return calculateCommissionSummary(opportunities, config, dateFilter);
   }, [opportunities, config, dateFilter]);
+
+  const combinedAttainment = totalQuota > 0
+    ? (summary.newArrBooked + summary.renewalArrBooked) / totalQuota
+    : 0;
+
   
   // Generate ledger entries for display
   const ledgerEntries = useMemo(() => {
@@ -347,6 +381,65 @@ export default function Quota() {
                 <div className="text-xs text-muted-foreground">New Logos</div>
               </div>
             </div>
+
+            {/* Strategic Planning Section */}
+            <Collapsible open={strategicOpen} onOpenChange={setStrategicOpen}>
+              <CollapsibleTrigger className="flex items-center gap-2 w-full text-left py-3 group">
+                <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", strategicOpen && "rotate-180")} />
+                <span className="font-display text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
+                  Strategic Planning & Pipeline Analysis
+                </span>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-6 pt-2">
+                {/* Pace to Quota + Pipeline Hygiene side by side */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <WidgetErrorBoundary widgetId="pace-to-quota">
+                    <PaceToQuotaCard paceToQuota={paceToQuota} />
+                  </WidgetErrorBoundary>
+                  <WidgetErrorBoundary widgetId="pipeline-hygiene">
+                    <PipelineHygieneCard />
+                  </WidgetErrorBoundary>
+                </div>
+
+                {/* Unified Pipeline */}
+                <WidgetErrorBoundary widgetId="unified-pipeline">
+                  <UnifiedPipeline />
+                </WidgetErrorBoundary>
+
+                {/* Next 45 Days Risk */}
+                <WidgetErrorBoundary widgetId="next-45-risk">
+                  <Next45DaysRisk opportunities={opportunities} renewals={renewals} />
+                </WidgetErrorBoundary>
+
+                {/* Scenario Simulator */}
+                <WidgetErrorBoundary widgetId="scenario-simulator">
+                  <QuotaScenarioSimulator />
+                </WidgetErrorBoundary>
+
+                {/* Performance & Commission Snapshots */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <WidgetErrorBoundary widgetId="performance-snapshot">
+                    <PerformanceSnapshot
+                      wtd={performanceRollups?.wtd || { dials: 0, conversations: 0, meetingsSet: 0, customerMeetingsHeld: 0, oppsCreated: 0, accountsResearched: 0, contactsPrepped: 0 }}
+                      mtd={performanceRollups?.mtd || { dials: 0, conversations: 0, meetingsSet: 0, customerMeetingsHeld: 0, oppsCreated: 0, accountsResearched: 0, contactsPrepped: 0 }}
+                      wtdDays={performanceRollups?.wtdDays || 0}
+                      mtdDays={performanceRollups?.mtdDays || 0}
+                      targets={performanceTargets}
+                      isLoading={rollupsLoading}
+                    />
+                  </WidgetErrorBoundary>
+                  <WidgetErrorBoundary widgetId="commission-snapshot">
+                    <CommissionSnapshot
+                      totalCommission={summary.totalCommission}
+                      newArrAttainment={summary.newArrAttainment}
+                      renewalArrAttainment={summary.renewalArrAttainment}
+                      combinedAttainment={combinedAttainment}
+                      projectedImpact={{ additionalNewArr: 50000, additionalCommission: 50000 * config.newArrAcr }}
+                    />
+                  </WidgetErrorBoundary>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </TabsContent>
           
           {/* Deals Ledger Tab */}
