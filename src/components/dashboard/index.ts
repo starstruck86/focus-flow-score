@@ -24,3 +24,4 @@ export { PipelineHygieneCard } from './PipelineHygieneCard';
 export { WeeklyBattlePlanCard } from './WeeklyBattlePlanCard';
 export { QuotaScenarioSimulator } from './QuotaScenarioSimulator';
 export { CoachingFeed } from './CoachingFeed';
+export { IcpAccountSourcing } from './IcpAccountSourcing';
