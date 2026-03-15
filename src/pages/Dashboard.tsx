@@ -60,6 +60,7 @@ import {
   CoachingFeed,
   IcpAccountSourcing,
   CompanyMonitorCard,
+  AccountHealthPulseCard,
 } from '@/components/dashboard';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 
@@ -315,6 +316,8 @@ export default function Dashboard() {
         return <IcpAccountSourcing key={widgetId} />;
       case 'company-monitor':
         return <CompanyMonitorCard key={widgetId} />;
+      case 'account-health-pulse':
+        return <AccountHealthPulseCard key={widgetId} />;
       default:
         return null;
     }
