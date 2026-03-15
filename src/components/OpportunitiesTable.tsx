@@ -735,6 +735,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   onRenewalArrChange={(v) => updateOpportunity(opp.id, { renewalArr: v })}
                   oneTimeAmount={opp.oneTimeAmount}
                   onOneTimeAmountChange={(v) => updateOpportunity(opp.id, { oneTimeAmount: v })}
+                  accountId={opp.accountId}
+                  accountName={stakeholderAccountName}
+                  accountWebsite={linkedAccount?.website}
+                  accountIndustry={linkedAccount?.industry}
+                  opportunityContext={`${opp.name} - ${opp.stage} - $${opp.arr || 0} ARR`}
                 />
               </TableCell>
             </TableRow>
