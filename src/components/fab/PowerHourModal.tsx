@@ -116,6 +116,9 @@ export function PowerHourModal({ open, onOpenChange }: PowerHourModalProps) {
   
   const applyToDaily = async () => {
     // Sync aggregate metrics to daily journal (SF is system of record for individual activities)
+    updateActivityInputs({
+      dials: (currentDay?.activityInputs.dials || 0) + dials,
+    });
     updateRawInputs({
       coldCallsWithConversations: (currentDay?.rawInputs.coldCallsWithConversations || 0) + connects,
       initialMeetingsSet: (currentDay?.rawInputs.initialMeetingsSet || 0) + meetingsSet,
