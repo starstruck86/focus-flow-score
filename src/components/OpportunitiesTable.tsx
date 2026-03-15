@@ -212,8 +212,12 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const addOpportunityMutation = useAddOpportunity();
   const updateRenewalMutation = useUpdateRenewal();
 
-  // Zustand store renewals AND opportunities (source of truth when DB is empty)
-  const { renewals: storeRenewals, opportunities: storeOpportunities } = useStore();
+  // Zustand store data (source of truth when DB is empty)
+  const {
+    renewals: storeRenewals,
+    opportunities: storeOpportunities,
+    accounts: storeAccounts,
+  } = useStore();
 
   // Transform DB data to UI format, merge with store opps
   const opportunities = useMemo(() => {
@@ -225,7 +229,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       .map(o => ({ ...o, status: normalizeOppStatus(o.status, o.stage) }));
     return [...dbMapped, ...storeOnly];
   }, [dbOpportunities, storeOpportunities]);
-  
+
   // Merge DB renewals with Zustand store renewals (same source as Renewals tab)
   const renewals = useMemo(() => {
     const dbMapped = dbRenewals.map(dbToRenewalFilter);
@@ -243,6 +247,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       }));
     return [...dbMapped, ...storeOnly];
   }, [dbRenewals, storeRenewals]);
+
+  const accountMap = useMemo(
+    () => new Map(storeAccounts.map(account => [account.id, account])),
+    [storeAccounts]
+  );
 
   // Sort hook
   const { sortConfig, handleSort } = useTableSort();
