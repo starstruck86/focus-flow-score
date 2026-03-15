@@ -9,6 +9,7 @@ import { toZonedTime } from 'date-fns-tz';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { matchAccountToEvent } from '@/lib/accountMatcher';
 
 const TIMEZONE = 'America/New_York';
 
@@ -53,12 +54,7 @@ export function MeetingPrepCard() {
       
       if (eventDateStr !== todayStr && eventDateStr !== tomorrowStr) return;
 
-      const titleLower = event.title.toLowerCase();
-      const matchedAccount = accounts.find(a => 
-        titleLower.includes(a.name.toLowerCase()) ||
-        a.name.toLowerCase().split(' ').some(word => word.length > 3 && titleLower.includes(word))
-      );
-
+      const matchedAccount = matchAccountToEvent(event.title, accounts);
       if (!matchedAccount) return;
 
       const minutesUntil = differenceInMinutes(estDate, now);

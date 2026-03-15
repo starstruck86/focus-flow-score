@@ -32,6 +32,8 @@ import {
   CommissionPacingDetailModal,
   ExpectedVsActualCard,
   MeetingPrepPrompt,
+  PostMeetingPrompt,
+  ResearchChecklist,
   DailyTimeBlocks,
   SmartWorkQueue,
   CoachingFeed,
@@ -183,12 +185,22 @@ export default function Dashboard() {
           <DailyTimeBlocks />
         </WidgetErrorBoundary>
 
-        {/* === SECTION 2: WHAT'S NEXT — Imminent meetings needing prep === */}
+        {/* === SECTION 2: POST-MEETING — Log next steps after meetings === */}
+        <WidgetErrorBoundary widgetId="post-meeting-prompt">
+          <PostMeetingPrompt />
+        </WidgetErrorBoundary>
+
+        {/* === SECTION 3: WHAT'S NEXT — Imminent meetings needing prep === */}
         <div id="meeting-prep-section">
         <WidgetErrorBoundary widgetId="meeting-prep-prompt">
           <MeetingPrepPrompt />
         </WidgetErrorBoundary>
         </div>
+
+        {/* === SECTION 4: RESEARCH — Structured checklist for accounts in research === */}
+        <WidgetErrorBoundary widgetId="research-checklist">
+          <ResearchChecklist />
+        </WidgetErrorBoundary>
 
         {/* === SECTION 3: COACH + ACCOUNTABILITY === */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

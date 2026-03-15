@@ -22,11 +22,12 @@ export function useCalendarEvents() {
   return useQuery({
     queryKey: ['calendar-events'],
     queryFn: async () => {
-      const now = new Date().toISOString();
+      // Fetch events from 2 hours ago (for post-meeting prompts) through future
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
       const { data, error } = await supabase
         .from('calendar_events' as any)
         .select('*')
-        .gte('start_time', now)
+        .gte('start_time', twoHoursAgo)
         .order('start_time', { ascending: true })
         .limit(50);
       

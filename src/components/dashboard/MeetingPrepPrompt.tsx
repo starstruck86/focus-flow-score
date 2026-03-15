@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { matchAccountToEvent } from '@/lib/accountMatcher';
 
 const TIMEZONE = 'America/New_York';
 const DISMISSED_KEY = 'meeting_prep_dismissed';
@@ -66,12 +67,7 @@ export function MeetingPrepPrompt() {
 
       if (minutesUntil < -15 || minutesUntil > 240) return;
 
-      const titleLower = event.title.toLowerCase();
-      const matchedAccount = accounts.find(a =>
-        titleLower.includes(a.name.toLowerCase()) ||
-        a.name.toLowerCase().split(' ').some(word => word.length > 3 && titleLower.includes(word))
-      );
-
+      const matchedAccount = matchAccountToEvent(event.title, accounts);
       if (!matchedAccount) return;
 
       const accountOpps = opportunities.filter(o => o.accountId === matchedAccount.id && o.status === 'active');
