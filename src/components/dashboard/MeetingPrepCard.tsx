@@ -9,6 +9,7 @@ import { toZonedTime } from 'date-fns-tz';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { matchAccountToEvent } from '@/lib/accountMatcher';
 
 const TIMEZONE = 'America/New_York';
 
