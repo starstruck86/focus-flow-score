@@ -708,6 +708,12 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                               companyNotes={account.notes || ''}
                               onCompanyNotesChange={(notes) => updateAccount(account.id, { notes })}
                             />
+                            <StakeholderMap
+                              accountId={account.id}
+                              accountName={account.name}
+                              website={account.website}
+                              industry={account.industry}
+                            />
                           </div>
                         </TableCell>
                       </TableRow>
