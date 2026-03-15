@@ -1686,6 +1686,7 @@ export default function WeeklyOutreach() {
         
         {/* Import Modal */}
         <ImportModal open={showImportModal} onOpenChange={setShowImportModal} />
+        <ClaudeImportModal open={showClaudeImport} onClose={() => setShowClaudeImport(false)} />
       </div>
     </Layout>
   );
