@@ -39,7 +39,7 @@ export function IcpAccountSourcing() {
   const currentBatchId = latestBatch?.[0]?.batch_id;
 
   const sourceMutation = useMutation({
-    mutationFn: async (opts?: { moreLikeCompany?: string }) => {
+    mutationFn: async (opts?: { moreLikeCompany?: string } | void) => {
       setIsSourcing(true);
       const body: any = { feedback: feedback || null, previousBatchId: currentBatchId || null };
       if (opts?.moreLikeCompany) {
