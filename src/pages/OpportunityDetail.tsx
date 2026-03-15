@@ -217,7 +217,7 @@ export default function OpportunityDetail() {
 
         {/* Quick Actions */}
         <div className="flex items-center gap-2 flex-wrap">
-          <TouchLogButtons compact />
+          <TouchLogButtons accountId={opp.accountId || ''} compact />
         </div>
 
         {/* Details */}

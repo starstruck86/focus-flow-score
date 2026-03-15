@@ -208,8 +208,8 @@ export default function AccountDetail() {
 
         {/* Quick Actions */}
         <div className="flex items-center gap-2 flex-wrap">
-          <TouchLogButtons compact />
-          <EnrichButton accountId={account.id} accountName={account.name} website={account.website} />
+          <TouchLogButtons accountId={account.id} compact />
+          <EnrichButton account={account} compact />
         </div>
 
         {/* Details Section */}
