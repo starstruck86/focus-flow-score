@@ -3,7 +3,7 @@
 // - If SFDC link missing: clicking name opens popover to add link
 // - Pencil icon to edit the name text itself
 import { useState, useEffect, useRef } from 'react';
-import { ExternalLink, Plus, Pencil, Link } from 'lucide-react';
+import { ExternalLink, Plus, Pencil, Link, ArrowUpRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
