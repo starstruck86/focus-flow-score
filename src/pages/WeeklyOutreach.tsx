@@ -747,6 +747,8 @@ export default function WeeklyOutreach() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showBulkImportDialog, setShowBulkImportDialog] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showClaudeImport, setShowClaudeImport] = useState(false);
+  const navigate = useNavigate();
   const [importPreview, setImportPreview] = useState<Partial<Account>[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
