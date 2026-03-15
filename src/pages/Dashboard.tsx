@@ -59,6 +59,7 @@ import {
   QuotaScenarioSimulator,
   CoachingFeed,
   IcpAccountSourcing,
+  CompanyMonitorCard,
 } from '@/components/dashboard';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 
