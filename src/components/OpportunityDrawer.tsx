@@ -28,6 +28,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ResourceLinksPanel } from '@/components/ResourceLinksPanel';
+import { StakeholderMap } from '@/components/StakeholderMap';
 import {
   Phone,
   Mail,
@@ -376,6 +377,20 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
             </div>
 
             <Separator />
+
+            {/* Stakeholder / Buyer Map */}
+            {opportunity.accountId && linkedAccount && (
+              <>
+                <StakeholderMap
+                  accountId={opportunity.accountId}
+                  accountName={linkedAccount.name}
+                  website={linkedAccount.website}
+                  industry={linkedAccount.industry}
+                  opportunityContext={`${opportunity.name} - ${opportunity.stage} - $${opportunity.arr || 0} ARR`}
+                />
+                <Separator />
+              </>
+            )}
 
             {/* Resources & Templates */}
             <ResourceLinksPanel

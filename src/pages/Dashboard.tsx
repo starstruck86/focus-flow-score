@@ -58,6 +58,7 @@ import {
   WeeklyBattlePlanCard,
   QuotaScenarioSimulator,
   CoachingFeed,
+  IcpAccountSourcing,
 } from '@/components/dashboard';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 
@@ -309,6 +310,8 @@ export default function Dashboard() {
         return <CoachingFeed key={widgetId} />;
       case 'scenario-simulator':
         return <QuotaScenarioSimulator key={widgetId} />;
+      case 'icp-sourcing':
+        return <IcpAccountSourcing key={widgetId} />;
       default:
         return null;
     }
