@@ -65,7 +65,6 @@ export default function Dashboard() {
   const { data: commissionPacing, isLoading: pacingLoading } = useCommissionPacing();
   const { data: quotaTargets } = useQuotaTargets();
   const { data: wtdMetrics, isLoading: wtdLoading } = useWeekToDateMetrics();
-  const { data: wtdMetrics, isLoading: wtdLoading } = useWeekToDateMetrics();
 
   // Wrap all derived calculations in try-catch to prevent render crashes
   let today: Date;
