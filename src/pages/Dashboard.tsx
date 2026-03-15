@@ -58,6 +58,7 @@ import {
   WeeklyBattlePlanCard,
   QuotaScenarioSimulator,
   CoachingFeed,
+  IcpAccountSourcing,
 } from '@/components/dashboard';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 
