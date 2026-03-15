@@ -1181,6 +1181,19 @@ export default function WeeklyOutreach() {
           <StreakChip variant="full" />
         </div>
         
+        {/* Account Intelligence Cards */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+          <WidgetErrorBoundary widgetId="account-health-pulse">
+            <AccountHealthPulseCard />
+          </WidgetErrorBoundary>
+          <WidgetErrorBoundary widgetId="company-monitor">
+            <CompanyMonitorCard />
+          </WidgetErrorBoundary>
+          <WidgetErrorBoundary widgetId="icp-sourcing">
+            <IcpAccountSourcing />
+          </WidgetErrorBoundary>
+        </div>
+
         {/* Staleness & Urgency Summary */}
         <StalenessAlert accounts={newLogoAccounts} />
 
