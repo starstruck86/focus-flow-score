@@ -18,11 +18,7 @@ import {
   isEligibleDay 
 } from '@/hooks/useStreakData';
 import { useTodayJournalEntry } from '@/hooks/useDailyJournal';
-import { 
-  usePaceToQuota, 
-  usePerformanceRollups,
-  useQuotaTargets,
-} from '@/hooks/useSalesAge';
+import { useQuotaTargets } from '@/hooks/useSalesAge';
 import { useCommissionPacing } from '@/hooks/useCommissionPacing';
 import { useWeekToDateMetrics, calculateExpectedVsActual } from '@/hooks/useGoodDayMetrics';
 import { getTemplateById, calculateWeeklyExpectations } from '@/lib/goodDayModel';
