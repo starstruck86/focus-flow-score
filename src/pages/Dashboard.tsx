@@ -26,8 +26,6 @@ import { DEFAULT_QUOTA_CONFIG } from '@/lib/commissionCalculations';
 import { DEFAULT_QUOTA_TARGETS } from '@/lib/salesAgeCalculations';
 import { format, differenceInBusinessDays, startOfWeek } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { useDashboardWidgets } from '@/hooks/useDashboardWidgets';
 import { WidgetCustomizer } from '@/components/dashboard/WidgetCustomizer';
