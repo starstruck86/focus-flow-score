@@ -123,7 +123,6 @@ export default function Quota() {
   const [timeView, setTimeView] = useState<TimeView>('ytd');
   const [fixingDeal, setFixingDeal] = useState<(Opportunity & { missingFields: string[] }) | null>(null);
   const updateOpportunityMutation = useUpdateOpportunity();
-  const { renewals } = useStore();
   const paceToQuota = usePaceToQuota();
   const { data: quotaTargets } = useQuotaTargets();
   const { data: performanceRollups, isLoading: rollupsLoading } = usePerformanceRollups();
