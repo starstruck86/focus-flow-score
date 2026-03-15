@@ -76,7 +76,7 @@ import { ManageColumnsPopover } from '@/components/table/ManageColumnsPopover';
 import { CustomFieldCell, CustomFieldRow } from '@/components/table/CustomFieldCell';
 import { MetricFieldCell } from '@/components/table/MetricFieldCell';
 import { useCustomFields } from '@/hooks/useCustomFields';
-import { ImportModal } from '@/components/import';
+import { ImportModal, ClaudeImportModal } from '@/components/import';
 import { EditableTextCell, EditableTextareaCell, DisplaySelectCell, WebsiteLinkCell, AccountNameCell } from '@/components/table';
 import { SortableHeader, useTableSort } from '@/components/table/SortableHeader';
 import { useBulkSelection } from '@/hooks/useBulkSelection';
