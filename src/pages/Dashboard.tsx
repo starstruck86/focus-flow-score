@@ -192,7 +192,7 @@ export default function Dashboard() {
                     <ExpectedVsActualCard
                       title="Today's Progress"
                       subtitle={todayCheckedIn ? "Checked in" : "Not yet checked in"}
-                      metrics={todayJournalEntry ? [
+                        metrics={todayJournalEntry ? [
                         {
                           metric: 'Points', expected: 8, actual: todayJournalEntry.dailyScore || 0,
                           gap: 8 - (todayJournalEntry.dailyScore || 0),
@@ -203,14 +203,14 @@ export default function Dashboard() {
                           metric: 'Conversations', expected: defaultTemplate.conversations,
                           actual: todayJournalEntry.activity.conversations,
                           gap: defaultTemplate.conversations - todayJournalEntry.activity.conversations,
-                          percentComplete: todayJournalEntry.activity.conversations / defaultTemplate.conversations,
+                          percentComplete: defaultTemplate.conversations > 0 ? todayJournalEntry.activity.conversations / defaultTemplate.conversations : 0,
                           status: todayJournalEntry.activity.conversations >= defaultTemplate.conversations ? 'ahead' : 'behind',
                         },
                         {
                           metric: 'Prospects Added', expected: defaultTemplate.prospectsAdded,
                           actual: todayJournalEntry.activity.prospectsAdded,
                           gap: defaultTemplate.prospectsAdded - todayJournalEntry.activity.prospectsAdded,
-                          percentComplete: todayJournalEntry.activity.prospectsAdded / defaultTemplate.prospectsAdded,
+                          percentComplete: defaultTemplate.prospectsAdded > 0 ? todayJournalEntry.activity.prospectsAdded / defaultTemplate.prospectsAdded : 0,
                           status: todayJournalEntry.activity.prospectsAdded >= defaultTemplate.prospectsAdded ? 'ahead' : 'behind',
                         },
                       ] : []}
