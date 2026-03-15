@@ -80,7 +80,7 @@ export function ResearchChecklist() {
     >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <BookOpen className="h-4 w-4 text-amber-500" />
+          <BookOpen className="h-4 w-4 text-status-yellow" />
           <h3 className="font-display text-sm font-semibold">Research Queue</h3>
           <Badge variant="outline" className="text-[10px] h-5">
             {researchAccounts.length} account{researchAccounts.length !== 1 ? 's' : ''}
