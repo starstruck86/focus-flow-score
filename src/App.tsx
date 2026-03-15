@@ -61,6 +61,8 @@ const App = () => (
                   <Route path="/auth" element={<Auth />} />
                   <Route path="/" element={<ProtectedPage><Dashboard /></ProtectedPage>} />
                   <Route path="/outreach" element={<ProtectedPage><WeeklyOutreach /></ProtectedPage>} />
+                  <Route path="/accounts/:id" element={<ProtectedPage><AccountDetail /></ProtectedPage>} />
+                  <Route path="/opportunities/:id" element={<ProtectedPage><OpportunityDetail /></ProtectedPage>} />
                   <Route path="/renewals" element={<ProtectedPage><Renewals /></ProtectedPage>} />
                   <Route path="/tasks" element={<ProtectedPage><Tasks /></ProtectedPage>} />
                   <Route path="/recurring" element={<ProtectedPage><RecurringTasks /></ProtectedPage>} />
