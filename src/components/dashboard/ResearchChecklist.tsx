@@ -74,13 +74,13 @@ export function ResearchChecklist() {
 
   return (
     <motion.div
-      className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"
+      className="rounded-xl border border-status-yellow/30 bg-status-yellow/5 p-4"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
     >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <BookOpen className="h-4 w-4 text-amber-500" />
+          <BookOpen className="h-4 w-4 text-status-yellow" />
           <h3 className="font-display text-sm font-semibold">Research Queue</h3>
           <Badge variant="outline" className="text-[10px] h-5">
             {researchAccounts.length} account{researchAccounts.length !== 1 ? 's' : ''}
@@ -120,7 +120,7 @@ export function ResearchChecklist() {
                   </Badge>
                   <span className={cn(
                     "text-[10px] font-mono font-bold",
-                    pct === 100 ? "text-status-green" : pct >= 50 ? "text-amber-500" : "text-muted-foreground"
+                    pct === 100 ? "text-status-green" : pct >= 50 ? "text-status-yellow" : "text-muted-foreground"
                   )}>
                     {completed}/{total}
                   </span>

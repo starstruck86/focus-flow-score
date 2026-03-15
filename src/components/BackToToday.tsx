@@ -16,12 +16,11 @@ export function BackToToday() {
       <TooltipTrigger asChild>
         <Button
           variant="outline"
-          size="sm"
-          className="fixed bottom-20 left-4 z-40 h-9 gap-1.5 text-xs shadow-lg bg-card/95 backdrop-blur-sm border-primary/20 hover:border-primary/40"
+          size="icon"
+          className="fixed bottom-[4.5rem] left-3 z-40 h-8 w-8 rounded-full shadow-lg bg-card/95 backdrop-blur-sm border-primary/20 hover:border-primary/40"
           onClick={() => navigate('/')}
         >
           <LayoutDashboard className="h-3.5 w-3.5 text-primary" />
-          <span className="hidden sm:inline">Today</span>
         </Button>
       </TooltipTrigger>
       <TooltipContent side="right">Back to Dashboard</TooltipContent>
