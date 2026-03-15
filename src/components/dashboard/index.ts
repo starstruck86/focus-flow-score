@@ -25,3 +25,5 @@ export { WeeklyBattlePlanCard } from './WeeklyBattlePlanCard';
 export { QuotaScenarioSimulator } from './QuotaScenarioSimulator';
 export { CoachingFeed } from './CoachingFeed';
 export { IcpAccountSourcing } from './IcpAccountSourcing';
+export { CompanyMonitorCard } from './CompanyMonitorCard';
+export { EnrichmentTimeline } from './EnrichmentTimeline';
