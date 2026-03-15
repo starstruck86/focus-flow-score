@@ -81,7 +81,7 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
   
   const hasCheckedInToday = todayEntry?.checkedIn || false;
   
-  // Handle keyboard shortcuts
+  // Handle keyboard shortcuts + custom events
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // T for quick add task
@@ -119,8 +119,15 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
       }
     };
     
+    // Listen for custom event from Game Plan blocks
+    const handleOpenPowerHour = () => setShowPowerHour(true);
+    
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('open-power-hour', handleOpenPowerHour);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('open-power-hour', handleOpenPowerHour);
+    };
   }, [isExpanded]);
   
   // Close menu when clicking outside
