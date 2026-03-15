@@ -89,10 +89,16 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
       const { data, error } = await supabase.functions.invoke('discover-contacts', {
         body: { accountId, accountName, website, industry, opportunityContext },
       });
-      if (error) throw new Error(error.message);
-      if (!data?.success) throw new Error(data?.error || 'Discovery failed');
+      if (error) {
+        console.error('discover-contacts invoke error:', error);
+        throw new Error(typeof error === 'object' && error.message ? error.message : String(error));
+      }
+      if (data?.error) throw new Error(data.error);
+      if (!data?.success) throw new Error('Discovery returned no results');
+      toast.success(`Found ${data.new_contacts || 0} new contacts`);
       return data.contacts || [];
     } catch (err) {
+      console.error('Contact discovery failed:', err);
       toast.error('Contact discovery failed', { description: err instanceof Error ? err.message : 'Unknown error' });
       return null;
     } finally {
