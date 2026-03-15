@@ -414,15 +414,20 @@ export type Database = {
       contacts: {
         Row: {
           account_id: string | null
+          ai_discovered: boolean | null
+          buyer_role: string | null
           created_at: string
           department: string | null
+          discovery_source: string | null
           email: string | null
           id: string
+          influence_level: string | null
           last_touch_date: string | null
           linkedin_url: string | null
           name: string
           notes: string | null
           preferred_channel: string | null
+          reporting_to: string | null
           salesforce_id: string | null
           salesforce_link: string | null
           seniority: string | null
@@ -433,15 +438,20 @@ export type Database = {
         }
         Insert: {
           account_id?: string | null
+          ai_discovered?: boolean | null
+          buyer_role?: string | null
           created_at?: string
           department?: string | null
+          discovery_source?: string | null
           email?: string | null
           id?: string
+          influence_level?: string | null
           last_touch_date?: string | null
           linkedin_url?: string | null
           name: string
           notes?: string | null
           preferred_channel?: string | null
+          reporting_to?: string | null
           salesforce_id?: string | null
           salesforce_link?: string | null
           seniority?: string | null
@@ -452,15 +462,20 @@ export type Database = {
         }
         Update: {
           account_id?: string | null
+          ai_discovered?: boolean | null
+          buyer_role?: string | null
           created_at?: string
           department?: string | null
+          discovery_source?: string | null
           email?: string | null
           id?: string
+          influence_level?: string | null
           last_touch_date?: string | null
           linkedin_url?: string | null
           name?: string
           notes?: string | null
           preferred_channel?: string | null
+          reporting_to?: string | null
           salesforce_id?: string | null
           salesforce_link?: string | null
           seniority?: string | null
@@ -900,6 +915,83 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      icp_sourced_accounts: {
+        Row: {
+          batch_id: string | null
+          company_name: string
+          created_at: string | null
+          employee_count: string | null
+          feedback: string | null
+          fit_score: number | null
+          hq_location: string | null
+          icp_fit_reason: string
+          id: string
+          industry: string | null
+          linkedin_url: string | null
+          news_snippet: string | null
+          promoted_account_id: string | null
+          signal_date: string | null
+          status: string | null
+          suggested_contacts: Json | null
+          trigger_signal: string | null
+          updated_at: string | null
+          user_id: string
+          website: string | null
+        }
+        Insert: {
+          batch_id?: string | null
+          company_name: string
+          created_at?: string | null
+          employee_count?: string | null
+          feedback?: string | null
+          fit_score?: number | null
+          hq_location?: string | null
+          icp_fit_reason: string
+          id?: string
+          industry?: string | null
+          linkedin_url?: string | null
+          news_snippet?: string | null
+          promoted_account_id?: string | null
+          signal_date?: string | null
+          status?: string | null
+          suggested_contacts?: Json | null
+          trigger_signal?: string | null
+          updated_at?: string | null
+          user_id: string
+          website?: string | null
+        }
+        Update: {
+          batch_id?: string | null
+          company_name?: string
+          created_at?: string | null
+          employee_count?: string | null
+          feedback?: string | null
+          fit_score?: number | null
+          hq_location?: string | null
+          icp_fit_reason?: string
+          id?: string
+          industry?: string | null
+          linkedin_url?: string | null
+          news_snippet?: string | null
+          promoted_account_id?: string | null
+          signal_date?: string | null
+          status?: string | null
+          suggested_contacts?: Json | null
+          trigger_signal?: string | null
+          updated_at?: string | null
+          user_id?: string
+          website?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "icp_sourced_accounts_promoted_account_id_fkey"
+            columns: ["promoted_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       import_account_aliases: {
         Row: {
