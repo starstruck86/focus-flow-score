@@ -212,8 +212,12 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const addOpportunityMutation = useAddOpportunity();
   const updateRenewalMutation = useUpdateRenewal();
 
-  // Zustand store renewals AND opportunities (source of truth when DB is empty)
-  const { renewals: storeRenewals, opportunities: storeOpportunities } = useStore();
+  // Zustand store data (source of truth when DB is empty)
+  const {
+    renewals: storeRenewals,
+    opportunities: storeOpportunities,
+    accounts: storeAccounts,
+  } = useStore();
 
   // Transform DB data to UI format, merge with store opps
   const opportunities = useMemo(() => {
@@ -225,7 +229,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       .map(o => ({ ...o, status: normalizeOppStatus(o.status, o.stage) }));
     return [...dbMapped, ...storeOnly];
   }, [dbOpportunities, storeOpportunities]);
-  
+
   // Merge DB renewals with Zustand store renewals (same source as Renewals tab)
   const renewals = useMemo(() => {
     const dbMapped = dbRenewals.map(dbToRenewalFilter);
@@ -243,6 +247,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       }));
     return [...dbMapped, ...storeOnly];
   }, [dbRenewals, storeRenewals]);
+
+  const accountMap = useMemo(
+    () => new Map(storeAccounts.map(account => [account.id, account])),
+    [storeAccounts]
+  );
 
   // Sort hook
   const { sortConfig, handleSort } = useTableSort();
@@ -590,6 +599,8 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
 
   const renderOpportunityRow = (opp: Opportunity) => {
     const isExpanded = expandedOppIds.has(opp.id);
+    const linkedAccount = opp.accountId ? accountMap.get(opp.accountId) : undefined;
+    const stakeholderAccountName = linkedAccount?.name ?? opp.accountName;
 
     if (renewalsOnly) {
       const expansion = (opp.renewalArr || 0) - (opp.priorContractArr || 0);
@@ -724,6 +735,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   onRenewalArrChange={(v) => updateOpportunity(opp.id, { renewalArr: v })}
                   oneTimeAmount={opp.oneTimeAmount}
                   onOneTimeAmountChange={(v) => updateOpportunity(opp.id, { oneTimeAmount: v })}
+                  accountId={opp.accountId}
+                  accountName={stakeholderAccountName}
+                  accountWebsite={linkedAccount?.website}
+                  accountIndustry={linkedAccount?.industry}
+                  opportunityContext={`${opp.name} - ${opp.stage} - $${opp.arr || 0} ARR`}
                 />
               </TableCell>
             </TableRow>
@@ -841,6 +857,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   onLastTouchDateChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
                   notes={opp.notes}
                   onNotesChange={(v) => updateOpportunity(opp.id, { notes: v })}
+                  accountId={opp.accountId}
+                  accountName={stakeholderAccountName}
+                  accountWebsite={linkedAccount?.website}
+                  accountIndustry={linkedAccount?.industry}
+                  opportunityContext={`${opp.name} - ${opp.stage} - $${opp.arr || 0} ARR`}
                 />
               </TableCell>
             </TableRow>
@@ -932,6 +953,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 onLastTouchDateChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
                 notes={opp.notes}
                 onNotesChange={(v) => updateOpportunity(opp.id, { notes: v })}
+                accountId={opp.accountId}
+                accountName={stakeholderAccountName}
+                accountWebsite={linkedAccount?.website}
+                accountIndustry={linkedAccount?.industry}
+                opportunityContext={`${opp.name} - ${opp.stage} - $${opp.arr || 0} ARR`}
               />
             </TableCell>
           </TableRow>

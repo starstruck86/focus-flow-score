@@ -1,6 +1,7 @@
 import { EditableDatePicker } from '@/components/EditableDatePicker';
 import { EditableTextareaCell, EditableNumberCell } from '@/components/table/EditableCell';
 import { CustomFieldRow } from '@/components/table/CustomFieldCell';
+import { StakeholderMap } from '@/components/StakeholderMap';
 import { useCustomFields } from '@/hooks/useCustomFields';
 import { cn } from '@/lib/utils';
 import { parseISO, isPast, isToday } from 'date-fns';
@@ -21,6 +22,11 @@ interface OpportunityDetailsFieldProps {
   oneTimeAmount?: number;
   onOneTimeAmountChange?: (value: number | undefined) => void;
   tabTarget?: 'opportunities' | 'opportunities-newlogo' | 'opportunities-renewals';
+  accountId?: string;
+  accountName?: string;
+  accountWebsite?: string;
+  accountIndustry?: string;
+  opportunityContext?: string;
 }
 
 export function OpportunityDetailsField({
@@ -39,6 +45,11 @@ export function OpportunityDetailsField({
   oneTimeAmount,
   onOneTimeAmountChange,
   tabTarget = 'opportunities',
+  accountId,
+  accountName,
+  accountWebsite,
+  accountIndustry,
+  opportunityContext,
 }: OpportunityDetailsFieldProps) {
   const { getFieldsForTab } = useCustomFields();
   const customExpandedFields = getFieldsForTab(tabTarget as any, 'expanded');
@@ -118,8 +129,8 @@ export function OpportunityDetailsField({
             onChange={(v) => onNextStepDateChange?.(v)}
             placeholder="+ Add"
             className={cn(
-              "w-full",
-              nextStepDate && isPast(parseISO(nextStepDate)) && !isToday(parseISO(nextStepDate)) && "[&_button]:border-status-red"
+              'w-full',
+              nextStepDate && isPast(parseISO(nextStepDate)) && !isToday(parseISO(nextStepDate)) && '[&_button]:border-status-red'
             )}
           />
         </div>
@@ -148,6 +159,17 @@ export function OpportunityDetailsField({
           emptyText="Add Notes"
         />
       </div>
+
+      {/* Stakeholder Map */}
+      {accountId && accountName && (
+        <StakeholderMap
+          accountId={accountId}
+          accountName={accountName}
+          website={accountWebsite}
+          industry={accountIndustry}
+          opportunityContext={opportunityContext}
+        />
+      )}
 
       {/* Custom Fields - right after notes */}
       {opportunityId && customExpandedFields.length > 0 && (

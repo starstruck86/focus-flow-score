@@ -21,6 +21,7 @@ import {
 import { Layout } from '@/components/Layout';
 import { StreakChip } from '@/components/StreakChip';
 import { LifecycleTierBadge, IcpScorePill, EnrichButton, SignalDetailPanel } from '@/components/LifecycleIntelligence';
+import { StakeholderMap } from '@/components/StakeholderMap';
 import { useAccountEnrichment } from '@/hooks/useAccountEnrichment';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1409,6 +1410,19 @@ export default function Renewals() {
                                 {(() => {
                                   const acct = getAccountForRenewal(renewal);
                                   return acct ? <SignalDetailPanel account={acct} /> : null;
+                                })()}
+                                {(() => {
+                                  const acct = getAccountForRenewal(renewal);
+                                  if (!acct) return null;
+                                  return (
+                                    <StakeholderMap
+                                      accountId={acct.id}
+                                      accountName={acct.name}
+                                      website={acct.website}
+                                      industry={acct.industry}
+                                      opportunityContext={`${renewal.accountName} renewal - due ${renewal.renewalDue}`}
+                                    />
+                                  );
                                 })()}
                                 <RenewalDetailsField
                                   renewalId={renewal.id}

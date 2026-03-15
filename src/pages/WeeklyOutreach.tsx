@@ -72,6 +72,7 @@ import { cn } from '@/lib/utils';
 import { OpportunitiesTable } from '@/components/OpportunitiesTable';
 import { OpportunityDrawer } from '@/components/OpportunityDrawer';
 import { AccountContactsField, type AccountContact } from '@/components/AccountContactsField';
+import { StakeholderMap } from '@/components/StakeholderMap';
 import { ManageColumnsPopover } from '@/components/table/ManageColumnsPopover';
 import { CustomFieldCell, CustomFieldRow } from '@/components/table/CustomFieldCell';
 import { MetricFieldCell } from '@/components/table/MetricFieldCell';
@@ -706,6 +707,12 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                               onChange={(contacts) => updateAccount(account.id, { accountContacts: contacts })}
                               companyNotes={account.notes || ''}
                               onCompanyNotesChange={(notes) => updateAccount(account.id, { notes })}
+                            />
+                            <StakeholderMap
+                              accountId={account.id}
+                              accountName={account.name}
+                              website={account.website}
+                              industry={account.industry}
                             />
                           </div>
                         </TableCell>
