@@ -42,18 +42,18 @@ export function QuickActions() {
       <p className="text-[11px] text-muted-foreground mb-3">Log activity here — details live in Salesforce</p>
       
       <div className="space-y-2">
-        {metrics.map(({ key, label, icon: Icon, value }) => (
-          <div key={key} className="flex items-center justify-between bg-secondary/50 rounded-lg px-3 py-2">
+        {metrics.map((metric) => (
+          <div key={metric.label} className="flex items-center justify-between bg-secondary/50 rounded-lg px-3 py-2">
             <div className="flex items-center gap-2">
-              <Icon className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">{label}</span>
+              <metric.icon className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">{metric.label}</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => adjust(key, -1)}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => adjust(metric, -1)}>
                 <Minus className="h-3.5 w-3.5" />
               </Button>
-              <span className="w-8 text-center text-lg font-bold tabular-nums">{value}</span>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => adjust(key, 1)}>
+              <span className="w-8 text-center text-lg font-bold tabular-nums">{metric.value}</span>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => adjust(metric, 1)}>
                 <Plus className="h-3.5 w-3.5" />
               </Button>
             </div>
