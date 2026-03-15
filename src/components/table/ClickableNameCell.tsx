@@ -48,6 +48,7 @@ export function ClickableNameCell({
   salesforceLink,
   onNameChange,
   onSalesforceLinkChange,
+  onOpenDetails,
   className,
   fontWeight = 'medium',
 }: ClickableNameCellProps) {
