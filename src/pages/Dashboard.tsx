@@ -35,32 +35,20 @@ import { cn } from '@/lib/utils';
 import { useDashboardWidgets } from '@/hooks/useDashboardWidgets';
 import { WidgetCustomizer } from '@/components/dashboard/WidgetCustomizer';
 import {
-  PaceToQuotaCard,
-  WhatToDoNext,
-  Next45DaysRisk,
-  PerformanceSnapshot,
-  CommissionSnapshot,
   CheckInBanner,
   CommissionPacingTile,
   CommissionPacingDetailModal,
   ExpectedVsActualCard,
-  UnifiedPipeline,
   TodayAgenda,
   MeetingPrepCard,
   SmartWorkQueue,
   DailyDigest,
   MeetingPrepPrompt,
-  AIAccountPrioritizer,
   CalendarIntelligence,
   DailyTimeBlocks,
   PClubMathCard,
-  PipelineHygieneCard,
   WeeklyBattlePlanCard,
-  QuotaScenarioSimulator,
   CoachingFeed,
-  IcpAccountSourcing,
-  CompanyMonitorCard,
-  AccountHealthPulseCard,
 } from '@/components/dashboard';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 
