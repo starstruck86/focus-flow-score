@@ -577,7 +577,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                             salesforceLink={account.salesforceLink}
                             onNameChange={(name) => updateAccount(account.id, { name })}
                             onSalesforceLinkChange={(link) => updateAccount(account.id, { salesforceLink: link })}
-                            onOpenDetails={() => navigate(`/accounts/${account.id}`)}
+                            onOpenDetails={() => onOpenAccountDetail(account.id)}
                             className="text-sm break-words"
                           />
                           <div className="opacity-0 group-hover/row:opacity-100 transition-opacity">
