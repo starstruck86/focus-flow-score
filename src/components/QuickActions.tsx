@@ -15,20 +15,24 @@ import { useState, useCallback } from 'react';
  * This only tracks aggregate daily numbers for coaching & accountability.
  */
 export function QuickActions() {
-  const { updateRawInputs, currentDay } = useStore();
+  const { updateRawInputs, updateActivityInputs, currentDay } = useStore();
 
   const metrics = [
-    { key: 'initialDials', label: 'Dials', icon: Phone, value: currentDay?.rawInputs.initialDials || 0 },
-    { key: 'initialConversations', label: 'Convos', icon: MessageSquare, value: currentDay?.rawInputs.initialConversations || 0 },
-    { key: 'initialMeetingsSet', label: 'Meetings Set', icon: Users, value: currentDay?.rawInputs.initialMeetingsSet || 0 },
+    { rawKey: null, actKey: 'dials', label: 'Dials', icon: Phone, value: currentDay?.activityInputs.dials || 0 },
+    { rawKey: 'coldCallsWithConversations', actKey: null, label: 'Convos', icon: MessageSquare, value: currentDay?.rawInputs.coldCallsWithConversations || 0 },
+    { rawKey: 'initialMeetingsSet', actKey: null, label: 'Meetings Set', icon: Users, value: currentDay?.rawInputs.initialMeetingsSet || 0 },
   ] as const;
 
-  const adjust = useCallback((key: string, delta: number) => {
-    const current = (currentDay?.rawInputs as any)?.[key] || 0;
-    const newVal = Math.max(0, current + delta);
-    updateRawInputs({ [key]: newVal } as any);
+  const adjust = useCallback((metric: typeof metrics[number], delta: number) => {
+    if (metric.actKey) {
+      const current = (currentDay?.activityInputs as any)?.[metric.actKey] || 0;
+      updateActivityInputs({ [metric.actKey]: Math.max(0, current + delta) } as any);
+    } else if (metric.rawKey) {
+      const current = (currentDay?.rawInputs as any)?.[metric.rawKey] || 0;
+      updateRawInputs({ [metric.rawKey]: Math.max(0, current + delta) } as any);
+    }
     if (delta > 0) toast.success(`+1 logged`);
-  }, [currentDay, updateRawInputs]);
+  }, [currentDay, updateRawInputs, updateActivityInputs]);
 
   return (
     <div className="metric-card">
