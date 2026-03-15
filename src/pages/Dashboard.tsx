@@ -313,6 +313,8 @@ export default function Dashboard() {
         return <QuotaScenarioSimulator key={widgetId} />;
       case 'icp-sourcing':
         return <IcpAccountSourcing key={widgetId} />;
+      case 'company-monitor':
+        return <CompanyMonitorCard key={widgetId} />;
       default:
         return null;
     }
