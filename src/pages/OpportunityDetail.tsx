@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { useStore } from '@/store/useStore';
@@ -12,22 +12,19 @@ import { Card, CardContent } from '@/components/ui/card';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import {
-  Collapsible, CollapsibleContent, CollapsibleTrigger,
-} from '@/components/ui/collapsible';
 import { EditableDatePicker } from '@/components/EditableDatePicker';
 import { StakeholderMap } from '@/components/StakeholderMap';
 import { ResourceLinksPanel } from '@/components/ResourceLinksPanel';
 import { TouchLogButtons } from '@/components/TouchLogButtons';
+import { CollapsibleSection, LinkPill, safeFormat, safeDaysSince } from '@/components/detail';
+import { useDebouncedUpdate } from '@/hooks/useDebouncedUpdate';
 import {
-  ArrowLeft, ChevronDown, ChevronRight, Target, Phone, Users,
-  FileText, CheckSquare, Calendar, TrendingUp, Link2, Building2,
+  ArrowLeft, ChevronRight, Target, Users,
+  FileText, CheckSquare, TrendingUp, Building2,
   Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format, parseISO, differenceInDays } from 'date-fns';
-import type { OpportunityStage, OpportunityStatus, DealType, ChurnRisk, Priority, Motion } from '@/types';
-import { toast } from 'sonner';
+import type { OpportunityStage, OpportunityStatus, DealType, ChurnRisk } from '@/types';
 
 const STATUS_COLORS: Record<OpportunityStatus, string> = {
   'active': 'bg-status-green/20 text-status-green',
@@ -47,43 +44,11 @@ const STAGE_COLORS: Record<string, string> = {
   'Proposal': 'bg-orange-500', 'Negotiate': 'bg-purple-500', 'Closed Won': 'bg-status-green', 'Closed Lost': 'bg-status-red',
 };
 
-function CollapsibleSection({ 
-  title, icon: Icon, count, defaultOpen = true, children 
-}: { 
-  title: string; icon: any; count?: number; defaultOpen?: boolean; children: React.ReactNode 
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex items-center gap-2 w-full py-3 px-1 hover:bg-muted/30 rounded-lg transition-colors">
-        {open ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{title}</span>
-        {count !== undefined && <Badge variant="secondary" className="ml-auto text-xs">{count}</Badge>}
-      </CollapsibleTrigger>
-      <CollapsibleContent className="pl-1">{children}</CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-function LinkPill({ label, url }: { label: string; url?: string }) {
-  if (!url) return null;
-  const href = url.startsWith('http') ? url : `https://${url}`;
-  return (
-    <a href={href} target="_blank" rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-      onClick={e => e.stopPropagation()}>
-      <Link2 className="h-3 w-3" />{label}
-    </a>
-  );
-}
-
-// Stage progress bar
 function StagePath({ currentStage }: { currentStage: OpportunityStage }) {
   const stages = STAGE_OPTIONS.filter(s => s !== '' && s !== 'Closed Lost');
   const currentIdx = stages.indexOf(currentStage as any);
   const isClosed = currentStage === 'Closed Lost';
-  
+
   return (
     <div className="flex items-center gap-1 w-full">
       {stages.map((stage, i) => (
@@ -105,15 +70,15 @@ function StagePath({ currentStage }: { currentStage: OpportunityStage }) {
 export default function OpportunityDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const {
-    accounts, opportunities, updateOpportunity, tasks,
-    logOpportunityActivity, logCall, logManualEmail, logMeetingHeld, addTask,
-  } = useStore();
+  const { accounts, opportunities, updateOpportunity, tasks } = useStore();
 
   const opp = opportunities.find(o => o.id === id);
   const linkedAccount = opp ? accounts.find(a => a.id === opp.accountId) : null;
-  
-  const oppTasks = useMemo(() => 
+
+  const { debouncedUpdate, flush } = useDebouncedUpdate(updateOpportunity, id || '');
+  useEffect(() => flush, [flush]);
+
+  const oppTasks = useMemo(() =>
     tasks.filter(t => t.linkedOpportunityId === id && t.status !== 'done' && t.status !== 'dropped'),
     [tasks, id]);
 
@@ -134,8 +99,8 @@ export default function OpportunityDetail() {
     updateOpportunity(opp.id, updates);
   };
 
-  const daysInStage = opp.updatedAt ? differenceInDays(new Date(), parseISO(opp.updatedAt)) : 0;
-  const daysSinceTouch = opp.lastTouchDate ? differenceInDays(new Date(), parseISO(opp.lastTouchDate)) : null;
+  const daysInStage = safeDaysSince(opp.updatedAt) ?? 0;
+  const daysSinceTouch = safeDaysSince(opp.lastTouchDate);
 
   return (
     <Layout>
@@ -169,7 +134,7 @@ export default function OpportunityDetail() {
                   </Badge>
                   {opp.dealType && <Badge variant="outline" className="text-[10px]">{opp.dealType}</Badge>}
                   {linkedAccount && (
-                    <button onClick={() => navigate(`/accounts/${linkedAccount.id}`)} 
+                    <button onClick={() => navigate(`/accounts/${linkedAccount.id}`)}
                       className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
                       <Building2 className="h-3 w-3" />{linkedAccount.name}
                     </button>
@@ -181,12 +146,10 @@ export default function OpportunityDetail() {
               </div>
             </div>
 
-            {/* Stage Path */}
             <div className="mt-4">
               <StagePath currentStage={opp.stage} />
             </div>
 
-            {/* KPI Row */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-4">
               <div className="text-center p-2 rounded-lg bg-muted/30">
                 <p className="text-[10px] uppercase text-muted-foreground tracking-wider">ARR</p>
@@ -194,7 +157,7 @@ export default function OpportunityDetail() {
               </div>
               <div className="text-center p-2 rounded-lg bg-muted/30">
                 <p className="text-[10px] uppercase text-muted-foreground tracking-wider">Close Date</p>
-                <p className="text-sm font-medium">{opp.closeDate ? format(parseISO(opp.closeDate), 'MMM d') : '—'}</p>
+                <p className="text-sm font-medium">{safeFormat(opp.closeDate, 'MMM d')}</p>
               </div>
               <div className="text-center p-2 rounded-lg bg-muted/30">
                 <p className="text-[10px] uppercase text-muted-foreground tracking-wider">Days in Stage</p>
@@ -202,7 +165,7 @@ export default function OpportunityDetail() {
               </div>
               <div className="text-center p-2 rounded-lg bg-muted/30">
                 <p className="text-[10px] uppercase text-muted-foreground tracking-wider">Last Touch</p>
-                <p className={cn("text-sm font-medium", 
+                <p className={cn("text-sm font-medium",
                   daysSinceTouch === null ? 'text-muted-foreground' :
                   daysSinceTouch <= 3 ? 'text-status-green' : daysSinceTouch <= 7 ? 'text-status-yellow' : 'text-status-red'
                 )}>{daysSinceTouch !== null ? `${daysSinceTouch}d ago` : '—'}</p>
@@ -225,7 +188,7 @@ export default function OpportunityDetail() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 py-3">
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Account</Label>
-              <Select value={opp.accountId || 'none'} onValueChange={v => handleUpdate({ 
+              <Select value={opp.accountId || 'none'} onValueChange={v => handleUpdate({
                 accountId: v === 'none' ? undefined : v,
                 accountName: v === 'none' ? undefined : accounts.find(a => a.id === v)?.name
               })}>
@@ -248,7 +211,7 @@ export default function OpportunityDetail() {
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">ARR</Label>
-              <Input className="h-8" type="number" value={opp.arr || ''} onChange={e => handleUpdate({ arr: e.target.value ? Number(e.target.value) : undefined })} placeholder="$0" />
+              <Input className="h-8" type="number" defaultValue={opp.arr || ''} onBlur={e => handleUpdate({ arr: e.target.value ? Number(e.target.value) : undefined })} placeholder="$0" />
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Close Date</Label>
@@ -298,11 +261,11 @@ export default function OpportunityDetail() {
             </div>
             <div className="space-y-1 col-span-full">
               <Label className="text-xs text-muted-foreground">Next Step</Label>
-              <Input className="h-8" value={opp.nextStep || ''} onChange={e => handleUpdate({ nextStep: e.target.value })} placeholder="Next step..." />
+              <Input className="h-8" defaultValue={opp.nextStep || ''} onBlur={e => handleUpdate({ nextStep: e.target.value })} placeholder="Next step..." />
             </div>
             <div className="space-y-1 col-span-full">
               <Label className="text-xs text-muted-foreground">Notes</Label>
-              <Textarea rows={3} value={opp.notes || ''} onChange={e => handleUpdate({ notes: e.target.value })} placeholder="Deal notes..." />
+              <Textarea rows={3} defaultValue={opp.notes || ''} onBlur={e => handleUpdate({ notes: e.target.value })} placeholder="Deal notes..." />
             </div>
           </div>
         </CollapsibleSection>
@@ -316,23 +279,23 @@ export default function OpportunityDetail() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 py-3">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Prior Contract ARR</Label>
-                  <Input className="h-8" type="number" value={opp.priorContractArr || ''} 
-                    onChange={e => handleUpdate({ priorContractArr: e.target.value ? Number(e.target.value) : undefined })} placeholder="$0" />
+                  <Input className="h-8" type="number" defaultValue={opp.priorContractArr || ''}
+                    onBlur={e => handleUpdate({ priorContractArr: e.target.value ? Number(e.target.value) : undefined })} placeholder="$0" />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Renewal ARR</Label>
-                  <Input className="h-8" type="number" value={opp.renewalArr || ''} 
-                    onChange={e => handleUpdate({ renewalArr: e.target.value ? Number(e.target.value) : undefined })} placeholder="$0" />
+                  <Input className="h-8" type="number" defaultValue={opp.renewalArr || ''}
+                    onBlur={e => handleUpdate({ renewalArr: e.target.value ? Number(e.target.value) : undefined })} placeholder="$0" />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">One-Time Amount</Label>
-                  <Input className="h-8" type="number" value={opp.oneTimeAmount || ''} 
-                    onChange={e => handleUpdate({ oneTimeAmount: e.target.value ? Number(e.target.value) : undefined })} placeholder="$0" />
+                  <Input className="h-8" type="number" defaultValue={opp.oneTimeAmount || ''}
+                    onBlur={e => handleUpdate({ oneTimeAmount: e.target.value ? Number(e.target.value) : undefined })} placeholder="$0" />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Term (months)</Label>
-                  <Input className="h-8" type="number" value={opp.termMonths || ''} 
-                    onChange={e => handleUpdate({ termMonths: e.target.value ? Number(e.target.value) : undefined })} placeholder="12" />
+                  <Input className="h-8" type="number" defaultValue={opp.termMonths || ''}
+                    onBlur={e => handleUpdate({ termMonths: e.target.value ? Number(e.target.value) : undefined })} placeholder="12" />
                 </div>
               </div>
             </CollapsibleSection>
@@ -366,7 +329,7 @@ export default function OpportunityDetail() {
                 <div key={task.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/30 transition-colors">
                   <Badge variant="outline" className="text-[10px]">{task.priority}</Badge>
                   <span className="text-sm flex-1 truncate">{task.title}</span>
-                  {task.dueDate && <span className="text-xs text-muted-foreground">{format(parseISO(task.dueDate), 'MMM d')}</span>}
+                  {task.dueDate && <span className="text-xs text-muted-foreground">{safeFormat(task.dueDate, 'MMM d')}</span>}
                 </div>
               ))}
             </div>
@@ -391,7 +354,7 @@ export default function OpportunityDetail() {
               {[...opp.activityLog].reverse().map(activity => (
                 <div key={activity.id} className="flex items-start gap-3 p-2 rounded-lg bg-muted/30">
                   <div className="text-xs text-muted-foreground whitespace-nowrap">
-                    {activity.date ? format(parseISO(activity.date), 'MMM d') : '—'}
+                    {safeFormat(activity.date, 'MMM d')}
                   </div>
                   <div className="flex-1">
                     <span className="text-sm font-medium capitalize">{activity.type.replace('-', ' ')}</span>

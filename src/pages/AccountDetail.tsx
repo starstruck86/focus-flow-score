@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { useStore } from '@/store/useStore';
@@ -12,25 +12,19 @@ import { Card, CardContent } from '@/components/ui/card';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import {
-  Collapsible, CollapsibleContent, CollapsibleTrigger,
-} from '@/components/ui/collapsible';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
 import { EditableDatePicker } from '@/components/EditableDatePicker';
 import { StakeholderMap } from '@/components/StakeholderMap';
 import { ResourceLinksPanel } from '@/components/ResourceLinksPanel';
 import { TouchLogButtons } from '@/components/TouchLogButtons';
 import { LifecycleTierBadge, IcpScorePill, EnrichButton } from '@/components/LifecycleIntelligence';
+import { CollapsibleSection, LinkPill, LastTouchIndicator, safeFormat } from '@/components/detail';
+import { useDebouncedUpdate } from '@/hooks/useDebouncedUpdate';
 import {
-  ArrowLeft, ChevronDown, ChevronRight, ExternalLink, Globe,
-  Building2, Target, Phone, Users, FileText, CheckSquare,
-  Calendar, TrendingUp, Link2,
+  ArrowLeft, ChevronRight, Building2, Target, Users,
+  FileText, CheckSquare, Calendar,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format, parseISO, differenceInDays } from 'date-fns';
-import type { AccountTier, AccountStatus, OpportunityStage } from '@/types';
+import type { AccountTier, AccountStatus } from '@/types';
 
 const TIER_COLORS: Record<AccountTier, string> = {
   'A': 'border-status-green text-status-green',
@@ -56,48 +50,6 @@ const STATUS_OPTIONS: { value: AccountStatus; label: string }[] = [
   { value: 'meeting-booked', label: 'Meeting Booked' },
 ];
 
-function CollapsibleSection({ 
-  title, icon: Icon, count, defaultOpen = true, children 
-}: { 
-  title: string; icon: any; count?: number; defaultOpen?: boolean; children: React.ReactNode 
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex items-center gap-2 w-full py-3 px-1 hover:bg-muted/30 rounded-lg transition-colors group">
-        {open ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{title}</span>
-        {count !== undefined && (
-          <Badge variant="secondary" className="ml-auto text-xs">{count}</Badge>
-        )}
-      </CollapsibleTrigger>
-      <CollapsibleContent className="pl-1">
-        {children}
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-function LinkPill({ label, url }: { label: string; url?: string }) {
-  if (!url) return null;
-  const href = url.startsWith('http') ? url : `https://${url}`;
-  return (
-    <a href={href} target="_blank" rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-      onClick={e => e.stopPropagation()}>
-      <Link2 className="h-3 w-3" />{label}
-    </a>
-  );
-}
-
-function LastTouchIndicator({ date }: { date?: string }) {
-  if (!date) return <span className="text-xs text-muted-foreground">No touch</span>;
-  const days = differenceInDays(new Date(), parseISO(date));
-  const color = days <= 3 ? 'text-status-green' : days <= 7 ? 'text-status-yellow' : 'text-status-red';
-  return <span className={cn("text-xs font-medium", color)}>{days}d ago</span>;
-}
-
 export default function AccountDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -105,17 +57,23 @@ export default function AccountDetail() {
 
   const account = accounts.find(a => a.id === id);
 
-  const accountOpps = useMemo(() => 
+  // Debounced update for text inputs
+  const { debouncedUpdate, flush } = useDebouncedUpdate(updateAccount, id || '');
+
+  // Flush pending updates on unmount
+  useEffect(() => flush, [flush]);
+
+  const accountOpps = useMemo(() =>
     opportunities.filter(o => o.accountId === id), [opportunities, id]);
-  const accountRenewals = useMemo(() => 
+  const accountRenewals = useMemo(() =>
     renewals.filter(r => r.accountId === id), [renewals, id]);
-  const accountTasks = useMemo(() => 
-    tasks.filter(t => t.linkedAccountId === id && t.status !== 'done' && t.status !== 'dropped'), 
+  const accountTasks = useMemo(() =>
+    tasks.filter(t => t.linkedAccountId === id && t.status !== 'done' && t.status !== 'dropped'),
     [tasks, id]);
-  const accountContacts = useMemo(() => 
+  const accountContacts = useMemo(() =>
     contacts.filter(c => c.accountId === id), [contacts, id]);
 
-  const totalArr = useMemo(() => 
+  const totalArr = useMemo(() =>
     accountOpps.filter(o => o.status === 'active' || o.status === 'closed-won')
       .reduce((sum, o) => sum + (o.arr || 0), 0), [accountOpps]);
 
@@ -246,11 +204,11 @@ export default function AccountDetail() {
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Industry</Label>
-              <Input className="h-8" value={account.industry || ''} onChange={e => handleUpdate({ industry: e.target.value })} placeholder="Industry..." />
+              <Input className="h-8" defaultValue={account.industry || ''} onBlur={e => handleUpdate({ industry: e.target.value })} placeholder="Industry..." />
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Next Step</Label>
-              <Input className="h-8" value={account.nextStep || ''} onChange={e => handleUpdate({ nextStep: e.target.value })} placeholder="Next step..." />
+              <Input className="h-8" defaultValue={account.nextStep || ''} onBlur={e => handleUpdate({ nextStep: e.target.value })} placeholder="Next step..." />
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Next Touch Due</Label>
@@ -258,7 +216,7 @@ export default function AccountDetail() {
             </div>
             <div className="space-y-1 col-span-full">
               <Label className="text-xs text-muted-foreground">Notes</Label>
-              <Textarea rows={3} value={account.notes || ''} onChange={e => handleUpdate({ notes: e.target.value })} placeholder="Account notes..." />
+              <Textarea rows={3} defaultValue={account.notes || ''} onBlur={e => handleUpdate({ notes: e.target.value })} placeholder="Account notes..." />
             </div>
           </div>
         </CollapsibleSection>
@@ -282,7 +240,7 @@ export default function AccountDetail() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                    {opp.closeDate && <span>Close: {format(parseISO(opp.closeDate), 'MMM d')}</span>}
+                    {opp.closeDate && <span>Close: {safeFormat(opp.closeDate, 'MMM d')}</span>}
                     {opp.nextStep && <span className="truncate">→ {opp.nextStep}</span>}
                   </div>
                 </button>
@@ -313,7 +271,7 @@ export default function AccountDetail() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                    <span>Due: {format(parseISO(ren.renewalDue), 'MMM d, yyyy')}</span>
+                    <span>Due: {safeFormat(ren.renewalDue, 'MMM d, yyyy')}</span>
                     {ren.csm && <span>CSM: {ren.csm}</span>}
                     {ren.nextStep && <span className="truncate">→ {ren.nextStep}</span>}
                   </div>
@@ -348,7 +306,7 @@ export default function AccountDetail() {
                   <Badge variant="outline" className="text-[10px]">{task.priority}</Badge>
                   <span className="text-sm flex-1 truncate">{task.title}</span>
                   {task.dueDate && (
-                    <span className="text-xs text-muted-foreground">{format(parseISO(task.dueDate), 'MMM d')}</span>
+                    <span className="text-xs text-muted-foreground">{safeFormat(task.dueDate, 'MMM d')}</span>
                   )}
                 </div>
               ))}
