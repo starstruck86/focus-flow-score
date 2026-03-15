@@ -170,6 +170,11 @@ export default function Quota() {
   const summary = useMemo(() => {
     return calculateCommissionSummary(opportunities, config, dateFilter);
   }, [opportunities, config, dateFilter]);
+
+  const combinedAttainment = totalQuota > 0
+    ? (summary.newArrBooked + summary.renewalArrBooked) / totalQuota
+    : 0;
+
   
   // Generate ledger entries for display
   const ledgerEntries = useMemo(() => {
