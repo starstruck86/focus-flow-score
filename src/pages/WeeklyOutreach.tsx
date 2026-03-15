@@ -449,6 +449,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
   isSelected,
   onToggleSelect,
   highlightId,
+  onOpenAccountDetail,
 }: {
   group: FunnelGroup;
   accounts: Account[];
@@ -461,6 +462,7 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
   isSelected: (id: string) => boolean;
   onToggleSelect: (id: string) => void;
   highlightId: string | null;
+  onOpenAccountDetail: (id: string) => void;
 }) {
   const { fields, getFieldValue } = useCustomFields();
   const [groupSort, setGroupSort] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
