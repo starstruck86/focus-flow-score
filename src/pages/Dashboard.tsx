@@ -78,9 +78,6 @@ export default function Dashboard() {
   let expectedVsActualMetrics: any[] = [];
   let effectiveConfig = quotaConfig || DEFAULT_QUOTA_CONFIG;
   let effectiveTargets = quotaTargets || DEFAULT_QUOTA_TARGETS;
-  let commissionSummary: any = { newArrBooked: 0, renewalArrBooked: 0, newArrAttainment: 0, renewalArrAttainment: 0, totalCommission: 0 };
-  let combinedAttainment = 0;
-  let performanceTargets: any = {};
 
   try {
     today = new Date();
@@ -112,28 +109,6 @@ export default function Dashboard() {
     
     effectiveConfig = quotaConfig || DEFAULT_QUOTA_CONFIG;
     effectiveTargets = quotaTargets || DEFAULT_QUOTA_TARGETS;
-    const fyStart = effectiveTargets.fiscalYearStart;
-    const dateFilter = { start: fyStart, end: format(today, 'yyyy-MM-dd') };
-    commissionSummary = calculateCommissionSummary(opportunities, {
-      ...effectiveConfig,
-      newArrQuota: effectiveTargets.newArrQuota,
-      renewalArrQuota: effectiveTargets.renewalArrQuota,
-    }, dateFilter);
-    
-    const totalQuota = (effectiveTargets.newArrQuota || 0) + (effectiveTargets.renewalArrQuota || 0);
-    combinedAttainment = totalQuota > 0
-      ? (commissionSummary.newArrBooked + commissionSummary.renewalArrBooked) / totalQuota
-      : 0;
-    
-    performanceTargets = {
-      dialsPerDay: effectiveTargets.targetDialsPerDay,
-      connectsPerDay: effectiveTargets.targetConnectsPerDay,
-      meetingsPerWeek: effectiveTargets.targetMeetingsSetPerWeek,
-      oppsPerWeek: effectiveTargets.targetOppsCreatedPerWeek,
-      customerMeetingsPerWeek: effectiveTargets.targetCustomerMeetingsPerWeek,
-      accountsResearchedPerDay: effectiveTargets.targetAccountsResearchedPerDay,
-      contactsPreppedPerDay: effectiveTargets.targetContactsPreppedPerDay,
-    };
     // calculations complete
   } catch (err) {
     console.error('[Dashboard] calculation crash:', err);
