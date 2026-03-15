@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { matchAccountToEvent } from '@/lib/accountMatcher';
 
 const TIMEZONE = 'America/New_York';
 const DISMISSED_KEY = 'meeting_prep_dismissed';
