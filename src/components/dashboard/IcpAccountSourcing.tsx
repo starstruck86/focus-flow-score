@@ -300,7 +300,7 @@ export function IcpAccountSourcing() {
                 size="sm"
                 variant="outline"
                 className="w-full gap-1.5"
-                onClick={() => sourceMutation.mutate()}
+                onClick={() => sourceMutation.mutate(undefined)}
                 disabled={isSourcing}
               >
                 {isSourcing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
