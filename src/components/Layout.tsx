@@ -24,9 +24,9 @@ import { TerritoryCopilot } from '@/components/TerritoryCopilot';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 const navItems = [
-  { to: '/', label: 'Home', icon: LayoutDashboard },
+  { to: '/', label: 'Today', icon: LayoutDashboard },
   { to: '/tasks', label: 'Tasks', icon: CheckSquare },
-  { to: '/outreach', label: 'New Logo', icon: Users },
+  { to: '/outreach', label: 'Accounts', icon: Users },
   { to: '/renewals', label: 'Renewals', icon: RefreshCw },
   { to: '/trends', label: 'Trends', icon: TrendingUp },
   { to: '/quota', label: 'Quota', icon: DollarSign },
