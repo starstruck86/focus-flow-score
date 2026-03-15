@@ -67,12 +67,7 @@ export function MeetingPrepPrompt() {
 
       if (minutesUntil < -15 || minutesUntil > 240) return;
 
-      const titleLower = event.title.toLowerCase();
-      const matchedAccount = accounts.find(a =>
-        titleLower.includes(a.name.toLowerCase()) ||
-        a.name.toLowerCase().split(' ').some(word => word.length > 3 && titleLower.includes(word))
-      );
-
+      const matchedAccount = matchAccountToEvent(event.title, accounts);
       if (!matchedAccount) return;
 
       const accountOpps = opportunities.filter(o => o.accountId === matchedAccount.id && o.status === 'active');

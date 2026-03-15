@@ -107,6 +107,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Bottom Nav - always visible */}
       <BottomNav />
       
+      {/* Back to Today shortcut */}
+      <BackToToday />
+      
       {/* Floating Action Button */}
       <GlobalFAB position="bottom-right" />
     </div>

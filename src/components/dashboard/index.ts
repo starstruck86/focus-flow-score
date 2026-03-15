@@ -28,3 +28,5 @@ export { IcpAccountSourcing } from './IcpAccountSourcing';
 export { CompanyMonitorCard } from './CompanyMonitorCard';
 export { EnrichmentTimeline } from './EnrichmentTimeline';
 export { AccountHealthPulseCard } from './AccountHealthPulseCard';
+export { PostMeetingPrompt } from './PostMeetingPrompt';
+export { ResearchChecklist } from './ResearchChecklist';
