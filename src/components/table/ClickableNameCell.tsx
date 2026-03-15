@@ -303,12 +303,14 @@ export function AccountNameCell({
   salesforceLink,
   onNameChange,
   onSalesforceLinkChange,
+  onOpenDetails,
   className,
 }: {
   name: string;
   salesforceLink?: string;
   onNameChange?: (name: string) => void;
   onSalesforceLinkChange: (link: string) => void;
+  onOpenDetails?: () => void;
   className?: string;
 }) {
   return (
@@ -317,6 +319,7 @@ export function AccountNameCell({
       salesforceLink={salesforceLink}
       onNameChange={onNameChange}
       onSalesforceLinkChange={onSalesforceLinkChange}
+      onOpenDetails={onOpenDetails}
       fontWeight="medium"
       className={className}
     />
