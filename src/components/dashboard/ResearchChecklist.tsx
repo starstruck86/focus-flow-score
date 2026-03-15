@@ -120,7 +120,7 @@ export function ResearchChecklist() {
                   </Badge>
                   <span className={cn(
                     "text-[10px] font-mono font-bold",
-                    pct === 100 ? "text-status-green" : pct >= 50 ? "text-amber-500" : "text-muted-foreground"
+                    pct === 100 ? "text-status-green" : pct >= 50 ? "text-status-yellow" : "text-muted-foreground"
                   )}>
                     {completed}/{total}
                   </span>
