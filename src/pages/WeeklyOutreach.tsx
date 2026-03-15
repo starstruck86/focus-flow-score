@@ -1,6 +1,12 @@
 import React, { useState, useRef, useMemo, useCallback, memo, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
+import {
+  IcpAccountSourcing,
+  CompanyMonitorCard,
+  AccountHealthPulseCard,
+} from '@/components/dashboard';
+import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 import { 
   ExternalLink, 
   Plus, 

@@ -382,6 +382,65 @@ export default function Quota() {
                 <div className="text-xs text-muted-foreground">New Logos</div>
               </div>
             </div>
+
+            {/* Strategic Planning Section */}
+            <Collapsible open={strategicOpen} onOpenChange={setStrategicOpen}>
+              <CollapsibleTrigger className="flex items-center gap-2 w-full text-left py-3 group">
+                <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", strategicOpen && "rotate-180")} />
+                <span className="font-display text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
+                  Strategic Planning & Pipeline Analysis
+                </span>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-6 pt-2">
+                {/* Pace to Quota + Pipeline Hygiene side by side */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <WidgetErrorBoundary widgetId="pace-to-quota">
+                    <PaceToQuotaCard paceToQuota={paceToQuota} />
+                  </WidgetErrorBoundary>
+                  <WidgetErrorBoundary widgetId="pipeline-hygiene">
+                    <PipelineHygieneCard />
+                  </WidgetErrorBoundary>
+                </div>
+
+                {/* Unified Pipeline */}
+                <WidgetErrorBoundary widgetId="unified-pipeline">
+                  <UnifiedPipeline />
+                </WidgetErrorBoundary>
+
+                {/* Next 45 Days Risk */}
+                <WidgetErrorBoundary widgetId="next-45-risk">
+                  <Next45DaysRisk opportunities={opportunities} renewals={renewals} />
+                </WidgetErrorBoundary>
+
+                {/* Scenario Simulator */}
+                <WidgetErrorBoundary widgetId="scenario-simulator">
+                  <QuotaScenarioSimulator />
+                </WidgetErrorBoundary>
+
+                {/* Performance & Commission Snapshots */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <WidgetErrorBoundary widgetId="performance-snapshot">
+                    <PerformanceSnapshot
+                      wtd={performanceRollups?.wtd || { dials: 0, conversations: 0, meetingsSet: 0, customerMeetingsHeld: 0, oppsCreated: 0, accountsResearched: 0, contactsPrepped: 0 }}
+                      mtd={performanceRollups?.mtd || { dials: 0, conversations: 0, meetingsSet: 0, customerMeetingsHeld: 0, oppsCreated: 0, accountsResearched: 0, contactsPrepped: 0 }}
+                      wtdDays={performanceRollups?.wtdDays || 0}
+                      mtdDays={performanceRollups?.mtdDays || 0}
+                      targets={performanceTargets}
+                      isLoading={rollupsLoading}
+                    />
+                  </WidgetErrorBoundary>
+                  <WidgetErrorBoundary widgetId="commission-snapshot">
+                    <CommissionSnapshot
+                      totalCommission={summary.totalCommission}
+                      newArrAttainment={summary.newArrAttainment}
+                      renewalArrAttainment={summary.renewalArrAttainment}
+                      combinedAttainment={combinedAttainment}
+                      projectedImpact={{ additionalNewArr: 50000, additionalCommission: 50000 * config.newArrAcr }}
+                    />
+                  </WidgetErrorBoundary>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </TabsContent>
           
           {/* Deals Ledger Tab */}
