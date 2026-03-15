@@ -31,6 +31,7 @@ const DEFAULT_WIDGETS: DashboardWidget[] = [
   { id: 'risk-window', label: 'Next 45 Days Risk', visible: false },
   { id: 'snapshots', label: 'Performance & Commission', visible: false },
   { id: 'daily-digest', label: 'Daily Digest', visible: false },
+  { id: 'icp-sourcing', label: 'ICP Account Sourcing', visible: true },
 ];
 
 function loadWidgets(): DashboardWidget[] {
