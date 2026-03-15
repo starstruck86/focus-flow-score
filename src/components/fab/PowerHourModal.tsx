@@ -49,7 +49,7 @@ const DURATION_PRESETS = [
 type SessionState = 'setup' | 'running' | 'paused' | 'completed';
 
 export function PowerHourModal({ open, onOpenChange }: PowerHourModalProps) {
-  const { updateRawInputs, currentDay, initializeToday } = useStore();
+  const { updateRawInputs, updateActivityInputs, currentDay, initializeToday } = useStore();
   
   const [duration, setDuration] = useState(60);
   const [focus, setFocus] = useState<Motion>('new-logo');
