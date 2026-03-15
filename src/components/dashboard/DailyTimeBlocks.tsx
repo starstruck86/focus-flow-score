@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,7 +14,8 @@ import {
   Clock, Zap, Phone, Users, BookOpen, Coffee, 
   BriefcaseBusiness, Target, RefreshCw, Star,
   ChevronDown, ChevronUp, MessageSquare, Lightbulb,
-  ThumbsUp, ThumbsDown, RotateCcw, CheckCircle2
+  ThumbsUp, ThumbsDown, RotateCcw, CheckCircle2,
+  ArrowRight, ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
