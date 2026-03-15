@@ -163,7 +163,7 @@ export function IcpAccountSourcing() {
           <Button
             variant={hasResults ? 'ghost' : 'default'}
             size="sm"
-            onClick={() => sourceMutation.mutate()}
+            onClick={() => sourceMutation.mutate(undefined)}
             disabled={isSourcing}
             className={cn(!hasResults && 'gap-1.5')}
           >
