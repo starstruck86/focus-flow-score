@@ -22,6 +22,7 @@ import {
   Trash2,
   ExternalLink as LinkIcon,
   Users,
+  Sparkles,
 } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { StreakChip } from '@/components/StreakChip';
@@ -79,6 +80,7 @@ import { OpportunitiesTable } from '@/components/OpportunitiesTable';
 import { OpportunityDrawer } from '@/components/OpportunityDrawer';
 import { AccountContactsField, type AccountContact } from '@/components/AccountContactsField';
 import { StakeholderMap } from '@/components/StakeholderMap';
+import { BatchDiscoveryModal } from '@/components/BatchDiscoveryModal';
 import { ManageColumnsPopover } from '@/components/table/ManageColumnsPopover';
 import { CustomFieldCell, CustomFieldRow } from '@/components/table/CustomFieldCell';
 import { MetricFieldCell } from '@/components/table/MetricFieldCell';
@@ -1323,6 +1325,12 @@ export default function WeeklyOutreach() {
                   <Upload className="h-4 w-4 mr-2" />
                   Claude Import
                 </Button>
+                <BatchDiscoveryModal>
+                  <Button variant="outline">
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    Batch Discover
+                  </Button>
+                </BatchDiscoveryModal>
                 
                 <Dialog open={showBulkImportDialog} onOpenChange={(open) => {
                   setShowBulkImportDialog(open);
