@@ -88,7 +88,7 @@ export function TaskKanbanBoard({ tasks, selectedIds, onToggleSelect }: TaskKanb
   }, [tasks, updateTask]);
 
   return (
-    <div className="flex gap-3 overflow-x-auto pb-4 -mx-2 px-2 snap-x snap-mandatory">
+    <div className="flex gap-4 overflow-x-auto pb-4 -mx-2 px-2 snap-x snap-mandatory min-h-[400px]">
       {COLUMN_STATUSES.map(status => {
         const meta = STATUS_META[status];
         const colTasks = columns[status];
@@ -98,9 +98,9 @@ export function TaskKanbanBoard({ tasks, selectedIds, onToggleSelect }: TaskKanb
           <div
             key={status}
             className={cn(
-              "flex-shrink-0 w-[260px] sm:w-[280px] lg:flex-1 lg:min-w-[220px] snap-start",
-              "flex flex-col rounded-xl border bg-muted/20 transition-all",
-              isOver && "border-primary/50 bg-primary/5 shadow-md shadow-primary/10"
+              "flex-shrink-0 w-[280px] sm:w-[300px] lg:flex-1 lg:min-w-[240px] snap-start",
+              "flex flex-col rounded-xl border bg-card/40 backdrop-blur-sm transition-all",
+              isOver && "border-primary/50 bg-primary/5 shadow-lg shadow-primary/10"
             )}
             onDragEnter={(e) => handleDragEnter(e, status)}
             onDragLeave={(e) => handleDragLeave(e, status)}
@@ -108,16 +108,16 @@ export function TaskKanbanBoard({ tasks, selectedIds, onToggleSelect }: TaskKanb
             onDrop={(e) => handleDrop(e, status)}
           >
             {/* Column Header */}
-            <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/30">
-              <span className={cn("h-2.5 w-2.5 rounded-full", meta.dot)} />
-              <span className="text-xs font-semibold tracking-tight">{meta.label}</span>
-              <span className="ml-auto text-[10px] text-muted-foreground font-medium bg-muted/60 h-5 min-w-5 px-1.5 rounded-full flex items-center justify-center">
+            <div className="flex items-center gap-2.5 px-3.5 py-3 border-b border-border/40">
+              <span className={cn("h-3 w-3 rounded-full ring-2 ring-offset-1 ring-offset-background", meta.dot, `ring-${meta.dot.replace('bg-', '')}/30`)} />
+              <span className="text-sm font-bold tracking-tight">{meta.label}</span>
+              <span className="ml-auto text-[11px] text-muted-foreground font-semibold bg-muted/80 h-6 min-w-6 px-2 rounded-full flex items-center justify-center">
                 {colTasks.length}
               </span>
             </div>
 
             {/* Cards */}
-            <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-[120px] max-h-[calc(100vh-320px)]">
+            <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5 min-h-[140px] max-h-[calc(100vh-300px)]">
               {colTasks.length === 0 ? (
                 <div className={cn(
                   "flex items-center justify-center h-20 rounded-lg border-2 border-dashed transition-colors text-[11px] text-muted-foreground/50",

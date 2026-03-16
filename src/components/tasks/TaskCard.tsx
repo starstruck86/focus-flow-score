@@ -168,7 +168,7 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
           →
         </div>
 
-        <div className="flex items-start gap-2.5 p-2.5">
+        <div className="flex items-start gap-2.5 p-3">
           {/* Left: checkbox + status */}
           <div className="flex flex-col items-center gap-1 pt-0.5">
             <Checkbox
@@ -182,10 +182,10 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
           <div className="flex-1 min-w-0 space-y-1">
             {/* Top row: title */}
             <div className="flex items-center gap-1.5">
-              <button onClick={cycleStatus} className={cn("shrink-0 h-5 px-1.5 rounded text-[9px] font-bold border transition-colors", statusMeta.color)}>
+              <button onClick={cycleStatus} className={cn("shrink-0 h-6 px-2 rounded text-[10px] font-bold border transition-colors", statusMeta.color)}>
                 {statusMeta.shortLabel}
               </button>
-              <button onClick={cyclePriority} className={cn("shrink-0 h-5 w-6 rounded text-[9px] font-bold", PRIORITY_COLORS[task.priority])}>
+              <button onClick={cyclePriority} className={cn("shrink-0 h-6 w-7 rounded text-[10px] font-bold", PRIORITY_COLORS[task.priority])}>
                 {task.priority}
               </button>
               {isRecurring && <Repeat className="h-3 w-3 text-primary shrink-0" />}
@@ -204,7 +204,7 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
                 <span
                   onClick={startTitleEdit}
                   className={cn(
-                    "text-sm font-medium truncate flex-1 min-w-0 cursor-text hover:text-primary transition-colors",
+                    "text-[13px] font-semibold leading-snug flex-1 min-w-0 cursor-text hover:text-primary transition-colors",
                     isTerminal && "line-through text-muted-foreground"
                   )}
                   title="Click to edit title"
@@ -215,37 +215,37 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
             </div>
 
             {/* Meta row: account, opp stage, due date, workstream */}
-            <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap mt-1">
               {accountName && (
-                <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded-md">
-                  <Building2 className="h-2.5 w-2.5" />
-                  <span className="truncate max-w-[100px]">{accountName}</span>
+                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">
+                  <Building2 className="h-3 w-3" />
+                  <span className="truncate max-w-[120px]">{accountName}</span>
                 </span>
               )}
               {oppStage && (
-                <span className="inline-flex items-center gap-0.5 text-[10px] text-purple-500 bg-purple-500/10 px-1.5 py-0.5 rounded-md border border-purple-500/20">
-                  <Target className="h-2.5 w-2.5" />
+                <span className="inline-flex items-center gap-1 text-[11px] text-purple-500 bg-purple-500/10 px-2 py-1 rounded-md border border-purple-500/20">
+                  <Target className="h-3 w-3" />
                   {oppStage}
                 </span>
               )}
               {dueInfo && (
-                <span className={cn("inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-md", dueInfo.color)}>
-                  {isOverdue && <AlertCircle className="h-2.5 w-2.5" />}
-                  <Calendar className="h-2.5 w-2.5" />
+                <span className={cn("inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md", dueInfo.color)}>
+                  {isOverdue && <AlertCircle className="h-3 w-3" />}
+                  <Calendar className="h-3 w-3" />
                   {dueInfo.label}
                 </span>
               )}
-              <span className="text-[9px] font-medium text-muted-foreground bg-muted/40 px-1.5 py-0.5 rounded">
+              <span className="text-[10px] font-medium text-muted-foreground bg-muted/40 px-2 py-1 rounded">
                 {WORKSTREAM_LABELS[workstream]}
               </span>
               {inferredTag && (
-                <span className={cn("text-[9px] px-1.5 py-0.5 rounded-full border font-medium", DRIVER_TAG_META[inferredTag].color)}>
+                <span className={cn("text-[10px] px-2 py-1 rounded-full border font-medium", DRIVER_TAG_META[inferredTag].color)}>
                   {DRIVER_TAG_META[inferredTag].label}
                 </span>
               )}
               {task.estimatedMinutes && (
-                <span className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground">
-                  <Clock className="h-2.5 w-2.5" />
+                <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <Clock className="h-3 w-3" />
                   {task.estimatedMinutes}m
                 </span>
               )}
@@ -260,13 +260,13 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
                     style={{ width: `${subtaskProgress.pct}%` }}
                   />
                 </div>
-                <span className="text-[9px] text-muted-foreground">{subtaskProgress.done}/{subtaskProgress.total}</span>
+                <span className="text-[10px] text-muted-foreground">{subtaskProgress.done}/{subtaskProgress.total}</span>
               </div>
             )}
 
             {/* Notes preview */}
             {task.notes && !expanded && (
-              <p className="text-[10px] text-muted-foreground/60 italic truncate">
+              <p className="text-[11px] text-muted-foreground/70 italic leading-relaxed line-clamp-2 mt-1">
                 {task.notes}
               </p>
             )}
