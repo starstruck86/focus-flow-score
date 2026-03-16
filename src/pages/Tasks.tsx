@@ -19,8 +19,8 @@ export default function Tasks() {
   const { tasks, accounts, opportunities, recurringTemplates, generateDueRecurringInstances } = useStore();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({ done: true, dropped: true });
-  const [filterWorkstream, setFilterWorkstream] = useState<'all' | Workstream>('pg');
-  const [filterDue, setFilterDue] = useState<'all' | 'today' | 'week'>('all');
+  const [filterWorkstream, setFilterWorkstream] = useState<'all' | Workstream>('all');
+  const [filterDue, setFilterDue] = useState<'all' | 'today' | 'week'>('today');
   const [searchQuery, setSearchQuery] = useState('');
   const [groupMode, setGroupMode] = useState<GroupMode>('status');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
