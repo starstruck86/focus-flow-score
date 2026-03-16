@@ -1,6 +1,6 @@
 // Reusable inline editable cells - Display mode by default, edit on click
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Pencil, Newspaper, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Pencil, Newspaper, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
