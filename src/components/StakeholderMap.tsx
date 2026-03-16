@@ -22,7 +22,6 @@ import {
   UserCheck,
   Lightbulb,
   Ban,
-  ChevronRight,
   Linkedin,
   AlertTriangle,
   SlidersHorizontal,
@@ -32,6 +31,9 @@ import {
   Upload,
   Loader2,
   ImagePlus,
+  Plus,
+  Check,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
