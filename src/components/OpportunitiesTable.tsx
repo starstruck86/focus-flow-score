@@ -290,8 +290,15 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     }
   };
 
+  const { deleteOpportunity: storeDeleteOpportunity } = useStore();
+  
   const deleteOpportunity = (id: string) => {
-    deleteOpportunityMutation.mutate(id);
+    if (dbOpportunityIds.has(id)) {
+      deleteOpportunityMutation.mutate(id);
+    } else {
+      storeDeleteOpportunity(id);
+      toast.success('Opportunity deleted');
+    }
   };
 
   const updateRenewal = (id: string, updates: { linkedOpportunityId?: string }) => {
