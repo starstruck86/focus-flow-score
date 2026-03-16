@@ -450,7 +450,7 @@ export function DailyTimeBlocks() {
               <div
                 key={i}
                 className={cn(
-                  "px-4 py-3 flex gap-3 transition-colors",
+                  "px-4 py-3 flex gap-3 transition-colors group/block",
                   isCurrent && "bg-primary/5 ring-1 ring-inset ring-primary/20",
                   isPast && "opacity-50"
                 )}
