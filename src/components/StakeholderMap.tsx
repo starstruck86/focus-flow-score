@@ -347,8 +347,8 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                   className="h-8 text-xs"
                   list="division-presets"
                 />
-                <datalist id="division-presets">
-                  {DIVISION_PRESETS.filter(Boolean).map((d) => (
+                 <datalist id="division-presets">
+                  {getDivisionPresets(accountName).map((d) => (
                     <option key={d} value={d} />
                   ))}
                 </datalist>
