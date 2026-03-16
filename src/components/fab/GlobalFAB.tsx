@@ -35,6 +35,7 @@ import { ScreenshotImportModal } from '@/components/ScreenshotImportModal';
 import { TranscriptViewer } from '@/components/TranscriptViewer';
 import { ResourceLibraryModal } from '@/components/ResourceLibraryModal';
 import { ClaudeSynopsisModal } from '@/components/ClaudeSynopsisModal';
+import { useStore } from '@/store/useStore';
 
 interface GlobalFABProps {
   position?: 'bottom-right' | 'bottom-left';
