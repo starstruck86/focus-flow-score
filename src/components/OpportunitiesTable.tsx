@@ -1070,7 +1070,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
 
   const renderGenericGroup = (label: string, opps: Opportunity[]) => {
     if (opps.length === 0) return null;
-    const groupArr = opps.reduce((sum, o) => sum + (o.arr || 0), 0);
+    const groupArr = opps.reduce((sum, o) => sum + getDisplayArr(o), 0);
 
     return (
       <React.Fragment key={label}>

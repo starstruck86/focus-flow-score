@@ -421,6 +421,11 @@ export function useDeleteOpportunity() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['db-opportunities'] });
+      toast.success('Opportunity deleted');
+    },
+    onError: (error) => {
+      console.error('Delete opportunity error:', error);
+      toast.error('Failed to delete opportunity: ' + (error as Error).message);
     },
   });
 }
