@@ -309,6 +309,21 @@ export default function OpportunityDetail() {
           </>
         )}
 
+        {/* Org Chart */}
+        {opp.accountId && linkedAccount && (
+          <>
+            <CollapsibleSection title="Org Chart" icon={Network} defaultOpen={false}>
+              <OrgChartView
+                accountId={opp.accountId}
+                accountName={linkedAccount.name}
+                website={linkedAccount.website}
+                industry={linkedAccount.industry}
+              />
+            </CollapsibleSection>
+            <Separator />
+          </>
+        )}
+
         {/* Stakeholders */}
         {opp.accountId && linkedAccount && (
           <>
