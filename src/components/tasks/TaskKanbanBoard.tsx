@@ -12,7 +12,7 @@ interface TaskKanbanBoardProps {
   onToggleSelect: (id: string) => void;
 }
 
-const COLUMN_STATUSES: TaskStatus[] = STATUS_ORDER;
+const COLUMN_STATUSES: TaskStatus[] = ['next', 'in-progress'];
 
 export function TaskKanbanBoard({ tasks, selectedIds, onToggleSelect }: TaskKanbanBoardProps) {
   const { updateTask } = useStore();
