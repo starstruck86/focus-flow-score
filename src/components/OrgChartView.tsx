@@ -178,6 +178,119 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
     }
   }, [accountId, accountName, website, industry, user, qc]);
 
+  // Handle screenshot drag-and-drop
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (!user) return;
+
+    const imageFiles = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    if (imageFiles.length === 0) return;
+
+    setIsParsingDrop(true);
+    try {
+      // Upload to storage
+      const uploadedUrls: string[] = [];
+      for (let i = 0; i < imageFiles.length; i++) {
+        const ext = imageFiles[i].name.split('.').pop() || 'png';
+        const path = `${user.id}/org-chart/${accountId}/${Date.now()}-${i}.${ext}`;
+        const { error } = await supabase.storage
+          .from('enrichment-screenshots')
+          .upload(path, imageFiles[i], { upsert: true });
+        if (error) { console.error('Upload error:', error); continue; }
+
+        const { data: signedData } = await supabase.storage
+          .from('enrichment-screenshots')
+          .createSignedUrl(path, 3600);
+        if (signedData?.signedUrl) uploadedUrls.push(signedData.signedUrl);
+      }
+
+      if (uploadedUrls.length === 0) {
+        toast.error('Failed to upload screenshot');
+        return;
+      }
+
+      toast.info(`Extracting contacts from ${uploadedUrls.length} screenshot(s)...`);
+
+      const { data, error } = await supabase.functions.invoke('parse-account-screenshot', {
+        body: {
+          imageUrls: uploadedUrls,
+          context: `Extract contacts/people for ${accountName}. Focus on names, titles, departments, and LinkedIn URLs.`,
+        },
+      });
+
+      if (error) throw new Error(error.message);
+      if (!data?.success) throw new Error(data?.error || 'Extraction failed');
+
+      const extractedAccounts = data.accounts || [];
+      // Collect all contacts from all extracted accounts
+      const allContacts: { name: string; title?: string; email?: string; department?: string }[] = [];
+      for (const acc of extractedAccounts) {
+        if (acc.contacts) allContacts.push(...acc.contacts);
+        // If the account itself looks like a contact entry (common with LinkedIn screenshots)
+        // the AI may put people as "accounts" — check if they have a title
+        if (acc.name && acc.notes?.includes('title:')) {
+          // skip, covered by contacts
+        }
+      }
+
+      // If no contacts found in the contacts array, the AI may have put people as accounts
+      if (allContacts.length === 0) {
+        for (const acc of extractedAccounts) {
+          if (acc.name) {
+            allContacts.push({
+              name: acc.name,
+              title: acc.industry || acc.notes || undefined, // AI sometimes puts title in unexpected fields
+            });
+          }
+        }
+      }
+
+      if (allContacts.length === 0) {
+        toast.info('No contacts found in screenshot');
+        return;
+      }
+
+      // Insert contacts, deduplicating
+      let added = 0;
+      for (const contact of allContacts) {
+        const { data: existing } = await supabase
+          .from('contacts')
+          .select('id')
+          .eq('account_id', accountId)
+          .ilike('name', contact.name)
+          .maybeSingle();
+
+        if (!existing) {
+          await supabase.from('contacts').insert({
+            user_id: user.id,
+            account_id: accountId,
+            name: contact.name,
+            title: contact.title || null,
+            email: contact.email || null,
+            department: contact.department || null,
+            status: 'target',
+            buyer_role: 'unknown',
+            influence_level: 'medium',
+            discovery_source: 'screenshot-drop',
+          });
+          added++;
+        }
+      }
+
+      qc.invalidateQueries({ queryKey: ['org-chart-contacts', accountId] });
+      toast.success(`Added ${added} contact(s) to org chart`, {
+        description: allContacts.length > added ? `${allContacts.length - added} duplicate(s) skipped` : undefined,
+      });
+    } catch (err) {
+      toast.error('Failed to parse screenshot', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setIsParsingDrop(false);
+    }
+  }, [user, accountId, accountName, qc]);
+
   // Build tree structure
   const { roots, childrenMap } = useMemo(() => {
     if (!contacts) return { roots: [], childrenMap: new Map<string, ContactNode[]>() };
