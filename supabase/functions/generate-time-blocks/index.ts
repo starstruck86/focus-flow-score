@@ -35,6 +35,9 @@ serve(async (req) => {
       feedbackRes,
       quotaRes,
       prevPlansRes,
+      oppsRes,
+      renewalsRes,
+      tasksRes,
     ] = await Promise.all([
       supabase.from("calendar_events").select("*")
         .gte("start_time", `${targetDate}T00:00:00`)
@@ -42,18 +45,23 @@ serve(async (req) => {
         .order("start_time"),
       supabase.from("daily_journal_entries").select("*")
         .eq("date", targetDate).maybeSingle(),
-      // Get top accounts/opps/renewals for work items
-      supabase.from("accounts").select("id, name, tier, account_status, last_touch_date, cadence_name, contact_status")
+      supabase.from("accounts").select("id, name, tier, account_status, last_touch_date, cadence_name, contact_status, motion")
         .in("account_status", ["active", "prepped", "researching"])
         .order("priority_score", { ascending: false }).limit(15),
-      // Last 10 time block feedbacks (both day-level and block-level)
       supabase.from("ai_feedback").select("*")
         .eq("feature", "time_blocks")
         .order("created_at", { ascending: false }).limit(10),
       supabase.from("quota_targets").select("*").maybeSingle(),
-      // Previous day's block-level feedback
       supabase.from("daily_time_blocks").select("blocks, block_feedback, feedback_rating, feedback_text, plan_date")
         .order("plan_date", { ascending: false }).limit(3),
+      supabase.from("opportunities").select("id, name, stage, status, arr, close_date, next_step, next_step_date, deal_type, account_id")
+        .in("status", ["active", "stalled"])
+        .order("close_date", { ascending: true }).limit(20),
+      supabase.from("renewals").select("id, account_name, arr, renewal_due, next_step, health_status, churn_risk")
+        .order("renewal_due", { ascending: true }).limit(15),
+      supabase.from("tasks").select("id, title, priority, due_date, motion, category, status")
+        .in("status", ["next", "in-progress"])
+        .order("due_date", { ascending: true }).limit(20),
     ]);
 
     const events = calendarRes.data || [];
