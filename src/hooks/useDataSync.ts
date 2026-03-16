@@ -412,11 +412,9 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
             notifySyncListeners();
           } catch (err) {
             console.error(`[DataSync] Write-back error for ${key}:`, err);
-            const { toast } = await import('@/hooks/use-toast');
-            toast({
-              title: 'Sync failed',
+            const { toast } = await import('sonner');
+            toast.error('Sync failed', {
               description: `Your ${key} changes couldn't save. They're preserved locally and will retry.`,
-              variant: 'destructive',
             });
           }
         }, 1500);
