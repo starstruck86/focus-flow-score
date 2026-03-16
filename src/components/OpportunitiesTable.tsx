@@ -446,6 +446,59 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     return groups;
   }, [filteredOpportunities]);
 
+  // Group by fiscal quarter (based on close date)
+  const quarterGroupedOpportunities = useMemo(() => {
+    const groups: Record<string, Opportunity[]> = {};
+    const noDate: Opportunity[] = [];
+
+    filteredOpportunities.forEach(opp => {
+      if (!opp.closeDate) {
+        noDate.push(opp);
+        return;
+      }
+      try {
+        const date = parseISO(opp.closeDate);
+        const q = getQuarter(date);
+        const y = getYear(date);
+        const key = `FY${y} Q${q}`;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(opp);
+      } catch {
+        noDate.push(opp);
+      }
+    });
+
+    if (noDate.length > 0) groups['No Close Date'] = noDate;
+
+    // Sort keys chronologically
+    const sorted = Object.entries(groups).sort(([a], [b]) => {
+      if (a === 'No Close Date') return 1;
+      if (b === 'No Close Date') return -1;
+      return a.localeCompare(b);
+    });
+
+    return sorted;
+  }, [filteredOpportunities]);
+
+  // Group by stage
+  const stageGroupedOpportunities = useMemo(() => {
+    const groups: Record<string, Opportunity[]> = {};
+
+    STAGE_OPTIONS.forEach(stage => {
+      groups[stage] = [];
+    });
+
+    filteredOpportunities.forEach(opp => {
+      const stage = opp.stage || '';
+      if (!groups[stage]) groups[stage] = [];
+      groups[stage].push(opp);
+    });
+
+    return STAGE_OPTIONS
+      .filter(stage => groups[stage]?.length > 0)
+      .map(stage => [STAGE_LABELS[stage] || stage || 'No Stage', groups[stage]] as [string, Opportunity[]]);
+  }, [filteredOpportunities]);
+
   const handleAddOpportunity = async () => {
     if (!newOppName.trim()) return;
     
