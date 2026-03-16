@@ -14,38 +14,42 @@ import { cn } from '@/lib/utils';
 import type { Account } from '@/types';
 
 // Title seniority tiers for org chart hierarchy inference
-const SENIORITY_TIERS: { patterns: RegExp[]; level: number; influence: string }[] = [
-  { patterns: [/\bc[eoi]o\b/i, /\bchief\b/i, /\bfounder\b/i, /\bpresident\b/i, /\bowner\b/i, /\bgeneral\s*manager\b/i], level: 1, influence: 'high' },
-  { patterns: [/\bsvp\b/i, /\bsenior\s+vice\s+president\b/i, /\bevp\b/i, /\bexecutive\s+vice\s+president\b/i], level: 2, influence: 'high' },
-  { patterns: [/\bvp\b/i, /\bvice\s+president\b/i], level: 3, influence: 'high' },
-  { patterns: [/\bsenior\s+director\b/i], level: 4, influence: 'high' },
-  { patterns: [/\bdirector\b/i, /\bhead\s+of\b/i], level: 5, influence: 'high' },
-  { patterns: [/\bsenior\s+manager\b/i], level: 6, influence: 'medium' },
-  { patterns: [/\bmanager\b/i], level: 7, influence: 'medium' },
-  { patterns: [/\blead\b/i, /\bprincipal\b/i, /\bsenior\b/i], level: 8, influence: 'medium' },
-  { patterns: [/\banalyst\b/i, /\bcoordinator\b/i, /\bspecialist\b/i, /\bassociate\b/i], level: 9, influence: 'low' },
+const SENIORITY_TIERS: { patterns: RegExp[]; level: number; influence: string; buyerRole: string }[] = [
+  { patterns: [/\bc[eoi]o\b/i, /\bchief\b/i, /\bfounder\b/i, /\bco-founder\b/i, /\bpresident\b/i, /\bowner\b/i, /\bgeneral\s*manager\b/i], level: 1, influence: 'high', buyerRole: 'decision-maker' },
+  { patterns: [/\bsvp\b/i, /\bsenior\s+vice\s+president\b/i, /\bevp\b/i, /\bexecutive\s+vice\s+president\b/i], level: 2, influence: 'high', buyerRole: 'decision-maker' },
+  { patterns: [/\bvp\b/i, /\bvice\s+president\b/i], level: 3, influence: 'high', buyerRole: 'decision-maker' },
+  { patterns: [/\bsenior\s+director\b/i], level: 4, influence: 'high', buyerRole: 'champion' },
+  { patterns: [/\bdirector\b/i, /\bhead\s+of\b/i], level: 5, influence: 'high', buyerRole: 'champion' },
+  { patterns: [/\bsenior\s+manager\b/i], level: 6, influence: 'medium', buyerRole: 'champion' },
+  { patterns: [/\bmanager\b/i], level: 7, influence: 'medium', buyerRole: 'influencer' },
+  { patterns: [/\blead\b/i, /\bprincipal\b/i], level: 8, influence: 'medium', buyerRole: 'influencer' },
+  { patterns: [/\bsenior\b/i], level: 8, influence: 'medium', buyerRole: 'influencer' },
+  { patterns: [/\banalyst\b/i, /\bcoordinator\b/i, /\bspecialist\b/i, /\bassociate\b/i], level: 9, influence: 'low', buyerRole: 'end-user' },
 ];
 
-function getTitleLevel(title: string | undefined): { level: number; influence: string } {
-  if (!title) return { level: 99, influence: 'medium' };
+function getTitleLevel(title: string | undefined): { level: number; influence: string; buyerRole: string } {
+  if (!title) return { level: 99, influence: 'medium', buyerRole: 'unknown' };
   for (const tier of SENIORITY_TIERS) {
-    if (tier.patterns.some(p => p.test(title))) return { level: tier.level, influence: tier.influence };
+    if (tier.patterns.some(p => p.test(title))) return { level: tier.level, influence: tier.influence, buyerRole: tier.buyerRole };
   }
-  return { level: 10, influence: 'medium' };
+  return { level: 10, influence: 'medium', buyerRole: 'unknown' };
 }
 
 function getDepartment(title: string | undefined): string | null {
   if (!title) return null;
+  const t = title.toLowerCase();
+  // "Account" in titles like "Account Executive" or "Account Manager" = sales, not finance
   const depts: [RegExp, string][] = [
-    [/market/i, 'marketing'], [/sale/i, 'sales'], [/revenue/i, 'revenue'],
+    [/account\s*(exec|manag|rep)/i, 'sales'],
+    [/market/i, 'marketing'], [/\bsale/i, 'sales'], [/revenue/i, 'revenue'],
     [/product/i, 'product'], [/engineer|tech|it\b|dev/i, 'engineering'],
-    [/financ|cfo|account/i, 'finance'], [/operat/i, 'operations'],
-    [/customer|success|cx|support/i, 'customer'], [/digital/i, 'digital'],
+    [/financ|cfo\b/i, 'finance'], [/operat/i, 'operations'],
+    [/customer|success|cx\b|support/i, 'customer'], [/digital/i, 'digital'],
     [/ecommerce|e-commerce/i, 'ecommerce'], [/data/i, 'data'],
     [/brand/i, 'brand'], [/growth/i, 'growth'], [/loyalty/i, 'loyalty'],
   ];
   for (const [pat, dept] of depts) {
-    if (pat.test(title)) return dept;
+    if (pat.test(t)) return dept;
   }
   return null;
 }
@@ -56,33 +60,47 @@ interface ContactWithHierarchy {
   email?: string;
   inferredReportingTo: string | null;
   inferredInfluence: string;
+  inferredBuyerRole: string;
 }
 
 function inferContactHierarchy(contacts: { name: string; title?: string; email?: string }[]): ContactWithHierarchy[] {
+  if (contacts.length === 0) return [];
+
   const scored = contacts.map(c => ({
     ...c,
     ...getTitleLevel(c.title),
     dept: getDepartment(c.title),
   }));
+  // Sort most senior first
   scored.sort((a, b) => a.level - b.level);
 
   const result: ContactWithHierarchy[] = [];
   for (const contact of scored) {
     let reportingTo: string | null = null;
-    if (contact.dept) {
-      const superior = scored.find(
-        s => s.name !== contact.name && s.level < contact.level &&
-             (s.dept === contact.dept || s.level <= 2)
-      );
-      if (superior) reportingTo = superior.name;
+
+    // Find closest superior: prefer same department, fall back to C-suite
+    if (contact.level > 1) {
+      // 1) Same department superior
+      if (contact.dept) {
+        const deptSuperior = scored
+          .filter(s => s.name !== contact.name && s.level < contact.level && s.dept === contact.dept)
+          .sort((a, b) => b.level - a.level)[0]; // closest rank above
+        if (deptSuperior) reportingTo = deptSuperior.name;
+      }
+      // 2) Fall back to any C-suite / top-level person
+      if (!reportingTo) {
+        const anySuperior = scored
+          .filter(s => s.name !== contact.name && s.level < contact.level)
+          .sort((a, b) => b.level - a.level)[0];
+        if (anySuperior) reportingTo = anySuperior.name;
+      }
     }
-    if (!reportingTo && contact.level > 1) {
-      const superior = scored.find(s => s.name !== contact.name && s.level < contact.level);
-      if (superior) reportingTo = superior.name;
-    }
+
     result.push({
       name: contact.name, title: contact.title, email: contact.email,
-      inferredReportingTo: reportingTo, inferredInfluence: contact.influence,
+      inferredReportingTo: reportingTo,
+      inferredInfluence: contact.influence,
+      inferredBuyerRole: contact.buyerRole,
     });
   }
   return result;
