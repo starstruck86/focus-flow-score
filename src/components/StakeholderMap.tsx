@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
+import { Label } from '@/components/ui/label';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -20,7 +22,6 @@ import {
   UserCheck,
   Lightbulb,
   Ban,
-  ChevronRight,
   Linkedin,
   AlertTriangle,
   SlidersHorizontal,
@@ -30,6 +31,9 @@ import {
   Upload,
   Loader2,
   ImagePlus,
+  Plus,
+  Check,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -365,28 +369,33 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
     setDiscoveredContacts((prev) => prev.filter((entry) => entry.name !== contact.name));
   };
 
-  const grouped = useMemo(() => {
-    const groups: Record<string, any[]> = {};
-    for (const role of BUYER_ROLES) groups[role.value] = [];
-    for (const contact of contacts || []) {
-      const role = (contact as any).buyer_role || 'unknown';
-      if (!groups[role]) groups[role] = [];
-      groups[role].push(contact);
-    }
-    return groups;
-  }, [contacts]);
+  // Build tree structure for org chart display
+  const { roots, childrenMap } = useMemo(() => {
+    if (!contacts) return { roots: [] as any[], childrenMap: new Map<string, any[]>() };
+    const map = new Map<string, any[]>();
+    const nameToId = new Map<string, string>();
+    for (const c of contacts) nameToId.set(c.name.toLowerCase(), c.id);
 
-  const teamGroups = useMemo(() => {
-    if (!contacts || contacts.length === 0) return {};
-    const teams: Record<string, any[]> = {};
-    for (const contact of contacts) {
-      const dept = (contact as any).department || 'General';
-      if (!teams[dept]) teams[dept] = [];
-      teams[dept].push(contact);
+    const roots: any[] = [];
+    for (const c of contacts) {
+      const reportingTo = (c as any).reporting_to;
+      if (!reportingTo) {
+        roots.push(c);
+      } else {
+        const parentId = nameToId.get(reportingTo.toLowerCase());
+        if (parentId) {
+          if (!map.has(parentId)) map.set(parentId, []);
+          map.get(parentId)!.push(c);
+        } else {
+          roots.push(c);
+        }
+      }
     }
-    return teams;
+
+    const seniorityOrder: Record<string, number> = { 'c-suite': 0, 'vp': 1, 'director': 2, 'manager': 3, 'individual': 4 };
+    roots.sort((a: any, b: any) => (seniorityOrder[a.seniority || 'individual'] || 4) - (seniorityOrder[b.seniority || 'individual'] || 4));
+    return { roots, childrenMap: map };
   }, [contacts]);
-  const hasMultipleTeams = Object.keys(teamGroups).length > 1;
 
   const powerMapScore = useMemo(() => {
     const mapped = (contacts || []).filter((contact: any) => contact.buyer_role && contact.buyer_role !== 'unknown');
@@ -406,6 +415,172 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
 
   const totalContacts = contacts?.length || 0;
   const mappedContacts = (contacts || []).filter((contact: any) => contact.buyer_role && contact.buyer_role !== 'unknown').length;
+
+  // Render a single org chart node card
+  const renderNodeCard = (contact: any) => {
+    const config = getRoleConfig(contact.buyer_role || 'unknown');
+    const Icon = config.icon;
+    const isEditing = editingContact === contact.id;
+
+    return (
+      <div className={cn("relative rounded-lg border-2 bg-card shadow-sm transition-all w-[160px]", config.bg.split(' ')[0] ? `border-${config.bg.split('border-')[1]?.split(' ')[0] || 'border'}` : 'border-border')}>
+        {/* Color top bar */}
+        <div className={cn("h-1.5 rounded-t-[6px]", config.bg.split(' ')[0])} />
+
+        <div className="px-3 py-2.5 text-center">
+          <div className="flex items-center justify-center gap-1 mb-0.5">
+            {contact.linkedin_url ? (
+              <a
+                href={contact.linkedin_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-semibold text-foreground hover:text-primary hover:underline transition-colors truncate"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {contact.name}
+              </a>
+            ) : (
+              <span className="text-sm font-semibold text-foreground truncate">{contact.name}</span>
+            )}
+            {contact.influence_level === 'high' && <span className="text-[9px] text-status-yellow">★</span>}
+          </div>
+          {contact.title && (
+            <p className="text-[11px] text-muted-foreground leading-tight truncate">{contact.title}</p>
+          )}
+          {(contact as any).department && (
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 mt-1.5 font-normal">
+              {(contact as any).department}
+            </Badge>
+          )}
+          <div className="flex items-center justify-center gap-1 mt-1.5">
+            <Icon className={cn("h-3 w-3", config.color)} />
+            <span className={cn("text-[10px] font-medium", config.color)}>{config.label}</span>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center justify-center gap-0.5 mt-1.5">
+            {contact.linkedin_url && (
+              <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-muted-foreground hover:text-primary">
+                  <Linkedin className="h-3 w-3" />
+                </Button>
+              </a>
+            )}
+            <Button
+              variant="ghost" size="sm" className="h-5 w-5 p-0"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingContact(isEditing ? null : contact.id);
+              }}
+            >
+              {isEditing ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3 text-muted-foreground" />}
+            </Button>
+          </div>
+        </div>
+
+        {/* Inline edit panel */}
+        {isEditing && (
+          <div className="px-3 pb-3 pt-1 border-t border-border/30 space-y-2 text-left">
+            <div className="grid grid-cols-1 gap-1.5">
+              <Input className="h-7 text-xs" placeholder="Name" defaultValue={contact.name}
+                onBlur={(e) => { if (e.target.value.trim() && e.target.value !== contact.name) updateContact.mutate({ id: contact.id, updates: { name: e.target.value.trim() } }); }}
+              />
+              <Input className="h-7 text-xs" placeholder="Title" defaultValue={contact.title || ''}
+                onBlur={(e) => { if (e.target.value !== (contact.title || '')) updateContact.mutate({ id: contact.id, updates: { title: e.target.value || null } }); }}
+              />
+            </div>
+            <div>
+              <Label className="text-[10px]">Reports To</Label>
+              <Select
+                value={(contact as any).reporting_to || '__none__'}
+                onValueChange={v => updateContact.mutate({ id: contact.id, updates: { reporting_to: v === '__none__' ? null : v } })}
+              >
+                <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None (root)</SelectItem>
+                  {(contacts || []).filter(c => c.id !== contact.id).map(c => (
+                    <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <Select value={contact.buyer_role || 'unknown'} onValueChange={v => updateContact.mutate({ id: contact.id, updates: { buyer_role: v } })}>
+                <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {BUYER_ROLES.map(r => <SelectItem key={r.value} value={r.value} className="text-xs">{r.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={contact.influence_level || 'medium'} onValueChange={v => updateContact.mutate({ id: contact.id, updates: { influence_level: v } })}>
+                <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {INFLUENCE_LEVELS.map(l => <SelectItem key={l} value={l} className="text-xs capitalize">{l}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <Input className="h-7 text-xs" placeholder="LinkedIn URL" defaultValue={contact.linkedin_url || ''}
+              onBlur={(e) => { if (e.target.value !== (contact.linkedin_url || '')) updateContact.mutate({ id: contact.id, updates: { linkedin_url: e.target.value || null } }); }}
+            />
+            <Button
+              variant="ghost" size="sm"
+              className="h-6 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 w-full"
+              onClick={() => { if (confirm(`Remove ${contact.name}?`)) deleteContact.mutate(contact.id); }}
+            >
+              <Trash2 className="h-3 w-3 mr-1" /> Remove
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Recursive tree renderer with connecting lines
+  const renderTree = (node: any): React.ReactNode => {
+    const children = childrenMap.get(node.id) || [];
+
+    return (
+      <div key={node.id} className="flex flex-col items-center">
+        {renderNodeCard(node)}
+
+        {children.length > 0 && (
+          <>
+            <div className="w-px h-5 bg-border" />
+            <div className="relative flex items-start">
+              {children.length > 1 && (
+                <div className="absolute top-0 bg-border h-px" style={{ left: `calc(50% / ${children.length})`, right: `calc(50% / ${children.length})` }} />
+              )}
+              <div className="flex gap-3 items-start">
+                {children.map((child: any) => (
+                  <div key={child.id} className="flex flex-col items-center">
+                    <div className="w-px h-5 bg-border" />
+                    {renderTree(child)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  // Add contact form state
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newContact, setNewContact] = useState({ name: '', title: '', department: '', buyer_role: 'unknown', reporting_to: '' });
+
+  const addNewContact = () => {
+    if (!newContact.name.trim()) return;
+    addContact.mutate({
+      name: newContact.name.trim(),
+      title: newContact.title || null,
+      department: newContact.department || null,
+      buyer_role: newContact.buyer_role,
+      reporting_to: newContact.reporting_to || null,
+      influence_level: 'medium',
+    });
+    setShowAddForm(false);
+    setNewContact({ name: '', title: '', department: '', buyer_role: 'unknown', reporting_to: '' });
+  };
 
   if (isLoading) {
     return (
@@ -436,6 +611,9 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
           )}
         </CardTitle>
         <div className="flex items-center gap-1.5 mt-2">
+          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => setShowAddForm(!showAddForm)}>
+            <Plus className="h-3.5 w-3.5" /> Add
+          </Button>
           <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => setShowTuning((v) => !v)}>
             <SlidersHorizontal className="h-3.5 w-3.5" />
             Tune
@@ -467,78 +645,85 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
             <span>Extracting contacts from screenshot...</span>
           </div>
         )}
+
+        {/* Add contact form */}
+        {showAddForm && (
+          <div className="p-3 rounded-lg bg-muted/30 border border-border/50 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[10px]">Name *</Label>
+                <Input className="h-7 text-xs" value={newContact.name} onChange={e => setNewContact(p => ({ ...p, name: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-[10px]">Title</Label>
+                <Input className="h-7 text-xs" value={newContact.title} onChange={e => setNewContact(p => ({ ...p, title: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-[10px]">Department</Label>
+                <Input className="h-7 text-xs" value={newContact.department} onChange={e => setNewContact(p => ({ ...p, department: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-[10px]">Reports To</Label>
+                <Input className="h-7 text-xs" value={newContact.reporting_to} onChange={e => setNewContact(p => ({ ...p, reporting_to: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-[10px]">Role</Label>
+                <Select value={newContact.buyer_role} onValueChange={v => setNewContact(p => ({ ...p, buyer_role: v }))}>
+                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {BUYER_ROLES.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" className="h-6 text-xs" disabled={!newContact.name.trim()} onClick={addNewContact}>
+                <Check className="h-3 w-3 mr-1" /> Add to Chart
+              </Button>
+              <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setShowAddForm(false)}>Cancel</Button>
+            </div>
+          </div>
+        )}
+
         {showTuning && (
           <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
             <div className="grid gap-3 md:grid-cols-[1fr_1fr_100px]">
               <div className="space-y-1.5">
                 <span className="text-[11px] font-medium text-muted-foreground">Discovery focus</span>
                 <Select value={discoveryMode} onValueChange={setDiscoveryMode}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {DISCOVERY_MODES.map((mode) => (
-                      <SelectItem key={mode.value} value={mode.value} className="text-xs">
-                        {mode.label}
-                      </SelectItem>
+                      <SelectItem key={mode.value} value={mode.value} className="text-xs">{mode.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="space-y-1.5">
                 <span className="text-[11px] font-medium text-muted-foreground">Division / BU</span>
-                <Input
-                  value={division}
-                  onChange={(e) => setDivision(e.target.value)}
-                  placeholder="e.g. Group Benefits"
-                  className="h-8 text-xs"
-                  list="division-presets"
-                />
-                 <datalist id="division-presets">
-                  {getDivisionPresets(accountName).map((d) => (
-                    <option key={d} value={d} />
-                  ))}
+                <Input value={division} onChange={(e) => setDivision(e.target.value)} placeholder="e.g. Group Benefits" className="h-8 text-xs" list="division-presets" />
+                <datalist id="division-presets">
+                  {getDivisionPresets(accountName).map((d) => (<option key={d} value={d} />))}
                 </datalist>
               </div>
-
               <div className="space-y-1.5">
                 <span className="text-[11px] font-medium text-muted-foreground">Target</span>
                 <Select value={maxContacts} onValueChange={setMaxContacts}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {TARGET_COUNTS.map((count) => (
-                      <SelectItem key={count} value={count} className="text-xs">
-                        {count}
-                      </SelectItem>
-                    ))}
+                    {TARGET_COUNTS.map((count) => (<SelectItem key={count} value={count} className="text-xs">{count}</SelectItem>))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
-
             <div className="space-y-1.5">
               <span className="text-[11px] font-medium text-muted-foreground">Custom guidance</span>
-              <Textarea
-                value={focusPrompt}
-                onChange={(event) => setFocusPrompt(event.target.value)}
-                placeholder="Example: prioritize digital marketing leadership, CRM owner, and the IT approver for this deal."
-                className="min-h-[84px] resize-y text-xs"
-              />
+              <Textarea value={focusPrompt} onChange={(e) => setFocusPrompt(e.target.value)} placeholder="Example: prioritize digital marketing leadership, CRM owner, and the IT approver for this deal." className="min-h-[84px] resize-y text-xs" />
             </div>
-
             <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-              <span className="truncate">
-                {accountName}
-                {division ? ` → ${division}` : ''}
-                {website ? ` • ${website}` : ''}
-                {industry ? ` • ${industry}` : ''}
-              </span>
+              <span className="truncate">{accountName}{division ? ` → ${division}` : ''}{website ? ` • ${website}` : ''}{industry ? ` • ${industry}` : ''}</span>
               <Button variant="ghost" size="sm" className="h-7 px-2 text-[11px]" onClick={resetTuning}>
-                <RotateCcw className="mr-1 h-3 w-3" />
-                Reset
+                <RotateCcw className="mr-1 h-3 w-3" /> Reset
               </Button>
             </div>
           </div>
@@ -551,14 +736,12 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
           </div>
         )}
 
+        {/* Power Map Score */}
         {totalContacts > 0 && (
           <div className="rounded-lg border border-border bg-muted/20 p-2.5 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold">Power Map Score</span>
-              <Badge
-                variant={powerMapScore.score >= 75 ? 'default' : powerMapScore.score >= 40 ? 'secondary' : 'destructive'}
-                className="text-[10px]"
-              >
+              <Badge variant={powerMapScore.score >= 75 ? 'default' : powerMapScore.score >= 40 ? 'secondary' : 'destructive'} className="text-[10px]">
                 {powerMapScore.score}/100
               </Badge>
             </div>
@@ -572,6 +755,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
           </div>
         )}
 
+        {/* Discovery confirmation */}
         {discoveredContacts.length > 0 && (
           <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
             <p className="text-xs font-medium text-primary">
@@ -582,294 +766,102 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
               const roleNew = typeof contact.role_tenure_months === 'number' && contact.role_tenure_months >= 0 && contact.role_tenure_months < 12;
               const linkedinFailed = contact.linkedin_verified === false;
               return (
-              <div key={`${contact.name}-${index}`} className={cn('flex items-start justify-between gap-2 rounded bg-background/80 p-2', linkedinFailed && 'opacity-60 border border-destructive/30')}>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate text-sm font-medium">{contact.name}</span>
-                    {contact.linkedin_url && (
-                      <a
-                        href={contact.linkedin_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={cn('hover:opacity-80', linkedinFailed ? 'text-destructive' : 'text-primary')}
-                        title={linkedinFailed ? 'LinkedIn profile could not be verified' : 'Open LinkedIn profile'}
-                      >
-                        <Linkedin className="h-3 w-3" />
-                      </a>
-                    )}
-                    {contact.linkedin_verified === true && (
-                      <Badge variant="outline" className="text-[8px] h-4 border-status-green/50 bg-status-green/10 text-status-green">✓ verified</Badge>
-                    )}
-                    {linkedinFailed && (
-                      <Badge variant="outline" className="text-[8px] h-4 border-destructive/50 bg-destructive/10 text-destructive">unverified</Badge>
-                    )}
+                <div key={`${contact.name}-${index}`} className={cn('flex items-start justify-between gap-2 rounded bg-background/80 p-2', linkedinFailed && 'opacity-60 border border-destructive/30')}>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-sm font-medium">{contact.name}</span>
+                      {contact.linkedin_url && (
+                        <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer"
+                          className={cn('hover:opacity-80', linkedinFailed ? 'text-destructive' : 'text-primary')}>
+                          <Linkedin className="h-3 w-3" />
+                        </a>
+                      )}
+                      {contact.linkedin_verified === true && (
+                        <Badge variant="outline" className="text-[8px] h-4 border-status-green/50 bg-status-green/10 text-status-green">✓ verified</Badge>
+                      )}
+                      {linkedinFailed && (
+                        <Badge variant="outline" className="text-[8px] h-4 border-destructive/50 bg-destructive/10 text-destructive">unverified</Badge>
+                      )}
+                    </div>
+                    <p className="truncate text-xs text-muted-foreground">{contact.title}{contact.department ? ` · ${contact.department}` : ''}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <Badge variant="outline" className={cn('text-[9px]', getRoleConfig(contact.buyer_role).bg)}>
+                        {getRoleConfig(contact.buyer_role).label}
+                      </Badge>
+                      {typeof contact.relevance_score === 'number' && contact.relevance_score >= 0 && (
+                        <Badge variant="outline" className={cn('text-[9px]',
+                          contact.relevance_score >= 50 ? 'border-status-green/50 bg-status-green/10 text-status-green' :
+                          contact.relevance_score >= 20 ? 'border-status-yellow/50 bg-status-yellow/10 text-status-yellow' :
+                          'border-destructive/50 bg-destructive/10 text-destructive'
+                        )}>
+                          {contact.relevance_score >= 50 ? '🎯' : contact.relevance_score >= 20 ? '~' : '⚠'} {contact.relevance_score}% fit
+                        </Badge>
+                      )}
+                    </div>
+                    {contact.notes && <p className="mt-1 text-[11px] text-muted-foreground">{contact.notes}</p>}
                   </div>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {contact.title}
-                    {contact.department ? ` · ${contact.department}` : ''}
-                  </p>
-                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                    <Badge variant="outline" className={cn('text-[9px]', getRoleConfig(contact.buyer_role).bg)}>
-                      {getRoleConfig(contact.buyer_role).label}
-                    </Badge>
-                    {contact.confidence && (
-                      <Badge variant="outline" className={cn('text-[9px] capitalize', contact.confidence === 'verified' ? 'border-status-green/50 text-status-green' : contact.confidence === 'suggested' ? 'border-status-yellow/50 text-status-yellow' : '')}>
-                        {contact.confidence}
-                      </Badge>
-                    )}
-                    {typeof contact.company_tenure_months === 'number' && contact.company_tenure_months >= 0 && (
-                      <Badge variant="outline" className={cn('text-[9px]', companyNew && 'border-status-yellow/50 bg-status-yellow/10 text-status-yellow')}>
-                        {contact.company_tenure_months < 12 ? `⚠ ${contact.company_tenure_months}mo at co.` : `${Math.round(contact.company_tenure_months / 12)}yr at co.`}
-                      </Badge>
-                    )}
-                    {typeof contact.role_tenure_months === 'number' && contact.role_tenure_months >= 0 && (
-                      <Badge variant="outline" className={cn('text-[9px]', roleNew && 'border-orange-400/50 bg-orange-400/10 text-orange-500 dark:text-orange-400')}>
-                        {contact.role_tenure_months < 12 ? `⚠ ${contact.role_tenure_months}mo in role` : `${Math.round(contact.role_tenure_months / 12)}yr in role`}
-                      </Badge>
-                    )}
-                    {typeof contact.relevance_score === 'number' && contact.relevance_score >= 0 && (
-                      <Badge variant="outline" className={cn('text-[9px]',
-                        contact.relevance_score >= 50 ? 'border-status-green/50 bg-status-green/10 text-status-green' :
-                        contact.relevance_score >= 20 ? 'border-status-yellow/50 bg-status-yellow/10 text-status-yellow' :
-                        'border-destructive/50 bg-destructive/10 text-destructive'
-                      )}>
-                        {contact.relevance_score >= 50 ? '🎯' : contact.relevance_score >= 20 ? '~' : '⚠'} {contact.relevance_score}% fit
-                      </Badge>
-                    )}
-                    {contact.keyword_hits?.length > 0 && (
-                      <span className="text-[9px] text-muted-foreground truncate max-w-[180px]">
-                        {contact.keyword_hits.slice(0, 3).join(', ')}
-                      </span>
-                    )}
+                  <div className="flex gap-1">
+                    <Button size="sm" variant="default" className="h-6 px-2 text-[10px]" onClick={() => confirmContact(contact)}>Add</Button>
+                    <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => setDiscoveredContacts((prev) => prev.filter((_, i) => i !== index))}>Skip</Button>
                   </div>
-                  {contact.notes && <p className="mt-1 text-[11px] text-muted-foreground">{contact.notes}</p>}
                 </div>
-                <div className="flex gap-1">
-                  <Button size="sm" variant="default" className="h-6 px-2 text-[10px]" onClick={() => confirmContact(contact)}>
-                    Add
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 px-2 text-[10px]"
-                    onClick={() => setDiscoveredContacts((prev) => prev.filter((_, currentIndex) => currentIndex !== index))}
-                  >
-                    Skip
-                  </Button>
-                </div>
-              </div>
               );
             })}
           </div>
         )}
 
+        {/* Org Chart Tree */}
         {totalContacts === 0 ? (
           <div className="py-8 text-center text-muted-foreground">
             <Users className="mx-auto mb-2 h-10 w-10 opacity-20" />
             <p className="text-sm">No stakeholders mapped yet</p>
-            <p className="mt-1 text-xs">Drop a screenshot, use AI Discover, or tune the focus.</p>
+            <p className="mt-1 text-xs">Drop a screenshot, use AI Discover, or add manually.</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {hasMultipleTeams && (
-              <div className="flex flex-wrap gap-1.5 mb-1">
-                {Object.entries(teamGroups).map(([team, members]) => (
-                  <Badge key={team} variant="outline" className="text-[10px]">
-                    {team} ({members.length})
-                  </Badge>
-                ))}
-              </div>
-            )}
-            <div className="space-y-2">
-            {BUYER_ROLES.filter((role) => grouped[role.value]?.length > 0).map((role) => {
-              const RoleIcon = role.icon;
-              return (
-                <div key={role.value} className={cn('rounded-lg border p-2.5', role.bg)}>
-                  <div className="mb-1.5 flex items-center gap-1.5">
-                    <RoleIcon className={cn('h-3.5 w-3.5', role.color)} />
-                    <span className="text-xs font-semibold">{role.label}</span>
-                    <Badge variant="outline" className="ml-auto text-[9px]">
-                      {grouped[role.value].length}
-                    </Badge>
+          <ScrollArea className="w-full">
+            <div className="min-w-fit py-4 px-2">
+              {roots.length === 1 ? (
+                <div className="flex justify-center">
+                  {renderTree(roots[0])}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center">
+                  <div className="rounded-lg border-2 border-primary/30 bg-primary/5 px-4 py-2 text-center shadow-sm">
+                    <span className="text-sm font-semibold text-foreground">{accountName}</span>
                   </div>
-                  <div className="space-y-1">
-                    {grouped[role.value].map((contact: any) => {
-                      // Parse tenure from notes field
-                      const tenureMatch = contact.notes?.match(/Company tenure:\s*(\d+)mo/);
-                      const roleTenureMatch = contact.notes?.match(/Role tenure:\s*(\d+)mo/);
-                      const companyTenure = tenureMatch ? parseInt(tenureMatch[1], 10) : null;
-                      const roleTenure = roleTenureMatch ? parseInt(roleTenureMatch[1], 10) : null;
-                      const companyNew = companyTenure !== null && companyTenure < 12;
-                      const roleNew = roleTenure !== null && roleTenure < 12;
-
-                      return (
-                      <div
-                        key={contact.id}
-                        className="group flex cursor-pointer items-center gap-2 rounded bg-background/60 p-1.5 hover:bg-background/80"
-                        onClick={() => setEditingContact(editingContact === contact.id ? null : contact.id)}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            {contact.linkedin_url ? (
-                              <a
-                                href={contact.linkedin_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(event) => event.stopPropagation()}
-                                className="truncate text-sm font-medium hover:underline underline-offset-2 decoration-primary/50"
-                              >
-                                {contact.name}
-                              </a>
-                            ) : (
-                              <span className="truncate text-sm font-medium">{contact.name}</span>
-                            )}
-                            {contact.linkedin_url && (
-                              <a
-                                href={contact.linkedin_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(event) => event.stopPropagation()}
-                                className="text-primary hover:text-primary/80"
-                                title="Open LinkedIn"
-                              >
-                                <Linkedin className="h-3 w-3" />
-                              </a>
-                            )}
-                            {contact.influence_level === 'high' && <span className="text-[9px] text-status-yellow">★</span>}
-                            {(contact as any).ai_discovered && <Sparkles className="h-2.5 w-2.5 text-primary/60" />}
-                          </div>
-                          <p className="truncate text-[11px] text-muted-foreground">{contact.title || 'No title'}</p>
-                          {(companyNew || roleNew) && (
-                            <div className="mt-0.5 flex flex-wrap gap-1">
-                              {companyNew && (
-                                <Badge variant="outline" className="text-[8px] h-4 border-status-yellow/50 bg-status-yellow/10 text-status-yellow">
-                                  ⚠ {companyTenure}mo at co.
-                                </Badge>
-                              )}
-                              {roleNew && (
-                                <Badge variant="outline" className="text-[8px] h-4 border-orange-400/50 bg-orange-400/10 text-orange-500 dark:text-orange-400">
-                                  ⚠ {roleTenure}mo in role
-                                </Badge>
-                              )}
-                            </div>
-                          )}
+                  <div className="w-px h-5 bg-border" />
+                  <div className="relative flex items-start">
+                    {roots.length > 1 && (
+                      <div className="absolute top-0 bg-border h-px" style={{ left: `calc(50% / ${roots.length})`, right: `calc(50% / ${roots.length})` }} />
+                    )}
+                    <div className="flex gap-3 items-start">
+                      {roots.map((root: any) => (
+                        <div key={root.id} className="flex flex-col items-center">
+                          <div className="w-px h-5 bg-border" />
+                          {renderTree(root)}
                         </div>
-                        <ChevronRight className={cn('h-3 w-3 text-muted-foreground transition-transform', editingContact === contact.id && 'rotate-90')} />
-                      </div>
-                      );
-                    })}
-                  </div>
-
-                  {grouped[role.value].some((contact: any) => editingContact === contact.id) && (
-                    <div className="mt-2 space-y-2 rounded border bg-background p-2">
-                      {(() => {
-                        const currentContact = grouped[role.value].find((contact: any) => editingContact === contact.id);
-                        if (!currentContact) return null;
-                        return (
-                          <>
-                            <div className="grid grid-cols-2 gap-2">
-                              <Input
-                                className="h-7 text-xs"
-                                placeholder="Name"
-                                defaultValue={currentContact.name || ''}
-                                onBlur={(event) => {
-                                  const val = event.target.value.trim();
-                                  if (val && val !== currentContact.name) {
-                                    updateContact.mutate({ id: currentContact.id, updates: { name: val } });
-                                  }
-                                }}
-                              />
-                              <Input
-                                className="h-7 text-xs"
-                                placeholder="Title"
-                                defaultValue={currentContact.title || ''}
-                                onBlur={(event) => {
-                                  if (event.target.value !== (currentContact.title || '')) {
-                                    updateContact.mutate({ id: currentContact.id, updates: { title: event.target.value || null } });
-                                  }
-                                }}
-                              />
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <Select
-                                value={(currentContact as any).buyer_role || 'unknown'}
-                                onValueChange={(value) => updateContact.mutate({ id: currentContact.id, updates: { buyer_role: value } })}
-                              >
-                                <SelectTrigger className="h-7 text-xs">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {BUYER_ROLES.map((entry) => (
-                                    <SelectItem key={entry.value} value={entry.value} className="text-xs">
-                                      {entry.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <Select
-                                value={(currentContact as any).influence_level || 'medium'}
-                                onValueChange={(value) => updateContact.mutate({ id: currentContact.id, updates: { influence_level: value } })}
-                              >
-                                <SelectTrigger className="h-7 text-xs">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {INFLUENCE_LEVELS.map((level) => (
-                                    <SelectItem key={level} value={level} className="text-xs capitalize">
-                                      {level} influence
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <Input
-                              className="h-7 text-xs"
-                              placeholder="LinkedIn URL"
-                              defaultValue={currentContact.linkedin_url || ''}
-                              onBlur={(event) => {
-                                if (event.target.value !== (currentContact.linkedin_url || '')) {
-                                  updateContact.mutate({
-                                    id: currentContact.id,
-                                    updates: { linkedin_url: event.target.value || null },
-                                  });
-                                }
-                              }}
-                            />
-                            <Input
-                              className="h-7 text-xs"
-                              placeholder="Notes"
-                              defaultValue={currentContact.notes || ''}
-                              onBlur={(event) => {
-                                if (event.target.value !== (currentContact.notes || '')) {
-                                  updateContact.mutate({
-                                    id: currentContact.id,
-                                    updates: { notes: event.target.value || null },
-                                  });
-                                }
-                              }}
-                            />
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 w-full"
-                              onClick={() => {
-                                if (confirm(`Remove ${currentContact.name} from stakeholder map?`)) {
-                                  deleteContact.mutate(currentContact.id);
-                                }
-                              }}
-                            >
-                              <Trash2 className="h-3 w-3 mr-1" />
-                              Remove contact
-                            </Button>
-                          </>
-                        );
-                      })()}
+                      ))}
                     </div>
-                  )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
+        )}
+
+        {/* Legend */}
+        {totalContacts > 0 && (
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-border/30">
+            {BUYER_ROLES.slice(0, -1).map(r => {
+              const Icon = r.icon;
+              return (
+                <div key={r.value} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <Icon className={cn("h-3 w-3", r.color)} />
+                  {r.label}
                 </div>
               );
             })}
-          </div>
           </div>
         )}
       </CardContent>
