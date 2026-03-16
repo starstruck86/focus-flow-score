@@ -1,6 +1,11 @@
 import React, { useState, useRef, useMemo, useCallback, memo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
+import {
+  AccountHealthPulseCard,
+  CompanyMonitorCard,
+} from '@/components/dashboard';
+import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 import { 
   Plus, 
   Phone, 
@@ -806,6 +811,16 @@ export default function Renewals() {
             </p>
           </div>
           <StreakChip variant="full" />
+        </div>
+
+        {/* Account Intelligence Cards */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+          <WidgetErrorBoundary widgetId="renewal-account-health-pulse">
+            <AccountHealthPulseCard />
+          </WidgetErrorBoundary>
+          <WidgetErrorBoundary widgetId="renewal-company-monitor">
+            <CompanyMonitorCard />
+          </WidgetErrorBoundary>
         </div>
 
         {/* Nearest Renewal Countdown + ARR at Risk */}

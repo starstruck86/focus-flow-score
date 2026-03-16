@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { LayoutGrid, List } from 'lucide-react';
+import { LayoutGrid, List, ChevronUp } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -18,6 +18,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Textarea } from '@/components/ui/textarea';
 import {
   DropdownMenu,
@@ -318,7 +319,8 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const [expandedOppIds, setExpandedOppIds] = useState<Set<string>>(new Set());
   const [deleteDialogOpp, setDeleteDialogOpp] = useState<Opportunity | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
-  const [groupingMode, setGroupingMode] = useState<GroupingMode>('status');
+  const [groupingMode, setGroupingMode] = useState<GroupingMode>(renewalsOnly ? 'quarter' : 'status');
+  const [showChurningOpps, setShowChurningOpps] = useState(false);
   const bulkSelection = useBulkSelection<Opportunity>();
 
   // Get renewals that don't have linked opportunities yet (for adding new renewal opps)
@@ -400,6 +402,14 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     return filtered;
   }, [opportunities, searchQuery, savedView, renewalsOnly, excludeRenewals, renewalOpportunityIds, stageFilter]);
 
+  // For renewal opps, separate OOB/churning into a hidden-by-default section
+  const { activeFilteredOpps, churningOpps } = useMemo(() => {
+    if (!renewalsOnly) return { activeFilteredOpps: filteredOpportunities, churningOpps: [] };
+    const active = filteredOpportunities.filter(o => o.churnRisk !== 'certain');
+    const churning = filteredOpportunities.filter(o => o.churnRisk === 'certain');
+    return { activeFilteredOpps: active, churningOpps: churning };
+  }, [filteredOpportunities, renewalsOnly]);
+
   // Sort opportunities
   const sortKeyMap: Record<string, { key: keyof Opportunity; customRank?: Record<string, number> }> = {
     status: { key: 'status', customRank: OPP_STATUS_SORT_RANK },
@@ -420,12 +430,12 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const isUserSorted = sortConfig !== null;
 
   const sortedOpportunities = useMemo(() => {
-    if (!isUserSorted) return filteredOpportunities;
+    if (!isUserSorted) return activeFilteredOpps;
     // Custom field sorting
     if (sortConfig?.key.startsWith('custom:')) {
       const fieldId = sortConfig.key.slice(7);
       const direction = sortConfig.direction!;
-      return [...filteredOpportunities].sort((a, b) => {
+      return [...activeFilteredOpps].sort((a, b) => {
         const aVal = getFieldValue(a.id, fieldId);
         const bVal = getFieldValue(b.id, fieldId);
         let comparison = 0;
@@ -436,8 +446,8 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
         return direction === 'desc' ? -comparison : comparison;
       });
     }
-    return applySortWithFallback(filteredOpportunities, sortConfig, defaultOppSort, sortKeyMap);
-  }, [filteredOpportunities, sortConfig, isUserSorted]);
+    return applySortWithFallback(activeFilteredOpps, sortConfig, defaultOppSort, sortKeyMap);
+  }, [activeFilteredOpps, sortConfig, isUserSorted]);
 
   // Group by status (only when no user sort active)
   const groupedOpportunities = useMemo(() => {
@@ -448,19 +458,19 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       'closed-won': [],
     };
 
-    filteredOpportunities.forEach(opp => {
+    activeFilteredOpps.forEach(opp => {
       groups[opp.status].push(opp);
     });
 
     return groups;
-  }, [filteredOpportunities]);
+  }, [activeFilteredOpps]);
 
   // Group by fiscal quarter (based on close date)
   const quarterGroupedOpportunities = useMemo(() => {
     const groups: Record<string, Opportunity[]> = {};
     const noDate: Opportunity[] = [];
 
-    filteredOpportunities.forEach(opp => {
+    activeFilteredOpps.forEach(opp => {
       if (!opp.closeDate) {
         noDate.push(opp);
         return;
@@ -487,7 +497,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     });
 
     return sorted;
-  }, [filteredOpportunities]);
+  }, [activeFilteredOpps]);
 
   // Group by stage
   const stageGroupedOpportunities = useMemo(() => {
@@ -497,7 +507,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       groups[stage] = [];
     });
 
-    filteredOpportunities.forEach(opp => {
+    activeFilteredOpps.forEach(opp => {
       const stage = opp.stage || '';
       if (!groups[stage]) groups[stage] = [];
       groups[stage].push(opp);
@@ -506,7 +516,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     return STAGE_OPTIONS
       .filter(stage => groups[stage]?.length > 0)
       .map(stage => [STAGE_LABELS[stage] || stage || 'No Stage', groups[stage]] as [string, Opportunity[]]);
-  }, [filteredOpportunities]);
+  }, [activeFilteredOpps]);
 
   const handleAddOpportunity = async () => {
     if (!newOppName.trim()) return;
@@ -1183,18 +1193,19 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       </div>
 
       {/* Filtered count + staleness */}
-      {filteredOpportunities.length !== opportunities.length && (
+      {activeFilteredOpps.length !== opportunities.length && (
         <div className="text-xs text-muted-foreground">
-          Showing <span className="font-semibold text-foreground">{filteredOpportunities.length}</span> of {opportunities.length} opportunities
+          Showing <span className="font-semibold text-foreground">{activeFilteredOpps.length}</span> of {opportunities.length} opportunities
+          {churningOpps.length > 0 && <span> ({churningOpps.length} OOB/churning hidden)</span>}
         </div>
       )}
       {(() => {
-        const staleOpps = filteredOpportunities.filter(o => {
+        const staleOpps = activeFilteredOpps.filter(o => {
           if (o.status !== 'active') return false;
           if (!o.lastTouchDate) return true;
           return Math.floor((Date.now() - new Date(o.lastTouchDate).getTime()) / 86400000) > 14;
         });
-        const noNextStep = filteredOpportunities.filter(o => o.status === 'active' && !o.nextStep).length;
+        const noNextStep = activeFilteredOpps.filter(o => o.status === 'active' && !o.nextStep).length;
         if (staleOpps.length === 0 && noNextStep === 0) return null;
         return (
           <div className="flex flex-wrap gap-3">
@@ -1253,10 +1264,10 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       {/* Kanban View */}
       {viewMode === 'kanban' ? (
         <KanbanBoard
-          opportunities={filteredOpportunities}
+          opportunities={activeFilteredOpps}
           onStageChange={(id, newStage) => updateOpportunity(id, { stage: newStage })}
           onSelect={(id) => {
-            const opp = filteredOpportunities.find(o => o.id === id);
+            const opp = activeFilteredOpps.find(o => o.id === id);
             if (opp) onOpenDrawer(opp);
           }}
         />
@@ -1269,8 +1280,8 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 <>
                   <TableHead className="w-8">
                     <Checkbox
-                      checked={bulkSelection.isAllSelected(filteredOpportunities)}
-                      onCheckedChange={() => bulkSelection.toggleAll(filteredOpportunities)}
+                      checked={bulkSelection.isAllSelected(activeFilteredOpps)}
+                      onCheckedChange={() => bulkSelection.toggleAll(activeFilteredOpps)}
                     />
                   </TableHead>
                   <TableHead className="w-8"></TableHead>
@@ -1290,8 +1301,8 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 <>
                   <TableHead className="w-8">
                     <Checkbox
-                      checked={bulkSelection.isAllSelected(filteredOpportunities)}
-                      onCheckedChange={() => bulkSelection.toggleAll(filteredOpportunities)}
+                      checked={bulkSelection.isAllSelected(activeFilteredOpps)}
+                      onCheckedChange={() => bulkSelection.toggleAll(activeFilteredOpps)}
                     />
                   </TableHead>
                   <TableHead className="w-8"></TableHead>
@@ -1314,8 +1325,8 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 <>
                   <TableHead className="w-8">
                     <Checkbox
-                      checked={bulkSelection.isAllSelected(filteredOpportunities)}
-                      onCheckedChange={() => bulkSelection.toggleAll(filteredOpportunities)}
+                      checked={bulkSelection.isAllSelected(activeFilteredOpps)}
+                      onCheckedChange={() => bulkSelection.toggleAll(activeFilteredOpps)}
                     />
                   </TableHead>
                   <TableHead className="w-8"></TableHead>
@@ -1403,7 +1414,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   Loading opportunities...
                 </TableCell>
               </TableRow>
-            ) : filteredOpportunities.length === 0 && !showAddRow ? (
+            ) : activeFilteredOpps.length === 0 && !showAddRow ? (
               <TableRow>
                 <TableCell colSpan={totalCols} className="text-center py-8 text-muted-foreground">
                   {opportunities.length === 0
@@ -1423,6 +1434,35 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           </TableBody>
         </Table>
       </div>
+      )}
+
+      {/* OOB / Churning Opportunities — collapsed by default for renewals */}
+      {renewalsOnly && churningOpps.length > 0 && (
+        <Collapsible open={showChurningOpps} onOpenChange={setShowChurningOpps}>
+          <CollapsibleTrigger asChild>
+            <button className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors hover:bg-muted/50 text-left border border-purple-500/30 mt-4">
+              {showChurningOpps ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
+              <Badge className="text-xs bg-purple-600/20 text-purple-400 border-purple-600/30">
+                OOB / Churning
+              </Badge>
+              <span className="text-xs text-muted-foreground">{churningOpps.length} opportunities</span>
+              <span className="ml-auto text-xs font-mono text-muted-foreground">
+                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(
+                  churningOpps.reduce((sum, o) => sum + (o.arr || 0), 0)
+                )}
+              </span>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="metric-card overflow-auto max-h-[50vh] p-0 mt-2">
+              <Table>
+                <TableBody>
+                  {churningOpps.map(renderOpportunityRow)}
+                </TableBody>
+              </Table>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       )}
       
       {/* Closed Won Modal */}
