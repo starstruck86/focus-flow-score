@@ -52,7 +52,6 @@ const App = () => (
           <LinkedRecordProvider>
             <CopilotProvider>
             <DataSyncProvider>
-              <Toaster />
               <Sonner />
               <OfflineBanner />
               <BrowserRouter>
