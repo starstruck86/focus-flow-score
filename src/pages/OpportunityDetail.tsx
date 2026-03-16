@@ -145,6 +145,9 @@ export default function OpportunityDetail() {
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setShowSynopsis(true)}>
+                  <Sparkles className="h-3.5 w-3.5" /> Paste Synopsis
+                </Button>
                 <LinkPill label="Salesforce" url={opp.salesforceLink} />
               </div>
             </div>
