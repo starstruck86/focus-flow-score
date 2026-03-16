@@ -196,6 +196,7 @@ async function runPerplexityResearch({
   roleBrief,
   websiteSummary,
   maxContacts,
+  division,
 }: {
   accountName: string;
   website?: string | null;
@@ -206,6 +207,7 @@ async function runPerplexityResearch({
   roleBrief: string;
   websiteSummary?: string | null;
   maxContacts: number;
+  division?: string | null;
 }) {
   const perplexityKey = Deno.env.get('PERPLEXITY_API_KEY');
   if (!perplexityKey) return '';
