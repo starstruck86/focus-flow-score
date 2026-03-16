@@ -499,6 +499,20 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                         {contact.role_tenure_months < 12 ? `⚠ ${contact.role_tenure_months}mo in role` : `${Math.round(contact.role_tenure_months / 12)}yr in role`}
                       </Badge>
                     )}
+                    {typeof contact.relevance_score === 'number' && contact.relevance_score >= 0 && (
+                      <Badge variant="outline" className={cn('text-[9px]',
+                        contact.relevance_score >= 50 ? 'border-status-green/50 bg-status-green/10 text-status-green' :
+                        contact.relevance_score >= 20 ? 'border-status-yellow/50 bg-status-yellow/10 text-status-yellow' :
+                        'border-destructive/50 bg-destructive/10 text-destructive'
+                      )}>
+                        {contact.relevance_score >= 50 ? '🎯' : contact.relevance_score >= 20 ? '~' : '⚠'} {contact.relevance_score}% fit
+                      </Badge>
+                    )}
+                    {contact.keyword_hits?.length > 0 && (
+                      <span className="text-[9px] text-muted-foreground truncate max-w-[180px]">
+                        {contact.keyword_hits.slice(0, 3).join(', ')}
+                      </span>
+                    )}
                   </div>
                   {contact.notes && <p className="mt-1 text-[11px] text-muted-foreground">{contact.notes}</p>}
                 </div>
