@@ -25,8 +25,12 @@ function ScoreBar({ label, value, max = 100 }: { label: string; value: number; m
   );
 }
 
-export function AccountHealthPulseCard() {
-  const { data: accounts, isLoading } = useAccountHealthPulse();
+interface AccountHealthPulseCardProps {
+  motionFilter?: 'new-logo' | 'renewal';
+}
+
+export function AccountHealthPulseCard({ motionFilter }: AccountHealthPulseCardProps = {}) {
+  const { data: accounts, isLoading } = useAccountHealthPulse(motionFilter);
 
   const top10 = (accounts || []).slice(0, 10);
   const tierCounts = {

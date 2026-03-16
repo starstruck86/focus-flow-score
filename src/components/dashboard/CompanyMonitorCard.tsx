@@ -36,7 +36,11 @@ const CATEGORY_COLORS: Record<string, string> = {
   competitive_displacement: 'bg-destructive/10 text-destructive border-destructive/30',
 };
 
-export function CompanyMonitorCard() {
+interface CompanyMonitorCardProps {
+  motionFilter?: 'new-logo' | 'renewal';
+}
+
+export function CompanyMonitorCard({ motionFilter }: CompanyMonitorCardProps = {}) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [isScanning, setIsScanning] = useState(false);
