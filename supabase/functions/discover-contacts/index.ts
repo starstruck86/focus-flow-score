@@ -51,19 +51,39 @@ function dedupeContacts(contacts: any[]) {
   });
 }
 
-// Strict LinkedIn URL validation — reject generic, placeholder, or malformed URLs
-function isValidLinkedInUrl(url?: string | null): boolean {
+// Strict LinkedIn URL validation — reject generic, placeholder, or fabricated URLs
+function isValidLinkedInUrl(url?: string | null, accountName?: string): boolean {
   if (!url) return false;
   const trimmed = url.trim();
   // Must match linkedin.com/in/{slug} pattern
   const match = trimmed.match(/^https?:\/\/(www\.)?linkedin\.com\/in\/([a-zA-Z0-9_-]+)\/?$/);
   if (!match) return false;
-  const slug = match[2];
+  const slug = match[2].toLowerCase();
   // Reject generic/placeholder slugs
   const blocked = ['example', 'placeholder', 'unknown', 'profile', 'user', 'test', 'firstname-lastname', 'john-doe', 'jane-doe'];
-  if (blocked.includes(slug.toLowerCase())) return false;
+  if (blocked.includes(slug)) return false;
   // Reject too-short slugs (likely fake)
   if (slug.length < 3) return false;
+  // Detect fabricated URLs: slug ends with company name slug (e.g., "john-smith-arrow-exterminators")
+  if (accountName) {
+    const companySlug = accountName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const companyWords = accountName.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    // If the slug ends with the full company slug or the first company word, it's likely fabricated
+    if (companySlug.length > 3 && slug.endsWith(`-${companySlug}`)) {
+      console.log(`isValidLinkedInUrl: rejected fabricated URL ${url} (ends with company slug "${companySlug}")`);
+      return false;
+    }
+    // Check if slug ends with first significant company word (e.g., "drew-shetter-arrow")
+    const firstWord = companyWords[0];
+    if (firstWord && firstWord.length > 3 && slug.endsWith(`-${firstWord}`)) {
+      // Only reject if the word is clearly a company name, not a common surname
+      const commonNames = ['smith', 'johnson', 'williams', 'brown', 'jones', 'davis', 'miller', 'wilson', 'moore', 'taylor', 'anderson', 'thomas', 'jackson', 'white', 'harris', 'martin', 'thompson', 'garcia', 'martinez', 'robinson', 'clark', 'rodriguez', 'lewis', 'lee', 'walker', 'hall', 'allen', 'young', 'king', 'wright', 'scott', 'green', 'baker', 'adams', 'nelson', 'hill', 'campbell', 'mitchell', 'roberts', 'carter', 'phillips', 'evans', 'turner', 'torres', 'parker', 'collins', 'edwards', 'stewart', 'flores', 'morris', 'nguyen', 'murphy', 'rivera', 'cook', 'rogers', 'morgan', 'peterson', 'cooper', 'reed', 'bailey', 'bell', 'gomez', 'kelly', 'howard', 'ward', 'cox', 'diaz', 'richardson', 'wood', 'watson', 'brooks', 'bennett', 'gray', 'james', 'reyes', 'cruz', 'hughes', 'price', 'myers', 'long', 'foster', 'sanders', 'ross', 'morales', 'powell', 'sullivan', 'russell', 'ortiz', 'jenkins', 'gutierrez', 'perry', 'butler', 'barnes', 'fisher', 'black', 'dog'];
+      if (!commonNames.includes(firstWord)) {
+        console.log(`isValidLinkedInUrl: rejected likely fabricated URL ${url} (ends with company word "${firstWord}")`);
+        return false;
+      }
+    }
+  }
   return true;
 }
 
