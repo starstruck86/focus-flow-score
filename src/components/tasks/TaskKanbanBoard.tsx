@@ -108,10 +108,10 @@ export function TaskKanbanBoard({ tasks, selectedIds, onToggleSelect }: TaskKanb
             onDrop={(e) => handleDrop(e, status)}
           >
             {/* Column Header */}
-            <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/30">
-              <span className={cn("h-2.5 w-2.5 rounded-full", meta.dot)} />
-              <span className="text-xs font-semibold tracking-tight">{meta.label}</span>
-              <span className="ml-auto text-[10px] text-muted-foreground font-medium bg-muted/60 h-5 min-w-5 px-1.5 rounded-full flex items-center justify-center">
+            <div className="flex items-center gap-2.5 px-3.5 py-3 border-b border-border/40">
+              <span className={cn("h-3 w-3 rounded-full ring-2 ring-offset-1 ring-offset-background", meta.dot, `ring-${meta.dot.replace('bg-', '')}/30`)} />
+              <span className="text-sm font-bold tracking-tight">{meta.label}</span>
+              <span className="ml-auto text-[11px] text-muted-foreground font-semibold bg-muted/80 h-6 min-w-6 px-2 rounded-full flex items-center justify-center">
                 {colTasks.length}
               </span>
             </div>
