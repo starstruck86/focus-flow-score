@@ -93,6 +93,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
     setDiscoveryMode('auto');
     setMaxContacts('5');
     setFocusPrompt(opportunityContext || '');
+    setDivision('');
   }, [accountId, opportunityContext]);
 
   const { data: contacts, isLoading } = useQuery({
