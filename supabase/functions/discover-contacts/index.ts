@@ -110,6 +110,44 @@ async function verifyLinkedInUrl(url: string): Promise<boolean> {
   }
 }
 
+function detectCompanySize(contextBlob: string): 'small' | 'mid' | 'enterprise' {
+  // Enterprise signals
+  if (/(fortune\s*\d|f500|nasdaq|nyse|publicly traded|global brand|10,?000\+?\s*employees|multinational|billion|enterprise|large.*(retailer|brand|company)|major\s+(retailer|brand|chain))/.test(contextBlob)) {
+    return 'enterprise';
+  }
+  // Small/local signals
+  if (/(local|small business|family.owned|single.location|boutique|independently owned|tavern|café|cafe|diner|inn|bed.and.breakfast|bakery|salon|barbershop|florist|pizzeria|brewery|taproom|pub|restaurant|shop|store|studio|clinic|practice|agency|consultancy|freelance|solopreneur|\d{1,2}\s*employees|small team|fewer than \d{2} (people|employees|staff))/.test(contextBlob)) {
+    return 'small';
+  }
+  // Mid-market signals
+  if (/(mid.market|mid.size|regional|100[\-–]\d{3,4}\s*employees|growing|series [a-d]|startup|scale.?up)/.test(contextBlob)) {
+    return 'mid';
+  }
+  return 'mid'; // Default to mid if unclear
+}
+
+function getCompanySizeGuidance(size: 'small' | 'mid' | 'enterprise'): string {
+  if (size === 'small') {
+    return `COMPANY SIZE CONTEXT: This appears to be a SMALL or LOCAL business. Adjust your expectations:
+- Titles will be simpler: Owner, General Manager, Marketing Manager, Director of Operations — NOT VP/SVP/CMO.
+- One person may wear many hats (e.g., "Owner" handles marketing, operations, and purchasing decisions).
+- The owner or general manager is almost always the economic buyer AND decision-maker.
+- Look for: Owner, Co-owner, Founder, General Manager, Marketing Manager/Coordinator, Operations Manager, Office Manager, Director.
+- Do NOT expect enterprise-style buying committees. 1-3 contacts is a perfectly good result.
+- Search their website About/Team page, Google Business listing, local press, Yelp, and industry associations.`;
+  }
+  if (size === 'enterprise') {
+    return `COMPANY SIZE CONTEXT: This is a LARGE ENTERPRISE. Expect a full buying committee:
+- Look for VP/SVP/C-suite stakeholders who own budget and strategy.
+- Map out the full committee: economic buyer, champions, technical evaluators, and influencers.
+- Large companies have specialized roles — find the specific function owners.`;
+  }
+  return `COMPANY SIZE CONTEXT: This appears to be a MID-MARKET company. Expect a moderate buying committee:
+- Titles range from Director to VP level, occasionally C-suite at smaller mid-market.
+- Some role consolidation (e.g., one Director may own both marketing and digital).
+- Typically 3-5 stakeholders in a buying decision.`;
+}
+
 function getDiscoveryBrief({
   mode,
   motion,
@@ -130,82 +168,100 @@ function getDiscoveryBrief({
     .join(' ')
     .toLowerCase();
 
+  const companySize = detectCompanySize(contextBlob);
+  const sizeGuidance = getCompanySizeGuidance(companySize);
+
   const looksLikeHomeServices = /(pest|termite|inspection|service center|residential|commercial services|home service|field service|branch|local service|referral)/.test(contextBlob);
   const looksLikeRenewal = /(renewal|expansion|existing customer|customer base|retention)/.test(contextBlob);
+
+  const smallBizAddendum = companySize === 'small'
+    ? ' For this smaller company, focus on whoever manages marketing/customer communications — this might be the Owner, GM, or a Marketing Manager rather than a VP or Director.'
+    : '';
 
   if (mode === 'marketing') {
     return {
       resolvedMode: 'marketing',
-      brief: 'Prioritize marketing, CRM, lifecycle, retention, digital, demand generation, ecommerce, and customer engagement stakeholders plus their executive approver.',
+      companySize,
+      brief: `${sizeGuidance}\n\nPrioritize marketing, CRM, lifecycle, retention, digital, demand generation, ecommerce, and customer engagement stakeholders plus their executive approver.${smallBizAddendum}`,
     };
   }
 
   if (mode === 'digital_engagement') {
     return {
       resolvedMode: 'digital_engagement',
-      brief: 'Prioritize digital engagement leaders: digital marketing, email/SMS channel owners, push notification/app engagement, personalization, customer journey orchestration, digital experience, website optimization, and digital product managers. These are the people who own the customer-facing messaging channels and touchpoints, NOT the people who manage the martech stack or CRM infrastructure.',
+      companySize,
+      brief: `${sizeGuidance}\n\nPrioritize digital engagement leaders: digital marketing, email/SMS channel owners, push notification/app engagement, personalization, customer journey orchestration, digital experience, website optimization, and digital product managers. These are the people who own the customer-facing messaging channels and touchpoints, NOT the people who manage the martech stack or CRM infrastructure.${smallBizAddendum}`,
     };
   }
 
   if (mode === 'marketing_ops') {
     return {
       resolvedMode: 'marketing_ops',
-      brief: 'Prioritize marketing operations and martech leaders: marketing technology, CRM administration, data & analytics, campaign operations, marketing automation platform owners, integration/data pipeline owners, and revenue operations. These are the people who manage the infrastructure, vendor relationships, and technical implementation of marketing systems, NOT the people who create content or manage customer engagement channels directly.',
+      companySize,
+      brief: `${sizeGuidance}\n\nPrioritize marketing operations and martech leaders: marketing technology, CRM administration, data & analytics, campaign operations, marketing automation platform owners, integration/data pipeline owners, and revenue operations.${smallBizAddendum}`,
     };
   }
 
   if (mode === 'revenue') {
     return {
       resolvedMode: 'revenue',
-      brief: 'Prioritize revenue leaders, growth leaders, revenue operations, sales/marketing alignment owners, pipeline owners, and executive sponsors involved in commercial systems decisions.',
+      companySize,
+      brief: `${sizeGuidance}\n\nPrioritize revenue leaders, growth leaders, revenue operations, sales/marketing alignment owners, pipeline owners, and executive sponsors involved in commercial systems decisions.${smallBizAddendum}`,
     };
   }
 
   if (mode === 'cx_loyalty') {
     return {
       resolvedMode: 'cx_loyalty',
-      brief: 'Prioritize customer experience, loyalty program, retention, customer insights, voice of customer, NPS/satisfaction program owners, customer success, and member engagement leaders. These are the people who own the post-acquisition customer relationship and program design.',
+      companySize,
+      brief: `${sizeGuidance}\n\nPrioritize customer experience, loyalty program, retention, customer insights, voice of customer, NPS/satisfaction program owners, customer success, and member engagement leaders.${smallBizAddendum}`,
     };
   }
 
   if (mode === 'operations') {
     return {
       resolvedMode: 'operations',
-      brief: 'Prioritize operations, customer experience, contact center, service delivery, branch/service center management, and process owners who influence systems, routing, or customer communication workflows.',
+      companySize,
+      brief: `${sizeGuidance}\n\nPrioritize operations, customer experience, contact center, service delivery, branch/service center management, and process owners who influence systems, routing, or customer communication workflows.${smallBizAddendum}`,
     };
   }
 
   if (mode === 'it') {
     return {
       resolvedMode: 'it',
-      brief: 'Prioritize IT, systems, data, integrations, marketing operations, and platform owners who evaluate security, implementation, and technical fit.',
+      companySize,
+      brief: `${sizeGuidance}\n\nPrioritize IT, systems, data, integrations, marketing operations, and platform owners who evaluate security, implementation, and technical fit.${smallBizAddendum}`,
     };
   }
 
   if (mode === 'executive') {
     return {
       resolvedMode: 'executive',
-      brief: 'Prioritize executive stakeholders and final approvers such as CMO, COO, CRO, CTO/CIO, President, GM, or SVP/VP leaders who would sponsor or approve the initiative.',
+      companySize,
+      brief: `${sizeGuidance}\n\nPrioritize executive stakeholders and final approvers such as CMO, COO, CRO, CTO/CIO, President, GM, or SVP/VP leaders who would sponsor or approve the initiative.${smallBizAddendum}`,
     };
   }
 
   if (looksLikeHomeServices) {
     return {
       resolvedMode: 'operations',
-      brief: 'This appears to be a home-services / field-services company, so prioritize digital marketing, customer acquisition, customer experience, contact center, operations, IT, and executive sponsors rather than ecommerce-only roles.',
+      companySize,
+      brief: `${sizeGuidance}\n\nThis appears to be a home-services / field-services company, so prioritize digital marketing, customer acquisition, customer experience, contact center, operations, IT, and executive sponsors rather than ecommerce-only roles.${smallBizAddendum}`,
     };
   }
 
   if (looksLikeRenewal) {
     return {
       resolvedMode: 'revenue',
-      brief: 'This looks tied to an existing customer or renewal motion, so prioritize customer marketing, lifecycle/CRM, digital, customer experience, revenue/ops, IT, and executive sponsors.',
+      companySize,
+      brief: `${sizeGuidance}\n\nThis looks tied to an existing customer or renewal motion, so prioritize customer marketing, lifecycle/CRM, digital, customer experience, revenue/ops, IT, and executive sponsors.${smallBizAddendum}`,
     };
   }
 
   return {
     resolvedMode: 'auto',
-    brief: 'Prioritize the most likely buying committee for lifecycle marketing / CRM / customer communication software: marketing, digital, lifecycle/CRM, customer experience, operations, IT, and executive sponsors.',
+    companySize,
+    brief: `${sizeGuidance}\n\nPrioritize the most likely buying committee for lifecycle marketing / CRM / customer communication software: marketing, digital, lifecycle/CRM, customer experience, operations, IT, and executive sponsors.${smallBizAddendum}`,
   };
 }
 
@@ -430,7 +486,7 @@ async function discoverForSingleAccount({
 
   const existingNames = new Set((existingContacts || []).map((contact: any) => cleanText(contact.name).toLowerCase()).filter(Boolean));
   const websiteSummary = await fetchWebsiteContext(resolvedWebsite);
-  const { resolvedMode, brief } = getDiscoveryBrief({
+  const { resolvedMode, companySize, brief } = getDiscoveryBrief({
     mode: requestedMode,
     motion: resolvedMotion,
     industry: resolvedIndustry,
@@ -463,6 +519,7 @@ async function discoverForSingleAccount({
     accountName: resolvedAccountName,
     requestedMode,
     resolvedMode,
+    companySize,
     requestedMaxContacts,
     division: resolvedDivision || null,
     hasWebsiteSummary: Boolean(websiteSummary),
