@@ -1193,18 +1193,19 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       </div>
 
       {/* Filtered count + staleness */}
-      {filteredOpportunities.length !== opportunities.length && (
+      {activeFilteredOpps.length !== opportunities.length && (
         <div className="text-xs text-muted-foreground">
-          Showing <span className="font-semibold text-foreground">{filteredOpportunities.length}</span> of {opportunities.length} opportunities
+          Showing <span className="font-semibold text-foreground">{activeFilteredOpps.length}</span> of {opportunities.length} opportunities
+          {churningOpps.length > 0 && <span> ({churningOpps.length} OOB/churning hidden)</span>}
         </div>
       )}
       {(() => {
-        const staleOpps = filteredOpportunities.filter(o => {
+        const staleOpps = activeFilteredOpps.filter(o => {
           if (o.status !== 'active') return false;
           if (!o.lastTouchDate) return true;
           return Math.floor((Date.now() - new Date(o.lastTouchDate).getTime()) / 86400000) > 14;
         });
-        const noNextStep = filteredOpportunities.filter(o => o.status === 'active' && !o.nextStep).length;
+        const noNextStep = activeFilteredOpps.filter(o => o.status === 'active' && !o.nextStep).length;
         if (staleOpps.length === 0 && noNextStep === 0) return null;
         return (
           <div className="flex flex-wrap gap-3">
