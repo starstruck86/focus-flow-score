@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { format, parseISO, isValid } from 'date-fns';
-import { CalendarIcon, Pencil } from 'lucide-react';
+import { CalendarIcon, Pencil, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -109,6 +109,17 @@ export function EditableDatePicker({
           />
         </PopoverContent>
       </Popover>
+      {value && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn("shrink-0 text-muted-foreground hover:text-destructive", compact ? "h-5 w-5" : "h-7 w-7")}
+          onClick={() => onChange(undefined)}
+          title="Clear date"
+        >
+          <X className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
+        </Button>
+      )}
       <Button
         variant="ghost"
         size="icon"

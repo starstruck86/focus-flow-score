@@ -54,7 +54,7 @@ import { KanbanBoard } from '@/components/KanbanBoard';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useStore } from '@/store/useStore';
 import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
-import { format, parseISO, isToday, isPast, isThisQuarter } from 'date-fns';
+import { format, parseISO, isToday, isPast, isThisQuarter, getQuarter, getYear } from 'date-fns';
 import { 
   useDbOpportunities, 
   useDbRenewals, 
@@ -122,6 +122,7 @@ const CHURN_RISK_SORT_RANK: Record<string, number> = {
 };
 
 type SavedView = 'all' | 'active' | 'stalled' | 'next-step-due' | 'closing-this-quarter' | 'no-next-step';
+type GroupingMode = 'status' | 'quarter' | 'stage';
 
 /**
  * Normalize status: if stage says "Closed Won" or "Closed Lost" but status doesn't match, fix it.
@@ -273,6 +274,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       if (updates.closeDate !== undefined) dbUpdates.close_date = updates.closeDate;
       if (updates.nextStep !== undefined) dbUpdates.next_step = updates.nextStep;
       if (updates.nextStepDate !== undefined) dbUpdates.next_step_date = updates.nextStepDate;
+      if (updates.lastTouchDate !== undefined) dbUpdates.last_touch_date = updates.lastTouchDate;
       if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
       if (updates.dealType !== undefined) dbUpdates.deal_type = updates.dealType;
       if (updates.paymentTerms !== undefined) dbUpdates.payment_terms = updates.paymentTerms;
@@ -308,6 +310,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const [expandedOppIds, setExpandedOppIds] = useState<Set<string>>(new Set());
   const [deleteDialogOpp, setDeleteDialogOpp] = useState<Opportunity | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
+  const [groupingMode, setGroupingMode] = useState<GroupingMode>('status');
   const bulkSelection = useBulkSelection<Opportunity>();
 
   // Get renewals that don't have linked opportunities yet (for adding new renewal opps)
@@ -442,6 +445,59 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     });
 
     return groups;
+  }, [filteredOpportunities]);
+
+  // Group by fiscal quarter (based on close date)
+  const quarterGroupedOpportunities = useMemo(() => {
+    const groups: Record<string, Opportunity[]> = {};
+    const noDate: Opportunity[] = [];
+
+    filteredOpportunities.forEach(opp => {
+      if (!opp.closeDate) {
+        noDate.push(opp);
+        return;
+      }
+      try {
+        const date = parseISO(opp.closeDate);
+        const q = getQuarter(date);
+        const y = getYear(date);
+        const key = `FY${y} Q${q}`;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(opp);
+      } catch {
+        noDate.push(opp);
+      }
+    });
+
+    if (noDate.length > 0) groups['No Close Date'] = noDate;
+
+    // Sort keys chronologically
+    const sorted = Object.entries(groups).sort(([a], [b]) => {
+      if (a === 'No Close Date') return 1;
+      if (b === 'No Close Date') return -1;
+      return a.localeCompare(b);
+    });
+
+    return sorted;
+  }, [filteredOpportunities]);
+
+  // Group by stage
+  const stageGroupedOpportunities = useMemo(() => {
+    const groups: Record<string, Opportunity[]> = {};
+
+    STAGE_OPTIONS.forEach(stage => {
+      groups[stage] = [];
+    });
+
+    filteredOpportunities.forEach(opp => {
+      const stage = opp.stage || '';
+      if (!groups[stage]) groups[stage] = [];
+      groups[stage].push(opp);
+    });
+
+    return STAGE_OPTIONS
+      .filter(stage => groups[stage]?.length > 0)
+      .map(stage => [STAGE_LABELS[stage] || stage || 'No Stage', groups[stage]] as [string, Opportunity[]]);
   }, [filteredOpportunities]);
 
   const handleAddOpportunity = async () => {
@@ -996,6 +1052,34 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     );
   };
 
+  const renderGenericGroup = (label: string, opps: Opportunity[]) => {
+    if (opps.length === 0) return null;
+    const groupArr = opps.reduce((sum, o) => sum + (o.arr || 0), 0);
+
+    return (
+      <React.Fragment key={label}>
+        <TableRow className="bg-muted/30 hover:bg-muted/30">
+          <TableCell colSpan={99} className="py-2">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-xs font-medium">
+                {label}
+              </Badge>
+              <span className="text-xs text-muted-foreground">
+                ({opps.length})
+              </span>
+              {groupArr > 0 && (
+                <span className="text-xs font-mono text-muted-foreground ml-1">
+                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(groupArr)}
+                </span>
+              )}
+            </div>
+          </TableCell>
+        </TableRow>
+        {opps.map(renderOpportunityRow)}
+      </React.Fragment>
+    );
+  };
+
   const totalCols = (renewalsOnly ? (showChurnRisk ? 14 : 13) : columnOrder === 'outreach' ? 10 : (showChurnRisk ? 11 : 10)) + summaryCustomFields.length;
 
   return (
@@ -1033,6 +1117,16 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             <SelectItem value="next-step-due">Next Step Due/Overdue</SelectItem>
             <SelectItem value="closing-this-quarter">Closing This Quarter</SelectItem>
             <SelectItem value="no-next-step">No Next Step</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={groupingMode} onValueChange={(v) => setGroupingMode(v as GroupingMode)}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="Group by..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="status">Group: Status</SelectItem>
+            <SelectItem value="quarter">Group: Quarter</SelectItem>
+            <SelectItem value="stage">Group: Stage</SelectItem>
           </SelectContent>
         </Select>
         <ManageColumnsPopover
@@ -1150,9 +1244,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           }}
         />
       ) : (
-        <div className="metric-card overflow-hidden p-0">
+        <div className="metric-card overflow-auto max-h-[80vh] p-0 relative">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow className="hover:bg-transparent">
               {columnOrder === 'outreach' ? (
                 <>
@@ -1301,10 +1395,12 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 </TableCell>
               </TableRow>
             ) : isUserSorted ? (
-              // Flat sorted list when user clicks a column header
               sortedOpportunities.map(renderOpportunityRow)
+            ) : groupingMode === 'quarter' ? (
+              quarterGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
+            ) : groupingMode === 'stage' ? (
+              stageGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
             ) : (
-              // Default: grouped by status
               STATUS_ORDER.map(status => renderStatusGroup(status, groupedOpportunities[status]))
             )}
           </TableBody>
