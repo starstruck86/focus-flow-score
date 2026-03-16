@@ -187,6 +187,15 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
         setIsExpanded(false);
       },
     },
+    ...(prefillOpportunityId ? [{
+      id: 'paste-synopsis',
+      label: 'Paste Synopsis',
+      icon: Sparkles,
+      onClick: () => {
+        setShowSynopsis(true);
+        setIsExpanded(false);
+      },
+    }] : []),
     {
       id: 'power-hour',
       label: 'Start Power Hour',
