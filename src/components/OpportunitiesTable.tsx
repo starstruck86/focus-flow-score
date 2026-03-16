@@ -470,7 +470,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     const groups: Record<string, Opportunity[]> = {};
     const noDate: Opportunity[] = [];
 
-    filteredOpportunities.forEach(opp => {
+    activeFilteredOpps.forEach(opp => {
       if (!opp.closeDate) {
         noDate.push(opp);
         return;
@@ -497,7 +497,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     });
 
     return sorted;
-  }, [filteredOpportunities]);
+  }, [activeFilteredOpps]);
 
   // Group by stage
   const stageGroupedOpportunities = useMemo(() => {
