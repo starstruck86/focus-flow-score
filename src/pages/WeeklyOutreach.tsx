@@ -1194,10 +1194,10 @@ export default function WeeklyOutreach() {
         {/* Account Intelligence Cards */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
           <WidgetErrorBoundary widgetId="account-health-pulse">
-            <AccountHealthPulseCard />
+            <AccountHealthPulseCard motionFilter="new-logo" />
           </WidgetErrorBoundary>
           <WidgetErrorBoundary widgetId="company-monitor">
-            <CompanyMonitorCard />
+            <CompanyMonitorCard motionFilter="new-logo" />
           </WidgetErrorBoundary>
           <WidgetErrorBoundary widgetId="icp-sourcing">
             <IcpAccountSourcing />
