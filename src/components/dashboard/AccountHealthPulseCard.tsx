@@ -52,8 +52,8 @@ export function AccountHealthPulseCard({ motionFilter }: AccountHealthPulseCardP
             {(['hot', 'warm', 'cool', 'cold'] as const).map(tier => {
               const cfg = TIER_CONFIG[tier];
               return tierCounts[tier] > 0 ? (
-                <Badge key={tier} variant="outline" className={cn("text-[9px] px-1.5 gap-0.5", cfg.bg, cfg.color)}>
-                  <cfg.icon className="h-2.5 w-2.5" />{tierCounts[tier]}
+                <Badge key={tier} variant="outline" className={cn("text-[10px] px-2 gap-1", cfg.bg, cfg.color)}>
+                  <cfg.icon className="h-3 w-3" />{tierCounts[tier]}
                 </Badge>
               ) : null;
             })}
