@@ -1118,6 +1118,16 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             <SelectItem value="no-next-step">No Next Step</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={groupingMode} onValueChange={(v) => setGroupingMode(v as GroupingMode)}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="Group by..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="status">Group: Status</SelectItem>
+            <SelectItem value="quarter">Group: Quarter</SelectItem>
+            <SelectItem value="stage">Group: Stage</SelectItem>
+          </SelectContent>
+        </Select>
         <ManageColumnsPopover
           tabTarget={oppTabTarget}
           viewKey={`opportunities-${renewalsOnly ? 'renewals' : excludeRenewals ? 'newlogo' : 'global'}-${savedView}`}
