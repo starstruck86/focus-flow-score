@@ -229,9 +229,9 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
                 </span>
               )}
               {dueInfo && (
-                <span className={cn("inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-md", dueInfo.color)}>
-                  {isOverdue && <AlertCircle className="h-2.5 w-2.5" />}
-                  <Calendar className="h-2.5 w-2.5" />
+                <span className={cn("inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md", dueInfo.color)}>
+                  {isOverdue && <AlertCircle className="h-3 w-3" />}
+                  <Calendar className="h-3 w-3" />
                   {dueInfo.label}
                 </span>
               )}
