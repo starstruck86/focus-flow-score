@@ -254,17 +254,32 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
           });
         }
 
-        // FIX: Save extracted contacts to account_contacts table
+        // Save extracted contacts to the contacts table (powers Org Chart)
         if (acc.contacts && acc.contacts.length > 0 && user) {
+          const targetAccountId = acc.matchedExistingId || accountId;
           for (const contact of acc.contacts) {
             try {
-              await supabase.from('account_contacts').insert({
-                user_id: user.id,
-                account_id: accountId || null,
-                name: contact.name,
-                title: contact.title || null,
-                notes: contact.email ? `Email: ${contact.email}` : null,
-              });
+              // Check for duplicates by name within the same account
+              const { data: existing } = await supabase
+                .from('contacts')
+                .select('id')
+                .eq('account_id', targetAccountId)
+                .ilike('name', contact.name)
+                .maybeSingle();
+
+              if (!existing) {
+                await supabase.from('contacts').insert({
+                  user_id: user.id,
+                  account_id: targetAccountId || null,
+                  name: contact.name,
+                  title: contact.title || null,
+                  email: contact.email || null,
+                  status: 'target',
+                  buyer_role: 'unknown',
+                  influence_level: 'medium',
+                  discovery_source: 'screenshot-import',
+                });
+              }
             } catch {
               // Non-critical — continue
             }
