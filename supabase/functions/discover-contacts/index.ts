@@ -196,6 +196,7 @@ async function runPerplexityResearch({
   roleBrief,
   websiteSummary,
   maxContacts,
+  division,
 }: {
   accountName: string;
   website?: string | null;
@@ -206,6 +207,7 @@ async function runPerplexityResearch({
   roleBrief: string;
   websiteSummary?: string | null;
   maxContacts: number;
+  division?: string | null;
 }) {
   const perplexityKey = Deno.env.get('PERPLEXITY_API_KEY');
   if (!perplexityKey) return '';
@@ -222,12 +224,13 @@ async function runPerplexityResearch({
         messages: [
           {
             role: 'user',
-            content: `Find current employees and likely buying-committee stakeholders at "${accountName}".
+            content: `Find current employees and likely buying-committee stakeholders at "${accountName}"${division ? ` specifically within the "${division}" division/business unit` : ''}.
 
 Company context:
 - Website: ${website || 'unknown'}
 - Industry: ${industry || 'unknown'}
 - Motion: ${motion || 'unknown'}
+- Division/BU: ${division || 'entire company'}
 - Opportunity context: ${opportunityContext || 'none provided'}
 - Custom focus: ${focusPrompt || 'none provided'}
 - Website summary: ${websiteSummary || 'not available'}
@@ -235,11 +238,14 @@ Company context:
 Discovery guidance:
 ${roleBrief}
 
+${division ? `CRITICAL: Only return people who work in or support the "${division}" division. Exclude people from other divisions.` : ''}
+
 Search LinkedIn, company leadership/about/team pages, press releases, conference speaker pages, interviews, podcasts, and local business coverage.
 
 Return up to ${maxContacts} CURRENT people at the company who are most relevant. For each person include:
 - Full name
 - Current title
+- Department or team they belong to
 - Why they matter to this evaluation
 - LinkedIn URL if you can find one
 - 1 short evidence note proving they are at the company now
@@ -294,6 +300,7 @@ Deno.serve(async (req) => {
       focusPrompt,
       maxContacts,
       discoveryMode,
+      division,
     } = body || {};
 
     if (!accountId) {
@@ -324,10 +331,15 @@ Deno.serve(async (req) => {
     const resolvedIndustry = cleanText(account.industry || industry);
     const resolvedMotion = cleanText(account.motion);
     const resolvedFocusPrompt = cleanText(focusPrompt);
+    const resolvedDivision = cleanText(division);
     const requestedMaxContacts = Math.max(3, Math.min(Number(maxContacts) || 5, 10));
     const requestedMode = (['auto', 'marketing', 'revenue', 'operations', 'it', 'executive'].includes(discoveryMode)
       ? discoveryMode
       : 'auto') as DiscoveryMode;
+
+    const divisionScope = resolvedDivision
+      ? `IMPORTANT: Scope ALL research to the "${resolvedDivision}" division/business unit of ${resolvedAccountName}. Only return people who work in or directly support this division. Exclude contacts from other divisions or the parent company's unrelated teams.`
+      : '';
 
     const { data: existingContacts, error: contactsError } = await supabase
       .from('contacts')
@@ -360,6 +372,7 @@ Deno.serve(async (req) => {
       roleBrief: brief,
       websiteSummary,
       maxContacts: requestedMaxContacts,
+      division: resolvedDivision,
     });
 
     const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
@@ -374,6 +387,7 @@ Deno.serve(async (req) => {
       requestedMode,
       resolvedMode,
       requestedMaxContacts,
+      division: resolvedDivision || null,
       hasWebsiteSummary: Boolean(websiteSummary),
       hasWebResearch: Boolean(webResearch),
       hasFocusPrompt: Boolean(resolvedFocusPrompt),
@@ -390,21 +404,24 @@ Deno.serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: 'You are a B2B stakeholder discovery assistant. Convert research into a strict contact list for a sales rep. Prefer real, current employees. Do not invent LinkedIn URLs. If research is sparse, infer buyer_role and influence_level conservatively from the title. Keep notes short and evidence-based.',
+            content: `You are a B2B stakeholder discovery assistant. Convert research into a strict contact list for a sales rep. Prefer real, current employees. Do not invent LinkedIn URLs. If research is sparse, infer buyer_role and influence_level conservatively from the title. Keep notes short and evidence-based.${resolvedDivision ? ` CRITICAL: Only include people from the "${resolvedDivision}" division/business unit. Exclude people from other divisions.` : ''}`,
           },
           {
             role: 'user',
-            content: `Build a stakeholder map for "${resolvedAccountName}".
+            content: `Build a stakeholder map for "${resolvedAccountName}"${resolvedDivision ? ` — "${resolvedDivision}" division only` : ''}.
 
 Account context:
 - Website: ${resolvedWebsite || 'unknown'}
 - Industry: ${resolvedIndustry || 'unknown'}
 - Motion: ${resolvedMotion || 'unknown'}
+- Division/BU: ${resolvedDivision || 'entire company (all divisions)'}
 - Opportunity context: ${opportunityContext || 'none provided'}
 - Discovery mode: ${resolvedMode}
 - Custom focus: ${resolvedFocusPrompt || 'none provided'}
 - Target count: ${requestedMaxContacts}
 - Account notes: ${cleanText(account.notes) || 'none'}
+
+${divisionScope}
 
 Role guidance:
 ${brief}
