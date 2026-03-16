@@ -215,7 +215,7 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
             </div>
 
             {/* Meta row: account, opp stage, due date, workstream */}
-            <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap mt-1">
               {accountName && (
                 <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded-md">
                   <Building2 className="h-2.5 w-2.5" />
