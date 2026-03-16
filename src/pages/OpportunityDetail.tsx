@@ -21,8 +21,10 @@ import { useDebouncedUpdate } from '@/hooks/useDebouncedUpdate';
 import {
   ArrowLeft, ChevronRight, Target, Users,
   FileText, CheckSquare, TrendingUp, Building2,
-  Activity,
+  Activity, Sparkles, Network,
 } from 'lucide-react';
+import { ClaudeSynopsisModal } from '@/components/ClaudeSynopsisModal';
+import { OrgChartView } from '@/components/OrgChartView';
 import { cn } from '@/lib/utils';
 import type { OpportunityStage, OpportunityStatus, DealType, ChurnRisk } from '@/types';
 
