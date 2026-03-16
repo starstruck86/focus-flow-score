@@ -765,7 +765,7 @@ export default function WeeklyOutreach() {
     itemLabel: 'Account',
   });
   
-  const [activeTab, setActiveTab] = useState<'accounts' | 'opportunities'>('accounts');
+  const [activeTab, setActiveTab] = useState<'accounts' | 'opportunities' | 'sourcing'>('opportunities');
   const [stageFilter, setStageFilter] = useState<OpportunityStage | null>(null);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1191,40 +1191,34 @@ export default function WeeklyOutreach() {
           <StreakChip variant="full" />
         </div>
         
-        {/* Account Intelligence Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-          <WidgetErrorBoundary widgetId="account-health-pulse">
-            <AccountHealthPulseCard motionFilter="new-logo" />
-          </WidgetErrorBoundary>
-          <WidgetErrorBoundary widgetId="company-monitor">
-            <CompanyMonitorCard motionFilter="new-logo" />
-          </WidgetErrorBoundary>
-          <WidgetErrorBoundary widgetId="icp-sourcing">
-            <IcpAccountSourcing />
-          </WidgetErrorBoundary>
-        </div>
-
-        {/* Staleness & Urgency Summary */}
-        <StalenessAlert accounts={newLogoAccounts} />
-
-        {/* Stage Summary - Visible on both tabs, clickable to filter */}
-        <OpportunitiesStageSummary 
-          activeStageFilter={stageFilter}
-          onStageFilterChange={(stage) => {
-            setStageFilter(stage);
-            if (stage !== null) setActiveTab('opportunities');
-          }}
-        />
-
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'accounts' | 'opportunities')} className="space-y-4">
-          <TabsList className="grid w-full max-w-xs grid-cols-2">
-            <TabsTrigger value="accounts">Accounts</TabsTrigger>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'opportunities' | 'accounts' | 'sourcing')} className="space-y-4">
+          <TabsList className="grid w-full max-w-sm grid-cols-3">
             <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
+            <TabsTrigger value="accounts">Accounts</TabsTrigger>
+            <TabsTrigger value="sourcing">Sourcing</TabsTrigger>
           </TabsList>
+
+          {/* Opportunities Tab */}
+          <TabsContent value="opportunities" className="space-y-4">
+            <OpportunitiesStageSummary 
+              activeStageFilter={stageFilter}
+              onStageFilterChange={(stage) => {
+                setStageFilter(stage);
+              }}
+            />
+            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} showChurnRisk={false} columnOrder="outreach" excludeRenewals stageFilter={stageFilter} onClearStageFilter={() => setStageFilter(null)} />
+          </TabsContent>
 
           {/* Accounts Tab - Funnel View */}
           <TabsContent value="accounts" className="space-y-4">
+            {/* Staleness & Urgency Summary */}
+            <StalenessAlert accounts={newLogoAccounts} />
+
+            {/* Account Health Pulse */}
+            <WidgetErrorBoundary widgetId="account-health-pulse">
+              <AccountHealthPulseCard motionFilter="new-logo" />
+            </WidgetErrorBoundary>
             {/* Funnel Health Bar */}
             <FunnelHealthBar accounts={newLogoAccounts} />
             
@@ -1720,9 +1714,16 @@ export default function WeeklyOutreach() {
             )}
           </TabsContent>
 
-          {/* Opportunities Tab */}
-          <TabsContent value="opportunities" className="space-y-4">
-            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} showChurnRisk={false} columnOrder="outreach" excludeRenewals stageFilter={stageFilter} onClearStageFilter={() => setStageFilter(null)} />
+          {/* Sourcing Tab */}
+          <TabsContent value="sourcing" className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <WidgetErrorBoundary widgetId="icp-sourcing">
+                <IcpAccountSourcing />
+              </WidgetErrorBoundary>
+              <WidgetErrorBoundary widgetId="company-monitor">
+                <CompanyMonitorCard motionFilter="new-logo" />
+              </WidgetErrorBoundary>
+            </div>
           </TabsContent>
         </Tabs>
 
