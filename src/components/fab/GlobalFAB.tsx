@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
+import {
   Plus, 
   X,
   ListPlus,
@@ -14,6 +14,7 @@ import {
   BookOpen,
   Link2,
   Camera,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -33,6 +34,8 @@ import { ScreenshotEnrichModal } from '@/components/ScreenshotEnrichModal';
 import { ScreenshotImportModal } from '@/components/ScreenshotImportModal';
 import { TranscriptViewer } from '@/components/TranscriptViewer';
 import { ResourceLibraryModal } from '@/components/ResourceLibraryModal';
+import { ClaudeSynopsisModal } from '@/components/ClaudeSynopsisModal';
+import { useStore } from '@/store/useStore';
 
 interface GlobalFABProps {
   position?: 'bottom-right' | 'bottom-left';
@@ -62,9 +65,14 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
   const [showScreenshotImport, setShowScreenshotImport] = useState(false);
   const [showTranscriptViewer, setShowTranscriptViewer] = useState(false);
   const [showResourceLibrary, setShowResourceLibrary] = useState(false);
+  const [showSynopsis, setShowSynopsis] = useState(false);
   
   // Context for prefills
   const { currentRecord } = useLinkedRecordContext();
+  const prefillOpportunityId = currentRecord.type === 'opportunity' ? currentRecord.id : undefined;
+  const prefillAccountId = currentRecord.type === 'account' ? currentRecord.id : currentRecord.accountId;
+  const { opportunities } = useStore();
+  const synopsisOpp = prefillOpportunityId ? opportunities.find(o => o.id === prefillOpportunityId) : undefined;
   
   // Data hooks
   const { data: todayEntry } = useTodayJournalEntry();
@@ -184,6 +192,15 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
         setIsExpanded(false);
       },
     },
+    ...(prefillOpportunityId ? [{
+      id: 'paste-synopsis',
+      label: 'Paste Synopsis',
+      icon: Sparkles,
+      onClick: () => {
+        setShowSynopsis(true);
+        setIsExpanded(false);
+      },
+    }] : []),
     {
       id: 'power-hour',
       label: 'Start Power Hour',
@@ -259,9 +276,7 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
   
   const menuAlignment = position === 'bottom-right' ? 'items-end' : 'items-start';
   
-  // Determine prefills based on current context
-  const prefillOpportunityId = currentRecord.type === 'opportunity' ? currentRecord.id : undefined;
-  const prefillAccountId = currentRecord.type === 'account' ? currentRecord.id : currentRecord.accountId;
+  
   
   return (
     <>
@@ -411,6 +426,14 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
         open={showResourceLibrary}
         onOpenChange={setShowResourceLibrary}
       />
+      
+      {synopsisOpp && (
+        <ClaudeSynopsisModal
+          open={showSynopsis}
+          onOpenChange={setShowSynopsis}
+          opportunity={synopsisOpp}
+        />
+      )}
     </>
   );
 }

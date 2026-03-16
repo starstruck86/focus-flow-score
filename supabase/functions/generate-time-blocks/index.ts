@@ -35,6 +35,9 @@ serve(async (req) => {
       feedbackRes,
       quotaRes,
       prevPlansRes,
+      oppsRes,
+      renewalsRes,
+      tasksRes,
     ] = await Promise.all([
       supabase.from("calendar_events").select("*")
         .gte("start_time", `${targetDate}T00:00:00`)
@@ -42,18 +45,23 @@ serve(async (req) => {
         .order("start_time"),
       supabase.from("daily_journal_entries").select("*")
         .eq("date", targetDate).maybeSingle(),
-      // Get top accounts/opps/renewals for work items
-      supabase.from("accounts").select("id, name, tier, account_status, last_touch_date, cadence_name, contact_status")
+      supabase.from("accounts").select("id, name, tier, account_status, last_touch_date, cadence_name, contact_status, motion")
         .in("account_status", ["active", "prepped", "researching"])
         .order("priority_score", { ascending: false }).limit(15),
-      // Last 10 time block feedbacks (both day-level and block-level)
       supabase.from("ai_feedback").select("*")
         .eq("feature", "time_blocks")
         .order("created_at", { ascending: false }).limit(10),
       supabase.from("quota_targets").select("*").maybeSingle(),
-      // Previous day's block-level feedback
       supabase.from("daily_time_blocks").select("blocks, block_feedback, feedback_rating, feedback_text, plan_date")
         .order("plan_date", { ascending: false }).limit(3),
+      supabase.from("opportunities").select("id, name, stage, status, arr, close_date, next_step, next_step_date, deal_type, account_id")
+        .in("status", ["active", "stalled"])
+        .order("close_date", { ascending: true }).limit(20),
+      supabase.from("renewals").select("id, account_name, arr, renewal_due, next_step, health_status, churn_risk")
+        .order("renewal_due", { ascending: true }).limit(15),
+      supabase.from("tasks").select("id, title, priority, due_date, motion, category, status")
+        .in("status", ["next", "in-progress"])
+        .order("due_date", { ascending: true }).limit(20),
     ]);
 
     const events = calendarRes.data || [];
@@ -109,19 +117,50 @@ serve(async (req) => {
       ? `Daily targets: ${targets.target_dials_per_day} dials, ${targets.target_connects_per_day} connects, ${targets.target_accounts_researched_per_day} accounts researched, ${targets.target_contacts_prepped_per_day} contacts prepped. Weekly: ${targets.target_meetings_set_per_week} meetings set, ${targets.target_opps_created_per_week} opps created, ${targets.target_customer_meetings_per_week} customer meetings.`
       : "Default targets: 60 dials/day, 6 connects/day, 3 accounts researched/day.";
 
-    const prompt = `You are an elite sales time management coach for a B2B SaaS account executive. Your job is to create a realistic, high-impact daily schedule that maximizes their path to President's Club.
+    // Build pipeline context
+    const activeOpps = oppsRes.data || [];
+    const renewals = renewalsRes.data || [];
+    const activeTasks = tasksRes.data || [];
+
+    const newLogoAccounts = topAccounts.filter((a: any) => a.motion === 'new-logo' || !a.motion);
+    const renewalAccounts = topAccounts.filter((a: any) => a.motion === 'renewal');
+
+    const newLogoOpps = activeOpps.filter((o: any) => o.deal_type !== 'renewal');
+    const renewalOpps = activeOpps.filter((o: any) => o.deal_type === 'renewal');
+
+    const newLogoTasks = activeTasks.filter((t: any) => t.motion !== 'renewal');
+    const renewalTasks = activeTasks.filter((t: any) => t.motion === 'renewal');
+
+    const pipelineContext = `
+NEW LOGO PIPELINE (${newLogoOpps.length} opps):
+${newLogoOpps.slice(0, 8).map((o: any) => `- ${o.name}: ${o.stage}, $${o.arr || 0}, close ${o.close_date || 'TBD'}, next: ${o.next_step || 'none'}`).join('\n')}
+
+RENEWAL PIPELINE (${renewalOpps.length} opps, ${renewals.length} renewals):
+${renewalOpps.slice(0, 5).map((o: any) => `- ${o.name}: ${o.stage}, $${o.arr || 0}, close ${o.close_date || 'TBD'}`).join('\n')}
+${renewals.slice(0, 5).map((r: any) => `- ${r.account_name}: $${r.arr}, due ${r.renewal_due}, health ${r.health_status}, risk ${r.churn_risk}`).join('\n')}
+
+OPEN TASKS:
+New Logo: ${newLogoTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ')}
+Renewal: ${renewalTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ')}`;
+
+    const prompt = `You are an elite sales time management coach for a B2B SaaS account executive. Create a daily schedule that CLEARLY SEPARATES new logo work from renewal work to minimize context switching.
 
 CRITICAL RULES:
 1. NO time blocks shorter than 25 minutes. Minimum block is 25 min.
-2. Group similar activities together to minimize context switching (e.g., all calls in one block, all research in another)
-3. Goals must be REALISTIC and specific - not aspirational fantasies. If someone has 2 hours of meetings, don't expect 60 dials.
-4. Account for energy patterns: deep work and prospecting in the morning, admin and lighter tasks in the afternoon
-5. Include buffer time around meetings (5-10 min) for prep/debrief - don't create separate blocks for this, build it into meeting blocks
-6. Every block needs a concrete, achievable goal that a human would read and think "yeah, I can do that"
-7. If feedback says past suggestions were unrealistic, SIGNIFICANTLY dial back goals
-8. Leave 30 min for daily journal/EOD wrap-up
-9. Never schedule prospecting calls during lunch (12-1pm)
-10. Build in at least one 15-min break mid-morning and mid-afternoon (these are breaks, not work blocks)
+2. BATCH new logo activities together and renewal activities together — DO NOT interleave them
+3. New logo work = prospecting, research on new accounts, cadence execution, discovery calls. This is high-energy hunter work.
+4. Renewal work = task execution, check-ins, contract reviews, expansion conversations. This is more methodical relationship work.
+5. Use "workstream" field to tag each block as "new_logo" or "renewal" or "general"
+6. Goals must be REALISTIC and specific - not aspirational fantasies
+7. Account for energy patterns: deep prospecting/new logo work in the morning, renewal tasks in the afternoon
+8. Include buffer time around meetings (5-10 min)
+9. If feedback says past suggestions were unrealistic, SIGNIFICANTLY dial back goals
+10. Leave 30 min for daily journal/EOD wrap-up
+11. Never schedule prospecting calls during lunch (12-1pm)
+12. Build in at least one 15-min break mid-morning and mid-afternoon
+13. NAME SPECIFIC ACCOUNTS in goals when possible (e.g., "Research Acme Corp, Widget Inc, TechCo")
+14. For research blocks: suggest exactly which accounts to research and add to cadence
+15. For prospecting blocks: suggest which cadences to execute
 
 TODAY'S CALENDAR (EST):
 ${calendarContext}
@@ -130,8 +169,13 @@ MEETING LOAD: ${meetingHours}h of meetings, ${focusHoursAvailable}h available fo
 
 ${quotaContext}
 
-TOP ACCOUNTS TO CONSIDER:
-${topAccounts.slice(0, 8).map((a: any) => `- ${a.name} (Tier ${a.tier}, ${a.account_status})`).join("\n")}
+NEW LOGO ACCOUNTS TO WORK:
+${newLogoAccounts.slice(0, 8).map((a: any) => `- ${a.name} (Tier ${a.tier}, ${a.account_status}, cadence: ${a.cadence_name || 'none'})`).join("\n")}
+
+RENEWAL ACCOUNTS TO WORK:
+${renewalAccounts.slice(0, 5).map((a: any) => `- ${a.name} (Tier ${a.tier}, ${a.account_status})`).join("\n")}
+
+${pipelineContext}
 
 ${journalRes.data ? `TODAY'S JOURNAL SO FAR: ${journalRes.data.dials || 0} dials, ${journalRes.data.conversations || 0} conversations, ${journalRes.data.meetings_set || 0} meetings set` : "No journal entry yet today."}
 
@@ -142,10 +186,11 @@ Generate a daily time-blocked schedule. For each block provide:
 - end_time (HH:MM in 24h EST)
 - label (short title, 3-5 words)
 - type: one of "prospecting", "meeting", "research", "admin", "break", "pipeline", "prep"
-- goals: array of 1-3 specific, realistic goals for that block
-- reasoning: one sentence on why this block matters for P-Club
+- workstream: "new_logo" or "renewal" or "general"
+- goals: array of 1-3 specific, realistic goals for that block (NAME ACCOUNTS when possible)
+- reasoning: one sentence on why this block matters
 
-Also provide an overall "day_strategy" (2-3 sentences on the day's theme/approach) and "key_metric_targets" object with realistic targets for today given the meeting load.`;
+Also provide an overall "day_strategy" (2-3 sentences distinguishing the new logo vs renewal focus for the day) and "key_metric_targets" object with realistic targets.`;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
@@ -180,10 +225,11 @@ Also provide an overall "day_strategy" (2-3 sentences on the day's theme/approac
                       end_time: { type: "string", description: "HH:MM in 24h format" },
                       label: { type: "string" },
                       type: { type: "string", enum: ["prospecting", "meeting", "research", "admin", "break", "pipeline", "prep"] },
+                      workstream: { type: "string", enum: ["new_logo", "renewal", "general"], description: "Which workstream this block belongs to" },
                       goals: { type: "array", items: { type: "string" } },
                       reasoning: { type: "string" },
                     },
-                    required: ["start_time", "end_time", "label", "type", "goals", "reasoning"],
+                    required: ["start_time", "end_time", "label", "type", "workstream", "goals", "reasoning"],
                     additionalProperties: false,
                   },
                 },

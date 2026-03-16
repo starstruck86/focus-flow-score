@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -15,7 +16,8 @@ import {
   BriefcaseBusiness, Target, RefreshCw, Star,
   ChevronDown, ChevronUp, MessageSquare, Lightbulb,
   ThumbsUp, ThumbsDown, RotateCcw, CheckCircle2,
-  ArrowRight, ExternalLink,
+  ArrowRight, ExternalLink, Pencil, Check, X, GripVertical,
+  Rocket, Shield,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -26,6 +28,7 @@ interface TimeBlock {
   end_time: string;
   label: string;
   type: 'prospecting' | 'meeting' | 'research' | 'admin' | 'break' | 'pipeline' | 'prep';
+  workstream?: 'new_logo' | 'renewal' | 'general';
   goals: string[];
   reasoning: string;
 }
@@ -86,6 +89,12 @@ const BLOCK_ACTIONS: Record<string, { label: string; route?: string; dispatch?: 
   meeting: { label: '→ Meeting Prep', dispatch: 'scroll-meeting-prep' },
 };
 
+const WORKSTREAM_CONFIG: Record<string, { label: string; icon: typeof Rocket; color: string }> = {
+  new_logo: { label: 'New Logo', icon: Rocket, color: 'text-blue-500' },
+  renewal: { label: 'Renewal', icon: Shield, color: 'text-status-green' },
+  general: { label: 'General', icon: BriefcaseBusiness, color: 'text-muted-foreground' },
+};
+
 export function DailyTimeBlocks() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -96,6 +105,9 @@ export function DailyTimeBlocks() {
   const [feedbackText, setFeedbackText] = useState('');
   const [expanded, setExpanded] = useState(true);
   const [currentIdx, setCurrentIdx] = useState(-1);
+  const [editingBlock, setEditingBlock] = useState<number | null>(null);
+  const [editLabel, setEditLabel] = useState('');
+  const [editGoals, setEditGoals] = useState<string[]>([]);
 
   const { data: plan, isLoading } = useQuery({
     queryKey: ['daily-time-blocks', todayStr],
@@ -214,6 +226,29 @@ export function DailyTimeBlocks() {
       .update({ block_feedback: updated })
       .eq('id', plan.id);
   }, [plan, todayStr, queryClient]);
+
+  // Edit block inline
+  const startEditBlock = useCallback((blockIdx: number) => {
+    if (!plan) return;
+    const block = (plan.blocks as TimeBlock[])[blockIdx];
+    setEditingBlock(blockIdx);
+    setEditLabel(block.label);
+    setEditGoals([...block.goals]);
+  }, [plan]);
+
+  const saveEditBlock = useCallback(async () => {
+    if (!plan || editingBlock === null) return;
+    const blocks = [...(plan.blocks as TimeBlock[])];
+    blocks[editingBlock] = { ...blocks[editingBlock], label: editLabel, goals: editGoals };
+    
+    queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks });
+    await supabase
+      .from('daily_time_blocks' as any)
+      .update({ blocks })
+      .eq('id', plan.id);
+    setEditingBlock(null);
+    toast.success('Block updated');
+  }, [plan, editingBlock, editLabel, editGoals, todayStr, queryClient]);
 
   // Calculate progress
   const blocks = (plan?.blocks || []) as TimeBlock[];
@@ -415,7 +450,7 @@ export function DailyTimeBlocks() {
               <div
                 key={i}
                 className={cn(
-                  "px-4 py-3 flex gap-3 transition-colors",
+                  "px-4 py-3 flex gap-3 transition-colors group/block",
                   isCurrent && "bg-primary/5 ring-1 ring-inset ring-primary/20",
                   isPast && "opacity-50"
                 )}
@@ -437,34 +472,81 @@ export function DailyTimeBlocks() {
                       <Icon className={cn("h-3 w-3 mr-1", config.color)} />
                       {block.type}
                     </Badge>
-                    <span className="text-sm font-medium truncate">{block.label}</span>
+                    {block.workstream && block.workstream !== 'general' && (
+                      <Badge variant="outline" className={cn(
+                        "text-[10px] px-1.5 py-0 h-5 font-normal",
+                        block.workstream === 'new_logo' ? 'bg-blue-500/10 text-blue-500 border-blue-500/30' : 'bg-status-green/10 text-status-green border-status-green/30'
+                      )}>
+                        {WORKSTREAM_CONFIG[block.workstream]?.label || block.workstream}
+                      </Badge>
+                    )}
+                    {editingBlock !== i ? (
+                      <span className="text-sm font-medium truncate">{block.label}</span>
+                    ) : null}
                     {isCurrent && (
                       <Badge className="text-[9px] px-1.5 py-0 h-4 bg-primary/20 text-primary border-0 animate-pulse">NOW</Badge>
                     )}
+                    <Button variant="ghost" size="sm" className="h-5 w-5 p-0 ml-auto opacity-0 group-hover/block:opacity-100" onClick={() => editingBlock === i ? setEditingBlock(null) : startEditBlock(i)}>
+                      {editingBlock === i ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
+                    </Button>
                   </div>
 
-                  {/* Goals with checkboxes */}
-                  <ul className="space-y-1 mt-1">
-                    {block.goals.map((goal, gi) => {
-                      const goalKey = `${i}-${gi}`;
-                      const isCompleted = completedSet.has(goalKey);
-                      return (
-                        <li key={gi} className="flex items-start gap-2 group/goal">
-                          <Checkbox
-                            checked={isCompleted}
-                            onCheckedChange={() => toggleGoal(i, gi)}
-                            className="mt-0.5 h-3.5 w-3.5"
+                  {/* Inline edit */}
+                  {editingBlock === i ? (
+                    <div className="space-y-2 mt-1">
+                      <Input
+                        className="h-7 text-xs"
+                        value={editLabel}
+                        onChange={e => setEditLabel(e.target.value)}
+                        placeholder="Block label..."
+                      />
+                      {editGoals.map((g, gi) => (
+                        <div key={gi} className="flex gap-1">
+                          <Input
+                            className="h-6 text-[11px] flex-1"
+                            value={g}
+                            onChange={e => {
+                              const next = [...editGoals];
+                              next[gi] = e.target.value;
+                              setEditGoals(next);
+                            }}
                           />
-                          <span className={cn(
-                            "text-[12px] text-muted-foreground transition-all",
-                            isCompleted && "line-through opacity-60"
-                          )}>
-                            {goal}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setEditGoals(editGoals.filter((_, j) => j !== gi))}>
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => setEditGoals([...editGoals, ''])}>+ Goal</Button>
+                        <Button size="sm" className="h-6 text-[10px] gap-1" onClick={saveEditBlock}>
+                          <Check className="h-3 w-3" /> Save
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Goals with checkboxes */
+                    <ul className="space-y-1 mt-1">
+                      {block.goals.map((goal, gi) => {
+                        const goalKey = `${i}-${gi}`;
+                        const isCompleted = completedSet.has(goalKey);
+                        return (
+                          <li key={gi} className="flex items-start gap-2 group/goal">
+                            <Checkbox
+                              checked={isCompleted}
+                              onCheckedChange={() => toggleGoal(i, gi)}
+                              className="mt-0.5 h-3.5 w-3.5"
+                            />
+                            <span className={cn(
+                              "text-[12px] text-muted-foreground transition-all",
+                              isCompleted && "line-through opacity-60"
+                            )}>
+                              {goal}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
 
                   {/* Per-block thumbs + reasoning */}
                    <div className="flex items-center gap-2 mt-1.5">

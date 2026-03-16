@@ -21,8 +21,10 @@ import { useDebouncedUpdate } from '@/hooks/useDebouncedUpdate';
 import {
   ArrowLeft, ChevronRight, Target, Users,
   FileText, CheckSquare, TrendingUp, Building2,
-  Activity,
+  Activity, Sparkles, Network,
 } from 'lucide-react';
+import { ClaudeSynopsisModal } from '@/components/ClaudeSynopsisModal';
+import { OrgChartView } from '@/components/OrgChartView';
 import { cn } from '@/lib/utils';
 import type { OpportunityStage, OpportunityStatus, DealType, ChurnRisk } from '@/types';
 
@@ -77,6 +79,7 @@ export default function OpportunityDetail() {
 
   const { debouncedUpdate, flush } = useDebouncedUpdate(updateOpportunity, id || '');
   useEffect(() => flush, [flush]);
+  const [showSynopsis, setShowSynopsis] = useState(false);
 
   const oppTasks = useMemo(() =>
     tasks.filter(t => t.linkedOpportunityId === id && t.status !== 'done' && t.status !== 'dropped'),
@@ -142,6 +145,9 @@ export default function OpportunityDetail() {
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setShowSynopsis(true)}>
+                  <Sparkles className="h-3.5 w-3.5" /> Paste Synopsis
+                </Button>
                 <LinkPill label="Salesforce" url={opp.salesforceLink} />
               </div>
             </div>
@@ -303,6 +309,21 @@ export default function OpportunityDetail() {
           </>
         )}
 
+        {/* Org Chart */}
+        {opp.accountId && linkedAccount && (
+          <>
+            <CollapsibleSection title="Org Chart" icon={Network} defaultOpen={false}>
+              <OrgChartView
+                accountId={opp.accountId}
+                accountName={linkedAccount.name}
+                website={linkedAccount.website}
+                industry={linkedAccount.industry}
+              />
+            </CollapsibleSection>
+            <Separator />
+          </>
+        )}
+
         {/* Stakeholders */}
         {opp.accountId && linkedAccount && (
           <>
@@ -366,6 +387,12 @@ export default function OpportunityDetail() {
           )}
         </CollapsibleSection>
       </div>
+
+      <ClaudeSynopsisModal
+        open={showSynopsis}
+        onOpenChange={setShowSynopsis}
+        opportunity={opp}
+      />
     </Layout>
   );
 }
