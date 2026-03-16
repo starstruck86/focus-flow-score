@@ -647,6 +647,7 @@ ${Array.from(existingNames).join(', ') || 'none'}
 
 Rules:
 - Return at most ${requestedMaxContacts} contacts.
+- ORDERING: Always start from the TOP of the org chart and work DOWN. C-suite first (CEO, CMO, CRO, CTO, COO), then SVP/VP, then Director, then Manager. Fill your list top-down — if you can only find 3 people, make sure they're the most senior 3.
 - Prioritize exact current employees at this company.
 - Map buyer_role from: champion, economic_buyer, technical_buyer, user_buyer, coach, influencer, blocker, unknown.
 - Map influence_level from: high, medium, low.
