@@ -140,9 +140,9 @@ For each finding, respond in this exact JSON array format:
   {
     "company": "exact company name from list",
     "category": "executive_hire" | "job_posting" | "company_news" | "tech_change" | "podcast" | "company_goal" | "competitive_displacement",
-    "headline": "short headline (under 100 chars)",
-    "summary": "2-3 sentence summary of what happened and why it matters for a sales rep selling CRM/lifecycle software",
-    "source_url": "URL if available, null otherwise",
+    "headline": "factual headline — what happened, who was involved, key details (under 120 chars)",
+    "summary": "one sentence with the key fact and any numbers/names — no fluff, no sales spin",
+    "source_url": "URL where this was found (required if possible)",
     "relevance": 1-100 score (100 = strongest buying signal),
     "is_actionable": true if this is a direct trigger for outreach,
     "suggested_action": "specific suggested next step for the sales rep",
@@ -151,7 +151,7 @@ For each finding, respond in this exact JSON array format:
   }
 ]
 
-If no recent updates found for a company, omit it. Return ONLY the JSON array. If nothing found, return [].`;
+IMPORTANT: Headlines should be factual and specific — include names, numbers, and dates. Do NOT summarize or editorialize. If no recent updates found for a company, omit it. Return ONLY the JSON array. If nothing found, return [].`;
 
         try {
           const response = await fetch("https://api.perplexity.ai/chat/completions", {
@@ -258,8 +258,9 @@ If no recent updates found for a company, omit it. Return ONLY the JSON array. I
               update.marketingPlatform = item.detected_platform.trim();
             }
 
-            if (item.is_actionable && item.headline) {
-              update.notes.push(`[${todayStr}] ${item.headline}`);
+            if (item.headline) {
+              const sourceLink = item.source_url ? ` [${item.source_url}]` : '';
+              update.notes.push(`[${todayStr}] ${item.headline}${sourceLink}`);
             }
           }
         } catch (batchErr) {
