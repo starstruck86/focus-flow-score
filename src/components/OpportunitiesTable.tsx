@@ -1051,6 +1051,34 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     );
   };
 
+  const renderGenericGroup = (label: string, opps: Opportunity[]) => {
+    if (opps.length === 0) return null;
+    const groupArr = opps.reduce((sum, o) => sum + (o.arr || 0), 0);
+
+    return (
+      <React.Fragment key={label}>
+        <TableRow className="bg-muted/30 hover:bg-muted/30">
+          <TableCell colSpan={99} className="py-2">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-xs font-medium">
+                {label}
+              </Badge>
+              <span className="text-xs text-muted-foreground">
+                ({opps.length})
+              </span>
+              {groupArr > 0 && (
+                <span className="text-xs font-mono text-muted-foreground ml-1">
+                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(groupArr)}
+                </span>
+              )}
+            </div>
+          </TableCell>
+        </TableRow>
+        {opps.map(renderOpportunityRow)}
+      </React.Fragment>
+    );
+  };
+
   const totalCols = (renewalsOnly ? (showChurnRisk ? 14 : 13) : columnOrder === 'outreach' ? 10 : (showChurnRisk ? 11 : 10)) + summaryCustomFields.length;
 
   return (
