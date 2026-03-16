@@ -571,22 +571,26 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
     );
   };
 
-  // Add contact form state
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newContact, setNewContact] = useState({ name: '', title: '', department: '', buyer_role: 'unknown', reporting_to: '' });
-
-  const addNewContact = () => {
-    if (!newContact.name.trim()) return;
+  const addNewContact = (parentName?: string) => {
+    const name = parentName ? quickAddName : newContact.name;
+    const title = parentName ? quickAddTitle : newContact.title;
+    if (!name.trim()) return;
     addContact.mutate({
-      name: newContact.name.trim(),
-      title: newContact.title || null,
-      department: newContact.department || null,
-      buyer_role: newContact.buyer_role,
-      reporting_to: newContact.reporting_to || null,
+      name: name.trim(),
+      title: title || null,
+      department: parentName ? null : (newContact.department || null),
+      buyer_role: parentName ? 'unknown' : newContact.buyer_role,
+      reporting_to: parentName || (newContact.reporting_to || null),
       influence_level: 'medium',
     });
-    setShowAddForm(false);
-    setNewContact({ name: '', title: '', department: '', buyer_role: 'unknown', reporting_to: '' });
+    if (parentName) {
+      setAddingUnderParent(null);
+      setQuickAddName('');
+      setQuickAddTitle('');
+    } else {
+      setShowAddForm(false);
+      setNewContact({ name: '', title: '', department: '', buyer_role: 'unknown', reporting_to: '' });
+    }
   };
 
   if (isLoading) {
