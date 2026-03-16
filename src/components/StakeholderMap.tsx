@@ -430,7 +430,10 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                       </a>
                     )}
                   </div>
-                  <p className="truncate text-xs text-muted-foreground">{contact.title}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {contact.title}
+                    {contact.department ? ` · ${contact.department}` : ''}
+                  </p>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     <Badge variant="outline" className={cn('text-[9px]', getRoleConfig(contact.buyer_role).bg)}>
                       {getRoleConfig(contact.buyer_role).label}
