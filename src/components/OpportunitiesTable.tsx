@@ -1414,7 +1414,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   Loading opportunities...
                 </TableCell>
               </TableRow>
-            ) : filteredOpportunities.length === 0 && !showAddRow ? (
+            ) : activeFilteredOpps.length === 0 && !showAddRow ? (
               <TableRow>
                 <TableCell colSpan={totalCols} className="text-center py-8 text-muted-foreground">
                   {opportunities.length === 0
@@ -1434,6 +1434,35 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           </TableBody>
         </Table>
       </div>
+      )}
+
+      {/* OOB / Churning Opportunities — collapsed by default for renewals */}
+      {renewalsOnly && churningOpps.length > 0 && (
+        <Collapsible open={showChurningOpps} onOpenChange={setShowChurningOpps}>
+          <CollapsibleTrigger asChild>
+            <button className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors hover:bg-muted/50 text-left border border-purple-500/30 mt-4">
+              {showChurningOpps ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
+              <Badge className="text-xs bg-purple-600/20 text-purple-400 border-purple-600/30">
+                OOB / Churning
+              </Badge>
+              <span className="text-xs text-muted-foreground">{churningOpps.length} opportunities</span>
+              <span className="ml-auto text-xs font-mono text-muted-foreground">
+                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(
+                  churningOpps.reduce((sum, o) => sum + (o.arr || 0), 0)
+                )}
+              </span>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="metric-card overflow-auto max-h-[50vh] p-0 mt-2">
+              <Table>
+                <TableBody>
+                  {churningOpps.map(renderOpportunityRow)}
+                </TableBody>
+              </Table>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       )}
       
       {/* Closed Won Modal */}
