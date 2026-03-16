@@ -244,8 +244,8 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
                 </span>
               )}
               {task.estimatedMinutes && (
-                <span className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground">
-                  <Clock className="h-2.5 w-2.5" />
+                <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <Clock className="h-3 w-3" />
                   {task.estimatedMinutes}m
                 </span>
               )}
