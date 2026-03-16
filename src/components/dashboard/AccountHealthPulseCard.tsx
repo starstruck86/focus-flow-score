@@ -46,7 +46,7 @@ export function AccountHealthPulseCard({ motionFilter }: AccountHealthPulseCardP
         <div className="flex items-center justify-between">
           <CardTitle className="text-base font-display flex items-center gap-2">
             <Activity className="h-4 w-4 text-primary" />
-            Account Health Pulse
+            {motionFilter === 'renewal' ? 'Renewal Account Health' : motionFilter === 'new-logo' ? 'New Logo Account Health' : 'Account Health Pulse'}
           </CardTitle>
           <div className="flex items-center gap-1">
             {(['hot', 'warm', 'cool', 'cold'] as const).map(tier => {
