@@ -178,12 +178,12 @@ export function EditableTextareaCell({
     const userNotes = value.slice(0, firstDigestIndex).trim();
     const digestSection = value.slice(firstDigestIndex);
     
-    // Collect all entries across all dates
-    const allEntries: string[] = [];
-    const linePattern = /\[(\d{4}-\d{2}-\d{2})\]\s*(.+)/g;
+    // Collect all entries across all dates, preserving source URLs
+    const allEntries: { date: string; text: string; url: string | null }[] = [];
+    const linePattern = /\[(\d{4}-\d{2}-\d{2})\]\s*(.+?)(?:\s*\[(https?:\/\/[^\]]+)\])?$/gm;
     let match;
     while ((match = linePattern.exec(digestSection)) !== null) {
-      allEntries.push(`${match[1]}: ${match[2]}`);
+      allEntries.push({ date: match[1], text: match[2].trim(), url: match[3] || null });
     }
     // Newest first
     allEntries.reverse();

@@ -258,8 +258,9 @@ IMPORTANT: Headlines should be factual and specific — include names, numbers, 
               update.marketingPlatform = item.detected_platform.trim();
             }
 
-            if (item.is_actionable && item.headline) {
-              update.notes.push(`[${todayStr}] ${item.headline}`);
+            if (item.headline) {
+              const sourceLink = item.source_url ? ` [${item.source_url}]` : '';
+              update.notes.push(`[${todayStr}] ${item.headline}${sourceLink}`);
             }
           }
         } catch (batchErr) {
