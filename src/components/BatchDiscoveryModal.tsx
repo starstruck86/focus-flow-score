@@ -152,24 +152,28 @@ export function BatchDiscoveryModal({ children }: { children: React.ReactNode })
 
   const confirmAllDiscovered = async () => {
     if (!user) return;
-    let added = 0;
+    // Build all valid contacts for batch insert
+    const rows: any[] = [];
     for (const result of results) {
       if (!result.success || !result.contacts?.length) continue;
       for (const contact of result.contacts) {
+        // Skip contacts without LinkedIn
+        if (!contact.linkedin_url || !contact.linkedin_url.includes('linkedin.com/in/')) continue;
+
         const tenureParts: string[] = [];
         if (typeof contact.company_tenure_months === 'number') tenureParts.push(`Company tenure: ${contact.company_tenure_months}mo`);
         if (typeof contact.role_tenure_months === 'number') tenureParts.push(`Role tenure: ${contact.role_tenure_months}mo`);
         const tenureNote = tenureParts.length > 0 ? tenureParts.join(' | ') : '';
         const combinedNotes = [contact.notes, tenureNote].filter(Boolean).join(' — ');
 
-        const { error } = await supabase.from('contacts').insert({
+        rows.push({
           account_id: result.accountId,
           user_id: user.id,
           name: contact.name,
           title: contact.title,
           department: contact.department || null,
           seniority: contact.seniority || null,
-          linkedin_url: contact.linkedin_url || null,
+          linkedin_url: contact.linkedin_url,
           buyer_role: contact.buyer_role || 'unknown',
           influence_level: contact.influence_level || 'medium',
           notes: combinedNotes || null,
@@ -177,12 +181,27 @@ export function BatchDiscoveryModal({ children }: { children: React.ReactNode })
           discovery_source: 'batch-discovery',
           status: 'target',
         });
-        if (!error) added++;
       }
     }
+
+    if (rows.length === 0) {
+      toast.info('No valid contacts to add');
+      return;
+    }
+
+    // Batch insert in chunks of 50
+    let added = 0;
+    for (let i = 0; i < rows.length; i += 50) {
+      const chunk = rows.slice(i, i + 50);
+      const { error } = await supabase.from('contacts').insert(chunk);
+      if (!error) added += chunk.length;
+      else console.error('Batch insert error:', error);
+    }
+
     toast.success(`Added ${added} contacts across ${results.filter((r) => r.success).length} accounts`);
-    for (const r of results) {
-      qc.invalidateQueries({ queryKey: ['stakeholder-contacts', r.accountId] });
+    const accountIds = new Set(results.map((r) => r.accountId));
+    for (const id of accountIds) {
+      qc.invalidateQueries({ queryKey: ['stakeholder-contacts', id] });
     }
     setResults([]);
   };

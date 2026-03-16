@@ -529,7 +529,16 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                     </Badge>
                   </div>
                   <div className="space-y-1">
-                    {grouped[role.value].map((contact: any) => (
+                    {grouped[role.value].map((contact: any) => {
+                      // Parse tenure from notes field
+                      const tenureMatch = contact.notes?.match(/Company tenure:\s*(\d+)mo/);
+                      const roleTenureMatch = contact.notes?.match(/Role tenure:\s*(\d+)mo/);
+                      const companyTenure = tenureMatch ? parseInt(tenureMatch[1], 10) : null;
+                      const roleTenure = roleTenureMatch ? parseInt(roleTenureMatch[1], 10) : null;
+                      const companyNew = companyTenure !== null && companyTenure < 12;
+                      const roleNew = roleTenure !== null && roleTenure < 12;
+
+                      return (
                       <div
                         key={contact.id}
                         className="group flex cursor-pointer items-center gap-2 rounded bg-background/60 p-1.5 hover:bg-background/80"
@@ -553,10 +562,25 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                             {(contact as any).ai_discovered && <Sparkles className="h-2.5 w-2.5 text-primary/60" />}
                           </div>
                           <p className="truncate text-[11px] text-muted-foreground">{contact.title || 'No title'}</p>
+                          {(companyNew || roleNew) && (
+                            <div className="mt-0.5 flex flex-wrap gap-1">
+                              {companyNew && (
+                                <Badge variant="outline" className="text-[8px] h-4 border-status-yellow/50 bg-status-yellow/10 text-status-yellow">
+                                  ⚠ {companyTenure}mo at co.
+                                </Badge>
+                              )}
+                              {roleNew && (
+                                <Badge variant="outline" className="text-[8px] h-4 border-orange-400/50 bg-orange-400/10 text-orange-500 dark:text-orange-400">
+                                  ⚠ {roleTenure}mo in role
+                                </Badge>
+                              )}
+                            </div>
+                          )}
                         </div>
                         <ChevronRight className={cn('h-3 w-3 text-muted-foreground transition-transform', editingContact === contact.id && 'rotate-90')} />
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {grouped[role.value].some((contact: any) => editingContact === contact.id) && (
