@@ -626,6 +626,29 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                         return (
                           <>
                             <div className="grid grid-cols-2 gap-2">
+                              <Input
+                                className="h-7 text-xs"
+                                placeholder="Name"
+                                defaultValue={currentContact.name || ''}
+                                onBlur={(event) => {
+                                  const val = event.target.value.trim();
+                                  if (val && val !== currentContact.name) {
+                                    updateContact.mutate({ id: currentContact.id, updates: { name: val } });
+                                  }
+                                }}
+                              />
+                              <Input
+                                className="h-7 text-xs"
+                                placeholder="Title"
+                                defaultValue={currentContact.title || ''}
+                                onBlur={(event) => {
+                                  if (event.target.value !== (currentContact.title || '')) {
+                                    updateContact.mutate({ id: currentContact.id, updates: { title: event.target.value || null } });
+                                  }
+                                }}
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
                               <Select
                                 value={(currentContact as any).buyer_role || 'unknown'}
                                 onValueChange={(value) => updateContact.mutate({ id: currentContact.id, updates: { buyer_role: value } })}
@@ -670,6 +693,32 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                                 }
                               }}
                             />
+                            <Input
+                              className="h-7 text-xs"
+                              placeholder="Notes"
+                              defaultValue={currentContact.notes || ''}
+                              onBlur={(event) => {
+                                if (event.target.value !== (currentContact.notes || '')) {
+                                  updateContact.mutate({
+                                    id: currentContact.id,
+                                    updates: { notes: event.target.value || null },
+                                  });
+                                }
+                              }}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 w-full"
+                              onClick={() => {
+                                if (confirm(`Remove ${currentContact.name} from stakeholder map?`)) {
+                                  deleteContact.mutate(currentContact.id);
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-3 w-3 mr-1" />
+                              Remove contact
+                            </Button>
                           </>
                         );
                       })()}
