@@ -426,6 +426,14 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
         open={showResourceLibrary}
         onOpenChange={setShowResourceLibrary}
       />
+      
+      {synopsisOpp && (
+        <ClaudeSynopsisModal
+          open={showSynopsis}
+          onOpenChange={setShowSynopsis}
+          opportunity={synopsisOpp}
+        />
+      )}
     </>
   );
 }
