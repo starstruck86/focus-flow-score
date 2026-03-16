@@ -25,6 +25,8 @@ import {
   AlertTriangle,
   SlidersHorizontal,
   RotateCcw,
+  Trash2,
+  Pencil,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -131,6 +133,18 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['stakeholder-contacts', accountId] }),
+  });
+
+  const deleteContact = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('contacts').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['stakeholder-contacts', accountId] });
+      setEditingContact(null);
+      toast.success('Contact removed');
+    },
   });
 
   const addContact = useMutation({
@@ -554,8 +568,19 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <span className="truncate text-sm font-medium">{contact.name}</span>
-                            {contact.influence_level === 'high' && <span className="text-[9px] text-status-yellow">★</span>}
+                            {contact.linkedin_url ? (
+                              <a
+                                href={contact.linkedin_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(event) => event.stopPropagation()}
+                                className="truncate text-sm font-medium hover:underline underline-offset-2 decoration-primary/50"
+                              >
+                                {contact.name}
+                              </a>
+                            ) : (
+                              <span className="truncate text-sm font-medium">{contact.name}</span>
+                            )}
                             {contact.linkedin_url && (
                               <a
                                 href={contact.linkedin_url}
@@ -563,10 +588,12 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                                 rel="noopener noreferrer"
                                 onClick={(event) => event.stopPropagation()}
                                 className="text-primary hover:text-primary/80"
+                                title="Open LinkedIn"
                               >
                                 <Linkedin className="h-3 w-3" />
                               </a>
                             )}
+                            {contact.influence_level === 'high' && <span className="text-[9px] text-status-yellow">★</span>}
                             {(contact as any).ai_discovered && <Sparkles className="h-2.5 w-2.5 text-primary/60" />}
                           </div>
                           <p className="truncate text-[11px] text-muted-foreground">{contact.title || 'No title'}</p>
@@ -598,6 +625,29 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                         if (!currentContact) return null;
                         return (
                           <>
+                            <div className="grid grid-cols-2 gap-2">
+                              <Input
+                                className="h-7 text-xs"
+                                placeholder="Name"
+                                defaultValue={currentContact.name || ''}
+                                onBlur={(event) => {
+                                  const val = event.target.value.trim();
+                                  if (val && val !== currentContact.name) {
+                                    updateContact.mutate({ id: currentContact.id, updates: { name: val } });
+                                  }
+                                }}
+                              />
+                              <Input
+                                className="h-7 text-xs"
+                                placeholder="Title"
+                                defaultValue={currentContact.title || ''}
+                                onBlur={(event) => {
+                                  if (event.target.value !== (currentContact.title || '')) {
+                                    updateContact.mutate({ id: currentContact.id, updates: { title: event.target.value || null } });
+                                  }
+                                }}
+                              />
+                            </div>
                             <div className="grid grid-cols-2 gap-2">
                               <Select
                                 value={(currentContact as any).buyer_role || 'unknown'}
@@ -643,6 +693,32 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                                 }
                               }}
                             />
+                            <Input
+                              className="h-7 text-xs"
+                              placeholder="Notes"
+                              defaultValue={currentContact.notes || ''}
+                              onBlur={(event) => {
+                                if (event.target.value !== (currentContact.notes || '')) {
+                                  updateContact.mutate({
+                                    id: currentContact.id,
+                                    updates: { notes: event.target.value || null },
+                                  });
+                                }
+                              }}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 w-full"
+                              onClick={() => {
+                                if (confirm(`Remove ${currentContact.name} from stakeholder map?`)) {
+                                  deleteContact.mutate(currentContact.id);
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-3 w-3 mr-1" />
+                              Remove contact
+                            </Button>
                           </>
                         );
                       })()}

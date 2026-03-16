@@ -306,6 +306,8 @@ async function runPerplexityResearch({
             role: 'user',
             content: `Find current employees and likely buying-committee stakeholders at "${accountName}"${division ? ` specifically within the "${division}" division/business unit` : ''}.
 
+CRITICAL ACCURACY REQUIREMENT: "${accountName}" must be matched EXACTLY. Do NOT confuse this company with similarly-named companies. Use the website (${website || 'unknown'}) and industry (${industry || 'unknown'}) to disambiguate. If the company has a common name, be extra careful to verify each person works at THIS specific company.
+
 Company context:
 - Website: ${website || 'unknown'}
 - Industry: ${industry || 'unknown'}
@@ -330,9 +332,9 @@ Return up to ${maxContacts} CURRENT people at the company who are most relevant.
 - Their DIRECT LinkedIn profile URL (https://www.linkedin.com/in/...) — this is REQUIRED
 - How long they have been at the company (in months)
 - How long they have been in their current role (in months)
-- 1 short evidence note proving they are at the company now
+- 1 short evidence note proving they are at THIS EXACT company now (e.g., "LinkedIn shows current role at ${accountName} since March 2023")
 
-IMPORTANT: Only return people whose LinkedIn profile you can find. Do NOT return people with unknown tenure.
+IMPORTANT: Only return people whose LinkedIn profile you can VERIFY shows them at "${accountName}". Do NOT return people with unknown tenure. It is better to return fewer, accurate results than more questionable ones.
 
 Prioritize real named people. If the obvious marketing leader is not public, include adjacent leaders in digital, operations, CX, IT, or executive leadership who would influence the decision.`,
           },
@@ -475,7 +477,16 @@ async function discoverForSingleAccount({
       messages: [
         {
           role: 'system',
-          content: `You are a B2B stakeholder discovery assistant. Convert research into a strict contact list for a sales rep. ONLY return contacts where you can find their LinkedIn profile URL (https://www.linkedin.com/in/...) and can estimate their tenure. Do not invent LinkedIn URLs — only use real ones you find in research. Keep notes short and evidence-based.${resolvedDivision ? ` CRITICAL: Only include people from the "${resolvedDivision}" division/business unit. Exclude people from other divisions.` : ''}`,
+          content: `You are a B2B stakeholder discovery assistant. Your PRIMARY goal is ACCURACY — never return a contact unless you have strong evidence they currently work at this specific company. Convert research into a strict contact list for a sales rep.
+
+ACCURACY RULES (non-negotiable):
+1. ONLY return contacts where you have CONCRETE EVIDENCE they currently work at this EXACT company (not a similarly-named company, not a former employee).
+2. You MUST provide their real LinkedIn profile URL (https://www.linkedin.com/in/...). Do NOT invent or guess LinkedIn URLs.
+3. You MUST verify the company name matches — "Black Dog Tavern" is NOT "Black Dog Clothing". "Delta Dental" is NOT "Delta Airlines". Pay close attention to industry context.
+4. If the company has a common name, use the website domain, industry, and other context to disambiguate. When in doubt, EXCLUDE the contact.
+5. Do NOT return contacts with unknown tenure — you must be able to estimate how long they've been there.
+6. Keep notes short and evidence-based. Include WHERE you found evidence of their employment (e.g., "Found on company leadership page", "LinkedIn shows current role since 2023").
+7. It is FAR BETTER to return 2 accurate contacts than 5 questionable ones.${resolvedDivision ? ` CRITICAL: Only include people from the "${resolvedDivision}" division/business unit. Exclude people from other divisions.` : ''}`,
         },
         {
           role: 'user',
