@@ -373,8 +373,8 @@ export function BatchDiscoveryModal({ children }: { children: React.ReactNode })
                     )}
                   </div>
                   {r.success && r.contacts?.map((c: any, ci: number) => {
-                    const companyNew = typeof c.company_tenure_months === 'number' && c.company_tenure_months < 12;
-                    const roleNew = typeof c.role_tenure_months === 'number' && c.role_tenure_months < 12;
+                    const companyNew = typeof c.company_tenure_months === 'number' && c.company_tenure_months >= 0 && c.company_tenure_months < 12;
+                    const roleNew = typeof c.role_tenure_months === 'number' && c.role_tenure_months >= 0 && c.role_tenure_months < 12;
                     return (
                       <div key={ci} className="ml-5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
                         <span className="truncate font-medium text-foreground">{c.name}</span>

@@ -322,7 +322,11 @@ ${roleBrief}
 
 ${division ? `CRITICAL: Only return people who work in or support the "${division}" division. Exclude people from other divisions.` : ''}
 
-Search LinkedIn, company leadership/about/team pages, press releases, conference speaker pages, interviews, podcasts, and local business coverage.
+Search LinkedIn, company leadership/about/team pages, press releases, conference speaker pages, interviews, podcasts, local business coverage, and industry association directories.
+
+IMPORTANT: Do NOT include interns, fellows, apprentices, or co-ops. Only full-time professional employees.
+
+For smaller or local businesses, look harder at the company website (About/Team/Leadership pages), local news coverage, and industry memberships. Even 1-2 accurate contacts is valuable.
 
 Return up to ${maxContacts} CURRENT people at the company who are most relevant. For each person include:
 - Full name
@@ -330,11 +334,11 @@ Return up to ${maxContacts} CURRENT people at the company who are most relevant.
 - Department or team they belong to
 - Why they matter to this evaluation
 - Their DIRECT LinkedIn profile URL (https://www.linkedin.com/in/...) — this is REQUIRED
-- How long they have been at the company (in months)
-- How long they have been in their current role (in months)
+- How long they have been at the company (in months), or "unknown" if not determinable
+- How long they have been in their current role (in months), or "unknown" if not determinable
 - 1 short evidence note proving they are at THIS EXACT company now (e.g., "LinkedIn shows current role at ${accountName} since March 2023")
 
-IMPORTANT: Only return people whose LinkedIn profile you can VERIFY shows them at "${accountName}". Do NOT return people with unknown tenure. It is better to return fewer, accurate results than more questionable ones.
+IMPORTANT: Only return people whose LinkedIn profile you can VERIFY shows them at "${accountName}". It is better to return fewer, accurate results than more questionable ones. If tenure is unknown, still include them — accuracy of employment is more important than tenure data.
 
 Prioritize real named people. If the obvious marketing leader is not public, include adjacent leaders in digital, operations, CX, IT, or executive leadership who would influence the decision.`,
           },
@@ -484,9 +488,11 @@ ACCURACY RULES (non-negotiable):
 2. You MUST provide their real LinkedIn profile URL (https://www.linkedin.com/in/...). Do NOT invent or guess LinkedIn URLs.
 3. You MUST verify the company name matches — "Black Dog Tavern" is NOT "Black Dog Clothing". "Delta Dental" is NOT "Delta Airlines". Pay close attention to industry context.
 4. If the company has a common name, use the website domain, industry, and other context to disambiguate. When in doubt, EXCLUDE the contact.
-5. Do NOT return contacts with unknown tenure — you must be able to estimate how long they've been there.
+5. If you can determine tenure, include it. If you cannot determine tenure, you may still include the contact — set company_tenure_months and role_tenure_months to -1 to indicate unknown. Do NOT exclude contacts solely because tenure is unknown.
 6. Keep notes short and evidence-based. Include WHERE you found evidence of their employment (e.g., "Found on company leadership page", "LinkedIn shows current role since 2023").
-7. It is FAR BETTER to return 2 accurate contacts than 5 questionable ones.${resolvedDivision ? ` CRITICAL: Only include people from the "${resolvedDivision}" division/business unit. Exclude people from other divisions.` : ''}`,
+7. It is FAR BETTER to return 2 accurate contacts than 5 questionable ones.
+8. NEVER include interns, fellows, apprentices, or co-ops. Only include full-time professional staff.
+9. For smaller or local businesses, look at the company website's About/Team/Leadership pages, local press, and industry associations. These companies may have fewer stakeholders — return whoever is relevant even if it's only 1-2 people.${resolvedDivision ? ` CRITICAL: Only include people from the "${resolvedDivision}" division/business unit. Exclude people from other divisions.` : ''}`,
         },
         {
           role: 'user',
@@ -527,9 +533,10 @@ Rules:
 - If the title suggests implementation or systems responsibility, prefer technical_buyer.
 - If the title suggests process knowledge, internal advocacy, or day-to-day ownership, prefer champion, coach, influencer, or user_buyer.
 - Exclude duplicate names and anyone already in the existing contacts list.
+- NEVER include interns, fellows, apprentices, or co-ops — only full-time professional employees.
 - CRITICAL: You MUST provide a direct LinkedIn profile URL for every contact (https://www.linkedin.com/in/...). Do NOT return a contact if you cannot find their LinkedIn profile URL.
-- CRITICAL: You MUST determine how long each contact has been at the company AND how long they have been in their current role. If you cannot determine tenure at all, exclude the contact entirely. Do NOT return contacts with unknown tenure.
-- For company_tenure_months and role_tenure_months, estimate based on available evidence (LinkedIn data, press releases, announcements). Use your best estimate.`,
+- For tenure: estimate company_tenure_months and role_tenure_months based on available evidence. If you truly cannot determine tenure, set both to -1 (unknown) — do NOT omit the contact just because tenure is unknown.
+- For smaller/local businesses with limited online presence, search the company website (About, Team, Leadership, Contact pages), local news, industry directories, and association memberships. Even 1-2 accurate contacts is valuable.`,
         },
       ],
       tools: [
@@ -598,7 +605,7 @@ Rules:
     return { accountId, accountName: resolvedAccountName, error: 'Failed to parse AI response' };
   }
 
-  // Server-side validation: enforce LinkedIn URL format and tenure data
+  // Server-side validation: enforce LinkedIn URL format, filter interns
   const validContacts = (parsed?.contacts || []).filter((contact: any) => {
     if (!contact.name || !cleanText(contact.name)) return false;
     // Must have a valid LinkedIn URL (strict format check)
@@ -606,11 +613,15 @@ Rules:
       console.log(`discover-contacts: filtered out "${contact.name}" — invalid LinkedIn URL: ${contact.linkedin_url || 'none'}`);
       return false;
     }
-    // Must have BOTH tenure data points
-    if (typeof contact.company_tenure_months !== 'number' || typeof contact.role_tenure_months !== 'number') {
-      console.log(`discover-contacts: filtered out "${contact.name}" — missing tenure data (company: ${contact.company_tenure_months}, role: ${contact.role_tenure_months})`);
+    // Filter out interns/fellows/apprentices
+    const titleLower = (contact.title || '').toLowerCase();
+    if (/\b(intern|internship|fellow|apprentice|co-op|coop)\b/.test(titleLower)) {
+      console.log(`discover-contacts: filtered out "${contact.name}" — intern/fellow title: ${contact.title}`);
       return false;
     }
+    // Normalize unknown tenure to -1 instead of rejecting
+    if (typeof contact.company_tenure_months !== 'number') contact.company_tenure_months = -1;
+    if (typeof contact.role_tenure_months !== 'number') contact.role_tenure_months = -1;
     return true;
   });
 
