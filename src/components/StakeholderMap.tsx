@@ -369,6 +369,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
             <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
               <span className="truncate">
                 {accountName}
+                {division ? ` → ${division}` : ''}
                 {website ? ` • ${website}` : ''}
                 {industry ? ` • ${industry}` : ''}
               </span>
