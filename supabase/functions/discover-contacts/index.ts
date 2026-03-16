@@ -51,6 +51,65 @@ function dedupeContacts(contacts: any[]) {
   });
 }
 
+// Strict LinkedIn URL validation — reject generic, placeholder, or malformed URLs
+function isValidLinkedInUrl(url?: string | null): boolean {
+  if (!url) return false;
+  const trimmed = url.trim();
+  // Must match linkedin.com/in/{slug} pattern
+  const match = trimmed.match(/^https?:\/\/(www\.)?linkedin\.com\/in\/([a-zA-Z0-9_-]+)\/?$/);
+  if (!match) return false;
+  const slug = match[2];
+  // Reject generic/placeholder slugs
+  const blocked = ['example', 'placeholder', 'unknown', 'profile', 'user', 'test', 'firstname-lastname', 'john-doe', 'jane-doe'];
+  if (blocked.includes(slug.toLowerCase())) return false;
+  // Reject too-short slugs (likely fake)
+  if (slug.length < 3) return false;
+  return true;
+}
+
+// Verify a LinkedIn URL is a real page using Firecrawl (returns true/false)
+async function verifyLinkedInUrl(url: string): Promise<boolean> {
+  const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY');
+  if (!firecrawlKey) return true; // Can't verify without Firecrawl, assume valid
+  
+  try {
+    const resp = await fetch(FIRECRAWL_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${firecrawlKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url,
+        formats: ['markdown'],
+        onlyMainContent: true,
+        waitFor: 3000,
+        timeout: 10000,
+      }),
+    });
+    
+    if (!resp.ok) {
+      const text = await resp.text();
+      console.log(`LinkedIn verify failed for ${url}: ${resp.status}`);
+      // 402 = no credits, don't penalize the contact
+      if (resp.status === 402) return true;
+      return false;
+    }
+    
+    const data = await resp.json();
+    const markdown = cleanText(data?.data?.markdown || data?.markdown || '');
+    // If we got content and it doesn't look like a 404/error page, consider it valid
+    if (markdown.length > 100 && !markdown.toLowerCase().includes('page not found') && !markdown.toLowerCase().includes('this page doesn')) {
+      return true;
+    }
+    console.log(`LinkedIn verify: ${url} looks like a dead page (content length: ${markdown.length})`);
+    return false;
+  } catch (err) {
+    console.error('LinkedIn verify exception:', err);
+    return true; // On error, don't penalize
+  }
+}
+
 function getDiscoveryBrief({
   mode,
   motion,
