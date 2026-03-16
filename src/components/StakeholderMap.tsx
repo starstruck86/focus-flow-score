@@ -988,16 +988,16 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                 >
                   <span className="text-sm font-semibold text-foreground">{accountName}</span>
                 </div>
-                <div className="w-px h-5 bg-border" />
+                <div className="w-px h-4 sm:h-5 bg-border" />
                 <div className="relative flex items-start">
                   {(roots.length + 1) > 1 && (
                     <div className="absolute top-0 bg-border h-px" style={{ left: `calc(50% / ${roots.length + 1})`, right: `calc(50% / ${roots.length + 1})` }} />
                   )}
-                  <div className="flex gap-3 items-start">
+                  <div className="flex gap-2 sm:gap-3 items-start">
                     {roots.map((root: any) => (
                       <div key={root.id} className="flex flex-col items-center">
-                        <div className="w-px h-5 bg-border" />
-                        {renderTree(root)}
+                        <div className="w-px h-4 sm:h-5 bg-border" />
+                        {renderTree(root, 0)}
                       </div>
                     ))}
                     {/* Root-level blank placeholder */}
