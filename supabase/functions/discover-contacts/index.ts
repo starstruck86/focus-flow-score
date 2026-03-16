@@ -306,6 +306,8 @@ async function runPerplexityResearch({
             role: 'user',
             content: `Find current employees and likely buying-committee stakeholders at "${accountName}"${division ? ` specifically within the "${division}" division/business unit` : ''}.
 
+CRITICAL ACCURACY REQUIREMENT: "${accountName}" must be matched EXACTLY. Do NOT confuse this company with similarly-named companies. Use the website (${website || 'unknown'}) and industry (${industry || 'unknown'}) to disambiguate. If the company has a common name, be extra careful to verify each person works at THIS specific company.
+
 Company context:
 - Website: ${website || 'unknown'}
 - Industry: ${industry || 'unknown'}
@@ -330,9 +332,9 @@ Return up to ${maxContacts} CURRENT people at the company who are most relevant.
 - Their DIRECT LinkedIn profile URL (https://www.linkedin.com/in/...) — this is REQUIRED
 - How long they have been at the company (in months)
 - How long they have been in their current role (in months)
-- 1 short evidence note proving they are at the company now
+- 1 short evidence note proving they are at THIS EXACT company now (e.g., "LinkedIn shows current role at ${accountName} since March 2023")
 
-IMPORTANT: Only return people whose LinkedIn profile you can find. Do NOT return people with unknown tenure.
+IMPORTANT: Only return people whose LinkedIn profile you can VERIFY shows them at "${accountName}". Do NOT return people with unknown tenure. It is better to return fewer, accurate results than more questionable ones.
 
 Prioritize real named people. If the obvious marketing leader is not public, include adjacent leaders in digital, operations, CX, IT, or executive leadership who would influence the decision.`,
           },
