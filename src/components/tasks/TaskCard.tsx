@@ -168,7 +168,7 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
           →
         </div>
 
-        <div className="flex items-start gap-2.5 p-2.5">
+        <div className="flex items-start gap-2.5 p-3">
           {/* Left: checkbox + status */}
           <div className="flex flex-col items-center gap-1 pt-0.5">
             <Checkbox
