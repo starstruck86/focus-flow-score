@@ -418,38 +418,55 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
   }
 
   return (
-    <Card className="metric-card border-primary/20">
+    <Card
+      className={cn("metric-card border-primary/20 transition-all", isDragOver && "ring-2 ring-primary/50 bg-primary/5")}
+      onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
+      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false); }}
+      onDrop={handleDrop}
+    >
       <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <CardTitle className="text-base font-display flex items-center gap-2">
-              <Users className="h-4 w-4 text-primary" />
-              Stakeholder Map
-              {totalContacts > 0 && (
-                <Badge variant="outline" className="text-[10px]">
-                  {mappedContacts}/{totalContacts} mapped
-                </Badge>
-              )}
-            </CardTitle>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              Tune discovery by buyer group, target count, or deal-specific guidance.
-            </p>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-1.5">
-            <Button variant="ghost" size="sm" onClick={() => setShowTuning((value) => !value)}>
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              <span className="ml-1 text-xs">Tune</span>
-            </Button>
-            <Button variant="ghost" size="sm" onClick={handleDiscover} disabled={isDiscovering}>
-              <Sparkles className={cn('h-3.5 w-3.5', isDiscovering && 'animate-spin')} />
-              <span className="ml-1 text-xs">{isDiscovering ? 'Finding...' : 'AI Discover'}</span>
-            </Button>
-          </div>
+        <CardTitle className="text-base font-display flex items-center gap-2">
+          <Users className="h-4 w-4 text-primary" />
+          Stakeholder Map
+          {totalContacts > 0 && (
+            <Badge variant="outline" className="text-[10px]">
+              {mappedContacts}/{totalContacts} mapped
+            </Badge>
+          )}
+        </CardTitle>
+        <div className="flex items-center gap-1.5 mt-2">
+          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => setShowTuning((v) => !v)}>
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Tune
+          </Button>
+          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={handleDiscover} disabled={isDiscovering}>
+            <Sparkles className={cn('h-3.5 w-3.5', isDiscovering && 'animate-spin')} />
+            {isDiscovering ? 'Finding...' : 'AI Discover'}
+          </Button>
+          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={handleUploadClick} disabled={isParsingDrop}>
+            {isParsingDrop ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            Screenshot
+          </Button>
         </div>
       </CardHeader>
 
       <CardContent className="space-y-3">
+        {/* Drag-drop overlay */}
+        {isDragOver && !isParsingDrop && (
+          <div className="flex flex-col items-center gap-2 p-6 rounded-lg border-2 border-dashed border-primary/40 bg-primary/5 text-center">
+            <ImagePlus className="h-8 w-8 text-primary/60" />
+            <p className="text-sm font-medium text-primary">Drop screenshot to extract contacts</p>
+            <p className="text-xs text-muted-foreground">LinkedIn, CRM, or any contact list</p>
+          </div>
+        )}
+
+        {isParsingDrop && (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20 text-sm">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <span>Extracting contacts from screenshot...</span>
+          </div>
+        )}
         {showTuning && (
           <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
             <div className="grid gap-3 md:grid-cols-[1fr_1fr_100px]">
