@@ -237,6 +237,112 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
     setDivision('');
   };
 
+  const handleScreenshotFiles = useCallback(async (files: File[]) => {
+    const imageFiles = files.filter(f => f.type.startsWith('image/'));
+    if (imageFiles.length === 0 || !user) return;
+
+    setIsParsingDrop(true);
+    try {
+      const uploadedUrls: string[] = [];
+      for (let i = 0; i < imageFiles.length; i++) {
+        const ext = imageFiles[i].name.split('.').pop() || 'png';
+        const path = `${user.id}/stakeholder/${accountId}/${Date.now()}-${i}.${ext}`;
+        const { error } = await supabase.storage
+          .from('enrichment-screenshots')
+          .upload(path, imageFiles[i], { upsert: true });
+        if (error) { console.error('Upload error:', error); continue; }
+        const { data: signedData } = await supabase.storage
+          .from('enrichment-screenshots')
+          .createSignedUrl(path, 3600);
+        if (signedData?.signedUrl) uploadedUrls.push(signedData.signedUrl);
+      }
+
+      if (uploadedUrls.length === 0) { toast.error('Failed to upload screenshot'); return; }
+
+      toast.info(`Extracting contacts from ${uploadedUrls.length} screenshot(s)...`);
+
+      const { data, error } = await supabase.functions.invoke('parse-account-screenshot', {
+        body: {
+          imageUrls: uploadedUrls,
+          context: `This is a CONTACTS screenshot for "${accountName}". Extract each PERSON as a contact under one account. Focus on person names, job titles, departments, emails, LinkedIn URLs.`,
+        },
+      });
+
+      if (error) throw new Error(error.message);
+      if (!data?.success) throw new Error(data?.error || 'Extraction failed');
+
+      const extractedAccounts = data.accounts || [];
+      const allContacts: { name: string; title?: string; email?: string; department?: string }[] = [];
+      for (const acc of extractedAccounts) {
+        if (acc.contacts) allContacts.push(...acc.contacts);
+      }
+      if (allContacts.length === 0) {
+        for (const acc of extractedAccounts) {
+          if (acc.name) allContacts.push({ name: acc.name, title: acc.industry || acc.notes || undefined });
+        }
+      }
+
+      if (allContacts.length === 0) { toast.info('No contacts found in screenshot'); return; }
+
+      let added = 0;
+      for (const contact of allContacts) {
+        const { data: existing } = await supabase
+          .from('contacts')
+          .select('id')
+          .eq('account_id', accountId)
+          .ilike('name', contact.name)
+          .maybeSingle();
+
+        if (!existing) {
+          await supabase.from('contacts').insert({
+            user_id: user.id,
+            account_id: accountId,
+            name: contact.name,
+            title: contact.title || null,
+            email: contact.email || null,
+            department: contact.department || null,
+            status: 'target',
+            buyer_role: 'unknown',
+            influence_level: 'medium',
+            discovery_source: 'screenshot-drop',
+          });
+          added++;
+        }
+      }
+
+      qc.invalidateQueries({ queryKey: ['stakeholder-contacts', accountId] });
+      toast.success(`Added ${added} contact(s)`, {
+        description: allContacts.length > added ? `${allContacts.length - added} duplicate(s) skipped` : undefined,
+      });
+    } catch (err) {
+      toast.error('Failed to parse screenshot', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setIsParsingDrop(false);
+      setIsDragOver(false);
+    }
+  }, [user, accountId, accountName, qc]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    handleScreenshotFiles(Array.from(e.dataTransfer.files));
+  }, [handleScreenshotFiles]);
+
+  const handleUploadClick = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.onchange = (e) => {
+      const target = e.target as HTMLInputElement;
+      if (target.files) handleScreenshotFiles(Array.from(target.files));
+    };
+    input.click();
+  };
+
   const confirmContact = (contact: any) => {
     const tenureParts: string[] = [];
     if (typeof contact.company_tenure_months === 'number') tenureParts.push(`Company tenure: ${contact.company_tenure_months}mo`);
