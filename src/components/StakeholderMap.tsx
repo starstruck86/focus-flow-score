@@ -461,14 +461,14 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
           setDropTargetId(null);
         }}
         className={cn(
-          "relative rounded-lg border-2 bg-card shadow-sm transition-all w-[160px] cursor-grab active:cursor-grabbing",
-          config.bg.split(' ')[0] ? `border-${config.bg.split('border-')[1]?.split(' ')[0] || 'border'}` : 'border-border',
+          "relative rounded-lg border-2 bg-card shadow-sm transition-all w-[140px] sm:w-[160px] cursor-grab active:cursor-grabbing",
+          config.borderClass,
           draggedContactId === contact.id && "opacity-40 scale-95",
           dropTargetId === contact.id && "ring-2 ring-primary shadow-lg scale-105",
         )}
       >
         {/* Color top bar */}
-        <div className={cn("h-1.5 rounded-t-[6px]", config.bg.split(' ')[0])} />
+        <div className={cn("h-1.5 rounded-t-[6px]", config.barClass)} />
 
         <div className="px-3 py-2.5 text-center">
           <div className="flex items-center justify-center gap-1 mb-0.5">
