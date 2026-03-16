@@ -18,9 +18,9 @@ const TIER_CONFIG = {
 function ScoreBar({ label, value, max = 100 }: { label: string; value: number; max?: number }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[10px] text-muted-foreground w-16 shrink-0">{label}</span>
-      <Progress value={(value / max) * 100} className="h-1 flex-1" />
-      <span className="text-[10px] font-mono w-6 text-right">{value}</span>
+      <span className="text-xs text-muted-foreground w-20 shrink-0">{label}</span>
+      <Progress value={(value / max) * 100} className="h-1.5 flex-1" />
+      <span className="text-xs font-mono w-8 text-right">{value}</span>
     </div>
   );
 }
