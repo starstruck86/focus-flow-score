@@ -1324,6 +1324,12 @@ export default function WeeklyOutreach() {
                   <Upload className="h-4 w-4 mr-2" />
                   Claude Import
                 </Button>
+                <BatchDiscoveryModal>
+                  <Button variant="outline">
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    Batch Discover
+                  </Button>
+                </BatchDiscoveryModal>
                 
                 <Dialog open={showBulkImportDialog} onOpenChange={(open) => {
                   setShowBulkImportDialog(open);
