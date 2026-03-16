@@ -151,6 +151,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
         discoveryMode,
         maxContacts: Number(maxContacts),
         focusPrompt: focusPrompt.trim() || null,
+        division: division.trim() || null,
       };
 
       const { data, error } = await supabase.functions.invoke('discover-contacts', {
