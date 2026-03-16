@@ -608,7 +608,7 @@ async function discoverForSingleAccount({
 
 ACCURACY RULES (non-negotiable):
 1. ONLY return contacts where you have CONCRETE EVIDENCE they currently work at this EXACT company (not a similarly-named company, not a former employee).
-2. You MUST provide their real LinkedIn profile URL (https://www.linkedin.com/in/...). Do NOT invent or guess LinkedIn URLs.
+2. You MUST provide their real LinkedIn profile URL (https://www.linkedin.com/in/...). Do NOT fabricate or guess LinkedIn URLs. NEVER construct a URL by combining someone's name with the company name (e.g., "linkedin.com/in/john-smith-arrow" is almost certainly fake). Only use LinkedIn URLs that you found in the web research data or on the company website. If you cannot find the real LinkedIn URL, DO NOT include the contact.
 3. You MUST verify the company name matches — "Black Dog Tavern" is NOT "Black Dog Clothing". "Delta Dental" is NOT "Delta Airlines". Pay close attention to industry context.
 4. If the company has a common name, use the website domain, industry, and other context to disambiguate. When in doubt, EXCLUDE the contact.
 5. If you can determine tenure, include it. If you cannot determine tenure, you may still include the contact — set company_tenure_months and role_tenure_months to -1 to indicate unknown. Do NOT exclude contacts solely because tenure is unknown.
