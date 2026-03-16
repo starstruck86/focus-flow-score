@@ -38,14 +38,14 @@ import {
 import { cn } from '@/lib/utils';
 
 const BUYER_ROLES = [
-  { value: 'economic_buyer', label: 'Economic Buyer', icon: Crown, color: 'text-status-yellow', bg: 'bg-status-yellow/10 border-status-yellow/30', critical: true },
-  { value: 'champion', label: 'Champion', icon: Shield, color: 'text-primary', bg: 'bg-primary/10 border-primary/30', critical: true },
-  { value: 'technical_buyer', label: 'Technical Buyer', icon: Target, color: 'text-accent', bg: 'bg-accent/10 border-accent/30', critical: false },
-  { value: 'user_buyer', label: 'User Buyer', icon: UserCheck, color: 'text-status-green', bg: 'bg-status-green/10 border-status-green/30', critical: false },
-  { value: 'coach', label: 'Coach', icon: Lightbulb, color: 'text-foreground', bg: 'bg-secondary/70 border-border', critical: true },
-  { value: 'influencer', label: 'Influencer', icon: Users, color: 'text-muted-foreground', bg: 'bg-muted/60 border-border', critical: false },
-  { value: 'blocker', label: 'Blocker', icon: Ban, color: 'text-destructive', bg: 'bg-destructive/10 border-destructive/30', critical: false },
-  { value: 'unknown', label: 'Unknown', icon: Users, color: 'text-muted-foreground', bg: 'bg-muted/50 border-border', critical: false },
+  { value: 'economic_buyer', label: 'Economic Buyer', icon: Crown, color: 'text-status-yellow', bgClass: 'bg-status-yellow/10', borderClass: 'border-status-yellow/30', barClass: 'bg-status-yellow/30', critical: true },
+  { value: 'champion', label: 'Champion', icon: Shield, color: 'text-primary', bgClass: 'bg-primary/10', borderClass: 'border-primary/30', barClass: 'bg-primary/30', critical: true },
+  { value: 'technical_buyer', label: 'Technical Buyer', icon: Target, color: 'text-accent', bgClass: 'bg-accent/10', borderClass: 'border-accent/30', barClass: 'bg-accent/30', critical: false },
+  { value: 'user_buyer', label: 'User Buyer', icon: UserCheck, color: 'text-status-green', bgClass: 'bg-status-green/10', borderClass: 'border-status-green/30', barClass: 'bg-status-green/30', critical: false },
+  { value: 'coach', label: 'Coach', icon: Lightbulb, color: 'text-foreground', bgClass: 'bg-secondary/70', borderClass: 'border-border', barClass: 'bg-secondary', critical: true },
+  { value: 'influencer', label: 'Influencer', icon: Users, color: 'text-muted-foreground', bgClass: 'bg-muted/60', borderClass: 'border-border', barClass: 'bg-muted', critical: false },
+  { value: 'blocker', label: 'Blocker', icon: Ban, color: 'text-destructive', bgClass: 'bg-destructive/10', borderClass: 'border-destructive/30', barClass: 'bg-destructive/30', critical: false },
+  { value: 'unknown', label: 'Unknown', icon: Users, color: 'text-muted-foreground', bgClass: 'bg-card', borderClass: 'border-border', barClass: 'bg-muted', critical: false },
 ] as const;
 
 const INFLUENCE_LEVELS = ['high', 'medium', 'low'] as const;
@@ -461,14 +461,14 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
           setDropTargetId(null);
         }}
         className={cn(
-          "relative rounded-lg border-2 bg-card shadow-sm transition-all w-[160px] cursor-grab active:cursor-grabbing",
-          config.bg.split(' ')[0] ? `border-${config.bg.split('border-')[1]?.split(' ')[0] || 'border'}` : 'border-border',
+          "relative rounded-lg border-2 bg-card shadow-sm transition-all w-[140px] sm:w-[160px] cursor-grab active:cursor-grabbing",
+          config.borderClass,
           draggedContactId === contact.id && "opacity-40 scale-95",
           dropTargetId === contact.id && "ring-2 ring-primary shadow-lg scale-105",
         )}
       >
         {/* Color top bar */}
-        <div className={cn("h-1.5 rounded-t-[6px]", config.bg.split(' ')[0])} />
+        <div className={cn("h-1.5 rounded-t-[6px]", config.barClass)} />
 
         <div className="px-3 py-2.5 text-center">
           <div className="flex items-center justify-center gap-1 mb-0.5">
@@ -583,7 +583,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
 
     if (isAdding) {
       return (
-        <div className="rounded-lg border-2 border-dashed border-primary/40 bg-primary/5 w-[160px] p-3 space-y-2">
+        <div className="rounded-lg border-2 border-dashed border-primary/40 bg-primary/5 w-[140px] sm:w-[160px] p-2.5 space-y-1.5">
           <Input
             className="h-7 text-xs text-center"
             placeholder="Name"
@@ -614,7 +614,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
     return (
       <div
         className={cn(
-          "rounded-lg border-2 border-dashed border-border/40 bg-muted/20 w-[160px] py-4 px-3 text-center cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-all group",
+          "rounded-lg border-2 border-dashed border-border/40 bg-muted/20 w-[140px] sm:w-[160px] py-3 px-2 text-center cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-all group",
           draggedContactId && "border-primary/30 bg-primary/5",
         )}
         onClick={() => { setAddingUnderParent(parentName); setQuickAddName(''); setQuickAddTitle(''); }}
@@ -625,16 +625,16 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
           e.preventDefault();
           e.stopPropagation();
           if (draggedContactId) {
-            updateContact.mutate({ id: draggedContactId, updates: { reporting_to: parentName } });
+            updateContact.mutate({ id: draggedContactId, updates: { reporting_to: parentName || null } });
             toast.success('Reporting line updated');
             setDraggedContactId(null);
             setDropTargetId(null);
           }
         }}
       >
-        <Plus className="h-4 w-4 mx-auto text-muted-foreground/50 group-hover:text-primary transition-colors" />
-        <p className="text-[11px] text-muted-foreground/60 group-hover:text-muted-foreground mt-1 font-medium">Add Name</p>
-        <p className="text-[10px] text-muted-foreground/40 group-hover:text-muted-foreground/60">Role/Position</p>
+        <Plus className="h-3.5 w-3.5 mx-auto text-muted-foreground/50 group-hover:text-primary transition-colors" />
+        <p className="text-[10px] text-muted-foreground/60 group-hover:text-muted-foreground mt-0.5 font-medium">Add Name</p>
+        <p className="text-[9px] text-muted-foreground/40 group-hover:text-muted-foreground/60">Role/Position</p>
       </div>
     );
   };
@@ -644,7 +644,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
     if (!draggedContactId) return null;
     return (
       <div
-        className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 w-[160px] py-4 px-3 text-center transition-all"
+        className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 w-[140px] sm:w-[160px] py-3 px-2 text-center transition-all"
         onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
         onDrop={(e) => {
           e.preventDefault();
@@ -657,37 +657,53 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
           }
         }}
       >
-        <p className="text-[11px] text-primary font-medium">Drop here for root level</p>
+        <p className="text-[10px] text-primary font-medium">Drop here for root</p>
       </div>
     );
   };
 
   // Recursive tree renderer with connecting lines
-  const renderTree = (node: any): React.ReactNode => {
+  const renderTree = (node: any, depth: number = 0): React.ReactNode => {
     const children = childrenMap.get(node.id) || [];
-    const allItems = [...children];
+    const isLeaf = children.length === 0;
+    // Show blank placeholder only on leaf nodes (max depth 3 to prevent infinite expansion)
+    const showBlank = isLeaf && depth < 3;
+
+    if (children.length === 0 && !showBlank) {
+      return (
+        <div key={node.id} className="flex flex-col items-center">
+          {renderNodeCard(node)}
+        </div>
+      );
+    }
+
+    const visibleItems = [...children];
 
     return (
       <div key={node.id} className="flex flex-col items-center">
         {renderNodeCard(node)}
 
-        {/* Always show children + blank placeholder */}
-        <div className="w-px h-5 bg-border" />
+        <div className="w-px h-4 sm:h-5 bg-border" />
         <div className="relative flex items-start">
-          {(allItems.length + 1) > 1 && (
-            <div className="absolute top-0 bg-border h-px" style={{ left: `calc(50% / ${allItems.length + 1})`, right: `calc(50% / ${allItems.length + 1})` }} />
+          {(visibleItems.length + (showBlank ? 1 : 0)) > 1 && (
+            <div className="absolute top-0 bg-border h-px" style={{
+              left: `calc(50% / ${visibleItems.length + (showBlank ? 1 : 0)})`,
+              right: `calc(50% / ${visibleItems.length + (showBlank ? 1 : 0)})`,
+            }} />
           )}
-          <div className="flex gap-3 items-start">
-            {allItems.map((child: any) => (
+          <div className="flex gap-2 sm:gap-3 items-start">
+            {visibleItems.map((child: any) => (
               <div key={child.id} className="flex flex-col items-center">
-                <div className="w-px h-5 bg-border" />
-                {renderTree(child)}
+                <div className="w-px h-4 sm:h-5 bg-border" />
+                {renderTree(child, depth + 1)}
               </div>
             ))}
-            <div className="flex flex-col items-center">
-              <div className="w-px h-5 bg-border/30" />
-              {renderBlankCard(node.name)}
-            </div>
+            {showBlank && (
+              <div className="flex flex-col items-center">
+                <div className="w-px h-4 sm:h-5 bg-border/30" />
+                {renderBlankCard(node.name)}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -919,7 +935,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                     </div>
                     <p className="truncate text-xs text-muted-foreground">{contact.title}{contact.department ? ` · ${contact.department}` : ''}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <Badge variant="outline" className={cn('text-[9px]', getRoleConfig(contact.buyer_role).bg)}>
+                      <Badge variant="outline" className={cn('text-[9px]', getRoleConfig(contact.buyer_role).bgClass, getRoleConfig(contact.buyer_role).borderClass)}>
                         {getRoleConfig(contact.buyer_role).label}
                       </Badge>
                       {typeof contact.relevance_score === 'number' && contact.relevance_score >= 0 && (
@@ -972,21 +988,21 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                 >
                   <span className="text-sm font-semibold text-foreground">{accountName}</span>
                 </div>
-                <div className="w-px h-5 bg-border" />
+                <div className="w-px h-4 sm:h-5 bg-border" />
                 <div className="relative flex items-start">
                   {(roots.length + 1) > 1 && (
                     <div className="absolute top-0 bg-border h-px" style={{ left: `calc(50% / ${roots.length + 1})`, right: `calc(50% / ${roots.length + 1})` }} />
                   )}
-                  <div className="flex gap-3 items-start">
+                  <div className="flex gap-2 sm:gap-3 items-start">
                     {roots.map((root: any) => (
                       <div key={root.id} className="flex flex-col items-center">
-                        <div className="w-px h-5 bg-border" />
-                        {renderTree(root)}
+                        <div className="w-px h-4 sm:h-5 bg-border" />
+                        {renderTree(root, 0)}
                       </div>
                     ))}
                     {/* Root-level blank placeholder */}
                     <div className="flex flex-col items-center">
-                      <div className="w-px h-5 bg-border/30" />
+                      <div className="w-px h-4 sm:h-5 bg-border/30" />
                       {renderBlankCard('')}
                     </div>
                   </div>
