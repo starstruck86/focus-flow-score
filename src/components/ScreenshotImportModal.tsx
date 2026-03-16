@@ -53,6 +53,7 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
   const addAccount = useStore(s => s.addAccount);
   const addRenewal = useStore(s => s.addRenewal);
   const accounts = useStore(s => s.accounts);
+  const updateAccount = useStore(s => s.updateAccount);
 
   const addFiles = useCallback((newFiles: FileList | File[]) => {
     const MAX_SIZE = 10 * 1024 * 1024; // 10MB per file
