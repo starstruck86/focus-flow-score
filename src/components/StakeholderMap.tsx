@@ -582,6 +582,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
               );
             })}
           </div>
+          </div>
         )}
       </CardContent>
     </Card>
