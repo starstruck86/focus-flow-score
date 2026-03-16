@@ -182,10 +182,10 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
           <div className="flex-1 min-w-0 space-y-1">
             {/* Top row: title */}
             <div className="flex items-center gap-1.5">
-              <button onClick={cycleStatus} className={cn("shrink-0 h-5 px-1.5 rounded text-[9px] font-bold border transition-colors", statusMeta.color)}>
+              <button onClick={cycleStatus} className={cn("shrink-0 h-6 px-2 rounded text-[10px] font-bold border transition-colors", statusMeta.color)}>
                 {statusMeta.shortLabel}
               </button>
-              <button onClick={cyclePriority} className={cn("shrink-0 h-5 w-6 rounded text-[9px] font-bold", PRIORITY_COLORS[task.priority])}>
+              <button onClick={cyclePriority} className={cn("shrink-0 h-6 w-7 rounded text-[10px] font-bold", PRIORITY_COLORS[task.priority])}>
                 {task.priority}
               </button>
               {isRecurring && <Repeat className="h-3 w-3 text-primary shrink-0" />}
