@@ -88,6 +88,12 @@ const BLOCK_ACTIONS: Record<string, { label: string; route?: string; dispatch?: 
   meeting: { label: '→ Meeting Prep', dispatch: 'scroll-meeting-prep' },
 };
 
+const WORKSTREAM_CONFIG: Record<string, { label: string; icon: typeof Rocket; color: string }> = {
+  new_logo: { label: 'New Logo', icon: Rocket, color: 'text-blue-500' },
+  renewal: { label: 'Renewal', icon: Shield, color: 'text-status-green' },
+  general: { label: 'General', icon: BriefcaseBusiness, color: 'text-muted-foreground' },
+};
+
 export function DailyTimeBlocks() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -98,6 +104,9 @@ export function DailyTimeBlocks() {
   const [feedbackText, setFeedbackText] = useState('');
   const [expanded, setExpanded] = useState(true);
   const [currentIdx, setCurrentIdx] = useState(-1);
+  const [editingBlock, setEditingBlock] = useState<number | null>(null);
+  const [editLabel, setEditLabel] = useState('');
+  const [editGoals, setEditGoals] = useState<string[]>([]);
 
   const { data: plan, isLoading } = useQuery({
     queryKey: ['daily-time-blocks', todayStr],
