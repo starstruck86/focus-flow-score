@@ -226,6 +226,29 @@ export function DailyTimeBlocks() {
       .eq('id', plan.id);
   }, [plan, todayStr, queryClient]);
 
+  // Edit block inline
+  const startEditBlock = useCallback((blockIdx: number) => {
+    if (!plan) return;
+    const block = (plan.blocks as TimeBlock[])[blockIdx];
+    setEditingBlock(blockIdx);
+    setEditLabel(block.label);
+    setEditGoals([...block.goals]);
+  }, [plan]);
+
+  const saveEditBlock = useCallback(async () => {
+    if (!plan || editingBlock === null) return;
+    const blocks = [...(plan.blocks as TimeBlock[])];
+    blocks[editingBlock] = { ...blocks[editingBlock], label: editLabel, goals: editGoals };
+    
+    queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks });
+    await supabase
+      .from('daily_time_blocks' as any)
+      .update({ blocks })
+      .eq('id', plan.id);
+    setEditingBlock(null);
+    toast.success('Block updated');
+  }, [plan, editingBlock, editLabel, editGoals, todayStr, queryClient]);
+
   // Calculate progress
   const blocks = (plan?.blocks || []) as TimeBlock[];
   const totalGoals = blocks.reduce((s, b) => s + b.goals.length, 0);
