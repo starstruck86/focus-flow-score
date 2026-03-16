@@ -91,30 +91,58 @@ export function BatchDiscoveryModal({ children }: { children: React.ReactNode })
 
     const ids = Array.from(selectedIds);
     const batchResults: BatchResult[] = [];
+    const MAX_RETRIES = 2;
+    const TIMEOUT_MS = 90_000; // 90s per account
 
-    // Process one at a time to avoid edge function timeouts
     for (let i = 0; i < ids.length; i++) {
       const accountId = ids[i];
       const account = accounts?.find((a) => a.id === accountId);
       setProgress(Math.round(((i) / ids.length) * 100));
 
-      try {
-        const { data, error } = await supabase.functions.invoke('discover-contacts', {
-          body: {
-            accountId,
-            accountName: account?.name,
-            website: account?.website,
-            industry: account?.industry,
-            discoveryMode,
-            maxContacts: Number(maxContacts),
-          },
-        });
+      let lastError = '';
+      let succeeded = false;
 
-        if (error) {
-          batchResults.push({ accountId, accountName: account?.name, error: String(error.message || error) });
-        } else if (data?.error) {
-          batchResults.push({ accountId, accountName: account?.name || data.accountName, error: data.error });
-        } else {
+      for (let attempt = 0; attempt <= MAX_RETRIES && !succeeded; attempt++) {
+        if (attempt > 0) {
+          // Exponential backoff: 2s, 4s
+          await new Promise((r) => setTimeout(r, 2000 * attempt));
+        }
+
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+          const { data, error } = await supabase.functions.invoke('discover-contacts', {
+            body: {
+              accountId,
+              accountName: account?.name,
+              website: account?.website,
+              industry: account?.industry,
+              discoveryMode,
+              maxContacts: Number(maxContacts),
+            },
+          });
+
+          clearTimeout(timeoutId);
+
+          if (error) {
+            lastError = String(error.message || error);
+            // Don't retry on auth errors
+            if (String(error).includes('401') || String(error).includes('Unauthorized')) break;
+            continue;
+          }
+
+          if (data?.error) {
+            lastError = data.error;
+            // Don't retry on rate limits — wait longer
+            if (data.error.includes('Rate limit')) {
+              await new Promise((r) => setTimeout(r, 5000));
+              continue;
+            }
+            if (data.error.includes('credits')) break; // No point retrying
+            continue;
+          }
+
           batchResults.push({
             accountId,
             accountName: account?.name || data.accountName,
@@ -123,12 +151,21 @@ export function BatchDiscoveryModal({ children }: { children: React.ReactNode })
             total_found: data.total_found,
             contacts: data.contacts,
           });
+          succeeded = true;
+        } catch (err) {
+          lastError = err instanceof Error ? err.message : 'Unknown error';
+          if (lastError.includes('abort')) {
+            lastError = `Timed out after ${TIMEOUT_MS / 1000}s`;
+            break; // Don't retry timeouts
+          }
         }
-      } catch (err) {
+      }
+
+      if (!succeeded) {
         batchResults.push({
           accountId,
           accountName: account?.name,
-          error: err instanceof Error ? err.message : 'Unknown error',
+          error: lastError || 'Failed after retries',
         });
       }
 
@@ -140,11 +177,11 @@ export function BatchDiscoveryModal({ children }: { children: React.ReactNode })
 
     const succeeded = batchResults.filter((r) => r.success);
     const totalNew = succeeded.reduce((sum, r) => sum + (r.new_contacts || 0), 0);
+    const retryNote = batchResults.some((r) => r.error) ? ` • ${batchResults.filter((r) => r.error).length} failed` : '';
     toast.success(`Batch discovery complete`, {
-      description: `${succeeded.length}/${ids.length} accounts • ${totalNew} total new contacts found`,
+      description: `${succeeded.length}/${ids.length} accounts • ${totalNew} total new contacts${retryNote}`,
     });
 
-    // Invalidate stakeholder queries for all processed accounts
     for (const id of ids) {
       qc.invalidateQueries({ queryKey: ['stakeholder-contacts', id] });
     }

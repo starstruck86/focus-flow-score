@@ -438,8 +438,9 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
             {discoveredContacts.map((contact, index) => {
               const companyNew = typeof contact.company_tenure_months === 'number' && contact.company_tenure_months < 12;
               const roleNew = typeof contact.role_tenure_months === 'number' && contact.role_tenure_months < 12;
+              const linkedinFailed = contact.linkedin_verified === false;
               return (
-              <div key={`${contact.name}-${index}`} className="flex items-start justify-between gap-2 rounded bg-background/80 p-2">
+              <div key={`${contact.name}-${index}`} className={cn('flex items-start justify-between gap-2 rounded bg-background/80 p-2', linkedinFailed && 'opacity-60 border border-destructive/30')}>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-sm font-medium">{contact.name}</span>
@@ -448,10 +449,17 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                         href={contact.linkedin_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-primary hover:text-primary/80"
+                        className={cn('hover:opacity-80', linkedinFailed ? 'text-destructive' : 'text-primary')}
+                        title={linkedinFailed ? 'LinkedIn profile could not be verified' : 'Open LinkedIn profile'}
                       >
                         <Linkedin className="h-3 w-3" />
                       </a>
+                    )}
+                    {contact.linkedin_verified === true && (
+                      <Badge variant="outline" className="text-[8px] h-4 border-status-green/50 bg-status-green/10 text-status-green">✓ verified</Badge>
+                    )}
+                    {linkedinFailed && (
+                      <Badge variant="outline" className="text-[8px] h-4 border-destructive/50 bg-destructive/10 text-destructive">unverified</Badge>
                     )}
                   </div>
                   <p className="truncate text-xs text-muted-foreground">
@@ -463,7 +471,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                       {getRoleConfig(contact.buyer_role).label}
                     </Badge>
                     {contact.confidence && (
-                      <Badge variant="outline" className="text-[9px] capitalize">
+                      <Badge variant="outline" className={cn('text-[9px] capitalize', contact.confidence === 'verified' ? 'border-status-green/50 text-status-green' : contact.confidence === 'suggested' ? 'border-status-yellow/50 text-status-yellow' : '')}>
                         {contact.confidence}
                       </Badge>
                     )}
