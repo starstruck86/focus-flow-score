@@ -427,7 +427,15 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
   const totalContacts = contacts?.length || 0;
 
   return (
-    <Card>
+    <Card
+      className={cn(
+        "transition-all",
+        isDragOver && "ring-2 ring-primary/50 bg-primary/5",
+      )}
+      onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+      onDragLeave={() => setIsDragOver(false)}
+      onDrop={handleDrop}
+    >
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -456,6 +464,23 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
 
       {expanded && (
         <CardContent className="space-y-3">
+          {/* Drag-drop processing overlay */}
+          {isParsingDrop && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20 text-sm">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <span>Extracting contacts from screenshot...</span>
+            </div>
+          )}
+
+          {/* Drag-over indicator */}
+          {isDragOver && !isParsingDrop && (
+            <div className="flex flex-col items-center gap-2 p-6 rounded-lg border-2 border-dashed border-primary/40 bg-primary/5 text-center">
+              <ImagePlus className="h-8 w-8 text-primary/60" />
+              <p className="text-sm font-medium text-primary">Drop screenshot to extract contacts</p>
+              <p className="text-xs text-muted-foreground">LinkedIn, CRM, or any contact list</p>
+            </div>
+          )}
+
           {/* Add form */}
           {showAddForm && (
             <div className="p-3 rounded-lg bg-muted/30 border border-border/50 space-y-2">
@@ -496,17 +521,17 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
           )}
 
           {/* Tree */}
-          {totalContacts === 0 ? (
+          {totalContacts === 0 && !isDragOver && !isParsingDrop ? (
             <div className="text-center py-6">
               <Network className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-30" />
               <p className="text-sm text-muted-foreground">No contacts yet.</p>
-              <p className="text-xs text-muted-foreground">Add manually or use AI Generate to build the org chart.</p>
+              <p className="text-xs text-muted-foreground">Drop a screenshot, add manually, or use AI Generate.</p>
             </div>
-          ) : (
+          ) : totalContacts > 0 ? (
             <div className="space-y-2">
               {roots.map(root => renderNode(root, 0))}
             </div>
-          )}
+          ) : null}
 
           {/* Legend */}
           {totalContacts > 0 && (
