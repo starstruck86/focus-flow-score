@@ -273,9 +273,7 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
   
   const menuAlignment = position === 'bottom-right' ? 'items-end' : 'items-start';
   
-  // Determine prefills based on current context
-  const prefillOpportunityId = currentRecord.type === 'opportunity' ? currentRecord.id : undefined;
-  const prefillAccountId = currentRecord.type === 'account' ? currentRecord.id : currentRecord.accountId;
+  
   
   return (
     <>
