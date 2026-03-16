@@ -1002,7 +1002,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                     ))}
                     {/* Root-level blank placeholder */}
                     <div className="flex flex-col items-center">
-                      <div className="w-px h-5 bg-border/30" />
+                      <div className="w-px h-4 sm:h-5 bg-border/30" />
                       {renderBlankCard('')}
                     </div>
                   </div>
