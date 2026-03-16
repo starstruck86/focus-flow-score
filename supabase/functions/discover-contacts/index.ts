@@ -475,7 +475,7 @@ Return up to ${maxContacts} CURRENT people at the company who are most relevant.
 - Current title
 - Department or team they belong to
 - Why they matter to this evaluation
-- Their DIRECT LinkedIn profile URL (https://www.linkedin.com/in/...) — this is REQUIRED
+- Their REAL LinkedIn profile URL (https://www.linkedin.com/in/...) — this is REQUIRED. Do NOT fabricate URLs by combining name + company (e.g., "john-smith-arrow" is FAKE). Only provide URLs you actually found in search results.
 - How long they have been at the company (in months), or "unknown" if not determinable
 - How long they have been in their current role (in months), or "unknown" if not determinable
 - 1 short evidence note proving they are at THIS EXACT company now (e.g., "LinkedIn shows current role at ${accountName} since March 2023")
