@@ -387,6 +387,12 @@ export default function OpportunityDetail() {
           )}
         </CollapsibleSection>
       </div>
+
+      <ClaudeSynopsisModal
+        open={showSynopsis}
+        onOpenChange={setShowSynopsis}
+        opportunity={opp}
+      />
     </Layout>
   );
 }
