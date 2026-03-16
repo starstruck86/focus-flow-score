@@ -1394,10 +1394,12 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 </TableCell>
               </TableRow>
             ) : isUserSorted ? (
-              // Flat sorted list when user clicks a column header
               sortedOpportunities.map(renderOpportunityRow)
+            ) : groupingMode === 'quarter' ? (
+              quarterGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
+            ) : groupingMode === 'stage' ? (
+              stageGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
             ) : (
-              // Default: grouped by status
               STATUS_ORDER.map(status => renderStatusGroup(status, groupedOpportunities[status]))
             )}
           </TableBody>
