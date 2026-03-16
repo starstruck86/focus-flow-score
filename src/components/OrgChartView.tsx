@@ -215,7 +215,7 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
       const { data, error } = await supabase.functions.invoke('parse-account-screenshot', {
         body: {
           imageUrls: uploadedUrls,
-          context: `Extract contacts/people for ${accountName}. Focus on names, titles, departments, and LinkedIn URLs.`,
+          context: `This is a CONTACTS screenshot for the company "${accountName}". Extract each PERSON as a contact under a single account named "${accountName}". Focus on: person names, job titles, departments, emails, and LinkedIn URLs. Put all people in the contacts array of one account entry.`,
         },
       });
 
@@ -227,20 +227,16 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
       const allContacts: { name: string; title?: string; email?: string; department?: string }[] = [];
       for (const acc of extractedAccounts) {
         if (acc.contacts) allContacts.push(...acc.contacts);
-        // If the account itself looks like a contact entry (common with LinkedIn screenshots)
-        // the AI may put people as "accounts" — check if they have a title
-        if (acc.name && acc.notes?.includes('title:')) {
-          // skip, covered by contacts
-        }
       }
 
-      // If no contacts found in the contacts array, the AI may have put people as accounts
+      // Fallback: AI may have put people as separate "accounts" — treat any account
+      // that doesn't look like a real company as a contact
       if (allContacts.length === 0) {
         for (const acc of extractedAccounts) {
           if (acc.name) {
             allContacts.push({
               name: acc.name,
-              title: acc.industry || acc.notes || undefined, // AI sometimes puts title in unexpected fields
+              title: acc.industry || acc.notes || undefined,
             });
           }
         }
