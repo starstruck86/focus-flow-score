@@ -1029,11 +1029,20 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     );
   };
 
+  // Calculate display ARR: for renewals view, show expansion ARR (renewal - prior)
+  const getDisplayArr = (o: Opportunity) => {
+    if (renewalsOnly) {
+      const expansion = (o.renewalArr || 0) - (o.priorContractArr || 0);
+      return expansion > 0 ? expansion : 0;
+    }
+    return o.arr || 0;
+  };
+
   const renderStatusGroup = (status: OpportunityStatus, opps: Opportunity[]) => {
     if (opps.length === 0) return null;
 
     const statusLabel = status.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
-    const groupArr = opps.reduce((sum, o) => sum + (o.arr || 0), 0);
+    const groupArr = opps.reduce((sum, o) => sum + getDisplayArr(o), 0);
 
     return (
       <React.Fragment key={status}>
