@@ -239,7 +239,7 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
                 {WORKSTREAM_LABELS[workstream]}
               </span>
               {inferredTag && (
-                <span className={cn("text-[9px] px-1.5 py-0.5 rounded-full border font-medium", DRIVER_TAG_META[inferredTag].color)}>
+                <span className={cn("text-[10px] px-2 py-1 rounded-full border font-medium", DRIVER_TAG_META[inferredTag].color)}>
                   {DRIVER_TAG_META[inferredTag].label}
                 </span>
               )}
