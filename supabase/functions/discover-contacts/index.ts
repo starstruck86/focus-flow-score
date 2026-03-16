@@ -529,9 +529,10 @@ Rules:
 - If the title suggests implementation or systems responsibility, prefer technical_buyer.
 - If the title suggests process knowledge, internal advocacy, or day-to-day ownership, prefer champion, coach, influencer, or user_buyer.
 - Exclude duplicate names and anyone already in the existing contacts list.
+- NEVER include interns, fellows, apprentices, or co-ops — only full-time professional employees.
 - CRITICAL: You MUST provide a direct LinkedIn profile URL for every contact (https://www.linkedin.com/in/...). Do NOT return a contact if you cannot find their LinkedIn profile URL.
-- CRITICAL: You MUST determine how long each contact has been at the company AND how long they have been in their current role. If you cannot determine tenure at all, exclude the contact entirely. Do NOT return contacts with unknown tenure.
-- For company_tenure_months and role_tenure_months, estimate based on available evidence (LinkedIn data, press releases, announcements). Use your best estimate.`,
+- For tenure: estimate company_tenure_months and role_tenure_months based on available evidence. If you truly cannot determine tenure, set both to -1 (unknown) — do NOT omit the contact just because tenure is unknown.
+- For smaller/local businesses with limited online presence, search the company website (About, Team, Leadership, Contact pages), local news, industry directories, and association memberships. Even 1-2 accurate contacts is valuable.`,
         },
       ],
       tools: [
