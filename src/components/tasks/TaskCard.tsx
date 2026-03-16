@@ -266,7 +266,7 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
 
             {/* Notes preview */}
             {task.notes && !expanded && (
-              <p className="text-[10px] text-muted-foreground/60 italic truncate">
+              <p className="text-[11px] text-muted-foreground/70 italic leading-relaxed line-clamp-2 mt-1">
                 {task.notes}
               </p>
             )}
