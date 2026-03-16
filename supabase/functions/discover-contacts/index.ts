@@ -222,12 +222,13 @@ async function runPerplexityResearch({
         messages: [
           {
             role: 'user',
-            content: `Find current employees and likely buying-committee stakeholders at "${accountName}".
+            content: `Find current employees and likely buying-committee stakeholders at "${accountName}"${division ? ` specifically within the "${division}" division/business unit` : ''}.
 
 Company context:
 - Website: ${website || 'unknown'}
 - Industry: ${industry || 'unknown'}
 - Motion: ${motion || 'unknown'}
+- Division/BU: ${division || 'entire company'}
 - Opportunity context: ${opportunityContext || 'none provided'}
 - Custom focus: ${focusPrompt || 'none provided'}
 - Website summary: ${websiteSummary || 'not available'}
@@ -235,11 +236,14 @@ Company context:
 Discovery guidance:
 ${roleBrief}
 
+${division ? `CRITICAL: Only return people who work in or support the "${division}" division. Exclude people from other divisions.` : ''}
+
 Search LinkedIn, company leadership/about/team pages, press releases, conference speaker pages, interviews, podcasts, and local business coverage.
 
 Return up to ${maxContacts} CURRENT people at the company who are most relevant. For each person include:
 - Full name
 - Current title
+- Department or team they belong to
 - Why they matter to this evaluation
 - LinkedIn URL if you can find one
 - 1 short evidence note proving they are at the company now
