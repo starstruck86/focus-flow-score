@@ -458,12 +458,12 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       'closed-won': [],
     };
 
-    filteredOpportunities.forEach(opp => {
+    activeFilteredOpps.forEach(opp => {
       groups[opp.status].push(opp);
     });
 
     return groups;
-  }, [filteredOpportunities]);
+  }, [activeFilteredOpps]);
 
   // Group by fiscal quarter (based on close date)
   const quarterGroupedOpportunities = useMemo(() => {
