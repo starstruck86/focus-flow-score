@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { LayoutGrid, List } from 'lucide-react';
+import { LayoutGrid, List, ChevronUp } from 'lucide-react';
 import {
   Table,
   TableBody,
