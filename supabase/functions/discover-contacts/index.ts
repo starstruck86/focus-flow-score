@@ -780,6 +780,15 @@ Rules:
   const discovered: any[] = [];
   for (let i = 0; i < deduped.length; i++) {
     const contact = deduped[i];
+    // Skip LinkedIn scan if contact has no LinkedIn URL
+    if (!contact.linkedin_url) {
+      contact.linkedin_verified = null;
+      contact.relevance_score = -1;
+      contact.matched_categories = [];
+      contact.keyword_hits = [];
+      discovered.push(contact);
+      continue;
+    }
     if (i < maxScan) {
       const scan = await scanLinkedInProfile(contact.linkedin_url, resolvedMode);
       contact.linkedin_verified = scan.verified;
