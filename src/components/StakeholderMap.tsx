@@ -50,6 +50,7 @@ const DISCOVERY_MODES = [
   { value: 'executive', label: 'Executive' },
 ] as const;
 const TARGET_COUNTS = ['3', '5', '8', '10'] as const;
+const DIVISION_PRESETS = ['', 'Group Benefits', 'Retirement & Income', 'Auto & Home', 'Pharmacy', 'Health', 'Caremark', 'Aetna', 'Digital', 'Corporate'] as const;
 
 function getRoleConfig(role: string) {
   return BUYER_ROLES.find((entry) => entry.value === role) || BUYER_ROLES[BUYER_ROLES.length - 1];
