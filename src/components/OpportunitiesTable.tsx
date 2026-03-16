@@ -1264,10 +1264,10 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       {/* Kanban View */}
       {viewMode === 'kanban' ? (
         <KanbanBoard
-          opportunities={filteredOpportunities}
+          opportunities={activeFilteredOpps}
           onStageChange={(id, newStage) => updateOpportunity(id, { stage: newStage })}
           onSelect={(id) => {
-            const opp = filteredOpportunities.find(o => o.id === id);
+            const opp = activeFilteredOpps.find(o => o.id === id);
             if (opp) onOpenDrawer(opp);
           }}
         />
