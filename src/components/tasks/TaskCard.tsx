@@ -223,8 +223,8 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
                 </span>
               )}
               {oppStage && (
-                <span className="inline-flex items-center gap-0.5 text-[10px] text-purple-500 bg-purple-500/10 px-1.5 py-0.5 rounded-md border border-purple-500/20">
-                  <Target className="h-2.5 w-2.5" />
+                <span className="inline-flex items-center gap-1 text-[11px] text-purple-500 bg-purple-500/10 px-2 py-1 rounded-md border border-purple-500/20">
+                  <Target className="h-3 w-3" />
                   {oppStage}
                 </span>
               )}
