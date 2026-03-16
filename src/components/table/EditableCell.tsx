@@ -170,6 +170,53 @@ export function EditableTextareaCell({
     );
   }
 
+  // Parse digest sections and user notes
+  const digestPattern = /--- 📰 Daily Digest \((\d{4}-\d{2}-\d{2})\) ---\n([\s\S]*?)(?=\n\n--- 📰|$)/g;
+  const hasDigest = value.includes('--- 📰 Daily Digest');
+
+  if (hasDigest) {
+    // Split into user notes (before first digest) and digest blocks
+    const firstDigestIndex = value.indexOf('--- 📰 Daily Digest');
+    const userNotes = value.slice(0, firstDigestIndex).trim();
+    const digestSection = value.slice(firstDigestIndex);
+    
+    const digestBlocks: { date: string; entries: string[] }[] = [];
+    let match;
+    while ((match = digestPattern.exec(digestSection)) !== null) {
+      const entries = match[2].trim().split('\n').filter(l => l.trim());
+      digestBlocks.push({ date: match[1], entries });
+    }
+    // Show newest first
+    digestBlocks.reverse();
+
+    return (
+      <div className="space-y-2">
+        {userNotes && (
+          <div
+            className="group flex items-start gap-1 cursor-pointer rounded px-2 py-1 -mx-2 hover:bg-muted/50 transition-colors w-full"
+            onClick={() => setIsEditing(true)}
+          >
+            <span className="text-sm whitespace-pre-wrap break-words flex-1">{userNotes}</span>
+            <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5" />
+          </div>
+        )}
+        {!userNotes && (
+          <div
+            className="group cursor-pointer rounded px-2 py-1 -mx-2 hover:bg-muted/50 transition-colors w-full"
+            onClick={() => setIsEditing(true)}
+          >
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <Pencil className="h-3 w-3" /> Edit notes
+            </span>
+          </div>
+        )}
+        {digestBlocks.map((block) => (
+          <DigestBlock key={block.date} date={block.date} entries={block.entries} />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -180,6 +227,48 @@ export function EditableTextareaCell({
     >
       <span className="text-sm whitespace-pre-wrap break-words flex-1">{value}</span>
       <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5" />
+    </div>
+  );
+}
+
+function DigestBlock({ date, entries }: { date: string; entries: string[] }) {
+  const [open, setOpen] = useState(false);
+  // Format date nicely
+  const formatted = (() => {
+    try {
+      return new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch { return date; }
+  })();
+
+  return (
+    <div className="text-xs p-3 rounded-md border border-status-yellow/20 bg-status-yellow/5">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center justify-between w-full"
+      >
+        <div className="flex items-center gap-1.5">
+          <Newspaper className="h-3 w-3 text-status-yellow shrink-0" />
+          <span className="font-semibold text-status-yellow text-[11px] uppercase tracking-wide">
+            Digest — {formatted}
+          </span>
+          <span className="text-[10px] text-muted-foreground">({entries.length})</span>
+        </div>
+        {open ? <ChevronUp className="h-3 w-3 text-status-yellow" /> : <ChevronDown className="h-3 w-3 text-status-yellow" />}
+      </button>
+      {open && (
+        <div className="mt-1.5 space-y-0.5">
+          {entries.map((entry, i) => {
+            // Strip [date] prefix
+            const cleaned = entry.replace(/^\[\d{4}-\d{2}-\d{2}\]\s*/, '');
+            return (
+              <div key={i} className="flex gap-1.5 text-foreground/80">
+                <span className="text-muted-foreground shrink-0">•</span>
+                <span>{cleaned}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
