@@ -486,7 +486,7 @@ async function discoverForSingleAccount({
 
   const existingNames = new Set((existingContacts || []).map((contact: any) => cleanText(contact.name).toLowerCase()).filter(Boolean));
   const websiteSummary = await fetchWebsiteContext(resolvedWebsite);
-  const { resolvedMode, brief } = getDiscoveryBrief({
+  const { resolvedMode, companySize, brief } = getDiscoveryBrief({
     mode: requestedMode,
     motion: resolvedMotion,
     industry: resolvedIndustry,
@@ -519,6 +519,7 @@ async function discoverForSingleAccount({
     accountName: resolvedAccountName,
     requestedMode,
     resolvedMode,
+    companySize,
     requestedMaxContacts,
     division: resolvedDivision || null,
     hasWebsiteSummary: Boolean(websiteSummary),
