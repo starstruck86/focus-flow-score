@@ -110,7 +110,8 @@ async function scanLinkedInProfile(url: string, discoveryMode: string): Promise<
     
     if (!resp.ok) {
       console.log(`LinkedIn scan failed for ${url}: ${resp.status}`);
-      if (resp.status === 402) return { verified: true, profileContent: '', relevanceScore: -1, matchedCategories: [], keywordHits: [] };
+      // 402 = no credits, 403 = LinkedIn blocking Firecrawl — don't penalize either way
+      if (resp.status === 402 || resp.status === 403) return { verified: true, profileContent: '', relevanceScore: -1, matchedCategories: [], keywordHits: [] };
       return { verified: false, profileContent: '', relevanceScore: 0, matchedCategories: [], keywordHits: [] };
     }
     
