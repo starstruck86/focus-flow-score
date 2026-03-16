@@ -18,15 +18,19 @@ const TIER_CONFIG = {
 function ScoreBar({ label, value, max = 100 }: { label: string; value: number; max?: number }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[10px] text-muted-foreground w-16 shrink-0">{label}</span>
-      <Progress value={(value / max) * 100} className="h-1 flex-1" />
-      <span className="text-[10px] font-mono w-6 text-right">{value}</span>
+      <span className="text-xs text-muted-foreground w-20 shrink-0">{label}</span>
+      <Progress value={(value / max) * 100} className="h-1.5 flex-1" />
+      <span className="text-xs font-mono w-8 text-right">{value}</span>
     </div>
   );
 }
 
-export function AccountHealthPulseCard() {
-  const { data: accounts, isLoading } = useAccountHealthPulse();
+interface AccountHealthPulseCardProps {
+  motionFilter?: 'new-logo' | 'renewal';
+}
+
+export function AccountHealthPulseCard({ motionFilter }: AccountHealthPulseCardProps = {}) {
+  const { data: accounts, isLoading } = useAccountHealthPulse(motionFilter);
 
   const top10 = (accounts || []).slice(0, 10);
   const tierCounts = {
@@ -42,14 +46,14 @@ export function AccountHealthPulseCard() {
         <div className="flex items-center justify-between">
           <CardTitle className="text-base font-display flex items-center gap-2">
             <Activity className="h-4 w-4 text-primary" />
-            Account Health Pulse
+            {motionFilter === 'renewal' ? 'Renewal Account Health' : motionFilter === 'new-logo' ? 'New Logo Account Health' : 'Account Health Pulse'}
           </CardTitle>
           <div className="flex items-center gap-1">
             {(['hot', 'warm', 'cool', 'cold'] as const).map(tier => {
               const cfg = TIER_CONFIG[tier];
               return tierCounts[tier] > 0 ? (
-                <Badge key={tier} variant="outline" className={cn("text-[9px] px-1.5 gap-0.5", cfg.bg, cfg.color)}>
-                  <cfg.icon className="h-2.5 w-2.5" />{tierCounts[tier]}
+                <Badge key={tier} variant="outline" className={cn("text-[10px] px-2 gap-1", cfg.bg, cfg.color)}>
+                  <cfg.icon className="h-3 w-3" />{tierCounts[tier]}
                 </Badge>
               ) : null;
             })}
@@ -75,11 +79,11 @@ export function AccountHealthPulseCard() {
                   <div key={acct.accountId} className={cn("p-3 rounded-lg border transition-all hover:bg-muted/30", cfg.bg)}>
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-[10px] text-muted-foreground font-mono">#{idx + 1}</span>
-                        <TierIcon className={cn("h-3.5 w-3.5 shrink-0", cfg.color)} />
+                        <span className="text-xs text-muted-foreground font-mono">#{idx + 1}</span>
+                        <TierIcon className={cn("h-4 w-4 shrink-0", cfg.color)} />
                         <span className="text-sm font-semibold truncate">{acct.accountName}</span>
                       </div>
-                      <Badge variant={acct.overallScore >= 75 ? 'default' : 'outline'} className="text-[10px] font-mono shrink-0">
+                      <Badge variant={acct.overallScore >= 75 ? 'default' : 'outline'} className="text-xs font-mono shrink-0 px-2">
                         {acct.overallScore}
                       </Badge>
                     </div>
@@ -91,8 +95,8 @@ export function AccountHealthPulseCard() {
                       <ScoreBar label="Engaged" value={acct.engagementRecency} />
                     </div>
                     {acct.topGap !== 'Well covered' && (
-                      <div className="flex items-center gap-1 mt-2 text-[10px] text-amber-500">
-                        <AlertTriangle className="h-2.5 w-2.5" />
+                      <div className="flex items-center gap-1.5 mt-2 text-xs text-amber-500">
+                        <AlertTriangle className="h-3 w-3" />
                         {acct.topGap}
                       </div>
                     )}

@@ -816,10 +816,10 @@ export default function Renewals() {
         {/* Account Intelligence Cards */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
           <WidgetErrorBoundary widgetId="renewal-account-health-pulse">
-            <AccountHealthPulseCard />
+            <AccountHealthPulseCard motionFilter="renewal" />
           </WidgetErrorBoundary>
           <WidgetErrorBoundary widgetId="renewal-company-monitor">
-            <CompanyMonitorCard />
+            <CompanyMonitorCard motionFilter="renewal" />
           </WidgetErrorBoundary>
         </div>
 

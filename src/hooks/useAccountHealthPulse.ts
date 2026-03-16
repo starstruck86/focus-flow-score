@@ -22,16 +22,20 @@ function daysSince(dateStr: string | null): number {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
 }
 
-export function useAccountHealthPulse() {
+export function useAccountHealthPulse(motionFilter?: 'new-logo' | 'renewal') {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ['account-health-pulse', user?.id],
+    queryKey: ['account-health-pulse', user?.id, motionFilter],
     queryFn: async (): Promise<AccountHealthPulse[]> => {
       if (!user) return [];
       // Fetch accounts + contacts + recent digest items in parallel (explicit user_id for defense-in-depth)
+      let accountsQuery = supabase.from('accounts').select('id, name, icp_fit_score, timing_score, last_touch_date, trigger_events, marketing_platform_detected, last_enriched_at, tier, motion').eq('user_id', user.id);
+      if (motionFilter) {
+        accountsQuery = accountsQuery.eq('motion', motionFilter);
+      }
       const [accountsRes, contactsRes, digestRes] = await Promise.all([
-        supabase.from('accounts').select('id, name, icp_fit_score, timing_score, last_touch_date, trigger_events, marketing_platform_detected, last_enriched_at, tier').eq('user_id', user.id),
+        accountsQuery,
         supabase.from('contacts').select('account_id, buyer_role, influence_level').eq('user_id', user.id),
         supabase.from('daily_digest_items').select('account_id, relevance_score, is_actionable, digest_date').eq('user_id', user.id).gte('digest_date', new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0]),
       ]);
