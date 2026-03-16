@@ -430,12 +430,12 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const isUserSorted = sortConfig !== null;
 
   const sortedOpportunities = useMemo(() => {
-    if (!isUserSorted) return filteredOpportunities;
+    if (!isUserSorted) return activeFilteredOpps;
     // Custom field sorting
     if (sortConfig?.key.startsWith('custom:')) {
       const fieldId = sortConfig.key.slice(7);
       const direction = sortConfig.direction!;
-      return [...filteredOpportunities].sort((a, b) => {
+      return [...activeFilteredOpps].sort((a, b) => {
         const aVal = getFieldValue(a.id, fieldId);
         const bVal = getFieldValue(b.id, fieldId);
         let comparison = 0;
@@ -446,8 +446,8 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
         return direction === 'desc' ? -comparison : comparison;
       });
     }
-    return applySortWithFallback(filteredOpportunities, sortConfig, defaultOppSort, sortKeyMap);
-  }, [filteredOpportunities, sortConfig, isUserSorted]);
+    return applySortWithFallback(activeFilteredOpps, sortConfig, defaultOppSort, sortKeyMap);
+  }, [activeFilteredOpps, sortConfig, isUserSorted]);
 
   // Group by status (only when no user sort active)
   const groupedOpportunities = useMemo(() => {
