@@ -260,7 +260,7 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
                     style={{ width: `${subtaskProgress.pct}%` }}
                   />
                 </div>
-                <span className="text-[9px] text-muted-foreground">{subtaskProgress.done}/{subtaskProgress.total}</span>
+                <span className="text-[10px] text-muted-foreground">{subtaskProgress.done}/{subtaskProgress.total}</span>
               </div>
             )}
 
