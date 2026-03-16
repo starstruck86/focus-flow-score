@@ -54,7 +54,7 @@ import { KanbanBoard } from '@/components/KanbanBoard';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useStore } from '@/store/useStore';
 import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
-import { format, parseISO, isToday, isPast, isThisQuarter } from 'date-fns';
+import { format, parseISO, isToday, isPast, isThisQuarter, getQuarter, getYear } from 'date-fns';
 import { 
   useDbOpportunities, 
   useDbRenewals, 
