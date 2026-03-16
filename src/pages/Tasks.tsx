@@ -140,12 +140,39 @@ export default function Tasks() {
         {/* Pinned overdue section */}
         <OverdueSection tasks={overdueTasks} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
 
-        {/* Kanban Board */}
+        {/* Kanban Board - excludes done/dropped/overdue */}
         <TaskKanbanBoard
-          tasks={filteredTasks.filter(t => !overdueIds.has(t.id))}
+          tasks={filteredTasks.filter(t => !overdueIds.has(t.id) && t.status !== 'done' && t.status !== 'dropped')}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
         />
+
+        {/* Completed tasks - expandable */}
+        {(() => {
+          const doneTasks = filteredTasks.filter(t => t.status === 'done' || t.status === 'dropped');
+          if (doneTasks.length === 0) return null;
+          const showDone = !collapsedGroups['done-section'];
+          return (
+            <div className="mt-4 rounded-xl border border-border/40 bg-card/30">
+              <button
+                className="flex items-center gap-2 w-full text-left px-4 py-3"
+                onClick={() => setCollapsedGroups(prev => ({ ...prev, 'done-section': !prev['done-section'] }))}
+              >
+                {showDone ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                <CheckCircle2 className="h-4 w-4 text-status-green" />
+                <span className="text-sm font-semibold">Completed</span>
+                <span className="text-[11px] text-muted-foreground">({doneTasks.length})</span>
+              </button>
+              {showDone && (
+                <div className="px-4 pb-3 space-y-2">
+                  {doneTasks.map(task => (
+                    <TaskCard key={task.id} task={task} selected={selectedIds.has(task.id)} onToggleSelect={toggleSelect} />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {filteredTasks.length === 0 && (
           <div className="text-center py-12">
