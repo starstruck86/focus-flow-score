@@ -820,7 +820,8 @@ export default function Renewals() {
           </TabsList>
 
           <TabsContent value="opportunities">
-            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} renewalsOnly highlightId={highlightId} stageFilter={renewalStageFilter} onClearStageFilter={() => setRenewalStageFilter(null)} />
+            <RenewalStageSummary activeStageFilter={renewalStageFilter} onStageFilterChange={setRenewalStageFilter} />
+            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} renewalsOnly columnOrder="outreach" highlightId={highlightId} stageFilter={renewalStageFilter} onClearStageFilter={() => setRenewalStageFilter(null)} />
           </TabsContent>
           
           <TabsContent value="renewals">
