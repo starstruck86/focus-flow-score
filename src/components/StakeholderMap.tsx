@@ -568,8 +568,19 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <span className="truncate text-sm font-medium">{contact.name}</span>
-                            {contact.influence_level === 'high' && <span className="text-[9px] text-status-yellow">★</span>}
+                            {contact.linkedin_url ? (
+                              <a
+                                href={contact.linkedin_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(event) => event.stopPropagation()}
+                                className="truncate text-sm font-medium hover:underline underline-offset-2 decoration-primary/50"
+                              >
+                                {contact.name}
+                              </a>
+                            ) : (
+                              <span className="truncate text-sm font-medium">{contact.name}</span>
+                            )}
                             {contact.linkedin_url && (
                               <a
                                 href={contact.linkedin_url}
@@ -577,10 +588,12 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                                 rel="noopener noreferrer"
                                 onClick={(event) => event.stopPropagation()}
                                 className="text-primary hover:text-primary/80"
+                                title="Open LinkedIn"
                               >
                                 <Linkedin className="h-3 w-3" />
                               </a>
                             )}
+                            {contact.influence_level === 'high' && <span className="text-[9px] text-status-yellow">★</span>}
                             {(contact as any).ai_discovered && <Sparkles className="h-2.5 w-2.5 text-primary/60" />}
                           </div>
                           <p className="truncate text-[11px] text-muted-foreground">{contact.title || 'No title'}</p>
