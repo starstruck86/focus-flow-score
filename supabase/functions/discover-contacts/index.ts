@@ -290,146 +290,133 @@ Prioritize real named people. If the obvious marketing leader is not public, inc
   }
 }
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
+async function discoverForSingleAccount({
+  supabase,
+  userId,
+  accountId,
+  accountName,
+  website,
+  industry,
+  opportunityContext,
+  focusPrompt,
+  maxContacts,
+  discoveryMode,
+  division,
+}: {
+  supabase: any;
+  userId: string;
+  accountId: string;
+  accountName?: string;
+  website?: string;
+  industry?: string;
+  opportunityContext?: string;
+  focusPrompt?: string;
+  maxContacts?: number;
+  discoveryMode?: string;
+  division?: string;
+}) {
+  const { data: account, error: accountError } = await supabase
+    .from('accounts')
+    .select('id, name, website, industry, motion, notes')
+    .eq('id', accountId)
+    .maybeSingle();
 
-  try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return jsonResponse({ error: 'Missing authorization' }, 401);
-    }
+  if (accountError) {
+    console.error('discover-contacts account lookup failed:', accountError.message);
+    return { accountId, error: 'Failed to load account context' };
+  }
 
-    const token = authHeader.replace('Bearer ', '');
-    const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
-      global: { headers: { Authorization: authHeader } },
-    });
+  if (!account) {
+    return { accountId, error: 'Account not found' };
+  }
 
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims?.sub) {
-      console.error('discover-contacts auth error:', claimsError?.message || 'No claims');
-      return jsonResponse({ error: 'Unauthorized' }, 401);
-    }
+  const resolvedAccountName = cleanText(account.name || accountName);
+  if (!resolvedAccountName) {
+    return { accountId, error: 'accountName required' };
+  }
 
-    const userId = claimsData.claims.sub;
-    const body = await req.json();
-    const {
-      accountId,
-      accountName,
-      website,
-      industry,
-      opportunityContext,
-      focusPrompt,
-      maxContacts,
-      discoveryMode,
-      division,
-    } = body || {};
+  const resolvedWebsite = normalizeWebsite(account.website || website);
+  const resolvedIndustry = cleanText(account.industry || industry);
+  const resolvedMotion = cleanText(account.motion);
+  const resolvedFocusPrompt = cleanText(focusPrompt);
+  const resolvedDivision = cleanText(division);
+  const requestedMaxContacts = Math.max(3, Math.min(Number(maxContacts) || 5, 10));
+  const requestedMode = (['auto', 'marketing', 'digital_engagement', 'marketing_ops', 'revenue', 'cx_loyalty', 'operations', 'it', 'executive'].includes(discoveryMode || '')
+    ? discoveryMode
+    : 'auto') as DiscoveryMode;
 
-    if (!accountId) {
-      return jsonResponse({ error: 'accountId required' }, 400);
-    }
+  const divisionScope = resolvedDivision
+    ? `IMPORTANT: Scope ALL research to the "${resolvedDivision}" division/business unit of ${resolvedAccountName}. Only return people who work in or directly support this division. Exclude contacts from other divisions or the parent company's unrelated teams.`
+    : '';
 
-    const { data: account, error: accountError } = await supabase
-      .from('accounts')
-      .select('id, name, website, industry, motion, notes')
-      .eq('id', accountId)
-      .maybeSingle();
+  const { data: existingContacts, error: contactsError } = await supabase
+    .from('contacts')
+    .select('name, title, linkedin_url')
+    .eq('account_id', accountId);
 
-    if (accountError) {
-      console.error('discover-contacts account lookup failed:', accountError.message);
-      return jsonResponse({ error: 'Failed to load account context' }, 500);
-    }
+  if (contactsError) {
+    console.error('discover-contacts existing contacts lookup failed:', contactsError.message);
+    return { accountId, accountName: resolvedAccountName, error: 'Failed to load existing contacts' };
+  }
 
-    if (!account) {
-      return jsonResponse({ error: 'Account not found' }, 404);
-    }
+  const existingNames = new Set((existingContacts || []).map((contact: any) => cleanText(contact.name).toLowerCase()).filter(Boolean));
+  const websiteSummary = await fetchWebsiteContext(resolvedWebsite);
+  const { resolvedMode, brief } = getDiscoveryBrief({
+    mode: requestedMode,
+    motion: resolvedMotion,
+    industry: resolvedIndustry,
+    opportunityContext,
+    focusPrompt: resolvedFocusPrompt,
+    websiteSummary,
+  });
 
-    const resolvedAccountName = cleanText(account.name || accountName);
-    if (!resolvedAccountName) {
-      return jsonResponse({ error: 'accountName required' }, 400);
-    }
+  const webResearch = await runPerplexityResearch({
+    accountName: resolvedAccountName,
+    website: resolvedWebsite,
+    industry: resolvedIndustry,
+    motion: resolvedMotion,
+    opportunityContext,
+    focusPrompt: resolvedFocusPrompt,
+    roleBrief: brief,
+    websiteSummary,
+    maxContacts: requestedMaxContacts,
+    division: resolvedDivision,
+  });
 
-    const resolvedWebsite = normalizeWebsite(account.website || website);
-    const resolvedIndustry = cleanText(account.industry || industry);
-    const resolvedMotion = cleanText(account.motion);
-    const resolvedFocusPrompt = cleanText(focusPrompt);
-    const resolvedDivision = cleanText(division);
-    const requestedMaxContacts = Math.max(3, Math.min(Number(maxContacts) || 5, 10));
-    const requestedMode = (['auto', 'marketing', 'digital_engagement', 'marketing_ops', 'revenue', 'cx_loyalty', 'operations', 'it', 'executive'].includes(discoveryMode)
-      ? discoveryMode
-      : 'auto') as DiscoveryMode;
+  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+  if (!lovableApiKey) {
+    return { accountId, accountName: resolvedAccountName, error: 'AI not configured' };
+  }
 
-    const divisionScope = resolvedDivision
-      ? `IMPORTANT: Scope ALL research to the "${resolvedDivision}" division/business unit of ${resolvedAccountName}. Only return people who work in or directly support this division. Exclude contacts from other divisions or the parent company's unrelated teams.`
-      : '';
+  console.log('discover-contacts request context:', {
+    userId,
+    accountId,
+    accountName: resolvedAccountName,
+    requestedMode,
+    resolvedMode,
+    requestedMaxContacts,
+    division: resolvedDivision || null,
+    hasWebsiteSummary: Boolean(websiteSummary),
+    hasWebResearch: Boolean(webResearch),
+    hasFocusPrompt: Boolean(resolvedFocusPrompt),
+  });
 
-    const { data: existingContacts, error: contactsError } = await supabase
-      .from('contacts')
-      .select('name, title, linkedin_url')
-      .eq('account_id', accountId);
-
-    if (contactsError) {
-      console.error('discover-contacts existing contacts lookup failed:', contactsError.message);
-      return jsonResponse({ error: 'Failed to load existing contacts' }, 500);
-    }
-
-    const existingNames = new Set((existingContacts || []).map((contact) => cleanText(contact.name).toLowerCase()).filter(Boolean));
-    const websiteSummary = await fetchWebsiteContext(resolvedWebsite);
-    const { resolvedMode, brief } = getDiscoveryBrief({
-      mode: requestedMode,
-      motion: resolvedMotion,
-      industry: resolvedIndustry,
-      opportunityContext,
-      focusPrompt: resolvedFocusPrompt,
-      websiteSummary,
-    });
-
-    const webResearch = await runPerplexityResearch({
-      accountName: resolvedAccountName,
-      website: resolvedWebsite,
-      industry: resolvedIndustry,
-      motion: resolvedMotion,
-      opportunityContext,
-      focusPrompt: resolvedFocusPrompt,
-      roleBrief: brief,
-      websiteSummary,
-      maxContacts: requestedMaxContacts,
-      division: resolvedDivision,
-    });
-
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
-    if (!lovableApiKey) {
-      return jsonResponse({ error: 'AI not configured' }, 500);
-    }
-
-    console.log('discover-contacts request context:', {
-      userId,
-      accountId,
-      accountName: resolvedAccountName,
-      requestedMode,
-      resolvedMode,
-      requestedMaxContacts,
-      division: resolvedDivision || null,
-      hasWebsiteSummary: Boolean(websiteSummary),
-      hasWebResearch: Boolean(webResearch),
-      hasFocusPrompt: Boolean(resolvedFocusPrompt),
-    });
-
-    const aiResp = await fetch(LOVABLE_AI_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a B2B stakeholder discovery assistant. Convert research into a strict contact list for a sales rep. Prefer real, current employees. Do not invent LinkedIn URLs. If research is sparse, infer buyer_role and influence_level conservatively from the title. Keep notes short and evidence-based.${resolvedDivision ? ` CRITICAL: Only include people from the "${resolvedDivision}" division/business unit. Exclude people from other divisions.` : ''}`,
-          },
-          {
-            role: 'user',
-            content: `Build a stakeholder map for "${resolvedAccountName}"${resolvedDivision ? ` — "${resolvedDivision}" division only` : ''}.
+  const aiResp = await fetch(LOVABLE_AI_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${lovableApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'google/gemini-2.5-flash',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a B2B stakeholder discovery assistant. Convert research into a strict contact list for a sales rep. Prefer real, current employees. Do not invent LinkedIn URLs. If research is sparse, infer buyer_role and influence_level conservatively from the title. Keep notes short and evidence-based.${resolvedDivision ? ` CRITICAL: Only include people from the "${resolvedDivision}" division/business unit. Exclude people from other divisions.` : ''}`,
+        },
+        {
+          role: 'user',
+          content: `Build a stakeholder map for "${resolvedAccountName}"${resolvedDivision ? ` — "${resolvedDivision}" division only` : ''}.
 
 Account context:
 - Website: ${resolvedWebsite || 'unknown'}
@@ -466,83 +453,169 @@ Rules:
 - If the title suggests implementation or systems responsibility, prefer technical_buyer.
 - If the title suggests process knowledge, internal advocacy, or day-to-day ownership, prefer champion, coach, influencer, or user_buyer.
 - Exclude duplicate names and anyone already in the existing contacts list.`,
-          },
-        ],
-        tools: [
-          {
-            type: 'function',
-            function: {
-              name: 'structure_contacts',
-              description: 'Return discovered contacts for the stakeholder map',
-              parameters: {
-                type: 'object',
-                properties: {
-                  contacts: {
-                    type: 'array',
-                    items: {
-                      type: 'object',
-                      properties: {
-                        name: { type: 'string' },
-                        title: { type: 'string' },
-                        department: { type: 'string' },
-                        seniority: { type: 'string', enum: ['c-suite', 'vp', 'director', 'manager', 'individual'] },
-                        buyer_role: { type: 'string', enum: ['champion', 'economic_buyer', 'technical_buyer', 'user_buyer', 'coach', 'influencer', 'blocker', 'unknown'] },
-                        influence_level: { type: 'string', enum: ['high', 'medium', 'low'] },
-                        linkedin_url: { type: 'string' },
-                        notes: { type: 'string' },
-                        confidence: { type: 'string', enum: ['verified', 'likely', 'suggested'] },
-                      },
-                      required: ['name', 'title', 'buyer_role'],
-                      additionalProperties: false,
+        },
+      ],
+      tools: [
+        {
+          type: 'function',
+          function: {
+            name: 'structure_contacts',
+            description: 'Return discovered contacts for the stakeholder map',
+            parameters: {
+              type: 'object',
+              properties: {
+                contacts: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string' },
+                      title: { type: 'string' },
+                      department: { type: 'string' },
+                      seniority: { type: 'string', enum: ['c-suite', 'vp', 'director', 'manager', 'individual'] },
+                      buyer_role: { type: 'string', enum: ['champion', 'economic_buyer', 'technical_buyer', 'user_buyer', 'coach', 'influencer', 'blocker', 'unknown'] },
+                      influence_level: { type: 'string', enum: ['high', 'medium', 'low'] },
+                      linkedin_url: { type: 'string' },
+                      notes: { type: 'string' },
+                      confidence: { type: 'string', enum: ['verified', 'likely', 'suggested'] },
                     },
+                    required: ['name', 'title', 'buyer_role'],
+                    additionalProperties: false,
                   },
                 },
-                required: ['contacts'],
-                additionalProperties: false,
               },
+              required: ['contacts'],
+              additionalProperties: false,
             },
           },
-        ],
-        tool_choice: { type: 'function', function: { name: 'structure_contacts' } },
-        temperature: 0.2,
-      }),
-    });
+        },
+      ],
+      tool_choice: { type: 'function', function: { name: 'structure_contacts' } },
+      temperature: 0.2,
+    }),
+  });
 
-    if (!aiResp.ok) {
-      const status = aiResp.status;
-      const bodyText = await aiResp.text();
-      console.error('discover-contacts AI error:', status, bodyText);
-      if (status === 429) return jsonResponse({ error: 'Rate limit exceeded' }, 429);
-      if (status === 402) return jsonResponse({ error: 'AI credits exhausted' }, 402);
-      return jsonResponse({ error: `AI error: ${status}` }, 500);
+  if (!aiResp.ok) {
+    const status = aiResp.status;
+    const bodyText = await aiResp.text();
+    console.error('discover-contacts AI error:', status, bodyText);
+    if (status === 429) return { accountId, accountName: resolvedAccountName, error: 'Rate limit exceeded' };
+    if (status === 402) return { accountId, accountName: resolvedAccountName, error: 'AI credits exhausted' };
+    return { accountId, accountName: resolvedAccountName, error: `AI error: ${status}` };
+  }
+
+  const aiData = await aiResp.json();
+  const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+  if (!toolCall?.function?.arguments) {
+    console.error('discover-contacts AI response missing tool call:', JSON.stringify(aiData).slice(0, 1000));
+    return { accountId, accountName: resolvedAccountName, error: 'No structured response from AI' };
+  }
+
+  const parsed = JSON.parse(toolCall.function.arguments);
+  const discovered = dedupeContacts(parsed?.contacts || []).filter((contact: any) => !existingNames.has(cleanText(contact.name).toLowerCase()));
+
+  console.log('discover-contacts completed:', {
+    accountId,
+    accountName: resolvedAccountName,
+    totalStructured: parsed?.contacts?.length || 0,
+    newContacts: discovered.length,
+    source: webResearch ? (websiteSummary ? 'website+perplexity+ai' : 'perplexity+ai') : (websiteSummary ? 'website+ai' : 'ai'),
+  });
+
+  return {
+    accountId,
+    accountName: resolvedAccountName,
+    success: true,
+    contacts: discovered,
+    total_found: parsed?.contacts?.length || 0,
+    new_contacts: discovered.length,
+    source: webResearch ? (websiteSummary ? 'website+perplexity+ai' : 'perplexity+ai') : (websiteSummary ? 'website+ai' : 'ai'),
+    discovery_mode: resolvedMode,
+    focus_prompt: resolvedFocusPrompt || null,
+    website_research_used: Boolean(websiteSummary),
+  };
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
+
+  try {
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return jsonResponse({ error: 'Missing authorization' }, 401);
     }
 
-    const aiData = await aiResp.json();
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall?.function?.arguments) {
-      console.error('discover-contacts AI response missing tool call:', JSON.stringify(aiData).slice(0, 1000));
-      return jsonResponse({ error: 'No structured response from AI' }, 500);
+    const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      console.error('discover-contacts auth error:', userError?.message || 'No user');
+      return jsonResponse({ error: 'Unauthorized' }, 401);
     }
 
-    const parsed = JSON.parse(toolCall.function.arguments);
-    const discovered = dedupeContacts(parsed?.contacts || []).filter((contact: any) => !existingNames.has(cleanText(contact.name).toLowerCase()));
+    const userId = user.id;
+    const body = await req.json();
 
-    console.log('discover-contacts completed:', {
-      accountId,
-      totalStructured: parsed?.contacts?.length || 0,
-      newContacts: discovered.length,
-      source: webResearch ? (websiteSummary ? 'website+perplexity+ai' : 'perplexity+ai') : (websiteSummary ? 'website+ai' : 'ai'),
-    });
+    // Support batch mode: if accountIds array is provided, run for each
+    const accountIds: string[] = body.accountIds || (body.accountId ? [body.accountId] : []);
+    if (accountIds.length === 0) {
+      return jsonResponse({ error: 'accountId or accountIds required' }, 400);
+    }
+
+    const isBatch = accountIds.length > 1;
+
+    if (!isBatch) {
+      // Single account mode — preserve existing response shape
+      const result = await discoverForSingleAccount({
+        supabase,
+        userId,
+        accountId: accountIds[0],
+        accountName: body.accountName,
+        website: body.website,
+        industry: body.industry,
+        opportunityContext: body.opportunityContext,
+        focusPrompt: body.focusPrompt,
+        maxContacts: body.maxContacts,
+        discoveryMode: body.discoveryMode,
+        division: body.division,
+      });
+
+      if (result.error) {
+        return jsonResponse({ error: result.error }, 400);
+      }
+      return jsonResponse(result);
+    }
+
+    // Batch mode — process sequentially to avoid timeouts, return results array
+    const results: any[] = [];
+    for (const accountId of accountIds) {
+      try {
+        const result = await discoverForSingleAccount({
+          supabase,
+          userId,
+          accountId,
+          discoveryMode: body.discoveryMode,
+          maxContacts: body.maxContacts,
+          focusPrompt: body.focusPrompt,
+          division: body.division,
+        });
+        results.push(result);
+        console.log(`Batch discover: ${result.accountName || accountId} — ${result.new_contacts || 0} new contacts`);
+      } catch (err) {
+        console.error(`Batch discover failed for ${accountId}:`, err);
+        results.push({ accountId, error: err instanceof Error ? err.message : 'Unknown error' });
+      }
+    }
 
     return jsonResponse({
       success: true,
-      contacts: discovered,
-      total_found: parsed?.contacts?.length || 0,
-      new_contacts: discovered.length,
-      source: webResearch ? (websiteSummary ? 'website+perplexity+ai' : 'perplexity+ai') : (websiteSummary ? 'website+ai' : 'ai'),
-      discovery_mode: resolvedMode,
-      focus_prompt: resolvedFocusPrompt || null,
-      website_research_used: Boolean(websiteSummary),
+      batch: true,
+      total_accounts: accountIds.length,
+      completed: results.filter((r) => r.success).length,
+      failed: results.filter((r) => r.error).length,
+      results,
     });
   } catch (error) {
     console.error('discover-contacts error:', error);
