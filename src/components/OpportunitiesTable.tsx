@@ -402,6 +402,14 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     return filtered;
   }, [opportunities, searchQuery, savedView, renewalsOnly, excludeRenewals, renewalOpportunityIds, stageFilter]);
 
+  // For renewal opps, separate OOB/churning into a hidden-by-default section
+  const { activeFilteredOpps, churningOpps } = useMemo(() => {
+    if (!renewalsOnly) return { activeFilteredOpps: filteredOpportunities, churningOpps: [] };
+    const active = filteredOpportunities.filter(o => o.churnRisk !== 'certain');
+    const churning = filteredOpportunities.filter(o => o.churnRisk === 'certain');
+    return { activeFilteredOpps: active, churningOpps: churning };
+  }, [filteredOpportunities, renewalsOnly]);
+
   // Sort opportunities
   const sortKeyMap: Record<string, { key: keyof Opportunity; customRank?: Record<string, number> }> = {
     status: { key: 'status', customRank: OPP_STATUS_SORT_RANK },
