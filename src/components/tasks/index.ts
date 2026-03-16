@@ -1,10 +1,12 @@
 export { MomentumHeader } from './MomentumHeader';
 export { TaskRow } from './TaskRow';
+export { TaskCard } from './TaskCard';
 export { TaskEditDialog } from './TaskEditDialog';
 export { AddTaskDialog } from './AddTaskDialog';
 export { FilterBar, type GroupMode } from './FilterBar';
 export { OverdueSection } from './OverdueSection';
 export { TaskBulkBar } from './TaskBulkBar';
+export { DayTimeline } from './DayTimeline';
 export { STATUS_ORDER, STATUS_META, PRIORITY_COLORS, WORKSTREAM_LABELS, STATUS_CYCLE } from './constants';
 export type { DriverTag } from './constants';
 export { getWorkstream, sortTasks, getAccountName, getOpportunityName } from './helpers';

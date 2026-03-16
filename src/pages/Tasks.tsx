@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { Task, TaskStatus, Workstream } from '@/types';
 import {
-  MomentumHeader, TaskRow, AddTaskDialog, FilterBar, OverdueSection, TaskBulkBar,
+  MomentumHeader, TaskCard, AddTaskDialog, FilterBar, OverdueSection, TaskBulkBar, DayTimeline,
   STATUS_ORDER, STATUS_META, getWorkstream, sortTasks, getAccountName,
   type GroupMode,
 } from '@/components/tasks';
@@ -26,7 +26,6 @@ export default function Tasks() {
 
   useEffect(() => { generateDueRecurringInstances(); }, [generateDueRecurringInstances]);
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -55,7 +54,6 @@ export default function Tasks() {
     });
   }, [tasks, filterWorkstream, filterDue, searchQuery, today, weekEnd]);
 
-  // Overdue tasks - pinned at top
   const overdueTasks = useMemo(() =>
     sortTasks(filteredTasks.filter(t =>
       t.dueDate && t.dueDate < today && t.status !== 'done' && t.status !== 'dropped'
@@ -64,11 +62,10 @@ export default function Tasks() {
   );
   const overdueIds = useMemo(() => new Set(overdueTasks.map(t => t.id)), [overdueTasks]);
 
-  // Grouped by status (excluding overdue since they're pinned)
   const groupedByStatus = useMemo(() => {
     const groups: Record<TaskStatus, Task[]> = { 'next': [], 'in-progress': [], 'blocked': [], 'done': [], 'dropped': [] };
     filteredTasks.forEach(task => {
-      if (overdueIds.has(task.id)) return; // skip, shown in overdue section
+      if (overdueIds.has(task.id)) return;
       const status = (task.status as string) === 'open' ? 'next' : task.status as TaskStatus;
       (groups[status] || groups['next']).push(task);
     });
@@ -76,7 +73,6 @@ export default function Tasks() {
     return groups;
   }, [filteredTasks, overdueIds]);
 
-  // Grouped by account
   const groupedByAccount = useMemo(() => {
     const groups: Record<string, Task[]> = {};
     filteredTasks.forEach(task => {
@@ -87,7 +83,6 @@ export default function Tasks() {
       groups[name].push(task);
     });
     Object.keys(groups).forEach(k => { groups[k] = sortTasks(groups[k]); });
-    // Sort account groups by count desc
     return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
   }, [filteredTasks, overdueIds, accounts, opportunities]);
 
@@ -105,6 +100,9 @@ export default function Tasks() {
   return (
     <Layout>
       <div className="p-4 lg:p-6 max-w-4xl mx-auto">
+        {/* Day Progress Timeline */}
+        <DayTimeline />
+
         <MomentumHeader workstreamFilter={filterWorkstream} />
 
         {/* Title row */}
@@ -131,7 +129,6 @@ export default function Tasks() {
           </div>
         </div>
 
-        {/* Filters */}
         <FilterBar
           filterWorkstream={filterWorkstream} setFilterWorkstream={setFilterWorkstream}
           filterDue={filterDue} setFilterDue={setFilterDue}
@@ -144,7 +141,7 @@ export default function Tasks() {
 
         {/* Task list */}
         {groupMode === 'status' ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {STATUS_ORDER.map(status => {
               const groupTasks = groupedByStatus[status];
               const isCollapsed = collapsedGroups[status];
@@ -152,21 +149,21 @@ export default function Tasks() {
               return (
                 <div key={status}>
                   <button
-                    className="flex items-center gap-1.5 w-full text-left py-1"
+                    className="flex items-center gap-1.5 w-full text-left py-1.5 mb-1"
                     onClick={() => toggleGroup(status)}
                   >
                     {isCollapsed ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
-                    <span className={cn("h-2 w-2 rounded-full", meta.dot)} />
+                    <span className={cn("h-2.5 w-2.5 rounded-full", meta.dot)} />
                     <span className="text-xs font-semibold">{meta.label}</span>
                     <span className="text-[10px] text-muted-foreground">({groupTasks.length})</span>
                   </button>
                   {!isCollapsed && (
-                    <div className="space-y-0.5 ml-5">
+                    <div className="space-y-1.5 ml-5">
                       {groupTasks.length === 0 ? (
-                        <p className="text-[11px] text-muted-foreground italic py-1 pl-2">No tasks</p>
+                        <p className="text-[11px] text-muted-foreground italic py-2 pl-2">No tasks</p>
                       ) : (
                         groupTasks.map(task => (
-                          <TaskRow key={task.id} task={task} selected={selectedIds.has(task.id)} onToggleSelect={toggleSelect} />
+                          <TaskCard key={task.id} task={task} selected={selectedIds.has(task.id)} onToggleSelect={toggleSelect} />
                         ))
                       )}
                     </div>
@@ -176,13 +173,13 @@ export default function Tasks() {
             })}
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {groupedByAccount.map(([accountName, accountTasks]) => {
               const isCollapsed = collapsedGroups[`acct-${accountName}`];
               return (
                 <div key={accountName}>
                   <button
-                    className="flex items-center gap-1.5 w-full text-left py-1"
+                    className="flex items-center gap-1.5 w-full text-left py-1.5 mb-1"
                     onClick={() => toggleGroup(`acct-${accountName}`)}
                   >
                     {isCollapsed ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
@@ -190,9 +187,9 @@ export default function Tasks() {
                     <span className="text-[10px] text-muted-foreground">({accountTasks.length})</span>
                   </button>
                   {!isCollapsed && (
-                    <div className="space-y-0.5 ml-5">
+                    <div className="space-y-1.5 ml-5">
                       {accountTasks.map(task => (
-                        <TaskRow key={task.id} task={task} selected={selectedIds.has(task.id)} onToggleSelect={toggleSelect} />
+                        <TaskCard key={task.id} task={task} selected={selectedIds.has(task.id)} onToggleSelect={toggleSelect} />
                       ))}
                     </div>
                   )}
@@ -213,7 +210,6 @@ export default function Tasks() {
           </div>
         )}
 
-        {/* Bulk actions bar */}
         <TaskBulkBar selectedIds={selectedIds} onClear={() => setSelectedIds(new Set())} />
       </div>
 
