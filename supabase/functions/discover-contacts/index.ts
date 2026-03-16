@@ -520,8 +520,31 @@ Rules:
     return { accountId, accountName: resolvedAccountName, error: 'No structured response from AI' };
   }
 
-  const parsed = JSON.parse(toolCall.function.arguments);
-  const discovered = dedupeContacts(parsed?.contacts || []).filter((contact: any) => !existingNames.has(cleanText(contact.name).toLowerCase()));
+  let parsed: any;
+  try {
+    parsed = JSON.parse(toolCall.function.arguments);
+  } catch (parseErr) {
+    console.error('discover-contacts JSON parse failed:', parseErr, toolCall.function.arguments.slice(0, 500));
+    return { accountId, accountName: resolvedAccountName, error: 'Failed to parse AI response' };
+  }
+
+  // Server-side validation: enforce LinkedIn URL and tenure data
+  const validContacts = (parsed?.contacts || []).filter((contact: any) => {
+    if (!contact.name || !cleanText(contact.name)) return false;
+    // Must have a real LinkedIn URL
+    if (!contact.linkedin_url || !contact.linkedin_url.includes('linkedin.com/in/')) {
+      console.log(`discover-contacts: filtered out "${contact.name}" — missing LinkedIn URL`);
+      return false;
+    }
+    // Must have tenure data
+    if (typeof contact.company_tenure_months !== 'number' && typeof contact.role_tenure_months !== 'number') {
+      console.log(`discover-contacts: filtered out "${contact.name}" — missing tenure data`);
+      return false;
+    }
+    return true;
+  });
+
+  const discovered = dedupeContacts(validContacts).filter((contact: any) => !existingNames.has(cleanText(contact.name).toLowerCase()));
 
   console.log('discover-contacts completed:', {
     accountId,
