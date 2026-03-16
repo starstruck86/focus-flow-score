@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { format, parseISO, isValid } from 'date-fns';
-import { CalendarIcon, Pencil } from 'lucide-react';
+import { CalendarIcon, Pencil, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
