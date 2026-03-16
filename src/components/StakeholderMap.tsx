@@ -135,6 +135,18 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
     onSuccess: () => qc.invalidateQueries({ queryKey: ['stakeholder-contacts', accountId] }),
   });
 
+  const deleteContact = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('contacts').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['stakeholder-contacts', accountId] });
+      setEditingContact(null);
+      toast.success('Contact removed');
+    },
+  });
+
   const addContact = useMutation({
     mutationFn: async (contact: any) => {
       const { error } = await supabase.from('contacts').insert({
