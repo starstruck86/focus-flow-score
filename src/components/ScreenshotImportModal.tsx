@@ -11,6 +11,7 @@ import { useStore } from '@/store/useStore';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import type { Account } from '@/types';
 
 interface ScreenshotImportModalProps {
   open: boolean;
@@ -52,6 +53,7 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
   const addAccount = useStore(s => s.addAccount);
   const addRenewal = useStore(s => s.addRenewal);
   const accounts = useStore(s => s.accounts);
+  const updateAccount = useStore(s => s.updateAccount);
 
   const addFiles = useCallback((newFiles: FileList | File[]) => {
     const MAX_SIZE = 10 * 1024 * 1024; // 10MB per file
@@ -109,7 +111,7 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
         if (acc.salesforce_id && a.salesforceId && acc.salesforce_id === a.salesforceId) return true;
         return false;
       });
-      return { ...acc, matchedExistingId: match?.id, selected: !match };
+      return { ...acc, matchedExistingId: match?.id, selected: true };
     });
   };
 
@@ -187,7 +189,38 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
       try {
         let accountId: string | undefined;
 
-        if (acc.motion === 'renewal' && acc.renewal_due) {
+        // If matched to an existing account, merge new data into it
+        if (acc.matchedExistingId) {
+          accountId = acc.matchedExistingId;
+          const mergeUpdates: Record<string, any> = {};
+          if (acc.website) mergeUpdates.website = acc.website;
+          if (acc.industry) mergeUpdates.industry = acc.industry;
+          if (acc.ecommerce) mergeUpdates.ecommerce = acc.ecommerce;
+          if (acc.mar_tech) mergeUpdates.mar_tech = acc.mar_tech;
+          if (acc.salesforce_id) mergeUpdates.salesforce_id = acc.salesforce_id;
+          if (acc.salesforce_link) mergeUpdates.salesforce_link = acc.salesforce_link;
+          if (acc.planhat_link) mergeUpdates.planhat_link = acc.planhat_link;
+          if (acc.notes) {
+            const existing = accounts.find(a => a.id === accountId);
+            mergeUpdates.notes = existing?.notes
+              ? `${existing.notes}\n\n**Imported:** ${acc.notes}`
+              : acc.notes;
+          }
+
+          // Only update fields that have values (smart-merge: don't overwrite with empty)
+          if (Object.keys(mergeUpdates).length > 0) {
+            const localUpdates: Partial<Account> = {};
+            if (mergeUpdates.website) localUpdates.website = mergeUpdates.website;
+            if (mergeUpdates.industry) localUpdates.industry = mergeUpdates.industry;
+            if (mergeUpdates.ecommerce) localUpdates.ecommerce = mergeUpdates.ecommerce;
+            if (mergeUpdates.mar_tech) localUpdates.marTech = mergeUpdates.mar_tech;
+            if (mergeUpdates.salesforce_id) localUpdates.salesforceId = mergeUpdates.salesforce_id;
+            if (mergeUpdates.salesforce_link) localUpdates.salesforceLink = mergeUpdates.salesforce_link;
+            if (mergeUpdates.planhat_link) localUpdates.planhatLink = mergeUpdates.planhat_link;
+            if (mergeUpdates.notes) localUpdates.notes = mergeUpdates.notes;
+            updateAccount(accountId, localUpdates);
+          }
+        } else if (acc.motion === 'renewal' && acc.renewal_due) {
           await addRenewal({
             accountName: acc.name,
             arr: acc.arr || 0,
@@ -367,8 +400,9 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
                   />
                   <span className="font-semibold text-sm flex-1">{acc.name}</span>
                   {acc.matchedExistingId && (
-                    <Badge variant="outline" className="text-[10px] text-status-yellow border-status-yellow/30">
-                      <AlertTriangle className="h-3 w-3 mr-1" /> Already exists
+                    <Badge variant="outline" className={cn("text-[10px]", acc.selected ? "text-primary border-primary/30" : "text-status-yellow border-status-yellow/30")}>
+                      {acc.selected ? <CheckCircle2 className="h-3 w-3 mr-1" /> : <AlertTriangle className="h-3 w-3 mr-1" />}
+                      {acc.selected ? 'Will merge' : 'Already exists'}
                     </Badge>
                   )}
                   <Badge variant="outline" className="text-[10px]">
