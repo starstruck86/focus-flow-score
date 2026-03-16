@@ -668,14 +668,17 @@ ${Array.from(existingNames).join(', ') || 'none'}
 
 Rules:
 - Return at most ${requestedMaxContacts} contacts.
-- ORDERING: Always start from the TOP of the org chart and work DOWN. C-suite first (CEO, CMO, CRO, CTO, COO), then SVP/VP, then Director, then Manager. Fill your list top-down — if you can only find 3 people, make sure they're the most senior 3.
+- RELEVANCE FIRST: Every contact MUST be relevant to the discovery mode and role guidance above. Do NOT include generic C-suite like CFO, CHRO, General Counsel, or Chief Legal Officer unless the discovery mode specifically targets finance, HR, or legal. A CMO or CRO is relevant; a CFO is NOT (unless they also own marketing budget).
+- ORDERING: Within relevant people, prioritize seniority: CMO/CRO/CDO (relevant C-suite) first, then SVP/VP of Marketing/Digital/CX, then Directors, then Managers. But a relevant Director of Lifecycle Marketing is ALWAYS better than an irrelevant CFO.
+- Each contact must have a clear connection to the buying use case: they either USE the tools, OWN the budget for the relevant department, or serve as an influencer/champion/coach/blocker for this type of purchase.
 - Prioritize exact current employees at this company.
 - Map buyer_role from: champion, economic_buyer, technical_buyer, user_buyer, coach, influencer, blocker, unknown.
 - Map influence_level from: high, medium, low.
-- Use notes for a short evidence-backed reason they belong in the map.
-- If the title suggests budget ownership or executive sponsorship, prefer economic_buyer.
-- If the title suggests implementation or systems responsibility, prefer technical_buyer.
-- If the title suggests process knowledge, internal advocacy, or day-to-day ownership, prefer champion, coach, influencer, or user_buyer.
+- Use notes for a short evidence-backed reason they belong in the map — specifically WHY they are relevant to marketing/CRM/lifecycle/digital tools.
+- If the title suggests budget ownership for the RELEVANT department (e.g., VP Marketing, CMO), prefer economic_buyer.
+- If the title suggests implementation or systems responsibility (e.g., Marketing Ops, CRM Admin), prefer technical_buyer.
+- If the title suggests day-to-day tool usage (e.g., Email Marketing Manager, CRM Specialist), prefer user_buyer or champion.
+- If the title suggests process knowledge or internal advocacy, prefer coach or influencer.
 - Exclude duplicate names and anyone already in the existing contacts list.
 - NEVER include interns, fellows, apprentices, or co-ops — only full-time professional employees.
 - CRITICAL: You MUST provide a direct LinkedIn profile URL for every contact (https://www.linkedin.com/in/...). Do NOT return a contact if you cannot find their LinkedIn profile URL.
