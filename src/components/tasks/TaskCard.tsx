@@ -204,7 +204,7 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
                 <span
                   onClick={startTitleEdit}
                   className={cn(
-                    "text-sm font-medium truncate flex-1 min-w-0 cursor-text hover:text-primary transition-colors",
+                    "text-[13px] font-semibold leading-snug flex-1 min-w-0 cursor-text hover:text-primary transition-colors",
                     isTerminal && "line-through text-muted-foreground"
                   )}
                   title="Click to edit title"
