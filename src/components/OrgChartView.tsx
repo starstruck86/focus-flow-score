@@ -90,6 +90,18 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
     onSuccess: () => qc.invalidateQueries({ queryKey: ['org-chart-contacts', accountId] }),
   });
 
+  const deleteContact = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('contacts').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['org-chart-contacts', accountId] });
+      toast.success('Contact removed');
+      setEditingId(null);
+    },
+  });
+
   const addContactMut = useMutation({
     mutationFn: async (contact: any) => {
       const { error } = await supabase.from('contacts').insert({
