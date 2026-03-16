@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import type { Task, TaskStatus, Workstream } from '@/types';
 import {
   MomentumHeader, TaskCard, AddTaskDialog, FilterBar, OverdueSection, TaskBulkBar, DayTimeline,
+  TaskKanbanBoard,
   STATUS_ORDER, STATUS_META, getWorkstream, sortTasks, getAccountName,
   type GroupMode,
 } from '@/components/tasks';
