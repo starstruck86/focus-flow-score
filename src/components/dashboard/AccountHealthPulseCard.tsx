@@ -95,8 +95,8 @@ export function AccountHealthPulseCard({ motionFilter }: AccountHealthPulseCardP
                       <ScoreBar label="Engaged" value={acct.engagementRecency} />
                     </div>
                     {acct.topGap !== 'Well covered' && (
-                      <div className="flex items-center gap-1 mt-2 text-[10px] text-amber-500">
-                        <AlertTriangle className="h-2.5 w-2.5" />
+                      <div className="flex items-center gap-1.5 mt-2 text-xs text-amber-500">
+                        <AlertTriangle className="h-3 w-3" />
                         {acct.topGap}
                       </div>
                     )}
