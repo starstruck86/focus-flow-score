@@ -27,6 +27,9 @@ import {
   RotateCcw,
   Trash2,
   Pencil,
+  Upload,
+  Loader2,
+  ImagePlus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -102,6 +105,8 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
   const [focusPrompt, setFocusPrompt] = useState(opportunityContext || '');
   const [division, setDivision] = useState('');
   const [lastDiscoveryMeta, setLastDiscoveryMeta] = useState<DiscoveryMeta | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [isParsingDrop, setIsParsingDrop] = useState(false);
 
   useEffect(() => {
     setDiscoveredContacts([]);
@@ -232,6 +237,112 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
     setDivision('');
   };
 
+  const handleScreenshotFiles = useCallback(async (files: File[]) => {
+    const imageFiles = files.filter(f => f.type.startsWith('image/'));
+    if (imageFiles.length === 0 || !user) return;
+
+    setIsParsingDrop(true);
+    try {
+      const uploadedUrls: string[] = [];
+      for (let i = 0; i < imageFiles.length; i++) {
+        const ext = imageFiles[i].name.split('.').pop() || 'png';
+        const path = `${user.id}/stakeholder/${accountId}/${Date.now()}-${i}.${ext}`;
+        const { error } = await supabase.storage
+          .from('enrichment-screenshots')
+          .upload(path, imageFiles[i], { upsert: true });
+        if (error) { console.error('Upload error:', error); continue; }
+        const { data: signedData } = await supabase.storage
+          .from('enrichment-screenshots')
+          .createSignedUrl(path, 3600);
+        if (signedData?.signedUrl) uploadedUrls.push(signedData.signedUrl);
+      }
+
+      if (uploadedUrls.length === 0) { toast.error('Failed to upload screenshot'); return; }
+
+      toast.info(`Extracting contacts from ${uploadedUrls.length} screenshot(s)...`);
+
+      const { data, error } = await supabase.functions.invoke('parse-account-screenshot', {
+        body: {
+          imageUrls: uploadedUrls,
+          context: `This is a CONTACTS screenshot for "${accountName}". Extract each PERSON as a contact under one account. Focus on person names, job titles, departments, emails, LinkedIn URLs.`,
+        },
+      });
+
+      if (error) throw new Error(error.message);
+      if (!data?.success) throw new Error(data?.error || 'Extraction failed');
+
+      const extractedAccounts = data.accounts || [];
+      const allContacts: { name: string; title?: string; email?: string; department?: string }[] = [];
+      for (const acc of extractedAccounts) {
+        if (acc.contacts) allContacts.push(...acc.contacts);
+      }
+      if (allContacts.length === 0) {
+        for (const acc of extractedAccounts) {
+          if (acc.name) allContacts.push({ name: acc.name, title: acc.industry || acc.notes || undefined });
+        }
+      }
+
+      if (allContacts.length === 0) { toast.info('No contacts found in screenshot'); return; }
+
+      let added = 0;
+      for (const contact of allContacts) {
+        const { data: existing } = await supabase
+          .from('contacts')
+          .select('id')
+          .eq('account_id', accountId)
+          .ilike('name', contact.name)
+          .maybeSingle();
+
+        if (!existing) {
+          await supabase.from('contacts').insert({
+            user_id: user.id,
+            account_id: accountId,
+            name: contact.name,
+            title: contact.title || null,
+            email: contact.email || null,
+            department: contact.department || null,
+            status: 'target',
+            buyer_role: 'unknown',
+            influence_level: 'medium',
+            discovery_source: 'screenshot-drop',
+          });
+          added++;
+        }
+      }
+
+      qc.invalidateQueries({ queryKey: ['stakeholder-contacts', accountId] });
+      toast.success(`Added ${added} contact(s)`, {
+        description: allContacts.length > added ? `${allContacts.length - added} duplicate(s) skipped` : undefined,
+      });
+    } catch (err) {
+      toast.error('Failed to parse screenshot', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setIsParsingDrop(false);
+      setIsDragOver(false);
+    }
+  }, [user, accountId, accountName, qc]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    handleScreenshotFiles(Array.from(e.dataTransfer.files));
+  }, [handleScreenshotFiles]);
+
+  const handleUploadClick = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.onchange = (e) => {
+      const target = e.target as HTMLInputElement;
+      if (target.files) handleScreenshotFiles(Array.from(target.files));
+    };
+    input.click();
+  };
+
   const confirmContact = (contact: any) => {
     const tenureParts: string[] = [];
     if (typeof contact.company_tenure_months === 'number') tenureParts.push(`Company tenure: ${contact.company_tenure_months}mo`);
@@ -307,38 +418,55 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
   }
 
   return (
-    <Card className="metric-card border-primary/20">
+    <Card
+      className={cn("metric-card border-primary/20 transition-all", isDragOver && "ring-2 ring-primary/50 bg-primary/5")}
+      onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
+      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false); }}
+      onDrop={handleDrop}
+    >
       <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <CardTitle className="text-base font-display flex items-center gap-2">
-              <Users className="h-4 w-4 text-primary" />
-              Stakeholder Map
-              {totalContacts > 0 && (
-                <Badge variant="outline" className="text-[10px]">
-                  {mappedContacts}/{totalContacts} mapped
-                </Badge>
-              )}
-            </CardTitle>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              Tune discovery by buyer group, target count, or deal-specific guidance.
-            </p>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-1.5">
-            <Button variant="ghost" size="sm" onClick={() => setShowTuning((value) => !value)}>
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              <span className="ml-1 text-xs">Tune</span>
-            </Button>
-            <Button variant="ghost" size="sm" onClick={handleDiscover} disabled={isDiscovering}>
-              <Sparkles className={cn('h-3.5 w-3.5', isDiscovering && 'animate-spin')} />
-              <span className="ml-1 text-xs">{isDiscovering ? 'Finding...' : 'AI Discover'}</span>
-            </Button>
-          </div>
+        <CardTitle className="text-base font-display flex items-center gap-2">
+          <Users className="h-4 w-4 text-primary" />
+          Stakeholder Map
+          {totalContacts > 0 && (
+            <Badge variant="outline" className="text-[10px]">
+              {mappedContacts}/{totalContacts} mapped
+            </Badge>
+          )}
+        </CardTitle>
+        <div className="flex items-center gap-1.5 mt-2">
+          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => setShowTuning((v) => !v)}>
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Tune
+          </Button>
+          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={handleDiscover} disabled={isDiscovering}>
+            <Sparkles className={cn('h-3.5 w-3.5', isDiscovering && 'animate-spin')} />
+            {isDiscovering ? 'Finding...' : 'AI Discover'}
+          </Button>
+          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={handleUploadClick} disabled={isParsingDrop}>
+            {isParsingDrop ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            Screenshot
+          </Button>
         </div>
       </CardHeader>
 
       <CardContent className="space-y-3">
+        {/* Drag-drop overlay */}
+        {isDragOver && !isParsingDrop && (
+          <div className="flex flex-col items-center gap-2 p-6 rounded-lg border-2 border-dashed border-primary/40 bg-primary/5 text-center">
+            <ImagePlus className="h-8 w-8 text-primary/60" />
+            <p className="text-sm font-medium text-primary">Drop screenshot to extract contacts</p>
+            <p className="text-xs text-muted-foreground">LinkedIn, CRM, or any contact list</p>
+          </div>
+        )}
+
+        {isParsingDrop && (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20 text-sm">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <span>Extracting contacts from screenshot...</span>
+          </div>
+        )}
         {showTuning && (
           <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
             <div className="grid gap-3 md:grid-cols-[1fr_1fr_100px]">
@@ -539,7 +667,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
           <div className="py-8 text-center text-muted-foreground">
             <Users className="mx-auto mb-2 h-10 w-10 opacity-20" />
             <p className="text-sm">No stakeholders mapped yet</p>
-            <p className="mt-1 text-xs">Use AI Discover, then tune the focus if results are too narrow.</p>
+            <p className="mt-1 text-xs">Drop a screenshot, use AI Discover, or tune the focus.</p>
           </div>
         ) : (
           <div className="space-y-3">
