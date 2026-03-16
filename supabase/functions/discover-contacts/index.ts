@@ -372,6 +372,7 @@ Deno.serve(async (req) => {
       roleBrief: brief,
       websiteSummary,
       maxContacts: requestedMaxContacts,
+      division: resolvedDivision,
     });
 
     const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
