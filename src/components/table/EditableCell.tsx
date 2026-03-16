@@ -230,7 +230,7 @@ export function EditableTextareaCell({
   );
 }
 
-function DigestBlock({ entries }: { entries: string[] }) {
+function DigestBlock({ entries }: { entries: { date: string; text: string; url: string | null }[] }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -249,11 +249,25 @@ function DigestBlock({ entries }: { entries: string[] }) {
         {open ? <ChevronUp className="h-3 w-3 text-status-yellow" /> : <ChevronDown className="h-3 w-3 text-status-yellow" />}
       </button>
       {open && (
-        <div className="mt-1.5 space-y-0.5">
+        <div className="mt-1.5 space-y-1">
           {entries.map((entry, i) => (
             <div key={i} className="flex gap-1.5 text-foreground/80">
               <span className="text-muted-foreground shrink-0">•</span>
-              <span>{entry}</span>
+              <div className="flex-1">
+                <span className="text-[10px] text-muted-foreground mr-1">{entry.date}</span>
+                <span>{entry.text}</span>
+                {entry.url && (
+                  <a
+                    href={entry.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-0.5 ml-1 text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-2.5 w-2.5" />
+                    <span>source</span>
+                  </a>
+                )}
+              </div>
             </div>
           ))}
         </div>
