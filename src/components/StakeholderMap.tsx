@@ -111,6 +111,13 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
   const [lastDiscoveryMeta, setLastDiscoveryMeta] = useState<DiscoveryMeta | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isParsingDrop, setIsParsingDrop] = useState(false);
+  const [draggedContactId, setDraggedContactId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newContact, setNewContact] = useState({ name: '', title: '', department: '', buyer_role: 'unknown', reporting_to: '' });
+  const [addingUnderParent, setAddingUnderParent] = useState<string | null>(null);
+  const [quickAddName, setQuickAddName] = useState('');
+  const [quickAddTitle, setQuickAddTitle] = useState('');
 
   useEffect(() => {
     setDiscoveredContacts([]);
@@ -423,7 +430,43 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
     const isEditing = editingContact === contact.id;
 
     return (
-      <div className={cn("relative rounded-lg border-2 bg-card shadow-sm transition-all w-[160px]", config.bg.split(' ')[0] ? `border-${config.bg.split('border-')[1]?.split(' ')[0] || 'border'}` : 'border-border')}>
+      <div
+        draggable={!isEditing}
+        onDragStart={(e) => {
+          e.stopPropagation();
+          setDraggedContactId(contact.id);
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', contact.id);
+        }}
+        onDragEnd={() => { setDraggedContactId(null); setDropTargetId(null); }}
+        onDragOver={(e) => {
+          if (draggedContactId && draggedContactId !== contact.id) {
+            e.preventDefault();
+            e.stopPropagation();
+            setDropTargetId(contact.id);
+          }
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTargetId(null);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (draggedContactId && draggedContactId !== contact.id) {
+            // Update the dragged contact's reporting_to to this contact's name
+            updateContact.mutate({ id: draggedContactId, updates: { reporting_to: contact.name } });
+            toast.success('Reporting line updated');
+          }
+          setDraggedContactId(null);
+          setDropTargetId(null);
+        }}
+        className={cn(
+          "relative rounded-lg border-2 bg-card shadow-sm transition-all w-[160px] cursor-grab active:cursor-grabbing",
+          config.bg.split(' ')[0] ? `border-${config.bg.split('border-')[1]?.split(' ')[0] || 'border'}` : 'border-border',
+          draggedContactId === contact.id && "opacity-40 scale-95",
+          dropTargetId === contact.id && "ring-2 ring-primary shadow-lg scale-105",
+        )}
+      >
         {/* Color top bar */}
         <div className={cn("h-1.5 rounded-t-[6px]", config.bg.split(' ')[0])} />
 
@@ -534,52 +577,143 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
     );
   };
 
+  // Blank placeholder card for adding a new person under a parent
+  const renderBlankCard = (parentName: string) => {
+    const isAdding = addingUnderParent === parentName;
+
+    if (isAdding) {
+      return (
+        <div className="rounded-lg border-2 border-dashed border-primary/40 bg-primary/5 w-[160px] p-3 space-y-2">
+          <Input
+            className="h-7 text-xs text-center"
+            placeholder="Name"
+            value={quickAddName}
+            onChange={(e) => setQuickAddName(e.target.value)}
+            autoFocus
+            onKeyDown={(e) => { if (e.key === 'Enter' && quickAddName.trim()) addNewContact(parentName); if (e.key === 'Escape') { setAddingUnderParent(null); setQuickAddName(''); setQuickAddTitle(''); } }}
+          />
+          <Input
+            className="h-7 text-xs text-center"
+            placeholder="Role/Position"
+            value={quickAddTitle}
+            onChange={(e) => setQuickAddTitle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && quickAddName.trim()) addNewContact(parentName); if (e.key === 'Escape') { setAddingUnderParent(null); setQuickAddName(''); setQuickAddTitle(''); } }}
+          />
+          <div className="flex gap-1">
+            <Button size="sm" className="h-6 text-xs flex-1" disabled={!quickAddName.trim()} onClick={() => addNewContact(parentName)}>
+              <Check className="h-3 w-3 mr-1" /> Add
+            </Button>
+            <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => { setAddingUnderParent(null); setQuickAddName(''); setQuickAddTitle(''); }}>
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        className={cn(
+          "rounded-lg border-2 border-dashed border-border/40 bg-muted/20 w-[160px] py-4 px-3 text-center cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-all group",
+          draggedContactId && "border-primary/30 bg-primary/5",
+        )}
+        onClick={() => { setAddingUnderParent(parentName); setQuickAddName(''); setQuickAddTitle(''); }}
+        onDragOver={(e) => {
+          if (draggedContactId) { e.preventDefault(); e.stopPropagation(); }
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (draggedContactId) {
+            updateContact.mutate({ id: draggedContactId, updates: { reporting_to: parentName } });
+            toast.success('Reporting line updated');
+            setDraggedContactId(null);
+            setDropTargetId(null);
+          }
+        }}
+      >
+        <Plus className="h-4 w-4 mx-auto text-muted-foreground/50 group-hover:text-primary transition-colors" />
+        <p className="text-[11px] text-muted-foreground/60 group-hover:text-muted-foreground mt-1 font-medium">Add Name</p>
+        <p className="text-[10px] text-muted-foreground/40 group-hover:text-muted-foreground/60">Role/Position</p>
+      </div>
+    );
+  };
+
+  // Root-level drop zone to make a node a root
+  const renderRootDropZone = () => {
+    if (!draggedContactId) return null;
+    return (
+      <div
+        className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 w-[160px] py-4 px-3 text-center transition-all"
+        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (draggedContactId) {
+            updateContact.mutate({ id: draggedContactId, updates: { reporting_to: null } });
+            toast.success('Moved to root level');
+            setDraggedContactId(null);
+            setDropTargetId(null);
+          }
+        }}
+      >
+        <p className="text-[11px] text-primary font-medium">Drop here for root level</p>
+      </div>
+    );
+  };
+
   // Recursive tree renderer with connecting lines
   const renderTree = (node: any): React.ReactNode => {
     const children = childrenMap.get(node.id) || [];
+    const allItems = [...children];
 
     return (
       <div key={node.id} className="flex flex-col items-center">
         {renderNodeCard(node)}
 
-        {children.length > 0 && (
-          <>
-            <div className="w-px h-5 bg-border" />
-            <div className="relative flex items-start">
-              {children.length > 1 && (
-                <div className="absolute top-0 bg-border h-px" style={{ left: `calc(50% / ${children.length})`, right: `calc(50% / ${children.length})` }} />
-              )}
-              <div className="flex gap-3 items-start">
-                {children.map((child: any) => (
-                  <div key={child.id} className="flex flex-col items-center">
-                    <div className="w-px h-5 bg-border" />
-                    {renderTree(child)}
-                  </div>
-                ))}
+        {/* Always show children + blank placeholder */}
+        <div className="w-px h-5 bg-border" />
+        <div className="relative flex items-start">
+          {(allItems.length + 1) > 1 && (
+            <div className="absolute top-0 bg-border h-px" style={{ left: `calc(50% / ${allItems.length + 1})`, right: `calc(50% / ${allItems.length + 1})` }} />
+          )}
+          <div className="flex gap-3 items-start">
+            {allItems.map((child: any) => (
+              <div key={child.id} className="flex flex-col items-center">
+                <div className="w-px h-5 bg-border" />
+                {renderTree(child)}
               </div>
+            ))}
+            <div className="flex flex-col items-center">
+              <div className="w-px h-5 bg-border/30" />
+              {renderBlankCard(node.name)}
             </div>
-          </>
-        )}
+          </div>
+        </div>
       </div>
     );
   };
 
-  // Add contact form state
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newContact, setNewContact] = useState({ name: '', title: '', department: '', buyer_role: 'unknown', reporting_to: '' });
-
-  const addNewContact = () => {
-    if (!newContact.name.trim()) return;
+  const addNewContact = (parentName?: string) => {
+    const name = parentName ? quickAddName : newContact.name;
+    const title = parentName ? quickAddTitle : newContact.title;
+    if (!name.trim()) return;
     addContact.mutate({
-      name: newContact.name.trim(),
-      title: newContact.title || null,
-      department: newContact.department || null,
-      buyer_role: newContact.buyer_role,
-      reporting_to: newContact.reporting_to || null,
+      name: name.trim(),
+      title: title || null,
+      department: parentName ? null : (newContact.department || null),
+      buyer_role: parentName ? 'unknown' : newContact.buyer_role,
+      reporting_to: parentName || null,
       influence_level: 'medium',
     });
-    setShowAddForm(false);
-    setNewContact({ name: '', title: '', department: '', buyer_role: 'unknown', reporting_to: '' });
+    if (parentName) {
+      setAddingUnderParent(null);
+      setQuickAddName('');
+      setQuickAddTitle('');
+    } else {
+      setShowAddForm(false);
+      setNewContact({ name: '', title: '', department: '', buyer_role: 'unknown', reporting_to: '' });
+    }
   };
 
   if (isLoading) {
@@ -677,7 +811,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
               </div>
             </div>
             <div className="flex gap-2">
-              <Button size="sm" className="h-6 text-xs" disabled={!newContact.name.trim()} onClick={addNewContact}>
+              <Button size="sm" className="h-6 text-xs" disabled={!newContact.name.trim()} onClick={() => addNewContact()}>
                 <Check className="h-3 w-3 mr-1" /> Add to Chart
               </Button>
               <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setShowAddForm(false)}>Cancel</Button>
@@ -820,31 +954,44 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
         ) : (
           <ScrollArea className="w-full">
             <div className="min-w-fit py-4 px-2">
-              {roots.length === 1 ? (
-                <div className="flex justify-center">
-                  {renderTree(roots[0])}
+              <div className="flex flex-col items-center">
+                {/* Company header node */}
+                <div
+                  className="rounded-lg border-2 border-primary/30 bg-primary/5 px-4 py-2 text-center shadow-sm"
+                  onDragOver={(e) => { if (draggedContactId) { e.preventDefault(); e.stopPropagation(); } }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (draggedContactId) {
+                      updateContact.mutate({ id: draggedContactId, updates: { reporting_to: null } });
+                      toast.success('Moved to root level');
+                      setDraggedContactId(null);
+                      setDropTargetId(null);
+                    }
+                  }}
+                >
+                  <span className="text-sm font-semibold text-foreground">{accountName}</span>
                 </div>
-              ) : (
-                <div className="flex flex-col items-center">
-                  <div className="rounded-lg border-2 border-primary/30 bg-primary/5 px-4 py-2 text-center shadow-sm">
-                    <span className="text-sm font-semibold text-foreground">{accountName}</span>
-                  </div>
-                  <div className="w-px h-5 bg-border" />
-                  <div className="relative flex items-start">
-                    {roots.length > 1 && (
-                      <div className="absolute top-0 bg-border h-px" style={{ left: `calc(50% / ${roots.length})`, right: `calc(50% / ${roots.length})` }} />
-                    )}
-                    <div className="flex gap-3 items-start">
-                      {roots.map((root: any) => (
-                        <div key={root.id} className="flex flex-col items-center">
-                          <div className="w-px h-5 bg-border" />
-                          {renderTree(root)}
-                        </div>
-                      ))}
+                <div className="w-px h-5 bg-border" />
+                <div className="relative flex items-start">
+                  {(roots.length + 1) > 1 && (
+                    <div className="absolute top-0 bg-border h-px" style={{ left: `calc(50% / ${roots.length + 1})`, right: `calc(50% / ${roots.length + 1})` }} />
+                  )}
+                  <div className="flex gap-3 items-start">
+                    {roots.map((root: any) => (
+                      <div key={root.id} className="flex flex-col items-center">
+                        <div className="w-px h-5 bg-border" />
+                        {renderTree(root)}
+                      </div>
+                    ))}
+                    {/* Root-level blank placeholder */}
+                    <div className="flex flex-col items-center">
+                      <div className="w-px h-5 bg-border/30" />
+                      {renderBlankCard('')}
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
             </div>
             <ScrollBar orientation="horizontal" />
           </ScrollArea>
