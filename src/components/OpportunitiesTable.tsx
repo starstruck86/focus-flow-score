@@ -1150,9 +1150,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           }}
         />
       ) : (
-        <div className="metric-card overflow-hidden p-0">
+        <div className="metric-card overflow-auto max-h-[80vh] p-0 relative">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow className="hover:bg-transparent">
               {columnOrder === 'outreach' ? (
                 <>
