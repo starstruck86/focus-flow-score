@@ -748,7 +748,11 @@ Rules:
     return true;
   });
 
-  const deduped = dedupeContacts(validContacts).filter((contact: any) => !existingNames.has(cleanText(contact.name).toLowerCase()));
+  // Sort by seniority: c-suite → vp → director → manager → individual
+  const seniorityOrder: Record<string, number> = { 'c-suite': 0, 'vp': 1, 'director': 2, 'manager': 3, 'individual': 4 };
+  const deduped = dedupeContacts(validContacts)
+    .filter((contact: any) => !existingNames.has(cleanText(contact.name).toLowerCase()))
+    .sort((a: any, b: any) => (seniorityOrder[a.seniority] ?? 4) - (seniorityOrder[b.seniority] ?? 4));
 
   // Scan top LinkedIn profiles for verification + keyword relevance
   const maxScan = 5; // Scan up to 5 profiles
