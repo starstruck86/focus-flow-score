@@ -450,8 +450,8 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
               {discoveredContacts.length} contacts discovered — confirm to add:
             </p>
             {discoveredContacts.map((contact, index) => {
-              const companyNew = typeof contact.company_tenure_months === 'number' && contact.company_tenure_months < 12;
-              const roleNew = typeof contact.role_tenure_months === 'number' && contact.role_tenure_months < 12;
+              const companyNew = typeof contact.company_tenure_months === 'number' && contact.company_tenure_months >= 0 && contact.company_tenure_months < 12;
+              const roleNew = typeof contact.role_tenure_months === 'number' && contact.role_tenure_months >= 0 && contact.role_tenure_months < 12;
               const linkedinFailed = contact.linkedin_verified === false;
               return (
               <div key={`${contact.name}-${index}`} className={cn('flex items-start justify-between gap-2 rounded bg-background/80 p-2', linkedinFailed && 'opacity-60 border border-destructive/30')}>
