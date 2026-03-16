@@ -51,19 +51,39 @@ function dedupeContacts(contacts: any[]) {
   });
 }
 
-// Strict LinkedIn URL validation — reject generic, placeholder, or malformed URLs
-function isValidLinkedInUrl(url?: string | null): boolean {
+// Strict LinkedIn URL validation — reject generic, placeholder, or fabricated URLs
+function isValidLinkedInUrl(url?: string | null, accountName?: string): boolean {
   if (!url) return false;
   const trimmed = url.trim();
   // Must match linkedin.com/in/{slug} pattern
   const match = trimmed.match(/^https?:\/\/(www\.)?linkedin\.com\/in\/([a-zA-Z0-9_-]+)\/?$/);
   if (!match) return false;
-  const slug = match[2];
+  const slug = match[2].toLowerCase();
   // Reject generic/placeholder slugs
   const blocked = ['example', 'placeholder', 'unknown', 'profile', 'user', 'test', 'firstname-lastname', 'john-doe', 'jane-doe'];
-  if (blocked.includes(slug.toLowerCase())) return false;
+  if (blocked.includes(slug)) return false;
   // Reject too-short slugs (likely fake)
   if (slug.length < 3) return false;
+  // Detect fabricated URLs: slug ends with company name slug (e.g., "john-smith-arrow-exterminators")
+  if (accountName) {
+    const companySlug = accountName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const companyWords = accountName.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    // If the slug ends with the full company slug or the first company word, it's likely fabricated
+    if (companySlug.length > 3 && slug.endsWith(`-${companySlug}`)) {
+      console.log(`isValidLinkedInUrl: rejected fabricated URL ${url} (ends with company slug "${companySlug}")`);
+      return false;
+    }
+    // Check if slug ends with first significant company word (e.g., "drew-shetter-arrow")
+    const firstWord = companyWords[0];
+    if (firstWord && firstWord.length > 3 && slug.endsWith(`-${firstWord}`)) {
+      // Only reject if the word is clearly a company name, not a common surname
+      const commonNames = ['smith', 'johnson', 'williams', 'brown', 'jones', 'davis', 'miller', 'wilson', 'moore', 'taylor', 'anderson', 'thomas', 'jackson', 'white', 'harris', 'martin', 'thompson', 'garcia', 'martinez', 'robinson', 'clark', 'rodriguez', 'lewis', 'lee', 'walker', 'hall', 'allen', 'young', 'king', 'wright', 'scott', 'green', 'baker', 'adams', 'nelson', 'hill', 'campbell', 'mitchell', 'roberts', 'carter', 'phillips', 'evans', 'turner', 'torres', 'parker', 'collins', 'edwards', 'stewart', 'flores', 'morris', 'nguyen', 'murphy', 'rivera', 'cook', 'rogers', 'morgan', 'peterson', 'cooper', 'reed', 'bailey', 'bell', 'gomez', 'kelly', 'howard', 'ward', 'cox', 'diaz', 'richardson', 'wood', 'watson', 'brooks', 'bennett', 'gray', 'james', 'reyes', 'cruz', 'hughes', 'price', 'myers', 'long', 'foster', 'sanders', 'ross', 'morales', 'powell', 'sullivan', 'russell', 'ortiz', 'jenkins', 'gutierrez', 'perry', 'butler', 'barnes', 'fisher', 'black', 'dog'];
+      if (!commonNames.includes(firstWord)) {
+        console.log(`isValidLinkedInUrl: rejected likely fabricated URL ${url} (ends with company word "${firstWord}")`);
+        return false;
+      }
+    }
+  }
   return true;
 }
 
@@ -110,7 +130,8 @@ async function scanLinkedInProfile(url: string, discoveryMode: string): Promise<
     
     if (!resp.ok) {
       console.log(`LinkedIn scan failed for ${url}: ${resp.status}`);
-      if (resp.status === 402) return { verified: true, profileContent: '', relevanceScore: -1, matchedCategories: [], keywordHits: [] };
+      // 402 = no credits, 403 = LinkedIn blocking Firecrawl — don't penalize either way
+      if (resp.status === 402 || resp.status === 403) return { verified: true, profileContent: '', relevanceScore: -1, matchedCategories: [], keywordHits: [] };
       return { verified: false, profileContent: '', relevanceScore: 0, matchedCategories: [], keywordHits: [] };
     }
     
@@ -454,7 +475,7 @@ Return up to ${maxContacts} CURRENT people at the company who are most relevant.
 - Current title
 - Department or team they belong to
 - Why they matter to this evaluation
-- Their DIRECT LinkedIn profile URL (https://www.linkedin.com/in/...) — this is REQUIRED
+- Their REAL LinkedIn profile URL (https://www.linkedin.com/in/...) — this is REQUIRED. Do NOT fabricate URLs by combining name + company (e.g., "john-smith-arrow" is FAKE). Only provide URLs you actually found in search results.
 - How long they have been at the company (in months), or "unknown" if not determinable
 - How long they have been in their current role (in months), or "unknown" if not determinable
 - 1 short evidence note proving they are at THIS EXACT company now (e.g., "LinkedIn shows current role at ${accountName} since March 2023")
@@ -607,7 +628,7 @@ async function discoverForSingleAccount({
 
 ACCURACY RULES (non-negotiable):
 1. ONLY return contacts where you have CONCRETE EVIDENCE they currently work at this EXACT company (not a similarly-named company, not a former employee).
-2. You MUST provide their real LinkedIn profile URL (https://www.linkedin.com/in/...). Do NOT invent or guess LinkedIn URLs.
+2. You MUST provide their real LinkedIn profile URL (https://www.linkedin.com/in/...). Do NOT fabricate or guess LinkedIn URLs. NEVER construct a URL by combining someone's name with the company name (e.g., "linkedin.com/in/john-smith-arrow" is almost certainly fake). Only use LinkedIn URLs that you found in the web research data or on the company website. If you cannot find the real LinkedIn URL, DO NOT include the contact.
 3. You MUST verify the company name matches — "Black Dog Tavern" is NOT "Black Dog Clothing". "Delta Dental" is NOT "Delta Airlines". Pay close attention to industry context.
 4. If the company has a common name, use the website domain, industry, and other context to disambiguate. When in doubt, EXCLUDE the contact.
 5. If you can determine tenure, include it. If you cannot determine tenure, you may still include the contact — set company_tenure_months and role_tenure_months to -1 to indicate unknown. Do NOT exclude contacts solely because tenure is unknown.
@@ -732,7 +753,7 @@ Rules:
   const validContacts = (parsed?.contacts || []).filter((contact: any) => {
     if (!contact.name || !cleanText(contact.name)) return false;
     // Must have a valid LinkedIn URL (strict format check)
-    if (!isValidLinkedInUrl(contact.linkedin_url)) {
+    if (!isValidLinkedInUrl(contact.linkedin_url, resolvedAccountName)) {
       console.log(`discover-contacts: filtered out "${contact.name}" — invalid LinkedIn URL: ${contact.linkedin_url || 'none'}`);
       return false;
     }
