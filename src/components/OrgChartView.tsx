@@ -428,9 +428,10 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
         "transition-all",
         isDragOver && "ring-2 ring-primary/50 bg-primary/5",
       )}
-      onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
-      onDragLeave={() => setIsDragOver(false)}
-      onDrop={handleDrop}
+      onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); if (!expanded) setExpanded(true); }}
+      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) { setIsDragOver(false); } }}
+      onDrop={(e) => { e.preventDefault(); e.stopPropagation(); handleDrop(e); }}
     >
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
