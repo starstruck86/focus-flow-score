@@ -428,9 +428,9 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
         "transition-all",
         isDragOver && "ring-2 ring-primary/50 bg-primary/5",
       )}
-      onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
+      onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); if (!expanded) setExpanded(true); }}
       onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-      onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(false); }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) { setIsDragOver(false); } }}
       onDrop={(e) => { e.preventDefault(); e.stopPropagation(); handleDrop(e); }}
     >
       <CardHeader className="pb-2">
