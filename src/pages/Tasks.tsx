@@ -140,68 +140,12 @@ export default function Tasks() {
         {/* Pinned overdue section */}
         <OverdueSection tasks={overdueTasks} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
 
-        {/* Task list */}
-        {groupMode === 'status' ? (
-          <div className="space-y-4">
-            {STATUS_ORDER.map(status => {
-              const groupTasks = groupedByStatus[status];
-              const isCollapsed = collapsedGroups[status];
-              const meta = STATUS_META[status];
-              return (
-                <div key={status}>
-                  <button
-                    className="flex items-center gap-1.5 w-full text-left py-1.5 mb-1"
-                    onClick={() => toggleGroup(status)}
-                  >
-                    {isCollapsed ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
-                    <span className={cn("h-2.5 w-2.5 rounded-full", meta.dot)} />
-                    <span className="text-xs font-semibold">{meta.label}</span>
-                    <span className="text-[10px] text-muted-foreground">({groupTasks.length})</span>
-                  </button>
-                  {!isCollapsed && (
-                    <div className="space-y-1.5 ml-5">
-                      {groupTasks.length === 0 ? (
-                        <p className="text-[11px] text-muted-foreground italic py-2 pl-2">No tasks</p>
-                      ) : (
-                        groupTasks.map(task => (
-                          <TaskCard key={task.id} task={task} selected={selectedIds.has(task.id)} onToggleSelect={toggleSelect} />
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {groupedByAccount.map(([accountName, accountTasks]) => {
-              const isCollapsed = collapsedGroups[`acct-${accountName}`];
-              return (
-                <div key={accountName}>
-                  <button
-                    className="flex items-center gap-1.5 w-full text-left py-1.5 mb-1"
-                    onClick={() => toggleGroup(`acct-${accountName}`)}
-                  >
-                    {isCollapsed ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
-                    <span className="text-xs font-semibold">{accountName}</span>
-                    <span className="text-[10px] text-muted-foreground">({accountTasks.length})</span>
-                  </button>
-                  {!isCollapsed && (
-                    <div className="space-y-1.5 ml-5">
-                      {accountTasks.map(task => (
-                        <TaskCard key={task.id} task={task} selected={selectedIds.has(task.id)} onToggleSelect={toggleSelect} />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            {groupedByAccount.length === 0 && (
-              <p className="text-xs text-muted-foreground text-center py-8">No active tasks to group</p>
-            )}
-          </div>
-        )}
+        {/* Kanban Board */}
+        <TaskKanbanBoard
+          tasks={filteredTasks.filter(t => !overdueIds.has(t.id))}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+        />
 
         {filteredTasks.length === 0 && (
           <div className="text-center py-12">
