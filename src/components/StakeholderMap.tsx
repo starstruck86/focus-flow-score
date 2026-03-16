@@ -219,6 +219,12 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
   };
 
   const confirmContact = (contact: any) => {
+    const tenureParts: string[] = [];
+    if (typeof contact.company_tenure_months === 'number') tenureParts.push(`Company tenure: ${contact.company_tenure_months}mo`);
+    if (typeof contact.role_tenure_months === 'number') tenureParts.push(`Role tenure: ${contact.role_tenure_months}mo`);
+    const tenureNote = tenureParts.length > 0 ? tenureParts.join(' | ') : '';
+    const combinedNotes = [contact.notes, tenureNote].filter(Boolean).join(' — ');
+
     addContact.mutate({
       name: contact.name,
       title: contact.title,
@@ -227,7 +233,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
       linkedin_url: contact.linkedin_url || null,
       buyer_role: contact.buyer_role || 'unknown',
       influence_level: contact.influence_level || 'medium',
-      notes: contact.notes || null,
+      notes: combinedNotes || null,
       ai_discovered: true,
       discovery_source: lastDiscoveryMeta?.source || contact.confidence || 'ai',
     });
