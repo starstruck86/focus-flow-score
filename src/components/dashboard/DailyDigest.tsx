@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { useDailyDigest, type DigestItem } from '@/hooks/useDailyDigest';
@@ -113,8 +114,9 @@ export function DailyDigest() {
   const today = new Date().toISOString().slice(0, 10);
   const yesterday = subDays(new Date(), 1).toISOString().slice(0, 10);
 
-  const actionableItems = items.filter(i => i.isActionable);
-  const regularItems = items.filter(i => !i.isActionable);
+  const sortedItems = [...items].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const actionableItems = sortedItems.filter(i => i.isActionable);
+  const regularItems = sortedItems.filter(i => !i.isActionable);
 
   return (
     <Card>
@@ -176,7 +178,7 @@ export function DailyDigest() {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="pt-0">
         {isLoading ? (
           <div className="space-y-3">
             {[1, 2, 3].map(i => (
@@ -203,34 +205,36 @@ export function DailyDigest() {
             )}
           </div>
         ) : (
-          <>
-            {actionableItems.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
-                  <AlertTriangle className="h-3 w-3" />
-                  Actionable ({actionableItems.length})
-                </div>
-                {actionableItems.map(item => (
-                  <DigestItemCard key={item.id} item={item} onMarkRead={markRead} />
-                ))}
-              </div>
-            )}
-            {regularItems.length > 0 && (
-              <div className="space-y-2">
-                {actionableItems.length > 0 && (
-                  <div className="text-xs font-medium text-muted-foreground mt-2">
-                    Other Updates ({regularItems.length})
+          <ScrollArea className="max-h-[400px]">
+            <div className="space-y-3 pr-3">
+              {actionableItems.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
+                    <AlertTriangle className="h-3 w-3" />
+                    Actionable ({actionableItems.length})
                   </div>
-                )}
-                {regularItems.map(item => (
-                  <DigestItemCard key={item.id} item={item} onMarkRead={markRead} />
-                ))}
-              </div>
-            )}
-            <p className="text-[10px] text-muted-foreground text-center pt-2">
-              {format(new Date(selectedDate), 'EEEE, MMMM d')} • {items.length} update{items.length !== 1 ? 's' : ''} across {new Set(items.map(i => i.accountName)).size} accounts
-            </p>
-          </>
+                  {actionableItems.map(item => (
+                    <DigestItemCard key={item.id} item={item} onMarkRead={markRead} />
+                  ))}
+                </div>
+              )}
+              {regularItems.length > 0 && (
+                <div className="space-y-2">
+                  {actionableItems.length > 0 && (
+                    <div className="text-xs font-medium text-muted-foreground mt-2">
+                      Other Updates ({regularItems.length})
+                    </div>
+                  )}
+                  {regularItems.map(item => (
+                    <DigestItemCard key={item.id} item={item} onMarkRead={markRead} />
+                  ))}
+                </div>
+              )}
+              <p className="text-[10px] text-muted-foreground text-center pt-2 pb-1">
+                {format(new Date(selectedDate), 'EEEE, MMMM d')} • {items.length} update{items.length !== 1 ? 's' : ''} across {new Set(items.map(i => i.accountName)).size} accounts
+              </p>
+            </div>
+          </ScrollArea>
         )}
       </CardContent>
     </Card>
