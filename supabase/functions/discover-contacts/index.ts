@@ -484,9 +484,11 @@ ACCURACY RULES (non-negotiable):
 2. You MUST provide their real LinkedIn profile URL (https://www.linkedin.com/in/...). Do NOT invent or guess LinkedIn URLs.
 3. You MUST verify the company name matches — "Black Dog Tavern" is NOT "Black Dog Clothing". "Delta Dental" is NOT "Delta Airlines". Pay close attention to industry context.
 4. If the company has a common name, use the website domain, industry, and other context to disambiguate. When in doubt, EXCLUDE the contact.
-5. Do NOT return contacts with unknown tenure — you must be able to estimate how long they've been there.
+5. If you can determine tenure, include it. If you cannot determine tenure, you may still include the contact — set company_tenure_months and role_tenure_months to -1 to indicate unknown. Do NOT exclude contacts solely because tenure is unknown.
 6. Keep notes short and evidence-based. Include WHERE you found evidence of their employment (e.g., "Found on company leadership page", "LinkedIn shows current role since 2023").
-7. It is FAR BETTER to return 2 accurate contacts than 5 questionable ones.${resolvedDivision ? ` CRITICAL: Only include people from the "${resolvedDivision}" division/business unit. Exclude people from other divisions.` : ''}`,
+7. It is FAR BETTER to return 2 accurate contacts than 5 questionable ones.
+8. NEVER include interns, fellows, apprentices, or co-ops. Only include full-time professional staff.
+9. For smaller or local businesses, look at the company website's About/Team/Leadership pages, local press, and industry associations. These companies may have fewer stakeholders — return whoever is relevant even if it's only 1-2 people.${resolvedDivision ? ` CRITICAL: Only include people from the "${resolvedDivision}" division/business unit. Exclude people from other divisions.` : ''}`,
         },
         {
           role: 'user',
