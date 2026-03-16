@@ -325,10 +325,15 @@ Deno.serve(async (req) => {
     const resolvedIndustry = cleanText(account.industry || industry);
     const resolvedMotion = cleanText(account.motion);
     const resolvedFocusPrompt = cleanText(focusPrompt);
+    const resolvedDivision = cleanText(division);
     const requestedMaxContacts = Math.max(3, Math.min(Number(maxContacts) || 5, 10));
     const requestedMode = (['auto', 'marketing', 'revenue', 'operations', 'it', 'executive'].includes(discoveryMode)
       ? discoveryMode
       : 'auto') as DiscoveryMode;
+
+    const divisionScope = resolvedDivision
+      ? `IMPORTANT: Scope ALL research to the "${resolvedDivision}" division/business unit of ${resolvedAccountName}. Only return people who work in or directly support this division. Exclude contacts from other divisions or the parent company's unrelated teams.`
+      : '';
 
     const { data: existingContacts, error: contactsError } = await supabase
       .from('contacts')
