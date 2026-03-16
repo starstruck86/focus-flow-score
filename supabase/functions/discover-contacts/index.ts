@@ -67,10 +67,30 @@ function isValidLinkedInUrl(url?: string | null): boolean {
   return true;
 }
 
-// Verify a LinkedIn URL is a real page using Firecrawl (returns true/false)
-async function verifyLinkedInUrl(url: string): Promise<boolean> {
+// Relevance keyword buckets for LinkedIn profile scanning
+const RELEVANCE_KEYWORDS: Record<string, string[]> = {
+  marketing: ['marketing', 'brand', 'demand gen', 'growth', 'acquisition', 'content', 'campaign', 'advertising', 'media buying', 'performance marketing'],
+  digital: ['digital', 'ecommerce', 'e-commerce', 'online', 'web', 'seo', 'sem', 'social media', 'email marketing', 'sms', 'push notification', 'personalization'],
+  crm_lifecycle: ['crm', 'lifecycle', 'retention', 'engagement', 'loyalty', 'customer journey', 'automation', 'segmentation', 'customer data', 'cdp'],
+  martech: ['martech', 'marketing technology', 'marketing operations', 'marketing ops', 'salesforce', 'hubspot', 'braze', 'iterable', 'klaviyo', 'attentive', 'sendgrid', 'mailchimp', 'adobe', 'oracle'],
+  cx: ['customer experience', 'customer success', 'voice of customer', 'nps', 'satisfaction', 'support', 'contact center', 'service'],
+  leadership: ['vp', 'vice president', 'director', 'head of', 'chief', 'cmo', 'coo', 'cro', 'cto', 'cio', 'svp', 'evp', 'president', 'general manager', 'owner', 'founder'],
+  revenue: ['revenue', 'sales', 'pipeline', 'business development', 'partnerships', 'account management'],
+  it_ops: ['it', 'information technology', 'systems', 'integrations', 'data', 'analytics', 'engineering', 'platform', 'infrastructure', 'devops'],
+};
+
+interface LinkedInScanResult {
+  verified: boolean;
+  profileContent: string;
+  relevanceScore: number; // 0-100
+  matchedCategories: string[];
+  keywordHits: string[];
+}
+
+// Verify a LinkedIn URL AND scan for relevance keywords using Firecrawl
+async function scanLinkedInProfile(url: string, discoveryMode: string): Promise<LinkedInScanResult> {
   const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY');
-  if (!firecrawlKey) return true; // Can't verify without Firecrawl, assume valid
+  if (!firecrawlKey) return { verified: true, profileContent: '', relevanceScore: -1, matchedCategories: [], keywordHits: [] };
   
   try {
     const resp = await fetch(FIRECRAWL_URL, {
@@ -89,24 +109,69 @@ async function verifyLinkedInUrl(url: string): Promise<boolean> {
     });
     
     if (!resp.ok) {
-      const text = await resp.text();
-      console.log(`LinkedIn verify failed for ${url}: ${resp.status}`);
-      // 402 = no credits, don't penalize the contact
-      if (resp.status === 402) return true;
-      return false;
+      console.log(`LinkedIn scan failed for ${url}: ${resp.status}`);
+      if (resp.status === 402) return { verified: true, profileContent: '', relevanceScore: -1, matchedCategories: [], keywordHits: [] };
+      return { verified: false, profileContent: '', relevanceScore: 0, matchedCategories: [], keywordHits: [] };
     }
     
     const data = await resp.json();
     const markdown = cleanText(data?.data?.markdown || data?.markdown || '');
-    // If we got content and it doesn't look like a 404/error page, consider it valid
-    if (markdown.length > 100 && !markdown.toLowerCase().includes('page not found') && !markdown.toLowerCase().includes('this page doesn')) {
-      return true;
+    
+    // Check if it's a valid profile page
+    if (markdown.length < 100 || markdown.toLowerCase().includes('page not found') || markdown.toLowerCase().includes('this page doesn')) {
+      console.log(`LinkedIn scan: ${url} looks like a dead page (content length: ${markdown.length})`);
+      return { verified: false, profileContent: markdown, relevanceScore: 0, matchedCategories: [], keywordHits: [] };
     }
-    console.log(`LinkedIn verify: ${url} looks like a dead page (content length: ${markdown.length})`);
-    return false;
+    
+    // Scan for keyword relevance
+    const lower = markdown.toLowerCase();
+    const matchedCategories: string[] = [];
+    const keywordHits: string[] = [];
+    
+    // Determine which keyword categories to prioritize based on discovery mode
+    const priorityCategories = getPriorityCategories(discoveryMode);
+    
+    for (const [category, keywords] of Object.entries(RELEVANCE_KEYWORDS)) {
+      for (const kw of keywords) {
+        if (lower.includes(kw)) {
+          if (!matchedCategories.includes(category)) matchedCategories.push(category);
+          if (!keywordHits.includes(kw)) keywordHits.push(kw);
+        }
+      }
+    }
+    
+    // Calculate relevance score (0-100)
+    let score = 0;
+    // Base score from total keyword hits
+    score += Math.min(keywordHits.length * 8, 40); // up to 40 points from keyword breadth
+    // Bonus for matching priority categories based on discovery mode
+    const priorityMatches = matchedCategories.filter(c => priorityCategories.includes(c)).length;
+    score += priorityMatches * 15; // up to 60 points from priority matches
+    // Leadership is always a bonus
+    if (matchedCategories.includes('leadership')) score += 10;
+    
+    score = Math.min(score, 100);
+    
+    console.log(`LinkedIn scan: ${url} — score=${score}, categories=[${matchedCategories.join(',')}], hits=${keywordHits.length}`);
+    
+    return { verified: true, profileContent: truncate(markdown, 500), relevanceScore: score, matchedCategories, keywordHits };
   } catch (err) {
-    console.error('LinkedIn verify exception:', err);
-    return true; // On error, don't penalize
+    console.error('LinkedIn scan exception:', err);
+    return { verified: true, profileContent: '', relevanceScore: -1, matchedCategories: [], keywordHits: [] };
+  }
+}
+
+function getPriorityCategories(mode: string): string[] {
+  switch (mode) {
+    case 'marketing': return ['marketing', 'digital', 'crm_lifecycle', 'martech'];
+    case 'digital_engagement': return ['digital', 'crm_lifecycle', 'marketing'];
+    case 'marketing_ops': return ['martech', 'it_ops', 'crm_lifecycle'];
+    case 'revenue': return ['revenue', 'leadership', 'marketing'];
+    case 'cx_loyalty': return ['cx', 'crm_lifecycle', 'marketing'];
+    case 'operations': return ['cx', 'it_ops', 'leadership'];
+    case 'it': return ['it_ops', 'martech', 'leadership'];
+    case 'executive': return ['leadership', 'revenue', 'marketing'];
+    default: return ['marketing', 'digital', 'crm_lifecycle', 'martech', 'leadership'];
   }
 }
 
