@@ -268,8 +268,12 @@ Return up to ${maxContacts} CURRENT people at the company who are most relevant.
 - Current title
 - Department or team they belong to
 - Why they matter to this evaluation
-- LinkedIn URL if you can find one
+- Their DIRECT LinkedIn profile URL (https://www.linkedin.com/in/...) — this is REQUIRED
+- How long they have been at the company (in months)
+- How long they have been in their current role (in months)
 - 1 short evidence note proving they are at the company now
+
+IMPORTANT: Only return people whose LinkedIn profile you can find. Do NOT return people with unknown tenure.
 
 Prioritize real named people. If the obvious marketing leader is not public, include adjacent leaders in digital, operations, CX, IT, or executive leadership who would influence the decision.`,
           },
@@ -412,7 +416,7 @@ async function discoverForSingleAccount({
       messages: [
         {
           role: 'system',
-          content: `You are a B2B stakeholder discovery assistant. Convert research into a strict contact list for a sales rep. Prefer real, current employees. Do not invent LinkedIn URLs. If research is sparse, infer buyer_role and influence_level conservatively from the title. Keep notes short and evidence-based.${resolvedDivision ? ` CRITICAL: Only include people from the "${resolvedDivision}" division/business unit. Exclude people from other divisions.` : ''}`,
+          content: `You are a B2B stakeholder discovery assistant. Convert research into a strict contact list for a sales rep. ONLY return contacts where you can find their LinkedIn profile URL (https://www.linkedin.com/in/...) and can estimate their tenure. Do not invent LinkedIn URLs — only use real ones you find in research. Keep notes short and evidence-based.${resolvedDivision ? ` CRITICAL: Only include people from the "${resolvedDivision}" division/business unit. Exclude people from other divisions.` : ''}`,
         },
         {
           role: 'user',
@@ -452,7 +456,10 @@ Rules:
 - If the title suggests budget ownership or executive sponsorship, prefer economic_buyer.
 - If the title suggests implementation or systems responsibility, prefer technical_buyer.
 - If the title suggests process knowledge, internal advocacy, or day-to-day ownership, prefer champion, coach, influencer, or user_buyer.
-- Exclude duplicate names and anyone already in the existing contacts list.`,
+- Exclude duplicate names and anyone already in the existing contacts list.
+- CRITICAL: You MUST provide a direct LinkedIn profile URL for every contact (https://www.linkedin.com/in/...). Do NOT return a contact if you cannot find their LinkedIn profile URL.
+- CRITICAL: You MUST determine how long each contact has been at the company AND how long they have been in their current role. If you cannot determine tenure at all, exclude the contact entirely. Do NOT return contacts with unknown tenure.
+- For company_tenure_months and role_tenure_months, estimate based on available evidence (LinkedIn data, press releases, announcements). Use your best estimate.`,
         },
       ],
       tools: [
@@ -475,11 +482,13 @@ Rules:
                       seniority: { type: 'string', enum: ['c-suite', 'vp', 'director', 'manager', 'individual'] },
                       buyer_role: { type: 'string', enum: ['champion', 'economic_buyer', 'technical_buyer', 'user_buyer', 'coach', 'influencer', 'blocker', 'unknown'] },
                       influence_level: { type: 'string', enum: ['high', 'medium', 'low'] },
-                      linkedin_url: { type: 'string' },
+                      linkedin_url: { type: 'string', description: 'Direct LinkedIn profile URL (https://www.linkedin.com/in/...)' },
+                      company_tenure_months: { type: 'number', description: 'Estimated months at the company' },
+                      role_tenure_months: { type: 'number', description: 'Estimated months in current role' },
                       notes: { type: 'string' },
                       confidence: { type: 'string', enum: ['verified', 'likely', 'suggested'] },
                     },
-                    required: ['name', 'title', 'buyer_role'],
+                    required: ['name', 'title', 'buyer_role', 'linkedin_url', 'company_tenure_months', 'role_tenure_months'],
                     additionalProperties: false,
                   },
                 },

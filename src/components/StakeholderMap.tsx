@@ -219,6 +219,12 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
   };
 
   const confirmContact = (contact: any) => {
+    const tenureParts: string[] = [];
+    if (typeof contact.company_tenure_months === 'number') tenureParts.push(`Company tenure: ${contact.company_tenure_months}mo`);
+    if (typeof contact.role_tenure_months === 'number') tenureParts.push(`Role tenure: ${contact.role_tenure_months}mo`);
+    const tenureNote = tenureParts.length > 0 ? tenureParts.join(' | ') : '';
+    const combinedNotes = [contact.notes, tenureNote].filter(Boolean).join(' — ');
+
     addContact.mutate({
       name: contact.name,
       title: contact.title,
@@ -227,7 +233,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
       linkedin_url: contact.linkedin_url || null,
       buyer_role: contact.buyer_role || 'unknown',
       influence_level: contact.influence_level || 'medium',
-      notes: contact.notes || null,
+      notes: combinedNotes || null,
       ai_discovered: true,
       discovery_source: lastDiscoveryMeta?.source || contact.confidence || 'ai',
     });
@@ -429,7 +435,10 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
             <p className="text-xs font-medium text-primary">
               {discoveredContacts.length} contacts discovered — confirm to add:
             </p>
-            {discoveredContacts.map((contact, index) => (
+            {discoveredContacts.map((contact, index) => {
+              const companyNew = typeof contact.company_tenure_months === 'number' && contact.company_tenure_months < 12;
+              const roleNew = typeof contact.role_tenure_months === 'number' && contact.role_tenure_months < 12;
+              return (
               <div key={`${contact.name}-${index}`} className="flex items-start justify-between gap-2 rounded bg-background/80 p-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
@@ -458,6 +467,16 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                         {contact.confidence}
                       </Badge>
                     )}
+                    {typeof contact.company_tenure_months === 'number' && (
+                      <Badge variant="outline" className={cn('text-[9px]', companyNew && 'border-status-yellow/50 bg-status-yellow/10 text-status-yellow')}>
+                        {contact.company_tenure_months < 12 ? `⚠ ${contact.company_tenure_months}mo at co.` : `${Math.round(contact.company_tenure_months / 12)}yr at co.`}
+                      </Badge>
+                    )}
+                    {typeof contact.role_tenure_months === 'number' && (
+                      <Badge variant="outline" className={cn('text-[9px]', roleNew && 'border-orange-400/50 bg-orange-400/10 text-orange-500 dark:text-orange-400')}>
+                        {contact.role_tenure_months < 12 ? `⚠ ${contact.role_tenure_months}mo in role` : `${Math.round(contact.role_tenure_months / 12)}yr in role`}
+                      </Badge>
+                    )}
                   </div>
                   {contact.notes && <p className="mt-1 text-[11px] text-muted-foreground">{contact.notes}</p>}
                 </div>
@@ -475,7 +494,8 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                   </Button>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
