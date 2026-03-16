@@ -489,12 +489,12 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                         {contact.confidence}
                       </Badge>
                     )}
-                    {typeof contact.company_tenure_months === 'number' && (
+                    {typeof contact.company_tenure_months === 'number' && contact.company_tenure_months >= 0 && (
                       <Badge variant="outline" className={cn('text-[9px]', companyNew && 'border-status-yellow/50 bg-status-yellow/10 text-status-yellow')}>
                         {contact.company_tenure_months < 12 ? `⚠ ${contact.company_tenure_months}mo at co.` : `${Math.round(contact.company_tenure_months / 12)}yr at co.`}
                       </Badge>
                     )}
-                    {typeof contact.role_tenure_months === 'number' && (
+                    {typeof contact.role_tenure_months === 'number' && contact.role_tenure_months >= 0 && (
                       <Badge variant="outline" className={cn('text-[9px]', roleNew && 'border-orange-400/50 bg-orange-400/10 text-orange-500 dark:text-orange-400')}>
                         {contact.role_tenure_months < 12 ? `⚠ ${contact.role_tenure_months}mo in role` : `${Math.round(contact.role_tenure_months / 12)}yr in role`}
                       </Badge>
