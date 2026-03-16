@@ -688,7 +688,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
               </div>
             </div>
             <div className="flex gap-2">
-              <Button size="sm" className="h-6 text-xs" disabled={!newContact.name.trim()} onClick={addNewContact}>
+              <Button size="sm" className="h-6 text-xs" disabled={!newContact.name.trim()} onClick={() => addNewContact()}>
                 <Check className="h-3 w-3 mr-1" /> Add to Chart
               </Button>
               <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setShowAddForm(false)}>Cancel</Button>
