@@ -11,7 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Sparkles, Users, CheckCircle2, XCircle, Loader2, Search } from 'lucide-react';
+import { Sparkles, Users, CheckCircle2, XCircle, Loader2, Search, Linkedin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const DISCOVERY_MODES = [
