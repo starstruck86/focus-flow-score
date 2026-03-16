@@ -384,6 +384,7 @@ Deno.serve(async (req) => {
       requestedMode,
       resolvedMode,
       requestedMaxContacts,
+      division: resolvedDivision || null,
       hasWebsiteSummary: Boolean(websiteSummary),
       hasWebResearch: Boolean(webResearch),
       hasFocusPrompt: Boolean(resolvedFocusPrompt),
@@ -400,21 +401,24 @@ Deno.serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: 'You are a B2B stakeholder discovery assistant. Convert research into a strict contact list for a sales rep. Prefer real, current employees. Do not invent LinkedIn URLs. If research is sparse, infer buyer_role and influence_level conservatively from the title. Keep notes short and evidence-based.',
+            content: `You are a B2B stakeholder discovery assistant. Convert research into a strict contact list for a sales rep. Prefer real, current employees. Do not invent LinkedIn URLs. If research is sparse, infer buyer_role and influence_level conservatively from the title. Keep notes short and evidence-based.${resolvedDivision ? ` CRITICAL: Only include people from the "${resolvedDivision}" division/business unit. Exclude people from other divisions.` : ''}`,
           },
           {
             role: 'user',
-            content: `Build a stakeholder map for "${resolvedAccountName}".
+            content: `Build a stakeholder map for "${resolvedAccountName}"${resolvedDivision ? ` — "${resolvedDivision}" division only` : ''}.
 
 Account context:
 - Website: ${resolvedWebsite || 'unknown'}
 - Industry: ${resolvedIndustry || 'unknown'}
 - Motion: ${resolvedMotion || 'unknown'}
+- Division/BU: ${resolvedDivision || 'entire company (all divisions)'}
 - Opportunity context: ${opportunityContext || 'none provided'}
 - Discovery mode: ${resolvedMode}
 - Custom focus: ${resolvedFocusPrompt || 'none provided'}
 - Target count: ${requestedMaxContacts}
 - Account notes: ${cleanText(account.notes) || 'none'}
+
+${divisionScope}
 
 Role guidance:
 ${brief}
