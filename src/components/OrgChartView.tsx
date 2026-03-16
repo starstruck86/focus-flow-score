@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import {
   Network, Sparkles, RefreshCw, Plus, Trash2, Pencil, Check, X,
   Crown, Shield, Target, UserCheck, Lightbulb, Users, Ban, Linkedin,
-  ArrowDown, ChevronDown, ChevronUp,
+  ArrowDown, ChevronDown, ChevronUp, Upload, Loader2, ImagePlus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
