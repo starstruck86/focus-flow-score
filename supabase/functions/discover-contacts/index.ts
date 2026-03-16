@@ -322,7 +322,11 @@ ${roleBrief}
 
 ${division ? `CRITICAL: Only return people who work in or support the "${division}" division. Exclude people from other divisions.` : ''}
 
-Search LinkedIn, company leadership/about/team pages, press releases, conference speaker pages, interviews, podcasts, and local business coverage.
+Search LinkedIn, company leadership/about/team pages, press releases, conference speaker pages, interviews, podcasts, local business coverage, and industry association directories.
+
+IMPORTANT: Do NOT include interns, fellows, apprentices, or co-ops. Only full-time professional employees.
+
+For smaller or local businesses, look harder at the company website (About/Team/Leadership pages), local news coverage, and industry memberships. Even 1-2 accurate contacts is valuable.
 
 Return up to ${maxContacts} CURRENT people at the company who are most relevant. For each person include:
 - Full name
@@ -330,11 +334,11 @@ Return up to ${maxContacts} CURRENT people at the company who are most relevant.
 - Department or team they belong to
 - Why they matter to this evaluation
 - Their DIRECT LinkedIn profile URL (https://www.linkedin.com/in/...) — this is REQUIRED
-- How long they have been at the company (in months)
-- How long they have been in their current role (in months)
+- How long they have been at the company (in months), or "unknown" if not determinable
+- How long they have been in their current role (in months), or "unknown" if not determinable
 - 1 short evidence note proving they are at THIS EXACT company now (e.g., "LinkedIn shows current role at ${accountName} since March 2023")
 
-IMPORTANT: Only return people whose LinkedIn profile you can VERIFY shows them at "${accountName}". Do NOT return people with unknown tenure. It is better to return fewer, accurate results than more questionable ones.
+IMPORTANT: Only return people whose LinkedIn profile you can VERIFY shows them at "${accountName}". It is better to return fewer, accurate results than more questionable ones. If tenure is unknown, still include them — accuracy of employment is more important than tenure data.
 
 Prioritize real named people. If the obvious marketing leader is not public, include adjacent leaders in digital, operations, CX, IT, or executive leadership who would influence the decision.`,
           },
