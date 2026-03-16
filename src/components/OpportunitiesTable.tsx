@@ -1280,8 +1280,8 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 <>
                   <TableHead className="w-8">
                     <Checkbox
-                      checked={bulkSelection.isAllSelected(filteredOpportunities)}
-                      onCheckedChange={() => bulkSelection.toggleAll(filteredOpportunities)}
+                      checked={bulkSelection.isAllSelected(activeFilteredOpps)}
+                      onCheckedChange={() => bulkSelection.toggleAll(activeFilteredOpps)}
                     />
                   </TableHead>
                   <TableHead className="w-8"></TableHead>
