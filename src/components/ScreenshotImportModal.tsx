@@ -11,6 +11,7 @@ import { useStore } from '@/store/useStore';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import type { Account } from '@/types';
 
 interface ScreenshotImportModalProps {
   open: boolean;
