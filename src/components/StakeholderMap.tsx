@@ -27,6 +27,9 @@ import {
   RotateCcw,
   Trash2,
   Pencil,
+  Upload,
+  Loader2,
+  ImagePlus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
