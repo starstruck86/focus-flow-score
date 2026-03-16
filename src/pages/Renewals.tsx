@@ -813,6 +813,16 @@ export default function Renewals() {
           <StreakChip variant="full" />
         </div>
 
+        {/* Account Intelligence Cards */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+          <WidgetErrorBoundary widgetId="renewal-account-health-pulse">
+            <AccountHealthPulseCard />
+          </WidgetErrorBoundary>
+          <WidgetErrorBoundary widgetId="renewal-company-monitor">
+            <CompanyMonitorCard />
+          </WidgetErrorBoundary>
+        </div>
+
         {/* Nearest Renewal Countdown + ARR at Risk */}
         <RenewalUrgencyHeader renewals={renewals} formatCurrency={formatCurrency} />
         

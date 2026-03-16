@@ -318,7 +318,8 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const [expandedOppIds, setExpandedOppIds] = useState<Set<string>>(new Set());
   const [deleteDialogOpp, setDeleteDialogOpp] = useState<Opportunity | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
-  const [groupingMode, setGroupingMode] = useState<GroupingMode>('status');
+  const [groupingMode, setGroupingMode] = useState<GroupingMode>(renewalsOnly ? 'quarter' : 'status');
+  const [showChurningOpps, setShowChurningOpps] = useState(false);
   const bulkSelection = useBulkSelection<Opportunity>();
 
   // Get renewals that don't have linked opportunities yet (for adding new renewal opps)
