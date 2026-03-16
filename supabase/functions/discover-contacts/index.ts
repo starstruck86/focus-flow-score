@@ -624,7 +624,13 @@ async function discoverForSingleAccount({
       messages: [
         {
           role: 'system',
-          content: `You are a B2B stakeholder discovery assistant. Your PRIMARY goal is ACCURACY — never return a contact unless you have strong evidence they currently work at this specific company. Convert research into a strict contact list for a sales rep.
+          content: `You are a B2B stakeholder discovery assistant for a company selling lifecycle marketing, CRM, and customer engagement software. Your PRIMARY goal is ACCURACY and RELEVANCE.
+
+RELEVANCE RULES (non-negotiable):
+- Every contact you return MUST be someone who either USES marketing/CRM/engagement tools, OWNS the budget for the relevant department, or is a direct influencer/champion/coach/blocker for this type of purchase.
+- Do NOT return generic C-suite who have nothing to do with marketing tools: CFO, CHRO, Chief Legal Officer, General Counsel, Chief People Officer, Head of Finance, Head of HR — these are IRRELEVANT unless the discovery mode explicitly targets their domain.
+- RELEVANT C-suite examples: CMO, Chief Digital Officer, Chief Customer Officer, CRO (if they own marketing), Chief Growth Officer, Chief Experience Officer.
+- A Director of Lifecycle Marketing is MORE valuable than a CFO. A CRM Manager is MORE valuable than a CHRO. Always prioritize functional relevance over raw seniority.
 
 ACCURACY RULES (non-negotiable):
 1. ONLY return contacts where you have CONCRETE EVIDENCE they currently work at this EXACT company (not a similarly-named company, not a former employee).
@@ -632,8 +638,8 @@ ACCURACY RULES (non-negotiable):
 3. You MUST verify the company name matches — "Black Dog Tavern" is NOT "Black Dog Clothing". "Delta Dental" is NOT "Delta Airlines". Pay close attention to industry context.
 4. If the company has a common name, use the website domain, industry, and other context to disambiguate. When in doubt, EXCLUDE the contact.
 5. If you can determine tenure, include it. If you cannot determine tenure, you may still include the contact — set company_tenure_months and role_tenure_months to -1 to indicate unknown. Do NOT exclude contacts solely because tenure is unknown.
-6. Keep notes short and evidence-based. Include WHERE you found evidence of their employment (e.g., "Found on company leadership page", "LinkedIn shows current role since 2023").
-7. It is FAR BETTER to return 2 accurate contacts than 5 questionable ones.
+6. Keep notes short and evidence-based. Include WHERE you found evidence AND why they are relevant to marketing/CRM tools.
+7. It is FAR BETTER to return 2 accurate, relevant contacts than 5 questionable ones.
 8. NEVER include interns, fellows, apprentices, or co-ops. Only include full-time professional staff.
 9. For smaller or local businesses, look at the company website's About/Team/Leadership pages, local press, and industry associations. These companies may have fewer stakeholders — return whoever is relevant even if it's only 1-2 people.${resolvedDivision ? ` CRITICAL: Only include people from the "${resolvedDivision}" division/business unit. Exclude people from other divisions.` : ''}`,
         },
@@ -668,14 +674,17 @@ ${Array.from(existingNames).join(', ') || 'none'}
 
 Rules:
 - Return at most ${requestedMaxContacts} contacts.
-- ORDERING: Always start from the TOP of the org chart and work DOWN. C-suite first (CEO, CMO, CRO, CTO, COO), then SVP/VP, then Director, then Manager. Fill your list top-down — if you can only find 3 people, make sure they're the most senior 3.
+- RELEVANCE FIRST: Every contact MUST be relevant to the discovery mode and role guidance above. Do NOT include generic C-suite like CFO, CHRO, General Counsel, or Chief Legal Officer unless the discovery mode specifically targets finance, HR, or legal. A CMO or CRO is relevant; a CFO is NOT (unless they also own marketing budget).
+- ORDERING: Within relevant people, prioritize seniority: CMO/CRO/CDO (relevant C-suite) first, then SVP/VP of Marketing/Digital/CX, then Directors, then Managers. But a relevant Director of Lifecycle Marketing is ALWAYS better than an irrelevant CFO.
+- Each contact must have a clear connection to the buying use case: they either USE the tools, OWN the budget for the relevant department, or serve as an influencer/champion/coach/blocker for this type of purchase.
 - Prioritize exact current employees at this company.
 - Map buyer_role from: champion, economic_buyer, technical_buyer, user_buyer, coach, influencer, blocker, unknown.
 - Map influence_level from: high, medium, low.
-- Use notes for a short evidence-backed reason they belong in the map.
-- If the title suggests budget ownership or executive sponsorship, prefer economic_buyer.
-- If the title suggests implementation or systems responsibility, prefer technical_buyer.
-- If the title suggests process knowledge, internal advocacy, or day-to-day ownership, prefer champion, coach, influencer, or user_buyer.
+- Use notes for a short evidence-backed reason they belong in the map — specifically WHY they are relevant to marketing/CRM/lifecycle/digital tools.
+- If the title suggests budget ownership for the RELEVANT department (e.g., VP Marketing, CMO), prefer economic_buyer.
+- If the title suggests implementation or systems responsibility (e.g., Marketing Ops, CRM Admin), prefer technical_buyer.
+- If the title suggests day-to-day tool usage (e.g., Email Marketing Manager, CRM Specialist), prefer user_buyer or champion.
+- If the title suggests process knowledge or internal advocacy, prefer coach or influencer.
 - Exclude duplicate names and anyone already in the existing contacts list.
 - NEVER include interns, fellows, apprentices, or co-ops — only full-time professional employees.
 - CRITICAL: You MUST provide a direct LinkedIn profile URL for every contact (https://www.linkedin.com/in/...). Do NOT return a contact if you cannot find their LinkedIn profile URL.
