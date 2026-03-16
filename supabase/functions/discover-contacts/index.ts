@@ -294,6 +294,7 @@ Deno.serve(async (req) => {
       focusPrompt,
       maxContacts,
       discoveryMode,
+      division,
     } = body || {};
 
     if (!accountId) {
