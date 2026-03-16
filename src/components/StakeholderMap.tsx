@@ -583,7 +583,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
 
     if (isAdding) {
       return (
-        <div className="rounded-lg border-2 border-dashed border-primary/40 bg-primary/5 w-[160px] p-3 space-y-2">
+        <div className="rounded-lg border-2 border-dashed border-primary/40 bg-primary/5 w-[140px] sm:w-[160px] p-2.5 space-y-1.5">
           <Input
             className="h-7 text-xs text-center"
             placeholder="Name"
@@ -614,7 +614,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
     return (
       <div
         className={cn(
-          "rounded-lg border-2 border-dashed border-border/40 bg-muted/20 w-[160px] py-4 px-3 text-center cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-all group",
+          "rounded-lg border-2 border-dashed border-border/40 bg-muted/20 w-[140px] sm:w-[160px] py-3 px-2 text-center cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-all group",
           draggedContactId && "border-primary/30 bg-primary/5",
         )}
         onClick={() => { setAddingUnderParent(parentName); setQuickAddName(''); setQuickAddTitle(''); }}
@@ -625,16 +625,16 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
           e.preventDefault();
           e.stopPropagation();
           if (draggedContactId) {
-            updateContact.mutate({ id: draggedContactId, updates: { reporting_to: parentName } });
+            updateContact.mutate({ id: draggedContactId, updates: { reporting_to: parentName || null } });
             toast.success('Reporting line updated');
             setDraggedContactId(null);
             setDropTargetId(null);
           }
         }}
       >
-        <Plus className="h-4 w-4 mx-auto text-muted-foreground/50 group-hover:text-primary transition-colors" />
-        <p className="text-[11px] text-muted-foreground/60 group-hover:text-muted-foreground mt-1 font-medium">Add Name</p>
-        <p className="text-[10px] text-muted-foreground/40 group-hover:text-muted-foreground/60">Role/Position</p>
+        <Plus className="h-3.5 w-3.5 mx-auto text-muted-foreground/50 group-hover:text-primary transition-colors" />
+        <p className="text-[10px] text-muted-foreground/60 group-hover:text-muted-foreground mt-0.5 font-medium">Add Name</p>
+        <p className="text-[9px] text-muted-foreground/40 group-hover:text-muted-foreground/60">Role/Position</p>
       </div>
     );
   };
