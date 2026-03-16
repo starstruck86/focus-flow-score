@@ -48,7 +48,7 @@ export function CompanyMonitorCard({ motionFilter }: CompanyMonitorCardProps = {
   const { createTasksFromSignals } = useSignalTriggeredTasks();
 
   const { data: digestItems, isLoading } = useQuery({
-    queryKey: ['company-monitor', user?.id],
+    queryKey: ['company-monitor', user?.id, motionFilter],
     queryFn: async () => {
       if (!user) return [];
       const weekAgo = new Date();
@@ -59,9 +59,25 @@ export function CompanyMonitorCard({ motionFilter }: CompanyMonitorCardProps = {
         .eq('user_id', user.id)
         .gte('digest_date', weekAgo.toISOString().split('T')[0])
         .order('relevance_score', { ascending: false })
-        .limit(20);
+        .limit(50);
       if (error) throw error;
-      return data || [];
+      let items = data || [];
+      
+      // Filter by account motion if specified
+      if (motionFilter && items.length > 0) {
+        const accountIds = items.map(i => i.account_id).filter(Boolean);
+        if (accountIds.length > 0) {
+          const { data: accounts } = await supabase
+            .from('accounts')
+            .select('id, motion')
+            .eq('user_id', user.id)
+            .in('id', accountIds as string[]);
+          const validIds = new Set((accounts || []).filter(a => a.motion === motionFilter).map(a => a.id));
+          items = items.filter(i => i.account_id && validIds.has(i.account_id));
+        }
+      }
+      
+      return items.slice(0, 20);
     },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
