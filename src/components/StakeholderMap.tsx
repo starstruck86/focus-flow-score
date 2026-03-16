@@ -468,7 +468,17 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
             <p className="mt-1 text-xs">Use AI Discover, then tune the focus if results are too narrow.</p>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
+            {hasMultipleTeams && (
+              <div className="flex flex-wrap gap-1.5 mb-1">
+                {Object.entries(teamGroups).map(([team, members]) => (
+                  <Badge key={team} variant="outline" className="text-[10px]">
+                    {team} ({members.length})
+                  </Badge>
+                ))}
+              </div>
+            )}
+            <div className="space-y-2">
             {BUYER_ROLES.filter((role) => grouped[role.value]?.length > 0).map((role) => {
               const RoleIcon = role.icon;
               return (
