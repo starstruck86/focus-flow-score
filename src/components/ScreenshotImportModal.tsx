@@ -400,8 +400,9 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
                   />
                   <span className="font-semibold text-sm flex-1">{acc.name}</span>
                   {acc.matchedExistingId && (
-                    <Badge variant="outline" className="text-[10px] text-status-yellow border-status-yellow/30">
-                      <AlertTriangle className="h-3 w-3 mr-1" /> Already exists
+                    <Badge variant="outline" className={cn("text-[10px]", acc.selected ? "text-primary border-primary/30" : "text-status-yellow border-status-yellow/30")}>
+                      {acc.selected ? <CheckCircle2 className="h-3 w-3 mr-1" /> : <AlertTriangle className="h-3 w-3 mr-1" />}
+                      {acc.selected ? 'Will merge' : 'Already exists'}
                     </Badge>
                   )}
                   <Badge variant="outline" className="text-[10px]">
