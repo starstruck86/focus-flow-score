@@ -306,7 +306,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
       <CardContent className="space-y-3">
         {showTuning && (
           <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
-            <div className="grid gap-3 md:grid-cols-[1fr_120px]">
+            <div className="grid gap-3 md:grid-cols-[1fr_1fr_100px]">
               <div className="space-y-1.5">
                 <span className="text-[11px] font-medium text-muted-foreground">Discovery focus</span>
                 <Select value={discoveryMode} onValueChange={setDiscoveryMode}>
@@ -324,7 +324,23 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
               </div>
 
               <div className="space-y-1.5">
-                <span className="text-[11px] font-medium text-muted-foreground">Target count</span>
+                <span className="text-[11px] font-medium text-muted-foreground">Division / BU</span>
+                <Input
+                  value={division}
+                  onChange={(e) => setDivision(e.target.value)}
+                  placeholder="e.g. Group Benefits"
+                  className="h-8 text-xs"
+                  list="division-presets"
+                />
+                <datalist id="division-presets">
+                  {DIVISION_PRESETS.filter(Boolean).map((d) => (
+                    <option key={d} value={d} />
+                  ))}
+                </datalist>
+              </div>
+
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-medium text-muted-foreground">Target</span>
                 <Select value={maxContacts} onValueChange={setMaxContacts}>
                   <SelectTrigger className="h-8 text-xs">
                     <SelectValue />
@@ -332,7 +348,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                   <SelectContent>
                     {TARGET_COUNTS.map((count) => (
                       <SelectItem key={count} value={count} className="text-xs">
-                        {count} contacts
+                        {count}
                       </SelectItem>
                     ))}
                   </SelectContent>
