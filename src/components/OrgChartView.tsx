@@ -247,32 +247,53 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
 
           {isEditing && (
             <div className="mt-2 pt-2 border-t border-border/30 space-y-2">
-              <div className="flex gap-2">
-                <div className="flex-1">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
                   <Label className="text-[10px]">Reports To</Label>
-                  <Input
-                    className="h-7 text-xs"
-                    value={editReportsTo}
-                    onChange={e => setEditReportsTo(e.target.value)}
-                    placeholder="Manager name..."
-                  />
+                  <Select
+                    value={editReportsTo || '__none__'}
+                    onValueChange={v => setEditReportsTo(v === '__none__' ? '' : v)}
+                  >
+                    <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="None (root)" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">None (root)</SelectItem>
+                      {(contacts || [])
+                        .filter(c => c.id !== contact.id)
+                        .map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)
+                      }
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label className="text-[10px]">Role</Label>
                   <Select value={contact.buyer_role || 'unknown'} onValueChange={v => updateContact.mutate({ id: contact.id, updates: { buyer_role: v } })}>
-                    <SelectTrigger className="h-7 text-xs w-28"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {BUYER_ROLES.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
-              <Button size="sm" className="h-6 text-xs" onClick={() => {
-                updateContact.mutate({ id: contact.id, updates: { reporting_to: editReportsTo || null } });
-                setEditingId(null);
-              }}>
-                <Check className="h-3 w-3 mr-1" /> Save
-              </Button>
+              <div className="flex gap-2 items-center">
+                <Button size="sm" className="h-6 text-xs" onClick={() => {
+                  updateContact.mutate({ id: contact.id, updates: { reporting_to: editReportsTo || null } });
+                  setEditingId(null);
+                }}>
+                  <Check className="h-3 w-3 mr-1" /> Save
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 ml-auto"
+                  onClick={() => {
+                    if (window.confirm(`Remove ${contact.name} from the org chart?`)) {
+                      deleteContact.mutate(contact.id);
+                    }
+                  }}
+                >
+                  <Trash2 className="h-3 w-3 mr-1" /> Delete
+                </Button>
+              </div>
             </div>
           )}
         </div>
