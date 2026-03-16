@@ -187,7 +187,38 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
       try {
         let accountId: string | undefined;
 
-        if (acc.motion === 'renewal' && acc.renewal_due) {
+        // If matched to an existing account, merge new data into it
+        if (acc.matchedExistingId) {
+          accountId = acc.matchedExistingId;
+          const mergeUpdates: Record<string, any> = {};
+          if (acc.website) mergeUpdates.website = acc.website;
+          if (acc.industry) mergeUpdates.industry = acc.industry;
+          if (acc.ecommerce) mergeUpdates.ecommerce = acc.ecommerce;
+          if (acc.mar_tech) mergeUpdates.mar_tech = acc.mar_tech;
+          if (acc.salesforce_id) mergeUpdates.salesforce_id = acc.salesforce_id;
+          if (acc.salesforce_link) mergeUpdates.salesforce_link = acc.salesforce_link;
+          if (acc.planhat_link) mergeUpdates.planhat_link = acc.planhat_link;
+          if (acc.notes) {
+            const existing = accounts.find(a => a.id === accountId);
+            mergeUpdates.notes = existing?.notes
+              ? `${existing.notes}\n\n**Imported:** ${acc.notes}`
+              : acc.notes;
+          }
+
+          // Only update fields that have values (smart-merge: don't overwrite with empty)
+          if (Object.keys(mergeUpdates).length > 0) {
+            const localUpdates: Partial<Account> = {};
+            if (mergeUpdates.website) localUpdates.website = mergeUpdates.website;
+            if (mergeUpdates.industry) localUpdates.industry = mergeUpdates.industry;
+            if (mergeUpdates.ecommerce) localUpdates.ecommerce = mergeUpdates.ecommerce;
+            if (mergeUpdates.mar_tech) localUpdates.marTech = mergeUpdates.mar_tech;
+            if (mergeUpdates.salesforce_id) localUpdates.salesforceId = mergeUpdates.salesforce_id;
+            if (mergeUpdates.salesforce_link) localUpdates.salesforceLink = mergeUpdates.salesforce_link;
+            if (mergeUpdates.planhat_link) localUpdates.planhatLink = mergeUpdates.planhat_link;
+            if (mergeUpdates.notes) localUpdates.notes = mergeUpdates.notes;
+            updateAccount(accountId, localUpdates);
+          }
+        } else if (acc.motion === 'renewal' && acc.renewal_due) {
           await addRenewal({
             accountName: acc.name,
             arr: acc.arr || 0,
