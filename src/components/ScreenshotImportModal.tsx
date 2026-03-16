@@ -372,7 +372,7 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
                   title: contact.title || null,
                   email: contact.email || null,
                   status: 'target',
-                  buyer_role: 'unknown',
+                  buyer_role: contact.inferredBuyerRole || 'unknown',
                   influence_level: contact.inferredInfluence || 'medium',
                   reporting_to: contact.inferredReportingTo || null,
                   discovery_source: 'screenshot-import',
