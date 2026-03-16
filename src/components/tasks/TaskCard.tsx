@@ -217,9 +217,9 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
             {/* Meta row: account, opp stage, due date, workstream */}
             <div className="flex items-center gap-2 flex-wrap mt-1">
               {accountName && (
-                <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded-md">
-                  <Building2 className="h-2.5 w-2.5" />
-                  <span className="truncate max-w-[100px]">{accountName}</span>
+                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">
+                  <Building2 className="h-3 w-3" />
+                  <span className="truncate max-w-[120px]">{accountName}</span>
                 </span>
               )}
               {oppStage && (
