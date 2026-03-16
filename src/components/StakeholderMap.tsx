@@ -667,7 +667,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
           <div className="py-8 text-center text-muted-foreground">
             <Users className="mx-auto mb-2 h-10 w-10 opacity-20" />
             <p className="text-sm">No stakeholders mapped yet</p>
-            <p className="mt-1 text-xs">Use AI Discover, then tune the focus if results are too narrow.</p>
+            <p className="mt-1 text-xs">Drop a screenshot, use AI Discover, or tune the focus.</p>
           </div>
         ) : (
           <div className="space-y-3">
