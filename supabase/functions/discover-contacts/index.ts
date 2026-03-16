@@ -753,7 +753,7 @@ Rules:
   const validContacts = (parsed?.contacts || []).filter((contact: any) => {
     if (!contact.name || !cleanText(contact.name)) return false;
     // Must have a valid LinkedIn URL (strict format check)
-    if (!isValidLinkedInUrl(contact.linkedin_url)) {
+    if (!isValidLinkedInUrl(contact.linkedin_url, resolvedAccountName)) {
       console.log(`discover-contacts: filtered out "${contact.name}" — invalid LinkedIn URL: ${contact.linkedin_url || 'none'}`);
       return false;
     }
