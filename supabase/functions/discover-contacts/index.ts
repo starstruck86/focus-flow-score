@@ -268,8 +268,12 @@ Return up to ${maxContacts} CURRENT people at the company who are most relevant.
 - Current title
 - Department or team they belong to
 - Why they matter to this evaluation
-- LinkedIn URL if you can find one
+- Their DIRECT LinkedIn profile URL (https://www.linkedin.com/in/...) — this is REQUIRED
+- How long they have been at the company (in months)
+- How long they have been in their current role (in months)
 - 1 short evidence note proving they are at the company now
+
+IMPORTANT: Only return people whose LinkedIn profile you can find. Do NOT return people with unknown tenure.
 
 Prioritize real named people. If the obvious marketing leader is not public, include adjacent leaders in digital, operations, CX, IT, or executive leadership who would influence the decision.`,
           },
