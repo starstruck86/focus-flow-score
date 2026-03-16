@@ -274,6 +274,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       if (updates.closeDate !== undefined) dbUpdates.close_date = updates.closeDate;
       if (updates.nextStep !== undefined) dbUpdates.next_step = updates.nextStep;
       if (updates.nextStepDate !== undefined) dbUpdates.next_step_date = updates.nextStepDate;
+      if (updates.lastTouchDate !== undefined) dbUpdates.last_touch_date = updates.lastTouchDate;
       if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
       if (updates.dealType !== undefined) dbUpdates.deal_type = updates.dealType;
       if (updates.paymentTerms !== undefined) dbUpdates.payment_terms = updates.paymentTerms;
