@@ -663,31 +663,47 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
   };
 
   // Recursive tree renderer with connecting lines
-  const renderTree = (node: any): React.ReactNode => {
+  const renderTree = (node: any, depth: number = 0): React.ReactNode => {
     const children = childrenMap.get(node.id) || [];
-    const allItems = [...children];
+    const isLeaf = children.length === 0;
+    // Show blank placeholder only on leaf nodes (max depth 3 to prevent infinite expansion)
+    const showBlank = isLeaf && depth < 3;
+
+    if (children.length === 0 && !showBlank) {
+      return (
+        <div key={node.id} className="flex flex-col items-center">
+          {renderNodeCard(node)}
+        </div>
+      );
+    }
+
+    const visibleItems = [...children];
 
     return (
       <div key={node.id} className="flex flex-col items-center">
         {renderNodeCard(node)}
 
-        {/* Always show children + blank placeholder */}
-        <div className="w-px h-5 bg-border" />
+        <div className="w-px h-4 sm:h-5 bg-border" />
         <div className="relative flex items-start">
-          {(allItems.length + 1) > 1 && (
-            <div className="absolute top-0 bg-border h-px" style={{ left: `calc(50% / ${allItems.length + 1})`, right: `calc(50% / ${allItems.length + 1})` }} />
+          {(visibleItems.length + (showBlank ? 1 : 0)) > 1 && (
+            <div className="absolute top-0 bg-border h-px" style={{
+              left: `calc(50% / ${visibleItems.length + (showBlank ? 1 : 0)})`,
+              right: `calc(50% / ${visibleItems.length + (showBlank ? 1 : 0)})`,
+            }} />
           )}
-          <div className="flex gap-3 items-start">
-            {allItems.map((child: any) => (
+          <div className="flex gap-2 sm:gap-3 items-start">
+            {visibleItems.map((child: any) => (
               <div key={child.id} className="flex flex-col items-center">
-                <div className="w-px h-5 bg-border" />
-                {renderTree(child)}
+                <div className="w-px h-4 sm:h-5 bg-border" />
+                {renderTree(child, depth + 1)}
               </div>
             ))}
-            <div className="flex flex-col items-center">
-              <div className="w-px h-5 bg-border/30" />
-              {renderBlankCard(node.name)}
-            </div>
+            {showBlank && (
+              <div className="flex flex-col items-center">
+                <div className="w-px h-4 sm:h-5 bg-border/30" />
+                {renderBlankCard(node.name)}
+              </div>
+            )}
           </div>
         </div>
       </div>
