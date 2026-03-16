@@ -749,21 +749,38 @@ Rules:
 
   const deduped = dedupeContacts(validContacts).filter((contact: any) => !existingNames.has(cleanText(contact.name).toLowerCase()));
 
-  // For single-account discovery (not batch), verify top LinkedIn URLs via Firecrawl
-  // Limit to 3 verifications to avoid timeout
-  const maxVerify = 3;
+  // Scan top LinkedIn profiles for verification + keyword relevance
+  const maxScan = 5; // Scan up to 5 profiles
   const discovered: any[] = [];
   for (let i = 0; i < deduped.length; i++) {
     const contact = deduped[i];
-    if (i < maxVerify) {
-      const verified = await verifyLinkedInUrl(contact.linkedin_url);
-      contact.linkedin_verified = verified;
-      if (!verified) {
+    if (i < maxScan) {
+      const scan = await scanLinkedInProfile(contact.linkedin_url, resolvedMode);
+      contact.linkedin_verified = scan.verified;
+      contact.relevance_score = scan.relevanceScore;
+      contact.matched_categories = scan.matchedCategories;
+      contact.keyword_hits = scan.keywordHits;
+      
+      if (!scan.verified) {
         console.log(`discover-contacts: LinkedIn verification failed for "${contact.name}" — ${contact.linkedin_url}`);
-        contact.confidence = 'suggested'; // Downgrade confidence
+        contact.confidence = 'suggested';
+      }
+      
+      // Auto-remove: unverified profile + 0 relevance + only 'suggested' confidence
+      if (scan.relevanceScore === 0 && !scan.verified) {
+        console.log(`discover-contacts: removing "${contact.name}" — unverified + zero relevance`);
+        continue;
+      }
+      // Auto-remove: verified but 0 keyword matches AND 'suggested' confidence
+      if (scan.verified && scan.relevanceScore === 0 && (contact.confidence === 'suggested')) {
+        console.log(`discover-contacts: removing "${contact.name}" — verified but zero relevance + low confidence`);
+        continue;
       }
     } else {
-      contact.linkedin_verified = null; // Not checked
+      contact.linkedin_verified = null;
+      contact.relevance_score = -1; // Not scanned
+      contact.matched_categories = [];
+      contact.keyword_hits = [];
     }
     discovered.push(contact);
   }
