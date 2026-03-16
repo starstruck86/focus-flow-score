@@ -315,7 +315,15 @@ function OpportunitiesStageSummary({ activeStageFilter, onStageFilterChange }: {
   activeStageFilter?: OpportunityStage | null;
   onStageFilterChange?: (stage: OpportunityStage | null) => void;
 }) {
-  const { opportunities } = useStore();
+  const { opportunities, renewals } = useStore();
+  
+  // Build set of renewal opportunity IDs to exclude from new logo pipeline
+  const renewalOpportunityIds = useMemo(() => {
+    const ids = new Set<string>();
+    renewals.filter(r => r.linkedOpportunityId).forEach(r => ids.add(r.linkedOpportunityId!));
+    opportunities.filter(o => o.dealType === 'renewal').forEach(o => ids.add(o.id));
+    return ids;
+  }, [renewals, opportunities]);
   
   const stageSummary = useMemo(() => {
     const stages: OpportunityStage[] = ['', 'Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate', 'Closed Won', 'Closed Lost'];
@@ -326,7 +334,7 @@ function OpportunitiesStageSummary({ activeStageFilter, onStageFilterChange }: {
     });
     
     opportunities
-      .filter(o => o.status === 'active')
+      .filter(o => o.status === 'active' && !renewalOpportunityIds.has(o.id))
       .forEach(o => {
         const stage = o.stage || '';
         if (summary[stage]) {
@@ -339,7 +347,7 @@ function OpportunitiesStageSummary({ activeStageFilter, onStageFilterChange }: {
       });
     
     return summary;
-  }, [opportunities]);
+  }, [opportunities, renewalOpportunityIds]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', {

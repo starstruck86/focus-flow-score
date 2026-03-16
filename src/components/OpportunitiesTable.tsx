@@ -53,6 +53,7 @@ import { BulkActionsBar } from '@/components/BulkActionsBar';
 import { KanbanBoard } from '@/components/KanbanBoard';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useStore } from '@/store/useStore';
+import { toast } from 'sonner';
 import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
 import { format, parseISO, isToday, isPast, isThisQuarter, getQuarter, getYear } from 'date-fns';
 import { 
@@ -290,8 +291,15 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     }
   };
 
+  const { deleteOpportunity: storeDeleteOpportunity } = useStore();
+  
   const deleteOpportunity = (id: string) => {
-    deleteOpportunityMutation.mutate(id);
+    if (dbOpportunityIds.has(id)) {
+      deleteOpportunityMutation.mutate(id);
+    } else {
+      storeDeleteOpportunity(id);
+      toast.success('Opportunity deleted');
+    }
   };
 
   const updateRenewal = (id: string, updates: { linkedOpportunityId?: string }) => {
@@ -1022,11 +1030,20 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     );
   };
 
+  // Calculate display ARR: for renewals view, show expansion ARR (renewal - prior)
+  const getDisplayArr = (o: Opportunity) => {
+    if (renewalsOnly) {
+      const expansion = (o.renewalArr || 0) - (o.priorContractArr || 0);
+      return expansion > 0 ? expansion : 0;
+    }
+    return o.arr || 0;
+  };
+
   const renderStatusGroup = (status: OpportunityStatus, opps: Opportunity[]) => {
     if (opps.length === 0) return null;
 
     const statusLabel = status.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
-    const groupArr = opps.reduce((sum, o) => sum + (o.arr || 0), 0);
+    const groupArr = opps.reduce((sum, o) => sum + getDisplayArr(o), 0);
 
     return (
       <React.Fragment key={status}>
@@ -1054,7 +1071,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
 
   const renderGenericGroup = (label: string, opps: Opportunity[]) => {
     if (opps.length === 0) return null;
-    const groupArr = opps.reduce((sum, o) => sum + (o.arr || 0), 0);
+    const groupArr = opps.reduce((sum, o) => sum + getDisplayArr(o), 0);
 
     return (
       <React.Fragment key={label}>
