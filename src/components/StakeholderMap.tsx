@@ -83,6 +83,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
   const [discoveryMode, setDiscoveryMode] = useState<string>('auto');
   const [maxContacts, setMaxContacts] = useState<string>('5');
   const [focusPrompt, setFocusPrompt] = useState(opportunityContext || '');
+  const [division, setDivision] = useState('');
   const [lastDiscoveryMeta, setLastDiscoveryMeta] = useState<DiscoveryMeta | null>(null);
 
   useEffect(() => {
