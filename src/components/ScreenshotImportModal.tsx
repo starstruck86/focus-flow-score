@@ -255,11 +255,15 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
         }
 
         // Save extracted contacts to the contacts table (powers Org Chart)
+        // with auto-inferred hierarchy based on title seniority
         if (acc.contacts && acc.contacts.length > 0 && user) {
           const targetAccountId = acc.matchedExistingId || accountId;
-          for (const contact of acc.contacts) {
+
+          // Infer hierarchy from titles
+          const withHierarchy = inferContactHierarchy(acc.contacts);
+
+          for (const contact of withHierarchy) {
             try {
-              // Check for duplicates by name within the same account
               const { data: existing } = await supabase
                 .from('contacts')
                 .select('id')
@@ -276,7 +280,8 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
                   email: contact.email || null,
                   status: 'target',
                   buyer_role: 'unknown',
-                  influence_level: 'medium',
+                  influence_level: contact.inferredInfluence || 'medium',
+                  reporting_to: contact.inferredReportingTo || null,
                   discovery_source: 'screenshot-import',
                 });
               }
