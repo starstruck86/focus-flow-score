@@ -644,7 +644,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
     if (!draggedContactId) return null;
     return (
       <div
-        className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 w-[160px] py-4 px-3 text-center transition-all"
+        className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 w-[140px] sm:w-[160px] py-3 px-2 text-center transition-all"
         onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
         onDrop={(e) => {
           e.preventDefault();
@@ -657,7 +657,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
           }
         }}
       >
-        <p className="text-[11px] text-primary font-medium">Drop here for root level</p>
+        <p className="text-[10px] text-primary font-medium">Drop here for root</p>
       </div>
     );
   };
