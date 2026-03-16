@@ -15,7 +15,8 @@ import {
   BriefcaseBusiness, Target, RefreshCw, Star,
   ChevronDown, ChevronUp, MessageSquare, Lightbulb,
   ThumbsUp, ThumbsDown, RotateCcw, CheckCircle2,
-  ArrowRight, ExternalLink,
+  ArrowRight, ExternalLink, Pencil, Check, X, GripVertical,
+  Rocket, Shield,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
