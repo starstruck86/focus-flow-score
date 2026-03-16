@@ -111,6 +111,13 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
   const [lastDiscoveryMeta, setLastDiscoveryMeta] = useState<DiscoveryMeta | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isParsingDrop, setIsParsingDrop] = useState(false);
+  const [draggedContactId, setDraggedContactId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newContact, setNewContact] = useState({ name: '', title: '', department: '', buyer_role: 'unknown', reporting_to: '' });
+  const [addingUnderParent, setAddingUnderParent] = useState<string | null>(null);
+  const [quickAddName, setQuickAddName] = useState('');
+  const [quickAddTitle, setQuickAddTitle] = useState('');
 
   useEffect(() => {
     setDiscoveredContacts([]);
