@@ -230,6 +230,18 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
     return groups;
   }, [contacts]);
 
+  const teamGroups = useMemo(() => {
+    if (!contacts || contacts.length === 0) return {};
+    const teams: Record<string, any[]> = {};
+    for (const contact of contacts) {
+      const dept = (contact as any).department || 'General';
+      if (!teams[dept]) teams[dept] = [];
+      teams[dept].push(contact);
+    }
+    return teams;
+  }, [contacts]);
+  const hasMultipleTeams = Object.keys(teamGroups).length > 1;
+
   const powerMapScore = useMemo(() => {
     const mapped = (contacts || []).filter((contact: any) => contact.buyer_role && contact.buyer_role !== 'unknown');
     const coveredRoles = new Set(mapped.map((contact: any) => contact.buyer_role));
