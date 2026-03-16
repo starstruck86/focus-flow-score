@@ -416,7 +416,7 @@ async function discoverForSingleAccount({
       messages: [
         {
           role: 'system',
-          content: `You are a B2B stakeholder discovery assistant. Convert research into a strict contact list for a sales rep. Prefer real, current employees. Do not invent LinkedIn URLs. If research is sparse, infer buyer_role and influence_level conservatively from the title. Keep notes short and evidence-based.${resolvedDivision ? ` CRITICAL: Only include people from the "${resolvedDivision}" division/business unit. Exclude people from other divisions.` : ''}`,
+          content: `You are a B2B stakeholder discovery assistant. Convert research into a strict contact list for a sales rep. ONLY return contacts where you can find their LinkedIn profile URL (https://www.linkedin.com/in/...) and can estimate their tenure. Do not invent LinkedIn URLs — only use real ones you find in research. Keep notes short and evidence-based.${resolvedDivision ? ` CRITICAL: Only include people from the "${resolvedDivision}" division/business unit. Exclude people from other divisions.` : ''}`,
         },
         {
           role: 'user',
