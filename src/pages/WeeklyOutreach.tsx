@@ -1714,9 +1714,16 @@ export default function WeeklyOutreach() {
             )}
           </TabsContent>
 
-          {/* Opportunities Tab */}
-          <TabsContent value="opportunities" className="space-y-4">
-            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} showChurnRisk={false} columnOrder="outreach" excludeRenewals stageFilter={stageFilter} onClearStageFilter={() => setStageFilter(null)} />
+          {/* Sourcing Tab */}
+          <TabsContent value="sourcing" className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <WidgetErrorBoundary widgetId="icp-sourcing">
+                <IcpAccountSourcing />
+              </WidgetErrorBoundary>
+              <WidgetErrorBoundary widgetId="company-monitor">
+                <CompanyMonitorCard motionFilter="new-logo" />
+              </WidgetErrorBoundary>
+            </div>
           </TabsContent>
         </Tabs>
 
