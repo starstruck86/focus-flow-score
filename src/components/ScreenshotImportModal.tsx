@@ -13,6 +13,81 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { Account } from '@/types';
 
+// Title seniority tiers for org chart hierarchy inference
+const SENIORITY_TIERS: { patterns: RegExp[]; level: number; influence: string }[] = [
+  { patterns: [/\bc[eoi]o\b/i, /\bchief\b/i, /\bfounder\b/i, /\bpresident\b/i, /\bowner\b/i, /\bgeneral\s*manager\b/i], level: 1, influence: 'high' },
+  { patterns: [/\bsvp\b/i, /\bsenior\s+vice\s+president\b/i, /\bevp\b/i, /\bexecutive\s+vice\s+president\b/i], level: 2, influence: 'high' },
+  { patterns: [/\bvp\b/i, /\bvice\s+president\b/i], level: 3, influence: 'high' },
+  { patterns: [/\bsenior\s+director\b/i], level: 4, influence: 'high' },
+  { patterns: [/\bdirector\b/i, /\bhead\s+of\b/i], level: 5, influence: 'high' },
+  { patterns: [/\bsenior\s+manager\b/i], level: 6, influence: 'medium' },
+  { patterns: [/\bmanager\b/i], level: 7, influence: 'medium' },
+  { patterns: [/\blead\b/i, /\bprincipal\b/i, /\bsenior\b/i], level: 8, influence: 'medium' },
+  { patterns: [/\banalyst\b/i, /\bcoordinator\b/i, /\bspecialist\b/i, /\bassociate\b/i], level: 9, influence: 'low' },
+];
+
+function getTitleLevel(title: string | undefined): { level: number; influence: string } {
+  if (!title) return { level: 99, influence: 'medium' };
+  for (const tier of SENIORITY_TIERS) {
+    if (tier.patterns.some(p => p.test(title))) return { level: tier.level, influence: tier.influence };
+  }
+  return { level: 10, influence: 'medium' };
+}
+
+function getDepartment(title: string | undefined): string | null {
+  if (!title) return null;
+  const depts: [RegExp, string][] = [
+    [/market/i, 'marketing'], [/sale/i, 'sales'], [/revenue/i, 'revenue'],
+    [/product/i, 'product'], [/engineer|tech|it\b|dev/i, 'engineering'],
+    [/financ|cfo|account/i, 'finance'], [/operat/i, 'operations'],
+    [/customer|success|cx|support/i, 'customer'], [/digital/i, 'digital'],
+    [/ecommerce|e-commerce/i, 'ecommerce'], [/data/i, 'data'],
+    [/brand/i, 'brand'], [/growth/i, 'growth'], [/loyalty/i, 'loyalty'],
+  ];
+  for (const [pat, dept] of depts) {
+    if (pat.test(title)) return dept;
+  }
+  return null;
+}
+
+interface ContactWithHierarchy {
+  name: string;
+  title?: string;
+  email?: string;
+  inferredReportingTo: string | null;
+  inferredInfluence: string;
+}
+
+function inferContactHierarchy(contacts: { name: string; title?: string; email?: string }[]): ContactWithHierarchy[] {
+  const scored = contacts.map(c => ({
+    ...c,
+    ...getTitleLevel(c.title),
+    dept: getDepartment(c.title),
+  }));
+  scored.sort((a, b) => a.level - b.level);
+
+  const result: ContactWithHierarchy[] = [];
+  for (const contact of scored) {
+    let reportingTo: string | null = null;
+    if (contact.dept) {
+      const superior = scored.find(
+        s => s.name !== contact.name && s.level < contact.level &&
+             (s.dept === contact.dept || s.level <= 2)
+      );
+      if (superior) reportingTo = superior.name;
+    }
+    if (!reportingTo && contact.level > 1) {
+      const superior = scored.find(s => s.name !== contact.name && s.level < contact.level);
+      if (superior) reportingTo = superior.name;
+    }
+    result.push({
+      name: contact.name, title: contact.title, email: contact.email,
+      inferredReportingTo: reportingTo, inferredInfluence: contact.influence,
+    });
+  }
+  return result;
+}
+
 interface ScreenshotImportModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -255,11 +330,15 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
         }
 
         // Save extracted contacts to the contacts table (powers Org Chart)
+        // with auto-inferred hierarchy based on title seniority
         if (acc.contacts && acc.contacts.length > 0 && user) {
           const targetAccountId = acc.matchedExistingId || accountId;
-          for (const contact of acc.contacts) {
+
+          // Infer hierarchy from titles
+          const withHierarchy = inferContactHierarchy(acc.contacts);
+
+          for (const contact of withHierarchy) {
             try {
-              // Check for duplicates by name within the same account
               const { data: existing } = await supabase
                 .from('contacts')
                 .select('id')
@@ -276,7 +355,8 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
                   email: contact.email || null,
                   status: 'target',
                   buyer_role: 'unknown',
-                  influence_level: 'medium',
+                  influence_level: contact.inferredInfluence || 'medium',
+                  reporting_to: contact.inferredReportingTo || null,
                   discovery_source: 'screenshot-import',
                 });
               }
