@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import {
   Network, Sparkles, RefreshCw, Plus, Trash2, Pencil, Check, X,
   Crown, Shield, Target, UserCheck, Lightbulb, Users, Ban, Linkedin,
-  ArrowDown, ChevronDown, ChevronUp,
+  ArrowDown, ChevronDown, ChevronUp, Upload, Loader2, ImagePlus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -67,6 +67,8 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
   const [showAddForm, setShowAddForm] = useState(false);
   const [newContact, setNewContact] = useState({ name: '', title: '', department: '', buyer_role: 'unknown', reporting_to: '' });
   const [expanded, setExpanded] = useState(true);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [isParsingDrop, setIsParsingDrop] = useState(false);
 
   const { data: contacts, isLoading } = useQuery({
     queryKey: ['org-chart-contacts', accountId],
@@ -175,6 +177,119 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
       setIsGenerating(false);
     }
   }, [accountId, accountName, website, industry, user, qc]);
+
+  // Handle screenshot drag-and-drop
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (!user) return;
+
+    const imageFiles = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    if (imageFiles.length === 0) return;
+
+    setIsParsingDrop(true);
+    try {
+      // Upload to storage
+      const uploadedUrls: string[] = [];
+      for (let i = 0; i < imageFiles.length; i++) {
+        const ext = imageFiles[i].name.split('.').pop() || 'png';
+        const path = `${user.id}/org-chart/${accountId}/${Date.now()}-${i}.${ext}`;
+        const { error } = await supabase.storage
+          .from('enrichment-screenshots')
+          .upload(path, imageFiles[i], { upsert: true });
+        if (error) { console.error('Upload error:', error); continue; }
+
+        const { data: signedData } = await supabase.storage
+          .from('enrichment-screenshots')
+          .createSignedUrl(path, 3600);
+        if (signedData?.signedUrl) uploadedUrls.push(signedData.signedUrl);
+      }
+
+      if (uploadedUrls.length === 0) {
+        toast.error('Failed to upload screenshot');
+        return;
+      }
+
+      toast.info(`Extracting contacts from ${uploadedUrls.length} screenshot(s)...`);
+
+      const { data, error } = await supabase.functions.invoke('parse-account-screenshot', {
+        body: {
+          imageUrls: uploadedUrls,
+          context: `Extract contacts/people for ${accountName}. Focus on names, titles, departments, and LinkedIn URLs.`,
+        },
+      });
+
+      if (error) throw new Error(error.message);
+      if (!data?.success) throw new Error(data?.error || 'Extraction failed');
+
+      const extractedAccounts = data.accounts || [];
+      // Collect all contacts from all extracted accounts
+      const allContacts: { name: string; title?: string; email?: string; department?: string }[] = [];
+      for (const acc of extractedAccounts) {
+        if (acc.contacts) allContacts.push(...acc.contacts);
+        // If the account itself looks like a contact entry (common with LinkedIn screenshots)
+        // the AI may put people as "accounts" — check if they have a title
+        if (acc.name && acc.notes?.includes('title:')) {
+          // skip, covered by contacts
+        }
+      }
+
+      // If no contacts found in the contacts array, the AI may have put people as accounts
+      if (allContacts.length === 0) {
+        for (const acc of extractedAccounts) {
+          if (acc.name) {
+            allContacts.push({
+              name: acc.name,
+              title: acc.industry || acc.notes || undefined, // AI sometimes puts title in unexpected fields
+            });
+          }
+        }
+      }
+
+      if (allContacts.length === 0) {
+        toast.info('No contacts found in screenshot');
+        return;
+      }
+
+      // Insert contacts, deduplicating
+      let added = 0;
+      for (const contact of allContacts) {
+        const { data: existing } = await supabase
+          .from('contacts')
+          .select('id')
+          .eq('account_id', accountId)
+          .ilike('name', contact.name)
+          .maybeSingle();
+
+        if (!existing) {
+          await supabase.from('contacts').insert({
+            user_id: user.id,
+            account_id: accountId,
+            name: contact.name,
+            title: contact.title || null,
+            email: contact.email || null,
+            department: contact.department || null,
+            status: 'target',
+            buyer_role: 'unknown',
+            influence_level: 'medium',
+            discovery_source: 'screenshot-drop',
+          });
+          added++;
+        }
+      }
+
+      qc.invalidateQueries({ queryKey: ['org-chart-contacts', accountId] });
+      toast.success(`Added ${added} contact(s) to org chart`, {
+        description: allContacts.length > added ? `${allContacts.length - added} duplicate(s) skipped` : undefined,
+      });
+    } catch (err) {
+      toast.error('Failed to parse screenshot', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setIsParsingDrop(false);
+    }
+  }, [user, accountId, accountName, qc]);
 
   // Build tree structure
   const { roots, childrenMap } = useMemo(() => {
@@ -312,7 +427,15 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
   const totalContacts = contacts?.length || 0;
 
   return (
-    <Card>
+    <Card
+      className={cn(
+        "transition-all",
+        isDragOver && "ring-2 ring-primary/50 bg-primary/5",
+      )}
+      onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+      onDragLeave={() => setIsDragOver(false)}
+      onDrop={handleDrop}
+    >
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -341,6 +464,23 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
 
       {expanded && (
         <CardContent className="space-y-3">
+          {/* Drag-drop processing overlay */}
+          {isParsingDrop && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20 text-sm">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <span>Extracting contacts from screenshot...</span>
+            </div>
+          )}
+
+          {/* Drag-over indicator */}
+          {isDragOver && !isParsingDrop && (
+            <div className="flex flex-col items-center gap-2 p-6 rounded-lg border-2 border-dashed border-primary/40 bg-primary/5 text-center">
+              <ImagePlus className="h-8 w-8 text-primary/60" />
+              <p className="text-sm font-medium text-primary">Drop screenshot to extract contacts</p>
+              <p className="text-xs text-muted-foreground">LinkedIn, CRM, or any contact list</p>
+            </div>
+          )}
+
           {/* Add form */}
           {showAddForm && (
             <div className="p-3 rounded-lg bg-muted/30 border border-border/50 space-y-2">
@@ -381,17 +521,17 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
           )}
 
           {/* Tree */}
-          {totalContacts === 0 ? (
+          {totalContacts === 0 && !isDragOver && !isParsingDrop ? (
             <div className="text-center py-6">
               <Network className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-30" />
               <p className="text-sm text-muted-foreground">No contacts yet.</p>
-              <p className="text-xs text-muted-foreground">Add manually or use AI Generate to build the org chart.</p>
+              <p className="text-xs text-muted-foreground">Drop a screenshot, add manually, or use AI Generate.</p>
             </div>
-          ) : (
+          ) : totalContacts > 0 ? (
             <div className="space-y-2">
               {roots.map(root => renderNode(root, 0))}
             </div>
-          )}
+          ) : null}
 
           {/* Legend */}
           {totalContacts > 0 && (
