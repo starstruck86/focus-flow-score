@@ -601,7 +601,7 @@ Rules:
     return { accountId, accountName: resolvedAccountName, error: 'Failed to parse AI response' };
   }
 
-  // Server-side validation: enforce LinkedIn URL format and tenure data
+  // Server-side validation: enforce LinkedIn URL format, filter interns
   const validContacts = (parsed?.contacts || []).filter((contact: any) => {
     if (!contact.name || !cleanText(contact.name)) return false;
     // Must have a valid LinkedIn URL (strict format check)
@@ -609,11 +609,15 @@ Rules:
       console.log(`discover-contacts: filtered out "${contact.name}" — invalid LinkedIn URL: ${contact.linkedin_url || 'none'}`);
       return false;
     }
-    // Must have BOTH tenure data points
-    if (typeof contact.company_tenure_months !== 'number' || typeof contact.role_tenure_months !== 'number') {
-      console.log(`discover-contacts: filtered out "${contact.name}" — missing tenure data (company: ${contact.company_tenure_months}, role: ${contact.role_tenure_months})`);
+    // Filter out interns/fellows/apprentices
+    const titleLower = (contact.title || '').toLowerCase();
+    if (/\b(intern|internship|fellow|apprentice|co-op|coop)\b/.test(titleLower)) {
+      console.log(`discover-contacts: filtered out "${contact.name}" — intern/fellow title: ${contact.title}`);
       return false;
     }
+    // Normalize unknown tenure to -1 instead of rejecting
+    if (typeof contact.company_tenure_months !== 'number') contact.company_tenure_months = -1;
+    if (typeof contact.role_tenure_months !== 'number') contact.role_tenure_months = -1;
     return true;
   });
 
