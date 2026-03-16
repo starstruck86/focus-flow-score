@@ -67,6 +67,8 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
   const [showAddForm, setShowAddForm] = useState(false);
   const [newContact, setNewContact] = useState({ name: '', title: '', department: '', buyer_role: 'unknown', reporting_to: '' });
   const [expanded, setExpanded] = useState(true);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [isParsingDrop, setIsParsingDrop] = useState(false);
 
   const { data: contacts, isLoading } = useQuery({
     queryKey: ['org-chart-contacts', accountId],
