@@ -507,7 +507,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       groups[stage] = [];
     });
 
-    filteredOpportunities.forEach(opp => {
+    activeFilteredOpps.forEach(opp => {
       const stage = opp.stage || '';
       if (!groups[stage]) groups[stage] = [];
       groups[stage].push(opp);
@@ -516,7 +516,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     return STAGE_OPTIONS
       .filter(stage => groups[stage]?.length > 0)
       .map(stage => [STAGE_LABELS[stage] || stage || 'No Stage', groups[stage]] as [string, Opportunity[]]);
-  }, [filteredOpportunities]);
+  }, [activeFilteredOpps]);
 
   const handleAddOpportunity = async () => {
     if (!newOppName.trim()) return;
