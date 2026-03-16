@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -13,26 +14,20 @@ import { toast } from 'sonner';
 import {
   Network, Sparkles, RefreshCw, Plus, Trash2, Pencil, Check, X,
   Crown, Shield, Target, UserCheck, Lightbulb, Users, Ban, Linkedin,
-  ArrowDown, ChevronDown, ChevronUp, Upload, Loader2, ImagePlus,
+  ChevronDown, ChevronUp, Loader2, ImagePlus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const BUYER_ROLES = [
-  { value: 'economic_buyer', label: 'Economic Buyer', icon: Crown, color: 'text-status-yellow', bg: 'bg-status-yellow/10 border-status-yellow/30' },
-  { value: 'champion', label: 'Champion', icon: Shield, color: 'text-primary', bg: 'bg-primary/10 border-primary/30' },
-  { value: 'technical_buyer', label: 'Technical Buyer', icon: Target, color: 'text-accent', bg: 'bg-accent/10 border-accent/30' },
-  { value: 'user_buyer', label: 'User Buyer', icon: UserCheck, color: 'text-status-green', bg: 'bg-status-green/10 border-status-green/30' },
-  { value: 'coach', label: 'Coach', icon: Lightbulb, color: 'text-foreground', bg: 'bg-secondary/70 border-border' },
-  { value: 'influencer', label: 'Influencer', icon: Users, color: 'text-muted-foreground', bg: 'bg-muted/60 border-border' },
-  { value: 'blocker', label: 'Blocker', icon: Ban, color: 'text-destructive', bg: 'bg-destructive/10 border-destructive/30' },
-  { value: 'unknown', label: 'Unknown', icon: Users, color: 'text-muted-foreground', bg: 'bg-muted/50 border-border' },
+  { value: 'economic_buyer', label: 'Economic Buyer', icon: Crown, color: 'text-status-yellow', bg: 'bg-status-yellow/10', border: 'border-status-yellow/40' },
+  { value: 'champion', label: 'Champion', icon: Shield, color: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/40' },
+  { value: 'technical_buyer', label: 'Technical Buyer', icon: Target, color: 'text-accent', bg: 'bg-accent/10', border: 'border-accent/40' },
+  { value: 'user_buyer', label: 'User Buyer', icon: UserCheck, color: 'text-status-green', bg: 'bg-status-green/10', border: 'border-status-green/40' },
+  { value: 'coach', label: 'Coach', icon: Lightbulb, color: 'text-foreground', bg: 'bg-secondary/70', border: 'border-border' },
+  { value: 'influencer', label: 'Influencer', icon: Users, color: 'text-muted-foreground', bg: 'bg-muted/60', border: 'border-border' },
+  { value: 'blocker', label: 'Blocker', icon: Ban, color: 'text-destructive', bg: 'bg-destructive/10', border: 'border-destructive/40' },
+  { value: 'unknown', label: 'Unknown', icon: Users, color: 'text-muted-foreground', bg: 'bg-card', border: 'border-border' },
 ] as const;
-
-const INFLUENCE_COLORS: Record<string, string> = {
-  high: 'ring-2 ring-status-yellow/60',
-  medium: 'ring-1 ring-border',
-  low: 'ring-1 ring-border/30 opacity-80',
-};
 
 interface OrgChartViewProps {
   accountId: string;
@@ -63,7 +58,7 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
   const qc = useQueryClient();
   const [isGenerating, setIsGenerating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editReportsTo, setEditReportsTo] = useState('');
+  const [editForm, setEditForm] = useState<{ reporting_to: string; buyer_role: string }>({ reporting_to: '', buyer_role: 'unknown' });
   const [showAddForm, setShowAddForm] = useState(false);
   const [newContact, setNewContact] = useState({ name: '', title: '', department: '', buyer_role: 'unknown', reporting_to: '' });
   const [expanded, setExpanded] = useState(true);
@@ -128,12 +123,8 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
     try {
       const { data, error } = await supabase.functions.invoke('discover-contacts', {
         body: {
-          accountId,
-          accountName,
-          website,
-          industry,
-          discoveryMode: 'executive',
-          maxContacts: 8,
+          accountId, accountName, website, industry,
+          discoveryMode: 'executive', maxContacts: 8,
           focusPrompt: 'Build an org chart: find the reporting hierarchy from VP/Director level through CMO/CRO. Include department heads and key decision makers.',
           includeReportingLines: true,
         },
@@ -142,43 +133,28 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
       if (data?.error) throw new Error(data.error);
 
       const newContacts = data?.contacts || [];
-      if (newContacts.length === 0) {
-        toast.info('No new contacts found for org chart');
-        return;
-      }
+      if (newContacts.length === 0) { toast.info('No new contacts found'); return; }
 
-      // Add contacts with reporting_to relationships
       for (const c of newContacts) {
         await supabase.from('contacts').insert({
-          name: c.name,
-          title: c.title,
-          department: c.department || null,
-          seniority: c.seniority || null,
-          buyer_role: c.buyer_role || 'unknown',
-          influence_level: c.influence_level || 'medium',
-          linkedin_url: c.linkedin_url || null,
-          reporting_to: c.reporting_to || null,
-          notes: c.notes || null,
-          account_id: accountId,
-          user_id: user.id,
-          ai_discovered: true,
-          discovery_source: 'org-chart-ai',
-          status: 'target',
+          name: c.name, title: c.title, department: c.department || null,
+          seniority: c.seniority || null, buyer_role: c.buyer_role || 'unknown',
+          influence_level: c.influence_level || 'medium', linkedin_url: c.linkedin_url || null,
+          reporting_to: c.reporting_to || null, notes: c.notes || null,
+          account_id: accountId, user_id: user.id, ai_discovered: true,
+          discovery_source: 'org-chart-ai', status: 'target',
         });
       }
 
       qc.invalidateQueries({ queryKey: ['org-chart-contacts', accountId] });
       toast.success(`Added ${newContacts.length} contacts to org chart`);
     } catch (err) {
-      toast.error('Failed to generate org chart', {
-        description: err instanceof Error ? err.message : 'Unknown error',
-      });
+      toast.error('Failed to generate org chart', { description: err instanceof Error ? err.message : 'Unknown error' });
     } finally {
       setIsGenerating(false);
     }
   }, [accountId, accountName, website, industry, user, qc]);
 
-  // Handle screenshot drag-and-drop
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
@@ -189,99 +165,56 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
 
     setIsParsingDrop(true);
     try {
-      // Upload to storage
       const uploadedUrls: string[] = [];
       for (let i = 0; i < imageFiles.length; i++) {
         const ext = imageFiles[i].name.split('.').pop() || 'png';
         const path = `${user.id}/org-chart/${accountId}/${Date.now()}-${i}.${ext}`;
-        const { error } = await supabase.storage
-          .from('enrichment-screenshots')
-          .upload(path, imageFiles[i], { upsert: true });
+        const { error } = await supabase.storage.from('enrichment-screenshots').upload(path, imageFiles[i], { upsert: true });
         if (error) { console.error('Upload error:', error); continue; }
-
-        const { data: signedData } = await supabase.storage
-          .from('enrichment-screenshots')
-          .createSignedUrl(path, 3600);
+        const { data: signedData } = await supabase.storage.from('enrichment-screenshots').createSignedUrl(path, 3600);
         if (signedData?.signedUrl) uploadedUrls.push(signedData.signedUrl);
       }
 
-      if (uploadedUrls.length === 0) {
-        toast.error('Failed to upload screenshot');
-        return;
-      }
-
+      if (uploadedUrls.length === 0) { toast.error('Failed to upload screenshot'); return; }
       toast.info(`Extracting contacts from ${uploadedUrls.length} screenshot(s)...`);
 
       const { data, error } = await supabase.functions.invoke('parse-account-screenshot', {
         body: {
           imageUrls: uploadedUrls,
-          context: `This is a CONTACTS screenshot for the company "${accountName}". Extract each PERSON as a contact under a single account named "${accountName}". Focus on: person names, job titles, departments, emails, and LinkedIn URLs. Put all people in the contacts array of one account entry.`,
+          context: `This is a CONTACTS screenshot for "${accountName}". Extract each PERSON as a contact. Focus on: names, titles, departments, emails, LinkedIn URLs.`,
         },
       });
-
       if (error) throw new Error(error.message);
       if (!data?.success) throw new Error(data?.error || 'Extraction failed');
 
-      const extractedAccounts = data.accounts || [];
-      // Collect all contacts from all extracted accounts
       const allContacts: { name: string; title?: string; email?: string; department?: string }[] = [];
-      for (const acc of extractedAccounts) {
+      for (const acc of (data.accounts || [])) {
         if (acc.contacts) allContacts.push(...acc.contacts);
       }
-
-      // Fallback: AI may have put people as separate "accounts" — treat any account
-      // that doesn't look like a real company as a contact
       if (allContacts.length === 0) {
-        for (const acc of extractedAccounts) {
-          if (acc.name) {
-            allContacts.push({
-              name: acc.name,
-              title: acc.industry || acc.notes || undefined,
-            });
-          }
+        for (const acc of (data.accounts || [])) {
+          if (acc.name) allContacts.push({ name: acc.name, title: acc.industry || acc.notes || undefined });
         }
       }
+      if (allContacts.length === 0) { toast.info('No contacts found in screenshot'); return; }
 
-      if (allContacts.length === 0) {
-        toast.info('No contacts found in screenshot');
-        return;
-      }
-
-      // Insert contacts, deduplicating
       let added = 0;
       for (const contact of allContacts) {
-        const { data: existing } = await supabase
-          .from('contacts')
-          .select('id')
-          .eq('account_id', accountId)
-          .ilike('name', contact.name)
-          .maybeSingle();
-
+        const { data: existing } = await supabase.from('contacts').select('id').eq('account_id', accountId).ilike('name', contact.name).maybeSingle();
         if (!existing) {
           await supabase.from('contacts').insert({
-            user_id: user.id,
-            account_id: accountId,
-            name: contact.name,
-            title: contact.title || null,
-            email: contact.email || null,
-            department: contact.department || null,
-            status: 'target',
-            buyer_role: 'unknown',
-            influence_level: 'medium',
-            discovery_source: 'screenshot-drop',
+            user_id: user.id, account_id: accountId, name: contact.name,
+            title: contact.title || null, email: contact.email || null,
+            department: contact.department || null, status: 'target',
+            buyer_role: 'unknown', influence_level: 'medium', discovery_source: 'screenshot-drop',
           });
           added++;
         }
       }
-
       qc.invalidateQueries({ queryKey: ['org-chart-contacts', accountId] });
-      toast.success(`Added ${added} contact(s) to org chart`, {
-        description: allContacts.length > added ? `${allContacts.length - added} duplicate(s) skipped` : undefined,
-      });
+      toast.success(`Added ${added} contact(s)`, { description: allContacts.length > added ? `${allContacts.length - added} duplicate(s) skipped` : undefined });
     } catch (err) {
-      toast.error('Failed to parse screenshot', {
-        description: err instanceof Error ? err.message : 'Unknown error',
-      });
+      toast.error('Failed to parse screenshot', { description: err instanceof Error ? err.message : 'Unknown error' });
     } finally {
       setIsParsingDrop(false);
     }
@@ -304,115 +237,178 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
           if (!map.has(parentId)) map.set(parentId, []);
           map.get(parentId)!.push(c);
         } else {
-          roots.push(c); // parent not found, treat as root
+          roots.push(c);
         }
       }
     }
 
-    // Sort roots by seniority
     const seniorityOrder: Record<string, number> = { 'c-suite': 0, 'vp': 1, 'director': 2, 'manager': 3, 'individual': 4 };
     roots.sort((a, b) => (seniorityOrder[a.seniority || 'individual'] || 4) - (seniorityOrder[b.seniority || 'individual'] || 4));
-
     return { roots, childrenMap: map };
   }, [contacts]);
 
-  const renderNode = (contact: ContactNode, depth: number = 0) => {
+  // Render a single org chart node card
+  const renderNodeCard = (contact: ContactNode) => {
     const config = getRoleConfig(contact.buyer_role || 'unknown');
     const Icon = config.icon;
-    const children = childrenMap.get(contact.id) || [];
     const isEditing = editingId === contact.id;
 
     return (
-      <div key={contact.id} className={cn("relative", depth > 0 && "ml-8")}>
-        {depth > 0 && (
-          <div className="absolute left-[-20px] top-0 bottom-1/2 w-5 border-l-2 border-b-2 border-border/40 rounded-bl-lg" />
+      <div
+        className={cn(
+          "relative rounded-lg border-2 bg-card shadow-sm transition-all w-[160px]",
+          config.border,
+          contact.influence_level === 'high' && "shadow-md",
         )}
-        <div className={cn(
-          "p-3 rounded-lg border bg-card transition-all",
-          INFLUENCE_COLORS[contact.influence_level || 'medium'],
-          config.bg,
-        )}>
-          <div className="flex items-start gap-2">
-            <Icon className={cn("h-4 w-4 mt-0.5 shrink-0", config.color)} />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium truncate">{contact.name}</span>
-                {contact.linkedin_url && (
-                  <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground">
-                    <Linkedin className="h-3 w-3" />
-                  </a>
-                )}
-              </div>
-              {contact.title && <p className="text-[11px] text-muted-foreground">{contact.title}</p>}
-              {contact.department && <Badge variant="outline" className="text-[10px] px-1.5 py-0 mt-1">{contact.department}</Badge>}
+      >
+        {/* Color top bar */}
+        <div className={cn("h-1.5 rounded-t-[6px]", config.bg)} />
+
+        <div className="px-3 py-2.5 text-center">
+          <div className="flex items-center justify-center gap-1 mb-0.5">
+            {contact.linkedin_url ? (
+              <a
+                href={contact.linkedin_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-semibold text-foreground hover:text-primary hover:underline transition-colors truncate"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {contact.name}
+              </a>
+            ) : (
+              <span className="text-sm font-semibold text-foreground truncate">{contact.name}</span>
+            )}
+          </div>
+          {contact.title && (
+            <p className="text-[11px] text-muted-foreground leading-tight truncate">{contact.title}</p>
+          )}
+          {contact.department && (
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 mt-1.5 font-normal">
+              {contact.department}
+            </Badge>
+          )}
+          <div className="flex items-center justify-center gap-1 mt-1.5">
+            <Icon className={cn("h-3 w-3", config.color)} />
+            <span className={cn("text-[10px] font-medium", config.color)}>{config.label}</span>
+          </div>
+
+          {/* Edit/action buttons */}
+          <div className="flex items-center justify-center gap-0.5 mt-1.5">
+            {contact.linkedin_url && (
+              <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-muted-foreground hover:text-primary">
+                  <Linkedin className="h-3 w-3" />
+                </Button>
+              </a>
+            )}
+            <Button
+              variant="ghost" size="sm" className="h-5 w-5 p-0"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isEditing) {
+                  setEditingId(null);
+                } else {
+                  setEditingId(contact.id);
+                  setEditForm({ reporting_to: contact.reporting_to || '', buyer_role: contact.buyer_role || 'unknown' });
+                }
+              }}
+            >
+              {isEditing ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3 text-muted-foreground" />}
+            </Button>
+          </div>
+        </div>
+
+        {/* Inline edit panel */}
+        {isEditing && (
+          <div className="px-3 pb-3 pt-1 border-t border-border/30 space-y-2">
+            <div>
+              <Label className="text-[10px]">Reports To</Label>
+              <Select
+                value={editForm.reporting_to || '__none__'}
+                onValueChange={v => setEditForm(f => ({ ...f, reporting_to: v === '__none__' ? '' : v }))}
+              >
+                <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None (root)</SelectItem>
+                  {(contacts || []).filter(c => c.id !== contact.id).map(c => (
+                    <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="flex gap-0.5">
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => {
-                setEditingId(isEditing ? null : contact.id);
-                setEditReportsTo(contact.reporting_to || '');
+            <div>
+              <Label className="text-[10px]">Role</Label>
+              <Select value={editForm.buyer_role} onValueChange={v => setEditForm(f => ({ ...f, buyer_role: v }))}>
+                <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {BUYER_ROLES.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex gap-1.5">
+              <Button size="sm" className="h-6 text-xs flex-1" onClick={() => {
+                updateContact.mutate({
+                  id: contact.id,
+                  updates: { reporting_to: editForm.reporting_to || null, buyer_role: editForm.buyer_role },
+                });
+                setEditingId(null);
               }}>
-                {isEditing ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
+                <Check className="h-3 w-3 mr-1" /> Save
+              </Button>
+              <Button
+                variant="ghost" size="sm"
+                className="h-6 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={() => {
+                  if (window.confirm(`Remove ${contact.name}?`)) deleteContact.mutate(contact.id);
+                }}
+              >
+                <Trash2 className="h-3 w-3" />
               </Button>
             </div>
           </div>
+        )}
+      </div>
+    );
+  };
 
-          {isEditing && (
-            <div className="mt-2 pt-2 border-t border-border/30 space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-[10px]">Reports To</Label>
-                  <Select
-                    value={editReportsTo || '__none__'}
-                    onValueChange={v => setEditReportsTo(v === '__none__' ? '' : v)}
-                  >
-                    <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="None (root)" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">None (root)</SelectItem>
-                      {(contacts || [])
-                        .filter(c => c.id !== contact.id)
-                        .map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)
-                      }
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-[10px]">Role</Label>
-                  <Select value={contact.buyer_role || 'unknown'} onValueChange={v => updateContact.mutate({ id: contact.id, updates: { buyer_role: v } })}>
-                    <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {BUYER_ROLES.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="flex gap-2 items-center">
-                <Button size="sm" className="h-6 text-xs" onClick={() => {
-                  updateContact.mutate({ id: contact.id, updates: { reporting_to: editReportsTo || null } });
-                  setEditingId(null);
-                }}>
-                  <Check className="h-3 w-3 mr-1" /> Save
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 ml-auto"
-                  onClick={() => {
-                    if (window.confirm(`Remove ${contact.name} from the org chart?`)) {
-                      deleteContact.mutate(contact.id);
-                    }
-                  }}
-                >
-                  <Trash2 className="h-3 w-3 mr-1" /> Delete
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
+  // Recursive tree renderer with connecting lines
+  const renderTree = (node: ContactNode) => {
+    const children = childrenMap.get(node.id) || [];
+
+    return (
+      <div key={node.id} className="flex flex-col items-center">
+        {renderNodeCard(node)}
 
         {children.length > 0 && (
-          <div className="mt-2 space-y-2">
-            {children.map(child => renderNode(child, depth + 1))}
-          </div>
+          <>
+            {/* Vertical line down from parent */}
+            <div className="w-px h-5 bg-border" />
+
+            {/* Horizontal connector bar + children */}
+            <div className="relative flex items-start">
+              {/* Horizontal bar spanning across children */}
+              {children.length > 1 && (
+                <div
+                  className="absolute top-0 bg-border h-px"
+                  style={{
+                    left: `calc(50% / ${children.length})`,
+                    right: `calc(50% / ${children.length})`,
+                  }}
+                />
+              )}
+
+              <div className="flex gap-2 items-start">
+                {children.map((child, i) => (
+                  <div key={child.id} className="flex flex-col items-center">
+                    {/* Vertical line down to child */}
+                    <div className="w-px h-5 bg-border" />
+                    {renderTree(child)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
         )}
       </div>
     );
@@ -422,15 +418,16 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
 
   const totalContacts = contacts?.length || 0;
 
+  // If there's a single top root with children, show as proper tree.
+  // If multiple roots, show them side by side under a virtual "company" node.
+  const hasSingleRoot = roots.length === 1;
+
   return (
     <Card
-      className={cn(
-        "transition-all",
-        isDragOver && "ring-2 ring-primary/50 bg-primary/5",
-      )}
+      className={cn("transition-all", isDragOver && "ring-2 ring-primary/50 bg-primary/5")}
       onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); if (!expanded) setExpanded(true); }}
       onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) { setIsDragOver(false); } }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false); }}
       onDrop={(e) => { e.preventDefault(); e.stopPropagation(); handleDrop(e); }}
     >
       <CardHeader className="pb-2">
@@ -444,11 +441,7 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
             <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => setShowAddForm(!showAddForm)}>
               <Plus className="h-3 w-3" /> Add
             </Button>
-            <Button
-              variant="ghost" size="sm" className="h-7 text-xs gap-1"
-              onClick={generateOrgChart}
-              disabled={isGenerating}
-            >
+            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={generateOrgChart} disabled={isGenerating}>
               {isGenerating ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
               AI Generate
             </Button>
@@ -461,7 +454,6 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
 
       {expanded && (
         <CardContent className="space-y-3">
-          {/* Drag-drop processing overlay */}
           {isParsingDrop && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20 text-sm">
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -469,7 +461,6 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
             </div>
           )}
 
-          {/* Drag-over indicator */}
           {isDragOver && !isParsingDrop && (
             <div className="flex flex-col items-center gap-2 p-6 rounded-lg border-2 border-dashed border-primary/40 bg-primary/5 text-center">
               <ImagePlus className="h-8 w-8 text-primary/60" />
@@ -478,7 +469,6 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
             </div>
           )}
 
-          {/* Add form */}
           {showAddForm && (
             <div className="p-3 rounded-lg bg-muted/30 border border-border/50 space-y-2">
               <div className="grid grid-cols-2 gap-2">
@@ -517,7 +507,7 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
             </div>
           )}
 
-          {/* Tree */}
+          {/* Org Chart Tree */}
           {totalContacts === 0 && !isDragOver && !isParsingDrop ? (
             <div className="text-center py-6">
               <Network className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-30" />
@@ -525,9 +515,43 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
               <p className="text-xs text-muted-foreground">Drop a screenshot, add manually, or use AI Generate.</p>
             </div>
           ) : totalContacts > 0 ? (
-            <div className="space-y-2">
-              {roots.map(root => renderNode(root, 0))}
-            </div>
+            <ScrollArea className="w-full">
+              <div className="min-w-fit py-4 px-2">
+                {hasSingleRoot ? (
+                  <div className="flex justify-center">
+                    {renderTree(roots[0])}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center">
+                    {/* Virtual company node for multiple roots */}
+                    <div className="rounded-lg border-2 border-primary/30 bg-primary/5 px-4 py-2 text-center shadow-sm">
+                      <span className="text-sm font-semibold text-foreground">{accountName}</span>
+                    </div>
+                    <div className="w-px h-5 bg-border" />
+                    <div className="relative flex items-start">
+                      {roots.length > 1 && (
+                        <div
+                          className="absolute top-0 bg-border h-px"
+                          style={{
+                            left: `calc(50% / ${roots.length})`,
+                            right: `calc(50% / ${roots.length})`,
+                          }}
+                        />
+                      )}
+                      <div className="flex gap-3 items-start">
+                        {roots.map(root => (
+                          <div key={root.id} className="flex flex-col items-center">
+                            <div className="w-px h-5 bg-border" />
+                            {renderTree(root)}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <ScrollBar orientation="horizontal" />
+            </ScrollArea>
           ) : null}
 
           {/* Legend */}
