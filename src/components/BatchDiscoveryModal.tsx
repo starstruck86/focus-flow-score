@@ -300,20 +300,47 @@ export function BatchDiscoveryModal({ children }: { children: React.ReactNode })
                 </Button>
               )}
             </div>
-            <div className="space-y-1 max-h-[120px] overflow-y-auto">
+            <div className="space-y-1 max-h-[200px] overflow-y-auto">
               {results.map((r) => (
-                <div key={r.accountId} className="flex items-center gap-2 text-[11px]">
-                  {r.success ? (
-                    <CheckCircle2 className="h-3 w-3 text-status-green shrink-0" />
-                  ) : (
-                    <XCircle className="h-3 w-3 text-destructive shrink-0" />
-                  )}
-                  <span className="font-medium truncate">{r.accountName}</span>
-                  {r.success ? (
-                    <span className="text-muted-foreground ml-auto shrink-0">{r.new_contacts} new</span>
-                  ) : (
-                    <span className="text-destructive ml-auto truncate max-w-[200px]">{r.error}</span>
-                  )}
+                <div key={r.accountId} className="space-y-0.5">
+                  <div className="flex items-center gap-2 text-[11px]">
+                    {r.success ? (
+                      <CheckCircle2 className="h-3 w-3 text-status-green shrink-0" />
+                    ) : (
+                      <XCircle className="h-3 w-3 text-destructive shrink-0" />
+                    )}
+                    <span className="font-medium truncate">{r.accountName}</span>
+                    {r.success ? (
+                      <span className="text-muted-foreground ml-auto shrink-0">{r.new_contacts} new</span>
+                    ) : (
+                      <span className="text-destructive ml-auto truncate max-w-[200px]">{r.error}</span>
+                    )}
+                  </div>
+                  {r.success && r.contacts?.map((c: any, ci: number) => {
+                    const companyNew = typeof c.company_tenure_months === 'number' && c.company_tenure_months < 12;
+                    const roleNew = typeof c.role_tenure_months === 'number' && c.role_tenure_months < 12;
+                    return (
+                      <div key={ci} className="ml-5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                        <span className="truncate font-medium text-foreground">{c.name}</span>
+                        <span className="truncate">{c.title}</span>
+                        {c.linkedin_url && (
+                          <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-primary shrink-0" onClick={e => e.stopPropagation()}>
+                            <Linkedin className="h-2.5 w-2.5" />
+                          </a>
+                        )}
+                        {companyNew && (
+                          <Badge variant="outline" className="text-[8px] h-4 border-status-yellow/50 bg-status-yellow/10 text-status-yellow shrink-0">
+                            {c.company_tenure_months}mo@co
+                          </Badge>
+                        )}
+                        {roleNew && (
+                          <Badge variant="outline" className="text-[8px] h-4 border-orange-400/50 bg-orange-400/10 text-orange-500 dark:text-orange-400 shrink-0">
+                            {c.role_tenure_months}mo role
+                          </Badge>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               ))}
             </div>
