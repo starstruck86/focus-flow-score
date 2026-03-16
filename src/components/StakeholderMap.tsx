@@ -703,7 +703,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
       title: title || null,
       department: parentName ? null : (newContact.department || null),
       buyer_role: parentName ? 'unknown' : newContact.buyer_role,
-      reporting_to: parentName || (newContact.reporting_to || null),
+      reporting_to: parentName || null,
       influence_level: 'medium',
     });
     if (parentName) {
