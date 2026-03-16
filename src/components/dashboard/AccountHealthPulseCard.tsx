@@ -79,11 +79,11 @@ export function AccountHealthPulseCard({ motionFilter }: AccountHealthPulseCardP
                   <div key={acct.accountId} className={cn("p-3 rounded-lg border transition-all hover:bg-muted/30", cfg.bg)}>
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-[10px] text-muted-foreground font-mono">#{idx + 1}</span>
-                        <TierIcon className={cn("h-3.5 w-3.5 shrink-0", cfg.color)} />
+                        <span className="text-xs text-muted-foreground font-mono">#{idx + 1}</span>
+                        <TierIcon className={cn("h-4 w-4 shrink-0", cfg.color)} />
                         <span className="text-sm font-semibold truncate">{acct.accountName}</span>
                       </div>
-                      <Badge variant={acct.overallScore >= 75 ? 'default' : 'outline'} className="text-[10px] font-mono shrink-0">
+                      <Badge variant={acct.overallScore >= 75 ? 'default' : 'outline'} className="text-xs font-mono shrink-0 px-2">
                         {acct.overallScore}
                       </Badge>
                     </div>
