@@ -25,6 +25,8 @@ import {
   AlertTriangle,
   SlidersHorizontal,
   RotateCcw,
+  Trash2,
+  Pencil,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
