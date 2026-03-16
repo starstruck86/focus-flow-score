@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Plus, ChevronDown, ChevronRight, Repeat, AlertCircle } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, Repeat, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
