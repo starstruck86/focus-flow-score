@@ -186,6 +186,10 @@ const CONFIDENCE_COLORS = {
 // ── Enrichment Summary Panel (clean formatted display) ──
 
 function EnrichmentSummaryPanel({ summary, evidence }: { summary: string; evidence: Record<string, string> }) {
+  const [icpOpen, setIcpOpen] = useState(true);
+  const [bizOpen, setBizOpen] = useState(true);
+  const [newsOpen, setNewsOpen] = useState(true);
+
   // Extract the main summary (before any ** sections)
   const mainMatch = summary.match(/^([\s\S]*?)(?=\n\n\*\*|$)/);
   const mainSummary = (mainMatch?.[1] || summary).replace(/\*\*/g, '').trim();
@@ -202,35 +206,57 @@ function EnrichmentSummaryPanel({ summary, evidence }: { summary: string; eviden
     <div className="space-y-2">
       {mainSummary && (
         <div className="text-xs bg-muted/50 p-3 rounded-md border border-border/50">
-          <div className="flex items-center gap-1.5 mb-1">
-            <Info className="h-3 w-3 text-muted-foreground shrink-0" />
-            <span className="font-semibold text-muted-foreground text-[11px] uppercase tracking-wide">ICP Summary</span>
-          </div>
-          <p className="text-foreground/80 leading-relaxed">{mainSummary}</p>
+          <button
+            onClick={() => setIcpOpen(v => !v)}
+            className="flex items-center justify-between w-full"
+          >
+            <div className="flex items-center gap-1.5">
+              <Info className="h-3 w-3 text-muted-foreground shrink-0" />
+              <span className="font-semibold text-muted-foreground text-[11px] uppercase tracking-wide">ICP Summary</span>
+            </div>
+            {icpOpen ? <ChevronUp className="h-3 w-3 text-muted-foreground" /> : <ChevronDown className="h-3 w-3 text-muted-foreground" />}
+          </button>
+          {icpOpen && <p className="text-foreground/80 leading-relaxed mt-1.5">{mainSummary}</p>}
         </div>
       )}
       
       {businessSummary && (
         <div className="text-xs p-3 rounded-md border border-primary/20 bg-primary/5">
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <DollarSign className="h-3 w-3 text-primary shrink-0" />
-            <span className="font-semibold text-primary text-[11px] uppercase tracking-wide">How They Make Money</span>
-          </div>
-          <div className="text-foreground/80 leading-relaxed">
-            {formatRichText(businessSummary)}
-          </div>
+          <button
+            onClick={() => setBizOpen(v => !v)}
+            className="flex items-center justify-between w-full"
+          >
+            <div className="flex items-center gap-1.5">
+              <DollarSign className="h-3 w-3 text-primary shrink-0" />
+              <span className="font-semibold text-primary text-[11px] uppercase tracking-wide">How They Make Money</span>
+            </div>
+            {bizOpen ? <ChevronUp className="h-3 w-3 text-primary" /> : <ChevronDown className="h-3 w-3 text-primary" />}
+          </button>
+          {bizOpen && (
+            <div className="text-foreground/80 leading-relaxed mt-1.5">
+              {formatRichText(businessSummary)}
+            </div>
+          )}
         </div>
       )}
       
       {hasNews && (
         <div className="text-xs p-3 rounded-md border border-status-yellow/20 bg-status-yellow/5">
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <Zap className="h-3 w-3 text-status-yellow shrink-0" />
-            <span className="font-semibold text-status-yellow text-[11px] uppercase tracking-wide">Recent News & Hires</span>
-          </div>
-          <div className="text-foreground/80 leading-relaxed">
-            {formatRichText(recentNews)}
-          </div>
+          <button
+            onClick={() => setNewsOpen(v => !v)}
+            className="flex items-center justify-between w-full"
+          >
+            <div className="flex items-center gap-1.5">
+              <Zap className="h-3 w-3 text-status-yellow shrink-0" />
+              <span className="font-semibold text-status-yellow text-[11px] uppercase tracking-wide">Recent News & Hires</span>
+            </div>
+            {newsOpen ? <ChevronUp className="h-3 w-3 text-status-yellow" /> : <ChevronDown className="h-3 w-3 text-status-yellow" />}
+          </button>
+          {newsOpen && (
+            <div className="text-foreground/80 leading-relaxed mt-1.5">
+              {formatRichText(recentNews)}
+            </div>
+          )}
         </div>
       )}
     </div>
