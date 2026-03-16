@@ -235,7 +235,7 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
                   {dueInfo.label}
                 </span>
               )}
-              <span className="text-[9px] font-medium text-muted-foreground bg-muted/40 px-1.5 py-0.5 rounded">
+              <span className="text-[10px] font-medium text-muted-foreground bg-muted/40 px-2 py-1 rounded">
                 {WORKSTREAM_LABELS[workstream]}
               </span>
               {inferredTag && (
