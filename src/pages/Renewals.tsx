@@ -234,6 +234,125 @@ const VIEWS = [
   { value: 'churning', label: 'Churning / OOB' },
 ];
 
+// Stage summary for renewal pipeline - mirrors the new logo OpportunitiesStageSummary
+const STAGE_COLORS: Record<string, string> = {
+  '': 'border-muted-foreground',
+  'Prospect': 'border-blue-400',
+  'Discover': 'border-cyan-400',
+  'Demo': 'border-status-yellow',
+  'Proposal': 'border-orange-400',
+  'Negotiate': 'border-purple-400',
+  'Closed Won': 'border-status-green',
+  'Closed Lost': 'border-status-red',
+};
+
+const STAGE_TEXT_COLORS: Record<string, string> = {
+  '': 'text-muted-foreground',
+  'Prospect': 'text-blue-400',
+  'Discover': 'text-cyan-400',
+  'Demo': 'text-status-yellow',
+  'Proposal': 'text-orange-400',
+  'Negotiate': 'text-purple-400',
+  'Closed Won': 'text-status-green',
+  'Closed Lost': 'text-status-red',
+};
+
+const STAGE_LABELS: Record<string, string> = {
+  '': 'No Stage',
+  'Prospect': '1 - Prospect',
+  'Discover': '2 - Discover',
+  'Demo': '3 - Demo',
+  'Proposal': '4 - Proposal',
+  'Negotiate': '5 - Negotiate',
+  'Closed Won': '6 - Closed Won',
+  'Closed Lost': '7 - Closed Lost',
+};
+
+function RenewalStageSummary({ activeStageFilter, onStageFilterChange }: {
+  activeStageFilter?: OpportunityStage | null;
+  onStageFilterChange?: (stage: OpportunityStage | null) => void;
+}) {
+  const { opportunities, renewals: storeRenewals } = useStore();
+
+  // Build set of renewal opportunity IDs
+  const renewalOpportunityIds = useMemo(() => {
+    const ids = new Set<string>();
+    storeRenewals.filter(r => r.linkedOpportunityId).forEach(r => ids.add(r.linkedOpportunityId!));
+    opportunities.filter(o => o.dealType === 'renewal').forEach(o => ids.add(o.id));
+    return ids;
+  }, [storeRenewals, opportunities]);
+
+  const stageSummary = useMemo(() => {
+    const stages: OpportunityStage[] = ['', 'Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate', 'Closed Won', 'Closed Lost'];
+    const summary: Record<string, { count: number; arr: number }> = {};
+    stages.forEach(stage => { summary[stage] = { count: 0, arr: 0 }; });
+
+    opportunities
+      .filter(o => o.status === 'active' && renewalOpportunityIds.has(o.id))
+      .forEach(o => {
+        const stage = o.stage || '';
+        if (summary[stage]) {
+          summary[stage].count++;
+          summary[stage].arr += o.arr || 0;
+        } else {
+          summary[''].count++;
+          summary[''].arr += o.arr || 0;
+        }
+      });
+
+    return summary;
+  }, [opportunities, renewalOpportunityIds]);
+
+  const formatCurrencyLocal = (value: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value);
+
+  const totalARR = Object.values(stageSummary).reduce((sum, s) => sum + s.arr, 0);
+  const totalCount = Object.values(stageSummary).reduce((sum, s) => sum + s.count, 0);
+
+  return (
+    <div className="space-y-3 mb-4">
+      <div className="flex items-center gap-4">
+        <div className="text-sm text-muted-foreground">
+          Active Pipeline: <span className="font-semibold text-foreground">{totalCount} opps</span> • <span className="font-mono font-semibold text-foreground">{formatCurrencyLocal(totalARR)}</span>
+        </div>
+        {activeStageFilter && (
+          <button onClick={() => onStageFilterChange?.(null)} className="text-[10px] text-primary hover:text-primary/80 underline">
+            Clear filter
+          </button>
+        )}
+      </div>
+      <div className="hidden sm:grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3">
+        {(['', 'Prospect', 'Discover', 'Demo', 'Proposal', 'Negotiate', 'Closed Won', 'Closed Lost'] as OpportunityStage[]).map(stage => {
+          const isActive = activeStageFilter === stage;
+          return (
+            <button
+              key={stage || 'no-stage'}
+              onClick={() => onStageFilterChange?.(isActive ? null : stage)}
+              className={cn(
+                "metric-card p-3 border-l-4 text-left transition-all cursor-pointer",
+                "hover:ring-1 hover:ring-primary/40 hover:shadow-sm",
+                isActive && "ring-2 ring-primary shadow-md",
+                STAGE_COLORS[stage],
+              )}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className={cn("text-xs font-medium", STAGE_TEXT_COLORS[stage])}>
+                  {STAGE_LABELS[stage] || stage || 'No Stage'}
+                </span>
+                <Badge variant="outline" className="text-xs h-5 px-1.5">
+                  {stageSummary[stage].count}
+                </Badge>
+              </div>
+              <div className="text-lg font-bold font-mono">
+                {formatCurrencyLocal(stageSummary[stage].arr)}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export default function Renewals() {
   const { renewals, accounts, addRenewal, updateRenewal, deleteRenewal, createMissingRenewalOpportunities, logCall, logManualEmail, logMeetingHeld, addAccount, updateAccount } = useStore();
@@ -820,7 +939,8 @@ export default function Renewals() {
           </TabsList>
 
           <TabsContent value="opportunities">
-            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} renewalsOnly highlightId={highlightId} stageFilter={renewalStageFilter} onClearStageFilter={() => setRenewalStageFilter(null)} />
+            <RenewalStageSummary activeStageFilter={renewalStageFilter} onStageFilterChange={setRenewalStageFilter} />
+            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} renewalsOnly columnOrder="outreach" highlightId={highlightId} stageFilter={renewalStageFilter} onClearStageFilter={() => setRenewalStageFilter(null)} />
           </TabsContent>
           
           <TabsContent value="renewals">

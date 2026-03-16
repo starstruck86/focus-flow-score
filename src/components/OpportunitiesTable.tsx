@@ -676,6 +676,135 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     const linkedAccount = opp.accountId ? accountMap.get(opp.accountId) : undefined;
     const stakeholderAccountName = linkedAccount?.name ?? opp.accountName;
 
+    // Weekly Outreach / New Logo / Renewal outreach view
+    if (columnOrder === 'outreach') {
+      // Last touch indicator
+      const lastTouchDays = opp.lastTouchDate 
+        ? Math.floor((Date.now() - new Date(opp.lastTouchDate).getTime()) / 86400000)
+        : null;
+      const lastTouchColor = lastTouchDays === null ? 'text-status-red' 
+        : lastTouchDays <= 3 ? 'text-status-green' 
+        : lastTouchDays <= 7 ? 'text-status-yellow' 
+        : 'text-status-red';
+
+      return (
+        <React.Fragment key={opp.id}>
+          <TableRow data-opp-id={opp.id} className={cn("group hover:bg-muted/30 cursor-pointer", localHighlight === opp.id && "ring-2 ring-primary/50 bg-primary/5 animate-pulse")} onClick={() => toggleExpand(opp.id)}>
+            <TableCell className="w-8 py-3" onClick={(e) => e.stopPropagation()}>
+              <Checkbox checked={bulkSelection.isSelected(opp.id)} onCheckedChange={() => bulkSelection.toggle(opp.id)} />
+            </TableCell>
+            <TableCell className="w-8 py-3">
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); toggleExpand(opp.id); }}>
+                {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              </Button>
+            </TableCell>
+            <TableCell className="align-top py-3">
+              <OpportunityNameCell
+                name={opp.name}
+                salesforceLink={opp.salesforceLink}
+                onNameChange={(name) => updateOpportunity(opp.id, { name })}
+                onSalesforceLinkChange={(link) => {
+                  const dbUpdates: Partial<DbOpportunity> = { salesforce_link: link || null };
+                  updateOpportunityMutation.mutate({ id: opp.id, updates: dbUpdates });
+                }}
+                onOpenDetails={() => onOpenDrawer(opp)}
+              />
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <DisplaySelectCell
+                value={opp.status}
+                options={STATUS_SELECT_OPTIONS}
+                onChange={(v) => handleStatusChange(opp, v as OpportunityStatus)}
+              />
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <DisplaySelectCell
+                value={opp.stage || 'none'}
+                options={STAGE_SELECT_OPTIONS}
+                onChange={(v) => updateOpportunity(opp.id, { stage: (v === 'none' ? '' : v) as OpportunityStage })}
+              />
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <EditableNumberCell
+                value={opp.arr || 0}
+                onChange={(v) => updateOpportunity(opp.id, { arr: v || undefined })}
+                format="currency"
+              />
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <EditableDatePicker
+                value={opp.closeDate}
+                onChange={(v) => updateOpportunity(opp.id, { closeDate: v })}
+                placeholder="—"
+                compact
+                className="w-28"
+              />
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <span className={cn("text-[10px] font-medium", lastTouchColor)}>
+                {lastTouchDays === null ? 'Never' : `${lastTouchDays}d ago`}
+              </span>
+            </TableCell>
+            <NextStepTextCell opp={opp} />
+            {summaryCustomFields.map(field => (
+              <TableCell key={field.id} className="align-top py-2" onClick={(e) => e.stopPropagation()}>
+                <MetricFieldCell field={field} recordId={opp.id} />
+              </TableCell>
+            ))}
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover:opacity-100">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => onOpenDrawer(opp)}>
+                    Open Details
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive"
+                    onClick={() => setDeleteDialogOpp(opp)}
+                  >
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </TableCell>
+          </TableRow>
+          {isExpanded && (
+            <TableRow className="hover:bg-transparent border-b-2">
+              <TableCell colSpan={99} className="pt-0 pb-3">
+                <OpportunityDetailsField
+                  tabTarget={oppTabTarget}
+                  opportunityId={opp.id}
+                  nextStepDate={opp.nextStepDate}
+                  onNextStepDateChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
+                  lastTouchDate={opp.lastTouchDate}
+                  onLastTouchDateChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
+                  notes={opp.notes}
+                  onNotesChange={(v) => updateOpportunity(opp.id, { notes: v })}
+                  isRenewal={renewalsOnly}
+                  priorContractArr={opp.priorContractArr}
+                  onPriorContractArrChange={renewalsOnly ? (v) => updateOpportunity(opp.id, { priorContractArr: v }) : undefined}
+                  renewalArr={opp.renewalArr}
+                  onRenewalArrChange={renewalsOnly ? (v) => updateOpportunity(opp.id, { renewalArr: v }) : undefined}
+                  oneTimeAmount={opp.oneTimeAmount}
+                  onOneTimeAmountChange={renewalsOnly ? (v) => updateOpportunity(opp.id, { oneTimeAmount: v }) : undefined}
+                  accountId={opp.accountId}
+                  accountName={stakeholderAccountName}
+                  accountWebsite={linkedAccount?.website}
+                  accountIndustry={linkedAccount?.industry}
+                  opportunityContext={`${opp.name} - ${opp.stage} - $${opp.arr || 0} ARR`}
+                />
+              </TableCell>
+            </TableRow>
+          )}
+        </React.Fragment>
+      );
+    }
+
     if (renewalsOnly) {
       const expansion = (opp.renewalArr || 0) - (opp.priorContractArr || 0);
       const totalValue = (opp.renewalArr || 0) + (opp.oneTimeAmount || 0);
@@ -809,128 +938,6 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   onRenewalArrChange={(v) => updateOpportunity(opp.id, { renewalArr: v })}
                   oneTimeAmount={opp.oneTimeAmount}
                   onOneTimeAmountChange={(v) => updateOpportunity(opp.id, { oneTimeAmount: v })}
-                  accountId={opp.accountId}
-                  accountName={stakeholderAccountName}
-                  accountWebsite={linkedAccount?.website}
-                  accountIndustry={linkedAccount?.industry}
-                  opportunityContext={`${opp.name} - ${opp.stage} - $${opp.arr || 0} ARR`}
-                />
-              </TableCell>
-            </TableRow>
-          )}
-        </React.Fragment>
-      );
-    }
-
-    // Weekly Outreach / New Logo view
-    if (columnOrder === 'outreach') {
-      // Last touch indicator
-      const lastTouchDays = opp.lastTouchDate 
-        ? Math.floor((Date.now() - new Date(opp.lastTouchDate).getTime()) / 86400000)
-        : null;
-      const lastTouchColor = lastTouchDays === null ? 'text-status-red' 
-        : lastTouchDays <= 3 ? 'text-status-green' 
-        : lastTouchDays <= 7 ? 'text-status-yellow' 
-        : 'text-status-red';
-
-      return (
-        <React.Fragment key={opp.id}>
-          <TableRow data-opp-id={opp.id} className={cn("group hover:bg-muted/30 cursor-pointer", localHighlight === opp.id && "ring-2 ring-primary/50 bg-primary/5 animate-pulse")} onClick={() => toggleExpand(opp.id)}>
-            <TableCell className="w-8 py-3" onClick={(e) => e.stopPropagation()}>
-              <Checkbox checked={bulkSelection.isSelected(opp.id)} onCheckedChange={() => bulkSelection.toggle(opp.id)} />
-            </TableCell>
-            <TableCell className="w-8 py-3">
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); toggleExpand(opp.id); }}>
-                {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-              </Button>
-            </TableCell>
-            <TableCell className="align-top py-3">
-              <OpportunityNameCell
-                name={opp.name}
-                salesforceLink={opp.salesforceLink}
-                onNameChange={(name) => updateOpportunity(opp.id, { name })}
-                onSalesforceLinkChange={(link) => {
-                  const dbUpdates: Partial<DbOpportunity> = { salesforce_link: link || null };
-                  updateOpportunityMutation.mutate({ id: opp.id, updates: dbUpdates });
-                }}
-                onOpenDetails={() => onOpenDrawer(opp)}
-              />
-            </TableCell>
-            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-              <DisplaySelectCell
-                value={opp.status}
-                options={STATUS_SELECT_OPTIONS}
-                onChange={(v) => handleStatusChange(opp, v as OpportunityStatus)}
-              />
-            </TableCell>
-            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-              <DisplaySelectCell
-                value={opp.stage || 'none'}
-                options={STAGE_SELECT_OPTIONS}
-                onChange={(v) => updateOpportunity(opp.id, { stage: (v === 'none' ? '' : v) as OpportunityStage })}
-              />
-            </TableCell>
-            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-              <EditableNumberCell
-                value={opp.arr || 0}
-                onChange={(v) => updateOpportunity(opp.id, { arr: v || undefined })}
-                format="currency"
-              />
-            </TableCell>
-            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-              <EditableDatePicker
-                value={opp.closeDate}
-                onChange={(v) => updateOpportunity(opp.id, { closeDate: v })}
-                placeholder="—"
-                compact
-                className="w-28"
-              />
-            </TableCell>
-            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-              <span className={cn("text-[10px] font-medium", lastTouchColor)}>
-                {lastTouchDays === null ? 'Never' : `${lastTouchDays}d ago`}
-              </span>
-            </TableCell>
-            <NextStepTextCell opp={opp} />
-            {summaryCustomFields.map(field => (
-              <TableCell key={field.id} className="align-top py-2" onClick={(e) => e.stopPropagation()}>
-                <MetricFieldCell field={field} recordId={opp.id} />
-              </TableCell>
-            ))}
-            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover:opacity-100">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => onOpenDrawer(opp)}>
-                    Open Details
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="text-destructive"
-                    onClick={() => setDeleteDialogOpp(opp)}
-                  >
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </TableCell>
-          </TableRow>
-          {isExpanded && (
-            <TableRow className="hover:bg-transparent border-b-2">
-              <TableCell colSpan={99} className="pt-0 pb-3">
-                <OpportunityDetailsField
-                  tabTarget={oppTabTarget}
-                  opportunityId={opp.id}
-                  nextStepDate={opp.nextStepDate}
-                  onNextStepDateChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
-                  lastTouchDate={opp.lastTouchDate}
-                  onLastTouchDateChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
-                  notes={opp.notes}
-                  onNotesChange={(v) => updateOpportunity(opp.id, { notes: v })}
                   accountId={opp.accountId}
                   accountName={stakeholderAccountName}
                   accountWebsite={linkedAccount?.website}
