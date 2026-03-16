@@ -8,7 +8,7 @@ const corsHeaders = {
 const LOVABLE_AI_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 const FIRECRAWL_URL = 'https://api.firecrawl.dev/v1/scrape';
 
-type DiscoveryMode = 'auto' | 'marketing' | 'revenue' | 'operations' | 'it' | 'executive';
+type DiscoveryMode = 'auto' | 'marketing' | 'digital_engagement' | 'marketing_ops' | 'revenue' | 'cx_loyalty' | 'operations' | 'it' | 'executive';
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
