@@ -954,31 +954,44 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
         ) : (
           <ScrollArea className="w-full">
             <div className="min-w-fit py-4 px-2">
-              {roots.length === 1 ? (
-                <div className="flex justify-center">
-                  {renderTree(roots[0])}
+              <div className="flex flex-col items-center">
+                {/* Company header node */}
+                <div
+                  className="rounded-lg border-2 border-primary/30 bg-primary/5 px-4 py-2 text-center shadow-sm"
+                  onDragOver={(e) => { if (draggedContactId) { e.preventDefault(); e.stopPropagation(); } }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (draggedContactId) {
+                      updateContact.mutate({ id: draggedContactId, updates: { reporting_to: null } });
+                      toast.success('Moved to root level');
+                      setDraggedContactId(null);
+                      setDropTargetId(null);
+                    }
+                  }}
+                >
+                  <span className="text-sm font-semibold text-foreground">{accountName}</span>
                 </div>
-              ) : (
-                <div className="flex flex-col items-center">
-                  <div className="rounded-lg border-2 border-primary/30 bg-primary/5 px-4 py-2 text-center shadow-sm">
-                    <span className="text-sm font-semibold text-foreground">{accountName}</span>
-                  </div>
-                  <div className="w-px h-5 bg-border" />
-                  <div className="relative flex items-start">
-                    {roots.length > 1 && (
-                      <div className="absolute top-0 bg-border h-px" style={{ left: `calc(50% / ${roots.length})`, right: `calc(50% / ${roots.length})` }} />
-                    )}
-                    <div className="flex gap-3 items-start">
-                      {roots.map((root: any) => (
-                        <div key={root.id} className="flex flex-col items-center">
-                          <div className="w-px h-5 bg-border" />
-                          {renderTree(root)}
-                        </div>
-                      ))}
+                <div className="w-px h-5 bg-border" />
+                <div className="relative flex items-start">
+                  {(roots.length + 1) > 1 && (
+                    <div className="absolute top-0 bg-border h-px" style={{ left: `calc(50% / ${roots.length + 1})`, right: `calc(50% / ${roots.length + 1})` }} />
+                  )}
+                  <div className="flex gap-3 items-start">
+                    {roots.map((root: any) => (
+                      <div key={root.id} className="flex flex-col items-center">
+                        <div className="w-px h-5 bg-border" />
+                        {renderTree(root)}
+                      </div>
+                    ))}
+                    {/* Root-level blank placeholder */}
+                    <div className="flex flex-col items-center">
+                      <div className="w-px h-5 bg-border/30" />
+                      {renderBlankCard('')}
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
             </div>
             <ScrollBar orientation="horizontal" />
           </ScrollArea>
