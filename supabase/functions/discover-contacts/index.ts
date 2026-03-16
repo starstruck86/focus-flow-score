@@ -749,13 +749,13 @@ Rules:
     return { accountId, accountName: resolvedAccountName, error: 'Failed to parse AI response' };
   }
 
-  // Server-side validation: enforce LinkedIn URL format, filter interns
+  // Server-side validation: clean LinkedIn URLs, filter interns
   const validContacts = (parsed?.contacts || []).filter((contact: any) => {
     if (!contact.name || !cleanText(contact.name)) return false;
-    // Must have a valid LinkedIn URL (strict format check)
+    // Validate LinkedIn URL — if invalid/fabricated, clear it but KEEP the contact
     if (!isValidLinkedInUrl(contact.linkedin_url, resolvedAccountName)) {
-      console.log(`discover-contacts: filtered out "${contact.name}" — invalid LinkedIn URL: ${contact.linkedin_url || 'none'}`);
-      return false;
+      console.log(`discover-contacts: cleared invalid LinkedIn URL for "${contact.name}" — was: ${contact.linkedin_url || 'none'}`);
+      contact.linkedin_url = null;
     }
     // Filter out interns/fellows/apprentices
     const titleLower = (contact.title || '').toLowerCase();
@@ -780,6 +780,15 @@ Rules:
   const discovered: any[] = [];
   for (let i = 0; i < deduped.length; i++) {
     const contact = deduped[i];
+    // Skip LinkedIn scan if contact has no LinkedIn URL
+    if (!contact.linkedin_url) {
+      contact.linkedin_verified = null;
+      contact.relevance_score = -1;
+      contact.matched_categories = [];
+      contact.keyword_hits = [];
+      discovered.push(contact);
+      continue;
+    }
     if (i < maxScan) {
       const scan = await scanLinkedInProfile(contact.linkedin_url, resolvedMode);
       contact.linkedin_verified = scan.verified;

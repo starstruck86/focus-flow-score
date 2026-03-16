@@ -194,8 +194,8 @@ export function BatchDiscoveryModal({ children }: { children: React.ReactNode })
     for (const result of results) {
       if (!result.success || !result.contacts?.length) continue;
       for (const contact of result.contacts) {
-        // Skip contacts without LinkedIn
-        if (!contact.linkedin_url || !contact.linkedin_url.includes('linkedin.com/in/')) continue;
+        // Skip contacts without a name
+        if (!contact.name) continue;
 
         const tenureParts: string[] = [];
         if (typeof contact.company_tenure_months === 'number') tenureParts.push(`Company tenure: ${contact.company_tenure_months}mo`);
