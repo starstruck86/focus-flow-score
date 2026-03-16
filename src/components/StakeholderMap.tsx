@@ -38,14 +38,14 @@ import {
 import { cn } from '@/lib/utils';
 
 const BUYER_ROLES = [
-  { value: 'economic_buyer', label: 'Economic Buyer', icon: Crown, color: 'text-status-yellow', bg: 'bg-status-yellow/10 border-status-yellow/30', critical: true },
-  { value: 'champion', label: 'Champion', icon: Shield, color: 'text-primary', bg: 'bg-primary/10 border-primary/30', critical: true },
-  { value: 'technical_buyer', label: 'Technical Buyer', icon: Target, color: 'text-accent', bg: 'bg-accent/10 border-accent/30', critical: false },
-  { value: 'user_buyer', label: 'User Buyer', icon: UserCheck, color: 'text-status-green', bg: 'bg-status-green/10 border-status-green/30', critical: false },
-  { value: 'coach', label: 'Coach', icon: Lightbulb, color: 'text-foreground', bg: 'bg-secondary/70 border-border', critical: true },
-  { value: 'influencer', label: 'Influencer', icon: Users, color: 'text-muted-foreground', bg: 'bg-muted/60 border-border', critical: false },
-  { value: 'blocker', label: 'Blocker', icon: Ban, color: 'text-destructive', bg: 'bg-destructive/10 border-destructive/30', critical: false },
-  { value: 'unknown', label: 'Unknown', icon: Users, color: 'text-muted-foreground', bg: 'bg-muted/50 border-border', critical: false },
+  { value: 'economic_buyer', label: 'Economic Buyer', icon: Crown, color: 'text-status-yellow', bgClass: 'bg-status-yellow/10', borderClass: 'border-status-yellow/30', barClass: 'bg-status-yellow/30', critical: true },
+  { value: 'champion', label: 'Champion', icon: Shield, color: 'text-primary', bgClass: 'bg-primary/10', borderClass: 'border-primary/30', barClass: 'bg-primary/30', critical: true },
+  { value: 'technical_buyer', label: 'Technical Buyer', icon: Target, color: 'text-accent', bgClass: 'bg-accent/10', borderClass: 'border-accent/30', barClass: 'bg-accent/30', critical: false },
+  { value: 'user_buyer', label: 'User Buyer', icon: UserCheck, color: 'text-status-green', bgClass: 'bg-status-green/10', borderClass: 'border-status-green/30', barClass: 'bg-status-green/30', critical: false },
+  { value: 'coach', label: 'Coach', icon: Lightbulb, color: 'text-foreground', bgClass: 'bg-secondary/70', borderClass: 'border-border', barClass: 'bg-secondary', critical: true },
+  { value: 'influencer', label: 'Influencer', icon: Users, color: 'text-muted-foreground', bgClass: 'bg-muted/60', borderClass: 'border-border', barClass: 'bg-muted', critical: false },
+  { value: 'blocker', label: 'Blocker', icon: Ban, color: 'text-destructive', bgClass: 'bg-destructive/10', borderClass: 'border-destructive/30', barClass: 'bg-destructive/30', critical: false },
+  { value: 'unknown', label: 'Unknown', icon: Users, color: 'text-muted-foreground', bgClass: 'bg-card', borderClass: 'border-border', barClass: 'bg-muted', critical: false },
 ] as const;
 
 const INFLUENCE_LEVELS = ['high', 'medium', 'low'] as const;
