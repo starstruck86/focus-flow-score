@@ -189,7 +189,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
     } finally {
       setIsDiscovering(false);
     }
-  }, [accountId, accountName, website, industry, opportunityContext, discoveryMode, maxContacts, focusPrompt, user]);
+  }, [accountId, accountName, website, industry, opportunityContext, discoveryMode, maxContacts, focusPrompt, division, user]);
 
   const handleDiscover = async () => {
     const result = await discoverContacts();
