@@ -300,7 +300,7 @@ export default function Renewals() {
   // Track which renewal is expanded to show details
   const [expandedRenewalId, setExpandedRenewalId] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('renewals');
+  const [activeTab, setActiveTab] = useState('opportunities');
   const [renewalStageFilter, setRenewalStageFilter] = useState<OpportunityStage | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
