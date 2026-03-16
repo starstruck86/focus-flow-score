@@ -68,6 +68,8 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
   
   // Context for prefills
   const { currentRecord } = useLinkedRecordContext();
+  const prefillOpportunityId = currentRecord.type === 'opportunity' ? currentRecord.id : undefined;
+  const prefillAccountId = currentRecord.type === 'account' ? currentRecord.id : currentRecord.accountId;
   
   // Data hooks
   const { data: todayEntry } = useTodayJournalEntry();
