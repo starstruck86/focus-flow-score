@@ -354,7 +354,7 @@ Deno.serve(async (req) => {
     const resolvedFocusPrompt = cleanText(focusPrompt);
     const resolvedDivision = cleanText(division);
     const requestedMaxContacts = Math.max(3, Math.min(Number(maxContacts) || 5, 10));
-    const requestedMode = (['auto', 'marketing', 'revenue', 'operations', 'it', 'executive'].includes(discoveryMode)
+    const requestedMode = (['auto', 'marketing', 'digital_engagement', 'marketing_ops', 'revenue', 'cx_loyalty', 'operations', 'it', 'executive'].includes(discoveryMode)
       ? discoveryMode
       : 'auto') as DiscoveryMode;
 
