@@ -117,7 +117,7 @@ export function TaskKanbanBoard({ tasks, selectedIds, onToggleSelect }: TaskKanb
             </div>
 
             {/* Cards */}
-            <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-[120px] max-h-[calc(100vh-320px)]">
+            <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5 min-h-[140px] max-h-[calc(100vh-300px)]">
               {colTasks.length === 0 ? (
                 <div className={cn(
                   "flex items-center justify-center h-20 rounded-lg border-2 border-dashed transition-colors text-[11px] text-muted-foreground/50",
