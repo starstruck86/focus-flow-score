@@ -98,9 +98,9 @@ export function TaskKanbanBoard({ tasks, selectedIds, onToggleSelect }: TaskKanb
           <div
             key={status}
             className={cn(
-              "flex-shrink-0 w-[260px] sm:w-[280px] lg:flex-1 lg:min-w-[220px] snap-start",
-              "flex flex-col rounded-xl border bg-muted/20 transition-all",
-              isOver && "border-primary/50 bg-primary/5 shadow-md shadow-primary/10"
+              "flex-shrink-0 w-[280px] sm:w-[300px] lg:flex-1 lg:min-w-[240px] snap-start",
+              "flex flex-col rounded-xl border bg-card/40 backdrop-blur-sm transition-all",
+              isOver && "border-primary/50 bg-primary/5 shadow-lg shadow-primary/10"
             )}
             onDragEnter={(e) => handleDragEnter(e, status)}
             onDragLeave={(e) => handleDragLeave(e, status)}
