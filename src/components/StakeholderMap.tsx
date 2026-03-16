@@ -105,6 +105,8 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
   const [focusPrompt, setFocusPrompt] = useState(opportunityContext || '');
   const [division, setDivision] = useState('');
   const [lastDiscoveryMeta, setLastDiscoveryMeta] = useState<DiscoveryMeta | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [isParsingDrop, setIsParsingDrop] = useState(false);
 
   useEffect(() => {
     setDiscoveredContacts([]);
