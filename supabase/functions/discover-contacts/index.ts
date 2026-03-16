@@ -51,6 +51,65 @@ function dedupeContacts(contacts: any[]) {
   });
 }
 
+// Strict LinkedIn URL validation — reject generic, placeholder, or malformed URLs
+function isValidLinkedInUrl(url?: string | null): boolean {
+  if (!url) return false;
+  const trimmed = url.trim();
+  // Must match linkedin.com/in/{slug} pattern
+  const match = trimmed.match(/^https?:\/\/(www\.)?linkedin\.com\/in\/([a-zA-Z0-9_-]+)\/?$/);
+  if (!match) return false;
+  const slug = match[2];
+  // Reject generic/placeholder slugs
+  const blocked = ['example', 'placeholder', 'unknown', 'profile', 'user', 'test', 'firstname-lastname', 'john-doe', 'jane-doe'];
+  if (blocked.includes(slug.toLowerCase())) return false;
+  // Reject too-short slugs (likely fake)
+  if (slug.length < 3) return false;
+  return true;
+}
+
+// Verify a LinkedIn URL is a real page using Firecrawl (returns true/false)
+async function verifyLinkedInUrl(url: string): Promise<boolean> {
+  const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY');
+  if (!firecrawlKey) return true; // Can't verify without Firecrawl, assume valid
+  
+  try {
+    const resp = await fetch(FIRECRAWL_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${firecrawlKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url,
+        formats: ['markdown'],
+        onlyMainContent: true,
+        waitFor: 3000,
+        timeout: 10000,
+      }),
+    });
+    
+    if (!resp.ok) {
+      const text = await resp.text();
+      console.log(`LinkedIn verify failed for ${url}: ${resp.status}`);
+      // 402 = no credits, don't penalize the contact
+      if (resp.status === 402) return true;
+      return false;
+    }
+    
+    const data = await resp.json();
+    const markdown = cleanText(data?.data?.markdown || data?.markdown || '');
+    // If we got content and it doesn't look like a 404/error page, consider it valid
+    if (markdown.length > 100 && !markdown.toLowerCase().includes('page not found') && !markdown.toLowerCase().includes('this page doesn')) {
+      return true;
+    }
+    console.log(`LinkedIn verify: ${url} looks like a dead page (content length: ${markdown.length})`);
+    return false;
+  } catch (err) {
+    console.error('LinkedIn verify exception:', err);
+    return true; // On error, don't penalize
+  }
+}
+
 function getDiscoveryBrief({
   mode,
   motion,
@@ -528,23 +587,42 @@ Rules:
     return { accountId, accountName: resolvedAccountName, error: 'Failed to parse AI response' };
   }
 
-  // Server-side validation: enforce LinkedIn URL and tenure data
+  // Server-side validation: enforce LinkedIn URL format and tenure data
   const validContacts = (parsed?.contacts || []).filter((contact: any) => {
     if (!contact.name || !cleanText(contact.name)) return false;
-    // Must have a real LinkedIn URL
-    if (!contact.linkedin_url || !contact.linkedin_url.includes('linkedin.com/in/')) {
-      console.log(`discover-contacts: filtered out "${contact.name}" — missing LinkedIn URL`);
+    // Must have a valid LinkedIn URL (strict format check)
+    if (!isValidLinkedInUrl(contact.linkedin_url)) {
+      console.log(`discover-contacts: filtered out "${contact.name}" — invalid LinkedIn URL: ${contact.linkedin_url || 'none'}`);
       return false;
     }
-    // Must have tenure data
-    if (typeof contact.company_tenure_months !== 'number' && typeof contact.role_tenure_months !== 'number') {
-      console.log(`discover-contacts: filtered out "${contact.name}" — missing tenure data`);
+    // Must have BOTH tenure data points
+    if (typeof contact.company_tenure_months !== 'number' || typeof contact.role_tenure_months !== 'number') {
+      console.log(`discover-contacts: filtered out "${contact.name}" — missing tenure data (company: ${contact.company_tenure_months}, role: ${contact.role_tenure_months})`);
       return false;
     }
     return true;
   });
 
-  const discovered = dedupeContacts(validContacts).filter((contact: any) => !existingNames.has(cleanText(contact.name).toLowerCase()));
+  const deduped = dedupeContacts(validContacts).filter((contact: any) => !existingNames.has(cleanText(contact.name).toLowerCase()));
+
+  // For single-account discovery (not batch), verify top LinkedIn URLs via Firecrawl
+  // Limit to 3 verifications to avoid timeout
+  const maxVerify = 3;
+  const discovered: any[] = [];
+  for (let i = 0; i < deduped.length; i++) {
+    const contact = deduped[i];
+    if (i < maxVerify) {
+      const verified = await verifyLinkedInUrl(contact.linkedin_url);
+      contact.linkedin_verified = verified;
+      if (!verified) {
+        console.log(`discover-contacts: LinkedIn verification failed for "${contact.name}" — ${contact.linkedin_url}`);
+        contact.confidence = 'suggested'; // Downgrade confidence
+      }
+    } else {
+      contact.linkedin_verified = null; // Not checked
+    }
+    discovered.push(contact);
+  }
 
   console.log('discover-contacts completed:', {
     accountId,
