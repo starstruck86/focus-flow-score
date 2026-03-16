@@ -109,7 +109,7 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
         if (acc.salesforce_id && a.salesforceId && acc.salesforce_id === a.salesforceId) return true;
         return false;
       });
-      return { ...acc, matchedExistingId: match?.id, selected: !match };
+      return { ...acc, matchedExistingId: match?.id, selected: true };
     });
   };
 
