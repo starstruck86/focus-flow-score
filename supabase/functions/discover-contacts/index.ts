@@ -8,7 +8,7 @@ const corsHeaders = {
 const LOVABLE_AI_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 const FIRECRAWL_URL = 'https://api.firecrawl.dev/v1/scrape';
 
-type DiscoveryMode = 'auto' | 'marketing' | 'revenue' | 'operations' | 'it' | 'executive';
+type DiscoveryMode = 'auto' | 'marketing' | 'digital_engagement' | 'marketing_ops' | 'revenue' | 'cx_loyalty' | 'operations' | 'it' | 'executive';
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -81,10 +81,31 @@ function getDiscoveryBrief({
     };
   }
 
+  if (mode === 'digital_engagement') {
+    return {
+      resolvedMode: 'digital_engagement',
+      brief: 'Prioritize digital engagement leaders: digital marketing, email/SMS channel owners, push notification/app engagement, personalization, customer journey orchestration, digital experience, website optimization, and digital product managers. These are the people who own the customer-facing messaging channels and touchpoints, NOT the people who manage the martech stack or CRM infrastructure.',
+    };
+  }
+
+  if (mode === 'marketing_ops') {
+    return {
+      resolvedMode: 'marketing_ops',
+      brief: 'Prioritize marketing operations and martech leaders: marketing technology, CRM administration, data & analytics, campaign operations, marketing automation platform owners, integration/data pipeline owners, and revenue operations. These are the people who manage the infrastructure, vendor relationships, and technical implementation of marketing systems, NOT the people who create content or manage customer engagement channels directly.',
+    };
+  }
+
   if (mode === 'revenue') {
     return {
       resolvedMode: 'revenue',
       brief: 'Prioritize revenue leaders, growth leaders, revenue operations, sales/marketing alignment owners, pipeline owners, and executive sponsors involved in commercial systems decisions.',
+    };
+  }
+
+  if (mode === 'cx_loyalty') {
+    return {
+      resolvedMode: 'cx_loyalty',
+      brief: 'Prioritize customer experience, loyalty program, retention, customer insights, voice of customer, NPS/satisfaction program owners, customer success, and member engagement leaders. These are the people who own the post-acquisition customer relationship and program design.',
     };
   }
 
@@ -333,7 +354,7 @@ Deno.serve(async (req) => {
     const resolvedFocusPrompt = cleanText(focusPrompt);
     const resolvedDivision = cleanText(division);
     const requestedMaxContacts = Math.max(3, Math.min(Number(maxContacts) || 5, 10));
-    const requestedMode = (['auto', 'marketing', 'revenue', 'operations', 'it', 'executive'].includes(discoveryMode)
+    const requestedMode = (['auto', 'marketing', 'digital_engagement', 'marketing_ops', 'revenue', 'cx_loyalty', 'operations', 'it', 'executive'].includes(discoveryMode)
       ? discoveryMode
       : 'auto') as DiscoveryMode;
 

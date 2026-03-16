@@ -44,13 +44,28 @@ const CRITICAL_ROLES = ['economic_buyer', 'champion', 'coach'];
 const DISCOVERY_MODES = [
   { value: 'auto', label: 'Auto' },
   { value: 'marketing', label: 'Marketing' },
+  { value: 'digital_engagement', label: 'Digital Engagement' },
+  { value: 'marketing_ops', label: 'Marketing Ops' },
   { value: 'revenue', label: 'Revenue' },
+  { value: 'cx_loyalty', label: 'CX / Loyalty' },
   { value: 'operations', label: 'Operations' },
   { value: 'it', label: 'IT / Systems' },
   { value: 'executive', label: 'Executive' },
 ] as const;
 const TARGET_COUNTS = ['3', '5', '8', '10'] as const;
-const DIVISION_PRESETS = ['', 'Group Benefits', 'Retirement & Income', 'Auto & Home', 'Pharmacy', 'Health', 'Caremark', 'Aetna', 'Digital', 'Corporate'] as const;
+
+const ENTERPRISE_DIVISION_PRESETS: Record<string, string[]> = {
+  metlife: ['Group Benefits', 'Retirement & Income Solutions', 'Auto & Home', 'Pet Insurance', 'Dental', 'Asia', 'Latin America', 'EMEA', 'Corporate / Enterprise'],
+  cvs: ['CVS Pharmacy', 'CVS Caremark', 'Aetna', 'CVS Health Corporate', 'CVS Specialty', 'MinuteClinic', 'CVS Media Exchange'],
+};
+
+function getDivisionPresets(accountName: string): string[] {
+  const lower = accountName.toLowerCase();
+  for (const [key, presets] of Object.entries(ENTERPRISE_DIVISION_PRESETS)) {
+    if (lower.includes(key)) return presets;
+  }
+  return ['Corporate', 'Digital', 'North America', 'EMEA', 'APAC'];
+}
 
 function getRoleConfig(role: string) {
   return BUYER_ROLES.find((entry) => entry.value === role) || BUYER_ROLES[BUYER_ROLES.length - 1];
@@ -332,8 +347,8 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
                   className="h-8 text-xs"
                   list="division-presets"
                 />
-                <datalist id="division-presets">
-                  {DIVISION_PRESETS.filter(Boolean).map((d) => (
+                 <datalist id="division-presets">
+                  {getDivisionPresets(accountName).map((d) => (
                     <option key={d} value={d} />
                   ))}
                 </datalist>
