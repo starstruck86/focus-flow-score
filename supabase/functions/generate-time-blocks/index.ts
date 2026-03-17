@@ -257,6 +257,16 @@ serve(async (req) => {
         }).join("\n")
       : "No meetings scheduled today.";
 
+    // Extract user preferences EARLY (needed for weekly context math below)
+    const workStart = userPrefs?.work_start_time?.slice(0, 5) || '09:00';
+    const workEnd = userPrefs?.work_end_time?.slice(0, 5) || '17:00';
+    const noMeetingsBefore = userPrefs?.no_meetings_before?.slice(0, 5) || workStart;
+    const noMeetingsAfter = userPrefs?.no_meetings_after?.slice(0, 5) || workEnd;
+    const minBlockMin = userPrefs?.min_block_minutes || 25;
+    const preferNewLogoMorning = userPrefs?.prefer_new_logo_morning !== false;
+    const maxBackToBack = userPrefs?.max_back_to_back_meetings || 3;
+    const personalRules: string[] = Array.isArray(userPrefs?.personal_rules) ? userPrefs.personal_rules : [];
+
     // Quota targets context
     const targets = quotaRes.data;
     const weeklyDialTarget = (targets?.target_dials_per_day || 60) * 5; // e.g., 300/week
