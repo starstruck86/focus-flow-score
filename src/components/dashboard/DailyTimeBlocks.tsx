@@ -271,7 +271,7 @@ export function DailyTimeBlocks() {
   const saveEditBlock = useCallback(async () => {
     if (!plan || editingBlock === null) return;
     const blocks = [...(plan.blocks as TimeBlock[])];
-    blocks[editingBlock] = { ...blocks[editingBlock], label: editLabel, goals: editGoals };
+    blocks[editingBlock] = { ...blocks[editingBlock], label: editLabel, goals: editGoals, start_time: editStartTime, end_time: editEndTime };
     
     queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks });
     await supabase
@@ -280,7 +280,54 @@ export function DailyTimeBlocks() {
       .eq('id', plan.id);
     setEditingBlock(null);
     toast.success('Block updated');
-  }, [plan, editingBlock, editLabel, editGoals, todayStr, queryClient]);
+  }, [plan, editingBlock, editLabel, editGoals, editStartTime, editEndTime, todayStr, queryClient]);
+
+  // Move block up/down
+  const moveBlock = useCallback(async (blockIdx: number, direction: 'up' | 'down') => {
+    if (!plan) return;
+    const blocks = [...(plan.blocks as TimeBlock[])];
+    const targetIdx = direction === 'up' ? blockIdx - 1 : blockIdx + 1;
+    if (targetIdx < 0 || targetIdx >= blocks.length) return;
+
+    // Swap blocks and recalculate times so they stay contiguous
+    const a = blocks[blockIdx];
+    const b = blocks[targetIdx];
+    const aDuration = getBlockDurationMinutes(a);
+    const bDuration = getBlockDurationMinutes(b);
+
+    // The earlier block keeps its start, gets the other's duration
+    const earlierIdx = Math.min(blockIdx, targetIdx);
+    const laterIdx = Math.max(blockIdx, targetIdx);
+    const earlierStart = blocks[earlierIdx].start_time;
+
+    // Parse start minutes
+    const [sh, sm] = earlierStart.split(':').map(Number);
+    const startMins = sh * 60 + sm;
+
+    // Swap: the block moving up gets earlier start, block moving down gets later start
+    const firstDuration = direction === 'up' ? aDuration : bDuration;
+    const secondDuration = direction === 'up' ? bDuration : aDuration;
+    const midMins = startMins + firstDuration;
+    const endMins = midMins + secondDuration;
+
+    const toTime = (mins: number) => {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    };
+
+    // Swap and assign new times
+    [blocks[earlierIdx], blocks[laterIdx]] = direction === 'up' ? [a, b] : [b, a];
+    blocks[earlierIdx] = { ...blocks[earlierIdx], start_time: earlierStart, end_time: toTime(midMins) };
+    blocks[laterIdx] = { ...blocks[laterIdx], start_time: toTime(midMins), end_time: toTime(endMins) };
+
+    queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks });
+    await supabase
+      .from('daily_time_blocks' as any)
+      .update({ blocks })
+      .eq('id', plan.id);
+    toast.success('Block moved');
+  }, [plan, todayStr, queryClient]);
 
   // Dismiss a block
   const dismissBlock = useCallback(async (blockIdx: number) => {
