@@ -14,6 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { 
   Clock, Zap, Phone, Users, BookOpen, Coffee, 
   BriefcaseBusiness, Target, RefreshCw, Star,
@@ -21,11 +22,13 @@ import {
   ThumbsUp, ThumbsDown, RotateCcw, CheckCircle2,
   ArrowRight, ExternalLink, Pencil, Check, X, GripVertical,
   Rocket, Shield, MoreVertical, EyeOff, Link2, Building2,
+  Settings2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { CalendarScreenshotDrop } from './CalendarScreenshotDrop';
+import { DailyPlanPreferences } from './DailyPlanPreferences';
 
 interface TimeBlock {
   start_time: string;
