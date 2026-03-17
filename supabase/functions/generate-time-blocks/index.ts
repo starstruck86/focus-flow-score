@@ -6,6 +6,56 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const EASTERN_TIMEZONE = "America/New_York";
+
+function extractEasternTime(dateString: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: EASTERN_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(dateString));
+
+  const hour = parts.find((part) => part.type === "hour")?.value ?? "00";
+  const minute = parts.find((part) => part.type === "minute")?.value ?? "00";
+  return `${hour}:${minute}`;
+}
+
+function toMinutes(time: string) {
+  const [hours, minutes] = time.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function overlaps(a: { start_time: string; end_time: string }, b: { start_time: string; end_time: string }) {
+  return toMinutes(a.start_time) < toMinutes(b.end_time) && toMinutes(b.start_time) < toMinutes(a.end_time);
+}
+
+function mergeLockedCalendarBlocks(
+  aiBlocks: Array<Record<string, any>>,
+  lockedBlocks: Array<Record<string, any>>,
+) {
+  const lockedKeys = new Set(
+    lockedBlocks.map((block) => `${block.start_time}-${block.end_time}-${block.label.trim().toLowerCase()}`),
+  );
+
+  const filteredAiBlocks = aiBlocks.filter((block) => {
+    if (!block?.start_time || !block?.end_time || !block?.label) return false;
+
+    const key = `${block.start_time}-${block.end_time}-${String(block.label).trim().toLowerCase()}`;
+    if (lockedKeys.has(key)) return false;
+
+    if (block.type === "meeting") {
+      return !lockedBlocks.some((lockedBlock) => overlaps(block, lockedBlock));
+    }
+
+    return true;
+  });
+
+  return [...filteredAiBlocks, ...lockedBlocks].sort(
+    (a, b) => toMinutes(a.start_time) - toMinutes(b.start_time),
+  );
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
