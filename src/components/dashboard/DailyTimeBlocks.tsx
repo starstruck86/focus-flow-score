@@ -107,7 +107,7 @@ const WORKSTREAM_CONFIG: Record<string, { label: string; icon: typeof Rocket; co
 
 export function DailyTimeBlocks() {
   const { user } = useAuth();
-  const { opportunities } = useStore();
+  const { opportunities, accounts } = useStore();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -123,6 +123,8 @@ export function DailyTimeBlocks() {
   const [linkOppBlockIdx, setLinkOppBlockIdx] = useState<number | null>(null);
   const [blockOppLinks, setBlockOppLinks] = useState<Map<number, { id: string; name: string }>>(new Map());
   const [showPreferences, setShowPreferences] = useState(false);
+  const [accountSearchBlockIdx, setAccountSearchBlockIdx] = useState<number | null>(null);
+  const [accountSearchQuery, setAccountSearchQuery] = useState('');
 
   const { data: plan, isLoading } = useQuery({
     queryKey: ['daily-time-blocks', todayStr],
