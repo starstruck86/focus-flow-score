@@ -6,3 +6,4 @@ export { WeeklyCoachingDigest } from './WeeklyCoachingDigest';
 export { CoachingStreaks } from './CoachingStreaks';
 export { CoachingFocus } from './CoachingFocus';
 export { MockCallSimulator } from './MockCallSimulator';
+export { ObjectionDrillReps } from './ObjectionDrillReps';
