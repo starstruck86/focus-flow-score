@@ -506,8 +506,9 @@ Deno.serve(async (req) => {
     // If an account is focused, filter transcripts to that account for relevance
     // Resources are NEVER filtered — they are general methodology, always available
     let focusAccount: any = null;
-    if (accountId) {
-      focusAccount = ctx.accounts.find((a: any) => a.id === accountId);
+    const effectiveAccountId = accountId || pageContext?.accountId;
+    if (effectiveAccountId) {
+      focusAccount = ctx.accounts.find((a: any) => a.id === effectiveAccountId);
     } else {
       const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user")?.content || "";
       focusAccount = detectAccountFocus(lastUserMsg, ctx.accounts);
