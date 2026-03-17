@@ -169,7 +169,17 @@ export default function AccountDetail() {
         <div className="flex items-center gap-2 flex-wrap">
           <TouchLogButtons accountId={account.id} compact />
           <EnrichButton account={account} compact />
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setShowSynopsis(true)}>
+            <Sparkles className="h-3.5 w-3.5" />
+            Paste Synopsis
+          </Button>
         </div>
+
+        <AccountSynopsisModal
+          open={showSynopsis}
+          onOpenChange={setShowSynopsis}
+          account={account}
+        />
 
         {/* Details Section */}
         <CollapsibleSection title="Account Details" icon={Building2} defaultOpen={true}>
