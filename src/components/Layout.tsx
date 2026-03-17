@@ -29,6 +29,7 @@ const navItems = [
   { to: '/tasks', label: 'Tasks', icon: CheckSquare },
   { to: '/outreach', label: 'Accounts', icon: Users },
   { to: '/renewals', label: 'Renewals', icon: RefreshCw },
+  { to: '/coach', label: 'Coach', icon: Compass },
   { to: '/trends', label: 'Trends', icon: TrendingUp },
   { to: '/quota', label: 'Quota', icon: DollarSign },
   { to: '/settings', label: 'Settings', icon: Settings },
