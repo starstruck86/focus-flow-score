@@ -6,6 +6,56 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const EASTERN_TIMEZONE = "America/New_York";
+
+function extractEasternTime(dateString: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: EASTERN_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(dateString));
+
+  const hour = parts.find((part) => part.type === "hour")?.value ?? "00";
+  const minute = parts.find((part) => part.type === "minute")?.value ?? "00";
+  return `${hour}:${minute}`;
+}
+
+function toMinutes(time: string) {
+  const [hours, minutes] = time.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function overlaps(a: { start_time: string; end_time: string }, b: { start_time: string; end_time: string }) {
+  return toMinutes(a.start_time) < toMinutes(b.end_time) && toMinutes(b.start_time) < toMinutes(a.end_time);
+}
+
+function mergeLockedCalendarBlocks(
+  aiBlocks: Array<Record<string, any>>,
+  lockedBlocks: Array<Record<string, any>>,
+) {
+  const lockedKeys = new Set(
+    lockedBlocks.map((block) => `${block.start_time}-${block.end_time}-${block.label.trim().toLowerCase()}`),
+  );
+
+  const filteredAiBlocks = aiBlocks.filter((block) => {
+    if (!block?.start_time || !block?.end_time || !block?.label) return false;
+
+    const key = `${block.start_time}-${block.end_time}-${String(block.label).trim().toLowerCase()}`;
+    if (lockedKeys.has(key)) return false;
+
+    if (block.type === "meeting") {
+      return !lockedBlocks.some((lockedBlock) => overlaps(block, lockedBlock));
+    }
+
+    return true;
+  });
+
+  return [...filteredAiBlocks, ...lockedBlocks].sort(
+    (a, b) => toMinutes(a.start_time) - toMinutes(b.start_time),
+  );
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -78,7 +128,7 @@ serve(async (req) => {
     const recentFeedback = feedbackRes.data || [];
     const topAccounts = workQueueRes.data || [];
 
-    // Calculate meeting load
+    // Calculate meeting load and build locked meeting anchors
     const meetings = events.filter((e: any) => !e.all_day && e.end_time);
     const meetingMinutes = meetings.reduce((sum: number, e: any) => {
       const start = new Date(e.start_time).getTime();
@@ -88,6 +138,34 @@ serve(async (req) => {
     const meetingHours = Math.round(meetingMinutes / 60 * 10) / 10;
     const focusHoursAvailable = Math.max(0, 8 - meetingHours);
 
+    const baseLockedCalendarBlocks = meetings.map((event: any) => ({
+      start_time: extractEasternTime(event.start_time),
+      end_time: extractEasternTime(event.end_time),
+      label: event.title,
+      type: "meeting",
+      workstream: "general",
+      goals: [`Attend ${event.title}`],
+      reasoning: "Fixed calendar meeting — this time is locked.",
+    }));
+
+    const screenshotMeetingBlocks = Array.isArray(confirmedScreenshotEvents)
+      ? confirmedScreenshotEvents
+          .filter((event: any) => event.category === "work_meeting")
+          .map((event: any) => ({
+            start_time: event.start_time,
+            end_time: event.end_time,
+            label: event.title,
+            type: "meeting",
+            workstream: "general",
+            goals: [`Attend ${event.title}`],
+            reasoning: "Screenshot-confirmed meeting — this time is locked.",
+          }))
+      : [];
+
+    const lockedCalendarBlocks = screenshotMeetingBlocks.length > 0
+      ? mergeLockedCalendarBlocks(baseLockedCalendarBlocks, screenshotMeetingBlocks)
+      : baseLockedCalendarBlocks;
+
     // Build feedback context (day-level + block-level)
     const prevPlans = prevPlansRes.data || [];
     let feedbackContext = "";
@@ -96,7 +174,6 @@ serve(async (req) => {
         `- Date: ${f.context_date}, Rating: ${f.rating}/5, Feedback: "${f.feedback_text}"`
       ).join("\n")}`;
     }
-    // Include block-level thumbs up/down from recent plans
     const plansWithBlockFb = prevPlans.filter((p: any) => p.block_feedback?.length > 0);
     if (plansWithBlockFb.length > 0) {
       feedbackContext += `\n\nBLOCK-LEVEL FEEDBACK (thumbs up/down on specific blocks):\n`;
@@ -111,33 +188,23 @@ serve(async (req) => {
       });
     }
 
-    // Build calendar context — merge DB events with screenshot-confirmed events
+    // Build personal context from screenshot-confirmed events
     let screenshotContext = "";
-    if (confirmedScreenshotEvents && Array.isArray(confirmedScreenshotEvents) && confirmedScreenshotEvents.length > 0) {
+    if (Array.isArray(confirmedScreenshotEvents) && confirmedScreenshotEvents.length > 0) {
       const personalBlocks = confirmedScreenshotEvents.filter((e: any) => e.is_personal_block);
-      const workMeetings = confirmedScreenshotEvents.filter((e: any) => e.category === 'work_meeting');
-      
+
       if (personalBlocks.length > 0) {
         screenshotContext += `\n\nPERSONAL/FAMILY COMMITMENTS (MUST block these times — DO NOT schedule work during these):\n`;
-        screenshotContext += personalBlocks.map((e: any) => 
+        screenshotContext += personalBlocks.map((e: any) =>
           `- ${e.start_time}–${e.end_time}: ${e.title}${e.family_member ? ` (${e.family_member})` : ''}${e.notes ? ` — ${e.notes}` : ''}`
-        ).join('\n');
-      }
-
-      if (workMeetings.length > 0) {
-        screenshotContext += `\n\nSCREENSHOT-CONFIRMED MEETINGS (these are verified by the user — prioritize these over calendar DB):\n`;
-        screenshotContext += workMeetings.map((e: any) => 
-          `- ${e.start_time}–${e.end_time}: ${e.title}`
         ).join('\n');
       }
     }
 
-    const calendarContext = meetings.length > 0
-      ? meetings.map((e: any) => {
-          const start = new Date(e.start_time);
-          const end = e.end_time ? new Date(e.end_time) : null;
-          const dur = end ? Math.round((end.getTime() - start.getTime()) / 60000) : 30;
-          return `- ${start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })}–${end?.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }) || "?"} (${dur}min): ${e.title}`;
+    const calendarContext = lockedCalendarBlocks.length > 0
+      ? lockedCalendarBlocks.map((block: any) => {
+          const dur = toMinutes(block.end_time) - toMinutes(block.start_time);
+          return `- ${block.start_time}–${block.end_time} EST (${dur}min): ${block.label}`;
         }).join("\n")
       : "No meetings scheduled today.";
 
@@ -193,8 +260,9 @@ CRITICAL RULES:
 15. For prospecting blocks: suggest which cadences to execute
 16. PERSONAL/FAMILY blocks are NON-NEGOTIABLE — the user has children (Quinn, Emmett). School drop-offs, pickups, and activities MUST be respected. Build work around them, not over them.
 17. If screenshot-confirmed meetings differ from calendar DB, TRUST the screenshot — the user verified them manually.
+18. CALENDAR MEETINGS ARE FIXED ANCHORS. Every meeting listed below must appear as its own block at the exact EST start and end time shown. Do NOT move, round, combine, rename, or replace them with a generic admin block.
 
-TODAY'S CALENDAR (EST):
+LOCKED CALENDAR MEETINGS (EXACT EST TIMES):
 ${calendarContext}
 ${screenshotContext}
 
@@ -306,6 +374,7 @@ Also provide an overall "day_strategy" (2-3 sentences distinguishing the new log
     if (!toolCall) throw new Error("No tool call in AI response");
 
     const plan = JSON.parse(toolCall.function.arguments);
+    const mergedBlocks = mergeLockedCalendarBlocks(plan.blocks || [], lockedCalendarBlocks);
 
     // Upsert the plan with all data persisted
     const { data: saved, error: saveError } = await supabase
@@ -313,7 +382,7 @@ Also provide an overall "day_strategy" (2-3 sentences distinguishing the new log
       .upsert({
         user_id: user.id,
         plan_date: targetDate,
-        blocks: plan.blocks,
+        blocks: mergedBlocks,
         meeting_load_hours: meetingHours,
         focus_hours_available: focusHoursAvailable,
         ai_reasoning: plan.day_strategy,
