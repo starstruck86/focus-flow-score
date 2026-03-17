@@ -347,6 +347,7 @@ export function DailyTimeBlocks() {
             )}
           </Button>
         </div>
+        <CalendarScreenshotDrop date={todayStr} onEventsConfirmed={handleScreenshotEventsConfirmed} />
       </Card>
     );
   }
