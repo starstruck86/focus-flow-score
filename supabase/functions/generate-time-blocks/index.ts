@@ -294,7 +294,7 @@ ${prefsContext}
 
 CRITICAL RULES:
 1. NO time blocks shorter than ${minBlockMin} minutes.
-2. NEW LOGO IS THE PRIORITY. Maximize the number and duration of new logo Prep→Execute cycles. Keep as much of the day open for new logo focus as possible.
+2. NEW LOGO IS THE PRIORITY. The daily targets below (dials, convos, accounts researched, contacts prepped) can ONLY be achieved through Prep→Call Blitz cycles. You MUST schedule ENOUGH cycles to realistically hit these targets. Work backwards from the targets to determine how many cycles and how much time is needed.
 3. Use "workstream" field to tag each block as "new_logo" or "renewal" or "general"
 4. Goals must be REALISTIC and specific - not aspirational fantasies
 5. ${preferNewLogoMorning ? 'Account for energy patterns: deep prospecting/new logo work in the morning, renewal tasks in the afternoon' : 'Distribute new logo and renewal work based on meeting gaps'}
@@ -303,41 +303,41 @@ CRITICAL RULES:
 8. Leave 30 min for daily journal/EOD wrap-up
 9. Never schedule prospecting calls during lunch (${lunchStart}-${lunchEnd})
 10. Build in at least one 15-min break mid-morning and mid-afternoon
-11. NAME SPECIFIC ACCOUNTS in goals when possible
+11. NAME SPECIFIC ACCOUNTS in Prep and Call Blitz block goals (from prospecting list only)
 12. PERSONAL/FAMILY blocks are NON-NEGOTIABLE — the user has children (Quinn, Emmett). School drop-offs, pickups, and activities MUST be respected.
 13. If screenshot-confirmed meetings differ from calendar DB, TRUST the screenshot.
-14. CALENDAR MEETINGS ARE FIXED ANCHORS. Every meeting listed below must appear as its own block at the exact EST start and end time shown. Do NOT move, round, combine, rename, or replace them. Do NOT generate your own meeting blocks — they are provided as locked blocks and merged automatically.
-15. DO NOT duplicate a meeting that already exists. If two calendar entries refer to the same meeting (same account/topic, overlapping times), use only ONE block at the correct time.
+14. CALENDAR MEETINGS ARE FIXED ANCHORS. Do NOT generate your own meeting blocks — they are provided as locked blocks and merged automatically.
+15. DO NOT duplicate a meeting that already exists.
 16. DO NOT schedule ANY blocks before ${workStart} or after ${workEnd}. This is a HARD boundary.
-17. ONLY use accounts from the NEW LOGO PROSPECTING list in Prep→Execute cycles. Current customers (accounts with renewals or active opportunities) are NOT prospecting targets.
+17. ONLY use accounts from the NEW LOGO PROSPECTING list in Prep→Execute cycles. Current customers are NOT prospecting targets.
+18. CONSOLIDATE all non-prospecting admin work (pipeline tasks, email, CRM updates) into ONE "Admin & Pipeline Tasks" block. Do NOT scatter small admin blocks throughout the day.
 
 WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL):
 
-**NEW LOGO PROSPECTING (accounts with NO active opportunity AND not current customers) — THIS IS THE CORE OF THE DAY:**
+**NEW LOGO PROSPECTING — THIS IS THE CORE OF THE DAY:**
 - This is research + cadence + cold outreach work — high-energy hunter mode
 - Use PREP → EXECUTE paired cycles:
-  - "Prep" block (type: "prep"): Research 2-3 specific accounts, review contacts, build call notes
-  - Immediately followed by "Call Blitz" block (type: "prospecting"): Dial into those exact accounts while context is fresh
-  - Label prep blocks like: "Tessitura Prep (2 accounts - 6 contacts)"
-  - Label execute blocks like: "Call Blitz #1 (8-10 Calls)"
+  - "Prep" block (type: "prep", 25-35 min): Research 2-3 specific accounts, review contacts, build call notes
+  - Immediately followed by "Call Blitz" block (type: "prospecting", 45-60 min): Dial into those exact accounts while context is fresh
+  - Label prep blocks like: "Account Prep (Tessitura, Privy)"
+  - Label execute blocks like: "Call Blitz #1 (15-20 dials)"
   - NEVER separate a Prep from its Call Blitz with a meeting or break — they must be adjacent
-- Aim for 2-3 Prep→Execute cycles per day depending on meeting load
-- Fill ALL available non-meeting time with new logo work
+- You MUST schedule enough Prep→Call Blitz cycles to hit the daily dial and conversation targets
+- A typical Call Blitz block of 45-60 min = ~20 dials. If the target is 60 dials, you need ~3 Call Blitz blocks
+- Fill ALL available non-meeting time with new logo Prep→Execute cycles
 
 **ACTIVE NEW LOGO OPPORTUNITIES (deals already in pipeline):**
-- These are TASK-ORIENTED and MEETING-DRIVEN — NOT more research/cadence work
-- Only schedule a block if there are specific urgent tasks (proposals, follow-ups, discovery prep)
-- Keep these blocks SHORT and focused — don't let them eat into prospecting time
-- Block types should be "pipeline", NOT "research" or "prospecting"
+- TASK-ORIENTED and MEETING-DRIVEN only — NOT research/cadence work
+- Do NOT give these their own time block unless there is a specific urgent task
+- Roll any pipeline tasks into the single "Admin & Pipeline Tasks" block
 
-**RENEWALS — KEEP IT MINIMAL:**
-- Schedule ONE single "Renewal Review" block per day, 30-45 minutes MAX
-- Purpose: look closer at 1-2 customer accounts with upcoming renewals, review health, work through any tasks
-- Goals should be GENERIC: "Review 1-2 upcoming renewal accounts" or "Work through renewal task queue"
-- DO NOT name specific renewal accounts, opportunities, or tasks in the goals — the user manages their own renewal priorities
-- DO NOT create multiple renewal blocks or expand renewal time
-- Label it simply: "Renewal Review"
-- Renewals should NEVER crowd out new logo prospecting time
+**RENEWALS — EXACTLY 30 MINUTES, ONCE PER DAY:**
+- Schedule ONE "Renewal Review" block, exactly 30 minutes, in the afternoon
+- Purpose: look closer at 1-2 customer accounts with upcoming renewals
+- Goals: "Review 1-2 upcoming renewal accounts" and "Work through renewal task queue" — keep it generic
+- DO NOT name specific renewal accounts, opportunities, or tasks
+- DO NOT create any other renewal blocks. All other renewal work happens in meetings or the admin block
+- This is the ONLY non-prospecting, non-admin block allowed
 
 **MEETING PREP (for any upcoming customer/prospect meeting):**
 - If there's a customer meeting today, schedule a short prep block (type: "prep") 30-60 min before it
