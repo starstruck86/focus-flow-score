@@ -91,6 +91,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
         <div className="flex items-center gap-2">
           <SaveIndicator />
+          <VoiceCommandButton />
           <TerritoryCopilot />
           <GlobalSearch />
           <ThemeToggle />
