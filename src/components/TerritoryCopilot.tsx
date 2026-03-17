@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Sparkles, Send, Loader2, MessageSquare, ArrowRight, Zap, RotateCcw, Search, Calendar, Target, Mail, Mic, MicOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { streamCopilot, SUGGESTED_QUESTIONS, MODE_CONFIG, type CopilotMsg, type CopilotMode } from '@/lib/territoryCopilot';
+import { streamCopilot, SUGGESTED_QUESTIONS, PAGE_SUGGESTED_QUESTIONS, PAGE_PLACEHOLDERS, MODE_CONFIG, type CopilotMsg, type CopilotMode } from '@/lib/territoryCopilot';
 import { useCopilot } from '@/contexts/CopilotContext';
 import { useVoiceMode } from '@/hooks/useVoiceMode';
 import ReactMarkdown from 'react-markdown';
@@ -197,7 +197,13 @@ function CopilotDialog() {
   }, [voice, sendMessage]);
 
   const showSuggestions = messages.length === 0 && !isStreaming;
-  const filteredSuggestions = SUGGESTED_QUESTIONS.filter(q => mode === 'quick' || q.mode === mode).slice(0, 6);
+  // Supercharge #1: Use page-specific suggestions when available
+  const pageSuggestions = pageContext?.page ? PAGE_SUGGESTED_QUESTIONS[pageContext.page] : null;
+  const baseSuggestions = pageSuggestions || SUGGESTED_QUESTIONS;
+  const filteredSuggestions = baseSuggestions.filter(q => mode === 'quick' || q.mode === mode).slice(0, 6);
+  
+  // Supercharge #2: Page-specific placeholder
+  const placeholder = pageContext?.page ? PAGE_PLACEHOLDERS[pageContext.page] : undefined;
 
   return (
     <Dialog open={state.open} onOpenChange={setOpen}>
@@ -238,9 +244,13 @@ function CopilotDialog() {
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Zap className="h-3 w-3 text-primary" />
-                {mode === 'quick' && "Ask anything about your territory, accounts, or pipeline."}
-                {mode === 'deep' && "Deep research combines CRM data with web intel and auto-updates your accounts."}
-                {mode === 'meeting' && "Get a comprehensive meeting brief — auto-enriches account data."}
+                {pageSuggestions && pageContext?.description
+                  ? `${pageContext.description} — ask me anything.`
+                  : mode === 'quick' ? "Ask anything about your territory, accounts, or pipeline."
+                  : mode === 'deep' ? "Deep research combines CRM data with web intel and auto-updates your accounts."
+                  : mode === 'meeting' ? "Get a comprehensive meeting brief — auto-enriches account data."
+                  : "Ask anything."
+                }
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {filteredSuggestions.map((q) => (
@@ -304,9 +314,11 @@ function CopilotDialog() {
             value={voice.isRecording ? '🔴 Recording...' : voice.isTranscribing ? 'Transcribing...' : input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={
-              mode === 'quick' ? "Ask about your territory..." :
-              mode === 'deep' ? "What do you want to research? (auto-updates accounts)" :
-              "Which account's meeting should I prep?"
+              placeholder || (
+                mode === 'quick' ? "Ask about your territory..." :
+                mode === 'deep' ? "What do you want to research? (auto-updates accounts)" :
+                "Which account's meeting should I prep?"
+              )
             }
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             disabled={isStreaming || voice.isRecording || voice.isTranscribing}
