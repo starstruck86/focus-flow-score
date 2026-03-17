@@ -208,8 +208,9 @@ CRITICAL RULES:
 15. For prospecting blocks: suggest which cadences to execute
 16. PERSONAL/FAMILY blocks are NON-NEGOTIABLE — the user has children (Quinn, Emmett). School drop-offs, pickups, and activities MUST be respected. Build work around them, not over them.
 17. If screenshot-confirmed meetings differ from calendar DB, TRUST the screenshot — the user verified them manually.
+18. CALENDAR MEETINGS ARE FIXED ANCHORS. Every meeting listed below must appear as its own block at the exact EST start and end time shown. Do NOT move, round, combine, rename, or replace them with a generic admin block.
 
-TODAY'S CALENDAR (EST):
+LOCKED CALENDAR MEETINGS (EXACT EST TIMES):
 ${calendarContext}
 ${screenshotContext}
 
