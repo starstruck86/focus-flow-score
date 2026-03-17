@@ -42,21 +42,22 @@ export function CoachingStreaks() {
     return categories.map(cat => {
       const scores = sorted.map((g: any) => (g as any)[`${cat}_score`] || 0);
 
-      // Calculate current improvement streak (consecutive calls where score >= previous)
+      // Calculate current improvement streak with tolerance for minor regression (1 point)
+      const TOLERANCE = 1;
       let currentStreak = 0;
       for (let i = scores.length - 1; i > 0; i--) {
-        if (scores[i] >= scores[i - 1]) {
+        if (scores[i] >= scores[i - 1] - TOLERANCE) {
           currentStreak++;
         } else {
           break;
         }
       }
 
-      // Calculate best streak
+      // Calculate best streak with same tolerance
       let bestStreak = 0;
       let streak = 0;
       for (let i = 1; i < scores.length; i++) {
-        if (scores[i] >= scores[i - 1]) {
+        if (scores[i] >= scores[i - 1] - TOLERANCE) {
           streak++;
           bestStreak = Math.max(bestStreak, streak);
         } else {
