@@ -310,7 +310,7 @@ CRITICAL RULES:
 15. DO NOT duplicate a meeting that already exists.
 16. DO NOT schedule ANY blocks before ${workStart} or after ${workEnd}. This is a HARD boundary.
 17. ONLY use accounts from the NEW LOGO PROSPECTING list in Prep→Execute cycles. Current customers are NOT prospecting targets.
-18. CONSOLIDATE all non-prospecting admin work (pipeline tasks, email, CRM updates) into ONE "Admin & Pipeline Tasks" block. Do NOT scatter small admin blocks throughout the day.
+18. CONSOLIDATE all non-prospecting, non-new-logo admin work (pipeline opp tasks, renewal tasks, email, CRM updates) into ONE "Admin & Pipeline Tasks" block. Do NOT scatter small admin blocks throughout the day. IMPORTANT: New Logo Account Prep blocks and Call Blitz blocks are NOT admin — they are the core prospecting workflow and should remain as their own dedicated paired cycles throughout the day.
 
 WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL):
 
