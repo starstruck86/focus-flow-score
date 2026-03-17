@@ -21,6 +21,7 @@ import { useCallTranscripts } from '@/hooks/useCallTranscripts';
 import { useSaveTranscript } from '@/hooks/useCallTranscripts';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { useStore } from '@/store/useStore';
 import {
   useAllTranscriptGrades, useGradeTranscript, useTranscriptGrade,
   useBehavioralPatterns, useMeddiccCompleteness,
