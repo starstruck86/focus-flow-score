@@ -473,7 +473,22 @@ export function DailyTimeBlocks() {
       {/* Time blocks */}
       {expanded && (
         <div className="divide-y divide-border/20">
+          {/* Changes pending banner */}
+          {hasChanges && (
+            <div className="px-4 py-2 bg-accent/50 border-b border-border/30 flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                {dismissedBlocks.size > 0 && `${dismissedBlocks.size} dismissed`}
+                {dismissedBlocks.size > 0 && blockOppLinks.size > 0 && ' · '}
+                {blockOppLinks.size > 0 && `${blockOppLinks.size} linked`}
+              </span>
+              <Button size="sm" className="h-6 text-[11px] gap-1" onClick={regenerateWithChanges} disabled={generateMutation.isPending}>
+                <RotateCcw className={cn("h-3 w-3", generateMutation.isPending && "animate-spin")} />
+                Rebuild Plan
+              </Button>
+            </div>
+          )}
           {blocks.map((block, i) => {
+            if (dismissedBlocks.has(i)) return null;
             const config = TYPE_CONFIG[block.type] || TYPE_CONFIG.admin;
             const Icon = config.icon;
             const isCurrent = i === currentIdx;
@@ -481,6 +496,8 @@ export function DailyTimeBlocks() {
             const duration = getBlockDurationMinutes(block);
             const blockThumb = blockFeedbackMap.get(i);
             const completedSet = new Set(plan.completed_goals as string[] || []);
+            const linkedOpp = blockOppLinks.get(i);
+            const isMeeting = block.type === 'meeting';
 
             return (
               <div
