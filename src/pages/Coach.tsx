@@ -799,7 +799,7 @@ export default function Coach() {
 
                 {ungraded.length === 0 && (transcripts?.length || 0) > 0 && (
                   <div className="text-center py-6 text-muted-foreground">
-                    <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-emerald-400" />
+                    <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-grade-excellent" />
                     <p className="font-medium">All transcripts graded</p>
                   </div>
                 )}
