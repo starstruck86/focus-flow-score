@@ -247,7 +247,7 @@ export function CoachingFocus() {
             className={cn(
               'ml-auto text-[10px]',
               focus.trend === 'declining' ? 'border-destructive/30 text-destructive' :
-              focus.trend === 'stuck' ? 'border-orange-500/30 text-orange-500' :
+              focus.trend === 'stuck' ? 'border-grade-average/30 text-grade-average' :
               'border-primary/30 text-primary'
             )}
           >
