@@ -63,7 +63,7 @@ const MEDDICC_LABELS: Record<string, string> = {
 
 function ScoreBlock({ score, label, max = 5 }: { score: number; label: string; max?: number }) {
   const pct = (score / max) * 100;
-  const color = pct >= 80 ? 'bg-emerald-500' : pct >= 60 ? 'bg-blue-500' : pct >= 40 ? 'bg-amber-500' : 'bg-red-500';
+  const color = pct >= 80 ? 'bg-grade-excellent' : pct >= 60 ? 'bg-grade-good' : pct >= 40 ? 'bg-grade-average' : 'bg-grade-failing';
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-xs">
