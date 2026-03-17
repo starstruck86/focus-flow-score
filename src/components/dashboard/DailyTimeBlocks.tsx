@@ -623,6 +623,16 @@ export function DailyTimeBlocks() {
                     </ul>
                   )}
 
+                  {/* Linked opportunity badge */}
+                  {linkedOpp && (
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-accent/50">
+                        <Building2 className="h-3 w-3" />
+                        {linkedOpp.name}
+                      </Badge>
+                    </div>
+                  )}
+
                   {/* Per-block thumbs + reasoning */}
                    <div className="flex items-center gap-2 mt-1.5">
                     <div className="flex gap-0.5">
