@@ -460,7 +460,15 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
 
     return () => {
       unsub();
+      // Flush pending writes immediately before clearing timers
       Object.values(writeTimers.current).forEach(t => clearTimeout(t));
+      _pendingWrites.forEach((fn, key) => {
+        fn().then(() => {
+          _pendingWrites.delete(key);
+          _lastSyncTime = Date.now();
+          notifySyncListeners();
+        }).catch(err => console.error(`[DataSync] Flush error for ${key}:`, err));
+      });
     };
   }, [userId]);
 
