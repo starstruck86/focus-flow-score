@@ -1850,6 +1850,80 @@ export type Database = {
           },
         ]
       }
+      transcript_grades: {
+        Row: {
+          actionable_feedback: string
+          acumen_notes: string | null
+          acumen_score: number
+          cadence_notes: string | null
+          cadence_score: number
+          created_at: string
+          feedback_focus: string
+          id: string
+          improvements: string[] | null
+          methodology_alignment: string | null
+          overall_grade: string
+          overall_score: number
+          strengths: string[] | null
+          style_notes: string | null
+          style_score: number
+          summary: string | null
+          transcript_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          actionable_feedback?: string
+          acumen_notes?: string | null
+          acumen_score?: number
+          cadence_notes?: string | null
+          cadence_score?: number
+          created_at?: string
+          feedback_focus?: string
+          id?: string
+          improvements?: string[] | null
+          methodology_alignment?: string | null
+          overall_grade?: string
+          overall_score?: number
+          strengths?: string[] | null
+          style_notes?: string | null
+          style_score?: number
+          summary?: string | null
+          transcript_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          actionable_feedback?: string
+          acumen_notes?: string | null
+          acumen_score?: number
+          cadence_notes?: string | null
+          cadence_score?: number
+          created_at?: string
+          feedback_focus?: string
+          id?: string
+          improvements?: string[] | null
+          methodology_alignment?: string | null
+          overall_grade?: string
+          overall_score?: number
+          strengths?: string[] | null
+          style_notes?: string | null
+          style_score?: number
+          summary?: string | null
+          transcript_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transcript_grades_transcript_id_fkey"
+            columns: ["transcript_id"]
+            isOneToOne: true
+            referencedRelation: "call_transcripts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       weekly_battle_plans: {
         Row: {
           created_at: string

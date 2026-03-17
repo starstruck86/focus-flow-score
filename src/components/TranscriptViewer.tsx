@@ -4,12 +4,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { FileText, Search, Clock, Target, RefreshCw, Trash2, Building2 } from 'lucide-react';
+import { FileText, Search, Clock, Target, RefreshCw, Trash2, Building2, GraduationCap } from 'lucide-react';
 import { useCallTranscripts, useDeleteTranscript, type CallTranscript } from '@/hooks/useCallTranscripts';
+import { useGradeTranscript, useTranscriptGrade } from '@/hooks/useTranscriptGrades';
 import { useStore } from '@/store/useStore';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { SalesCoachPanel } from '@/components/SalesCoachPanel';
 
 interface TranscriptViewerProps {
   open: boolean;
@@ -22,6 +24,7 @@ interface TranscriptViewerProps {
 export function TranscriptViewer({ open, onOpenChange, accountId, opportunityId, renewalId }: TranscriptViewerProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [coachOpen, setCoachOpen] = useState(false);
   const { opportunities, renewals, accounts } = useStore();
   const deleteTranscript = useDeleteTranscript();
 
@@ -75,8 +78,12 @@ export function TranscriptViewer({ open, onOpenChange, accountId, opportunityId,
             <FileText className="h-5 w-5 text-primary" />
             Call Transcripts
             {transcripts && <Badge variant="outline" className="ml-2">{transcripts.length}</Badge>}
+            <Button variant="outline" size="sm" className="ml-auto" onClick={() => setCoachOpen(true)}>
+              <GraduationCap className="h-3.5 w-3.5 mr-1" /> Sales Coach
+            </Button>
           </DialogTitle>
         </DialogHeader>
+        <SalesCoachPanel open={coachOpen} onOpenChange={setCoachOpen} />
 
         {/* Search */}
         <div className="relative">
