@@ -811,6 +811,57 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_plan_preferences: {
+        Row: {
+          created_at: string
+          id: string
+          lunch_end: string | null
+          lunch_start: string | null
+          max_back_to_back_meetings: number | null
+          min_block_minutes: number
+          no_meetings_after: string | null
+          no_meetings_before: string | null
+          personal_rules: Json
+          prefer_new_logo_morning: boolean
+          updated_at: string
+          user_id: string
+          work_end_time: string
+          work_start_time: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          lunch_end?: string | null
+          lunch_start?: string | null
+          max_back_to_back_meetings?: number | null
+          min_block_minutes?: number
+          no_meetings_after?: string | null
+          no_meetings_before?: string | null
+          personal_rules?: Json
+          prefer_new_logo_morning?: boolean
+          updated_at?: string
+          user_id: string
+          work_end_time?: string
+          work_start_time?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          lunch_end?: string | null
+          lunch_start?: string | null
+          max_back_to_back_meetings?: number | null
+          min_block_minutes?: number
+          no_meetings_after?: string | null
+          no_meetings_before?: string | null
+          personal_rules?: Json
+          prefer_new_logo_morning?: boolean
+          updated_at?: string
+          user_id?: string
+          work_end_time?: string
+          work_start_time?: string
+        }
+        Relationships: []
+      }
       daily_time_blocks: {
         Row: {
           ai_reasoning: string | null
