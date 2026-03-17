@@ -78,8 +78,12 @@ export function TranscriptViewer({ open, onOpenChange, accountId, opportunityId,
             <FileText className="h-5 w-5 text-primary" />
             Call Transcripts
             {transcripts && <Badge variant="outline" className="ml-2">{transcripts.length}</Badge>}
+            <Button variant="outline" size="sm" className="ml-auto" onClick={() => setCoachOpen(true)}>
+              <GraduationCap className="h-3.5 w-3.5 mr-1" /> Sales Coach
+            </Button>
           </DialogTitle>
         </DialogHeader>
+        <SalesCoachPanel open={coachOpen} onOpenChange={setCoachOpen} />
 
         {/* Search */}
         <div className="relative">
