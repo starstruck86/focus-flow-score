@@ -87,6 +87,17 @@ serve(async (req) => {
     const { date, confirmedScreenshotEvents } = await req.json();
     const targetDate = date || new Date().toISOString().split("T")[0];
 
+    // Determine week boundaries (Mon-Fri) for the target date
+    const targetDateObj = new Date(targetDate + 'T12:00:00');
+    const dayOfWeek = targetDateObj.getDay(); // 0=Sun, 1=Mon, ...
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const weekMonday = new Date(targetDateObj);
+    weekMonday.setDate(targetDateObj.getDate() + mondayOffset);
+    const weekFriday = new Date(weekMonday);
+    weekFriday.setDate(weekMonday.getDate() + 4);
+    const weekMondayStr = weekMonday.toISOString().split('T')[0];
+    const weekFridayStr = weekFriday.toISOString().split('T')[0];
+
     // Gather context in parallel
     const [
       calendarRes,
@@ -99,6 +110,9 @@ serve(async (req) => {
       renewalsRes,
       tasksRes,
       prefsRes,
+      weekJournalRes,
+      weekCalendarRes,
+      battlePlanRes,
     ] = await Promise.all([
       // Convert EST day boundaries to UTC for correct timezone filtering
       (() => {
@@ -132,6 +146,30 @@ serve(async (req) => {
         .in("status", ["next", "in-progress"])
         .order("due_date", { ascending: true }).limit(20),
       supabase.from("daily_plan_preferences").select("*").maybeSingle(),
+      // This week's journal entries (to know what's already been done)
+      supabase.from("daily_journal_entries").select("date, dials, conversations, meetings_set, opportunities_created, daily_score")
+        .gte("date", weekMondayStr)
+        .lte("date", weekFridayStr)
+        .order("date"),
+      // Rest of week calendar (to understand meeting load distribution)
+      (() => {
+        const d = new Date(weekMondayStr + 'T00:00:00');
+        const month = d.getMonth();
+        const offsetHours = (month >= 2 && month <= 10) ? 4 : 5;
+        const weekStartUTC = new Date(d.getTime() + offsetHours * 60 * 60 * 1000).toISOString();
+        const fridayEnd = new Date(weekFriday.getTime() + offsetHours * 60 * 60 * 1000 + 24 * 60 * 60 * 1000 - 1000).toISOString();
+        return supabase.from("calendar_events").select("start_time, end_time, all_day, title")
+          .gte("start_time", weekStartUTC)
+          .lte("start_time", fridayEnd)
+          .order("start_time");
+      })(),
+      // Weekly battle plan
+      supabase.from("weekly_battle_plans").select("*")
+        .gte("week_start", weekMondayStr)
+        .lte("week_start", weekFridayStr)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     const events = calendarRes.data || [];
@@ -221,9 +259,71 @@ serve(async (req) => {
 
     // Quota targets context
     const targets = quotaRes.data;
+    const weeklyDialTarget = (targets?.target_dials_per_day || 60) * 5; // e.g., 300/week
+    const weeklyConnectsTarget = (targets?.target_connects_per_day || 6) * 5;
+
+    // Build weekly context: what's been done + what's left
+    const weekJournals = weekJournalRes.data || [];
+    const weekCalEvents = weekCalendarRes.data || [];
+    const battlePlan = battlePlanRes.data;
+
+    const weekDialsSoFar = weekJournals.reduce((sum: number, j: any) => sum + (j.dials || 0), 0);
+    const weekConvosSoFar = weekJournals.reduce((sum: number, j: any) => sum + (j.conversations || 0), 0);
+    const weekMeetingsSetSoFar = weekJournals.reduce((sum: number, j: any) => sum + (j.meetings_set || 0), 0);
+    const daysLoggedThisWeek = weekJournals.filter((j: any) => j.date < targetDate).length;
+
+    // Calculate meeting load per day for rest of week
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const weekDayMeetingMinutes: Record<string, number> = {};
+    weekCalEvents.forEach((evt: any) => {
+      if (evt.all_day || !evt.end_time) return;
+      const evtDate = new Date(evt.start_time);
+      const dateStr = evtDate.toISOString().split('T')[0];
+      const dur = Math.max(0, (new Date(evt.end_time).getTime() - evtDate.getTime()) / 60000);
+      weekDayMeetingMinutes[dateStr] = (weekDayMeetingMinutes[dateStr] || 0) + dur;
+    });
+
+    // Determine remaining workdays this week (including today)
+    const remainingDays: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(weekMonday);
+      d.setDate(weekMonday.getDate() + i);
+      const ds = d.toISOString().split('T')[0];
+      if (ds >= targetDate) remainingDays.push(ds);
+    }
+
+    const remainingDialsNeeded = Math.max(0, weeklyDialTarget - weekDialsSoFar);
+    const remainingDaysCount = remainingDays.length || 1;
+
+    // Calculate today's adjusted target based on meeting load relative to other days
+    const todayMeetingMin = weekDayMeetingMinutes[targetDate] || 0;
+    const totalWorkMinPerDay = toMinutes(workEnd) - toMinutes(workStart);
+    const todayFocusMin = Math.max(0, totalWorkMinPerDay - todayMeetingMin);
+
+    // Distribute remaining dials weighted by available focus time
+    const remainingDaysFocus = remainingDays.map(d => ({
+      date: d,
+      focusMin: Math.max(0, totalWorkMinPerDay - (weekDayMeetingMinutes[d] || 0)),
+    }));
+    const totalRemainingFocusMin = remainingDaysFocus.reduce((s, d) => s + d.focusMin, 0) || 1;
+    const todayDialTarget = Math.round(remainingDialsNeeded * (todayFocusMin / totalRemainingFocusMin));
+    const todayConvoTarget = Math.round((weeklyConnectsTarget - weekConvosSoFar) * (todayFocusMin / totalRemainingFocusMin));
+
+    const weeklyContext = `
+WEEKLY CONTEXT (this day fits into a bigger picture):
+- Week: ${weekMondayStr} to ${weekFridayStr}
+- Weekly targets: ${weeklyDialTarget} dials, ${weeklyConnectsTarget} connects, ${targets?.target_meetings_set_per_week || 3} meetings set
+- Progress so far this week (${daysLoggedThisWeek} days logged): ${weekDialsSoFar} dials, ${weekConvosSoFar} convos, ${weekMeetingsSetSoFar} meetings set
+- Remaining needed: ${remainingDialsNeeded} dials across ${remainingDaysCount} remaining days
+- TODAY'S ADJUSTED TARGETS (based on available focus time vs rest of week): ~${todayDialTarget} dials, ~${Math.max(1, todayConvoTarget)} convos
+- Today's meeting load: ${Math.round(todayMeetingMin / 60 * 10) / 10}h — ${todayMeetingMin > 180 ? 'HEAVY meeting day, lower activity targets are expected' : todayMeetingMin > 90 ? 'moderate meeting day' : 'light meeting day — push hard on dials'}
+${remainingDays.map(d => `  ${dayNames[new Date(d + 'T12:00:00').getDay()]}: ${Math.round((weekDayMeetingMinutes[d] || 0) / 60 * 10) / 10}h meetings`).join('\n')}
+${battlePlan?.strategy_summary ? `\nWEEKLY BATTLE PLAN STRATEGY:\n${battlePlan.strategy_summary}` : ''}
+${battlePlan?.moves?.length ? `\nTOP WEEKLY MOVES:\n${(battlePlan.moves as any[]).slice(0, 5).map((m: any) => `- ${m.action || m.title || m.description}`).join('\n')}` : ''}`;
+
     const quotaContext = targets
-      ? `Daily targets: ${targets.target_dials_per_day} dials, ${targets.target_connects_per_day} connects, ${targets.target_accounts_researched_per_day} accounts researched, ${targets.target_contacts_prepped_per_day} contacts prepped. Weekly: ${targets.target_meetings_set_per_week} meetings set, ${targets.target_opps_created_per_week} opps created, ${targets.target_customer_meetings_per_week} customer meetings.`
-      : "Default targets: 60 dials/day, 6 connects/day, 3 accounts researched/day.";
+      ? `WEEKLY targets: ${weeklyDialTarget} dials, ${weeklyConnectsTarget} connects. TODAY'S adjusted targets: ${todayDialTarget} dials, ${Math.max(1, todayConvoTarget)} convos, ${targets.target_accounts_researched_per_day} accounts researched, ${targets.target_contacts_prepped_per_day} contacts prepped.`
+      : `Default weekly targets: 300 dials, 30 connects. Adjust daily based on meeting load.`;
 
     // Build pipeline context
     const activeOpps = oppsRes.data || [];
@@ -290,13 +390,20 @@ Renewal: ${renewalTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`
     }
 
     const prompt = `You are an elite sales time management coach for a B2B SaaS account executive. The PRIMARY GOAL of each day is to maximize time spent on NEW LOGO prospecting — the work required to create more new logo opportunities. Everything else is secondary.
+
+THIS DAY IS PART OF A WEEKLY PLAN. Today's targets are ADJUSTED based on meeting load and what's already been accomplished this week. On heavy meeting days, lower dial targets are expected — but lighter days should compensate. The weekly target MUST be hit across all 5 days combined.
 ${prefsContext}
+
+${weeklyContext}
 
 CRITICAL RULES:
 1. NO time blocks shorter than ${minBlockMin} minutes.
-2. NEW LOGO IS THE PRIORITY. The daily targets below (dials, convos, accounts researched, contacts prepped) can ONLY be achieved through Prep→Call Blitz cycles. You MUST schedule ENOUGH cycles to realistically hit these targets. Work backwards from the targets to determine how many cycles and how much time is needed.
+2. NEW LOGO IS THE PRIORITY. Use TODAY'S ADJUSTED TARGETS (from weekly context above) — NOT the raw daily averages. Schedule enough Prep→Call Blitz cycles to hit TODAY'S target.
 3. Use "workstream" field to tag each block as "new_logo" or "renewal" or "general"
-4. Goals must be REALISTIC and specific - not aspirational fantasies
+4. Goals must be REALISTIC and ACHIEVABLE. Use these realistic pacing rates:
+   - DIAL RATE: ~15 dials per 30 minutes (1 dial every 2 min including voicemail/notes). A 45-min Call Blitz = ~22 dials. A 60-min blitz = ~30 dials.
+   - PREP RATE: 2-3 accounts per 25-30 min prep block
+   - Do the math: if today's target is ${todayDialTarget} dials, you need ~${Math.ceil(todayDialTarget / 25)} Call Blitz blocks of 45-50 min each
 5. ${preferNewLogoMorning ? 'Account for energy patterns: deep prospecting/new logo work in the morning, renewal tasks in the afternoon' : 'Distribute new logo and renewal work based on meeting gaps'}
 6. Include buffer time around meetings (5-10 min)
 7. If feedback says past suggestions were unrealistic, SIGNIFICANTLY dial back goals
@@ -318,12 +425,12 @@ WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL):
 - This is research + cadence + cold outreach work — high-energy hunter mode
 - Use PREP → EXECUTE paired cycles:
   - "Prep" block (type: "prep", 25-35 min): Research 2-3 specific accounts, review contacts, build call notes
-  - Immediately followed by "Call Blitz" block (type: "prospecting", 45-60 min): Dial into those exact accounts while context is fresh
+  - Immediately followed by "Call Blitz" block (type: "prospecting", 45-60 min): Dial into those prepped accounts
   - Label prep blocks like: "Account Prep (Tessitura, Privy)"
-  - Label execute blocks like: "Call Blitz #1 (15-20 dials)"
+  - Label execute blocks like: "Call Blitz #1 (~22 dials)" — use realistic math: 45min ≈ 22 dials, 60min ≈ 30 dials
   - Each Prep block must be immediately followed by its Call Blitz — no gaps between a specific pair
-  - BUT it's fine to have MULTIPLE separate Prep→Blitz cycles throughout the day, split around meetings and breaks (e.g., Prep→Blitz #1 in the morning, meeting, Prep→Blitz #2 after)
-- You MUST schedule enough Prep→Call Blitz cycles to hit the daily dial and conversation targets
+  - BUT it's fine to have MULTIPLE separate Prep→Blitz cycles throughout the day, split around meetings (e.g., Prep→Blitz #1 in the morning, meeting, Prep→Blitz #2 after)
+- Schedule enough cycles to hit TODAY'S ADJUSTED dial target (from weekly context), NOT the raw daily average
 - Fill ALL available non-meeting time with new logo Prep→Execute cycles
 
 **ACTIVE NEW LOGO OPPORTUNITIES (deals already in pipeline):**
@@ -366,7 +473,7 @@ Generate a daily time-blocked schedule. For each block provide:
 - goals: array of 1-3 specific, realistic goals for that block (NAME ACCOUNTS for new logo prospecting blocks only — NOT for renewal blocks)
 - reasoning: one sentence on why this block matters
 
-Also provide an overall "day_strategy" (2-3 sentences distinguishing the new logo vs renewal focus for the day) and "key_metric_targets" object with realistic targets.`;
+Also provide an overall "day_strategy" (2-3 sentences: how today fits into the weekly plan, what makes today different from other days this week) and "key_metric_targets" object with TODAY'S ADJUSTED targets (not raw daily averages).`;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
