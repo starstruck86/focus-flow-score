@@ -357,15 +357,29 @@ function ChatInterface({
               <span className="text-[10px] text-muted-foreground">Voice</span>
             </div>
             {voiceEnabled && (
-              <div className="flex items-center gap-1.5">
-                <Volume2 className="h-3.5 w-3.5 text-muted-foreground" />
-                <Switch
-                  checked={autoSpeak}
-                  onCheckedChange={setAutoSpeak}
-                  className="scale-75"
-                />
-                <span className="text-[10px] text-muted-foreground">Auto-speak</span>
-              </div>
+              <>
+                <div className="flex items-center gap-1.5">
+                  <Volume2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  <Switch
+                    checked={autoSpeak}
+                    onCheckedChange={setAutoSpeak}
+                    className="scale-75"
+                  />
+                  <span className="text-[10px] text-muted-foreground">Auto-speak</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Zap className="h-3.5 w-3.5 text-muted-foreground" />
+                  <Switch
+                    checked={handsFree}
+                    onCheckedChange={(v) => {
+                      setHandsFree(v);
+                      if (v) setAutoSpeak(true); // hands-free requires auto-speak
+                    }}
+                    className="scale-75"
+                  />
+                  <span className="text-[10px] text-muted-foreground">Hands-free</span>
+                </div>
+              </>
             )}
             <Button size="sm" variant="destructive" onClick={onEnd}>
               <Square className="h-3 w-3 mr-1" /> End & Grade
