@@ -191,9 +191,12 @@ CRITICAL RULES:
 13. NAME SPECIFIC ACCOUNTS in goals when possible (e.g., "Research Acme Corp, Widget Inc, TechCo")
 14. For research blocks: suggest exactly which accounts to research and add to cadence
 15. For prospecting blocks: suggest which cadences to execute
+16. PERSONAL/FAMILY blocks are NON-NEGOTIABLE — the user has children (Quinn, Emmett). School drop-offs, pickups, and activities MUST be respected. Build work around them, not over them.
+17. If screenshot-confirmed meetings differ from calendar DB, TRUST the screenshot — the user verified them manually.
 
 TODAY'S CALENDAR (EST):
 ${calendarContext}
+${screenshotContext}
 
 MEETING LOAD: ${meetingHours}h of meetings, ${focusHoursAvailable}h available for focused work
 
