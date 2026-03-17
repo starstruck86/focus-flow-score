@@ -631,7 +631,7 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
                 </div>
 
                 {/* Metadata row */}
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   <div className="space-y-1">
                     <Label className="text-[10px]">Title</Label>
                     <Input
@@ -653,6 +653,33 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
                   <div className="space-y-1">
                     <Label className="text-[10px]">Date</Label>
                     <Input type="date" value={callDate} onChange={e => setCallDate(e.target.value)} className="h-7 text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Account</Label>
+                    <Select value={accountId} onValueChange={(v) => { setAccountId(v); setOpportunityId(''); }}>
+                      <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Link account..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">None</SelectItem>
+                        {accounts.sort((a, b) => a.name.localeCompare(b.name)).map(a => (
+                          <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Opportunity</Label>
+                    <Select value={opportunityId} onValueChange={setOpportunityId}>
+                      <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Link opp..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">None</SelectItem>
+                        {opportunities
+                          .filter(o => !accountId || o.accountId === accountId)
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map(o => (
+                            <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px]">Participants</Label>
