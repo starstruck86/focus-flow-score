@@ -700,6 +700,35 @@ export function DailyTimeBlocks() {
           {plan.key_metric_targets.contacts_prepped != null && <span>{plan.key_metric_targets.contacts_prepped} prepped</span>}
         </div>
       )}
+
+      {/* Link Opportunity Dialog */}
+      <Dialog open={linkOppBlockIdx !== null} onOpenChange={(open) => !open && setLinkOppBlockIdx(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Link Opportunity</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1 max-h-64 overflow-y-auto">
+            {opportunities.filter(o => o.status === 'active' || o.status === 'stalled').length === 0 ? (
+              <p className="text-xs text-muted-foreground py-4 text-center">No active opportunities found.</p>
+            ) : (
+              opportunities
+                .filter(o => o.status === 'active' || o.status === 'stalled')
+                .map(opp => (
+                  <button
+                    key={opp.id}
+                    onClick={() => linkOppBlockIdx !== null && linkOpportunity(linkOppBlockIdx, { id: opp.id, name: opp.name })}
+                    className="w-full text-left px-3 py-2 rounded-md hover:bg-accent transition-colors"
+                  >
+                    <div className="text-xs font-medium">{opp.name}</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {opp.stage} · ${(opp.arr || 0).toLocaleString()} ARR
+                    </div>
+                  </button>
+                ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
