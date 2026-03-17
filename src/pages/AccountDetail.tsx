@@ -21,8 +21,9 @@ import { CollapsibleSection, LinkPill, LastTouchIndicator, safeFormat } from '@/
 import { useDebouncedUpdate } from '@/hooks/useDebouncedUpdate';
 import {
   ArrowLeft, ChevronRight, Building2, Target, Users,
-  FileText, CheckSquare, Calendar,
+  FileText, CheckSquare, Calendar, Sparkles,
 } from 'lucide-react';
+import { AccountSynopsisModal } from '@/components/AccountSynopsisModal';
 import { cn } from '@/lib/utils';
 import type { AccountTier, AccountStatus } from '@/types';
 
@@ -51,6 +52,7 @@ const STATUS_OPTIONS: { value: AccountStatus; label: string }[] = [
 ];
 
 export default function AccountDetail() {
+  const [showSynopsis, setShowSynopsis] = useState(false);
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { accounts, updateAccount, opportunities, renewals, tasks, contacts } = useStore();
@@ -168,7 +170,17 @@ export default function AccountDetail() {
         <div className="flex items-center gap-2 flex-wrap">
           <TouchLogButtons accountId={account.id} compact />
           <EnrichButton account={account} compact />
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setShowSynopsis(true)}>
+            <Sparkles className="h-3.5 w-3.5" />
+            Paste Synopsis
+          </Button>
         </div>
+
+        <AccountSynopsisModal
+          open={showSynopsis}
+          onOpenChange={setShowSynopsis}
+          account={account}
+        />
 
         {/* Details Section */}
         <CollapsibleSection title="Account Details" icon={Building2} defaultOpen={true}>
