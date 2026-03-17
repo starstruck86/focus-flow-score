@@ -653,6 +653,17 @@ export function DailyTimeBlocks() {
                       <Badge className="text-[9px] px-1.5 py-0 h-4 bg-primary/20 text-primary border-0 animate-pulse">NOW</Badge>
                     )}
                     <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover/block:opacity-100">
+                      {/* Move up/down buttons */}
+                      {i > 0 && (
+                        <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => moveBlock(i, 'up')} title="Move up">
+                          <ChevronUp className="h-3 w-3" />
+                        </Button>
+                      )}
+                      {i < blocks.length - 1 && (
+                        <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => moveBlock(i, 'down')} title="Move down">
+                          <ChevronDown className="h-3 w-3" />
+                        </Button>
+                      )}
                       <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => editingBlock === i ? setEditingBlock(null) : startEditBlock(i)}>
                         {editingBlock === i ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
                       </Button>
