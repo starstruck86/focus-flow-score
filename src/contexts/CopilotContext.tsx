@@ -9,6 +9,8 @@ export interface PageContext {
   accountName?: string;
   opportunityId?: string;
   opportunityName?: string;
+  /** Supercharge #3: Extra metadata for richer AI context */
+  metadata?: Record<string, any>;
 }
 
 interface CopilotState {
