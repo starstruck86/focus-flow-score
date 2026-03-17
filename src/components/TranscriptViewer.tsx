@@ -24,6 +24,7 @@ interface TranscriptViewerProps {
 export function TranscriptViewer({ open, onOpenChange, accountId, opportunityId, renewalId }: TranscriptViewerProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [coachOpen, setCoachOpen] = useState(false);
   const { opportunities, renewals, accounts } = useStore();
   const deleteTranscript = useDeleteTranscript();
 
