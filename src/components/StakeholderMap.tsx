@@ -173,9 +173,10 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
       });
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       qc.invalidateQueries({ queryKey: ['stakeholder-contacts', accountId] });
       toast.success('Contact added');
+      await maybePromoteToResearching(accountId);
     },
   });
 
