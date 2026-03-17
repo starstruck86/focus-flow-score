@@ -52,7 +52,7 @@ function dedupeContacts(contacts: any[]) {
 }
 
 // Strict LinkedIn URL validation — reject generic, placeholder, or fabricated URLs
-function isValidLinkedInUrl(url?: string | null, accountName?: string): boolean {
+function isValidLinkedInUrl(url?: string | null, accountName?: string, webResearchText?: string): boolean {
   if (!url) return false;
   const trimmed = url.trim();
   // Must match linkedin.com/in/{slug} pattern
@@ -76,12 +76,21 @@ function isValidLinkedInUrl(url?: string | null, accountName?: string): boolean 
     // Check if slug ends with first significant company word (e.g., "drew-shetter-arrow")
     const firstWord = companyWords[0];
     if (firstWord && firstWord.length > 3 && slug.endsWith(`-${firstWord}`)) {
-      // Only reject if the word is clearly a company name, not a common surname
       const commonNames = ['smith', 'johnson', 'williams', 'brown', 'jones', 'davis', 'miller', 'wilson', 'moore', 'taylor', 'anderson', 'thomas', 'jackson', 'white', 'harris', 'martin', 'thompson', 'garcia', 'martinez', 'robinson', 'clark', 'rodriguez', 'lewis', 'lee', 'walker', 'hall', 'allen', 'young', 'king', 'wright', 'scott', 'green', 'baker', 'adams', 'nelson', 'hill', 'campbell', 'mitchell', 'roberts', 'carter', 'phillips', 'evans', 'turner', 'torres', 'parker', 'collins', 'edwards', 'stewart', 'flores', 'morris', 'nguyen', 'murphy', 'rivera', 'cook', 'rogers', 'morgan', 'peterson', 'cooper', 'reed', 'bailey', 'bell', 'gomez', 'kelly', 'howard', 'ward', 'cox', 'diaz', 'richardson', 'wood', 'watson', 'brooks', 'bennett', 'gray', 'james', 'reyes', 'cruz', 'hughes', 'price', 'myers', 'long', 'foster', 'sanders', 'ross', 'morales', 'powell', 'sullivan', 'russell', 'ortiz', 'jenkins', 'gutierrez', 'perry', 'butler', 'barnes', 'fisher', 'black', 'dog'];
       if (!commonNames.includes(firstWord)) {
         console.log(`isValidLinkedInUrl: rejected likely fabricated URL ${url} (ends with company word "${firstWord}")`);
         return false;
       }
+    }
+  }
+  // Cross-reference: if we have web research text, the LinkedIn slug must appear in it
+  // This catches AI-fabricated URLs that look plausible but weren't actually found online
+  if (webResearchText && webResearchText.length > 100) {
+    const researchLower = webResearchText.toLowerCase();
+    // Check if the exact slug or URL appears in the research
+    if (!researchLower.includes(slug) && !researchLower.includes(trimmed.toLowerCase())) {
+      console.log(`isValidLinkedInUrl: rejected URL ${url} — slug "${slug}" not found in web research`);
+      return false;
     }
   }
   return true;
