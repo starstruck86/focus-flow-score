@@ -341,6 +341,17 @@ export default function OpportunityDetail() {
           </>
         )}
 
+        {/* MEDDICC + CotM Methodology */}
+        <CollapsibleSection title="MEDDICC & Command of the Message" icon={Brain} defaultOpen={true}>
+          <MethodologyTracker
+            opportunityId={opp.id}
+            opportunityName={opp.name}
+            stage={opp.stage}
+          />
+        </CollapsibleSection>
+
+        <Separator />
+
         {/* Stakeholders */}
         {opp.accountId && linkedAccount && (
           <>
