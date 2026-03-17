@@ -488,11 +488,15 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
   const [callType, setCallType] = useState('');
   const [callDate, setCallDate] = useState(new Date().toISOString().split('T')[0]);
   const [participants, setParticipants] = useState('');
+  const [accountId, setAccountId] = useState('');
+  const [opportunityId, setOpportunityId] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [fileLoading, setFileLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const saveTranscript = useSaveTranscript();
   const { user } = useAuth();
+  const accounts = useStore(s => s.accounts);
+  const opportunities = useStore(s => s.opportunities);
 
   const handleFile = useCallback(async (file: File) => {
     setFileLoading(true);
