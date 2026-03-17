@@ -614,20 +614,73 @@ export function DailyTimeBlocks() {
             const linkedOpp = blockOppLinks.get(i);
             const isMeeting = block.type === 'meeting';
 
-            return (
+             return (
               <div
                 key={i}
+                draggable
+                onDragStart={(e) => {
+                  setDragIdx(i);
+                  e.dataTransfer.effectAllowed = 'move';
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  setDragOverIdx(i);
+                }}
+                onDragLeave={() => setDragOverIdx(null)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragIdx !== null && dragIdx !== i) {
+                    // Perform a full reorder: remove dragIdx block, insert at i
+                    const reorderedBlocks = [...(plan.blocks as TimeBlock[])];
+                    const [moved] = reorderedBlocks.splice(dragIdx, 1);
+                    reorderedBlocks.splice(i, 0, moved);
+                    // Recalculate all times to stay contiguous
+                    const origBlocks = plan.blocks as TimeBlock[];
+                    const [fh, fm] = origBlocks[0].start_time.split(':').map(Number);
+                    let cursor = fh * 60 + fm;
+                    const toTime = (mins: number) => {
+                      const h = Math.floor(mins / 60);
+                      const m = mins % 60;
+                      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+                    };
+                    const fixedBlocks = reorderedBlocks.map(b => {
+                      const dur = getBlockDurationMinutes(b);
+                      const start = toTime(cursor);
+                      cursor += dur;
+                      return { ...b, start_time: start, end_time: toTime(cursor) };
+                    });
+                    queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks: fixedBlocks });
+                    supabase
+                      .from('daily_time_blocks' as any)
+                      .update({ blocks: fixedBlocks })
+                      .eq('id', plan.id)
+                      .then();
+                    toast.success('Block reordered');
+                  }
+                  setDragIdx(null);
+                  setDragOverIdx(null);
+                }}
+                onDragEnd={() => {
+                  setDragIdx(null);
+                  setDragOverIdx(null);
+                }}
                 className={cn(
                   "px-4 py-3 flex gap-3 transition-colors group/block",
                   isCurrent && "bg-primary/5 ring-1 ring-inset ring-primary/20",
-                  isPast && "opacity-50"
+                  isPast && "opacity-50",
+                  dragIdx === i && "opacity-40",
+                  dragOverIdx === i && dragIdx !== i && "ring-2 ring-inset ring-primary/40 bg-primary/5"
                 )}
               >
-                {/* Time column */}
-                <div className="w-[68px] shrink-0 text-[11px] text-muted-foreground pt-0.5">
-                  <div className="font-medium">{formatTime(block.start_time)}</div>
-                  <div>{formatTime(block.end_time)}</div>
-                  <div className="text-[10px] mt-0.5">{duration}m</div>
+                {/* Drag handle + Time column */}
+                <div className="w-[68px] shrink-0 text-[11px] text-muted-foreground pt-0.5 flex gap-1">
+                  <GripVertical className="h-4 w-4 shrink-0 cursor-grab opacity-0 group-hover/block:opacity-40 transition-opacity mt-0.5" />
+                  <div>
+                    <div className="font-medium">{formatTime(block.start_time)}</div>
+                    <div>{formatTime(block.end_time)}</div>
+                    <div className="text-[10px] mt-0.5">{duration}m</div>
+                  </div>
                 </div>
 
                 {/* Content */}
