@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useCopilot } from '@/contexts/CopilotContext';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { useStore } from '@/store/useStore';
