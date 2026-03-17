@@ -211,6 +211,7 @@ function ChatInterface({
   const [isStreaming, setIsStreaming] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(true);
+  const [handsFree, setHandsFree] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const saveMessages = useSaveMockMessages();
