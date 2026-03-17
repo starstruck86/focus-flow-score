@@ -476,11 +476,11 @@ function ChatInterface({
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Voice Status</p>
             <div className="bg-muted/30 rounded p-2 space-y-1">
               <div className="flex items-center gap-2 text-xs">
-                <div className={cn('h-2 w-2 rounded-full', voice.isRecording ? 'bg-red-500 animate-pulse' : 'bg-muted-foreground/30')} />
+                <div className={cn('h-2 w-2 rounded-full', voice.isRecording ? 'bg-destructive animate-pulse' : 'bg-muted-foreground/30')} />
                 <span>{voice.isRecording ? 'Recording...' : 'Mic idle'}</span>
               </div>
               <div className="flex items-center gap-2 text-xs">
-                <div className={cn('h-2 w-2 rounded-full', voice.isPlaying ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground/30')} />
+                <div className={cn('h-2 w-2 rounded-full', voice.isPlaying ? 'bg-primary animate-pulse' : 'bg-muted-foreground/30')} />
                 <span>{voice.isPlaying ? 'Speaking...' : 'Audio idle'}</span>
               </div>
             </div>
