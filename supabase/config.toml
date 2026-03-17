@@ -77,3 +77,9 @@ verify_jwt = false
 
 [functions.grade-mock-call]
 verify_jwt = false
+
+[functions.elevenlabs-tts-stream]
+verify_jwt = false
+
+[functions.elevenlabs-stt]
+verify_jwt = false

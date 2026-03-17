@@ -14,6 +14,7 @@ serve(async (req) => {
 
     const { text, voiceId } = await req.json();
     if (!text) throw new Error("Missing text parameter");
+    if (text.length > 5000) throw new Error("Text too long — max 5000 characters per request");
 
     // Default to "George" voice - professional male
     const voice = voiceId || "JBFqnCBsd6RMkjVDRZzb";
