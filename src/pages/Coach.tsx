@@ -417,9 +417,9 @@ function TrendsDashboard() {
               <YAxis domain={[0, 100]} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
               <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
               <Line type="monotone" dataKey="overall" stroke="hsl(var(--primary))" strokeWidth={2} name="Overall" dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="cotm" stroke="#f59e0b" strokeWidth={1.5} name="CotM" strokeDasharray="4 2" />
-              <Line type="monotone" dataKey="meddicc" stroke="#3b82f6" strokeWidth={1.5} name="MEDDICC" strokeDasharray="4 2" />
-              <Line type="monotone" dataKey="discovery" stroke="#10b981" strokeWidth={1.5} name="Discovery" strokeDasharray="4 2" />
+              <Line type="monotone" dataKey="cotm" stroke="hsl(var(--coach-cotm))" strokeWidth={1.5} name="CotM" strokeDasharray="4 2" />
+              <Line type="monotone" dataKey="meddicc" stroke="hsl(var(--coach-meddicc))" strokeWidth={1.5} name="MEDDICC" strokeDasharray="4 2" />
+              <Line type="monotone" dataKey="discovery" stroke="hsl(var(--coach-discovery))" strokeWidth={1.5} name="Discovery" strokeDasharray="4 2" />
             </LineChart>
           </ResponsiveContainer>
         </CardContent>
