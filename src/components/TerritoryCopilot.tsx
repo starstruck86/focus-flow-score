@@ -83,7 +83,7 @@ function CopilotDialog() {
   const streamingRef = useRef(false);
   const voice = useVoiceMode();
 
-  // handleMicClick defined after sendMessage below
+  
 
   useEffect(() => {
     if (state.open) {
