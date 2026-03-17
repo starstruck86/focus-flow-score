@@ -771,7 +771,7 @@ Rules:
   const validContacts = (parsed?.contacts || []).filter((contact: any) => {
     if (!contact.name || !cleanText(contact.name)) return false;
     // Validate LinkedIn URL — if invalid/fabricated, clear it but KEEP the contact
-    if (!isValidLinkedInUrl(contact.linkedin_url, resolvedAccountName)) {
+    if (!isValidLinkedInUrl(contact.linkedin_url, resolvedAccountName, webResearch)) {
       console.log(`discover-contacts: cleared invalid LinkedIn URL for "${contact.name}" — was: ${contact.linkedin_url || 'none'}`);
       contact.linkedin_url = null;
     }
