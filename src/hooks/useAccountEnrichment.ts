@@ -87,9 +87,8 @@ export function useAccountEnrichment() {
       };
 
       updateAccount(account.id, updates);
-      const tierLabel = result.scores!.lifecycle_tier === '1' ? 'Must Win' : result.scores!.lifecycle_tier === '2' ? 'Strong Fit' : result.scores!.lifecycle_tier === '3' ? 'DQ (Tech)' : 'Bad Fit';
       toast.success(`Enriched ${account.name}`, {
-        description: `Tier ${result.scores!.lifecycle_tier} (${tierLabel}) • Score ${result.scores!.icp_fit_score}/40`,
+        description: `ICP ${result.scores!.icp_fit_score} • Tier ${result.scores!.lifecycle_tier}`,
       });
 
       return result;
