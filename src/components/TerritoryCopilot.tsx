@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Sparkles, Send, Loader2, MessageSquare, ArrowRight, Zap, RotateCcw, Search, Calendar, Target, Mail, Mic, MicOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { streamCopilot, SUGGESTED_QUESTIONS, MODE_CONFIG, type CopilotMsg, type CopilotMode } from '@/lib/territoryCopilot';
+import { streamCopilot, SUGGESTED_QUESTIONS, PAGE_SUGGESTED_QUESTIONS, PAGE_PLACEHOLDERS, MODE_CONFIG, type CopilotMsg, type CopilotMode } from '@/lib/territoryCopilot';
 import { useCopilot } from '@/contexts/CopilotContext';
 import { useVoiceMode } from '@/hooks/useVoiceMode';
 import ReactMarkdown from 'react-markdown';
