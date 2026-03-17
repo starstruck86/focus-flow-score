@@ -38,6 +38,8 @@ interface TimeBlock {
   workstream?: 'new_logo' | 'renewal' | 'general';
   goals: string[];
   reasoning: string;
+  actual_dials?: number;
+  actual_emails?: number;
 }
 
 interface DailyPlan {
@@ -276,6 +278,20 @@ export function DailyTimeBlocks() {
     setDismissedBlocks(prev => new Set([...prev, blockIdx]));
     toast.success('Meeting dismissed from plan');
   }, [plan]);
+
+  // Update actual dials/emails on a prospecting block
+  const updateBlockActual = useCallback(async (blockIdx: number, field: 'actual_dials' | 'actual_emails', value: number) => {
+    if (!plan) return;
+    const blocks = [...(plan.blocks as TimeBlock[])];
+    blocks[blockIdx] = { ...blocks[blockIdx], [field]: value };
+
+    queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks });
+
+    await supabase
+      .from('daily_time_blocks' as any)
+      .update({ blocks })
+      .eq('id', plan.id);
+  }, [plan, todayStr, queryClient]);
 
   // Link opportunity to a block
   const linkOpportunity = useCallback((blockIdx: number, opp: { id: string; name: string }) => {
@@ -649,6 +665,43 @@ export function DailyTimeBlocks() {
                     </ul>
                   )}
 
+                  {/* Dial/Email actuals tracker for prospecting blocks */}
+                  {editingBlock !== i && block.type === 'prospecting' && (
+                    <div className="flex items-center gap-3 mt-2 py-1.5 px-2.5 rounded-md bg-muted/40 border border-border/30">
+                      <div className="flex items-center gap-1.5">
+                        <Phone className="h-3 w-3 text-blue-500" />
+                        <span className="text-[10px] text-muted-foreground font-medium">Dials:</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          className="h-6 w-14 text-xs text-center px-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          placeholder="—"
+                          value={block.actual_dials ?? ''}
+                          onChange={e => {
+                            const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                            if (!isNaN(val)) updateBlockActual(i, 'actual_dials', val);
+                          }}
+                        />
+                      </div>
+                      {block.label.toLowerCase().includes('email') && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-muted-foreground font-medium">Emails:</span>
+                          <Input
+                            type="number"
+                            min={0}
+                            className="h-6 w-14 text-xs text-center px-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            placeholder="—"
+                            value={block.actual_emails ?? ''}
+                            onChange={e => {
+                              const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                              if (!isNaN(val)) updateBlockActual(i, 'actual_emails', val);
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Linked opportunity badge */}
                   {linkedOpp && (
                     <div className="flex items-center gap-1.5 mt-1.5">
@@ -717,15 +770,31 @@ export function DailyTimeBlocks() {
       )}
 
       {/* Metric targets footer */}
-      {expanded && plan.key_metric_targets && Object.keys(plan.key_metric_targets).length > 0 && (
-        <div className="px-4 py-2.5 bg-muted/20 border-t border-border/30 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-          <span className="font-medium text-foreground">Today's targets:</span>
-          {plan.key_metric_targets.dials != null && <span>{plan.key_metric_targets.dials} dials</span>}
-          {plan.key_metric_targets.conversations != null && <span>{plan.key_metric_targets.conversations} convos</span>}
-          {plan.key_metric_targets.accounts_researched != null && <span>{plan.key_metric_targets.accounts_researched} researched</span>}
-          {plan.key_metric_targets.contacts_prepped != null && <span>{plan.key_metric_targets.contacts_prepped} prepped</span>}
-        </div>
-      )}
+      {expanded && plan.key_metric_targets && Object.keys(plan.key_metric_targets).length > 0 && (() => {
+        const actualDialsTotal = blocks
+          .filter(b => b.type === 'prospecting')
+          .reduce((s, b) => s + (b.actual_dials || 0), 0);
+        const targetDials = plan.key_metric_targets.dials;
+        const hasActuals = actualDialsTotal > 0;
+        
+        return (
+          <div className="px-4 py-2.5 bg-muted/20 border-t border-border/30 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+            <span className="font-medium text-foreground">Today's targets:</span>
+            {targetDials != null && (
+              <span className={cn(
+                hasActuals && actualDialsTotal >= targetDials && "text-status-green font-medium",
+                hasActuals && actualDialsTotal < targetDials && actualDialsTotal >= targetDials * 0.7 && "text-amber-500 font-medium",
+              )}>
+                {hasActuals ? `${actualDialsTotal}/${targetDials} dials` : `${targetDials} dials`}
+                {hasActuals && actualDialsTotal >= targetDials && ' ✓'}
+              </span>
+            )}
+            {plan.key_metric_targets.conversations != null && <span>{plan.key_metric_targets.conversations} convos</span>}
+            {plan.key_metric_targets.accounts_researched != null && <span>{plan.key_metric_targets.accounts_researched} researched</span>}
+            {plan.key_metric_targets.contacts_prepped != null && <span>{plan.key_metric_targets.contacts_prepped} prepped</span>}
+          </div>
+        );
+      })()}
 
       {/* Link Opportunity Dialog */}
       <Dialog open={linkOppBlockIdx !== null} onOpenChange={(open) => !open && setLinkOppBlockIdx(null)}>
