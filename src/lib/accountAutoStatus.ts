@@ -24,7 +24,7 @@ export async function maybePromoteToResearching(accountId: string) {
     .select('id', { count: 'exact', head: true })
     .eq('account_id', accountId);
 
-  if (count != null && count >= 3) {
+  if (count != null && count >= 1) {
     await supabase
       .from('accounts')
       .update({ account_status: 'researching' })
