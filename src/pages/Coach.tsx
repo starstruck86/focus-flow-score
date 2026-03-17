@@ -40,6 +40,7 @@ import {
   WeeklyCoachingDigest,
   CoachingStreaks,
   CoachingFocus,
+  MockCallSimulator,
 } from '@/components/coach';
 
 const GRADE_COLORS: Record<string, string> = {
