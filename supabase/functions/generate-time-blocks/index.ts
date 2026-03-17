@@ -428,28 +428,32 @@ WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL):
 
 **NEW LOGO PROSPECTING — THIS IS THE CORE OF THE DAY:**
 - This is research + cadence + cold outreach work — high-energy hunter mode
-- Use PREP → EXECUTE paired cycles:
-  - "Prep" block (type: "prep", 25-35 min): Research 2-3 specific accounts, review contacts, build call notes
-  - Immediately followed by "Call Blitz" block (type: "prospecting", 45-60 min): Dial into those prepped accounts
+- WARM-UP: Start the day with a short "Rust Buster" block (15-20 min, type: "prospecting"): quick dials to LOW-PREP targets — old leads, closed-lost re-engagements, prebuilt lists. Purpose: build momentum and shake off hesitation before the main blitz.
+- Then use PREP → EXECUTE paired cycles for TARGETED prospecting:
+  - "Prep" block (type: "prep", 25-35 min): Research 2-3 specific accounts, review contacts, build call notes + email drafts
+  - Immediately followed by "Call Blitz" block (type: "prospecting", 45-60 min): Dial into those prepped accounts. MINIMUM 30 minutes — no short blitzes to targeted accounts.
   - Label prep blocks like: "Account Prep (Tessitura, Privy)"
-  - Label execute blocks like: "Call Blitz #1 (~22 dials)" — use realistic math: 45min ≈ 22 dials, 60min ≈ 30 dials
+  - Label call blocks like: "Call Blitz #1 (~22 dials)" — use realistic math: 45min ≈ 22 dials, 60min ≈ 30 dials
   - Each Prep block must be immediately followed by its Call Blitz — no gaps between a specific pair
-  - BUT it's fine to have MULTIPLE separate Prep→Blitz cycles throughout the day, split around meetings (e.g., Prep→Blitz #1 in the morning, meeting, Prep→Blitz #2 after)
-- Schedule enough cycles to hit TODAY'S ADJUSTED dial target (from weekly context), NOT the raw daily average
-- Fill ALL available non-meeting time with new logo Prep→Execute cycles
+  - BUT it's fine to have MULTIPLE separate Prep→Blitz cycles throughout the day, split around meetings
+- EMAIL OUTREACH is equally important — schedule "Email Blitz" blocks (type: "prospecting", 25-30 min) for personalized outbound. Multi-channel (call + email) is how top AEs operate.
+  - Label like: "Email Blitz (~10 personalized emails)"
+  - Can follow a Call Blitz (call first, then email the ones who didn't pick up) or stand alone
+- Schedule enough cycles to hit TODAY'S ADJUSTED dial + email target, NOT the raw daily average
+- Fill ALL available non-meeting time with prospecting activity (calls, emails, prep)
 
 **ACTIVE NEW LOGO OPPORTUNITIES (deals already in pipeline):**
 - TASK-ORIENTED and MEETING-DRIVEN only — NOT research/cadence work
 - Do NOT give these their own time block unless there is a specific urgent task
 - Roll any pipeline tasks into the single "Admin & Pipeline Tasks" block
 
-**RENEWALS — EXACTLY 30 MINUTES, ONCE PER DAY:**
-- Schedule ONE "Renewal Review" block, exactly 30 minutes, in the afternoon
+**RENEWALS — CONDITIONAL, 30 MINUTES MAX:**
+- On LIGHT/MODERATE meeting days (under 3h of meetings): Schedule ONE "Renewal Review" block, exactly 30 minutes, in the afternoon
+- On HEAVY meeting days (3h+ of meetings): SKIP Renewal Review entirely. Use that time for prospecting. Catch up on renewals on lighter days.
 - Purpose: look closer at 1-2 customer accounts with upcoming renewals
 - Goals: "Review 1-2 upcoming renewal accounts" and "Work through renewal task queue" — keep it generic
 - DO NOT name specific renewal accounts, opportunities, or tasks
 - DO NOT create any other renewal blocks. All other renewal work happens in meetings or the admin block
-- This is the ONLY non-prospecting, non-admin block allowed
 
 **MEETING PREP (for any upcoming customer/prospect meeting):**
 - If there's a customer meeting today, schedule a short prep block (type: "prep") 30-60 min before it
