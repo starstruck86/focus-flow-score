@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { format, startOfWeek, endOfWeek, eachDayOfInterval } from 'date-fns';
+import { format, startOfWeek, endOfWeek, eachDayOfInterval, isWeekend } from 'date-fns';
 
 export interface WeekDaySummary {
   date: string;
@@ -38,7 +38,7 @@ export function useWeekJournalEntries(selectedDate?: Date) {
         (data || []).map((d: any) => [d.date, d])
       );
 
-      const days = eachDayOfInterval({ start: weekStart, end: weekEnd });
+      const days = eachDayOfInterval({ start: weekStart, end: weekEnd }).filter(d => !isWeekend(d));
       return days.map((day): WeekDaySummary => {
         const dateStr = format(day, 'yyyy-MM-dd');
         const entry = entryMap.get(dateStr) as any;
