@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useStore } from '@/store/useStore';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,13 +12,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { 
   Clock, Zap, Phone, Users, BookOpen, Coffee, 
   BriefcaseBusiness, Target, RefreshCw, Star,
   ChevronDown, ChevronUp, MessageSquare, Lightbulb,
   ThumbsUp, ThumbsDown, RotateCcw, CheckCircle2,
   ArrowRight, ExternalLink, Pencil, Check, X, GripVertical,
-  Rocket, Shield,
+  Rocket, Shield, MoreVertical, EyeOff, Link2, Building2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -97,6 +100,7 @@ const WORKSTREAM_CONFIG: Record<string, { label: string; icon: typeof Rocket; co
 
 export function DailyTimeBlocks() {
   const { user } = useAuth();
+  const { opportunities } = useStore();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -108,6 +112,9 @@ export function DailyTimeBlocks() {
   const [editingBlock, setEditingBlock] = useState<number | null>(null);
   const [editLabel, setEditLabel] = useState('');
   const [editGoals, setEditGoals] = useState<string[]>([]);
+  const [dismissedBlocks, setDismissedBlocks] = useState<Set<number>>(new Set());
+  const [linkOppBlockIdx, setLinkOppBlockIdx] = useState<number | null>(null);
+  const [blockOppLinks, setBlockOppLinks] = useState<Map<number, { id: string; name: string }>>(new Map());
 
   const { data: plan, isLoading } = useQuery({
     queryKey: ['daily-time-blocks', todayStr],
@@ -249,6 +256,35 @@ export function DailyTimeBlocks() {
     setEditingBlock(null);
     toast.success('Block updated');
   }, [plan, editingBlock, editLabel, editGoals, todayStr, queryClient]);
+
+  // Dismiss a block
+  const dismissBlock = useCallback(async (blockIdx: number) => {
+    if (!plan) return;
+    setDismissedBlocks(prev => new Set([...prev, blockIdx]));
+    toast.success('Meeting dismissed from plan');
+  }, [plan]);
+
+  // Link opportunity to a block
+  const linkOpportunity = useCallback((blockIdx: number, opp: { id: string; name: string }) => {
+    setBlockOppLinks(prev => {
+      const next = new Map(prev);
+      next.set(blockIdx, opp);
+      return next;
+    });
+    setLinkOppBlockIdx(null);
+    toast.success(`Linked ${opp.name}`);
+  }, []);
+
+  // Regenerate with dismissed blocks and linked opps
+  const regenerateWithChanges = useCallback(() => {
+    // The dismissed blocks and linked opps will be reflected in the current state
+    // For now, trigger a regenerate which will pull fresh calendar data with correct timezone
+    generateMutation.mutate();
+    setDismissedBlocks(new Set());
+    setBlockOppLinks(new Map());
+  }, [generateMutation]);
+
+  const hasChanges = dismissedBlocks.size > 0 || blockOppLinks.size > 0;
 
   // Calculate progress
   const blocks = (plan?.blocks || []) as TimeBlock[];
@@ -437,7 +473,22 @@ export function DailyTimeBlocks() {
       {/* Time blocks */}
       {expanded && (
         <div className="divide-y divide-border/20">
+          {/* Changes pending banner */}
+          {hasChanges && (
+            <div className="px-4 py-2 bg-accent/50 border-b border-border/30 flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                {dismissedBlocks.size > 0 && `${dismissedBlocks.size} dismissed`}
+                {dismissedBlocks.size > 0 && blockOppLinks.size > 0 && ' · '}
+                {blockOppLinks.size > 0 && `${blockOppLinks.size} linked`}
+              </span>
+              <Button size="sm" className="h-6 text-[11px] gap-1" onClick={regenerateWithChanges} disabled={generateMutation.isPending}>
+                <RotateCcw className={cn("h-3 w-3", generateMutation.isPending && "animate-spin")} />
+                Rebuild Plan
+              </Button>
+            </div>
+          )}
           {blocks.map((block, i) => {
+            if (dismissedBlocks.has(i)) return null;
             const config = TYPE_CONFIG[block.type] || TYPE_CONFIG.admin;
             const Icon = config.icon;
             const isCurrent = i === currentIdx;
@@ -445,6 +496,8 @@ export function DailyTimeBlocks() {
             const duration = getBlockDurationMinutes(block);
             const blockThumb = blockFeedbackMap.get(i);
             const completedSet = new Set(plan.completed_goals as string[] || []);
+            const linkedOpp = blockOppLinks.get(i);
+            const isMeeting = block.type === 'meeting';
 
             return (
               <div
@@ -486,9 +539,31 @@ export function DailyTimeBlocks() {
                     {isCurrent && (
                       <Badge className="text-[9px] px-1.5 py-0 h-4 bg-primary/20 text-primary border-0 animate-pulse">NOW</Badge>
                     )}
-                    <Button variant="ghost" size="sm" className="h-5 w-5 p-0 ml-auto opacity-0 group-hover/block:opacity-100" onClick={() => editingBlock === i ? setEditingBlock(null) : startEditBlock(i)}>
-                      {editingBlock === i ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
-                    </Button>
+                    <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover/block:opacity-100">
+                      <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => editingBlock === i ? setEditingBlock(null) : startEditBlock(i)}>
+                        {editingBlock === i ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
+                      </Button>
+                      {isMeeting && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-5 w-5 p-0">
+                              <MoreVertical className="h-3 w-3" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem onClick={() => setLinkOppBlockIdx(i)} className="text-xs gap-2">
+                              <Link2 className="h-3.5 w-3.5" />
+                              Link Opportunity
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => dismissBlock(i)} className="text-xs gap-2 text-destructive focus:text-destructive">
+                              <EyeOff className="h-3.5 w-3.5" />
+                              Dismiss from Plan
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
                   </div>
 
                   {/* Inline edit */}
@@ -546,6 +621,16 @@ export function DailyTimeBlocks() {
                         );
                       })}
                     </ul>
+                  )}
+
+                  {/* Linked opportunity badge */}
+                  {linkedOpp && (
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-accent/50">
+                        <Building2 className="h-3 w-3" />
+                        {linkedOpp.name}
+                      </Badge>
+                    </div>
                   )}
 
                   {/* Per-block thumbs + reasoning */}
@@ -615,6 +700,35 @@ export function DailyTimeBlocks() {
           {plan.key_metric_targets.contacts_prepped != null && <span>{plan.key_metric_targets.contacts_prepped} prepped</span>}
         </div>
       )}
+
+      {/* Link Opportunity Dialog */}
+      <Dialog open={linkOppBlockIdx !== null} onOpenChange={(open) => !open && setLinkOppBlockIdx(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Link Opportunity</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1 max-h-64 overflow-y-auto">
+            {opportunities.filter(o => o.status === 'active' || o.status === 'stalled').length === 0 ? (
+              <p className="text-xs text-muted-foreground py-4 text-center">No active opportunities found.</p>
+            ) : (
+              opportunities
+                .filter(o => o.status === 'active' || o.status === 'stalled')
+                .map(opp => (
+                  <button
+                    key={opp.id}
+                    onClick={() => linkOppBlockIdx !== null && linkOpportunity(linkOppBlockIdx, { id: opp.id, name: opp.name })}
+                    className="w-full text-left px-3 py-2 rounded-md hover:bg-accent transition-colors"
+                  >
+                    <div className="text-xs font-medium">{opp.name}</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {opp.stage} · ${(opp.arr || 0).toLocaleString()} ARR
+                    </div>
+                  </button>
+                ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

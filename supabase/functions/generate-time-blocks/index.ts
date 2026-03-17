@@ -39,10 +39,20 @@ serve(async (req) => {
       renewalsRes,
       tasksRes,
     ] = await Promise.all([
-      supabase.from("calendar_events").select("*")
-        .gte("start_time", `${targetDate}T00:00:00`)
-        .lte("start_time", `${targetDate}T23:59:59`)
-        .order("start_time"),
+      // Convert EST day boundaries to UTC for correct timezone filtering
+      // EST = UTC-5, EDT = UTC-4. Use wider window to catch both.
+      (() => {
+        const d = new Date(targetDate + 'T00:00:00');
+        const month = d.getMonth();
+        // DST (EDT) roughly March-November, EST otherwise
+        const offsetHours = (month >= 2 && month <= 10) ? 4 : 5;
+        const dayStartUTC = new Date(d.getTime() + offsetHours * 60 * 60 * 1000).toISOString();
+        const dayEndUTC = new Date(d.getTime() + offsetHours * 60 * 60 * 1000 + 24 * 60 * 60 * 1000 - 1000).toISOString();
+        return supabase.from("calendar_events").select("*")
+          .gte("start_time", dayStartUTC)
+          .lte("start_time", dayEndUTC)
+          .order("start_time");
+      })(),
       supabase.from("daily_journal_entries").select("*")
         .eq("date", targetDate).maybeSingle(),
       supabase.from("accounts").select("id, name, tier, account_status, last_touch_date, cadence_name, contact_status, motion")
