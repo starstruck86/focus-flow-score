@@ -479,6 +479,11 @@ export function DailyTimeBlocks() {
         </div>
       )}
 
+      {/* Calendar screenshot drop zone */}
+      {expanded && (
+        <CalendarScreenshotDrop date={todayStr} onEventsConfirmed={handleScreenshotEventsConfirmed} />
+      )}
+
       {/* Time blocks */}
       {expanded && (
         <div className="divide-y divide-border/20">
