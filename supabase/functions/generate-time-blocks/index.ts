@@ -341,9 +341,6 @@ MEETING LOAD: ${meetingHours}h of meetings, ${focusHoursAvailable}h available fo
 
 ${quotaContext}
 
-NEW LOGO PROSPECTING ACCOUNTS (these are the focus — use in Prep→Execute cycles):
-${prospectingAccounts.slice(0, 8).map((a: any) => `- ${a.name} (Tier ${a.tier}, ${a.account_status}, cadence: ${a.cadence_name || 'none'})`).join("\n") || '(none)'}
-
 ${pipelineContext}
 
 ${journalRes.data ? `TODAY'S JOURNAL SO FAR: ${journalRes.data.dials || 0} dials, ${journalRes.data.conversations || 0} conversations, ${journalRes.data.meetings_set || 0} meetings set` : "No journal entry yet today."}
