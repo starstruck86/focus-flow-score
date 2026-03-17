@@ -163,7 +163,7 @@ function CopilotDialog() {
       },
       signal: abort.signal,
     });
-  }, [messages, mode, state.accountId]);
+  }, [messages, mode, state.accountId, pageContext]);
 
   const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); sendMessage(input); };
   const handleClear = useCallback(() => {
