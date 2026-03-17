@@ -525,6 +525,7 @@ Deno.serve(async (req) => {
       resources: resourcesRes.data || [],
       contacts: contactsRes?.data || [],
       transcripts: transcriptsRes?.data || [],
+      grades: gradesRes?.data || [],
     };
 
     // If an account is focused, filter transcripts to that account for relevance
