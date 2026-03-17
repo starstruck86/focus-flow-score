@@ -1311,6 +1311,93 @@ export type Database = {
           },
         ]
       }
+      opportunity_methodology: {
+        Row: {
+          after_state_notes: string | null
+          before_state_notes: string | null
+          call_goals: Json | null
+          champion_confirmed: boolean
+          champion_notes: string | null
+          competition_confirmed: boolean
+          competition_notes: string | null
+          created_at: string
+          decision_criteria_confirmed: boolean
+          decision_criteria_notes: string | null
+          decision_process_confirmed: boolean
+          decision_process_notes: string | null
+          economic_buyer_confirmed: boolean
+          economic_buyer_notes: string | null
+          id: string
+          identify_pain_confirmed: boolean
+          identify_pain_notes: string | null
+          metrics_confirmed: boolean
+          metrics_notes: string | null
+          metrics_value_notes: string | null
+          negative_consequences_notes: string | null
+          opportunity_id: string
+          positive_business_outcomes_notes: string | null
+          required_capabilities_notes: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          after_state_notes?: string | null
+          before_state_notes?: string | null
+          call_goals?: Json | null
+          champion_confirmed?: boolean
+          champion_notes?: string | null
+          competition_confirmed?: boolean
+          competition_notes?: string | null
+          created_at?: string
+          decision_criteria_confirmed?: boolean
+          decision_criteria_notes?: string | null
+          decision_process_confirmed?: boolean
+          decision_process_notes?: string | null
+          economic_buyer_confirmed?: boolean
+          economic_buyer_notes?: string | null
+          id?: string
+          identify_pain_confirmed?: boolean
+          identify_pain_notes?: string | null
+          metrics_confirmed?: boolean
+          metrics_notes?: string | null
+          metrics_value_notes?: string | null
+          negative_consequences_notes?: string | null
+          opportunity_id: string
+          positive_business_outcomes_notes?: string | null
+          required_capabilities_notes?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          after_state_notes?: string | null
+          before_state_notes?: string | null
+          call_goals?: Json | null
+          champion_confirmed?: boolean
+          champion_notes?: string | null
+          competition_confirmed?: boolean
+          competition_notes?: string | null
+          created_at?: string
+          decision_criteria_confirmed?: boolean
+          decision_criteria_notes?: string | null
+          decision_process_confirmed?: boolean
+          decision_process_notes?: string | null
+          economic_buyer_confirmed?: boolean
+          economic_buyer_notes?: string | null
+          id?: string
+          identify_pain_confirmed?: boolean
+          identify_pain_notes?: string | null
+          metrics_confirmed?: boolean
+          metrics_notes?: string | null
+          metrics_value_notes?: string | null
+          negative_consequences_notes?: string | null
+          opportunity_id?: string
+          positive_business_outcomes_notes?: string | null
+          required_capabilities_notes?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       pipeline_hygiene_scans: {
         Row: {
           created_at: string

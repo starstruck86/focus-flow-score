@@ -22,10 +22,11 @@ import { useDebouncedUpdate } from '@/hooks/useDebouncedUpdate';
 import {
   ArrowLeft, ChevronRight, Target, Users,
   FileText, CheckSquare, TrendingUp, Building2,
-  Activity, Sparkles, Network,
+  Activity, Sparkles, Network, Brain,
 } from 'lucide-react';
 import { ClaudeSynopsisModal } from '@/components/ClaudeSynopsisModal';
 import { OrgChartView } from '@/components/OrgChartView';
+import { MethodologyTracker } from '@/components/MethodologyTracker';
 import { cn } from '@/lib/utils';
 import type { OpportunityStage, OpportunityStatus, DealType, ChurnRisk } from '@/types';
 
@@ -339,6 +340,17 @@ export default function OpportunityDetail() {
             <Separator />
           </>
         )}
+
+        {/* MEDDICC + CotM Methodology */}
+        <CollapsibleSection title="MEDDICC & Command of the Message" icon={Brain} defaultOpen={true}>
+          <MethodologyTracker
+            opportunityId={opp.id}
+            opportunityName={opp.name}
+            stage={opp.stage}
+          />
+        </CollapsibleSection>
+
+        <Separator />
 
         {/* Stakeholders */}
         {opp.accountId && linkedAccount && (
