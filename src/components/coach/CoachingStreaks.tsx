@@ -77,8 +77,6 @@ export function CoachingStreaks() {
     }).sort((a, b) => b.currentStreak - a.currentStreak);
   }, [allGrades]);
 
-  if (streaks.length === 0) return null;
-
   const overallStreak = useMemo(() => {
     if (!allGrades || allGrades.length < 2) return 0;
     const sorted = [...allGrades].sort((a: any, b: any) => {
