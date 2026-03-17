@@ -39,6 +39,7 @@ export function MethodologyTracker({ opportunityId, opportunityName, stage }: Pr
   const { data, isLoading, upsert } = useOpportunityMethodology(opportunityId);
   const [expandedSection, setExpandedSection] = useState<'meddicc' | 'cotm' | 'goals' | null>('meddicc');
   const [newGoal, setNewGoal] = useState('');
+  const [generating, setGenerating] = useState(false);
 
   const confirmedCount = MEDDICC_FIELDS.filter(f => data?.[`${f.key}_confirmed` as keyof typeof data]).length;
   const cotmFilledCount = COTM_FIELDS.filter(f => {
