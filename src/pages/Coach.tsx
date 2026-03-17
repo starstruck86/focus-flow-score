@@ -698,7 +698,7 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px]">Account {autoDetected && <span className="text-primary">(auto)</span>}</Label>
-                    <Select value={accountId || "__none__"} onValueChange={(v) => { setAccountId(v === "__none__" ? "" : v); setOpportunityId(''); setAutoDetected(null); }}>
+                    <Select value={accountId || "__none__"} onValueChange={(v) => { const val = v === "__none__" ? "" : v; setAccountId(val); setOpportunityId(''); setAutoDetected(null); manuallySelected.current = !!val; }}>
                       <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Link account..." /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none__">None</SelectItem>
