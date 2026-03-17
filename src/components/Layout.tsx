@@ -108,7 +108,23 @@ function BottomNav() {
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
-  
+  const location = useLocation();
+  const { setPageContext } = useCopilot();
+
+  // Set page context for copilot based on current route
+  useEffect(() => {
+    const path = location.pathname;
+    // Check exact matches first, then prefix matches for detail pages
+    if (PAGE_CONTEXT_MAP[path]) {
+      setPageContext(PAGE_CONTEXT_MAP[path]);
+    } else if (path.startsWith('/accounts/')) {
+      setPageContext({ page: 'account-detail', description: 'Account Detail — deep-dive on a specific account' });
+    } else if (path.startsWith('/opportunities/')) {
+      setPageContext({ page: 'opportunity-detail', description: 'Opportunity Detail — deal-level view' });
+    } else {
+      setPageContext({ page: 'other', description: path });
+    }
+  }, [location.pathname, setPageContext]);
   return (
     <div className="min-h-screen bg-background flex flex-col w-full">
       {/* Top bar */}
