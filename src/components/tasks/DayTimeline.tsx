@@ -342,6 +342,13 @@ export function DayTimeline() {
             </div>
           )}
 
+          {/* Rust Buster quick links */}
+          {selected.type === 'prospecting' && isRustBusterBlock(selected.label) && (
+            <div className="ml-9">
+              <RustBusterQuickLinks />
+            </div>
+          )}
+
           {/* Account picker for prep blocks */}
           {selected.type === 'prep' && (
             <div className="mt-2.5 ml-9 py-1.5 px-2.5 rounded-md bg-muted/40 border border-border/30">
