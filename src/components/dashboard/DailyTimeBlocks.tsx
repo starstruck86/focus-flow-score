@@ -40,6 +40,7 @@ interface TimeBlock {
   reasoning: string;
   actual_dials?: number;
   actual_emails?: number;
+  linked_accounts?: { id: string; name: string }[];
 }
 
 interface DailyPlan {
