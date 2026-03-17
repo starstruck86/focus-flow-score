@@ -292,6 +292,17 @@ CRITICAL RULES:
 18. CALENDAR MEETINGS ARE FIXED ANCHORS. Every meeting listed below must appear as its own block at the exact EST start and end time shown. Do NOT move, round, combine, rename, or replace them with a generic admin block.
 19. DO NOT schedule ANY blocks before ${workStart} or after ${workEnd}. This is a HARD boundary.
 
+PREP-THEN-EXECUTE WORKFLOW (THIS IS HOW THE USER WORKS BEST — FOLLOW THIS PATTERN):
+The user's preferred rhythm is to PREP a batch of accounts, then IMMEDIATELY execute on them. Structure the day as paired "Prep → Execute" cycles:
+- A "Prep" block (type: "prep" or "research") where they research 2-3 specific accounts, review contacts, and build call notes
+- Immediately followed by a "Call Blitz" or "Execute" block (type: "prospecting") where they dial into those exact accounts while context is fresh
+- Each Prep block should name the specific accounts being prepped (e.g., "Tessitura Prep (2 accounts - 6 contacts)")
+- Each Call Blitz block should reference the number of calls (e.g., "Call Blitz #1 (8-10 Calls)")
+- Aim for 2-3 Prep→Execute cycles per day depending on meeting load
+- NEVER separate a Prep block from its Execute block with a meeting or break — they must be adjacent
+- The prep block warms up context; the execute block capitalizes on it immediately
+- This pattern applies to both new_logo and renewal workstreams
+
 LOCKED CALENDAR MEETINGS (EXACT EST TIMES):
 ${calendarContext}
 ${screenshotContext}
