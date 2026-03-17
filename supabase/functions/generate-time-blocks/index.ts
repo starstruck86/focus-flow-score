@@ -30,6 +30,10 @@ function overlaps(a: { start_time: string; end_time: string }, b: { start_time: 
   return toMinutes(a.start_time) < toMinutes(b.end_time) && toMinutes(b.start_time) < toMinutes(a.end_time);
 }
 
+function normalizeLabel(label: string): string {
+  return label.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 function mergeLockedCalendarBlocks(
   aiBlocks: Array<Record<string, any>>,
   lockedBlocks: Array<Record<string, any>>,
@@ -38,11 +42,17 @@ function mergeLockedCalendarBlocks(
     lockedBlocks.map((block) => `${block.start_time}-${block.end_time}-${block.label.trim().toLowerCase()}`),
   );
 
+  // Also build a set of normalized locked labels to catch duplicate meetings at wrong times
+  const lockedLabelSet = new Set(lockedBlocks.map((block) => normalizeLabel(block.label)));
+
   const filteredAiBlocks = aiBlocks.filter((block) => {
     if (!block?.start_time || !block?.end_time || !block?.label) return false;
 
     const key = `${block.start_time}-${block.end_time}-${String(block.label).trim().toLowerCase()}`;
     if (lockedKeys.has(key)) return false;
+
+    // Drop AI-generated meeting blocks that duplicate a locked meeting (same name, different time)
+    if (block.type === "meeting" && lockedLabelSet.has(normalizeLabel(block.label))) return false;
 
     if (block.type === "meeting") {
       return !lockedBlocks.some((lockedBlock) => overlaps(block, lockedBlock));
@@ -220,8 +230,10 @@ serve(async (req) => {
     const renewals = renewalsRes.data || [];
     const activeTasks = tasksRes.data || [];
 
-    const newLogoAccounts = topAccounts.filter((a: any) => a.motion === 'new-logo' || !a.motion);
-    const renewalAccounts = topAccounts.filter((a: any) => a.motion === 'renewal');
+    // Identify ALL accounts that have ANY active opportunity (new logo OR renewal)
+    const allOppAccountIds = new Set(activeOpps.map((o: any) => o.account_id).filter(Boolean));
+    // Also identify accounts linked to upcoming renewals
+    const allRenewalAccountNames = new Set(renewals.map((r: any) => r.account_name?.toLowerCase()).filter(Boolean));
 
     const newLogoOpps = activeOpps.filter((o: any) => o.deal_type !== 'renewal');
     const renewalOpps = activeOpps.filter((o: any) => o.deal_type === 'renewal');
@@ -229,27 +241,26 @@ serve(async (req) => {
     const newLogoTasks = activeTasks.filter((t: any) => t.motion !== 'renewal');
     const renewalTasks = activeTasks.filter((t: any) => t.motion === 'renewal');
 
-    // Separate prospecting accounts (no active opp) from accounts with active opps
-    const newLogoAccountIds = new Set(newLogoOpps.map((o: any) => o.account_id).filter(Boolean));
-    const renewalAccountIds = new Set(renewalOpps.map((o: any) => o.account_id).filter(Boolean));
-    const prospectingAccounts = newLogoAccounts.filter((a: any) => !newLogoAccountIds.has(a.id));
-    const accountsWithNewLogoOpps = newLogoAccounts.filter((a: any) => newLogoAccountIds.has(a.id));
+    // PURE prospecting accounts: no active opp AND not a renewal/current customer account
+    const prospectingAccounts = topAccounts.filter((a: any) => {
+      if (allOppAccountIds.has(a.id)) return false; // Has an active opp — not prospecting
+      if (a.motion === 'renewal') return false; // Renewal motion — not prospecting
+      if (allRenewalAccountNames.has(a.name?.toLowerCase())) return false; // Has a renewal — current customer
+      return true;
+    });
 
     const pipelineContext = `
-NEW LOGO PROSPECTING ACCOUNTS (NO active opportunity — these need Prep→Call Blitz cycles):
+NEW LOGO PROSPECTING ACCOUNTS (NO active opportunity, NOT current customers — these need Prep→Call Blitz cycles):
 ${prospectingAccounts.slice(0, 8).map((a: any) => `- ${a.name} (Tier ${a.tier}, ${a.account_status}, cadence: ${a.cadence_name || 'none'})`).join('\n') || '(none)'}
 
 ACTIVE NEW LOGO OPPORTUNITIES (TASK & MEETING oriented — NOT research/cadence work):
 ${newLogoOpps.slice(0, 8).map((o: any) => `- ${o.name}: ${o.stage}, $${o.arr || 0}, close ${o.close_date || 'TBD'}, next step: ${o.next_step || 'none'}${o.next_step_date ? ` (due ${o.next_step_date})` : ''}`).join('\n') || '(none)'}
 
-RENEWAL PIPELINE (TASK & MEETING oriented — admin, follow-ups, order forms, contracts):
-Opportunities: ${renewalOpps.slice(0, 5).map((o: any) => `- ${o.name}: ${o.stage}, $${o.arr || 0}, close ${o.close_date || 'TBD'}, next step: ${o.next_step || 'none'}`).join('\n') || '(none)'}
-Renewals: ${renewals.slice(0, 5).map((r: any) => `- ${r.account_name}: $${r.arr}, due ${r.renewal_due}, health ${r.health_status}, risk ${r.churn_risk}, next step: ${r.next_step || 'none'}`).join('\n') || '(none)'}
+RENEWAL COUNT: ${renewals.length} upcoming renewals (user manages these independently — do NOT list specific accounts)
 
 OPEN TASKS:
-New Logo Prospecting: ${newLogoTasks.filter((t: any) => !newLogoAccountIds.has(t.account_id)).slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ') || '(none)'}
-Active Opp Tasks: ${newLogoTasks.filter((t: any) => newLogoAccountIds.has(t.account_id)).slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ') || '(none)'}
-Renewal Tasks: ${renewalTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ') || '(none)'}`;
+New Logo: ${newLogoTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ') || '(none)'}
+Renewal: ${renewalTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ') || '(none)'}`;
 
     // Build user preferences context
     const workStart = userPrefs?.work_start_time?.slice(0, 5) || '09:00';
@@ -295,12 +306,14 @@ CRITICAL RULES:
 11. NAME SPECIFIC ACCOUNTS in goals when possible
 12. PERSONAL/FAMILY blocks are NON-NEGOTIABLE — the user has children (Quinn, Emmett). School drop-offs, pickups, and activities MUST be respected.
 13. If screenshot-confirmed meetings differ from calendar DB, TRUST the screenshot.
-14. CALENDAR MEETINGS ARE FIXED ANCHORS. Every meeting listed below must appear as its own block at the exact EST start and end time shown. Do NOT move, round, combine, rename, or replace them.
-15. DO NOT schedule ANY blocks before ${workStart} or after ${workEnd}. This is a HARD boundary.
+14. CALENDAR MEETINGS ARE FIXED ANCHORS. Every meeting listed below must appear as its own block at the exact EST start and end time shown. Do NOT move, round, combine, rename, or replace them. Do NOT generate your own meeting blocks — they are provided as locked blocks and merged automatically.
+15. DO NOT duplicate a meeting that already exists. If two calendar entries refer to the same meeting (same account/topic, overlapping times), use only ONE block at the correct time.
+16. DO NOT schedule ANY blocks before ${workStart} or after ${workEnd}. This is a HARD boundary.
+17. ONLY use accounts from the NEW LOGO PROSPECTING list in Prep→Execute cycles. Current customers (accounts with renewals or active opportunities) are NOT prospecting targets.
 
 WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL):
 
-**NEW LOGO PROSPECTING (accounts with NO active opportunity) — THIS IS THE CORE OF THE DAY:**
+**NEW LOGO PROSPECTING (accounts with NO active opportunity AND not current customers) — THIS IS THE CORE OF THE DAY:**
 - This is research + cadence + cold outreach work — high-energy hunter mode
 - Use PREP → EXECUTE paired cycles:
   - "Prep" block (type: "prep"): Research 2-3 specific accounts, review contacts, build call notes
@@ -319,11 +332,11 @@ WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL):
 
 **RENEWALS — KEEP IT MINIMAL:**
 - Schedule ONE single "Renewal Review" block per day, 30-45 minutes MAX
-- Purpose: review 1-2 upcoming renewal accounts, check health, handle any urgent tasks the user has already created
-- DO NOT suggest specific renewal tasks, accounts, or opportunities in goals — the user manages their own renewal task list
+- Purpose: look closer at 1-2 customer accounts with upcoming renewals, review health, work through any tasks
+- Goals should be GENERIC: "Review 1-2 upcoming renewal accounts" or "Work through renewal task queue"
+- DO NOT name specific renewal accounts, opportunities, or tasks in the goals — the user manages their own renewal priorities
 - DO NOT create multiple renewal blocks or expand renewal time
-- Label it simply: "Renewal Review" with goals like "Review upcoming renewals, work through renewal task queue"
-- This is NOT prospecting or research — it's admin/task execution time
+- Label it simply: "Renewal Review"
 - Renewals should NEVER crowd out new logo prospecting time
 
 **MEETING PREP (for any upcoming customer/prospect meeting):**
@@ -338,9 +351,6 @@ MEETING LOAD: ${meetingHours}h of meetings, ${focusHoursAvailable}h available fo
 
 ${quotaContext}
 
-NEW LOGO PROSPECTING ACCOUNTS (these are the focus — use in Prep→Execute cycles):
-${prospectingAccounts.slice(0, 8).map((a: any) => `- ${a.name} (Tier ${a.tier}, ${a.account_status}, cadence: ${a.cadence_name || 'none'})`).join("\n") || '(none)'}
-
 ${pipelineContext}
 
 ${journalRes.data ? `TODAY'S JOURNAL SO FAR: ${journalRes.data.dials || 0} dials, ${journalRes.data.conversations || 0} conversations, ${journalRes.data.meetings_set || 0} meetings set` : "No journal entry yet today."}
@@ -353,7 +363,7 @@ Generate a daily time-blocked schedule. For each block provide:
 - label (short title, 3-5 words)
 - type: one of "prospecting", "meeting", "research", "admin", "break", "pipeline", "prep"
 - workstream: "new_logo" or "renewal" or "general"
-- goals: array of 1-3 specific, realistic goals for that block (NAME ACCOUNTS when possible)
+- goals: array of 1-3 specific, realistic goals for that block (NAME ACCOUNTS for new logo prospecting blocks only — NOT for renewal blocks)
 - reasoning: one sentence on why this block matters
 
 Also provide an overall "day_strategy" (2-3 sentences distinguishing the new logo vs renewal focus for the day) and "key_metric_targets" object with realistic targets.`;
