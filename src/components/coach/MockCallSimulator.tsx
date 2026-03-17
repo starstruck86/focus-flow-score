@@ -7,11 +7,12 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
 import {
   Play, Square, Send, Loader2, RotateCcw, Trophy, Target, Crosshair,
   ShieldCheck, ShieldAlert, Eye, Brain, Zap, Clock, CheckCircle2,
   AlertTriangle, Lightbulb, MessageSquareQuote, ChevronDown, ChevronUp,
-  Swords, Mic, BarChart3, ArrowRight,
+  Swords, Mic, MicOff, BarChart3, ArrowRight, Volume2, VolumeX,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -19,8 +20,10 @@ import {
   useMockCallSessions, useCreateMockSession, useSaveMockMessages,
   useGradeMockCall, streamMockCall, type MockCallSession,
 } from '@/hooks/useMockCalls';
+import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { format, parseISO } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
+import { toast } from 'sonner';
 
 // ── CONSTANTS ──────────────────────────────────────────────
 const CALL_TYPES = ['Discovery', 'Demo', 'Pricing', 'Objection Handling', 'Executive Alignment', 'Deal Rescue'];
@@ -206,9 +209,12 @@ function ChatInterface({
   );
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [autoSpeak, setAutoSpeak] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const saveMessages = useSaveMockMessages();
+  const voice = useVoiceMode();
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }), 50);
@@ -221,8 +227,22 @@ function ChatInterface({
     }
   }, [messages.length, isStreaming]);
 
-  const sendMessage = useCallback(async () => {
-    const text = input.trim();
+  // Auto-speak assistant responses when voice mode is on
+  const lastAssistantRef = useRef<string>('');
+  useEffect(() => {
+    if (!voiceEnabled || !autoSpeak || isStreaming) return;
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg?.role === 'assistant' && lastMsg.content !== lastAssistantRef.current) {
+      lastAssistantRef.current = lastMsg.content;
+      voice.playTTS(lastMsg.content).catch(err => {
+        console.error('TTS error:', err);
+        toast.error('Voice playback failed');
+      });
+    }
+  }, [messages, isStreaming, voiceEnabled, autoSpeak]);
+
+  const sendMessage = useCallback(async (textOverride?: string) => {
+    const text = (textOverride || input).trim();
     if (!text || isStreaming) return;
 
     const userMsg: { role: 'user' | 'assistant'; content: string } = { role: 'user', content: text };
@@ -272,6 +292,28 @@ function ChatInterface({
     }
   };
 
+  // Voice recording handlers
+  const handleMicClick = useCallback(async () => {
+    if (voice.isRecording) {
+      try {
+        const transcript = await voice.stopRecording();
+        if (transcript) {
+          sendMessage(transcript);
+        }
+      } catch (err: any) {
+        if (err.message !== 'Recording too short') {
+          toast.error('Transcription failed', { description: err.message });
+        }
+      }
+    } else {
+      try {
+        await voice.startRecording();
+      } catch {
+        // Error toast handled in hook
+      }
+    }
+  }, [voice, sendMessage]);
+
   return (
     <div className="flex gap-4 h-[calc(100vh-220px)] min-h-[500px]">
       {/* Chat panel */}
@@ -289,9 +331,38 @@ function ChatInterface({
               <Badge variant="secondary" className="text-[10px]">{session.skill_mode}</Badge>
             )}
           </div>
-          <Button size="sm" variant="destructive" onClick={onEnd}>
-            <Square className="h-3 w-3 mr-1" /> End & Grade
-          </Button>
+          <div className="flex items-center gap-3">
+            {/* Voice mode toggle */}
+            <div className="flex items-center gap-1.5">
+              <Mic className="h-3.5 w-3.5 text-muted-foreground" />
+              <Switch
+                checked={voiceEnabled}
+                onCheckedChange={(v) => {
+                  setVoiceEnabled(v);
+                  if (!v) {
+                    voice.cancelRecording();
+                    voice.stopPlayback();
+                  }
+                }}
+                className="scale-75"
+              />
+              <span className="text-[10px] text-muted-foreground">Voice</span>
+            </div>
+            {voiceEnabled && (
+              <div className="flex items-center gap-1.5">
+                <Volume2 className="h-3.5 w-3.5 text-muted-foreground" />
+                <Switch
+                  checked={autoSpeak}
+                  onCheckedChange={setAutoSpeak}
+                  className="scale-75"
+                />
+                <span className="text-[10px] text-muted-foreground">Auto-speak</span>
+              </div>
+            )}
+            <Button size="sm" variant="destructive" onClick={onEnd}>
+              <Square className="h-3 w-3 mr-1" /> End & Grade
+            </Button>
+          </div>
         </div>
 
         {/* Messages */}
@@ -300,7 +371,11 @@ function ChatInterface({
             <div className="text-center py-12 text-muted-foreground">
               <Mic className="h-8 w-8 mx-auto mb-2 opacity-40" />
               <p className="text-sm font-medium">Start the call</p>
-              <p className="text-xs">Type your opening — how would you start this {session.call_type.toLowerCase()} call?</p>
+              <p className="text-xs">
+                {voiceEnabled
+                  ? 'Press the microphone button to speak your opening'
+                  : `Type your opening — how would you start this ${session.call_type.toLowerCase()} call?`}
+              </p>
             </div>
           )}
           {messages.map((msg, i) => (
@@ -311,9 +386,21 @@ function ChatInterface({
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted border border-border'
               )}>
-                <p className="text-[10px] font-bold mb-1 opacity-70">
-                  {msg.role === 'user' ? 'YOU (Rep)' : `BUYER (${session.persona})`}
-                </p>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <p className="text-[10px] font-bold opacity-70">
+                    {msg.role === 'user' ? 'YOU (Rep)' : `BUYER (${session.persona})`}
+                  </p>
+                  {/* Manual speak button for assistant messages */}
+                  {msg.role === 'assistant' && voiceEnabled && !isStreaming && (
+                    <button
+                      onClick={() => voice.playTTS(msg.content)}
+                      className="opacity-50 hover:opacity-100 transition-opacity"
+                      title="Play response"
+                    >
+                      {voice.isPlaying ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
+                    </button>
+                  )}
+                </div>
                 <div className="prose prose-sm dark:prose-invert max-w-none">
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
                 </div>
@@ -331,23 +418,74 @@ function ChatInterface({
 
         {/* Input */}
         <div className="border-t border-border p-3 flex gap-2">
-          <Input
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type your response..."
-            disabled={isStreaming}
-            className="flex-1"
-          />
-          <Button onClick={sendMessage} disabled={isStreaming || !input.trim()} size="icon">
-            {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </Button>
+          {voiceEnabled ? (
+            <>
+              <Input
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={voice.isRecording ? '🔴 Recording... click mic to send' : voice.isTranscribing ? 'Transcribing...' : 'Type or press mic to speak...'}
+                disabled={isStreaming || voice.isRecording || voice.isTranscribing}
+                className="flex-1"
+              />
+              <Button
+                onClick={handleMicClick}
+                disabled={isStreaming || voice.isTranscribing || voice.isPlaying}
+                size="icon"
+                variant={voice.isRecording ? 'destructive' : 'default'}
+                className={cn(voice.isRecording && 'animate-pulse')}
+              >
+                {voice.isTranscribing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : voice.isRecording ? (
+                  <MicOff className="h-4 w-4" />
+                ) : (
+                  <Mic className="h-4 w-4" />
+                )}
+              </Button>
+              {input.trim() && (
+                <Button onClick={() => sendMessage()} disabled={isStreaming} size="icon">
+                  <Send className="h-4 w-4" />
+                </Button>
+              )}
+            </>
+          ) : (
+            <>
+              <Input
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Type your response..."
+                disabled={isStreaming}
+                className="flex-1"
+              />
+              <Button onClick={() => sendMessage()} disabled={isStreaming || !input.trim()} size="icon">
+                {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
       {/* Sidebar tracking */}
       <div className="w-56 flex-shrink-0 space-y-4">
         <LiveTracking messages={messages} />
+
+        {voiceEnabled && (
+          <div className="space-y-2">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Voice Status</p>
+            <div className="bg-muted/30 rounded p-2 space-y-1">
+              <div className="flex items-center gap-2 text-xs">
+                <div className={cn('h-2 w-2 rounded-full', voice.isRecording ? 'bg-destructive animate-pulse' : 'bg-muted-foreground/30')} />
+                <span>{voice.isRecording ? 'Recording...' : 'Mic idle'}</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <div className={cn('h-2 w-2 rounded-full', voice.isPlaying ? 'bg-primary animate-pulse' : 'bg-muted-foreground/30')} />
+                <span>{voice.isPlaying ? 'Speaking...' : 'Audio idle'}</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {messages.length >= 6 && (
           <Button variant="outline" size="sm" className="w-full text-xs" onClick={onEnd}>
