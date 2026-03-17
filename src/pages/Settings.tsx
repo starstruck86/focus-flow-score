@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useStore } from '@/store/useStore';
 import { ConversionBenchmarksSettings } from '@/components/settings/ConversionBenchmarksSettings';
 import { NotificationSettings } from '@/components/NotificationSettings';
 import { Layout } from '@/components/Layout';
