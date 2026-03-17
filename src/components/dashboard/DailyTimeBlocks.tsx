@@ -38,6 +38,8 @@ interface TimeBlock {
   workstream?: 'new_logo' | 'renewal' | 'general';
   goals: string[];
   reasoning: string;
+  actual_dials?: number;
+  actual_emails?: number;
 }
 
 interface DailyPlan {
