@@ -529,7 +529,7 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
                     <div className="rounded-lg border-2 border-primary/30 bg-primary/5 px-4 py-2 text-center shadow-sm">
                       <span className="text-sm font-semibold text-foreground">{accountName}</span>
                     </div>
-                    <div className="w-px h-5 bg-border" />
+                    <div className="w-px h-8 bg-border" />
                     <div className="relative flex items-start">
                       {roots.length > 1 && (
                         <div
@@ -540,10 +540,10 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
                           }}
                         />
                       )}
-                      <div className="flex gap-3 items-start">
+                      <div className="flex gap-6 items-start">
                         {roots.map(root => (
                           <div key={root.id} className="flex flex-col items-center">
-                            <div className="w-px h-5 bg-border" />
+                            <div className="w-px h-8 bg-border" />
                             {renderTree(root)}
                           </div>
                         ))}
