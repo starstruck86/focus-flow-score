@@ -229,17 +229,27 @@ serve(async (req) => {
     const newLogoTasks = activeTasks.filter((t: any) => t.motion !== 'renewal');
     const renewalTasks = activeTasks.filter((t: any) => t.motion === 'renewal');
 
-    const pipelineContext = `
-NEW LOGO PIPELINE (${newLogoOpps.length} opps):
-${newLogoOpps.slice(0, 8).map((o: any) => `- ${o.name}: ${o.stage}, $${o.arr || 0}, close ${o.close_date || 'TBD'}, next: ${o.next_step || 'none'}`).join('\n')}
+    // Separate prospecting accounts (no active opp) from accounts with active opps
+    const newLogoAccountIds = new Set(newLogoOpps.map((o: any) => o.account_id).filter(Boolean));
+    const renewalAccountIds = new Set(renewalOpps.map((o: any) => o.account_id).filter(Boolean));
+    const prospectingAccounts = newLogoAccounts.filter((a: any) => !newLogoAccountIds.has(a.id));
+    const accountsWithNewLogoOpps = newLogoAccounts.filter((a: any) => newLogoAccountIds.has(a.id));
 
-RENEWAL PIPELINE (${renewalOpps.length} opps, ${renewals.length} renewals):
-${renewalOpps.slice(0, 5).map((o: any) => `- ${o.name}: ${o.stage}, $${o.arr || 0}, close ${o.close_date || 'TBD'}`).join('\n')}
-${renewals.slice(0, 5).map((r: any) => `- ${r.account_name}: $${r.arr}, due ${r.renewal_due}, health ${r.health_status}, risk ${r.churn_risk}`).join('\n')}
+    const pipelineContext = `
+NEW LOGO PROSPECTING ACCOUNTS (NO active opportunity — these need Prep→Call Blitz cycles):
+${prospectingAccounts.slice(0, 8).map((a: any) => `- ${a.name} (Tier ${a.tier}, ${a.account_status}, cadence: ${a.cadence_name || 'none'})`).join('\n') || '(none)'}
+
+ACTIVE NEW LOGO OPPORTUNITIES (TASK & MEETING oriented — NOT research/cadence work):
+${newLogoOpps.slice(0, 8).map((o: any) => `- ${o.name}: ${o.stage}, $${o.arr || 0}, close ${o.close_date || 'TBD'}, next step: ${o.next_step || 'none'}${o.next_step_date ? ` (due ${o.next_step_date})` : ''}`).join('\n') || '(none)'}
+
+RENEWAL PIPELINE (TASK & MEETING oriented — admin, follow-ups, order forms, contracts):
+Opportunities: ${renewalOpps.slice(0, 5).map((o: any) => `- ${o.name}: ${o.stage}, $${o.arr || 0}, close ${o.close_date || 'TBD'}, next step: ${o.next_step || 'none'}`).join('\n') || '(none)'}
+Renewals: ${renewals.slice(0, 5).map((r: any) => `- ${r.account_name}: $${r.arr}, due ${r.renewal_due}, health ${r.health_status}, risk ${r.churn_risk}, next step: ${r.next_step || 'none'}`).join('\n') || '(none)'}
 
 OPEN TASKS:
-New Logo: ${newLogoTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ')}
-Renewal: ${renewalTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ')}`;
+New Logo Prospecting: ${newLogoTasks.filter((t: any) => !newLogoAccountIds.has(t.account_id)).slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ') || '(none)'}
+Active Opp Tasks: ${newLogoTasks.filter((t: any) => newLogoAccountIds.has(t.account_id)).slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ') || '(none)'}
+Renewal Tasks: ${renewalTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ') || '(none)'}`;
 
     // Build user preferences context
     const workStart = userPrefs?.work_start_time?.slice(0, 5) || '09:00';
