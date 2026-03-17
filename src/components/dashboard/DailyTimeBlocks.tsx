@@ -539,9 +539,31 @@ export function DailyTimeBlocks() {
                     {isCurrent && (
                       <Badge className="text-[9px] px-1.5 py-0 h-4 bg-primary/20 text-primary border-0 animate-pulse">NOW</Badge>
                     )}
-                    <Button variant="ghost" size="sm" className="h-5 w-5 p-0 ml-auto opacity-0 group-hover/block:opacity-100" onClick={() => editingBlock === i ? setEditingBlock(null) : startEditBlock(i)}>
-                      {editingBlock === i ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
-                    </Button>
+                    <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover/block:opacity-100">
+                      <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => editingBlock === i ? setEditingBlock(null) : startEditBlock(i)}>
+                        {editingBlock === i ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
+                      </Button>
+                      {isMeeting && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-5 w-5 p-0">
+                              <MoreVertical className="h-3 w-3" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem onClick={() => setLinkOppBlockIdx(i)} className="text-xs gap-2">
+                              <Link2 className="h-3.5 w-3.5" />
+                              Link Opportunity
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => dismissBlock(i)} className="text-xs gap-2 text-destructive focus:text-destructive">
+                              <EyeOff className="h-3.5 w-3.5" />
+                              Dismiss from Plan
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
                   </div>
 
                   {/* Inline edit */}
