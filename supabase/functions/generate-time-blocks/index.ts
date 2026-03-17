@@ -322,6 +322,7 @@ Also provide an overall "day_strategy" (2-3 sentences distinguishing the new log
     if (!toolCall) throw new Error("No tool call in AI response");
 
     const plan = JSON.parse(toolCall.function.arguments);
+    const mergedBlocks = mergeLockedCalendarBlocks(plan.blocks || [], lockedCalendarBlocks);
 
     // Upsert the plan with all data persisted
     const { data: saved, error: saveError } = await supabase
@@ -329,7 +330,7 @@ Also provide an overall "day_strategy" (2-3 sentences distinguishing the new log
       .upsert({
         user_id: user.id,
         plan_date: targetDate,
-        blocks: plan.blocks,
+        blocks: mergedBlocks,
         meeting_load_hours: meetingHours,
         focus_hours_available: focusHoursAvailable,
         ai_reasoning: plan.day_strategy,
