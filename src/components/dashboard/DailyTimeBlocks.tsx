@@ -721,6 +721,11 @@ export function DailyTimeBlocks() {
                     </div>
                   )}
 
+                  {/* Rust Buster quick links */}
+                  {editingBlock !== i && block.type === 'prospecting' && isRustBusterBlock(block.label) && (
+                    <RustBusterQuickLinks />
+                  )}
+
                   {/* Account picker for prep blocks */}
                   {editingBlock !== i && block.type === 'prep' && (
                     <div className="mt-2 py-1.5 px-2.5 rounded-md bg-muted/40 border border-border/30">
