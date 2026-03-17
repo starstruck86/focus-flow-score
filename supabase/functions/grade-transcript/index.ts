@@ -405,6 +405,110 @@ ${accountContext}`;
       throw new Error("Failed to save grade");
     }
 
+    // Auto-enrich opportunity methodology tracker with MEDDICC/CotM signals
+    if (transcript.opportunity_id) {
+      try {
+        const meddicc = grade.meddicc_signals || {};
+        const cotm = grade.cotm_signals || {};
+
+        // Build methodology update — only set fields to true (never revert confirmed items)
+        const methodologyUpdate: Record<string, any> = {
+          user_id: user.id,
+          opportunity_id: transcript.opportunity_id,
+        };
+
+        // MEDDICC: confirm + append evidence
+        const meddiccFields = ['metrics', 'economic_buyer', 'decision_criteria', 'decision_process', 'identify_pain', 'champion', 'competition'];
+        for (const field of meddiccFields) {
+          if (meddicc[field]) {
+            methodologyUpdate[`${field}_confirmed`] = true;
+            if (meddicc[`${field}_detail`]) {
+              methodologyUpdate[`${field}_notes`] = meddicc[`${field}_detail`];
+            }
+          }
+        }
+
+        // CotM: append evidence notes
+        if (cotm.before_identified && cotm.before_evidence) {
+          methodologyUpdate.before_state_notes = cotm.before_evidence;
+        }
+        if (cotm.after_defined && cotm.after_evidence) {
+          methodologyUpdate.after_state_notes = cotm.after_evidence;
+        }
+        if (cotm.negative_consequences && cotm.negative_consequences_evidence) {
+          methodologyUpdate.negative_consequences_notes = cotm.negative_consequences_evidence;
+        }
+        if (cotm.pbo_articulated && cotm.pbo_evidence) {
+          methodologyUpdate.positive_business_outcomes_notes = cotm.pbo_evidence;
+        }
+        if (cotm.required_capabilities && cotm.capabilities_evidence) {
+          methodologyUpdate.required_capabilities_notes = cotm.capabilities_evidence;
+        }
+        if (cotm.metrics_captured && cotm.metrics_evidence) {
+          methodologyUpdate.metrics_value_notes = cotm.metrics_evidence;
+        }
+
+        // Upsert — uses service role to avoid needing existing row
+        // First check if row exists
+        const { data: existing } = await supabase
+          .from("opportunity_methodology")
+          .select("id, metrics_notes, economic_buyer_notes, decision_criteria_notes, decision_process_notes, identify_pain_notes, champion_notes, competition_notes, before_state_notes, after_state_notes, negative_consequences_notes, positive_business_outcomes_notes, required_capabilities_notes, metrics_value_notes")
+          .eq("opportunity_id", transcript.opportunity_id)
+          .maybeSingle();
+
+        if (existing) {
+          // Merge notes — append new evidence to existing if not already there
+          for (const field of meddiccFields) {
+            const notesKey = `${field}_notes`;
+            const existingNotes = (existing as any)[notesKey] || '';
+            const newNotes = methodologyUpdate[notesKey];
+            if (newNotes && existingNotes && !existingNotes.includes(newNotes)) {
+              methodologyUpdate[notesKey] = `${existingNotes}\n\n📞 ${transcript.title} (${transcript.call_date}):\n${newNotes}`;
+            } else if (newNotes && !existingNotes) {
+              methodologyUpdate[notesKey] = `📞 ${transcript.title} (${transcript.call_date}):\n${newNotes}`;
+            }
+          }
+          // Same for CotM notes
+          const cotmKeys = ['before_state_notes', 'after_state_notes', 'negative_consequences_notes', 'positive_business_outcomes_notes', 'required_capabilities_notes', 'metrics_value_notes'];
+          for (const key of cotmKeys) {
+            const existingNotes = (existing as any)[key] || '';
+            const newNotes = methodologyUpdate[key];
+            if (newNotes && existingNotes && !existingNotes.includes(newNotes)) {
+              methodologyUpdate[key] = `${existingNotes}\n\n📞 ${transcript.title} (${transcript.call_date}):\n${newNotes}`;
+            } else if (newNotes && !existingNotes) {
+              methodologyUpdate[key] = `📞 ${transcript.title} (${transcript.call_date}):\n${newNotes}`;
+            }
+          }
+
+          await supabase
+            .from("opportunity_methodology")
+            .update(methodologyUpdate)
+            .eq("id", existing.id);
+        } else {
+          // Create new row with enriched data
+          for (const field of meddiccFields) {
+            const notesKey = `${field}_notes`;
+            if (methodologyUpdate[notesKey]) {
+              methodologyUpdate[notesKey] = `📞 ${transcript.title} (${transcript.call_date}):\n${methodologyUpdate[notesKey]}`;
+            }
+          }
+          const cotmKeys = ['before_state_notes', 'after_state_notes', 'negative_consequences_notes', 'positive_business_outcomes_notes', 'required_capabilities_notes', 'metrics_value_notes'];
+          for (const key of cotmKeys) {
+            if (methodologyUpdate[key]) {
+              methodologyUpdate[key] = `📞 ${transcript.title} (${transcript.call_date}):\n${methodologyUpdate[key]}`;
+            }
+          }
+          await supabase
+            .from("opportunity_methodology")
+            .insert(methodologyUpdate);
+        }
+
+        console.log("Methodology tracker enriched for opportunity:", transcript.opportunity_id);
+      } catch (enrichErr) {
+        console.error("Methodology enrichment failed (non-fatal):", enrichErr);
+      }
+    }
+
     return new Response(JSON.stringify(saved), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
