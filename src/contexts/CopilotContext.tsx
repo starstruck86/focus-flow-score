@@ -1,6 +1,15 @@
-// Copilot Context — allows any component to open the copilot with a question and mode
+// Copilot Context — allows any component to open the copilot with a question, mode, and page context
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import type { CopilotMode } from '@/lib/territoryCopilot';
+
+export interface PageContext {
+  page: string;
+  description: string;
+  accountId?: string;
+  accountName?: string;
+  opportunityId?: string;
+  opportunityName?: string;
+}
 
 interface CopilotState {
   open: boolean;
@@ -11,6 +20,8 @@ interface CopilotState {
 
 interface CopilotContextValue {
   state: CopilotState;
+  pageContext: PageContext | null;
+  setPageContext: (ctx: PageContext | null) => void;
   ask: (question: string, mode?: CopilotMode, accountId?: string) => void;
   open: () => void;
   close: () => void;
@@ -22,6 +33,7 @@ const CopilotContext = createContext<CopilotContextValue | null>(null);
 
 export function CopilotProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<CopilotState>({ open: false });
+  const [pageContext, setPageContext] = useState<PageContext | null>(null);
 
   const ask = (question: string, mode?: CopilotMode, accountId?: string) =>
     setState({ open: true, initialQuestion: question, mode, accountId });
@@ -32,7 +44,7 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, initialQuestion: undefined, mode: undefined }));
 
   return (
-    <CopilotContext.Provider value={{ state, ask, open, close, setOpen, clearInitialQuestion }}>
+    <CopilotContext.Provider value={{ state, pageContext, setPageContext, ask, open, close, setOpen, clearInitialQuestion }}>
       {children}
     </CopilotContext.Provider>
   );
