@@ -39,6 +39,7 @@ import {
   DealIntelligence,
   WeeklyCoachingDigest,
   CoachingStreaks,
+  CoachingFocus,
 } from '@/components/coach';
 
 const GRADE_COLORS: Record<string, string> = {
