@@ -719,6 +719,99 @@ export function DailyTimeBlocks() {
                     </div>
                   )}
 
+                  {/* Account picker for prep blocks */}
+                  {editingBlock !== i && block.type === 'prep' && (
+                    <div className="mt-2 py-1.5 px-2.5 rounded-md bg-muted/40 border border-border/30">
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <Target className="h-3 w-3 text-cyan-500" />
+                        <span className="text-[10px] text-muted-foreground font-medium">Target Accounts:</span>
+                      </div>
+                      {/* Linked account pills */}
+                      {(block.linked_accounts || []).length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-1.5">
+                          {(block.linked_accounts || []).map(acct => (
+                            <Badge
+                              key={acct.id}
+                              variant="outline"
+                              className="text-[10px] h-5 gap-1 bg-accent/50 pr-1 group/pill"
+                            >
+                              <Building2 className="h-3 w-3" />
+                              {acct.name}
+                              <button
+                                onClick={() => {
+                                  const updated = (block.linked_accounts || []).filter(a => a.id !== acct.id);
+                                  updateBlockLinkedAccounts(i, updated);
+                                }}
+                                className="ml-0.5 opacity-0 group-hover/pill:opacity-100 transition-opacity"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                      {/* Search input */}
+                      {accountSearchBlockIdx === i ? (
+                        <div className="relative">
+                          <Input
+                            autoFocus
+                            className="h-6 text-xs"
+                            placeholder="Search accounts..."
+                            value={accountSearchQuery}
+                            onChange={e => setAccountSearchQuery(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Escape') {
+                                setAccountSearchBlockIdx(null);
+                                setAccountSearchQuery('');
+                              }
+                            }}
+                          />
+                          {accountSearchQuery.length > 0 && (
+                            <div className="absolute z-20 top-7 left-0 right-0 bg-popover border border-border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                              {accounts
+                                .filter(a => {
+                                  const q = accountSearchQuery.toLowerCase();
+                                  const alreadyLinked = (block.linked_accounts || []).some(la => la.id === a.id);
+                                  return !alreadyLinked && a.name.toLowerCase().includes(q);
+                                })
+                                .slice(0, 8)
+                                .map(a => (
+                                  <button
+                                    key={a.id}
+                                    className="w-full text-left px-3 py-1.5 hover:bg-accent transition-colors text-xs flex items-center justify-between"
+                                    onClick={() => {
+                                      const updated = [...(block.linked_accounts || []), { id: a.id, name: a.name }];
+                                      updateBlockLinkedAccounts(i, updated);
+                                      setAccountSearchQuery('');
+                                      if (updated.length >= 3) {
+                                        setAccountSearchBlockIdx(null);
+                                      }
+                                    }}
+                                  >
+                                    <span>{a.name}</span>
+                                    <span className="text-[10px] text-muted-foreground">Tier {a.tier}</span>
+                                  </button>
+                                ))}
+                              {accounts.filter(a => !((block.linked_accounts || []).some(la => la.id === a.id)) && a.name.toLowerCase().includes(accountSearchQuery.toLowerCase())).length === 0 && (
+                                <div className="px-3 py-2 text-[11px] text-muted-foreground">No matching accounts</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setAccountSearchBlockIdx(i);
+                            setAccountSearchQuery('');
+                          }}
+                          className="text-[11px] text-primary hover:text-primary/80 font-medium"
+                        >
+                          + Add account
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   {/* Linked opportunity badge */}
                   {linkedOpp && (
                     <div className="flex items-center gap-1.5 mt-1.5">
