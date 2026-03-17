@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-
 export function BackToToday() {
   const location = useLocation();
   const navigate = useNavigate();

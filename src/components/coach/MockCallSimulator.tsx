@@ -489,8 +489,8 @@ function ChatInterface({
         </div>
       </div>
 
-      {/* Sidebar tracking */}
-      <div className="w-56 flex-shrink-0 space-y-4">
+      {/* Sidebar tracking — hidden on mobile */}
+      <div className="hidden md:block w-56 flex-shrink-0 space-y-4">
         <LiveTracking messages={messages} />
 
         {voiceEnabled && (

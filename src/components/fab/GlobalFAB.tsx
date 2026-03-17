@@ -282,9 +282,10 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
     },
   ];
   
+  // Position FAB above the 2-row bottom nav (nav is ~92px + safe-area)
   const positionClasses = position === 'bottom-right' 
-    ? 'right-6 bottom-6' 
-    : 'left-6 bottom-6';
+    ? 'right-4 bottom-[calc(6rem+env(safe-area-inset-bottom))]' 
+    : 'left-4 bottom-[calc(6rem+env(safe-area-inset-bottom))]';
   
   const menuAlignment = position === 'bottom-right' ? 'items-end' : 'items-start';
   
