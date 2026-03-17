@@ -54,7 +54,7 @@ function ScenarioSetup({ onStart }: { onStart: (cfg: any) => void }) {
   const [industry, setIndustry] = useState('DTC / Ecommerce');
   const [persona, setPersona] = useState('CMO');
   const [difficulty, setDifficulty] = useState(2);
-  const [skillMode, setSkillMode] = useState('');
+  const [skillMode, setSkillMode] = useState('full-call');
 
   return (
     <div className="space-y-6">
