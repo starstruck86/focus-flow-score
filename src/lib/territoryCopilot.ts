@@ -15,6 +15,7 @@ export async function streamCopilot({
   messages,
   mode = "quick",
   accountId,
+  pageContext,
   onDelta,
   onDone,
   onError,
@@ -24,6 +25,7 @@ export async function streamCopilot({
   messages: CopilotMsg[];
   mode?: CopilotMode;
   accountId?: string;
+  pageContext?: { page: string; description: string; accountId?: string; accountName?: string; opportunityId?: string; opportunityName?: string } | null;
   onDelta: (text: string) => void;
   onDone: () => void;
   onError: (error: string) => void;
@@ -44,7 +46,7 @@ export async function streamCopilot({
         Authorization: `Bearer ${token}`,
         apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
       },
-      body: JSON.stringify({ messages, mode, accountId }),
+      body: JSON.stringify({ messages, mode, accountId, pageContext }),
       signal,
     });
 
