@@ -790,11 +790,19 @@ export default function Coach() {
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="w-full grid grid-cols-3">
+          <TabsList className="w-full grid grid-cols-4">
+            <TabsTrigger value="simulate" className="gap-1">
+              <Swords className="h-3.5 w-3.5" /> Simulate
+            </TabsTrigger>
             <TabsTrigger value="scorecard">Scorecard</TabsTrigger>
             <TabsTrigger value="history">History</TabsTrigger>
-            <TabsTrigger value="trends">Trends & Patterns</TabsTrigger>
+            <TabsTrigger value="trends">Trends</TabsTrigger>
           </TabsList>
+
+          {/* ── SIMULATE TAB ── */}
+          <TabsContent value="simulate" className="mt-4">
+            <MockCallSimulator />
+          </TabsContent>
 
           {/* ── SCORECARD TAB ── */}
           <TabsContent value="scorecard" className="mt-4">
