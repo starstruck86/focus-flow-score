@@ -269,51 +269,57 @@ function parseICS(icsContent: string): RawEvent[] {
 function expandRecurringEvents(rawEvents: RawEvent[], rangeStart: Date, rangeEnd: Date, userId: string): CalendarEvent[] {
   const expandedEvents: CalendarEvent[] = [];
   const overrides = new Map<string, RawEvent>();
+  const baseEventsByUid = new Map<string, RawEvent>();
+
+  const overrideKeyFor = (uid: string, recurrenceDate: Date) => `${uid}_${recurrenceDate.toISOString()}`;
   
-  // First, collect all exception instances (events with RECURRENCE-ID)
+  // First, collect base recurring events + exception instances
   for (const event of rawEvents) {
+    if (event.rrule && !event.recurrenceId) {
+      baseEventsByUid.set(event.uid, event);
+    }
     if (event.recurrenceId) {
-      overrides.set(`${event.uid}_${event.recurrenceId}`, event);
+      overrides.set(overrideKeyFor(event.uid, event.recurrenceId), event);
     }
   }
   
   for (const event of rawEvents) {
     if (event.recurrenceId) {
-      // This is an exception instance, add it directly
+      const baseEvent = baseEventsByUid.get(event.uid);
+      const fallbackDuration = baseEvent?.duration ?? 3600000;
+      const fallbackEndTime = event.end_time
+        ? event.end_time
+        : new Date(event.start_time.getTime() + fallbackDuration);
+
       expandedEvents.push({
         external_id: `${event.uid}_${event.start_time.toISOString()}`,
-        title: event.title,
-        description: event.description,
+        title: event.title ?? baseEvent?.title ?? 'Untitled event',
+        description: event.description ?? baseEvent?.description ?? null,
         start_time: event.start_time.toISOString(),
-        end_time: event.end_time?.toISOString() || null,
-        location: event.location,
+        end_time: fallbackEndTime?.toISOString() || null,
+        location: event.location ?? baseEvent?.location ?? null,
         all_day: event.all_day,
         user_id: userId,
       });
     } else if (event.rrule) {
-      // Expand recurring event
       const occurrences = parseRRule(event.rrule, event.start_time, rangeEnd);
       
       for (const occurrence of occurrences) {
         if (occurrence < rangeStart) continue;
         
-        // Check if this occurrence is excluded
-        const isExcluded = event.exdates.some(exdate => 
-          Math.abs(exdate.getTime() - occurrence.getTime()) < 86400000 // within a day
-        );
+        const isExcluded = event.exdates.some(exdate => exdate.getTime() === occurrence.getTime());
         if (isExcluded) continue;
         
-        // Check if there's an override for this occurrence
-        const overrideKey = `${event.uid}_${occurrence.toISOString().slice(0, 10)}`;
-        if (overrides.has(overrideKey)) continue; // Skip, override will be added separately
+        const overrideKey = overrideKeyFor(event.uid, occurrence);
+        if (overrides.has(overrideKey)) continue;
         
-        const endTime = event.end_time 
+        const endTime = event.end_time
           ? new Date(occurrence.getTime() + event.duration)
           : null;
         
         expandedEvents.push({
           external_id: `${event.uid}_${occurrence.toISOString()}`,
-          title: event.title,
+          title: event.title ?? 'Untitled event',
           description: event.description,
           start_time: occurrence.toISOString(),
           end_time: endTime?.toISOString() || null,
@@ -323,10 +329,9 @@ function expandRecurringEvents(rawEvents: RawEvent[], rangeStart: Date, rangeEnd
         });
       }
     } else {
-      // Non-recurring event
       expandedEvents.push({
         external_id: `${event.uid}_${event.start_time.toISOString()}`,
-        title: event.title,
+        title: event.title ?? 'Untitled event',
         description: event.description,
         start_time: event.start_time.toISOString(),
         end_time: event.end_time?.toISOString() || null,
@@ -337,7 +342,6 @@ function expandRecurringEvents(rawEvents: RawEvent[], rangeStart: Date, rangeEnd
     }
   }
   
-  // Deduplicate by external_id (keep the last occurrence in case of duplicates)
   const uniqueEvents = new Map<string, CalendarEvent>();
   for (const event of expandedEvents) {
     uniqueEvents.set(event.external_id, event);
