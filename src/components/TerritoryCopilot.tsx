@@ -197,7 +197,13 @@ function CopilotDialog() {
   }, [voice, sendMessage]);
 
   const showSuggestions = messages.length === 0 && !isStreaming;
-  const filteredSuggestions = SUGGESTED_QUESTIONS.filter(q => mode === 'quick' || q.mode === mode).slice(0, 6);
+  // Supercharge #1: Use page-specific suggestions when available
+  const pageSuggestions = pageContext?.page ? PAGE_SUGGESTED_QUESTIONS[pageContext.page] : null;
+  const baseSuggestions = pageSuggestions || SUGGESTED_QUESTIONS;
+  const filteredSuggestions = baseSuggestions.filter(q => mode === 'quick' || q.mode === mode).slice(0, 6);
+  
+  // Supercharge #2: Page-specific placeholder
+  const placeholder = pageContext?.page ? PAGE_PLACEHOLDERS[pageContext.page] : undefined;
 
   return (
     <Dialog open={state.open} onOpenChange={setOpen}>
