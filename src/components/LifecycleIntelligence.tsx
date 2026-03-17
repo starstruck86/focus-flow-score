@@ -60,9 +60,10 @@ export function LifecycleTierBadge({ account }: { account: Account }) {
             {isOverridden && <Pencil className="h-2 w-2 ml-0.5" />}
           </Badge>
         </TooltipTrigger>
-        <TooltipContent side="top" className="text-xs max-w-[200px]">
-          <p className="font-semibold">ICP Tier {tier}</p>
-          {account.icpFitScore != null && <p>Fit Score: {account.icpFitScore}/100</p>}
+        <TooltipContent side="top" className="text-xs max-w-[220px]">
+          <p className="font-semibold">ICP Tier {tier} — {tier === '1' ? 'Must Win' : tier === '2' ? 'Strong Fit' : tier === '3' ? 'Disqualified (Tech Stack)' : 'Bad Fit'}</p>
+          <p className="text-muted-foreground">Tier = ICP Fit</p>
+          {account.icpFitScore != null && <p>Priority Score: {account.icpFitScore}/40</p>}
           {isOverridden && <p className="text-primary">Manually overridden</p>}
           {account.confidenceScore != null && <p>Confidence: {account.confidenceScore}%</p>}
         </TooltipContent>
