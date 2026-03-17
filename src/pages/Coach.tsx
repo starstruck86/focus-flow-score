@@ -14,7 +14,7 @@ import {
   GraduationCap, TrendingUp, Target, Mic, Sparkles, ArrowRight, ArrowUp, ArrowDown, Minus,
   CheckCircle2, AlertTriangle, Lightbulb, BarChart3, Loader2, MessageSquareQuote,
   ShieldCheck, ShieldAlert, Brain, Crosshair, Zap, Clock, Eye, FileText,
-  Upload, Plus, ChevronDown, ChevronUp, Wand2,
+  Upload, Plus, ChevronDown, ChevronUp, Wand2, Swords,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCallTranscripts, useSaveTranscript } from '@/hooks/useCallTranscripts';
