@@ -30,6 +30,10 @@ function overlaps(a: { start_time: string; end_time: string }, b: { start_time: 
   return toMinutes(a.start_time) < toMinutes(b.end_time) && toMinutes(b.start_time) < toMinutes(a.end_time);
 }
 
+function normalizeLabel(label: string): string {
+  return label.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 function mergeLockedCalendarBlocks(
   aiBlocks: Array<Record<string, any>>,
   lockedBlocks: Array<Record<string, any>>,
@@ -38,11 +42,17 @@ function mergeLockedCalendarBlocks(
     lockedBlocks.map((block) => `${block.start_time}-${block.end_time}-${block.label.trim().toLowerCase()}`),
   );
 
+  // Also build a set of normalized locked labels to catch duplicate meetings at wrong times
+  const lockedLabelSet = new Set(lockedBlocks.map((block) => normalizeLabel(block.label)));
+
   const filteredAiBlocks = aiBlocks.filter((block) => {
     if (!block?.start_time || !block?.end_time || !block?.label) return false;
 
     const key = `${block.start_time}-${block.end_time}-${String(block.label).trim().toLowerCase()}`;
     if (lockedKeys.has(key)) return false;
+
+    // Drop AI-generated meeting blocks that duplicate a locked meeting (same name, different time)
+    if (block.type === "meeting" && lockedLabelSet.has(normalizeLabel(block.label))) return false;
 
     if (block.type === "meeting") {
       return !lockedBlocks.some((lockedBlock) => overlaps(block, lockedBlock));
