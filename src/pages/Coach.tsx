@@ -668,10 +668,10 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px]">Opportunity</Label>
-                    <Select value={opportunityId} onValueChange={setOpportunityId}>
+                    <Select value={opportunityId || "__none__"} onValueChange={(v) => setOpportunityId(v === "__none__" ? "" : v)}>
                       <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Link opp..." /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="__none__">None</SelectItem>
                         {opportunities
                           .filter(o => !accountId || o.accountId === accountId)
                           .sort((a, b) => a.name.localeCompare(b.name))
