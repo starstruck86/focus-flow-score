@@ -1,11 +1,13 @@
 import { useState, useCallback } from 'react';
-import { CheckCircle2, Circle, ChevronDown, ChevronRight, Target, Brain, Crosshair, Plus, X } from 'lucide-react';
+import { CheckCircle2, Circle, ChevronDown, ChevronRight, Target, Brain, Crosshair, Plus, X, Sparkles, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { useOpportunityMethodology, type CallGoal } from '@/hooks/useOpportunityMethodology';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 interface Props {
