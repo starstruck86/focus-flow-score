@@ -21,8 +21,9 @@ import { CollapsibleSection, LinkPill, LastTouchIndicator, safeFormat } from '@/
 import { useDebouncedUpdate } from '@/hooks/useDebouncedUpdate';
 import {
   ArrowLeft, ChevronRight, Building2, Target, Users,
-  FileText, CheckSquare, Calendar,
+  FileText, CheckSquare, Calendar, Sparkles,
 } from 'lucide-react';
+import { AccountSynopsisModal } from '@/components/AccountSynopsisModal';
 import { cn } from '@/lib/utils';
 import type { AccountTier, AccountStatus } from '@/types';
 
