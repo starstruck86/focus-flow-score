@@ -397,14 +397,14 @@ function parseICS(icsContent: string): RawEvent[] {
       currentEvent = { exdates: [] };
       allDay = false;
     } else if (line === 'END:VEVENT' && currentEvent) {
-      if (currentEvent.uid && currentEvent.title && currentEvent.start_time) {
+      if (currentEvent.uid && currentEvent.start_time) {
         const duration = currentEvent.end_time
           ? currentEvent.end_time.getTime() - currentEvent.start_time.getTime()
           : 3600000; // default 1 hour
 
         events.push({
           uid: currentEvent.uid,
-          title: currentEvent.title,
+          title: currentEvent.title || null,
           description: currentEvent.description || null,
           start_time: currentEvent.start_time,
           end_time: currentEvent.end_time || null,
