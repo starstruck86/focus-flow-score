@@ -1,10 +1,18 @@
-import { useState, useEffect, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useStore } from '@/store/useStore';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { Clock, Rocket, Shield, BriefcaseBusiness, Phone, Users, BookOpen, Coffee, Target, Lightbulb, CheckCircle2, X } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Clock, Rocket, Shield, BriefcaseBusiness, Phone, Users,
+  BookOpen, Coffee, Target, Lightbulb, CheckCircle2, X,
+  Building2, ThumbsUp, ThumbsDown,
+} from 'lucide-react';
 
 interface TimeBlock {
   start_time: string;
@@ -14,6 +22,9 @@ interface TimeBlock {
   workstream?: 'new_logo' | 'renewal' | 'general';
   goals: string[];
   reasoning: string;
+  actual_dials?: number;
+  actual_emails?: number;
+  linked_accounts?: { id: string; name: string }[];
 }
 
 const TYPE_CONFIG: Record<string, { icon: typeof Clock; color: string; barColor: string }> = {
@@ -46,9 +57,13 @@ function toMinutes(t: string): number {
 
 export function DayTimeline() {
   const { user } = useAuth();
+  const { accounts } = useStore();
+  const queryClient = useQueryClient();
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const [selectedBlock, setSelectedBlock] = useState<number | null>(null);
   const [nowPct, setNowPct] = useState(0);
+  const [accountSearchBlockIdx, setAccountSearchBlockIdx] = useState<number | null>(null);
+  const [accountSearchQuery, setAccountSearchQuery] = useState('');
 
   const { data: plan } = useQuery({
     queryKey: ['daily-time-blocks', todayStr],
@@ -88,12 +103,58 @@ export function DayTimeline() {
     return () => clearInterval(interval);
   }, [blocks, dayStart, totalMinutes]);
 
+  // Toggle goal completion
+  const toggleGoal = useCallback(async (blockIdx: number, goalIdx: number) => {
+    if (!plan) return;
+    const goalKey = `${blockIdx}-${goalIdx}`;
+    const current = (plan.completed_goals || []) as string[];
+    const updated = current.includes(goalKey)
+      ? current.filter((g: string) => g !== goalKey)
+      : [...current, goalKey];
+
+    queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, completed_goals: updated });
+    await supabase.from('daily_time_blocks' as any).update({ completed_goals: updated }).eq('id', plan.id);
+  }, [plan, todayStr, queryClient]);
+
+  // Update block field (dials, emails)
+  const updateBlockActual = useCallback(async (blockIdx: number, field: 'actual_dials' | 'actual_emails', value: number) => {
+    if (!plan) return;
+    const updatedBlocks = [...(plan.blocks as TimeBlock[])];
+    updatedBlocks[blockIdx] = { ...updatedBlocks[blockIdx], [field]: value };
+    queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks: updatedBlocks });
+    await supabase.from('daily_time_blocks' as any).update({ blocks: updatedBlocks }).eq('id', plan.id);
+  }, [plan, todayStr, queryClient]);
+
+  // Update linked accounts on a prep block
+  const updateBlockLinkedAccounts = useCallback(async (blockIdx: number, linkedAccounts: { id: string; name: string }[]) => {
+    if (!plan) return;
+    const updatedBlocks = [...(plan.blocks as TimeBlock[])];
+    updatedBlocks[blockIdx] = { ...updatedBlocks[blockIdx], linked_accounts: linkedAccounts };
+    queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks: updatedBlocks });
+    await supabase.from('daily_time_blocks' as any).update({ blocks: updatedBlocks }).eq('id', plan.id);
+  }, [plan, todayStr, queryClient]);
+
+  // Block thumbs feedback
+  const thumbsBlock = useCallback(async (blockIdx: number, thumbs: 'up' | 'down') => {
+    if (!plan) return;
+    const current = (plan.block_feedback || []) as { blockIdx: number; thumbs: string }[];
+    const existing = current.findIndex((f: any) => f.blockIdx === blockIdx);
+    const updated = [...current];
+    if (existing >= 0) updated[existing] = { blockIdx, thumbs };
+    else updated.push({ blockIdx, thumbs });
+    queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, block_feedback: updated });
+    await supabase.from('daily_time_blocks' as any).update({ block_feedback: updated }).eq('id', plan.id);
+  }, [plan, todayStr, queryClient]);
+
   if (blocks.length === 0) return null;
 
   const selected = selectedBlock !== null ? blocks[selectedBlock] : null;
   const selectedConfig = selected ? TYPE_CONFIG[selected.type] || TYPE_CONFIG.admin : null;
   const SelectedIcon = selectedConfig?.icon || Clock;
   const WsIcon = selected?.workstream ? WORKSTREAM_ICON[selected.workstream] || BriefcaseBusiness : null;
+  const blockFeedbackMap = new Map(
+    ((plan?.block_feedback || []) as { blockIdx: number; thumbs: string }[]).map((f: any) => [f.blockIdx, f.thumbs])
+  );
 
   return (
     <div className="mb-4 rounded-xl border border-border bg-card/80 backdrop-blur-sm overflow-hidden">
@@ -114,7 +175,6 @@ export function DayTimeline() {
         {/* The actual timeline bar */}
         <div className="relative h-10 rounded-lg bg-muted/30 overflow-hidden flex">
           {blocks.map((block, i) => {
-            const startPct = ((toMinutes(block.start_time) - dayStart) / totalMinutes) * 100;
             const widthPct = ((toMinutes(block.end_time) - toMinutes(block.start_time)) / totalMinutes) * 100;
             const config = TYPE_CONFIG[block.type] || TYPE_CONFIG.admin;
             const Icon = config.icon;
@@ -130,7 +190,6 @@ export function DayTimeline() {
             })();
             const isSelected = selectedBlock === i;
 
-            // Count completed goals for this block
             const totalG = block.goals.length;
             const doneG = block.goals.filter((_, gi) => completedGoals.has(`${i}-${gi}`)).length;
 
@@ -185,7 +244,7 @@ export function DayTimeline() {
       </div>
 
       {/* Selected block detail panel */}
-      {selected && selectedConfig && (
+      {selected && selectedConfig && selectedBlock !== null && (
         <div className="px-3 pb-3 border-t border-border/30 pt-2.5 animate-fade-in">
           <div className="flex items-start justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -217,34 +276,189 @@ export function DayTimeline() {
             </button>
           </div>
 
-          {/* Goals */}
+          {/* Goals with interactive checkboxes */}
           {selected.goals.length > 0 && (
             <div className="space-y-1 ml-9">
               {selected.goals.map((goal, gi) => {
-                const isDone = completedGoals.has(`${selectedBlock}-${gi}`);
+                const goalKey = `${selectedBlock}-${gi}`;
+                const isDone = completedGoals.has(goalKey);
                 return (
-                  <div key={gi} className={cn(
-                    "flex items-center gap-1.5 text-[11px]",
-                    isDone ? "text-status-green line-through" : "text-muted-foreground"
-                  )}>
-                    {isDone ? (
-                      <CheckCircle2 className="h-3 w-3 text-status-green shrink-0" />
-                    ) : (
-                      <div className="h-3 w-3 rounded-full border border-muted-foreground/40 shrink-0" />
+                  <div key={gi} className="flex items-center gap-1.5 group/goal">
+                    <Checkbox
+                      checked={isDone}
+                      onCheckedChange={() => toggleGoal(selectedBlock, gi)}
+                      className="h-3.5 w-3.5"
+                    />
+                    <span className={cn(
+                      "text-[11px] transition-all cursor-pointer",
+                      isDone ? "text-status-green line-through opacity-70" : "text-muted-foreground"
                     )}
-                    {goal}
+                      onClick={() => toggleGoal(selectedBlock, gi)}
+                    >
+                      {goal}
+                    </span>
                   </div>
                 );
               })}
             </div>
           )}
 
-          {/* Reasoning */}
-          {selected.reasoning && (
-            <p className="text-[10px] text-muted-foreground/70 italic ml-9 mt-1.5">
-              💡 {selected.reasoning}
-            </p>
+          {/* Dial tracker for prospecting blocks */}
+          {selected.type === 'prospecting' && (
+            <div className="flex items-center gap-3 mt-2.5 ml-9 py-1.5 px-2.5 rounded-md bg-muted/40 border border-border/30">
+              <div className="flex items-center gap-1.5">
+                <Phone className="h-3 w-3 text-blue-500" />
+                <span className="text-[10px] text-muted-foreground font-medium">Dials:</span>
+                <Input
+                  type="number"
+                  min={0}
+                  className="h-6 w-14 text-xs text-center px-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  placeholder="—"
+                  value={selected.actual_dials ?? ''}
+                  onChange={e => {
+                    const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                    if (!isNaN(val)) updateBlockActual(selectedBlock, 'actual_dials', val);
+                  }}
+                />
+              </div>
+              {selected.label.toLowerCase().includes('email') && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-muted-foreground font-medium">Emails:</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    className="h-6 w-14 text-xs text-center px-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    placeholder="—"
+                    value={selected.actual_emails ?? ''}
+                    onChange={e => {
+                      const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                      if (!isNaN(val)) updateBlockActual(selectedBlock, 'actual_emails', val);
+                    }}
+                  />
+                </div>
+              )}
+            </div>
           )}
+
+          {/* Account picker for prep blocks */}
+          {selected.type === 'prep' && (
+            <div className="mt-2.5 ml-9 py-1.5 px-2.5 rounded-md bg-muted/40 border border-border/30">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <Target className="h-3 w-3 text-cyan-500" />
+                <span className="text-[10px] text-muted-foreground font-medium">Target Accounts:</span>
+              </div>
+              {(selected.linked_accounts || []).length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-1.5">
+                  {(selected.linked_accounts || []).map(acct => (
+                    <Badge
+                      key={acct.id}
+                      variant="outline"
+                      className="text-[10px] h-5 gap-1 bg-accent/50 pr-1 group/pill"
+                    >
+                      <Building2 className="h-3 w-3" />
+                      {acct.name}
+                      <button
+                        onClick={() => {
+                          const updated = (selected.linked_accounts || []).filter(a => a.id !== acct.id);
+                          updateBlockLinkedAccounts(selectedBlock, updated);
+                        }}
+                        className="ml-0.5 opacity-0 group-hover/pill:opacity-100 transition-opacity"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              {accountSearchBlockIdx === selectedBlock ? (
+                <div className="relative">
+                  <Input
+                    autoFocus
+                    className="h-6 text-xs"
+                    placeholder="Search accounts..."
+                    value={accountSearchQuery}
+                    onChange={e => setAccountSearchQuery(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Escape') {
+                        setAccountSearchBlockIdx(null);
+                        setAccountSearchQuery('');
+                      }
+                    }}
+                  />
+                  {accountSearchQuery.length > 0 && (
+                    <div className="absolute z-20 top-7 left-0 right-0 bg-popover border border-border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                      {accounts
+                        .filter(a => {
+                          const q = accountSearchQuery.toLowerCase();
+                          const alreadyLinked = (selected.linked_accounts || []).some(la => la.id === a.id);
+                          return !alreadyLinked && a.name.toLowerCase().includes(q);
+                        })
+                        .slice(0, 8)
+                        .map(a => (
+                          <button
+                            key={a.id}
+                            className="w-full text-left px-3 py-1.5 hover:bg-accent transition-colors text-xs flex items-center justify-between"
+                            onClick={() => {
+                              const updated = [...(selected.linked_accounts || []), { id: a.id, name: a.name }];
+                              updateBlockLinkedAccounts(selectedBlock, updated);
+                              setAccountSearchQuery('');
+                              if (updated.length >= 3) {
+                                setAccountSearchBlockIdx(null);
+                              }
+                            }}
+                          >
+                            <span>{a.name}</span>
+                            <span className="text-[10px] text-muted-foreground">Tier {a.tier}</span>
+                          </button>
+                        ))}
+                      {accounts.filter(a => !((selected.linked_accounts || []).some(la => la.id === a.id)) && a.name.toLowerCase().includes(accountSearchQuery.toLowerCase())).length === 0 && (
+                        <div className="px-3 py-2 text-[11px] text-muted-foreground">No matching accounts</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    setAccountSearchBlockIdx(selectedBlock);
+                    setAccountSearchQuery('');
+                  }}
+                  className="text-[11px] text-primary hover:text-primary/80 font-medium"
+                >
+                  + Add account
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Thumbs feedback + reasoning */}
+          <div className="flex items-center gap-2 mt-2 ml-9">
+            <div className="flex gap-0.5">
+              <button
+                onClick={() => thumbsBlock(selectedBlock, 'up')}
+                className={cn(
+                  "p-0.5 rounded transition-colors",
+                  blockFeedbackMap.get(selectedBlock) === 'up' ? "text-status-green" : "text-muted-foreground/25 hover:text-muted-foreground/50"
+                )}
+              >
+                <ThumbsUp className="h-3 w-3" />
+              </button>
+              <button
+                onClick={() => thumbsBlock(selectedBlock, 'down')}
+                className={cn(
+                  "p-0.5 rounded transition-colors",
+                  blockFeedbackMap.get(selectedBlock) === 'down' ? "text-destructive" : "text-muted-foreground/25 hover:text-muted-foreground/50"
+                )}
+              >
+                <ThumbsDown className="h-3 w-3" />
+              </button>
+            </div>
+            {selected.reasoning && (
+              <p className="text-[10px] text-muted-foreground/50 italic truncate">
+                💡 {selected.reasoning}
+              </p>
+            )}
+          </div>
         </div>
       )}
     </div>
