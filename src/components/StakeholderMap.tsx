@@ -123,6 +123,9 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
   const [addingUnderParent, setAddingUnderParent] = useState<string | null>(null);
   const [quickAddName, setQuickAddName] = useState('');
   const [quickAddTitle, setQuickAddTitle] = useState('');
+  const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
+  const [isEnrichingContacts, setIsEnrichingContacts] = useState(false);
+  const [isInferringHierarchy, setIsInferringHierarchy] = useState(false);
 
   useEffect(() => {
     setDiscoveredContacts([]);
