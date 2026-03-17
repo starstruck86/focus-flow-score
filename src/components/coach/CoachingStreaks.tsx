@@ -86,8 +86,9 @@ export function CoachingStreaks() {
       return dA.localeCompare(dB);
     });
     let streak = 0;
+    const TOLERANCE = 2; // Overall score tolerance slightly higher (out of 100)
     for (let i = sorted.length - 1; i > 0; i--) {
-      if (sorted[i].overall_score >= sorted[i - 1].overall_score) {
+      if (sorted[i].overall_score >= sorted[i - 1].overall_score - TOLERANCE) {
         streak++;
       } else {
         break;

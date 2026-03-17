@@ -65,11 +65,14 @@ export function DealIntelligence() {
 
     const summaries: DealSummary[] = [];
 
-    byOpp.forEach((grades, accountId) => {
+    byOpp.forEach(({ type, grades }, key) => {
       if (grades.length < 1) return;
 
-      const account = accounts.find(a => a.id === accountId);
-      const relatedOpps = opportunities.filter(o => o.accountId === accountId);
+      const rawId = key.replace(/^(opp|account):/, '');
+      const opp = type === 'opp' ? opportunities.find(o => o.id === rawId) : null;
+      const accountId = type === 'opp' ? opp?.accountId : rawId;
+      const account = accountId ? accounts.find(a => a.id === accountId) : null;
+      const relatedOpps = type === 'opp' ? (opp ? [opp] : []) : opportunities.filter(o => o.accountId === rawId);
 
       // Sort by date
       const sorted = [...grades].sort((a, b) => {
