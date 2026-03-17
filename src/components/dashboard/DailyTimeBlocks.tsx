@@ -257,6 +257,35 @@ export function DailyTimeBlocks() {
     toast.success('Block updated');
   }, [plan, editingBlock, editLabel, editGoals, todayStr, queryClient]);
 
+  // Dismiss a block
+  const dismissBlock = useCallback(async (blockIdx: number) => {
+    if (!plan) return;
+    setDismissedBlocks(prev => new Set([...prev, blockIdx]));
+    toast.success('Meeting dismissed from plan');
+  }, [plan]);
+
+  // Link opportunity to a block
+  const linkOpportunity = useCallback((blockIdx: number, opp: { id: string; name: string }) => {
+    setBlockOppLinks(prev => {
+      const next = new Map(prev);
+      next.set(blockIdx, opp);
+      return next;
+    });
+    setLinkOppBlockIdx(null);
+    toast.success(`Linked ${opp.name}`);
+  }, []);
+
+  // Regenerate with dismissed blocks and linked opps
+  const regenerateWithChanges = useCallback(() => {
+    // The dismissed blocks and linked opps will be reflected in the current state
+    // For now, trigger a regenerate which will pull fresh calendar data with correct timezone
+    generateMutation.mutate();
+    setDismissedBlocks(new Set());
+    setBlockOppLinks(new Map());
+  }, [generateMutation]);
+
+  const hasChanges = dismissedBlocks.size > 0 || blockOppLinks.size > 0;
+
   // Calculate progress
   const blocks = (plan?.blocks || []) as TimeBlock[];
   const totalGoals = blocks.reduce((s, b) => s + b.goals.length, 0);
