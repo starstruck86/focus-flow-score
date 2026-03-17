@@ -4,12 +4,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { FileText, Search, Clock, Target, RefreshCw, Trash2, Building2 } from 'lucide-react';
+import { FileText, Search, Clock, Target, RefreshCw, Trash2, Building2, GraduationCap } from 'lucide-react';
 import { useCallTranscripts, useDeleteTranscript, type CallTranscript } from '@/hooks/useCallTranscripts';
+import { useGradeTranscript, useTranscriptGrade } from '@/hooks/useTranscriptGrades';
 import { useStore } from '@/store/useStore';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { SalesCoachPanel } from '@/components/SalesCoachPanel';
 
 interface TranscriptViewerProps {
   open: boolean;
