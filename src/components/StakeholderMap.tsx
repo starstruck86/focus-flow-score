@@ -580,12 +580,19 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
           config.borderClass,
           draggedContactId === contact.id && "opacity-40 scale-95",
           dropTargetId === contact.id && "ring-2 ring-primary shadow-lg scale-105",
+          selectedContactIds.has(contact.id) && "ring-2 ring-primary/60",
         )}
       >
+        {/* Selection checkbox */}
+        <div className="absolute top-1.5 left-1.5 z-10" onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={selectedContactIds.has(contact.id)}
+            onCheckedChange={() => toggleContactSelection(contact.id)}
+            className="h-3.5 w-3.5"
+          />
+        </div>
         {/* Color top bar */}
         <div className={cn("h-1.5 rounded-t-[6px]", config.barClass)} />
-
-        <div className="px-3 py-2.5 text-center">
           <div className="flex items-center justify-center gap-1 mb-0.5">
             {contact.linkedin_url ? (
               <a
