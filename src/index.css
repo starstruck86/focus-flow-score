@@ -65,6 +65,19 @@
     --circadian-evening-from: 230 60% 50%;
     --circadian-evening-to: 260 50% 45%;
 
+    /* Coach / grade tokens */
+    --grade-excellent: 160 84% 39%;
+    --grade-good: 210 100% 50%;
+    --grade-average: 38 92% 50%;
+    --grade-poor: 24 95% 53%;
+    --grade-failing: 0 72% 51%;
+    --coach-cotm: 38 92% 50%;
+    --coach-meddicc: 210 100% 50%;
+    --coach-discovery: 160 84% 39%;
+
+    /* Bottom nav */
+    --nav-active-glow: 210 100% 50% / 0.15;
+
     --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 220 20% 20%;
     --sidebar-primary: 210 100% 50%;
