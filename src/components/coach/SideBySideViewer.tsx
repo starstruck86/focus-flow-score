@@ -54,7 +54,7 @@ export function SideBySideViewer({ transcriptContent, grade, renderScorecard }: 
         </Badge>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Transcript Panel */}
         <Card className="border-border/50">
           <CardHeader className="pb-2 pt-3 px-4">

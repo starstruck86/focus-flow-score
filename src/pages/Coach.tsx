@@ -510,12 +510,14 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
   const opportunities = useStore(s => s.opportunities);
 
   // Auto-detect account when content or participants change
+  const manuallySelected = useRef(false);
   useEffect(() => {
     if (!pasteContent && !participants) {
       setAutoDetected(null);
       return;
     }
-    if (accountId) return; // User already selected one
+    if (manuallySelected.current) return; // User manually picked one
+    if (accountId && !autoDetected) return; // Already has a manual selection
 
     const timer = setTimeout(() => {
       const result = detectAccountFromTranscript(pasteContent, participants, accounts);
@@ -528,7 +530,7 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [pasteContent, participants, accounts, accountId]);
+  }, [pasteContent, participants, accounts]); // removed accountId to prevent loops
 
   const handleFile = useCallback(async (file: File) => {
     setFileLoading(true);
