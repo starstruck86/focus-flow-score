@@ -211,6 +211,7 @@ function ChatInterface({
   const [isStreaming, setIsStreaming] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(true);
+  const [handsFree, setHandsFree] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const saveMessages = useSaveMockMessages();
@@ -227,19 +228,26 @@ function ChatInterface({
     }
   }, [messages.length, isStreaming]);
 
-  // Auto-speak assistant responses when voice mode is on
+  // Auto-speak assistant responses when voice mode is on, then auto-record in hands-free mode
   const lastAssistantRef = useRef<string>('');
   useEffect(() => {
     if (!voiceEnabled || !autoSpeak || isStreaming) return;
     const lastMsg = messages[messages.length - 1];
     if (lastMsg?.role === 'assistant' && lastMsg.content !== lastAssistantRef.current) {
       lastAssistantRef.current = lastMsg.content;
-      voice.playTTS(lastMsg.content).catch(err => {
-        console.error('TTS error:', err);
-        toast.error('Voice playback failed');
-      });
+      voice.playTTS(lastMsg.content)
+        .then(() => {
+          // In hands-free mode, auto-start recording after buyer finishes speaking
+          if (handsFree && voiceEnabled && !voice.isRecording) {
+            voice.startRecording().catch(() => {});
+          }
+        })
+        .catch(err => {
+          console.error('TTS error:', err);
+          toast.error('Voice playback failed');
+        });
     }
-  }, [messages, isStreaming, voiceEnabled, autoSpeak]);
+  }, [messages, isStreaming, voiceEnabled, autoSpeak, handsFree]);
 
   const sendMessage = useCallback(async (textOverride?: string) => {
     const text = (textOverride || input).trim();
@@ -349,15 +357,29 @@ function ChatInterface({
               <span className="text-[10px] text-muted-foreground">Voice</span>
             </div>
             {voiceEnabled && (
-              <div className="flex items-center gap-1.5">
-                <Volume2 className="h-3.5 w-3.5 text-muted-foreground" />
-                <Switch
-                  checked={autoSpeak}
-                  onCheckedChange={setAutoSpeak}
-                  className="scale-75"
-                />
-                <span className="text-[10px] text-muted-foreground">Auto-speak</span>
-              </div>
+              <>
+                <div className="flex items-center gap-1.5">
+                  <Volume2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  <Switch
+                    checked={autoSpeak}
+                    onCheckedChange={setAutoSpeak}
+                    className="scale-75"
+                  />
+                  <span className="text-[10px] text-muted-foreground">Auto-speak</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Zap className="h-3.5 w-3.5 text-muted-foreground" />
+                  <Switch
+                    checked={handsFree}
+                    onCheckedChange={(v) => {
+                      setHandsFree(v);
+                      if (v) setAutoSpeak(true); // hands-free requires auto-speak
+                    }}
+                    className="scale-75"
+                  />
+                  <span className="text-[10px] text-muted-foreground">Hands-free</span>
+                </div>
+              </>
             )}
             <Button size="sm" variant="destructive" onClick={onEnd}>
               <Square className="h-3 w-3 mr-1" /> End & Grade

@@ -21,6 +21,7 @@ import { WorkdayCheckInButton } from '@/components/WorkdayCheckInButton';
 import { GlobalSearch } from '@/components/GlobalSearch';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { TerritoryCopilot } from '@/components/TerritoryCopilot';
+import { VoiceCommandButton } from '@/components/VoiceCommandButton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { BackToToday } from '@/components/BackToToday';
 
@@ -90,6 +91,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
         <div className="flex items-center gap-2">
           <SaveIndicator />
+          <VoiceCommandButton />
           <TerritoryCopilot />
           <GlobalSearch />
           <ThemeToggle />
