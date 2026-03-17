@@ -173,6 +173,28 @@ function CopilotDialog() {
     streamingRef.current = false;
   }, []);
 
+  const handleMicClick = useCallback(async () => {
+    if (voice.isRecording) {
+      try {
+        const transcript = await voice.stopRecording();
+        if (transcript) {
+          setInput('');
+          sendMessage(transcript);
+        }
+      } catch (err: any) {
+        if (err.message !== 'Recording too short') {
+          toast.error('Voice input failed', { description: err.message });
+        }
+      }
+    } else {
+      try {
+        await voice.startRecording();
+      } catch {
+        // handled in hook
+      }
+    }
+  }, [voice, sendMessage]);
+
   const showSuggestions = messages.length === 0 && !isStreaming;
   const filteredSuggestions = SUGGESTED_QUESTIONS.filter(q => mode === 'quick' || q.mode === mode).slice(0, 6);
 
