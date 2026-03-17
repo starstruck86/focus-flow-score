@@ -142,7 +142,7 @@ export function DailyTimeBlocks() {
   }, [plan?.blocks]);
 
   const generateMutation = useMutation({
-    mutationFn: async (opts?: { confirmedScreenshotEvents?: any[] }) => {
+    mutationFn: async (opts: { confirmedScreenshotEvents?: any[] } | void) => {
       const { data, error } = await supabase.functions.invoke('generate-time-blocks', {
         body: { date: todayStr, confirmedScreenshotEvents: opts?.confirmedScreenshotEvents },
       });
