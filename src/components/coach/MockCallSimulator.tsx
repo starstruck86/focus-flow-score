@@ -7,11 +7,12 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
 import {
   Play, Square, Send, Loader2, RotateCcw, Trophy, Target, Crosshair,
   ShieldCheck, ShieldAlert, Eye, Brain, Zap, Clock, CheckCircle2,
   AlertTriangle, Lightbulb, MessageSquareQuote, ChevronDown, ChevronUp,
-  Swords, Mic, BarChart3, ArrowRight,
+  Swords, Mic, MicOff, BarChart3, ArrowRight, Volume2, VolumeX,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -19,8 +20,10 @@ import {
   useMockCallSessions, useCreateMockSession, useSaveMockMessages,
   useGradeMockCall, streamMockCall, type MockCallSession,
 } from '@/hooks/useMockCalls';
+import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { format, parseISO } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
+import { toast } from 'sonner';
 
 // ── CONSTANTS ──────────────────────────────────────────────
 const CALL_TYPES = ['Discovery', 'Demo', 'Pricing', 'Objection Handling', 'Executive Alignment', 'Deal Rescue'];
