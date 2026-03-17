@@ -250,6 +250,111 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
     if (result) setDiscoveredContacts(result);
   };
 
+  const toggleContactSelection = useCallback((id: string) => {
+    setSelectedContactIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleAllContacts = useCallback(() => {
+    if (!contacts) return;
+    if (selectedContactIds.size === contacts.length) {
+      setSelectedContactIds(new Set());
+    } else {
+      setSelectedContactIds(new Set(contacts.map(c => c.id)));
+    }
+  }, [contacts, selectedContactIds]);
+
+  const enrichSelectedContacts = useCallback(async () => {
+    if (!user || !contacts || selectedContactIds.size === 0) return;
+    setIsEnrichingContacts(true);
+    try {
+      const selected = contacts.filter(c => selectedContactIds.has(c.id));
+      const contactSummary = selected.map(c => `${c.name} - ${c.title || 'Unknown title'}`).join('\n');
+
+      const { data, error } = await supabase.functions.invoke('discover-contacts', {
+        body: {
+          accountId,
+          accountName,
+          website,
+          industry,
+          discoveryMode: 'auto',
+          maxContacts: selected.length,
+          focusPrompt: `UPDATE/ENRICH these EXISTING contacts (do NOT find new people, only update info for these specific people):\n${contactSummary}\n\nFor each person, verify and update: current title, department, seniority level, buyer role, influence level, and LinkedIn URL. Return ONLY these people with updated information.`,
+          includeReportingLines: true,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const enrichedContacts = data?.contacts || [];
+      let updated = 0;
+
+      for (const enriched of enrichedContacts) {
+        const match = selected.find(s => s.name.toLowerCase() === enriched.name?.toLowerCase());
+        if (!match) continue;
+
+        const updates: Record<string, any> = {};
+        if (enriched.title && enriched.title !== match.title) updates.title = enriched.title;
+        if (enriched.department) updates.department = enriched.department;
+        if (enriched.seniority) updates.seniority = enriched.seniority;
+        if (enriched.buyer_role && enriched.buyer_role !== 'unknown') updates.buyer_role = enriched.buyer_role;
+        if (enriched.influence_level) updates.influence_level = enriched.influence_level;
+        if (enriched.linkedin_url && !match.linkedin_url) updates.linkedin_url = enriched.linkedin_url;
+        if (enriched.reporting_to) updates.reporting_to = enriched.reporting_to;
+        if (enriched.notes) updates.notes = enriched.notes;
+
+        if (Object.keys(updates).length > 0) {
+          await supabase.from('contacts').update(updates).eq('id', match.id);
+          updated++;
+        }
+      }
+
+      qc.invalidateQueries({ queryKey: ['stakeholder-contacts', accountId] });
+      qc.invalidateQueries({ queryKey: ['org-chart-contacts', accountId] });
+      setSelectedContactIds(new Set());
+      toast.success(`Updated ${updated} contact(s)`, {
+        description: enrichedContacts.length > updated ? `${enrichedContacts.length - updated} unchanged` : undefined,
+      });
+    } catch (err) {
+      toast.error('Contact enrichment failed', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setIsEnrichingContacts(false);
+    }
+  }, [user, contacts, selectedContactIds, accountId, accountName, website, industry, qc]);
+
+  const handleInferHierarchy = useCallback(async () => {
+    setIsInferringHierarchy(true);
+    try {
+      // First clear all reporting_to so inference runs fresh
+      if (contacts) {
+        for (const c of contacts) {
+          if ((c as any).reporting_to) {
+            await supabase.from('contacts').update({ reporting_to: null }).eq('id', c.id);
+          }
+        }
+      }
+      const count = await autoInferHierarchy(accountId);
+      qc.invalidateQueries({ queryKey: ['stakeholder-contacts', accountId] });
+      qc.invalidateQueries({ queryKey: ['org-chart-contacts', accountId] });
+      if (count > 0) {
+        toast.success(`Organized ${count} contacts into hierarchy`);
+      } else {
+        toast.info('Could not infer hierarchy — contacts may all have the same seniority level');
+      }
+    } catch (err) {
+      toast.error('Hierarchy inference failed');
+    } finally {
+      setIsInferringHierarchy(false);
+    }
+  }, [accountId, contacts, qc]);
+
   const resetTuning = () => {
     setDiscoveryMode('auto');
     setMaxContacts('5');
