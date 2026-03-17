@@ -369,7 +369,7 @@ function TrendsDashboard() {
           {trendSummary.filter(t => t.direction !== 'stable').map(t => (
             <Badge key={t.dimension} variant="outline" className={cn(
               'text-xs',
-              t.direction === 'improving' ? 'border-emerald-500/30 text-emerald-400' : 'border-red-500/30 text-red-400'
+              t.direction === 'improving' ? 'border-grade-excellent/30 text-grade-excellent' : 'border-grade-failing/30 text-grade-failing'
             )}>
               {t.direction === 'improving' ? <ArrowUp className="h-3 w-3 mr-1" /> : <ArrowDown className="h-3 w-3 mr-1" />}
               {CATEGORY_LABELS[t.dimension]?.label || t.dimension}: {t.direction === 'improving' ? '+' : ''}{t.delta}
