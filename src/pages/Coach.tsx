@@ -364,6 +364,9 @@ function TrendsDashboard() {
 
   return (
     <div className="space-y-4">
+      {/* #1 Focus Recommendation */}
+      <CoachingFocus />
+
       {/* Weekly Coaching Digest */}
       <WeeklyCoachingDigest />
 
