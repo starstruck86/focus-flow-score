@@ -77,7 +77,7 @@ export function IcpScorePill({ account }: { account: Account }) {
   const score = account.icpScoreOverride ?? account.icpFitScore;
   if (score == null) return <span className="text-xs text-muted-foreground">—</span>;
   
-  const color = score >= 75 ? 'text-status-green' : score >= 50 ? 'text-primary' : score >= 25 ? 'text-status-yellow' : 'text-muted-foreground';
+  const color = score >= 30 ? 'text-status-green' : score >= 20 ? 'text-primary' : score >= 10 ? 'text-status-yellow' : 'text-muted-foreground';
   const isOverridden = account.icpScoreOverride != null;
   const isLowConfidence = account.confidenceScore != null && account.confidenceScore < 50;
 
@@ -91,13 +91,14 @@ export function IcpScorePill({ account }: { account: Account }) {
             isLowConfidence && 'opacity-60',
             isOverridden && 'underline decoration-dotted decoration-primary'
           )}>
-            {score}
+            {score}/40
           </span>
         </TooltipTrigger>
-        <TooltipContent side="top" className="text-xs">
-          ICP Fit Score {score}/100
-          {isOverridden && ' (overridden)'}
-          {isLowConfidence && ' • Low confidence'}
+        <TooltipContent side="top" className="text-xs max-w-[200px]">
+          <p>Priority Score {score}/40</p>
+          <p className="text-muted-foreground">Prioritization within tier (does not affect tier)</p>
+          {isOverridden && <p className="text-primary">Overridden</p>}
+          {isLowConfidence && <p>Low confidence</p>}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
