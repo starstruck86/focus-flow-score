@@ -390,13 +390,20 @@ Renewal: ${renewalTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`
     }
 
     const prompt = `You are an elite sales time management coach for a B2B SaaS account executive. The PRIMARY GOAL of each day is to maximize time spent on NEW LOGO prospecting — the work required to create more new logo opportunities. Everything else is secondary.
+
+THIS DAY IS PART OF A WEEKLY PLAN. Today's targets are ADJUSTED based on meeting load and what's already been accomplished this week. On heavy meeting days, lower dial targets are expected — but lighter days should compensate. The weekly target MUST be hit across all 5 days combined.
 ${prefsContext}
+
+${weeklyContext}
 
 CRITICAL RULES:
 1. NO time blocks shorter than ${minBlockMin} minutes.
-2. NEW LOGO IS THE PRIORITY. The daily targets below (dials, convos, accounts researched, contacts prepped) can ONLY be achieved through Prep→Call Blitz cycles. You MUST schedule ENOUGH cycles to realistically hit these targets. Work backwards from the targets to determine how many cycles and how much time is needed.
+2. NEW LOGO IS THE PRIORITY. Use TODAY'S ADJUSTED TARGETS (from weekly context above) — NOT the raw daily averages. Schedule enough Prep→Call Blitz cycles to hit TODAY'S target.
 3. Use "workstream" field to tag each block as "new_logo" or "renewal" or "general"
-4. Goals must be REALISTIC and specific - not aspirational fantasies
+4. Goals must be REALISTIC and ACHIEVABLE. Use these realistic pacing rates:
+   - DIAL RATE: ~15 dials per 30 minutes (1 dial every 2 min including voicemail/notes). A 45-min Call Blitz = ~22 dials. A 60-min blitz = ~30 dials.
+   - PREP RATE: 2-3 accounts per 25-30 min prep block
+   - Do the math: if today's target is ${todayDialTarget} dials, you need ~${Math.ceil(todayDialTarget / 25)} Call Blitz blocks of 45-50 min each
 5. ${preferNewLogoMorning ? 'Account for energy patterns: deep prospecting/new logo work in the morning, renewal tasks in the afternoon' : 'Distribute new logo and renewal work based on meeting gaps'}
 6. Include buffer time around meetings (5-10 min)
 7. If feedback says past suggestions were unrealistic, SIGNIFICANTLY dial back goals
@@ -418,7 +425,7 @@ WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL):
 - This is research + cadence + cold outreach work — high-energy hunter mode
 - Use PREP → EXECUTE paired cycles:
   - "Prep" block (type: "prep", 25-35 min): Research 2-3 specific accounts, review contacts, build call notes
-  - Immediately followed by "Call Blitz" block (type: "prospecting", 45-60 min): Dial into those exact accounts while context is fresh
+  - Immediately followed by "Call Blitz" block (type: "prospecting", 45-60 min): Dial into those prepped accounts
   - Label prep blocks like: "Account Prep (Tessitura, Privy)"
   - Label execute blocks like: "Call Blitz #1 (15-20 dials)"
   - Each Prep block must be immediately followed by its Call Blitz — no gaps between a specific pair
