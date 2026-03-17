@@ -267,7 +267,7 @@ async function executeToolCalls(toolCalls: any[], supabase: any, userId: string)
 }
 
 // ─── System prompts ──────────────────────────────────────
-function buildSystemPrompt(ctx: any, mode: CopilotMode, researchData?: string): string {
+function buildSystemPrompt(ctx: any, mode: CopilotMode, researchData?: string, pageContext?: any): string {
   const today = new Date().toISOString().split("T")[0];
   const dayOfWeek = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
