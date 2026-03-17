@@ -158,7 +158,7 @@ function DataExportSection() {
   const handleExportJSON = async () => {
     setExporting(true);
     try {
-      const state = (await import('@/store/useStore')).useStore.getState();
+      const state = useStore.getState();
       const exportData = {
         exportedAt: new Date().toISOString(),
         version: 1,
