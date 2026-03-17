@@ -298,11 +298,12 @@ CRITICAL RULES:
 13. If screenshot-confirmed meetings differ from calendar DB, TRUST the screenshot.
 14. CALENDAR MEETINGS ARE FIXED ANCHORS. Every meeting listed below must appear as its own block at the exact EST start and end time shown. Do NOT move, round, combine, rename, or replace them. Do NOT generate your own meeting blocks — they are provided as locked blocks and merged automatically.
 15. DO NOT duplicate a meeting that already exists. If two calendar entries refer to the same meeting (same account/topic, overlapping times), use only ONE block at the correct time.
-15. DO NOT schedule ANY blocks before ${workStart} or after ${workEnd}. This is a HARD boundary.
+16. DO NOT schedule ANY blocks before ${workStart} or after ${workEnd}. This is a HARD boundary.
+17. ONLY use accounts from the NEW LOGO PROSPECTING list in Prep→Execute cycles. Current customers (accounts with renewals or active opportunities) are NOT prospecting targets.
 
 WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL):
 
-**NEW LOGO PROSPECTING (accounts with NO active opportunity) — THIS IS THE CORE OF THE DAY:**
+**NEW LOGO PROSPECTING (accounts with NO active opportunity AND not current customers) — THIS IS THE CORE OF THE DAY:**
 - This is research + cadence + cold outreach work — high-energy hunter mode
 - Use PREP → EXECUTE paired cycles:
   - "Prep" block (type: "prep"): Research 2-3 specific accounts, review contacts, build call notes
@@ -321,11 +322,11 @@ WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL):
 
 **RENEWALS — KEEP IT MINIMAL:**
 - Schedule ONE single "Renewal Review" block per day, 30-45 minutes MAX
-- Purpose: review 1-2 upcoming renewal accounts, check health, handle any urgent tasks the user has already created
-- DO NOT suggest specific renewal tasks, accounts, or opportunities in goals — the user manages their own renewal task list
+- Purpose: look closer at 1-2 customer accounts with upcoming renewals, review health, work through any tasks
+- Goals should be GENERIC: "Review 1-2 upcoming renewal accounts" or "Work through renewal task queue"
+- DO NOT name specific renewal accounts, opportunities, or tasks in the goals — the user manages their own renewal priorities
 - DO NOT create multiple renewal blocks or expand renewal time
-- Label it simply: "Renewal Review" with goals like "Review upcoming renewals, work through renewal task queue"
-- This is NOT prospecting or research — it's admin/task execution time
+- Label it simply: "Renewal Review"
 - Renewals should NEVER crowd out new logo prospecting time
 
 **MEETING PREP (for any upcoming customer/prospect meeting):**
