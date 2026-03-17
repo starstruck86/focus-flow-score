@@ -41,12 +41,21 @@ describe('detectAccountFromTranscript', () => {
     expect(result!.accountId).toBe('a2');
   });
 
-  it('skips very short account names', () => {
+  it('skips very short account names without participant signal', () => {
     const accounts = [makeAccount('a3', 'AI')];
     const result = detectAccountFromTranscript(
       'We discussed AI strategy with the team.', '', accounts,
     );
     expect(result).toBeNull();
+  });
+
+  it('detects short account names when in participants', () => {
+    const accounts = [makeAccount('a3b', 'SAP')];
+    const result = detectAccountFromTranscript(
+      'We discussed their platform migration.', 'John from SAP, Jane', accounts,
+    );
+    expect(result).not.toBeNull();
+    expect(result!.accountId).toBe('a3b');
   });
 
   it('returns highest confidence match', () => {

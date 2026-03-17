@@ -25,15 +25,15 @@ export function detectAccountFromTranscript(
     let score = 0;
     const nameLower = account.name.toLowerCase().trim();
 
-    // Skip very short names (too many false positives)
-    if (nameLower.length < 3) continue;
+    // Short names (2-3 chars) need stronger contextual signals
+    const isShort = nameLower.length <= 3;
 
     // Exact name match in first 3000 chars
     if (searchText.includes(nameLower)) {
-      score += 10;
-      // Bonus if in participants specifically
+      score += isShort ? 4 : 10; // Short names get less credit for raw match
+      // Bonus if in participants specifically (strong signal even for short names)
       if (participants.toLowerCase().includes(nameLower)) {
-        score += 5;
+        score += isShort ? 8 : 5; // Participant mention is very strong for short names
       }
     }
 

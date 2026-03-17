@@ -42,21 +42,22 @@ export function CoachingStreaks() {
     return categories.map(cat => {
       const scores = sorted.map((g: any) => (g as any)[`${cat}_score`] || 0);
 
-      // Calculate current improvement streak (consecutive calls where score >= previous)
+      // Calculate current improvement streak with tolerance for minor regression (1 point)
+      const TOLERANCE = 1;
       let currentStreak = 0;
       for (let i = scores.length - 1; i > 0; i--) {
-        if (scores[i] >= scores[i - 1]) {
+        if (scores[i] >= scores[i - 1] - TOLERANCE) {
           currentStreak++;
         } else {
           break;
         }
       }
 
-      // Calculate best streak
+      // Calculate best streak with same tolerance
       let bestStreak = 0;
       let streak = 0;
       for (let i = 1; i < scores.length; i++) {
-        if (scores[i] >= scores[i - 1]) {
+        if (scores[i] >= scores[i - 1] - TOLERANCE) {
           streak++;
           bestStreak = Math.max(bestStreak, streak);
         } else {
@@ -85,8 +86,9 @@ export function CoachingStreaks() {
       return dA.localeCompare(dB);
     });
     let streak = 0;
+    const TOLERANCE = 2; // Overall score tolerance slightly higher (out of 100)
     for (let i = sorted.length - 1; i > 0; i--) {
-      if (sorted[i].overall_score >= sorted[i - 1].overall_score) {
+      if (sorted[i].overall_score >= sorted[i - 1].overall_score - TOLERANCE) {
         streak++;
       } else {
         break;

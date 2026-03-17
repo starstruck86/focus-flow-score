@@ -46,25 +46,33 @@ export function DealIntelligence() {
   const dealSummaries = useMemo(() => {
     if (!allGrades?.length) return [];
 
-    // Group grades by opportunity
-    const byOpp = new Map<string, any[]>();
+    // Group grades by opportunity_id first, then fall back to account_id
+    const byOpp = new Map<string, { type: 'opp' | 'account'; grades: any[] }>();
     allGrades.forEach((g: any) => {
-      const oppId = g.call_transcripts?.account_id;
-      // Try to match via account -> opportunity
+      const oppId = g.call_transcripts?.opportunity_id;
+      const accountId = g.call_transcripts?.account_id;
+      // Prefer opportunity-level grouping when available
       if (oppId) {
-        const key = oppId;
-        if (!byOpp.has(key)) byOpp.set(key, []);
-        byOpp.get(key)!.push(g);
+        const key = `opp:${oppId}`;
+        if (!byOpp.has(key)) byOpp.set(key, { type: 'opp', grades: [] });
+        byOpp.get(key)!.grades.push(g);
+      } else if (accountId) {
+        const key = `account:${accountId}`;
+        if (!byOpp.has(key)) byOpp.set(key, { type: 'account', grades: [] });
+        byOpp.get(key)!.grades.push(g);
       }
     });
 
     const summaries: DealSummary[] = [];
 
-    byOpp.forEach((grades, accountId) => {
+    byOpp.forEach(({ type, grades }, key) => {
       if (grades.length < 1) return;
 
-      const account = accounts.find(a => a.id === accountId);
-      const relatedOpps = opportunities.filter(o => o.accountId === accountId);
+      const rawId = key.replace(/^(opp|account):/, '');
+      const opp = type === 'opp' ? opportunities.find(o => o.id === rawId) : null;
+      const accountId = type === 'opp' ? opp?.accountId : rawId;
+      const account = accountId ? accounts.find(a => a.id === accountId) : null;
+      const relatedOpps = type === 'opp' ? (opp ? [opp] : []) : opportunities.filter(o => o.accountId === rawId);
 
       // Sort by date
       const sorted = [...grades].sort((a, b) => {

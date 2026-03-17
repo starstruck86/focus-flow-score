@@ -19,16 +19,43 @@ export function SideBySideViewer({ transcriptContent, grade, renderScorecard }: 
 
   const evidence = (grade.evidence as EvidenceItem[]) || [];
 
-  // Build highlighted transcript
+  // Build highlighted transcript with fuzzy matching
   const highlightedContent = useMemo(() => {
     if (!transcriptContent) return [];
 
     const lines = transcriptContent.split('\n');
+
+    // Normalize for matching: lowercase, collapse whitespace, strip punctuation
+    const normalize = (s: string) => s.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+
+    // Pre-compute normalized evidence tokens (significant 4+ word sequences)
+    const evidenceMatchers = evidence.map(e => {
+      if (!e.quote) return null;
+      const norm = normalize(e.quote);
+      // Use multiple strategies: full match, start match, key-phrase match
+      const words = norm.split(' ').filter(w => w.length > 2);
+      const keyPhrases = words.length > 4 ? [
+        words.slice(0, 5).join(' '),
+        words.slice(-5).join(' '),
+      ] : [norm];
+      return { evidence: e, norm, keyPhrases };
+    }).filter(Boolean) as { evidence: EvidenceItem; norm: string; keyPhrases: string[] }[];
+
     return lines.map((line, i) => {
-      const matchingEvidence = evidence.find(e =>
-        e.quote && line.toLowerCase().includes(e.quote.toLowerCase().substring(0, 40))
-      );
-      return { line, index: i, evidence: matchingEvidence };
+      const lineNorm = normalize(line);
+      if (lineNorm.length < 5) return { line, index: i, evidence: undefined };
+
+      const matchingEvidence = evidenceMatchers.find(m => {
+        // Strategy 1: line contains a big chunk of the quote
+        if (m.norm.length > 10 && lineNorm.includes(m.norm.substring(0, Math.min(60, m.norm.length)))) return true;
+        // Strategy 2: quote contains the line (for shorter lines within a longer quote)
+        if (lineNorm.length > 15 && m.norm.includes(lineNorm)) return true;
+        // Strategy 3: key phrase match (first/last 5 words)
+        if (m.keyPhrases.some(kp => lineNorm.includes(kp))) return true;
+        return false;
+      });
+
+      return { line, index: i, evidence: matchingEvidence?.evidence };
     });
   }, [transcriptContent, evidence]);
 
