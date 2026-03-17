@@ -402,6 +402,13 @@ export function DailyTimeBlocks() {
           </div>
           <div className="flex items-center gap-1">
             <Button
+              variant="ghost" size="sm" className="h-7 w-7 p-0"
+              onClick={() => setShowPreferences(true)}
+              title="Plan preferences"
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+            </Button>
+            <Button
               variant="ghost" size="sm" className="h-7 text-xs"
               onClick={() => setShowFeedback(!showFeedback)}
               title="Rate today's plan"
