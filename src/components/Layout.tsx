@@ -1,4 +1,5 @@
 import { NavLink as RouterNavLink, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import { 
   LayoutDashboard, 
   Users, 
@@ -24,6 +25,19 @@ import { TerritoryCopilot } from '@/components/TerritoryCopilot';
 import { VoiceCommandButton } from '@/components/VoiceCommandButton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { BackToToday } from '@/components/BackToToday';
+import { useCopilot, type PageContext } from '@/contexts/CopilotContext';
+
+const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
+  '/': { page: 'dashboard', description: 'Today / Dashboard — daily plan, agenda, and key metrics' },
+  '/tasks': { page: 'tasks', description: 'Tasks — action items, follow-ups, and to-dos' },
+  '/outreach': { page: 'outreach', description: 'New Logo Outreach — prospecting accounts and pipeline building' },
+  '/renewals': { page: 'renewals', description: 'Renewals — existing customer renewals and retention' },
+  '/prep': { page: 'prep-hub', description: 'Prep Hub — meeting preparation and research' },
+  '/coach': { page: 'coach', description: 'Sales Coach — call analysis, roleplay, and skill development' },
+  '/trends': { page: 'trends', description: 'Trends — performance trends and analytics over time' },
+  '/quota': { page: 'quota', description: 'Quota — quota attainment, commission, and pipeline math' },
+  '/settings': { page: 'settings', description: 'Settings — app configuration and preferences' },
+};
 
 const navRow1 = [
   { to: '/', label: 'Today', icon: LayoutDashboard },
