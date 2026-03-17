@@ -229,17 +229,27 @@ serve(async (req) => {
     const newLogoTasks = activeTasks.filter((t: any) => t.motion !== 'renewal');
     const renewalTasks = activeTasks.filter((t: any) => t.motion === 'renewal');
 
-    const pipelineContext = `
-NEW LOGO PIPELINE (${newLogoOpps.length} opps):
-${newLogoOpps.slice(0, 8).map((o: any) => `- ${o.name}: ${o.stage}, $${o.arr || 0}, close ${o.close_date || 'TBD'}, next: ${o.next_step || 'none'}`).join('\n')}
+    // Separate prospecting accounts (no active opp) from accounts with active opps
+    const newLogoAccountIds = new Set(newLogoOpps.map((o: any) => o.account_id).filter(Boolean));
+    const renewalAccountIds = new Set(renewalOpps.map((o: any) => o.account_id).filter(Boolean));
+    const prospectingAccounts = newLogoAccounts.filter((a: any) => !newLogoAccountIds.has(a.id));
+    const accountsWithNewLogoOpps = newLogoAccounts.filter((a: any) => newLogoAccountIds.has(a.id));
 
-RENEWAL PIPELINE (${renewalOpps.length} opps, ${renewals.length} renewals):
-${renewalOpps.slice(0, 5).map((o: any) => `- ${o.name}: ${o.stage}, $${o.arr || 0}, close ${o.close_date || 'TBD'}`).join('\n')}
-${renewals.slice(0, 5).map((r: any) => `- ${r.account_name}: $${r.arr}, due ${r.renewal_due}, health ${r.health_status}, risk ${r.churn_risk}`).join('\n')}
+    const pipelineContext = `
+NEW LOGO PROSPECTING ACCOUNTS (NO active opportunity — these need Prep→Call Blitz cycles):
+${prospectingAccounts.slice(0, 8).map((a: any) => `- ${a.name} (Tier ${a.tier}, ${a.account_status}, cadence: ${a.cadence_name || 'none'})`).join('\n') || '(none)'}
+
+ACTIVE NEW LOGO OPPORTUNITIES (TASK & MEETING oriented — NOT research/cadence work):
+${newLogoOpps.slice(0, 8).map((o: any) => `- ${o.name}: ${o.stage}, $${o.arr || 0}, close ${o.close_date || 'TBD'}, next step: ${o.next_step || 'none'}${o.next_step_date ? ` (due ${o.next_step_date})` : ''}`).join('\n') || '(none)'}
+
+RENEWAL PIPELINE (TASK & MEETING oriented — admin, follow-ups, order forms, contracts):
+Opportunities: ${renewalOpps.slice(0, 5).map((o: any) => `- ${o.name}: ${o.stage}, $${o.arr || 0}, close ${o.close_date || 'TBD'}, next step: ${o.next_step || 'none'}`).join('\n') || '(none)'}
+Renewals: ${renewals.slice(0, 5).map((r: any) => `- ${r.account_name}: $${r.arr}, due ${r.renewal_due}, health ${r.health_status}, risk ${r.churn_risk}, next step: ${r.next_step || 'none'}`).join('\n') || '(none)'}
 
 OPEN TASKS:
-New Logo: ${newLogoTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ')}
-Renewal: ${renewalTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ')}`;
+New Logo Prospecting: ${newLogoTasks.filter((t: any) => !newLogoAccountIds.has(t.account_id)).slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ') || '(none)'}
+Active Opp Tasks: ${newLogoTasks.filter((t: any) => newLogoAccountIds.has(t.account_id)).slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ') || '(none)'}
+Renewal Tasks: ${renewalTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ') || '(none)'}`;
 
     // Build user preferences context
     const workStart = userPrefs?.work_start_time?.slice(0, 5) || '09:00';
@@ -274,34 +284,51 @@ ${prefsContext}
 CRITICAL RULES:
 1. NO time blocks shorter than ${minBlockMin} minutes.
 2. BATCH new logo activities together and renewal activities together — DO NOT interleave them
-3. New logo work = prospecting, research on new accounts, cadence execution, discovery calls. This is high-energy hunter work.
-4. Renewal work = task execution, check-ins, contract reviews, expansion conversations. This is more methodical relationship work.
-5. Use "workstream" field to tag each block as "new_logo" or "renewal" or "general"
-6. Goals must be REALISTIC and specific - not aspirational fantasies
-7. ${preferNewLogoMorning ? 'Account for energy patterns: deep prospecting/new logo work in the morning, renewal tasks in the afternoon' : 'Distribute new logo and renewal work based on meeting gaps'}
-8. Include buffer time around meetings (5-10 min)
-9. If feedback says past suggestions were unrealistic, SIGNIFICANTLY dial back goals
-10. Leave 30 min for daily journal/EOD wrap-up
-11. Never schedule prospecting calls during lunch (${lunchStart}-${lunchEnd})
-12. Build in at least one 15-min break mid-morning and mid-afternoon
-13. NAME SPECIFIC ACCOUNTS in goals when possible (e.g., "Research Acme Corp, Widget Inc, TechCo")
-14. For research blocks: suggest exactly which accounts to research and add to cadence
-15. For prospecting blocks: suggest which cadences to execute
-16. PERSONAL/FAMILY blocks are NON-NEGOTIABLE — the user has children (Quinn, Emmett). School drop-offs, pickups, and activities MUST be respected. Build work around them, not over them.
-17. If screenshot-confirmed meetings differ from calendar DB, TRUST the screenshot — the user verified them manually.
-18. CALENDAR MEETINGS ARE FIXED ANCHORS. Every meeting listed below must appear as its own block at the exact EST start and end time shown. Do NOT move, round, combine, rename, or replace them with a generic admin block.
-19. DO NOT schedule ANY blocks before ${workStart} or after ${workEnd}. This is a HARD boundary.
+3. Use "workstream" field to tag each block as "new_logo" or "renewal" or "general"
+4. Goals must be REALISTIC and specific - not aspirational fantasies
+5. ${preferNewLogoMorning ? 'Account for energy patterns: deep prospecting/new logo work in the morning, renewal tasks in the afternoon' : 'Distribute new logo and renewal work based on meeting gaps'}
+6. Include buffer time around meetings (5-10 min)
+7. If feedback says past suggestions were unrealistic, SIGNIFICANTLY dial back goals
+8. Leave 30 min for daily journal/EOD wrap-up
+9. Never schedule prospecting calls during lunch (${lunchStart}-${lunchEnd})
+10. Build in at least one 15-min break mid-morning and mid-afternoon
+11. NAME SPECIFIC ACCOUNTS in goals when possible
+12. PERSONAL/FAMILY blocks are NON-NEGOTIABLE — the user has children (Quinn, Emmett). School drop-offs, pickups, and activities MUST be respected.
+13. If screenshot-confirmed meetings differ from calendar DB, TRUST the screenshot.
+14. CALENDAR MEETINGS ARE FIXED ANCHORS. Every meeting listed below must appear as its own block at the exact EST start and end time shown. Do NOT move, round, combine, rename, or replace them.
+15. DO NOT schedule ANY blocks before ${workStart} or after ${workEnd}. This is a HARD boundary.
 
-PREP-THEN-EXECUTE WORKFLOW (THIS IS HOW THE USER WORKS BEST — FOLLOW THIS PATTERN):
-The user's preferred rhythm is to PREP a batch of accounts, then IMMEDIATELY execute on them. Structure the day as paired "Prep → Execute" cycles:
-- A "Prep" block (type: "prep" or "research") where they research 2-3 specific accounts, review contacts, and build call notes
-- Immediately followed by a "Call Blitz" or "Execute" block (type: "prospecting") where they dial into those exact accounts while context is fresh
-- Each Prep block should name the specific accounts being prepped (e.g., "Tessitura Prep (2 accounts - 6 contacts)")
-- Each Call Blitz block should reference the number of calls (e.g., "Call Blitz #1 (8-10 Calls)")
+WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL — different work types need different block structures):
+
+**NEW LOGO PROSPECTING (accounts with NO active opportunity):**
+- This is research + cadence + cold outreach work — high-energy hunter mode
+- Use PREP → EXECUTE paired cycles:
+  - "Prep" block (type: "prep"): Research 2-3 specific accounts, review contacts, build call notes
+  - Immediately followed by "Call Blitz" block (type: "prospecting"): Dial into those exact accounts while context is fresh
+  - Label prep blocks like: "Tessitura Prep (2 accounts - 6 contacts)"
+  - Label execute blocks like: "Call Blitz #1 (8-10 Calls)"
+  - NEVER separate a Prep from its Call Blitz with a meeting or break — they must be adjacent
 - Aim for 2-3 Prep→Execute cycles per day depending on meeting load
-- NEVER separate a Prep block from its Execute block with a meeting or break — they must be adjacent
-- The prep block warms up context; the execute block capitalizes on it immediately
-- This pattern applies to both new_logo and renewal workstreams
+
+**ACTIVE OPPORTUNITIES (both new logo AND renewal deals in pipeline):**
+- These are TASK-ORIENTED and MEETING-DRIVEN — NOT research/cadence work
+- Block types should be "pipeline" or "admin", NOT "research" or "prospecting"
+- Goals should reference specific tasks: "Generate order form for P1 renewal", "Follow up on outstanding items for Generali", "Prepare discovery questions for Isabella Stewart Gardner Museum"
+- Label blocks like: "Deal Advancement" or "Opp Follow-ups" — NOT "Research & Prep"
+- Work is driven by next steps, proposals, contracts, follow-ups, and meeting prep
+
+**RENEWAL ACCOUNTS & OPPORTUNITIES:**
+- This is methodical relationship work — task execution, NOT prospecting
+- Block types should be "admin" or "pipeline", NOT "research" or "prospecting"
+- Goals = task completion: order forms, follow-ups, document organization, contract reviews, expansion conversations
+- Label blocks like: "Renewal Admin & Follow-up" — NOT "Call Blitz" or "Research & Prep"
+- Include specific renewal tasks: "Generate order form for X", "Follow up on outstanding items for Y", "Organize renewal documents for Z"
+- NEVER create "Call Blitz" or "Research" blocks for renewal work
+
+**MEETING PREP (for any upcoming customer/prospect meeting):**
+- If there's a customer meeting today, schedule a short prep block (type: "prep") 30-60 min before it
+- Goals: review account history, prep talking points, check latest activity
+- Label like: "Klaviyo Prep (2 accounts - 6 contacts)" or "[Account] Meeting Prep"
 
 LOCKED CALENDAR MEETINGS (EXACT EST TIMES):
 ${calendarContext}
