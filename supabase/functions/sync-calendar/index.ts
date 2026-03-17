@@ -83,11 +83,18 @@ function parseRRule(rrule: string, startDate: Date, endRange: Date): Date[] {
   const interval = parseInt(parts['INTERVAL'] || '1');
   const count = parts['COUNT'] ? parseInt(parts['COUNT']) : null;
   const until = parts['UNTIL'] ? parseICSDate(parts['UNTIL'], '').date : null;
-  const byDay = parts['BYDAY']?.split(',') || [];
+  const byDayRaw = parts['BYDAY']?.split(',') || [];
   
   const dayMap: Record<string, number> = {
     'SU': 0, 'MO': 1, 'TU': 2, 'WE': 3, 'TH': 4, 'FR': 5, 'SA': 6
   };
+
+  // Parse BYDAY values - handle ordinal prefixes like "3WE", "-1FR"
+  const parsedByDay = byDayRaw.map(raw => {
+    const match = raw.match(/^(-?\d+)?(SU|MO|TU|WE|TH|FR|SA)$/);
+    if (!match) return null;
+    return { ordinal: match[1] ? parseInt(match[1]) : null, day: dayMap[match[2]] };
+  }).filter(Boolean) as { ordinal: number | null; day: number }[];
   
   let current = new Date(startDate);
   let occurrenceCount = 0;
@@ -96,24 +103,19 @@ function parseRRule(rrule: string, startDate: Date, endRange: Date): Date[] {
   
   while (current <= effectiveEnd && occurrenceCount < maxOccurrences) {
     if (freq === 'WEEKLY') {
-      if (byDay.length > 0) {
-        // For each day in BYDAY
-        for (const day of byDay) {
-          const targetDay = dayMap[day];
-          if (targetDay !== undefined) {
-            const weekStart = new Date(current);
-            weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay()); // Go to Sunday
-            const occurrence = new Date(weekStart);
-            occurrence.setUTCDate(occurrence.getUTCDate() + targetDay);
-            occurrence.setUTCHours(startDate.getUTCHours(), startDate.getUTCMinutes(), startDate.getUTCSeconds());
-            
-            if (occurrence >= startDate && occurrence <= effectiveEnd) {
-              occurrences.push(new Date(occurrence));
-              occurrenceCount++;
-            }
+      if (parsedByDay.length > 0) {
+        for (const { day: targetDay } of parsedByDay) {
+          const weekStart = new Date(current);
+          weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay());
+          const occurrence = new Date(weekStart);
+          occurrence.setUTCDate(occurrence.getUTCDate() + targetDay);
+          occurrence.setUTCHours(startDate.getUTCHours(), startDate.getUTCMinutes(), startDate.getUTCSeconds());
+          
+          if (occurrence >= startDate && occurrence <= effectiveEnd) {
+            occurrences.push(new Date(occurrence));
+            occurrenceCount++;
           }
         }
-        // Move to next interval
         current.setUTCDate(current.getUTCDate() + (7 * interval));
       } else {
         if (current >= startDate) {
@@ -129,13 +131,51 @@ function parseRRule(rrule: string, startDate: Date, endRange: Date): Date[] {
       }
       current.setUTCDate(current.getUTCDate() + interval);
     } else if (freq === 'MONTHLY') {
-      if (current >= startDate) {
-        occurrences.push(new Date(current));
-        occurrenceCount++;
+      if (parsedByDay.length > 0 && parsedByDay[0].ordinal !== null) {
+        // Handle ordinal BYDAY for MONTHLY (e.g., BYDAY=3WE = 3rd Wednesday)
+        const { ordinal, day: targetDay } = parsedByDay[0];
+        const year = current.getUTCFullYear();
+        const month = current.getUTCMonth();
+
+        let nthDate: Date | null = null;
+        if (ordinal > 0) {
+          // Find the Nth occurrence of targetDay in the month
+          // Start from the 1st of the month
+          const firstOfMonth = new Date(Date.UTC(year, month, 1, startDate.getUTCHours(), startDate.getUTCMinutes(), startDate.getUTCSeconds()));
+          const firstDow = firstOfMonth.getUTCDay();
+          let dayOffset = targetDay - firstDow;
+          if (dayOffset < 0) dayOffset += 7;
+          // First occurrence is on day (1 + dayOffset), Nth is + (ordinal-1)*7
+          const nthDay = 1 + dayOffset + (ordinal - 1) * 7;
+          // Validate it's still in the same month
+          const candidate = new Date(Date.UTC(year, month, nthDay, startDate.getUTCHours(), startDate.getUTCMinutes(), startDate.getUTCSeconds()));
+          if (candidate.getUTCMonth() === month) {
+            nthDate = candidate;
+          }
+        } else if (ordinal === -1) {
+          // Last occurrence of targetDay in the month
+          const lastOfMonth = new Date(Date.UTC(year, month + 1, 0));
+          let d = lastOfMonth.getUTCDate();
+          while (new Date(Date.UTC(year, month, d)).getUTCDay() !== targetDay && d > 0) d--;
+          if (d > 0) {
+            nthDate = new Date(Date.UTC(year, month, d, startDate.getUTCHours(), startDate.getUTCMinutes(), startDate.getUTCSeconds()));
+          }
+        }
+
+        if (nthDate && nthDate >= startDate && nthDate <= effectiveEnd) {
+          occurrences.push(nthDate);
+          occurrenceCount++;
+        }
+        current.setUTCMonth(current.getUTCMonth() + interval);
+      } else {
+        // Simple monthly: same day of month
+        if (current >= startDate) {
+          occurrences.push(new Date(current));
+          occurrenceCount++;
+        }
+        current.setUTCMonth(current.getUTCMonth() + interval);
       }
-      current.setUTCMonth(current.getUTCMonth() + interval);
     } else {
-      // Unknown frequency, just add the start date
       occurrences.push(new Date(current));
       break;
     }
@@ -372,17 +412,17 @@ Deno.serve(async (req) => {
     // Use service role for database writes
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Clear old events for this user and insert new ones
+    // Full replace: delete ALL events for this user, then insert fresh set
     if (futureEvents.length > 0) {
-      // Delete old events first to handle removed/cancelled meetings
-      await supabase.from('calendar_events').delete().eq('user_id', userId).lt('start_time', now.toISOString());
+      await supabase.from('calendar_events').delete().eq('user_id', userId);
       
-      const { error } = await supabase
-        .from('calendar_events')
-        .upsert(futureEvents, { onConflict: 'external_id' });
-
-      if (error) {
-        throw error;
+      // Batch insert in chunks of 100
+      for (let i = 0; i < futureEvents.length; i += 100) {
+        const chunk = futureEvents.slice(i, i + 100);
+        const { error } = await supabase
+          .from('calendar_events')
+          .upsert(chunk, { onConflict: 'external_id' });
+        if (error) throw error;
       }
     }
 
