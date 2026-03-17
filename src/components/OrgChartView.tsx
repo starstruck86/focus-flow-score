@@ -110,11 +110,12 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
       });
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       qc.invalidateQueries({ queryKey: ['org-chart-contacts', accountId] });
       setShowAddForm(false);
       setNewContact({ name: '', title: '', department: '', buyer_role: 'unknown', reporting_to: '' });
       toast.success('Contact added to org chart');
+      await maybePromoteToResearching(accountId);
     },
   });
 
