@@ -264,6 +264,16 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
                 </Button>
 
                 <Button
+                  variant="default"
+                  size="sm"
+                  className="justify-start col-span-2"
+                  onClick={() => setShowSynopsis(true)}
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Paste Synopsis
+                </Button>
+
+                <Button
                   variant="outline"
                   size="sm"
                   className="justify-start col-span-2"
