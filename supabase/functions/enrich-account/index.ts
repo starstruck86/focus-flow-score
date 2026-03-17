@@ -8,54 +8,146 @@ const corsHeaders = {
 const FIRECRAWL_URL = 'https://api.firecrawl.dev/v1/scrape';
 const LOVABLE_AI_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 
-// Weighted ICP scoring config
-const SIGNAL_WEIGHTS = {
-  direct_ecommerce: 25,
-  email_sms_capture: 15,
-  loyalty_membership: 15,
-  category_complexity: 10,
-  mobile_app: 5,
-  marketing_platform: 5,
+// ── DISQUALIFYING TECH STACKS ──
+const DISQUALIFYING_TECH = [
+  'salesforce marketing cloud', 'sfmc', 'pardot',
+];
+
+function isDisqualifiedByTechStack(signals: any): boolean {
+  const allTech = [
+    signals.esp_platform, signals.marketing_platform_detected,
+    signals.marketing_platform_details, signals.other_tech_detected
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  // Check Salesforce Marketing Cloud or Pardot
+  if (DISQUALIFYING_TECH.some(t => allTech.includes(t))) return true;
+
+  // Check Shopify + Klaviyo combo
+  const ecom = (signals.ecommerce_platform || '').toLowerCase();
+  const esp = (signals.esp_platform || '').toLowerCase();
+  if (ecom.includes('shopify') && esp.includes('klaviyo')) return true;
+
+  return false;
+}
+
+// ── TIER 1 QUALIFYING INDUSTRIES ──
+const TIER1_INDUSTRIES = [
+  'retail', 'ecommerce', 'e-commerce', 'financial services', 'fintech', 'banking',
+  'hospitality', 'gaming', 'igaming', 'telecom', 'telecommunications', 'travel',
+  'insurance', 'media', 'entertainment', 'fashion', 'apparel', 'beauty', 'cosmetics',
+  'food & beverage', 'consumer goods', 'luxury', 'sports', 'fitness',
+];
+
+// ── TIER 4 BAD FIT INDUSTRIES ──
+const BAD_FIT_INDUSTRIES = [
+  'healthcare', 'medical', 'pharmaceutical', 'manufacturing', 'industrial',
+  'restaurant', 'restaurants', 'automotive dealer', 'auto dealer', 'construction',
+  'agriculture', 'mining', 'oil & gas', 'utilities',
+];
+
+function hasGoodIndustryFit(industry: string): boolean {
+  const lower = industry.toLowerCase();
+  return TIER1_INDUSTRIES.some(i => lower.includes(i));
+}
+
+function hasBadIndustryFit(industry: string): boolean {
+  const lower = industry.toLowerCase();
+  return BAD_FIT_INDUSTRIES.some(i => lower.includes(i));
+}
+
+// ── INDEPENDENT TIER ASSIGNMENT ──
+// Tier is determined ONLY by ICP criteria, NOT by score
+function assignIcpTier(signals: any, industry: string): string {
+  // TIER 3 — Disqualified by tech stack (takes priority)
+  if (isDisqualifiedByTechStack(signals)) return '3';
+
+  const estimatedRevenue = signals.estimated_revenue_millions || 0;
+  const estimatedTraffic = signals.estimated_monthly_traffic || 0;
+  const hasLifecycleUseCases = signals.direct_ecommerce || signals.email_sms_capture || signals.loyalty_membership;
+  const hasDataFragmentation = signals.category_complexity || (signals.crm_lifecycle_team_size || 0) >= 3;
+
+  // TIER 4 — Bad Fit checks
+  if (estimatedRevenue > 0 && estimatedRevenue < 10) return '4';
+  if (estimatedTraffic > 0 && estimatedTraffic < 10000) return '4';
+  if (hasBadIndustryFit(industry)) return '4';
+  if (!hasLifecycleUseCases && !signals.mobile_app && estimatedRevenue < 10) return '4';
+
+  // TIER 1 — Must Win
+  const strongIndustry = hasGoodIndustryFit(industry);
+  const highRevenue = estimatedRevenue >= 50;
+  const highTraffic = estimatedTraffic >= 100000;
+  const strongDigital = signals.direct_ecommerce && (signals.email_sms_capture || signals.loyalty_membership);
+
+  if (strongIndustry && highRevenue && strongDigital && !isDisqualifiedByTechStack(signals)) {
+    return '1';
+  }
+  if (highRevenue && highTraffic && hasLifecycleUseCases && hasDataFragmentation) {
+    return '1';
+  }
+  if (strongIndustry && estimatedRevenue >= 100 && hasLifecycleUseCases) {
+    return '1';
+  }
+
+  // TIER 2 — Strong Fit
+  if (estimatedRevenue >= 10 && hasLifecycleUseCases) return '2';
+  if (strongIndustry && hasLifecycleUseCases) return '2';
+  if (estimatedRevenue >= 10 && strongIndustry) return '2';
+
+  // Default — if we don't have enough data, use signals as proxy
+  if (strongDigital && (signals.mobile_app || signals.category_complexity)) return '2';
+
+  return '4';
+}
+
+// ── SCORE (0-40) — Priority within tier ──
+// Score is ONLY for prioritization, does NOT affect tier
+const SCORE_WEIGHTS = {
+  direct_ecommerce: 8,
+  email_sms_capture: 6,
+  loyalty_membership: 6,
+  category_complexity: 4,
+  mobile_app: 3,
+  marketing_platform: 3,
 };
 
 const CONFIDENCE_MULTIPLIERS: Record<string, number> = { high: 1.0, medium: 0.7, low: 0.4 };
 
 function crmTeamScore(size: number): number {
-  if (size >= 3 && size <= 5) return 25;
-  if (size >= 1 && size <= 2) return 15;
-  if (size >= 6 && size <= 10) return 10;
+  if (size >= 3 && size <= 5) return 10;
+  if (size >= 1 && size <= 2) return 6;
+  if (size >= 6 && size <= 10) return 4;
   return 0;
 }
 
-function calculateScores(signals: any) {
+function calculatePriorityScore(signals: any): number {
   const conf = (key: string) => CONFIDENCE_MULTIPLIERS[signals[`${key}_confidence`]] || 0.5;
 
-  let icpFitScore = 0;
-  for (const [key, weight] of Object.entries(SIGNAL_WEIGHTS)) {
+  let score = 0;
+  for (const [key, weight] of Object.entries(SCORE_WEIGHTS)) {
     const signalKey = key === 'marketing_platform' ? 'marketing_platform_detected' : key;
     const val = key === 'marketing_platform'
       ? (signals.marketing_platform_detected || '').length > 0
       : !!signals[signalKey];
-    if (val) icpFitScore += weight * conf(key === 'marketing_platform' ? 'marketing_platform' : key);
+    if (val) score += weight * conf(key === 'marketing_platform' ? 'marketing_platform' : key);
   }
 
   const teamSize = signals.crm_lifecycle_team_size || 0;
-  icpFitScore += crmTeamScore(teamSize) * conf('crm_lifecycle_team_size');
-  icpFitScore = Math.round(Math.min(100, icpFitScore));
+  score += crmTeamScore(teamSize) * conf('crm_lifecycle_team_size');
+  return Math.round(Math.min(40, score));
+}
+
+function calculateScores(signals: any, industry: string) {
+  const priorityScore = calculatePriorityScore(signals);
+  const lifecycleTier = assignIcpTier(signals, industry);
 
   const confKeys = ['direct_ecommerce', 'email_sms_capture', 'loyalty_membership', 'category_complexity', 'mobile_app', 'marketing_platform', 'crm_lifecycle_team_size'];
   const avgConf = Math.round(
     (confKeys.map(k => CONFIDENCE_MULTIPLIERS[signals[`${k}_confidence`]] || 0.5).reduce((a, b) => a + b, 0) / confKeys.length) * 100
   );
 
-  let lifecycleTier = '4';
-  if (icpFitScore >= 75) lifecycleTier = '1';
-  else if (icpFitScore >= 50) lifecycleTier = '2';
-  else if (icpFitScore >= 25) lifecycleTier = '3';
+  const highProbabilityBuyer = lifecycleTier === '1' && priorityScore >= 25;
 
-  const highProbabilityBuyer = icpFitScore >= 60 && signals.direct_ecommerce && (signals.email_sms_capture || signals.loyalty_membership);
-
-  return { icpFitScore, lifecycleTier, confidenceScore: avgConf, highProbabilityBuyer };
+  return { icpFitScore: priorityScore, lifecycleTier, confidenceScore: avgConf, highProbabilityBuyer };
 }
 
 // The structured signal schema used across all channels
@@ -90,6 +182,11 @@ const SIGNAL_SCHEMA_PROMPT = `You are analyzing a company's website for a B2B sa
   "personalization_platform": "Nosto|Dynamic Yield|etc or empty",
   "reviews_platform": "Yotpo|Bazaarvoice|etc or empty",
   "other_tech_detected": "other notable tech",
+  "estimated_revenue_millions": number (estimated annual revenue in millions USD, 0 if unknown),
+  "estimated_monthly_traffic": number (estimated monthly website visitors, 0 if unknown),
+  "industry_classification": "primary industry category (e.g. retail, ecommerce, financial services, hospitality, gaming, telecom, travel, healthcare, manufacturing, etc.)",
+  "lifecycle_use_cases": "describe lifecycle marketing use cases: conversion, cross-sell, retention, winback, etc.",
+  "data_fragmentation_evidence": "evidence of fragmented data, missed personalization, or disconnected channels",
   "summary": "2-3 sentence summary of lifecycle marketing maturity"
 }
 
@@ -145,11 +242,16 @@ async function tryFirecrawl(formattedUrl: string, accountName: string): Promise<
               personalization_platform: { type: 'string' },
               reviews_platform: { type: 'string' },
               other_tech_detected: { type: 'string' },
+              estimated_revenue_millions: { type: 'number' },
+              estimated_monthly_traffic: { type: 'number' },
+              industry_classification: { type: 'string' },
+              lifecycle_use_cases: { type: 'string' },
+              data_fragmentation_evidence: { type: 'string' },
               summary: { type: 'string' },
             },
             required: ['direct_ecommerce', 'email_sms_capture', 'loyalty_membership', 'category_complexity', 'crm_lifecycle_team_size', 'mobile_app', 'marketing_platform_detected', 'summary'],
           },
-          prompt: `Analyze this website for ${accountName}. Name specific platforms, programs, tools. Be thorough about marketing tech detection.`,
+          prompt: `Analyze this website for ${accountName}. Name specific platforms, programs, tools. Be thorough about marketing tech detection. Estimate revenue and traffic.`,
         },
         onlyMainContent: false,
         waitFor: 3000,
@@ -189,7 +291,6 @@ async function tryFirecrawlMarkdownWithAI(formattedUrl: string, accountName: str
   }
 
   try {
-    // Step 1: Get raw markdown from Firecrawl (simpler, less likely to fail)
     const scrapeResponse = await fetch(FIRECRAWL_URL, {
       method: 'POST',
       headers: {
@@ -213,14 +314,13 @@ async function tryFirecrawlMarkdownWithAI(formattedUrl: string, accountName: str
     const scrapeData = await scrapeResponse.json();
     const markdown = scrapeData?.data?.markdown || scrapeData?.markdown || '';
     const html = scrapeData?.data?.html || scrapeData?.html || '';
-    const pageContent = (markdown || html).slice(0, 15000); // Limit to avoid token overflow
+    const pageContent = (markdown || html).slice(0, 15000);
 
     if (!pageContent || pageContent.length < 100) {
       console.error('Channel:Firecrawl+AI — insufficient page content');
       return null;
     }
 
-    // Step 2: Send to Lovable AI for structured extraction
     const aiResponse = await fetch(LOVABLE_AI_URL, {
       method: 'POST',
       headers: {
@@ -259,7 +359,7 @@ async function tryFirecrawlMarkdownWithAI(formattedUrl: string, accountName: str
   }
 }
 
-// ─── Channel 3: Perplexity web search (no scraping needed) ───
+// ─── Channel 3: Perplexity web search ───
 async function tryPerplexitySignals(accountName: string, formattedUrl: string): Promise<{ signals: any; source: string } | null> {
   const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY');
   if (!PERPLEXITY_API_KEY) {
@@ -280,7 +380,7 @@ async function tryPerplexitySignals(accountName: string, formattedUrl: string): 
           { role: 'system', content: SIGNAL_SCHEMA_PROMPT },
           {
             role: 'user',
-            content: `Research the company "${accountName}" (website: ${formattedUrl}). Visit/analyze their website and extract the structured signals. Look at their tech stack, marketing tools, ecommerce setup, loyalty programs, mobile apps, email/SMS capture methods. Return ONLY valid JSON matching the schema.`,
+            content: `Research the company "${accountName}" (website: ${formattedUrl}). Visit/analyze their website and extract the structured signals. Look at their tech stack, marketing tools, ecommerce setup, loyalty programs, mobile apps, email/SMS capture methods. Estimate their annual revenue and monthly website traffic. Return ONLY valid JSON matching the schema.`,
           },
         ],
       }),
@@ -309,7 +409,7 @@ async function tryPerplexitySignals(accountName: string, formattedUrl: string): 
   }
 }
 
-// ─── Channel 4: Lovable AI only (uses model knowledge, no live scraping) ───
+// ─── Channel 4: Lovable AI only ───
 async function tryLovableAIOnly(accountName: string, formattedUrl: string): Promise<{ signals: any; source: string } | null> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   if (!LOVABLE_API_KEY) {
@@ -330,7 +430,7 @@ async function tryLovableAIOnly(accountName: string, formattedUrl: string): Prom
           { role: 'system', content: SIGNAL_SCHEMA_PROMPT },
           {
             role: 'user',
-            content: `Based on your knowledge of the company "${accountName}" (website: ${formattedUrl}), extract the structured marketing signals. Use your training data knowledge about this company's tech stack, business model, and marketing practices. If you are unsure about a signal, set confidence to "low". Return ONLY valid JSON.`,
+            content: `Based on your knowledge of the company "${accountName}" (website: ${formattedUrl}), extract the structured marketing signals. Use your training data knowledge about this company's tech stack, business model, and marketing practices. Estimate revenue and monthly traffic. If you are unsure about a signal, set confidence to "low". Return ONLY valid JSON.`,
           },
         ],
         temperature: 0.1,
@@ -351,10 +451,9 @@ async function tryLovableAIOnly(accountName: string, formattedUrl: string): Prom
       return null;
     }
 
-    // Mark all confidences as low since this is from model knowledge only
     for (const key of Object.keys(signals)) {
       if (key.endsWith('_confidence') && signals[key] === 'high') {
-        signals[key] = 'medium'; // Downgrade since no live data
+        signals[key] = 'medium';
       }
     }
 
@@ -370,15 +469,12 @@ async function tryLovableAIOnly(accountName: string, formattedUrl: string): Prom
 function parseJsonFromAI(raw: string): any | null {
   if (!raw) return null;
   try {
-    // Try direct parse
     return JSON.parse(raw);
   } catch {
-    // Try extracting JSON from markdown code block
     const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (jsonMatch) {
       try { return JSON.parse(jsonMatch[1].trim()); } catch { /* fall through */ }
     }
-    // Try finding first { ... } block
     const braceMatch = raw.match(/\{[\s\S]*\}/);
     if (braceMatch) {
       try { return JSON.parse(braceMatch[0]); } catch { /* fall through */ }
@@ -445,7 +541,7 @@ Keep it concise and factual.`,
   }
 }
 
-// Search for martech case studies related to this company via Perplexity
+// Search for martech case studies
 async function fetchMartechCaseStudies(companyName: string, websiteUrl: string, espPlatform?: string): Promise<string | null> {
   const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY');
   if (!PERPLEXITY_API_KEY) return null;
@@ -587,30 +683,23 @@ Deno.serve(async (req) => {
     console.log('Enriching:', formattedUrl, 'for:', accountName);
 
     // ─── Multi-channel waterfall + parallel intelligence ───
-    // Company intelligence and case study search run in parallel with signal extraction
     const companyIntelPromise = fetchCompanyIntelligence(accountName || '', formattedUrl);
-    // Case study search starts immediately (doesn't need signal results)
     const caseStudyPromise = fetchMartechCaseStudies(accountName || '', formattedUrl);
 
-    // Try channels in priority order — stop at first success
     let signalResult: { signals: any; source: string } | null = null;
 
-    // Channel 1: Firecrawl structured JSON (highest quality)
     signalResult = await tryFirecrawl(formattedUrl, accountName || '');
 
-    // Channel 2: Firecrawl markdown → Lovable AI analysis
     if (!signalResult) {
       console.log('Falling back to Channel 2: Firecrawl markdown + AI');
       signalResult = await tryFirecrawlMarkdownWithAI(formattedUrl, accountName || '');
     }
 
-    // Channel 3: Perplexity web search (no scraping — searches the web)
     if (!signalResult) {
       console.log('Falling back to Channel 3: Perplexity signals');
       signalResult = await tryPerplexitySignals(accountName || '', formattedUrl);
     }
 
-    // Channel 4: Lovable AI model knowledge (last resort)
     if (!signalResult) {
       console.log('Falling back to Channel 4: AI model knowledge');
       signalResult = await tryLovableAIOnly(accountName || '', formattedUrl);
@@ -618,7 +707,6 @@ Deno.serve(async (req) => {
 
     const [companyIntel, caseStudies] = await Promise.all([companyIntelPromise, caseStudyPromise]);
 
-    // If ALL channels failed, return error with company intel if available
     if (!signalResult) {
       const fallbackSummary = companyIntel
         ? `**How they make money:**\n${companyIntel.businessSummary}\n\n**Recent news:**\n${companyIntel.recentNews}`
@@ -662,8 +750,11 @@ Deno.serve(async (req) => {
     const marTechString = marTechParts.join(' | ') || signals.marketing_platform_detected || null;
     const ecommerceString = signals.ecommerce_platform || null;
 
-    // Calculate scores
-    const { icpFitScore, lifecycleTier, confidenceScore, highProbabilityBuyer } = calculateScores(signals);
+    // Use industry from signals or from request
+    const effectiveIndustry = signals.industry_classification || industry || '';
+
+    // Calculate scores with INDEPENDENT tier assignment
+    const { icpFitScore, lifecycleTier, confidenceScore, highProbabilityBuyer } = calculateScores(signals, effectiveIndustry);
 
     // Build enriched summary
     let enrichedSummary = signals.summary || '';
@@ -702,6 +793,11 @@ Deno.serve(async (req) => {
           recent_news: companyIntel?.recentNews || '',
           case_studies: caseStudies || '',
           enrichment_source: source,
+          estimated_revenue_millions: String(signals.estimated_revenue_millions || 0),
+          estimated_monthly_traffic: String(signals.estimated_monthly_traffic || 0),
+          industry_classification: signals.industry_classification || '',
+          lifecycle_use_cases: signals.lifecycle_use_cases || '',
+          data_fragmentation_evidence: signals.data_fragmentation_evidence || '',
         };
 
         const updatePayload: Record<string, any> = {
@@ -727,6 +823,10 @@ Deno.serve(async (req) => {
         };
 
         if (discoveredUrl) updatePayload.website = discoveredUrl;
+        // Update industry if we discovered it
+        if (signals.industry_classification) {
+          updatePayload.industry = signals.industry_classification;
+        }
 
         const { error: dbError } = await supabase.from('accounts').update(updatePayload).eq('id', accountId);
         if (dbError) console.error('DB write error:', dbError);
