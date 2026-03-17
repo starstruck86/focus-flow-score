@@ -189,7 +189,7 @@ function DataExportSection() {
   const handleExportCSV = async () => {
     setExporting(true);
     try {
-      const state = (await import('@/store/useStore')).useStore.getState();
+      const state = useStore.getState();
       
       // Accounts CSV
       const accountHeaders = ['Name', 'Website', 'Industry', 'Tier', 'Status', 'Motion', 'Outreach Status', 'Last Touch', 'Next Step', 'Notes'];
