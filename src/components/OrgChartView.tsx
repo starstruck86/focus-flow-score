@@ -258,54 +258,54 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
     return (
       <div
         className={cn(
-          "relative rounded-lg border-2 bg-card shadow-sm transition-all w-[160px]",
+          "relative rounded-xl border-2 bg-card shadow-sm transition-all w-[220px]",
           config.border,
-          contact.influence_level === 'high' && "shadow-md",
+          contact.influence_level === 'high' && "shadow-md ring-1 ring-primary/10",
         )}
       >
         {/* Color top bar */}
-        <div className={cn("h-1.5 rounded-t-[6px]", config.bg)} />
+        <div className={cn("h-2 rounded-t-[10px]", config.bg)} />
 
-        <div className="px-3 py-2.5 text-center">
-          <div className="flex items-center justify-center gap-1 mb-0.5">
+        <div className="px-4 py-3 text-center">
+          <div className="flex items-center justify-center gap-1.5 mb-1">
             {contact.linkedin_url ? (
               <a
                 href={contact.linkedin_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm font-semibold text-foreground hover:text-primary hover:underline transition-colors truncate"
+                className="text-sm font-bold text-foreground hover:text-primary hover:underline transition-colors line-clamp-2"
                 onClick={(e) => e.stopPropagation()}
               >
                 {contact.name}
               </a>
             ) : (
-              <span className="text-sm font-semibold text-foreground truncate">{contact.name}</span>
+              <span className="text-sm font-bold text-foreground line-clamp-2">{contact.name}</span>
             )}
           </div>
           {contact.title && (
-            <p className="text-[11px] text-muted-foreground leading-tight truncate">{contact.title}</p>
+            <p className="text-xs text-muted-foreground leading-snug line-clamp-2 mb-1">{contact.title}</p>
           )}
           {contact.department && (
-            <Badge variant="outline" className="text-[9px] px-1.5 py-0 mt-1.5 font-normal">
+            <Badge variant="outline" className="text-[10px] px-2 py-0.5 mt-1 font-normal">
               {contact.department}
             </Badge>
           )}
-          <div className="flex items-center justify-center gap-1 mt-1.5">
-            <Icon className={cn("h-3 w-3", config.color)} />
-            <span className={cn("text-[10px] font-medium", config.color)}>{config.label}</span>
+          <div className="flex items-center justify-center gap-1.5 mt-2">
+            <Icon className={cn("h-3.5 w-3.5", config.color)} />
+            <span className={cn("text-xs font-medium", config.color)}>{config.label}</span>
           </div>
 
           {/* Edit/action buttons */}
-          <div className="flex items-center justify-center gap-0.5 mt-1.5">
+          <div className="flex items-center justify-center gap-1 mt-2">
             {contact.linkedin_url && (
               <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-                <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-muted-foreground hover:text-primary">
-                  <Linkedin className="h-3 w-3" />
+                <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-primary">
+                  <Linkedin className="h-3.5 w-3.5" />
                 </Button>
               </a>
             )}
             <Button
-              variant="ghost" size="sm" className="h-5 w-5 p-0"
+              variant="ghost" size="sm" className="h-6 w-6 p-0"
               onClick={(e) => {
                 e.stopPropagation();
                 if (isEditing) {
@@ -316,7 +316,7 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
                 }
               }}
             >
-              {isEditing ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3 text-muted-foreground" />}
+              {isEditing ? <X className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5 text-muted-foreground" />}
             </Button>
           </div>
         </div>
