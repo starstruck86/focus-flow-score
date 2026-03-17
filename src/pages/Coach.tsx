@@ -21,6 +21,7 @@ import { useCallTranscripts } from '@/hooks/useCallTranscripts';
 import { useSaveTranscript } from '@/hooks/useCallTranscripts';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { useStore } from '@/store/useStore';
 import {
   useAllTranscriptGrades, useGradeTranscript, useTranscriptGrade,
   useBehavioralPatterns, useMeddiccCompleteness,
@@ -488,11 +489,15 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
   const [callType, setCallType] = useState('');
   const [callDate, setCallDate] = useState(new Date().toISOString().split('T')[0]);
   const [participants, setParticipants] = useState('');
+  const [accountId, setAccountId] = useState('');
+  const [opportunityId, setOpportunityId] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [fileLoading, setFileLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const saveTranscript = useSaveTranscript();
   const { user } = useAuth();
+  const accounts = useStore(s => s.accounts);
+  const opportunities = useStore(s => s.opportunities);
 
   const handleFile = useCallback(async (file: File) => {
     setFileLoading(true);
@@ -532,12 +537,16 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
         call_date: callDate,
         call_type: callType || undefined,
         participants: participants.trim() || undefined,
+        account_id: accountId || undefined,
+        opportunity_id: opportunityId || undefined,
       });
       toast.success('Transcript saved — ready to analyze');
       setPasteContent('');
       setTitle('');
       setCallType('');
       setParticipants('');
+      setAccountId('');
+      setOpportunityId('');
       setExpanded(false);
       onSaved();
     } catch (err: any) {
@@ -622,7 +631,7 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
                 </div>
 
                 {/* Metadata row */}
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   <div className="space-y-1">
                     <Label className="text-[10px]">Title</Label>
                     <Input
@@ -644,6 +653,33 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
                   <div className="space-y-1">
                     <Label className="text-[10px]">Date</Label>
                     <Input type="date" value={callDate} onChange={e => setCallDate(e.target.value)} className="h-7 text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Account</Label>
+                    <Select value={accountId} onValueChange={(v) => { setAccountId(v); setOpportunityId(''); }}>
+                      <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Link account..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">None</SelectItem>
+                        {accounts.sort((a, b) => a.name.localeCompare(b.name)).map(a => (
+                          <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Opportunity</Label>
+                    <Select value={opportunityId} onValueChange={setOpportunityId}>
+                      <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Link opp..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">None</SelectItem>
+                        {opportunities
+                          .filter(o => !accountId || o.accountId === accountId)
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map(o => (
+                            <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px]">Participants</Label>
