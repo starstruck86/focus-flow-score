@@ -593,6 +593,8 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
         </div>
         {/* Color top bar */}
         <div className={cn("h-1.5 rounded-t-[6px]", config.barClass)} />
+
+        <div className="px-3 py-2.5 text-center">
           <div className="flex items-center justify-center gap-1 mb-0.5">
             {contact.linkedin_url ? (
               <a
