@@ -70,7 +70,7 @@ const MessageBubble = memo(({ msg }: { msg: CopilotMsg }) => (
 MessageBubble.displayName = 'MessageBubble';
 
 function CopilotDialog() {
-  const { state, setOpen, clearInitialQuestion } = useCopilot();
+  const { state, setOpen, clearInitialQuestion, pageContext } = useCopilot();
   const [messages, setMessages] = useState<CopilotMsg[]>([]);
   const [input, setInput] = useState('');
   const [mode, setMode] = useState<CopilotMode>('quick');
