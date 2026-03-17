@@ -384,8 +384,8 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
 
         {children.length > 0 && (
           <>
-            {/* Vertical line down from parent */}
-            <div className="w-px h-5 bg-border" />
+             {/* Vertical line down from parent */}
+            <div className="w-px h-8 bg-border" />
 
             {/* Horizontal connector bar + children */}
             <div className="relative flex items-start">
@@ -400,11 +400,11 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
                 />
               )}
 
-              <div className="flex gap-2 items-start">
-                {children.map((child, i) => (
+              <div className="flex gap-6 items-start">
+                {children.map((child) => (
                   <div key={child.id} className="flex flex-col items-center">
                     {/* Vertical line down to child */}
-                    <div className="w-px h-5 bg-border" />
+                    <div className="w-px h-8 bg-border" />
                     {renderTree(child)}
                   </div>
                 ))}
