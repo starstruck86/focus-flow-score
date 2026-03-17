@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { maybePromoteToResearching } from '@/lib/accountAutoStatus';
+import { autoInferHierarchy } from '@/lib/orgChartInference';
 import {
   Users,
   Sparkles,
@@ -35,6 +37,8 @@ import {
   Plus,
   Check,
   X,
+  RefreshCw,
+  Network,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -119,6 +123,9 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
   const [addingUnderParent, setAddingUnderParent] = useState<string | null>(null);
   const [quickAddName, setQuickAddName] = useState('');
   const [quickAddTitle, setQuickAddTitle] = useState('');
+  const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
+  const [isEnrichingContacts, setIsEnrichingContacts] = useState(false);
+  const [isInferringHierarchy, setIsInferringHierarchy] = useState(false);
 
   useEffect(() => {
     setDiscoveredContacts([]);
@@ -242,6 +249,111 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
     const result = await discoverContacts();
     if (result) setDiscoveredContacts(result);
   };
+
+  const toggleContactSelection = useCallback((id: string) => {
+    setSelectedContactIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleAllContacts = useCallback(() => {
+    if (!contacts) return;
+    if (selectedContactIds.size === contacts.length) {
+      setSelectedContactIds(new Set());
+    } else {
+      setSelectedContactIds(new Set(contacts.map(c => c.id)));
+    }
+  }, [contacts, selectedContactIds]);
+
+  const enrichSelectedContacts = useCallback(async () => {
+    if (!user || !contacts || selectedContactIds.size === 0) return;
+    setIsEnrichingContacts(true);
+    try {
+      const selected = contacts.filter(c => selectedContactIds.has(c.id));
+      const contactSummary = selected.map(c => `${c.name} - ${c.title || 'Unknown title'}`).join('\n');
+
+      const { data, error } = await supabase.functions.invoke('discover-contacts', {
+        body: {
+          accountId,
+          accountName,
+          website,
+          industry,
+          discoveryMode: 'auto',
+          maxContacts: selected.length,
+          focusPrompt: `UPDATE/ENRICH these EXISTING contacts (do NOT find new people, only update info for these specific people):\n${contactSummary}\n\nFor each person, verify and update: current title, department, seniority level, buyer role, influence level, and LinkedIn URL. Return ONLY these people with updated information.`,
+          includeReportingLines: true,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const enrichedContacts = data?.contacts || [];
+      let updated = 0;
+
+      for (const enriched of enrichedContacts) {
+        const match = selected.find(s => s.name.toLowerCase() === enriched.name?.toLowerCase());
+        if (!match) continue;
+
+        const updates: Record<string, any> = {};
+        if (enriched.title && enriched.title !== match.title) updates.title = enriched.title;
+        if (enriched.department) updates.department = enriched.department;
+        if (enriched.seniority) updates.seniority = enriched.seniority;
+        if (enriched.buyer_role && enriched.buyer_role !== 'unknown') updates.buyer_role = enriched.buyer_role;
+        if (enriched.influence_level) updates.influence_level = enriched.influence_level;
+        if (enriched.linkedin_url && !match.linkedin_url) updates.linkedin_url = enriched.linkedin_url;
+        if (enriched.reporting_to) updates.reporting_to = enriched.reporting_to;
+        if (enriched.notes) updates.notes = enriched.notes;
+
+        if (Object.keys(updates).length > 0) {
+          await supabase.from('contacts').update(updates).eq('id', match.id);
+          updated++;
+        }
+      }
+
+      qc.invalidateQueries({ queryKey: ['stakeholder-contacts', accountId] });
+      qc.invalidateQueries({ queryKey: ['org-chart-contacts', accountId] });
+      setSelectedContactIds(new Set());
+      toast.success(`Updated ${updated} contact(s)`, {
+        description: enrichedContacts.length > updated ? `${enrichedContacts.length - updated} unchanged` : undefined,
+      });
+    } catch (err) {
+      toast.error('Contact enrichment failed', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setIsEnrichingContacts(false);
+    }
+  }, [user, contacts, selectedContactIds, accountId, accountName, website, industry, qc]);
+
+  const handleInferHierarchy = useCallback(async () => {
+    setIsInferringHierarchy(true);
+    try {
+      // First clear all reporting_to so inference runs fresh
+      if (contacts) {
+        for (const c of contacts) {
+          if ((c as any).reporting_to) {
+            await supabase.from('contacts').update({ reporting_to: null }).eq('id', c.id);
+          }
+        }
+      }
+      const count = await autoInferHierarchy(accountId);
+      qc.invalidateQueries({ queryKey: ['stakeholder-contacts', accountId] });
+      qc.invalidateQueries({ queryKey: ['org-chart-contacts', accountId] });
+      if (count > 0) {
+        toast.success(`Organized ${count} contacts into hierarchy`);
+      } else {
+        toast.info('Could not infer hierarchy — contacts may all have the same seniority level');
+      }
+    } catch (err) {
+      toast.error('Hierarchy inference failed');
+    } finally {
+      setIsInferringHierarchy(false);
+    }
+  }, [accountId, contacts, qc]);
 
   const resetTuning = () => {
     setDiscoveryMode('auto');
@@ -468,8 +580,17 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
           config.borderClass,
           draggedContactId === contact.id && "opacity-40 scale-95",
           dropTargetId === contact.id && "ring-2 ring-primary shadow-lg scale-105",
+          selectedContactIds.has(contact.id) && "ring-2 ring-primary/60",
         )}
       >
+        {/* Selection checkbox */}
+        <div className="absolute top-1.5 left-1.5 z-10" onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={selectedContactIds.has(contact.id)}
+            onCheckedChange={() => toggleContactSelection(contact.id)}
+            className="h-3.5 w-3.5"
+          />
+        </div>
         {/* Color top bar */}
         <div className={cn("h-1.5 rounded-t-[6px]", config.barClass)} />
 
@@ -763,7 +884,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
             </Badge>
           )}
         </CardTitle>
-        <div className="flex items-center gap-1.5 mt-2">
+        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
           <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => setShowAddForm(!showAddForm)}>
             <Plus className="h-3.5 w-3.5" /> Add
           </Button>
@@ -779,7 +900,37 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
             {isParsingDrop ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
             Screenshot
           </Button>
+          {totalContacts > 1 && (
+            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={handleInferHierarchy} disabled={isInferringHierarchy}>
+              {isInferringHierarchy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Network className="h-3.5 w-3.5" />}
+              Auto-Org
+            </Button>
+          )}
         </div>
+        {/* Bulk actions bar */}
+        {selectedContactIds.size > 0 && (
+          <div className="flex items-center gap-2 mt-2 p-2 rounded-md bg-primary/5 border border-primary/20">
+            <Checkbox
+              checked={contacts ? selectedContactIds.size === contacts.length : false}
+              onCheckedChange={toggleAllContacts}
+              className="h-3.5 w-3.5"
+            />
+            <span className="text-xs font-medium text-primary">{selectedContactIds.size} selected</span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 text-xs gap-1 ml-auto"
+              onClick={enrichSelectedContacts}
+              disabled={isEnrichingContacts}
+            >
+              {isEnrichingContacts ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+              Enrich Selected
+            </Button>
+            <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setSelectedContactIds(new Set())}>
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        )}
       </CardHeader>
 
       <CardContent className="space-y-3">
