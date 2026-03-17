@@ -643,9 +643,10 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px]">Call Type</Label>
-                    <Select value={callType} onValueChange={setCallType}>
+                    <Select value={callType || "__none__"} onValueChange={(v) => setCallType(v === "__none__" ? "" : v)}>
                       <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Type..." /></SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="__none__">Any</SelectItem>
                         {CALL_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                       </SelectContent>
                     </Select>
