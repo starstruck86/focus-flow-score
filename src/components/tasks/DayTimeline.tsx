@@ -8,6 +8,8 @@ import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { RustBusterQuickLinks } from '@/components/dashboard/RustBusterQuickLinks';
+import { isRustBusterBlock } from '@/lib/rustBusterLinks';
 import {
   Clock, Rocket, Shield, BriefcaseBusiness, Phone, Users,
   BookOpen, Coffee, Target, Lightbulb, CheckCircle2, X,
@@ -337,6 +339,13 @@ export function DayTimeline() {
                   />
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Rust Buster quick links */}
+          {selected.type === 'prospecting' && isRustBusterBlock(selected.label) && (
+            <div className="ml-9">
+              <RustBusterQuickLinks />
             </div>
           )}
 

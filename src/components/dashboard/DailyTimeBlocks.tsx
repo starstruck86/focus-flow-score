@@ -29,6 +29,8 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { CalendarScreenshotDrop } from './CalendarScreenshotDrop';
 import { DailyPlanPreferences } from './DailyPlanPreferences';
+import { RustBusterQuickLinks } from './RustBusterQuickLinks';
+import { isRustBusterBlock } from '@/lib/rustBusterLinks';
 
 interface TimeBlock {
   start_time: string;
@@ -717,6 +719,11 @@ export function DailyTimeBlocks() {
                         </div>
                       )}
                     </div>
+                  )}
+
+                  {/* Rust Buster quick links */}
+                  {editingBlock !== i && block.type === 'prospecting' && isRustBusterBlock(block.label) && (
+                    <RustBusterQuickLinks />
                   )}
 
                   {/* Account picker for prep blocks */}
