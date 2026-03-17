@@ -430,10 +430,11 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { messages, mode: requestedMode, accountId } = body as {
+    const { messages, mode: requestedMode, accountId, pageContext } = body as {
       messages: any[];
       mode?: CopilotMode;
       accountId?: string;
+      pageContext?: { page: string; description: string; accountId?: string; accountName?: string; opportunityId?: string; opportunityName?: string };
     };
 
     if (!messages || !Array.isArray(messages)) {
