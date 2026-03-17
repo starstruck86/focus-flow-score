@@ -255,12 +255,17 @@ export function DailyTimeBlocks() {
   }, [plan, todayStr, queryClient]);
 
   // Edit block inline
+  const [editStartTime, setEditStartTime] = useState('');
+  const [editEndTime, setEditEndTime] = useState('');
+
   const startEditBlock = useCallback((blockIdx: number) => {
     if (!plan) return;
     const block = (plan.blocks as TimeBlock[])[blockIdx];
     setEditingBlock(blockIdx);
     setEditLabel(block.label);
     setEditGoals([...block.goals]);
+    setEditStartTime(block.start_time);
+    setEditEndTime(block.end_time);
   }, [plan]);
 
   const saveEditBlock = useCallback(async () => {
