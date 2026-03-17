@@ -255,18 +255,23 @@ export function DailyTimeBlocks() {
   }, [plan, todayStr, queryClient]);
 
   // Edit block inline
+  const [editStartTime, setEditStartTime] = useState('');
+  const [editEndTime, setEditEndTime] = useState('');
+
   const startEditBlock = useCallback((blockIdx: number) => {
     if (!plan) return;
     const block = (plan.blocks as TimeBlock[])[blockIdx];
     setEditingBlock(blockIdx);
     setEditLabel(block.label);
     setEditGoals([...block.goals]);
+    setEditStartTime(block.start_time);
+    setEditEndTime(block.end_time);
   }, [plan]);
 
   const saveEditBlock = useCallback(async () => {
     if (!plan || editingBlock === null) return;
     const blocks = [...(plan.blocks as TimeBlock[])];
-    blocks[editingBlock] = { ...blocks[editingBlock], label: editLabel, goals: editGoals };
+    blocks[editingBlock] = { ...blocks[editingBlock], label: editLabel, goals: editGoals, start_time: editStartTime, end_time: editEndTime };
     
     queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks });
     await supabase
@@ -275,7 +280,54 @@ export function DailyTimeBlocks() {
       .eq('id', plan.id);
     setEditingBlock(null);
     toast.success('Block updated');
-  }, [plan, editingBlock, editLabel, editGoals, todayStr, queryClient]);
+  }, [plan, editingBlock, editLabel, editGoals, editStartTime, editEndTime, todayStr, queryClient]);
+
+  // Move block up/down
+  const moveBlock = useCallback(async (blockIdx: number, direction: 'up' | 'down') => {
+    if (!plan) return;
+    const blocks = [...(plan.blocks as TimeBlock[])];
+    const targetIdx = direction === 'up' ? blockIdx - 1 : blockIdx + 1;
+    if (targetIdx < 0 || targetIdx >= blocks.length) return;
+
+    // Swap blocks and recalculate times so they stay contiguous
+    const a = blocks[blockIdx];
+    const b = blocks[targetIdx];
+    const aDuration = getBlockDurationMinutes(a);
+    const bDuration = getBlockDurationMinutes(b);
+
+    // The earlier block keeps its start, gets the other's duration
+    const earlierIdx = Math.min(blockIdx, targetIdx);
+    const laterIdx = Math.max(blockIdx, targetIdx);
+    const earlierStart = blocks[earlierIdx].start_time;
+
+    // Parse start minutes
+    const [sh, sm] = earlierStart.split(':').map(Number);
+    const startMins = sh * 60 + sm;
+
+    // Swap: the block moving up gets earlier start, block moving down gets later start
+    const firstDuration = direction === 'up' ? aDuration : bDuration;
+    const secondDuration = direction === 'up' ? bDuration : aDuration;
+    const midMins = startMins + firstDuration;
+    const endMins = midMins + secondDuration;
+
+    const toTime = (mins: number) => {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    };
+
+    // Swap and assign new times
+    [blocks[earlierIdx], blocks[laterIdx]] = direction === 'up' ? [a, b] : [b, a];
+    blocks[earlierIdx] = { ...blocks[earlierIdx], start_time: earlierStart, end_time: toTime(midMins) };
+    blocks[laterIdx] = { ...blocks[laterIdx], start_time: toTime(midMins), end_time: toTime(endMins) };
+
+    queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks });
+    await supabase
+      .from('daily_time_blocks' as any)
+      .update({ blocks })
+      .eq('id', plan.id);
+    toast.success('Block moved');
+  }, [plan, todayStr, queryClient]);
 
   // Dismiss a block
   const dismissBlock = useCallback(async (blockIdx: number) => {
@@ -601,6 +653,17 @@ export function DailyTimeBlocks() {
                       <Badge className="text-[9px] px-1.5 py-0 h-4 bg-primary/20 text-primary border-0 animate-pulse">NOW</Badge>
                     )}
                     <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover/block:opacity-100">
+                      {/* Move up/down buttons */}
+                      {i > 0 && (
+                        <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => moveBlock(i, 'up')} title="Move up">
+                          <ChevronUp className="h-3 w-3" />
+                        </Button>
+                      )}
+                      {i < blocks.length - 1 && (
+                        <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => moveBlock(i, 'down')} title="Move down">
+                          <ChevronDown className="h-3 w-3" />
+                        </Button>
+                      )}
                       <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => editingBlock === i ? setEditingBlock(null) : startEditBlock(i)}>
                         {editingBlock === i ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
                       </Button>
@@ -630,6 +693,24 @@ export function DailyTimeBlocks() {
                   {/* Inline edit */}
                   {editingBlock === i ? (
                     <div className="space-y-2 mt-1">
+                      <div className="flex gap-2 items-center">
+                        <div className="flex items-center gap-1">
+                          <Clock className="h-3 w-3 text-muted-foreground" />
+                          <Input
+                            type="time"
+                            className="h-7 text-xs w-28"
+                            value={editStartTime}
+                            onChange={e => setEditStartTime(e.target.value)}
+                          />
+                          <span className="text-xs text-muted-foreground">–</span>
+                          <Input
+                            type="time"
+                            className="h-7 text-xs w-28"
+                            value={editEndTime}
+                            onChange={e => setEditEndTime(e.target.value)}
+                          />
+                        </div>
+                      </div>
                       <Input
                         className="h-7 text-xs"
                         value={editLabel}
