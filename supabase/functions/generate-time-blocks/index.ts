@@ -88,13 +88,12 @@ serve(async (req) => {
       oppsRes,
       renewalsRes,
       tasksRes,
+      prefsRes,
     ] = await Promise.all([
       // Convert EST day boundaries to UTC for correct timezone filtering
-      // EST = UTC-5, EDT = UTC-4. Use wider window to catch both.
       (() => {
         const d = new Date(targetDate + 'T00:00:00');
         const month = d.getMonth();
-        // DST (EDT) roughly March-November, EST otherwise
         const offsetHours = (month >= 2 && month <= 10) ? 4 : 5;
         const dayStartUTC = new Date(d.getTime() + offsetHours * 60 * 60 * 1000).toISOString();
         const dayEndUTC = new Date(d.getTime() + offsetHours * 60 * 60 * 1000 + 24 * 60 * 60 * 1000 - 1000).toISOString();
@@ -122,11 +121,13 @@ serve(async (req) => {
       supabase.from("tasks").select("id, title, priority, due_date, motion, category, status")
         .in("status", ["next", "in-progress"])
         .order("due_date", { ascending: true }).limit(20),
+      supabase.from("daily_plan_preferences").select("*").maybeSingle(),
     ]);
 
     const events = calendarRes.data || [];
     const recentFeedback = feedbackRes.data || [];
     const topAccounts = workQueueRes.data || [];
+    const userPrefs = prefsRes.data as any;
 
     // Calculate meeting load and build locked meeting anchors
     const meetings = events.filter((e: any) => !e.all_day && e.end_time);
@@ -240,20 +241,48 @@ OPEN TASKS:
 New Logo: ${newLogoTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ')}
 Renewal: ${renewalTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ')}`;
 
+    // Build user preferences context
+    const workStart = userPrefs?.work_start_time?.slice(0, 5) || '09:00';
+    const workEnd = userPrefs?.work_end_time?.slice(0, 5) || '17:00';
+    const noMeetingsBefore = userPrefs?.no_meetings_before?.slice(0, 5) || workStart;
+    const noMeetingsAfter = userPrefs?.no_meetings_after?.slice(0, 5) || workEnd;
+    const lunchStart = userPrefs?.lunch_start?.slice(0, 5) || '12:00';
+    const lunchEnd = userPrefs?.lunch_end?.slice(0, 5) || '13:00';
+    const minBlockMin = userPrefs?.min_block_minutes || 25;
+    const preferNewLogoMorning = userPrefs?.prefer_new_logo_morning !== false;
+    const maxBackToBack = userPrefs?.max_back_to_back_meetings || 3;
+    const personalRules: string[] = Array.isArray(userPrefs?.personal_rules) ? userPrefs.personal_rules : [];
+
+    let prefsContext = `\n\nUSER SCHEDULING PREFERENCES (MUST FOLLOW — these override default rules):
+- Working hours: ${workStart} to ${workEnd} EST. ABSOLUTELY NO work or meeting blocks outside these hours.
+- No meetings before ${noMeetingsBefore} EST or after ${noMeetingsAfter} EST.
+- Protected lunch break: ${lunchStart} to ${lunchEnd} EST — no work blocks during this time.
+- Minimum block duration: ${minBlockMin} minutes. No shorter blocks.
+- Max back-to-back meetings: ${maxBackToBack}. Insert breaks if needed.
+- Workstream strategy: ${preferNewLogoMorning ? 'New logo work in the morning, renewal work in the afternoon' : 'No specific morning/afternoon workstream preference'}.`;
+
+    if (personalRules.length > 0) {
+      prefsContext += `\n\nPERSONAL RULES (user-defined, MUST be respected):`;
+      personalRules.forEach((rule, i) => {
+        prefsContext += `\n${i + 1}. ${rule}`;
+      });
+    }
+
     const prompt = `You are an elite sales time management coach for a B2B SaaS account executive. Create a daily schedule that CLEARLY SEPARATES new logo work from renewal work to minimize context switching.
+${prefsContext}
 
 CRITICAL RULES:
-1. NO time blocks shorter than 25 minutes. Minimum block is 25 min.
+1. NO time blocks shorter than ${minBlockMin} minutes.
 2. BATCH new logo activities together and renewal activities together — DO NOT interleave them
 3. New logo work = prospecting, research on new accounts, cadence execution, discovery calls. This is high-energy hunter work.
 4. Renewal work = task execution, check-ins, contract reviews, expansion conversations. This is more methodical relationship work.
 5. Use "workstream" field to tag each block as "new_logo" or "renewal" or "general"
 6. Goals must be REALISTIC and specific - not aspirational fantasies
-7. Account for energy patterns: deep prospecting/new logo work in the morning, renewal tasks in the afternoon
+7. ${preferNewLogoMorning ? 'Account for energy patterns: deep prospecting/new logo work in the morning, renewal tasks in the afternoon' : 'Distribute new logo and renewal work based on meeting gaps'}
 8. Include buffer time around meetings (5-10 min)
 9. If feedback says past suggestions were unrealistic, SIGNIFICANTLY dial back goals
 10. Leave 30 min for daily journal/EOD wrap-up
-11. Never schedule prospecting calls during lunch (12-1pm)
+11. Never schedule prospecting calls during lunch (${lunchStart}-${lunchEnd})
 12. Build in at least one 15-min break mid-morning and mid-afternoon
 13. NAME SPECIFIC ACCOUNTS in goals when possible (e.g., "Research Acme Corp, Widget Inc, TechCo")
 14. For research blocks: suggest exactly which accounts to research and add to cadence
@@ -261,6 +290,7 @@ CRITICAL RULES:
 16. PERSONAL/FAMILY blocks are NON-NEGOTIABLE — the user has children (Quinn, Emmett). School drop-offs, pickups, and activities MUST be respected. Build work around them, not over them.
 17. If screenshot-confirmed meetings differ from calendar DB, TRUST the screenshot — the user verified them manually.
 18. CALENDAR MEETINGS ARE FIXED ANCHORS. Every meeting listed below must appear as its own block at the exact EST start and end time shown. Do NOT move, round, combine, rename, or replace them with a generic admin block.
+19. DO NOT schedule ANY blocks before ${workStart} or after ${workEnd}. This is a HARD boundary.
 
 LOCKED CALENDAR MEETINGS (EXACT EST TIMES):
 ${calendarContext}

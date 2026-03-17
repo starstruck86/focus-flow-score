@@ -14,6 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { 
   Clock, Zap, Phone, Users, BookOpen, Coffee, 
   BriefcaseBusiness, Target, RefreshCw, Star,
@@ -21,11 +22,13 @@ import {
   ThumbsUp, ThumbsDown, RotateCcw, CheckCircle2,
   ArrowRight, ExternalLink, Pencil, Check, X, GripVertical,
   Rocket, Shield, MoreVertical, EyeOff, Link2, Building2,
+  Settings2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { CalendarScreenshotDrop } from './CalendarScreenshotDrop';
+import { DailyPlanPreferences } from './DailyPlanPreferences';
 
 interface TimeBlock {
   start_time: string;
@@ -116,6 +119,7 @@ export function DailyTimeBlocks() {
   const [dismissedBlocks, setDismissedBlocks] = useState<Set<number>>(new Set());
   const [linkOppBlockIdx, setLinkOppBlockIdx] = useState<number | null>(null);
   const [blockOppLinks, setBlockOppLinks] = useState<Map<number, { id: string; name: string }>>(new Map());
+  const [showPreferences, setShowPreferences] = useState(false);
 
   const { data: plan, isLoading } = useQuery({
     queryKey: ['daily-time-blocks', todayStr],
@@ -397,6 +401,13 @@ export function DailyTimeBlocks() {
             </div>
           </div>
           <div className="flex items-center gap-1">
+            <Button
+              variant="ghost" size="sm" className="h-7 w-7 p-0"
+              onClick={() => setShowPreferences(true)}
+              title="Plan preferences"
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+            </Button>
             <Button
               variant="ghost" size="sm" className="h-7 text-xs"
               onClick={() => setShowFeedback(!showFeedback)}
@@ -744,6 +755,21 @@ export function DailyTimeBlocks() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Preferences Sheet */}
+      <Sheet open={showPreferences} onOpenChange={setShowPreferences}>
+        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="text-base flex items-center gap-2">
+              <Settings2 className="h-4 w-4" />
+              Game Plan Preferences
+            </SheetTitle>
+          </SheetHeader>
+          <div className="mt-4">
+            <DailyPlanPreferences onClose={() => setShowPreferences(false)} />
+          </div>
+        </SheetContent>
+      </Sheet>
     </Card>
   );
 }
