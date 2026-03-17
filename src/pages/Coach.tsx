@@ -247,7 +247,7 @@ function CallScorecard({ grade }: { grade: TranscriptGrade }) {
         </Card>
         <Card className="border-border/50">
           <CardContent className="p-3 space-y-2">
-            <p className="text-xs font-semibold text-red-400 flex items-center gap-1">
+            <p className="text-xs font-semibold text-grade-failing flex items-center gap-1">
               <AlertTriangle className="h-3 w-3" /> Missed Opportunities
             </p>
             {((grade.missed_opportunities as any[]) || []).map((m: any, i: number) => (
