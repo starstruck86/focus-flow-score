@@ -366,7 +366,17 @@ Output the email in a ready-to-send format with Subject line, Body, and a brief 
 ${toolInstructions}`,
   };
 
-  let prompt = `${modeInstructions[mode]}
+  let pageCtxPrompt = '';
+  if (pageContext) {
+    pageCtxPrompt = `\n\n## CURRENT PAGE CONTEXT
+The user is currently viewing: **${pageContext.description || pageContext.page}**
+${pageContext.accountName ? `Focused Account: ${pageContext.accountName} (id: ${pageContext.accountId})` : ''}
+${pageContext.opportunityName ? `Focused Opportunity: ${pageContext.opportunityName} (id: ${pageContext.opportunityId})` : ''}
+
+IMPORTANT: Tailor your answers to the context of this page. If the user is on an account detail page, focus answers on that specific account. If on the coach page, relate answers to their call performance and skill development. If on the quota page, focus on pipeline math and attainment. If on the dashboard, focus on today's priorities and agenda. Always be contextually relevant.`;
+  }
+
+  let prompt = `${modeInstructions[mode]}${pageCtxPrompt}
 Today: ${dayOfWeek}, ${today}
 
 Key: T=Tier, S=Status, M=Motion, Fit=ICP Fit, Tim=Timing, Pri=Priority, LC=Lifecycle, LT=Last Touch, OS=Outreach Status, NS=Next Step, HPB=High Probability Buyer, TRIG=Triggered, NL=New Logo
