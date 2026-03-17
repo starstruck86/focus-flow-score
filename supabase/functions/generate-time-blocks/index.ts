@@ -88,13 +88,12 @@ serve(async (req) => {
       oppsRes,
       renewalsRes,
       tasksRes,
+      prefsRes,
     ] = await Promise.all([
       // Convert EST day boundaries to UTC for correct timezone filtering
-      // EST = UTC-5, EDT = UTC-4. Use wider window to catch both.
       (() => {
         const d = new Date(targetDate + 'T00:00:00');
         const month = d.getMonth();
-        // DST (EDT) roughly March-November, EST otherwise
         const offsetHours = (month >= 2 && month <= 10) ? 4 : 5;
         const dayStartUTC = new Date(d.getTime() + offsetHours * 60 * 60 * 1000).toISOString();
         const dayEndUTC = new Date(d.getTime() + offsetHours * 60 * 60 * 1000 + 24 * 60 * 60 * 1000 - 1000).toISOString();
@@ -122,11 +121,13 @@ serve(async (req) => {
       supabase.from("tasks").select("id, title, priority, due_date, motion, category, status")
         .in("status", ["next", "in-progress"])
         .order("due_date", { ascending: true }).limit(20),
+      supabase.from("daily_plan_preferences").select("*").maybeSingle(),
     ]);
 
     const events = calendarRes.data || [];
     const recentFeedback = feedbackRes.data || [];
     const topAccounts = workQueueRes.data || [];
+    const userPrefs = prefsRes.data as any;
 
     // Calculate meeting load and build locked meeting anchors
     const meetings = events.filter((e: any) => !e.all_day && e.end_time);
