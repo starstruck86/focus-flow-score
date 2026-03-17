@@ -327,20 +327,23 @@ function ChatInterface({
       {/* Chat panel */}
       <div className="flex-1 flex flex-col border border-border rounded-lg overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
-          <div className="flex items-center gap-2">
-            <Swords className="h-4 w-4 text-primary" />
-            <span className="text-sm font-semibold">{session.call_type}</span>
-            <Badge variant="outline" className="text-[10px]">{session.persona}</Badge>
-            <Badge variant="outline" className={cn('text-[10px]', DIFFICULTY_LABELS[session.difficulty]?.color)}>
-              Lvl {session.difficulty}
-            </Badge>
-            {session.skill_mode && (
-              <Badge variant="secondary" className="text-[10px]">{session.skill_mode}</Badge>
-            )}
+        <div className="flex flex-col gap-2 px-3 py-2 border-b border-border bg-muted/30">
+          {/* Row 1: Session info + End button */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+              <Swords className="h-4 w-4 text-primary flex-shrink-0" />
+              <span className="text-sm font-semibold truncate">{session.call_type}</span>
+              <Badge variant="outline" className="text-[10px]">{session.persona}</Badge>
+              <Badge variant="outline" className={cn('text-[10px] hidden sm:inline-flex', DIFFICULTY_LABELS[session.difficulty]?.color)}>
+                Lvl {session.difficulty}
+              </Badge>
+            </div>
+            <Button size="sm" variant="destructive" onClick={onEnd} className="flex-shrink-0 ml-2">
+              <Square className="h-3 w-3 mr-1" /> End
+            </Button>
           </div>
-          <div className="flex items-center gap-3">
-            {/* Voice mode toggle */}
+          {/* Row 2: Voice controls */}
+          <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-1.5">
               <Mic className="h-3.5 w-3.5 text-muted-foreground" />
               <Switch
@@ -365,7 +368,7 @@ function ChatInterface({
                     onCheckedChange={setAutoSpeak}
                     className="scale-75"
                   />
-                  <span className="text-[10px] text-muted-foreground">Auto-speak</span>
+                  <span className="text-[10px] text-muted-foreground">Auto</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Zap className="h-3.5 w-3.5 text-muted-foreground" />
@@ -373,7 +376,7 @@ function ChatInterface({
                     checked={handsFree}
                     onCheckedChange={(v) => {
                       setHandsFree(v);
-                      if (v) setAutoSpeak(true); // hands-free requires auto-speak
+                      if (v) setAutoSpeak(true);
                     }}
                     className="scale-75"
                   />
@@ -381,9 +384,6 @@ function ChatInterface({
                 </div>
               </>
             )}
-            <Button size="sm" variant="destructive" onClick={onEnd}>
-              <Square className="h-3 w-3 mr-1" /> End & Grade
-            </Button>
           </div>
         </div>
 
