@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { maybePromoteToResearching } from '@/lib/accountAutoStatus';
 import {
   Network, Sparkles, RefreshCw, Plus, Trash2, Pencil, Check, X,
   Crown, Shield, Target, UserCheck, Lightbulb, Users, Ban, Linkedin,
