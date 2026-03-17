@@ -79,7 +79,6 @@ export function CoachingStreaks() {
 
   if (streaks.length === 0) return null;
 
-  const hasActiveStreaks = streaks.some(s => s.currentStreak >= 2);
   const overallStreak = useMemo(() => {
     if (!allGrades || allGrades.length < 2) return 0;
     const sorted = [...allGrades].sort((a: any, b: any) => {
