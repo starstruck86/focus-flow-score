@@ -40,7 +40,10 @@ function BottomNav() {
   const { signOut } = useAuth();
   
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-md border-t border-border pb-[env(safe-area-inset-bottom)]">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/60 pb-[env(safe-area-inset-bottom)]"
+      style={{ background: 'linear-gradient(to top, hsl(var(--card)), hsl(var(--card) / 0.97))' }}
+    >
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
       <div className="flex items-center justify-around h-14 max-w-3xl mx-auto px-1">
         {navItems.map((item) => {
           const isActive = item.to === '/' 
@@ -52,14 +55,17 @@ function BottomNav() {
                 <RouterNavLink
                   to={item.to}
                   className={cn(
-                    'flex flex-col items-center justify-center gap-0.5 flex-1 h-full text-[10px] font-medium transition-colors rounded-lg',
+                    'relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full text-[10px] font-medium transition-all duration-200 rounded-lg',
                     isActive
                       ? 'text-primary'
                       : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
-                  <item.icon className={cn("h-5 w-5", isActive && "text-primary")} />
-                  <span className="truncate">{item.label}</span>
+                  {isActive && (
+                    <span className="absolute -top-px left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--nav-active-glow))]" />
+                  )}
+                  <item.icon className={cn("h-5 w-5 transition-transform duration-200", isActive && "text-primary scale-110")} />
+                  <span className={cn("truncate transition-opacity", isActive ? "opacity-100" : "opacity-70")}>{item.label}</span>
                 </RouterNavLink>
               </TooltipTrigger>
               <TooltipContent side="top" className="text-xs">{item.label}</TooltipContent>

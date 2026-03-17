@@ -35,10 +35,10 @@ import {
 } from 'recharts';
 
 const GRADE_COLORS: Record<string, string> = {
-  'A+': 'text-emerald-400', A: 'text-emerald-400', 'A-': 'text-emerald-500',
-  'B+': 'text-blue-400', B: 'text-blue-400', 'B-': 'text-blue-500',
-  'C+': 'text-amber-400', C: 'text-amber-400', 'C-': 'text-amber-500',
-  'D+': 'text-orange-400', D: 'text-orange-500', F: 'text-red-500',
+  'A+': 'text-grade-excellent', A: 'text-grade-excellent', 'A-': 'text-grade-excellent',
+  'B+': 'text-grade-good', B: 'text-grade-good', 'B-': 'text-grade-good',
+  'C+': 'text-grade-average', C: 'text-grade-average', 'C-': 'text-grade-average',
+  'D+': 'text-grade-poor', D: 'text-grade-poor', F: 'text-grade-failing',
 };
 
 const CATEGORY_LABELS: Record<string, { label: string; icon: any }> = {
@@ -63,7 +63,7 @@ const MEDDICC_LABELS: Record<string, string> = {
 
 function ScoreBlock({ score, label, max = 5 }: { score: number; label: string; max?: number }) {
   const pct = (score / max) * 100;
-  const color = pct >= 80 ? 'bg-emerald-500' : pct >= 60 ? 'bg-blue-500' : pct >= 40 ? 'bg-amber-500' : 'bg-red-500';
+  const color = pct >= 80 ? 'bg-grade-excellent' : pct >= 60 ? 'bg-grade-good' : pct >= 40 ? 'bg-grade-average' : 'bg-grade-failing';
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-xs">
@@ -144,8 +144,8 @@ function CallScorecard({ grade }: { grade: TranscriptGrade }) {
             </div>
           )}
           {grade.replacement_behavior && (
-            <div className="rounded bg-emerald-500/10 border border-emerald-500/20 p-2">
-              <p className="text-xs font-medium text-emerald-400 mb-1">→ Instead, do this:</p>
+            <div className="rounded bg-grade-excellent/10 border border-grade-excellent/20 p-2">
+              <p className="text-xs font-medium text-grade-excellent mb-1">→ Instead, do this:</p>
               <p className="text-sm">{grade.replacement_behavior}</p>
             </div>
           )}
@@ -172,8 +172,8 @@ function CallScorecard({ grade }: { grade: TranscriptGrade }) {
             ].map(item => (
               <div key={item.key} className="flex items-center gap-1.5 text-xs">
                 {cotm[item.key]
-                  ? <CheckCircle2 className="h-3 w-3 text-emerald-400 flex-shrink-0" />
-                  : <ShieldAlert className="h-3 w-3 text-red-400 flex-shrink-0" />}
+                  ? <CheckCircle2 className="h-3 w-3 text-grade-excellent flex-shrink-0" />
+                  : <ShieldAlert className="h-3 w-3 text-grade-failing flex-shrink-0" />}
                 <span className={cotm[item.key] ? 'text-foreground' : 'text-muted-foreground'}>{item.label}</span>
               </div>
             ))}
@@ -191,8 +191,8 @@ function CallScorecard({ grade }: { grade: TranscriptGrade }) {
             {Object.entries(MEDDICC_LABELS).map(([key, label]) => (
               <div key={key} className="flex items-center gap-1.5 text-xs">
                 {meddicc[key]
-                  ? <CheckCircle2 className="h-3 w-3 text-emerald-400 flex-shrink-0" />
-                  : <ShieldAlert className="h-3 w-3 text-red-400 flex-shrink-0" />}
+                  ? <CheckCircle2 className="h-3 w-3 text-grade-excellent flex-shrink-0" />
+                  : <ShieldAlert className="h-3 w-3 text-grade-failing flex-shrink-0" />}
                 <span className={meddicc[key] ? 'text-foreground' : 'text-muted-foreground'}>{label}</span>
               </div>
             ))}
@@ -221,10 +221,10 @@ function CallScorecard({ grade }: { grade: TranscriptGrade }) {
               <div><p className="text-lg font-mono font-bold">{pres.talk_ratio_estimate || 0}%</p><p className="text-[10px] text-muted-foreground">Talk Ratio</p></div>
               <div><p className="text-lg font-mono font-bold">{pres.flow_control || 0}/5</p><p className="text-[10px] text-muted-foreground">Flow Control</p></div>
               <div className="text-xs text-muted-foreground col-span-2 flex gap-3 justify-center">
-                <span className={pres.rambling_detected ? 'text-red-400' : 'text-emerald-400'}>
+                <span className={pres.rambling_detected ? 'text-grade-failing' : 'text-grade-excellent'}>
                   {pres.rambling_detected ? '⚠ Rambling' : '✓ Concise'}
                 </span>
-                <span className={pres.interruptions_detected ? 'text-red-400' : 'text-emerald-400'}>
+                <span className={pres.interruptions_detected ? 'text-grade-failing' : 'text-grade-excellent'}>
                   {pres.interruptions_detected ? '⚠ Interrupts' : '✓ Listens'}
                 </span>
               </div>
@@ -237,7 +237,7 @@ function CallScorecard({ grade }: { grade: TranscriptGrade }) {
       <div className="grid grid-cols-2 gap-3">
         <Card className="border-border/50">
           <CardContent className="p-3 space-y-2">
-            <p className="text-xs font-semibold text-emerald-400 flex items-center gap-1">
+            <p className="text-xs font-semibold text-grade-excellent flex items-center gap-1">
               <CheckCircle2 className="h-3 w-3" /> What You Did Well
             </p>
             {(grade.strengths || []).map((s, i) => (
@@ -247,7 +247,7 @@ function CallScorecard({ grade }: { grade: TranscriptGrade }) {
         </Card>
         <Card className="border-border/50">
           <CardContent className="p-3 space-y-2">
-            <p className="text-xs font-semibold text-red-400 flex items-center gap-1">
+            <p className="text-xs font-semibold text-grade-failing flex items-center gap-1">
               <AlertTriangle className="h-3 w-3" /> Missed Opportunities
             </p>
             {((grade.missed_opportunities as any[]) || []).map((m: any, i: number) => (
@@ -266,11 +266,11 @@ function CallScorecard({ grade }: { grade: TranscriptGrade }) {
       {((grade.suggested_questions as any[]) || []).length > 0 && (
         <Card className="border-border/50">
           <CardContent className="p-3 space-y-2">
-            <p className="text-xs font-semibold text-blue-400 flex items-center gap-1">
+            <p className="text-xs font-semibold text-grade-good flex items-center gap-1">
               <Lightbulb className="h-3 w-3" /> Questions You Should Have Asked
             </p>
             {((grade.suggested_questions as any[]) || []).map((q: any, i: number) => (
-              <div key={i} className="text-xs border-l-2 border-blue-500/30 pl-2 space-y-0.5">
+              <div key={i} className="text-xs border-l-2 border-grade-good/30 pl-2 space-y-0.5">
                 <p className="font-medium">"{q.question}"</p>
                 <p className="text-[10px] text-muted-foreground">
                   {q.framework && <Badge variant="outline" className="text-[9px] h-3.5 mr-1">{q.framework}</Badge>}
@@ -369,7 +369,7 @@ function TrendsDashboard() {
           {trendSummary.filter(t => t.direction !== 'stable').map(t => (
             <Badge key={t.dimension} variant="outline" className={cn(
               'text-xs',
-              t.direction === 'improving' ? 'border-emerald-500/30 text-emerald-400' : 'border-red-500/30 text-red-400'
+              t.direction === 'improving' ? 'border-grade-excellent/30 text-grade-excellent' : 'border-grade-failing/30 text-grade-failing'
             )}>
               {t.direction === 'improving' ? <ArrowUp className="h-3 w-3 mr-1" /> : <ArrowDown className="h-3 w-3 mr-1" />}
               {CATEGORY_LABELS[t.dimension]?.label || t.dimension}: {t.direction === 'improving' ? '+' : ''}{t.delta}
@@ -380,9 +380,9 @@ function TrendsDashboard() {
 
       {/* Weakest area callout */}
       {weakestArea && (
-        <Card className="border-red-500/20 bg-red-500/5">
+        <Card className="border-grade-failing/20 bg-grade-failing/5">
           <CardContent className="p-3 flex items-center gap-3">
-            <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0" />
+            <AlertTriangle className="h-5 w-5 text-grade-failing flex-shrink-0" />
             <div>
               <p className="text-sm font-semibold">Consistent Gap: {CATEGORY_LABELS[weakestArea.category]?.label || weakestArea.category}</p>
               <p className="text-xs text-muted-foreground">Avg score: {weakestArea.avg.toFixed(1)}/5 — This is your highest-ROI improvement area</p>
@@ -417,9 +417,9 @@ function TrendsDashboard() {
               <YAxis domain={[0, 100]} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
               <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
               <Line type="monotone" dataKey="overall" stroke="hsl(var(--primary))" strokeWidth={2} name="Overall" dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="cotm" stroke="#f59e0b" strokeWidth={1.5} name="CotM" strokeDasharray="4 2" />
-              <Line type="monotone" dataKey="meddicc" stroke="#3b82f6" strokeWidth={1.5} name="MEDDICC" strokeDasharray="4 2" />
-              <Line type="monotone" dataKey="discovery" stroke="#10b981" strokeWidth={1.5} name="Discovery" strokeDasharray="4 2" />
+              <Line type="monotone" dataKey="cotm" stroke="hsl(var(--coach-cotm))" strokeWidth={1.5} name="CotM" strokeDasharray="4 2" />
+              <Line type="monotone" dataKey="meddicc" stroke="hsl(var(--coach-meddicc))" strokeWidth={1.5} name="MEDDICC" strokeDasharray="4 2" />
+              <Line type="monotone" dataKey="discovery" stroke="hsl(var(--coach-discovery))" strokeWidth={1.5} name="Discovery" strokeDasharray="4 2" />
             </LineChart>
           </ResponsiveContainer>
         </CardContent>
@@ -443,7 +443,7 @@ function TrendsDashboard() {
                 <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
                 <Bar dataKey="pct" radius={[0, 4, 4, 0]}>
                   {meddiccBarData.map((entry, i) => (
-                    <Cell key={i} fill={entry.pct >= 70 ? '#10b981' : entry.pct >= 40 ? '#f59e0b' : '#ef4444'} />
+                    <Cell key={i} fill={entry.pct >= 70 ? 'hsl(var(--grade-excellent))' : entry.pct >= 40 ? 'hsl(var(--grade-average))' : 'hsl(var(--grade-failing))'} />
                   ))}
                 </Bar>
               </BarChart>
@@ -462,7 +462,7 @@ function TrendsDashboard() {
                 <span className="text-muted-foreground">{p.label}</span>
                 <div className="flex items-center gap-2">
                   <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div className="h-full rounded-full bg-red-500" style={{ width: `${p.pct}%` }} />
+                    <div className="h-full rounded-full bg-grade-failing" style={{ width: `${p.pct}%` }} />
                   </div>
                   <span className="text-xs font-mono w-10 text-right">{p.pct}%</span>
                 </div>
@@ -643,9 +643,10 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px]">Call Type</Label>
-                    <Select value={callType} onValueChange={setCallType}>
+                    <Select value={callType || "__none__"} onValueChange={(v) => setCallType(v === "__none__" ? "" : v)}>
                       <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Type..." /></SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="__none__">Any</SelectItem>
                         {CALL_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                       </SelectContent>
                     </Select>
@@ -799,7 +800,7 @@ export default function Coach() {
 
                 {ungraded.length === 0 && (transcripts?.length || 0) > 0 && (
                   <div className="text-center py-6 text-muted-foreground">
-                    <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-emerald-400" />
+                    <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-grade-excellent" />
                     <p className="font-medium">All transcripts graded</p>
                   </div>
                 )}
