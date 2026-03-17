@@ -755,6 +755,21 @@ export function DailyTimeBlocks() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Preferences Sheet */}
+      <Sheet open={showPreferences} onOpenChange={setShowPreferences}>
+        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="text-base flex items-center gap-2">
+              <Settings2 className="h-4 w-4" />
+              Game Plan Preferences
+            </SheetTitle>
+          </SheetHeader>
+          <div className="mt-4">
+            <DailyPlanPreferences onClose={() => setShowPreferences(false)} />
+          </div>
+        </SheetContent>
+      </Sheet>
     </Card>
   );
 }
