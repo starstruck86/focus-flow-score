@@ -266,11 +266,11 @@ function CallScorecard({ grade }: { grade: TranscriptGrade }) {
       {((grade.suggested_questions as any[]) || []).length > 0 && (
         <Card className="border-border/50">
           <CardContent className="p-3 space-y-2">
-            <p className="text-xs font-semibold text-blue-400 flex items-center gap-1">
+            <p className="text-xs font-semibold text-grade-good flex items-center gap-1">
               <Lightbulb className="h-3 w-3" /> Questions You Should Have Asked
             </p>
             {((grade.suggested_questions as any[]) || []).map((q: any, i: number) => (
-              <div key={i} className="text-xs border-l-2 border-blue-500/30 pl-2 space-y-0.5">
+              <div key={i} className="text-xs border-l-2 border-grade-good/30 pl-2 space-y-0.5">
                 <p className="font-medium">"{q.question}"</p>
                 <p className="text-[10px] text-muted-foreground">
                   {q.framework && <Badge variant="outline" className="text-[9px] h-3.5 mr-1">{q.framework}</Badge>}
