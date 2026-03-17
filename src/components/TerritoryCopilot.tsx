@@ -244,9 +244,13 @@ function CopilotDialog() {
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Zap className="h-3 w-3 text-primary" />
-                {mode === 'quick' && "Ask anything about your territory, accounts, or pipeline."}
-                {mode === 'deep' && "Deep research combines CRM data with web intel and auto-updates your accounts."}
-                {mode === 'meeting' && "Get a comprehensive meeting brief — auto-enriches account data."}
+                {pageSuggestions && pageContext?.description
+                  ? `${pageContext.description} — ask me anything.`
+                  : mode === 'quick' ? "Ask anything about your territory, accounts, or pipeline."
+                  : mode === 'deep' ? "Deep research combines CRM data with web intel and auto-updates your accounts."
+                  : mode === 'meeting' ? "Get a comprehensive meeting brief — auto-enriches account data."
+                  : "Ask anything."
+                }
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {filteredSuggestions.map((q) => (
