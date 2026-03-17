@@ -321,9 +321,9 @@ WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL):
   - Immediately followed by "Call Blitz" block (type: "prospecting", 45-60 min): Dial into those exact accounts while context is fresh
   - Label prep blocks like: "Account Prep (Tessitura, Privy)"
   - Label execute blocks like: "Call Blitz #1 (15-20 dials)"
-  - NEVER separate a Prep from its Call Blitz with a meeting or break — they must be adjacent
+  - Each Prep block must be immediately followed by its Call Blitz — no gaps between a specific pair
+  - BUT it's fine to have MULTIPLE separate Prep→Blitz cycles throughout the day, split around meetings and breaks (e.g., Prep→Blitz #1 in the morning, meeting, Prep→Blitz #2 after)
 - You MUST schedule enough Prep→Call Blitz cycles to hit the daily dial and conversation targets
-- A typical Call Blitz block of 45-60 min = ~20 dials. If the target is 60 dials, you need ~3 Call Blitz blocks
 - Fill ALL available non-meeting time with new logo Prep→Execute cycles
 
 **ACTIVE NEW LOGO OPPORTUNITIES (deals already in pipeline):**
