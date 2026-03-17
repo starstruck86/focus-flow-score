@@ -353,7 +353,7 @@ Generate a daily time-blocked schedule. For each block provide:
 - label (short title, 3-5 words)
 - type: one of "prospecting", "meeting", "research", "admin", "break", "pipeline", "prep"
 - workstream: "new_logo" or "renewal" or "general"
-- goals: array of 1-3 specific, realistic goals for that block (NAME ACCOUNTS when possible)
+- goals: array of 1-3 specific, realistic goals for that block (NAME ACCOUNTS for new logo prospecting blocks only — NOT for renewal blocks)
 - reasoning: one sentence on why this block matters
 
 Also provide an overall "day_strategy" (2-3 sentences distinguishing the new logo vs renewal focus for the day) and "key_metric_targets" object with realistic targets.`;
