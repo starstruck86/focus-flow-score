@@ -494,11 +494,19 @@ Deno.serve(async (req) => {
     ];
 
     // For modes that need deep context, also fetch contacts and transcripts
-    if (needsDeepContext) {
+    if (needsDeepContext || pageContext?.page === 'coach') {
       dbQueries.push(
         supabase.from("contacts").select("*").eq("user_id", user.id).limit(500),
         supabase.from("call_transcripts").select("*").eq("user_id", user.id)
           .order("call_date", { ascending: false }).limit(20),
+      );
+    }
+
+    // Supercharge #3: Fetch transcript grades when on coach page
+    if (pageContext?.page === 'coach') {
+      dbQueries.push(
+        supabase.from("transcript_grades").select("overall_score,overall_grade,style_score,acumen_score,cadence_score,structure_score,cotm_score,meddicc_score,discovery_score,presence_score,commercial_score,next_step_score,feedback_focus,coaching_issue,coaching_why,replacement_behavior,call_type")
+          .eq("user_id", user.id).order("created_at", { ascending: false }).limit(20)
       );
     }
 
