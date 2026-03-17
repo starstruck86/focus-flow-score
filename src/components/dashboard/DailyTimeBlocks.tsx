@@ -142,9 +142,9 @@ export function DailyTimeBlocks() {
   }, [plan?.blocks]);
 
   const generateMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (opts?: { confirmedScreenshotEvents?: any[] }) => {
       const { data, error } = await supabase.functions.invoke('generate-time-blocks', {
-        body: { date: todayStr },
+        body: { date: todayStr, confirmedScreenshotEvents: opts?.confirmedScreenshotEvents },
       });
       if (error) throw error;
       return data as DailyPlan;
@@ -157,6 +157,13 @@ export function DailyTimeBlocks() {
       toast.error(e instanceof Error ? e.message : 'Failed to generate plan');
     },
   });
+
+  // Handle confirmed screenshot events — rebuild plan with them
+  const handleScreenshotEventsConfirmed = useCallback((events: any[]) => {
+    generateMutation.mutate({ confirmedScreenshotEvents: events });
+    setDismissedBlocks(new Set());
+    setBlockOppLinks(new Map());
+  }, [generateMutation]);
 
   const feedbackMutation = useMutation({
     mutationFn: async () => {
