@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, Loader2, X } from 'lucide-react';
+import { Mic, MicOff, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { useCopilot } from '@/contexts/CopilotContext';
@@ -14,6 +14,7 @@ const COMMAND_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/voice-com
 interface VoiceCommand {
   action: string;
   question?: string;
+  original_intent?: string;
   mode?: CopilotMode;
   title?: string;
   priority?: string;
@@ -23,7 +24,7 @@ interface VoiceCommand {
   suggestion?: string;
 }
 
-export function VoiceCommandButton() {
+export function VoiceCommandButton({ size = 'default' }: { size?: 'default' | 'large' }) {
   const voice = useVoiceMode();
   const { ask: askCopilot } = useCopilot();
   const navigate = useNavigate();
@@ -38,7 +39,6 @@ export function VoiceCommandButton() {
         break;
 
       case 'create_task':
-        // Dispatch custom event for quick task creation
         window.dispatchEvent(new CustomEvent('voice-create-task', {
           detail: { title: command.title, priority: command.priority, accountName: command.accountName },
         }));
@@ -58,18 +58,29 @@ export function VoiceCommandButton() {
         setShowFeedback(`📝 Opening quick log...`);
         break;
 
+      case 'clarify':
+        // AI is asking for clarification — show question and re-engage mic
+        setShowFeedback(`🤔 ${command.question}`);
+        toast.info(command.question || "Could you give me more details?", { duration: 5000 });
+        // Use TTS to speak the question if available
+        if (command.question) {
+          try {
+            await voice.playTTS(command.question);
+          } catch { /* TTS optional */ }
+        }
+        break;
+
       case 'unknown':
         setShowFeedback(command.suggestion || "I didn't catch that. Try again?");
         toast.info(command.suggestion || "I didn't understand that command.");
         break;
     }
 
-    setTimeout(() => setShowFeedback(null), 3000);
-  }, [askCopilot, navigate]);
+    setTimeout(() => setShowFeedback(null), command.action === 'clarify' ? 6000 : 3000);
+  }, [askCopilot, navigate, voice]);
 
   const handlePress = useCallback(async () => {
     if (voice.isRecording) {
-      // Stop and process
       try {
         const transcript = await voice.stopRecording();
         if (!transcript) return;
@@ -114,6 +125,7 @@ export function VoiceCommandButton() {
   }, [voice, executeCommand]);
 
   const isActive = voice.isRecording || voice.isTranscribing || isProcessing;
+  const isLarge = size === 'large';
 
   return (
     <div className="relative">
@@ -123,9 +135,9 @@ export function VoiceCommandButton() {
             initial={{ opacity: 0, y: 10, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.9 }}
-            className="absolute bottom-full mb-2 right-0 bg-popover border border-border rounded-lg px-3 py-2 shadow-lg max-w-[240px] whitespace-nowrap overflow-hidden text-ellipsis"
+            className="absolute bottom-full mb-2 right-0 bg-popover border border-border rounded-lg px-3 py-2 shadow-lg max-w-[280px]"
           >
-            <p className="text-xs text-foreground">{showFeedback}</p>
+            <p className="text-xs text-foreground whitespace-pre-wrap">{showFeedback}</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -136,7 +148,8 @@ export function VoiceCommandButton() {
         onClick={handlePress}
         disabled={voice.isTranscribing || isProcessing}
         className={cn(
-          "h-10 w-10 rounded-full flex items-center justify-center shadow-md transition-all",
+          "rounded-full flex items-center justify-center shadow-md transition-all",
+          isLarge ? "h-14 w-14" : "h-10 w-10",
           voice.isRecording
             ? "bg-destructive text-destructive-foreground animate-pulse"
             : isProcessing || voice.isTranscribing
@@ -146,11 +159,11 @@ export function VoiceCommandButton() {
         title={voice.isRecording ? "Stop & process command" : "Voice command"}
       >
         {isProcessing || voice.isTranscribing ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Loader2 className={cn("animate-spin", isLarge ? "h-6 w-6" : "h-4 w-4")} />
         ) : voice.isRecording ? (
-          <MicOff className="h-4 w-4" />
+          <MicOff className={cn(isLarge ? "h-6 w-6" : "h-4 w-4")} />
         ) : (
-          <Mic className="h-4 w-4" />
+          <Mic className={cn(isLarge ? "h-6 w-6" : "h-4 w-4")} />
         )}
       </motion.button>
     </div>

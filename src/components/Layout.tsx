@@ -9,7 +9,7 @@ import {
   Settings,
   Compass,
   LogOut,
-  Search,
+  FileText,
 } from 'lucide-react';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { SaveIndicator } from '@/components/SaveIndicator';
@@ -25,54 +25,68 @@ import { VoiceCommandButton } from '@/components/VoiceCommandButton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { BackToToday } from '@/components/BackToToday';
 
-const navItems = [
+const navRow1 = [
   { to: '/', label: 'Today', icon: LayoutDashboard },
   { to: '/tasks', label: 'Tasks', icon: CheckSquare },
-  { to: '/outreach', label: 'Accounts', icon: Users },
+  { to: '/outreach', label: 'New Logo', icon: Users },
   { to: '/renewals', label: 'Renewals', icon: RefreshCw },
+];
+
+const navRow2 = [
+  { to: '/prep', label: 'Prep Hub', icon: FileText },
   { to: '/coach', label: 'Coach', icon: Compass },
   { to: '/trends', label: 'Trends', icon: TrendingUp },
   { to: '/quota', label: 'Quota', icon: DollarSign },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
-function BottomNav() {
+function NavItem({ item }: { item: { to: string; label: string; icon: React.ElementType } }) {
   const location = useLocation();
-  const { signOut } = useAuth();
-  
+  const isActive = item.to === '/'
+    ? location.pathname === '/'
+    : location.pathname.startsWith(item.to);
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <RouterNavLink
+          to={item.to}
+          className={cn(
+            'relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full text-[10px] font-medium transition-all duration-200 rounded-lg',
+            isActive
+              ? 'text-primary'
+              : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          {isActive && (
+            <span className="absolute -top-px left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--nav-active-glow))]" />
+          )}
+          <item.icon className={cn("h-4 w-4 transition-transform duration-200", isActive && "text-primary scale-110")} />
+          <span className={cn("truncate transition-opacity", isActive ? "opacity-100" : "opacity-70")}>{item.label}</span>
+        </RouterNavLink>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">{item.label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function BottomNav() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/60 pb-[env(safe-area-inset-bottom)]"
       style={{ background: 'linear-gradient(to top, hsl(var(--card)), hsl(var(--card) / 0.97))' }}
     >
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
-      <div className="flex items-center justify-around h-14 max-w-3xl mx-auto px-1">
-        {navItems.map((item) => {
-          const isActive = item.to === '/' 
-            ? location.pathname === '/' 
-            : location.pathname.startsWith(item.to);
-          return (
-            <Tooltip key={item.to}>
-              <TooltipTrigger asChild>
-                <RouterNavLink
-                  to={item.to}
-                  className={cn(
-                    'relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full text-[10px] font-medium transition-all duration-200 rounded-lg',
-                    isActive
-                      ? 'text-primary'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  {isActive && (
-                    <span className="absolute -top-px left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--nav-active-glow))]" />
-                  )}
-                  <item.icon className={cn("h-5 w-5 transition-transform duration-200", isActive && "text-primary scale-110")} />
-                  <span className={cn("truncate transition-opacity", isActive ? "opacity-100" : "opacity-70")}>{item.label}</span>
-                </RouterNavLink>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs">{item.label}</TooltipContent>
-            </Tooltip>
-          );
-        })}
+      <div className="max-w-3xl mx-auto px-1">
+        {/* Row 1 — Primary nav */}
+        <div className="flex items-center justify-around h-11">
+          {navRow1.map(item => <NavItem key={item.to} item={item} />)}
+        </div>
+        {/* Divider */}
+        <div className="h-px bg-border/30 mx-4" />
+        {/* Row 2 — Secondary nav */}
+        <div className="flex items-center justify-around h-10">
+          {navRow2.map(item => <NavItem key={item.to} item={item} />)}
+        </div>
       </div>
     </nav>
   );
@@ -89,7 +103,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <Compass className="h-5 w-5 text-primary" />
           <span className="font-display text-sm font-bold">Quota Compass</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <SaveIndicator />
           <VoiceCommandButton />
           <TerritoryCopilot />
@@ -109,11 +123,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main Content */}
       <Breadcrumbs />
-      <main className="flex-1 overflow-auto pb-20">
+      <main className="flex-1 overflow-auto pb-28">
         {children}
       </main>
 
-      {/* Bottom Nav - always visible */}
+      {/* Bottom Nav - 2 rows */}
       <BottomNav />
       
       {/* Back to Today shortcut */}

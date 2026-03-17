@@ -34,7 +34,6 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    // Fetch context: upcoming meetings, recent accounts
     const now = new Date().toISOString();
     const fourHoursLater = new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString();
 
@@ -55,25 +54,38 @@ serve(async (req) => {
 
     const systemPrompt = `You are a voice-activated sales assistant embedded in a CRM/coaching app. The user just gave you a voice command. Interpret their intent and return a structured JSON response.
 
+## CRITICAL BEHAVIOR: ASK BEFORE ACTING
+When the user's request is ambiguous, incomplete, or could be interpreted multiple ways, you MUST ask a clarifying question INSTEAD of guessing. Use the "clarify" action for this.
+
+Examples of when to clarify:
+- "Create a task" → Ask: What's the task about? Any specific account or priority?
+- "Prep me" → Ask: Which meeting or account should I prep for?
+- "Send a follow-up" → Ask: For which account/meeting? What should I cover?
+- "Log activity" → If unclear what type, ask.
+
+Do NOT clarify when the intent is crystal clear:
+- "Prep me for my 2pm call with Acme" → Clear, execute immediately
+- "Create a task to follow up with Jane at Salesforce by Friday" → Clear, execute
+- "Take me to tasks" → Clear navigation
+
 ## AVAILABLE ACTIONS
-You can return ONE of these action types:
 
 1. "open_copilot" — User wants to ask the AI copilot a question or get analysis
    { "action": "open_copilot", "question": "<the question to ask>", "mode": "quick|deep|meeting|deal-strategy|recap-email" }
 
-2. "create_task" — User wants to create a task
+2. "create_task" — User wants to create a task (only when specifics are clear)
    { "action": "create_task", "title": "<task title>", "priority": "p0|p1|p2|p3", "accountName": "<optional account name>" }
 
-3. "meeting_prep" — User wants to prep for a meeting
-   { "action": "open_copilot", "question": "Prep me for my meeting with <account/person>", "mode": "meeting" }
+3. "navigate" — User wants to go somewhere in the app
+   { "action": "navigate", "path": "/|/tasks|/quota|/coach|/trends|/settings|/renewals|/outreach|/prep" }
 
-4. "navigate" — User wants to go somewhere in the app
-   { "action": "navigate", "path": "/dashboard|/tasks|/quota|/coach|/trends|/settings|/renewals|/weekly-outreach" }
-
-5. "log_activity" — User wants to log dials, emails, meetings etc
+4. "log_activity" — User wants to log dials, emails, meetings etc
    { "action": "log_activity", "type": "quick_log" }
 
-6. "unknown" — Can't determine intent
+5. "clarify" — You need more info before acting. Ask a SHORT, specific question.
+   { "action": "clarify", "question": "<your clarifying question>", "original_intent": "<what you think they meant>" }
+
+6. "unknown" — Can't determine intent at all
    { "action": "unknown", "suggestion": "<helpful suggestion>" }
 
 ## CONTEXT
@@ -85,6 +97,8 @@ Current time: ${new Date().toLocaleString()}
 - Match account names fuzzy (e.g. "acme" matches "Acme Corp")
 - For meeting prep, detect which meeting they mean from context
 - For tasks, infer a reasonable priority (default p2)
+- PREFER "clarify" over guessing when the request is vague
+- Keep clarifying questions short and conversational (1 sentence)
 - Return ONLY valid JSON, no explanation`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -107,8 +121,9 @@ Current time: ${new Date().toLocaleString()}
             parameters: {
               type: "object",
               properties: {
-                action: { type: "string", enum: ["open_copilot", "create_task", "navigate", "log_activity", "unknown"] },
-                question: { type: "string", description: "Question for copilot" },
+                action: { type: "string", enum: ["open_copilot", "create_task", "navigate", "log_activity", "clarify", "unknown"] },
+                question: { type: "string", description: "Question for copilot OR clarifying question" },
+                original_intent: { type: "string", description: "What the user likely meant (for clarify action)" },
                 mode: { type: "string", enum: ["quick", "deep", "meeting", "deal-strategy", "recap-email"] },
                 title: { type: "string", description: "Task title" },
                 priority: { type: "string", enum: ["p0", "p1", "p2", "p3"] },
