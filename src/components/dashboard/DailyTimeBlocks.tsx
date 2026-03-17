@@ -40,6 +40,7 @@ interface TimeBlock {
   reasoning: string;
   actual_dials?: number;
   actual_emails?: number;
+  linked_accounts?: { id: string; name: string }[];
 }
 
 interface DailyPlan {
@@ -106,7 +107,7 @@ const WORKSTREAM_CONFIG: Record<string, { label: string; icon: typeof Rocket; co
 
 export function DailyTimeBlocks() {
   const { user } = useAuth();
-  const { opportunities } = useStore();
+  const { opportunities, accounts } = useStore();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -122,6 +123,8 @@ export function DailyTimeBlocks() {
   const [linkOppBlockIdx, setLinkOppBlockIdx] = useState<number | null>(null);
   const [blockOppLinks, setBlockOppLinks] = useState<Map<number, { id: string; name: string }>>(new Map());
   const [showPreferences, setShowPreferences] = useState(false);
+  const [accountSearchBlockIdx, setAccountSearchBlockIdx] = useState<number | null>(null);
+  const [accountSearchQuery, setAccountSearchQuery] = useState('');
 
   const { data: plan, isLoading } = useQuery({
     queryKey: ['daily-time-blocks', todayStr],
@@ -284,6 +287,20 @@ export function DailyTimeBlocks() {
     if (!plan) return;
     const blocks = [...(plan.blocks as TimeBlock[])];
     blocks[blockIdx] = { ...blocks[blockIdx], [field]: value };
+
+    queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks });
+
+    await supabase
+      .from('daily_time_blocks' as any)
+      .update({ blocks })
+      .eq('id', plan.id);
+  }, [plan, todayStr, queryClient]);
+
+  // Update linked accounts on a prep block
+  const updateBlockLinkedAccounts = useCallback(async (blockIdx: number, linkedAccounts: { id: string; name: string }[]) => {
+    if (!plan) return;
+    const blocks = [...(plan.blocks as TimeBlock[])];
+    blocks[blockIdx] = { ...blocks[blockIdx], linked_accounts: linkedAccounts };
 
     queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks });
 
@@ -698,6 +715,99 @@ export function DailyTimeBlocks() {
                             }}
                           />
                         </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Account picker for prep blocks */}
+                  {editingBlock !== i && block.type === 'prep' && (
+                    <div className="mt-2 py-1.5 px-2.5 rounded-md bg-muted/40 border border-border/30">
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <Target className="h-3 w-3 text-cyan-500" />
+                        <span className="text-[10px] text-muted-foreground font-medium">Target Accounts:</span>
+                      </div>
+                      {/* Linked account pills */}
+                      {(block.linked_accounts || []).length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-1.5">
+                          {(block.linked_accounts || []).map(acct => (
+                            <Badge
+                              key={acct.id}
+                              variant="outline"
+                              className="text-[10px] h-5 gap-1 bg-accent/50 pr-1 group/pill"
+                            >
+                              <Building2 className="h-3 w-3" />
+                              {acct.name}
+                              <button
+                                onClick={() => {
+                                  const updated = (block.linked_accounts || []).filter(a => a.id !== acct.id);
+                                  updateBlockLinkedAccounts(i, updated);
+                                }}
+                                className="ml-0.5 opacity-0 group-hover/pill:opacity-100 transition-opacity"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                      {/* Search input */}
+                      {accountSearchBlockIdx === i ? (
+                        <div className="relative">
+                          <Input
+                            autoFocus
+                            className="h-6 text-xs"
+                            placeholder="Search accounts..."
+                            value={accountSearchQuery}
+                            onChange={e => setAccountSearchQuery(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Escape') {
+                                setAccountSearchBlockIdx(null);
+                                setAccountSearchQuery('');
+                              }
+                            }}
+                          />
+                          {accountSearchQuery.length > 0 && (
+                            <div className="absolute z-20 top-7 left-0 right-0 bg-popover border border-border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                              {accounts
+                                .filter(a => {
+                                  const q = accountSearchQuery.toLowerCase();
+                                  const alreadyLinked = (block.linked_accounts || []).some(la => la.id === a.id);
+                                  return !alreadyLinked && a.name.toLowerCase().includes(q);
+                                })
+                                .slice(0, 8)
+                                .map(a => (
+                                  <button
+                                    key={a.id}
+                                    className="w-full text-left px-3 py-1.5 hover:bg-accent transition-colors text-xs flex items-center justify-between"
+                                    onClick={() => {
+                                      const updated = [...(block.linked_accounts || []), { id: a.id, name: a.name }];
+                                      updateBlockLinkedAccounts(i, updated);
+                                      setAccountSearchQuery('');
+                                      if (updated.length >= 3) {
+                                        setAccountSearchBlockIdx(null);
+                                      }
+                                    }}
+                                  >
+                                    <span>{a.name}</span>
+                                    <span className="text-[10px] text-muted-foreground">Tier {a.tier}</span>
+                                  </button>
+                                ))}
+                              {accounts.filter(a => !((block.linked_accounts || []).some(la => la.id === a.id)) && a.name.toLowerCase().includes(accountSearchQuery.toLowerCase())).length === 0 && (
+                                <div className="px-3 py-2 text-[11px] text-muted-foreground">No matching accounts</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setAccountSearchBlockIdx(i);
+                            setAccountSearchQuery('');
+                          }}
+                          className="text-[11px] text-primary hover:text-primary/80 font-medium"
+                        >
+                          + Add account
+                        </button>
                       )}
                     </div>
                   )}
