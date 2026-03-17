@@ -24,7 +24,7 @@ serve(async (req) => {
       });
     }
 
-    const { date } = await req.json();
+    const { date, confirmedScreenshotEvents } = await req.json();
     const targetDate = date || new Date().toISOString().split("T")[0];
 
     // Gather context in parallel
