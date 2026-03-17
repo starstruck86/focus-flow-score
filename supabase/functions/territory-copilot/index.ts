@@ -462,7 +462,7 @@ Deno.serve(async (req) => {
 
     const mode: CopilotMode = requestedMode || "quick";
     const today = new Date().toISOString().split("T")[0];
-    const needsDeepContext = mode !== "quick";
+    const needsDeepContext = mode !== "quick" || !!pageContext?.accountId;
 
     // Gather DB context in parallel — always include resources & transcripts now
     const dbQueries: Promise<any>[] = [
