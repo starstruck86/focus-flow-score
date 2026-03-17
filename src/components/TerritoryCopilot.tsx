@@ -293,7 +293,7 @@ function CopilotDialog() {
         <form onSubmit={handleSubmit} className="flex items-center gap-2 px-4 py-3 border-t border-border shrink-0">
           <input
             ref={inputRef}
-            value={input}
+            value={voice.isRecording ? '🔴 Recording...' : voice.isTranscribing ? 'Transcribing...' : input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={
               mode === 'quick' ? "Ask about your territory..." :
@@ -301,11 +301,32 @@ function CopilotDialog() {
               "Which account's meeting should I prep?"
             }
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-            disabled={isStreaming}
+            disabled={isStreaming || voice.isRecording || voice.isTranscribing}
+            readOnly={voice.isRecording}
           />
           <button
+            type="button"
+            onClick={handleMicClick}
+            disabled={isStreaming || voice.isTranscribing}
+            className={cn(
+              "h-8 w-8 rounded-lg flex items-center justify-center transition-all shrink-0",
+              voice.isRecording
+                ? "bg-destructive text-destructive-foreground animate-pulse"
+                : "bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground"
+            )}
+            title={voice.isRecording ? "Stop recording" : "Voice input"}
+          >
+            {voice.isTranscribing ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : voice.isRecording ? (
+              <MicOff className="h-3.5 w-3.5" />
+            ) : (
+              <Mic className="h-3.5 w-3.5" />
+            )}
+          </button>
+          <button
             type="submit"
-            disabled={!input.trim() || isStreaming}
+            disabled={!input.trim() || isStreaming || voice.isRecording}
             className="h-8 w-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center disabled:opacity-30 transition-opacity shrink-0"
           >
             {isStreaming ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
