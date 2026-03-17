@@ -206,6 +206,11 @@ function CopilotDialog() {
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border shrink-0">
           <Sparkles className="h-4 w-4 text-primary" />
           <span className="font-display text-sm font-bold">Territory Intelligence</span>
+          {pageContext && (
+            <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full truncate max-w-[200px]">
+              {pageContext.accountName || pageContext.opportunityName || pageContext.description}
+            </span>
+          )}
           <div className="flex-1" />
           <ModeSelector mode={mode} onChange={setMode} disabled={isStreaming} />
           {messages.length > 0 && (
