@@ -416,11 +416,18 @@ export function useDeleteOpportunity() {
   
   return useMutation({
     mutationFn: async (id: string) => {
+      // Clear FK references in child tables before deleting
+      await supabase.from('tasks').update({ linked_opportunity_id: null }).eq('linked_opportunity_id', id);
+      await supabase.from('renewals').update({ linked_opportunity_id: null }).eq('linked_opportunity_id', id);
+      await supabase.from('call_transcripts').update({ opportunity_id: null }).eq('opportunity_id', id);
+      await supabase.from('resource_links').update({ opportunity_id: null }).eq('opportunity_id', id);
+      
       const { error } = await supabase.from('opportunities').delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['db-opportunities'] });
+      queryClient.invalidateQueries({ queryKey: ['db-renewals'] });
       toast.success('Opportunity deleted');
     },
     onError: (error) => {
