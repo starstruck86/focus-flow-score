@@ -71,3 +71,9 @@ verify_jwt = false
 
 [functions.weekly-battle-plan]
 verify_jwt = false
+
+[functions.mock-call]
+verify_jwt = false
+
+[functions.grade-mock-call]
+verify_jwt = false
