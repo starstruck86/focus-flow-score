@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Layout } from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,13 +6,21 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   GraduationCap, TrendingUp, Target, Mic, Sparkles, ArrowRight, ArrowUp, ArrowDown, Minus,
   CheckCircle2, AlertTriangle, Lightbulb, BarChart3, Loader2, MessageSquareQuote,
   ShieldCheck, ShieldAlert, Brain, Crosshair, Zap, Clock, Eye, FileText,
+  Upload, Plus, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCallTranscripts } from '@/hooks/useCallTranscripts';
+import { useSaveTranscript } from '@/hooks/useCallTranscripts';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 import {
   useAllTranscriptGrades, useGradeTranscript, useTranscriptGrade,
   useBehavioralPatterns, useMeddiccCompleteness,
