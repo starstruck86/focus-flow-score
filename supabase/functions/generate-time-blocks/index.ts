@@ -278,12 +278,12 @@ Renewal Tasks: ${renewalTasks.slice(0, 5).map((t: any) => `${t.title} (${t.prior
       });
     }
 
-    const prompt = `You are an elite sales time management coach for a B2B SaaS account executive. Create a daily schedule that CLEARLY SEPARATES new logo work from renewal work to minimize context switching.
+    const prompt = `You are an elite sales time management coach for a B2B SaaS account executive. The PRIMARY GOAL of each day is to maximize time spent on NEW LOGO prospecting — the work required to create more new logo opportunities. Everything else is secondary.
 ${prefsContext}
 
 CRITICAL RULES:
 1. NO time blocks shorter than ${minBlockMin} minutes.
-2. BATCH new logo activities together and renewal activities together — DO NOT interleave them
+2. NEW LOGO IS THE PRIORITY. Maximize the number and duration of new logo Prep→Execute cycles. Keep as much of the day open for new logo focus as possible.
 3. Use "workstream" field to tag each block as "new_logo" or "renewal" or "general"
 4. Goals must be REALISTIC and specific - not aspirational fantasies
 5. ${preferNewLogoMorning ? 'Account for energy patterns: deep prospecting/new logo work in the morning, renewal tasks in the afternoon' : 'Distribute new logo and renewal work based on meeting gaps'}
@@ -298,9 +298,9 @@ CRITICAL RULES:
 14. CALENDAR MEETINGS ARE FIXED ANCHORS. Every meeting listed below must appear as its own block at the exact EST start and end time shown. Do NOT move, round, combine, rename, or replace them.
 15. DO NOT schedule ANY blocks before ${workStart} or after ${workEnd}. This is a HARD boundary.
 
-WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL — different work types need different block structures):
+WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL):
 
-**NEW LOGO PROSPECTING (accounts with NO active opportunity):**
+**NEW LOGO PROSPECTING (accounts with NO active opportunity) — THIS IS THE CORE OF THE DAY:**
 - This is research + cadence + cold outreach work — high-energy hunter mode
 - Use PREP → EXECUTE paired cycles:
   - "Prep" block (type: "prep"): Research 2-3 specific accounts, review contacts, build call notes
@@ -309,26 +309,26 @@ WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL — different work types need differen
   - Label execute blocks like: "Call Blitz #1 (8-10 Calls)"
   - NEVER separate a Prep from its Call Blitz with a meeting or break — they must be adjacent
 - Aim for 2-3 Prep→Execute cycles per day depending on meeting load
+- Fill ALL available non-meeting time with new logo work
 
-**ACTIVE OPPORTUNITIES (both new logo AND renewal deals in pipeline):**
-- These are TASK-ORIENTED and MEETING-DRIVEN — NOT research/cadence work
-- Block types should be "pipeline" or "admin", NOT "research" or "prospecting"
-- Goals should reference specific tasks: "Generate order form for P1 renewal", "Follow up on outstanding items for Generali", "Prepare discovery questions for Isabella Stewart Gardner Museum"
-- Label blocks like: "Deal Advancement" or "Opp Follow-ups" — NOT "Research & Prep"
-- Work is driven by next steps, proposals, contracts, follow-ups, and meeting prep
+**ACTIVE NEW LOGO OPPORTUNITIES (deals already in pipeline):**
+- These are TASK-ORIENTED and MEETING-DRIVEN — NOT more research/cadence work
+- Only schedule a block if there are specific urgent tasks (proposals, follow-ups, discovery prep)
+- Keep these blocks SHORT and focused — don't let them eat into prospecting time
+- Block types should be "pipeline", NOT "research" or "prospecting"
 
-**RENEWAL ACCOUNTS & OPPORTUNITIES:**
-- This is methodical relationship work — task execution, NOT prospecting
-- Block types should be "admin" or "pipeline", NOT "research" or "prospecting"
-- Goals = task completion: order forms, follow-ups, document organization, contract reviews, expansion conversations
-- Label blocks like: "Renewal Admin & Follow-up" — NOT "Call Blitz" or "Research & Prep"
-- Include specific renewal tasks: "Generate order form for X", "Follow up on outstanding items for Y", "Organize renewal documents for Z"
-- NEVER create "Call Blitz" or "Research" blocks for renewal work
+**RENEWALS — KEEP IT MINIMAL:**
+- Schedule ONE single "Renewal Review" block per day, 30-45 minutes MAX
+- Purpose: review 1-2 upcoming renewal accounts, check health, handle any urgent tasks the user has already created
+- DO NOT suggest specific renewal tasks, accounts, or opportunities in goals — the user manages their own renewal task list
+- DO NOT create multiple renewal blocks or expand renewal time
+- Label it simply: "Renewal Review" with goals like "Review upcoming renewals, work through renewal task queue"
+- This is NOT prospecting or research — it's admin/task execution time
+- Renewals should NEVER crowd out new logo prospecting time
 
 **MEETING PREP (for any upcoming customer/prospect meeting):**
 - If there's a customer meeting today, schedule a short prep block (type: "prep") 30-60 min before it
 - Goals: review account history, prep talking points, check latest activity
-- Label like: "Klaviyo Prep (2 accounts - 6 contacts)" or "[Account] Meeting Prep"
 
 LOCKED CALENDAR MEETINGS (EXACT EST TIMES):
 ${calendarContext}
@@ -338,11 +338,8 @@ MEETING LOAD: ${meetingHours}h of meetings, ${focusHoursAvailable}h available fo
 
 ${quotaContext}
 
-NEW LOGO ACCOUNTS TO WORK:
-${newLogoAccounts.slice(0, 8).map((a: any) => `- ${a.name} (Tier ${a.tier}, ${a.account_status}, cadence: ${a.cadence_name || 'none'})`).join("\n")}
-
-RENEWAL ACCOUNTS TO WORK:
-${renewalAccounts.slice(0, 5).map((a: any) => `- ${a.name} (Tier ${a.tier}, ${a.account_status})`).join("\n")}
+NEW LOGO PROSPECTING ACCOUNTS (these are the focus — use in Prep→Execute cycles):
+${prospectingAccounts.slice(0, 8).map((a: any) => `- ${a.name} (Tier ${a.tier}, ${a.account_status}, cadence: ${a.cadence_name || 'none'})`).join("\n") || '(none)'}
 
 ${pipelineContext}
 
