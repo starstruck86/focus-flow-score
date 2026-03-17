@@ -277,7 +277,7 @@ Renewal: ${renewalTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`
     let prefsContext = `\n\nUSER SCHEDULING PREFERENCES (MUST FOLLOW — these override default rules):
 - Working hours: ${workStart} to ${workEnd} EST. ABSOLUTELY NO work or meeting blocks outside these hours.
 - No meetings before ${noMeetingsBefore} EST or after ${noMeetingsAfter} EST.
-- Protected lunch break: ${lunchStart} to ${lunchEnd} EST — no work blocks during this time.
+- NO lunch break blocks. Do NOT schedule lunch, break, or downtime blocks. Use that time for Prep→Call Blitz cycles instead.
 - Minimum block duration: ${minBlockMin} minutes. No shorter blocks.
 - Max back-to-back meetings: ${maxBackToBack}. Insert breaks if needed.
 - Workstream strategy: ${preferNewLogoMorning ? 'New logo work in the morning, renewal work in the afternoon' : 'No specific morning/afternoon workstream preference'}.`;
@@ -300,14 +300,13 @@ CRITICAL RULES:
 5. ${preferNewLogoMorning ? 'Account for energy patterns: deep prospecting/new logo work in the morning, renewal tasks in the afternoon' : 'Distribute new logo and renewal work based on meeting gaps'}
 6. Include buffer time around meetings (5-10 min)
 7. If feedback says past suggestions were unrealistic, SIGNIFICANTLY dial back goals
-8. Leave 30 min for daily journal/EOD wrap-up
-9. Never schedule prospecting calls during lunch (${lunchStart}-${lunchEnd})
-10. Build in at least one 15-min break mid-morning and mid-afternoon
-11. NAME SPECIFIC ACCOUNTS in Prep and Call Blitz block goals (from prospecting list only)
-12. PERSONAL/FAMILY blocks are NON-NEGOTIABLE — the user has children (Quinn, Emmett). School drop-offs, pickups, and activities MUST be respected.
-13. If screenshot-confirmed meetings differ from calendar DB, TRUST the screenshot.
-14. CALENDAR MEETINGS ARE FIXED ANCHORS. Do NOT generate your own meeting blocks — they are provided as locked blocks and merged automatically.
-15. DO NOT duplicate a meeting that already exists.
+8. DO NOT schedule an EOD wrap-up or journal block. The user handles reflection during their morning check-in the next day.
+9. DO NOT schedule lunch breaks, mid-morning breaks, or mid-afternoon breaks. Every available minute should be Prep→Call Blitz or meeting prep.
+10. NAME SPECIFIC ACCOUNTS in Prep and Call Blitz block goals (from prospecting list only)
+11. PERSONAL/FAMILY blocks are NON-NEGOTIABLE — the user has children (Quinn, Emmett). School drop-offs, pickups, and activities MUST be respected.
+12. If screenshot-confirmed meetings differ from calendar DB, TRUST the screenshot.
+13. CALENDAR MEETINGS ARE FIXED ANCHORS. Do NOT generate your own meeting blocks — they are provided as locked blocks and merged automatically.
+14. DO NOT duplicate a meeting that already exists.
 16. DO NOT schedule ANY blocks before ${workStart} or after ${workEnd}. This is a HARD boundary.
 17. ONLY use accounts from the NEW LOGO PROSPECTING list in Prep→Execute cycles. Current customers are NOT prospecting targets.
 18. CONSOLIDATE all non-prospecting, non-new-logo admin work (pipeline opp tasks, renewal tasks, email, CRM updates) into ONE "Admin & Pipeline Tasks" block. Do NOT scatter small admin blocks throughout the day. IMPORTANT: New Logo Account Prep blocks and Call Blitz blocks are NOT admin — they are the core prospecting workflow and should remain as their own dedicated paired cycles throughout the day.
