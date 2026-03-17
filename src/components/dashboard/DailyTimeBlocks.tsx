@@ -119,6 +119,7 @@ export function DailyTimeBlocks() {
   const [dismissedBlocks, setDismissedBlocks] = useState<Set<number>>(new Set());
   const [linkOppBlockIdx, setLinkOppBlockIdx] = useState<number | null>(null);
   const [blockOppLinks, setBlockOppLinks] = useState<Map<number, { id: string; name: string }>>(new Map());
+  const [showPreferences, setShowPreferences] = useState(false);
 
   const { data: plan, isLoading } = useQuery({
     queryKey: ['daily-time-blocks', todayStr],
