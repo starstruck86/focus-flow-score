@@ -462,7 +462,7 @@ function TrendsDashboard() {
                 <span className="text-muted-foreground">{p.label}</span>
                 <div className="flex items-center gap-2">
                   <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div className="h-full rounded-full bg-red-500" style={{ width: `${p.pct}%` }} />
+                    <div className="h-full rounded-full bg-grade-failing" style={{ width: `${p.pct}%` }} />
                   </div>
                   <span className="text-xs font-mono w-10 text-right">{p.pct}%</span>
                 </div>
