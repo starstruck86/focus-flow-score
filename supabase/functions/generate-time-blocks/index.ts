@@ -296,7 +296,8 @@ CRITICAL RULES:
 11. NAME SPECIFIC ACCOUNTS in goals when possible
 12. PERSONAL/FAMILY blocks are NON-NEGOTIABLE — the user has children (Quinn, Emmett). School drop-offs, pickups, and activities MUST be respected.
 13. If screenshot-confirmed meetings differ from calendar DB, TRUST the screenshot.
-14. CALENDAR MEETINGS ARE FIXED ANCHORS. Every meeting listed below must appear as its own block at the exact EST start and end time shown. Do NOT move, round, combine, rename, or replace them.
+14. CALENDAR MEETINGS ARE FIXED ANCHORS. Every meeting listed below must appear as its own block at the exact EST start and end time shown. Do NOT move, round, combine, rename, or replace them. Do NOT generate your own meeting blocks — they are provided as locked blocks and merged automatically.
+15. DO NOT duplicate a meeting that already exists. If two calendar entries refer to the same meeting (same account/topic, overlapping times), use only ONE block at the correct time.
 15. DO NOT schedule ANY blocks before ${workStart} or after ${workEnd}. This is a HARD boundary.
 
 WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL):
