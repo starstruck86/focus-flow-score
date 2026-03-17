@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStore } from '@/store/useStore';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import type { Account, Contact, Renewal, Opportunity, Task, ChurnRisk } from '@/types';
 
 // ── Sync status (exported for save indicator) ─────────────
@@ -412,7 +413,6 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
             notifySyncListeners();
           } catch (err) {
             console.error(`[DataSync] Write-back error for ${key}:`, err);
-            const { toast } = await import('sonner');
             toast.error('Sync failed', {
               description: `Your ${key} changes couldn't save. They're preserved locally and will retry.`,
             });
