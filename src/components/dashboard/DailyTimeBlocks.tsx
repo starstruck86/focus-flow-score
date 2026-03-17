@@ -665,6 +665,43 @@ export function DailyTimeBlocks() {
                     </ul>
                   )}
 
+                  {/* Dial/Email actuals tracker for prospecting blocks */}
+                  {editingBlock !== i && block.type === 'prospecting' && (
+                    <div className="flex items-center gap-3 mt-2 py-1.5 px-2.5 rounded-md bg-muted/40 border border-border/30">
+                      <div className="flex items-center gap-1.5">
+                        <Phone className="h-3 w-3 text-blue-500" />
+                        <span className="text-[10px] text-muted-foreground font-medium">Dials:</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          className="h-6 w-14 text-xs text-center px-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          placeholder="—"
+                          value={block.actual_dials ?? ''}
+                          onChange={e => {
+                            const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                            if (!isNaN(val)) updateBlockActual(i, 'actual_dials', val);
+                          }}
+                        />
+                      </div>
+                      {block.label.toLowerCase().includes('email') && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-muted-foreground font-medium">Emails:</span>
+                          <Input
+                            type="number"
+                            min={0}
+                            className="h-6 w-14 text-xs text-center px-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            placeholder="—"
+                            value={block.actual_emails ?? ''}
+                            onChange={e => {
+                              const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                              if (!isNaN(val)) updateBlockActual(i, 'actual_emails', val);
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Linked opportunity badge */}
                   {linkedOpp && (
                     <div className="flex items-center gap-1.5 mt-1.5">
