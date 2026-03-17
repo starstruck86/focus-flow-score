@@ -323,7 +323,7 @@ function ChatInterface({
   }, [voice, sendMessage]);
 
   return (
-    <div className="flex gap-4 h-[calc(100vh-220px)] min-h-[500px]">
+    <div className="flex flex-col md:flex-row gap-4 h-[calc(100vh-220px)] min-h-[400px]">
       {/* Chat panel */}
       <div className="flex-1 flex flex-col border border-border rounded-lg overflow-hidden">
         {/* Header */}
