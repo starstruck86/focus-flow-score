@@ -224,23 +224,59 @@ export function MethodologyTracker({ opportunityId, opportunityName, stage }: Pr
 
       {expandedSection === 'goals' && (
         <div className="space-y-2 pl-2">
-          <p className="text-[10px] text-muted-foreground px-2">
-            Define specific outcomes you need from the next call. These inform call scoring and pre-call coaching.
-          </p>
-          {(data?.call_goals || []).map((goal: CallGoal) => (
-            <div key={goal.id} className="flex items-center gap-2 p-2 rounded-lg border border-border/50 bg-muted/20">
-              <button onClick={() => handleToggleGoal(goal.id)} className="flex-shrink-0">
-                {goal.completed
-                  ? <CheckCircle2 className="h-4 w-4 text-primary" />
-                  : <Circle className="h-4 w-4 text-muted-foreground hover:text-foreground transition-colors" />
+          <div className="flex items-center justify-between px-2">
+            <p className="text-[10px] text-muted-foreground">
+              Define specific outcomes you need from the next call. These inform call scoring and pre-call coaching.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 text-[10px] gap-1 shrink-0"
+              onClick={async () => {
+                setGenerating(true);
+                try {
+                  const { data: result, error } = await supabase.functions.invoke('generate-call-goals', {
+                    body: { opportunity_id: opportunityId },
+                  });
+                  if (error) throw error;
+                  if (result?.error) throw new Error(result.error);
+                  toast.success(`${result.goals?.length || 0} goals generated`);
+                  // Refresh data
+                  upsert.mutate({} as any);
+                } catch (err: any) {
+                  toast.error('Goal generation failed', { description: err.message });
+                } finally {
+                  setGenerating(false);
                 }
-              </button>
-              <span className={cn('text-xs flex-1', goal.completed && 'line-through text-muted-foreground')}>
-                {goal.text}
-              </span>
-              <button onClick={() => handleRemoveGoal(goal.id)} className="text-muted-foreground hover:text-destructive transition-colors">
-                <X className="h-3 w-3" />
-              </button>
+              }}
+              disabled={generating}
+            >
+              {generating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+              {generating ? 'Generating...' : 'AI Generate'}
+            </Button>
+          </div>
+          {(data?.call_goals || []).map((goal: any) => (
+            <div key={goal.id} className="p-2 rounded-lg border border-border/50 bg-muted/20">
+              <div className="flex items-center gap-2">
+                <button onClick={() => handleToggleGoal(goal.id)} className="flex-shrink-0">
+                  {goal.completed
+                    ? <CheckCircle2 className="h-4 w-4 text-primary" />
+                    : <Circle className="h-4 w-4 text-muted-foreground hover:text-foreground transition-colors" />
+                  }
+                </button>
+                <span className={cn('text-xs flex-1', goal.completed && 'line-through text-muted-foreground')}>
+                  {goal.text}
+                </span>
+                {goal.framework && (
+                  <Badge variant="outline" className="text-[9px] shrink-0">{goal.framework}</Badge>
+                )}
+                <button onClick={() => handleRemoveGoal(goal.id)} className="text-muted-foreground hover:text-destructive transition-colors">
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+              {goal.rationale && (
+                <p className="text-[10px] text-muted-foreground ml-6 mt-0.5">{goal.rationale}</p>
+              )}
             </div>
           ))}
           <div className="flex gap-2">
