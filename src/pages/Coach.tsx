@@ -443,7 +443,7 @@ function TrendsDashboard() {
                 <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
                 <Bar dataKey="pct" radius={[0, 4, 4, 0]}>
                   {meddiccBarData.map((entry, i) => (
-                    <Cell key={i} fill={entry.pct >= 70 ? '#10b981' : entry.pct >= 40 ? '#f59e0b' : '#ef4444'} />
+                    <Cell key={i} fill={entry.pct >= 70 ? 'hsl(var(--grade-excellent))' : entry.pct >= 40 ? 'hsl(var(--grade-average))' : 'hsl(var(--grade-failing))'} />
                   ))}
                 </Bar>
               </BarChart>
