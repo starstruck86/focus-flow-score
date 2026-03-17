@@ -791,9 +791,12 @@ export default function Coach() {
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="w-full grid grid-cols-4">
+          <TabsList className="w-full grid grid-cols-5">
             <TabsTrigger value="simulate" className="gap-1">
               <Swords className="h-3.5 w-3.5" /> Simulate
+            </TabsTrigger>
+            <TabsTrigger value="drills" className="gap-1">
+              <Shield className="h-3.5 w-3.5" /> Drills
             </TabsTrigger>
             <TabsTrigger value="scorecard">Scorecard</TabsTrigger>
             <TabsTrigger value="history">History</TabsTrigger>
@@ -803,6 +806,11 @@ export default function Coach() {
           {/* ── SIMULATE TAB ── */}
           <TabsContent value="simulate" className="mt-4">
             <MockCallSimulator />
+          </TabsContent>
+
+          {/* ── DRILLS TAB ── */}
+          <TabsContent value="drills" className="mt-4">
+            <ObjectionDrillReps />
           </TabsContent>
 
           {/* ── SCORECARD TAB ── */}
