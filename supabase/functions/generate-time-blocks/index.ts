@@ -240,20 +240,17 @@ serve(async (req) => {
     });
 
     const pipelineContext = `
-NEW LOGO PROSPECTING ACCOUNTS (NO active opportunity — these need Prep→Call Blitz cycles):
+NEW LOGO PROSPECTING ACCOUNTS (NO active opportunity, NOT current customers — these need Prep→Call Blitz cycles):
 ${prospectingAccounts.slice(0, 8).map((a: any) => `- ${a.name} (Tier ${a.tier}, ${a.account_status}, cadence: ${a.cadence_name || 'none'})`).join('\n') || '(none)'}
 
 ACTIVE NEW LOGO OPPORTUNITIES (TASK & MEETING oriented — NOT research/cadence work):
 ${newLogoOpps.slice(0, 8).map((o: any) => `- ${o.name}: ${o.stage}, $${o.arr || 0}, close ${o.close_date || 'TBD'}, next step: ${o.next_step || 'none'}${o.next_step_date ? ` (due ${o.next_step_date})` : ''}`).join('\n') || '(none)'}
 
-RENEWAL PIPELINE (TASK & MEETING oriented — admin, follow-ups, order forms, contracts):
-Opportunities: ${renewalOpps.slice(0, 5).map((o: any) => `- ${o.name}: ${o.stage}, $${o.arr || 0}, close ${o.close_date || 'TBD'}, next step: ${o.next_step || 'none'}`).join('\n') || '(none)'}
-Renewals: ${renewals.slice(0, 5).map((r: any) => `- ${r.account_name}: $${r.arr}, due ${r.renewal_due}, health ${r.health_status}, risk ${r.churn_risk}, next step: ${r.next_step || 'none'}`).join('\n') || '(none)'}
+RENEWAL COUNT: ${renewals.length} upcoming renewals (user manages these independently — do NOT list specific accounts)
 
 OPEN TASKS:
-New Logo Prospecting: ${newLogoTasks.filter((t: any) => !newLogoAccountIds.has(t.account_id)).slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ') || '(none)'}
-Active Opp Tasks: ${newLogoTasks.filter((t: any) => newLogoAccountIds.has(t.account_id)).slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ') || '(none)'}
-Renewal Tasks: ${renewalTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ') || '(none)'}`;
+New Logo: ${newLogoTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ') || '(none)'}
+Renewal: ${renewalTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ') || '(none)'}`;
 
     // Build user preferences context
     const workStart = userPrefs?.work_start_time?.slice(0, 5) || '09:00';
