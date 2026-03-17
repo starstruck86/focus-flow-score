@@ -314,9 +314,11 @@ function CopilotDialog() {
             value={voice.isRecording ? '🔴 Recording...' : voice.isTranscribing ? 'Transcribing...' : input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={
-              mode === 'quick' ? "Ask about your territory..." :
-              mode === 'deep' ? "What do you want to research? (auto-updates accounts)" :
-              "Which account's meeting should I prep?"
+              placeholder || (
+                mode === 'quick' ? "Ask about your territory..." :
+                mode === 'deep' ? "What do you want to research? (auto-updates accounts)" :
+                "Which account's meeting should I prep?"
+              )
             }
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             disabled={isStreaming || voice.isRecording || voice.isTranscribing}
