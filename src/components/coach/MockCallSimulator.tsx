@@ -455,14 +455,14 @@ function ChatInterface({
                 disabled={isStreaming || voice.isTranscribing || voice.isPlaying}
                 size="icon"
                 variant={voice.isRecording ? 'destructive' : 'default'}
-                className={cn(voice.isRecording && 'animate-pulse')}
+                className={cn('h-10 w-10 md:h-9 md:w-9', voice.isRecording && 'animate-pulse')}
               >
                 {voice.isTranscribing ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-5 w-5 md:h-4 md:w-4 animate-spin" />
                 ) : voice.isRecording ? (
-                  <MicOff className="h-4 w-4" />
+                  <MicOff className="h-5 w-5 md:h-4 md:w-4" />
                 ) : (
-                  <Mic className="h-4 w-4" />
+                  <Mic className="h-5 w-5 md:h-4 md:w-4" />
                 )}
               </Button>
               {input.trim() && (
