@@ -146,12 +146,54 @@ serve(async (req) => {
       goals: [`Attend ${event.title}`],
       reasoning: "Fixed calendar meeting — this time is locked.",
     }));
-...
+
+    // Build feedback context (day-level + block-level)
+    const prevPlans = prevPlansRes.data || [];
+    let feedbackContext = "";
+    if (recentFeedback.length > 0) {
+      feedbackContext += `\n\nRECENT USER FEEDBACK ON TIME BLOCKS (learn from this - adjust accordingly):\n${recentFeedback.map((f: any) =>
+        `- Date: ${f.context_date}, Rating: ${f.rating}/5, Feedback: "${f.feedback_text}"`
+      ).join("\n")}`;
+    }
+    const plansWithBlockFb = prevPlans.filter((p: any) => p.block_feedback?.length > 0);
+    if (plansWithBlockFb.length > 0) {
+      feedbackContext += `\n\nBLOCK-LEVEL FEEDBACK (thumbs up/down on specific blocks):\n`;
+      plansWithBlockFb.forEach((p: any) => {
+        const blocks = p.blocks || [];
+        (p.block_feedback || []).forEach((fb: any) => {
+          const block = blocks[fb.blockIdx];
+          if (block) {
+            feedbackContext += `- ${p.plan_date}: "${block.label}" (${block.type}) got 👎${fb.thumbs === 'down' ? ' DISLIKED' : ' 👍 LIKED'}\n`;
+          }
+        });
+      });
+    }
+
+    // Build calendar context — merge DB events with screenshot-confirmed events
+    let screenshotContext = "";
+    if (confirmedScreenshotEvents && Array.isArray(confirmedScreenshotEvents) && confirmedScreenshotEvents.length > 0) {
+      const personalBlocks = confirmedScreenshotEvents.filter((e: any) => e.is_personal_block);
+      const workMeetings = confirmedScreenshotEvents.filter((e: any) => e.category === 'work_meeting');
+      
+      if (personalBlocks.length > 0) {
+        screenshotContext += `\n\nPERSONAL/FAMILY COMMITMENTS (MUST block these times — DO NOT schedule work during these):\n`;
+        screenshotContext += personalBlocks.map((e: any) => 
+          `- ${e.start_time}–${e.end_time}: ${e.title}${e.family_member ? ` (${e.family_member})` : ''}${e.notes ? ` — ${e.notes}` : ''}`
+        ).join('\n');
+      }
+
+      if (workMeetings.length > 0) {
+        screenshotContext += `\n\nSCREENSHOT-CONFIRMED MEETINGS (these are verified by the user — prioritize these over calendar DB):\n`;
+        screenshotContext += workMeetings.map((e: any) => 
+          `- ${e.start_time}–${e.end_time}: ${e.title}`
+        ).join('\n');
+      }
+    }
+
     const calendarContext = meetings.length > 0
       ? meetings.map((e: any) => {
-          const start = new Date(e.start_time);
           const end = e.end_time ? new Date(e.end_time) : null;
-          const dur = end ? Math.round((end.getTime() - start.getTime()) / 60000) : 30;
+          const dur = end ? Math.round((end.getTime() - new Date(e.start_time).getTime()) / 60000) : 30;
           return `- ${extractEasternTime(e.start_time)}–${extractEasternTime(e.end_time)} EST (${dur}min): ${e.title}`;
         }).join("\n")
       : "No meetings scheduled today.";
