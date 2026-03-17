@@ -77,6 +77,21 @@ export default function OpportunityDetail() {
 
   const opp = opportunities.find(o => o.id === id);
   const linkedAccount = opp ? accounts.find(a => a.id === opp.accountId) : null;
+  const { setPageContext } = useCopilot();
+
+  // Set rich page context for copilot
+  useEffect(() => {
+    if (opp) {
+      setPageContext({
+        page: 'opportunity-detail',
+        description: `Opportunity Detail — ${opp.name}`,
+        accountId: linkedAccount?.id,
+        accountName: linkedAccount?.name,
+        opportunityId: opp.id,
+        opportunityName: opp.name,
+      });
+    }
+  }, [opp?.id, opp?.name, linkedAccount?.id, linkedAccount?.name, setPageContext]);
 
   const { debouncedUpdate, flush } = useDebouncedUpdate(updateOpportunity, id || '');
   useEffect(() => flush, [flush]);

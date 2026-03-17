@@ -59,6 +59,19 @@ export default function AccountDetail() {
   const { accounts, updateAccount, opportunities, renewals, tasks, contacts } = useStore();
 
   const account = accounts.find(a => a.id === id);
+  const { setPageContext } = useCopilot();
+
+  // Set rich page context for copilot
+  useEffect(() => {
+    if (account) {
+      setPageContext({
+        page: 'account-detail',
+        description: `Account Detail — ${account.name}`,
+        accountId: account.id,
+        accountName: account.name,
+      });
+    }
+  }, [account?.id, account?.name, setPageContext]);
 
   // Debounced update for text inputs
   const { debouncedUpdate, flush } = useDebouncedUpdate(updateAccount, id || '');
