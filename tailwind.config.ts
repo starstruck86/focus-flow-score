@@ -79,6 +79,19 @@ export default {
           medium: "hsl(var(--priority-medium))",
           low: "hsl(var(--priority-low))",
         },
+        // Coach / grade colors
+        grade: {
+          excellent: "hsl(var(--grade-excellent))",
+          good: "hsl(var(--grade-good))",
+          average: "hsl(var(--grade-average))",
+          poor: "hsl(var(--grade-poor))",
+          failing: "hsl(var(--grade-failing))",
+        },
+        coach: {
+          cotm: "hsl(var(--coach-cotm))",
+          meddicc: "hsl(var(--coach-meddicc))",
+          discovery: "hsl(var(--coach-discovery))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
