@@ -18,14 +18,14 @@ interface CalendarEvent {
 
 interface RawEvent {
   uid: string;
-  title: string;
+  title: string | null;
   description: string | null;
   start_time: Date;
   end_time: Date | null;
   location: string | null;
   all_day: boolean;
   rrule: string | null;
-  recurrenceId: string | null;
+  recurrenceId: Date | null;
   exdates: Date[];
   duration: number; // in milliseconds
 }
