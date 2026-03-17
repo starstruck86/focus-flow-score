@@ -97,6 +97,10 @@ export function CoachingStreaks() {
     return streak;
   }, [allGrades]);
 
+  if (streaks.length === 0) return null;
+
+  const hasActiveStreaks = streaks.some(s => s.currentStreak >= 2);
+
   return (
     <Card className="border-border/50">
       <CardHeader className="pb-2 pt-3 px-4">
