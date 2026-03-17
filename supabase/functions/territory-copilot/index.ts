@@ -368,12 +368,26 @@ ${toolInstructions}`,
 
   let pageCtxPrompt = '';
   if (pageContext) {
+    const pageSpecific: Record<string, string> = {
+      'coach': `The user is on the SALES COACH page. Focus on call performance, transcript analysis, skill development, and coaching recommendations. Reference their transcript grades, behavioral patterns, and specific improvement areas. When they ask about improving scores, analyze their graded calls and give specific, actionable advice tied to their weakest categories (structure, CotM, MEDDICC, discovery, presence, commercial, next-step).`,
+      'quota': `The user is on the QUOTA page. Focus on pipeline math, quota attainment, deal progression, commission pacing, and P-Club math. Be specific with numbers — calculate gaps, coverage ratios, and required win rates.`,
+      'outreach': `The user is on the NEW LOGO OUTREACH page. Focus on prospecting strategy, account prioritization, ICP fit, trigger events, and outreach cadence. Help them identify the highest-value accounts to pursue.`,
+      'renewals': `The user is on the RENEWALS page. Focus on renewal risk, churn prevention, expansion opportunities, and customer health. Prioritize at-risk renewals.`,
+      'tasks': `The user is on the TASKS page. Focus on task prioritization, time management, and which actions will have the most impact on pipeline and quota.`,
+      'dashboard': `The user is on the TODAY DASHBOARD. Focus on today's priorities, upcoming meetings, and the single most impactful action they can take right now.`,
+      'trends': `The user is on the TRENDS page. Focus on performance patterns, week-over-week changes, and what's driving improvement or decline.`,
+      'account-detail': `The user is viewing a SPECIFIC ACCOUNT. Focus ALL answers on this account. Be deeply specific — reference their contacts, opportunities, touch history, and next steps.`,
+      'opportunity-detail': `The user is viewing a SPECIFIC OPPORTUNITY. Focus ALL answers on this deal. Score it, identify gaps, and recommend specific next moves.`,
+      'prep-hub': `The user is on the PREP HUB. Focus on meeting preparation, call review, and research for upcoming interactions.`,
+    };
+    const specific = pageSpecific[pageContext.page] || '';
     pageCtxPrompt = `\n\n## CURRENT PAGE CONTEXT
 The user is currently viewing: **${pageContext.description || pageContext.page}**
 ${pageContext.accountName ? `Focused Account: ${pageContext.accountName} (id: ${pageContext.accountId})` : ''}
 ${pageContext.opportunityName ? `Focused Opportunity: ${pageContext.opportunityName} (id: ${pageContext.opportunityId})` : ''}
+${specific}
 
-IMPORTANT: Tailor your answers to the context of this page. If the user is on an account detail page, focus answers on that specific account. If on the coach page, relate answers to their call performance and skill development. If on the quota page, focus on pipeline math and attainment. If on the dashboard, focus on today's priorities and agenda. Always be contextually relevant.`;
+IMPORTANT: Tailor your answers to the context of this page. Always be contextually relevant — the user expects answers about what they're currently looking at.`;
   }
 
   let prompt = `${modeInstructions[mode]}${pageCtxPrompt}
