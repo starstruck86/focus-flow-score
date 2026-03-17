@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Layout } from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,18 +14,17 @@ import {
   GraduationCap, TrendingUp, Target, Mic, Sparkles, ArrowRight, ArrowUp, ArrowDown, Minus,
   CheckCircle2, AlertTriangle, Lightbulb, BarChart3, Loader2, MessageSquareQuote,
   ShieldCheck, ShieldAlert, Brain, Crosshair, Zap, Clock, Eye, FileText,
-  Upload, Plus, ChevronDown, ChevronUp,
+  Upload, Plus, ChevronDown, ChevronUp, Wand2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useCallTranscripts } from '@/hooks/useCallTranscripts';
-import { useSaveTranscript } from '@/hooks/useCallTranscripts';
+import { useCallTranscripts, useSaveTranscript } from '@/hooks/useCallTranscripts';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { useStore } from '@/store/useStore';
 import {
   useAllTranscriptGrades, useGradeTranscript, useTranscriptGrade,
   useBehavioralPatterns, useMeddiccCompleteness,
-  type TranscriptGrade, type EvidenceItem, type MissedOpportunity, type SuggestedQuestion,
+  type TranscriptGrade, type EvidenceItem,
 } from '@/hooks/useTranscriptGrades';
 import { format, parseISO } from 'date-fns';
 import {
@@ -33,6 +32,14 @@ import {
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
   BarChart, Bar, Cell,
 } from 'recharts';
+import {
+  detectAccountFromTranscript,
+  SideBySideViewer,
+  PreCallCoach,
+  DealIntelligence,
+  WeeklyCoachingDigest,
+  CoachingStreaks,
+} from '@/components/coach';
 
 const GRADE_COLORS: Record<string, string> = {
   'A+': 'text-grade-excellent', A: 'text-grade-excellent', 'A-': 'text-grade-excellent',
@@ -120,7 +127,7 @@ function CallScorecard({ grade }: { grade: TranscriptGrade }) {
         </CardContent>
       </Card>
 
-      {/* PRIMARY COACHING ACTION — centerpiece */}
+      {/* PRIMARY COACHING ACTION */}
       <Card className="border-primary/30 bg-primary/5">
         <CardContent className="p-4 space-y-3">
           <div className="flex items-center gap-2">
@@ -129,12 +136,8 @@ function CallScorecard({ grade }: { grade: TranscriptGrade }) {
               Primary Coaching Action — {grade.feedback_focus?.toUpperCase()}
             </span>
           </div>
-          {grade.coaching_issue && (
-            <p className="text-sm font-semibold">{grade.coaching_issue}</p>
-          )}
-          {grade.coaching_why && (
-            <p className="text-xs text-muted-foreground">{grade.coaching_why}</p>
-          )}
+          {grade.coaching_issue && <p className="text-sm font-semibold">{grade.coaching_issue}</p>}
+          {grade.coaching_why && <p className="text-xs text-muted-foreground">{grade.coaching_why}</p>}
           {grade.transcript_moment && (
             <div className="rounded bg-muted/50 p-2 border-l-2 border-primary/50">
               <p className="text-xs italic text-muted-foreground">
@@ -152,7 +155,7 @@ function CallScorecard({ grade }: { grade: TranscriptGrade }) {
         </CardContent>
       </Card>
 
-      {/* Framework coverage — CotM + MEDDICC */}
+      {/* Framework coverage */}
       <div className="grid grid-cols-2 gap-3">
         <Card className="border-border/50">
           <CardHeader className="pb-1 pt-3 px-3">
@@ -331,14 +334,12 @@ function TrendsDashboard() {
 
   const categories = Object.entries(CATEGORY_LABELS);
 
-  // Radar data
   const radarData = categories.map(([key, { label }]) => ({
     dimension: label.length > 12 ? label.substring(0, 12) + '…' : label,
-    score: Math.round(allGrades.reduce((s, g) => s + ((g as any)[`${key}_score`] || 0), 0) / allGrades.length * 20), // scale 1-5 to 0-100
+    score: Math.round(allGrades.reduce((s, g) => s + ((g as any)[`${key}_score`] || 0), 0) / allGrades.length * 20),
     fullMark: 100,
   }));
 
-  // Line chart data
   const trendData = [...allGrades]
     .sort((a, b) => {
       const dA = (a as any).call_transcripts?.call_date || a.created_at;
@@ -355,7 +356,6 @@ function TrendsDashboard() {
       discovery: (g.discovery_score || 0) * 20,
     }));
 
-  // MEDDICC bar chart
   const meddiccBarData = meddicc?.completeness?.map(c => ({
     name: MEDDICC_LABELS[c.field] || c.field,
     pct: c.pct,
@@ -363,6 +363,12 @@ function TrendsDashboard() {
 
   return (
     <div className="space-y-4">
+      {/* Weekly Coaching Digest */}
+      <WeeklyCoachingDigest />
+
+      {/* Coaching Streaks */}
+      <CoachingStreaks />
+
       {/* Trend direction badges */}
       {trendSummary.length > 0 && (
         <div className="flex flex-wrap gap-2">
@@ -452,6 +458,9 @@ function TrendsDashboard() {
         </Card>
       )}
 
+      {/* Deal-Level Intelligence */}
+      <DealIntelligence />
+
       {/* Behavioral patterns */}
       {patterns.length > 0 && (
         <Card className="border-border/50">
@@ -493,11 +502,33 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
   const [opportunityId, setOpportunityId] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [fileLoading, setFileLoading] = useState(false);
+  const [autoDetected, setAutoDetected] = useState<{ name: string; confidence: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const saveTranscript = useSaveTranscript();
   const { user } = useAuth();
   const accounts = useStore(s => s.accounts);
   const opportunities = useStore(s => s.opportunities);
+
+  // Auto-detect account when content or participants change
+  useEffect(() => {
+    if (!pasteContent && !participants) {
+      setAutoDetected(null);
+      return;
+    }
+    if (accountId) return; // User already selected one
+
+    const timer = setTimeout(() => {
+      const result = detectAccountFromTranscript(pasteContent, participants, accounts);
+      if (result) {
+        setAccountId(result.accountId);
+        setAutoDetected({ name: result.accountName, confidence: result.confidence });
+      } else {
+        setAutoDetected(null);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [pasteContent, participants, accounts, accountId]);
 
   const handleFile = useCallback(async (file: File) => {
     setFileLoading(true);
@@ -531,7 +562,7 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
     }
     const autoTitle = title.trim() || `${callType || 'Call'} — ${callDate}`;
     try {
-      const saved = await saveTranscript.mutateAsync({
+      await saveTranscript.mutateAsync({
         title: autoTitle,
         content: pasteContent.trim(),
         call_date: callDate,
@@ -547,6 +578,7 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
       setParticipants('');
       setAccountId('');
       setOpportunityId('');
+      setAutoDetected(null);
       setExpanded(false);
       onSaved();
     } catch (err: any) {
@@ -565,7 +597,6 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
       >
-        {/* Collapsed header */}
         <button
           onClick={() => setExpanded(!expanded)}
           className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors rounded-lg"
@@ -589,7 +620,6 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
               className="overflow-hidden"
             >
               <div className="px-3 pb-3 space-y-3">
-                {/* Transcript input */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs">Transcript</Label>
@@ -625,21 +655,29 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
                     rows={6}
                     className="font-mono text-xs resize-y"
                   />
-                  {pasteContent && (
-                    <p className="text-[10px] text-muted-foreground">{(pasteContent.length / 1000).toFixed(1)}k characters</p>
-                  )}
+                  <div className="flex items-center justify-between">
+                    {pasteContent && (
+                      <p className="text-[10px] text-muted-foreground">{(pasteContent.length / 1000).toFixed(1)}k characters</p>
+                    )}
+                    {autoDetected && (
+                      <Badge variant="outline" className="text-[10px] gap-1 border-primary/30 text-primary">
+                        <Wand2 className="h-2.5 w-2.5" />
+                        Auto-detected: {autoDetected.name} ({autoDetected.confidence}%)
+                      </Badge>
+                    )}
+                  </div>
                 </div>
+
+                {/* Pre-call coach (shows when account is selected) */}
+                {accountId && (
+                  <PreCallCoach accountId={accountId} opportunityId={opportunityId} callType={callType} />
+                )}
 
                 {/* Metadata row */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   <div className="space-y-1">
                     <Label className="text-[10px]">Title</Label>
-                    <Input
-                      placeholder="Auto-generated"
-                      value={title}
-                      onChange={e => setTitle(e.target.value)}
-                      className="h-7 text-xs"
-                    />
+                    <Input placeholder="Auto-generated" value={title} onChange={e => setTitle(e.target.value)} className="h-7 text-xs" />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px]">Call Type</Label>
@@ -656,8 +694,8 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
                     <Input type="date" value={callDate} onChange={e => setCallDate(e.target.value)} className="h-7 text-xs" />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-[10px]">Account</Label>
-                    <Select value={accountId || "__none__"} onValueChange={(v) => { setAccountId(v === "__none__" ? "" : v); setOpportunityId(''); }}>
+                    <Label className="text-[10px]">Account {autoDetected && <span className="text-primary">(auto)</span>}</Label>
+                    <Select value={accountId || "__none__"} onValueChange={(v) => { setAccountId(v === "__none__" ? "" : v); setOpportunityId(''); setAutoDetected(null); }}>
                       <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Link account..." /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none__">None</SelectItem>
@@ -688,7 +726,6 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
                   </div>
                 </div>
 
-                {/* Save button */}
                 <div className="flex justify-end">
                   <Button
                     size="sm"
@@ -719,12 +756,15 @@ export default function Coach() {
   const [selectedTranscriptId, setSelectedTranscriptId] = useState<string | null>(null);
   const { data: selectedGrade } = useTranscriptGrade(selectedTranscriptId || undefined);
 
+  // Get transcript content for side-by-side
+  const selectedTranscript = (transcripts || []).find(t => t.id === selectedTranscriptId);
+
   const gradedIds = new Set((allGrades || []).map(g => g.transcript_id));
   const ungraded = (transcripts || []).filter(t => !gradedIds.has(t.id));
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -755,13 +795,21 @@ export default function Coach() {
                 <Button variant="ghost" size="sm" onClick={() => setSelectedTranscriptId(null)}>
                   ← Back to transcripts
                 </Button>
-                <CallScorecard grade={selectedGrade} />
+                {/* Side-by-side viewer when transcript content is available */}
+                {selectedTranscript?.content ? (
+                  <SideBySideViewer
+                    transcriptContent={selectedTranscript.content}
+                    grade={selectedGrade}
+                    renderScorecard={() => <CallScorecard grade={selectedGrade} />}
+                  />
+                ) : (
+                  <CallScorecard grade={selectedGrade} />
+                )}
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Transcript ingestion */}
                 <TranscriptIngestion onSaved={() => refetchTranscripts()} />
-                {/* Ungraded transcripts */}
+
                 {ungraded.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Ready to Grade</p>
@@ -805,7 +853,6 @@ export default function Coach() {
                   </div>
                 )}
 
-                {/* Recently graded quick access */}
                 {(allGrades || []).length > 0 && (
                   <div className="space-y-2 pt-2 border-t border-border/50">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Recently Graded</p>
