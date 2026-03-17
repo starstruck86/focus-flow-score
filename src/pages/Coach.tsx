@@ -237,7 +237,7 @@ function CallScorecard({ grade }: { grade: TranscriptGrade }) {
       <div className="grid grid-cols-2 gap-3">
         <Card className="border-border/50">
           <CardContent className="p-3 space-y-2">
-            <p className="text-xs font-semibold text-emerald-400 flex items-center gap-1">
+            <p className="text-xs font-semibold text-grade-excellent flex items-center gap-1">
               <CheckCircle2 className="h-3 w-3" /> What You Did Well
             </p>
             {(grade.strengths || []).map((s, i) => (
