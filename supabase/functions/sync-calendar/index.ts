@@ -6,6 +6,21 @@ const corsHeaders = {
 };
 
 const DEFAULT_TIMEZONE = 'America/New_York';
+const WINDOWS_TIMEZONE_MAP: Record<string, string> = {
+  'Eastern Standard Time': 'America/New_York',
+  'Central Standard Time': 'America/Chicago',
+  'Mountain Standard Time': 'America/Denver',
+  'Pacific Standard Time': 'America/Los_Angeles',
+  'Alaskan Standard Time': 'America/Anchorage',
+  'Hawaiian Standard Time': 'Pacific/Honolulu',
+  'US Eastern Standard Time': 'America/Indianapolis',
+  'Atlantic Standard Time': 'America/Halifax',
+  'Newfoundland Standard Time': 'America/St_Johns',
+  'GMT Standard Time': 'Europe/London',
+  'Greenwich Standard Time': 'Atlantic/Reykjavik',
+  'W. Europe Standard Time': 'Europe/Berlin',
+  'Romance Standard Time': 'Europe/Paris',
+};
 
 interface CalendarEvent {
   external_id: string;
@@ -43,9 +58,10 @@ function normalizeTimeZone(timeZone: string | null): string {
   if (!timeZone) return DEFAULT_TIMEZONE;
 
   const normalized = timeZone.trim().replace(/\\/g, '');
+  const mappedWindowsZone = WINDOWS_TIMEZONE_MAP[normalized];
+  if (mappedWindowsZone) return mappedWindowsZone;
 
   if (
-    normalized === 'Eastern Standard Time' ||
     normalized.includes('Eastern') ||
     normalized.includes('New_York')
   ) {
