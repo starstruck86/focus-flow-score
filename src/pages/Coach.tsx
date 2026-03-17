@@ -144,8 +144,8 @@ function CallScorecard({ grade }: { grade: TranscriptGrade }) {
             </div>
           )}
           {grade.replacement_behavior && (
-            <div className="rounded bg-emerald-500/10 border border-emerald-500/20 p-2">
-              <p className="text-xs font-medium text-emerald-400 mb-1">→ Instead, do this:</p>
+            <div className="rounded bg-grade-excellent/10 border border-grade-excellent/20 p-2">
+              <p className="text-xs font-medium text-grade-excellent mb-1">→ Instead, do this:</p>
               <p className="text-sm">{grade.replacement_behavior}</p>
             </div>
           )}
