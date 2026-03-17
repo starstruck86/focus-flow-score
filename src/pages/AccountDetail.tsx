@@ -52,6 +52,7 @@ const STATUS_OPTIONS: { value: AccountStatus; label: string }[] = [
 ];
 
 export default function AccountDetail() {
+  const [showSynopsis, setShowSynopsis] = useState(false);
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { accounts, updateAccount, opportunities, renewals, tasks, contacts } = useStore();
