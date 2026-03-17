@@ -882,7 +882,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
             </Badge>
           )}
         </CardTitle>
-        <div className="flex items-center gap-1.5 mt-2">
+        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
           <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => setShowAddForm(!showAddForm)}>
             <Plus className="h-3.5 w-3.5" /> Add
           </Button>
@@ -898,7 +898,37 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
             {isParsingDrop ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
             Screenshot
           </Button>
+          {totalContacts > 1 && (
+            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={handleInferHierarchy} disabled={isInferringHierarchy}>
+              {isInferringHierarchy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Network className="h-3.5 w-3.5" />}
+              Auto-Org
+            </Button>
+          )}
         </div>
+        {/* Bulk actions bar */}
+        {selectedContactIds.size > 0 && (
+          <div className="flex items-center gap-2 mt-2 p-2 rounded-md bg-primary/5 border border-primary/20">
+            <Checkbox
+              checked={contacts ? selectedContactIds.size === contacts.length : false}
+              onCheckedChange={toggleAllContacts}
+              className="h-3.5 w-3.5"
+            />
+            <span className="text-xs font-medium text-primary">{selectedContactIds.size} selected</span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 text-xs gap-1 ml-auto"
+              onClick={enrichSelectedContacts}
+              disabled={isEnrichingContacts}
+            >
+              {isEnrichingContacts ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+              Enrich Selected
+            </Button>
+            <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setSelectedContactIds(new Set())}>
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        )}
       </CardHeader>
 
       <CardContent className="space-y-3">
