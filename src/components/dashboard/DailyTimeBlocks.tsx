@@ -25,6 +25,7 @@ import {
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { CalendarScreenshotDrop } from './CalendarScreenshotDrop';
 
 interface TimeBlock {
   start_time: string;
@@ -141,9 +142,10 @@ export function DailyTimeBlocks() {
   }, [plan?.blocks]);
 
   const generateMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (opts: { confirmedScreenshotEvents?: any[] } | void) => {
+      const screenshotEvents = opts && 'confirmedScreenshotEvents' in opts ? opts.confirmedScreenshotEvents : undefined;
       const { data, error } = await supabase.functions.invoke('generate-time-blocks', {
-        body: { date: todayStr },
+        body: { date: todayStr, confirmedScreenshotEvents: screenshotEvents },
       });
       if (error) throw error;
       return data as DailyPlan;
@@ -156,6 +158,13 @@ export function DailyTimeBlocks() {
       toast.error(e instanceof Error ? e.message : 'Failed to generate plan');
     },
   });
+
+  // Handle confirmed screenshot events — rebuild plan with them
+  const handleScreenshotEventsConfirmed = useCallback((events: any[]) => {
+    generateMutation.mutate({ confirmedScreenshotEvents: events });
+    setDismissedBlocks(new Set());
+    setBlockOppLinks(new Map());
+  }, [generateMutation]);
 
   const feedbackMutation = useMutation({
     mutationFn: async () => {
@@ -338,6 +347,7 @@ export function DailyTimeBlocks() {
             )}
           </Button>
         </div>
+        <CalendarScreenshotDrop date={todayStr} onEventsConfirmed={handleScreenshotEventsConfirmed} />
       </Card>
     );
   }
@@ -468,6 +478,11 @@ export function DailyTimeBlocks() {
             </Button>
           </div>
         </div>
+      )}
+
+      {/* Calendar screenshot drop zone */}
+      {expanded && (
+        <CalendarScreenshotDrop date={todayStr} onEventsConfirmed={handleScreenshotEventsConfirmed} />
       )}
 
       {/* Time blocks */}
