@@ -316,9 +316,9 @@ export function SignalDetailPanel({ account }: { account: Account }) {
           {score != null && (
             <div className="flex items-center gap-2">
               <Badge variant="outline" className={cn('font-mono', TIER_STYLES[tier || '4'] || TIER_STYLES['4'])}>
-                Tier {tier}
+                Tier {tier} — {tier === '1' ? 'Must Win' : tier === '2' ? 'Strong Fit' : tier === '3' ? 'DQ (Tech)' : 'Bad Fit'}
               </Badge>
-              <span className="text-sm font-mono font-bold">{score}/100</span>
+              <span className="text-sm font-mono font-bold">{score}/40</span>
               {account.confidenceScore != null && (
                 <span className="text-xs text-muted-foreground">({account.confidenceScore}% confidence)</span>
               )}
