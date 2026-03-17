@@ -191,8 +191,8 @@ function CallScorecard({ grade }: { grade: TranscriptGrade }) {
             {Object.entries(MEDDICC_LABELS).map(([key, label]) => (
               <div key={key} className="flex items-center gap-1.5 text-xs">
                 {meddicc[key]
-                  ? <CheckCircle2 className="h-3 w-3 text-emerald-400 flex-shrink-0" />
-                  : <ShieldAlert className="h-3 w-3 text-red-400 flex-shrink-0" />}
+                  ? <CheckCircle2 className="h-3 w-3 text-grade-excellent flex-shrink-0" />
+                  : <ShieldAlert className="h-3 w-3 text-grade-failing flex-shrink-0" />}
                 <span className={meddicc[key] ? 'text-foreground' : 'text-muted-foreground'}>{label}</span>
               </div>
             ))}
