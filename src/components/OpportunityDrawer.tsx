@@ -29,6 +29,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ResourceLinksPanel } from '@/components/ResourceLinksPanel';
 import { StakeholderMap } from '@/components/StakeholderMap';
+import { ClaudeSynopsisModal } from '@/components/ClaudeSynopsisModal';
 import {
   Phone,
   Mail,
@@ -36,7 +37,7 @@ import {
   MessageSquare,
   Timer,
   Plus,
-  Calendar,
+  Sparkles,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
@@ -85,6 +86,7 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
 
   const [showConversationDialog, setShowConversationDialog] = useState(false);
   const [showCreateTaskDialog, setShowCreateTaskDialog] = useState(false);
+  const [showSynopsis, setShowSynopsis] = useState(false);
   const [newTask, setNewTask] = useState<Partial<Task>>({
     priority: 'P1',
     motion: 'new-logo',
@@ -259,6 +261,16 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
                 >
                   <Timer className="h-4 w-4 mr-2" />
                   Focus: Deck/Research
+                </Button>
+
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="justify-start col-span-2"
+                  onClick={() => setShowSynopsis(true)}
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Paste Synopsis
                 </Button>
 
                 <Button
@@ -510,6 +522,12 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ClaudeSynopsisModal
+        open={showSynopsis}
+        onOpenChange={setShowSynopsis}
+        opportunity={opportunity}
+      />
     </>
   );
 }
