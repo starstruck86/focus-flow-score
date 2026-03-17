@@ -383,6 +383,11 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
               // Non-critical — continue
             }
           }
+
+          // Auto-promote inactive new-logo accounts with 3+ contacts
+          if (targetAccountId) {
+            await maybePromoteToResearching(targetAccountId);
+          }
         }
 
         imported++;
