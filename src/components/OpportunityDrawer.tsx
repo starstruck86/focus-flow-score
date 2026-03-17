@@ -522,6 +522,12 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ClaudeSynopsisModal
+        open={showSynopsis}
+        onOpenChange={setShowSynopsis}
+        opportunity={opportunity}
+      />
     </>
   );
 }
