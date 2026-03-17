@@ -67,7 +67,7 @@ export function JournalDashboardCard() {
           {/* Week strip */}
           {isLoading ? (
             <div className="flex gap-1.5">
-              {Array.from({ length: 7 }).map((_, i) => (
+              {Array.from({ length: 5 }).map((_, i) => (
                 <Skeleton key={i} className="h-16 flex-1 rounded-xl" />
               ))}
             </div>
