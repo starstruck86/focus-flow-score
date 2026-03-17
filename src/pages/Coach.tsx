@@ -35,10 +35,10 @@ import {
 } from 'recharts';
 
 const GRADE_COLORS: Record<string, string> = {
-  'A+': 'text-emerald-400', A: 'text-emerald-400', 'A-': 'text-emerald-500',
-  'B+': 'text-blue-400', B: 'text-blue-400', 'B-': 'text-blue-500',
-  'C+': 'text-amber-400', C: 'text-amber-400', 'C-': 'text-amber-500',
-  'D+': 'text-orange-400', D: 'text-orange-500', F: 'text-red-500',
+  'A+': 'text-grade-excellent', A: 'text-grade-excellent', 'A-': 'text-grade-excellent',
+  'B+': 'text-grade-good', B: 'text-grade-good', 'B-': 'text-grade-good',
+  'C+': 'text-grade-average', C: 'text-grade-average', 'C-': 'text-grade-average',
+  'D+': 'text-grade-poor', D: 'text-grade-poor', F: 'text-grade-failing',
 };
 
 const CATEGORY_LABELS: Record<string, { label: string; icon: any }> = {
