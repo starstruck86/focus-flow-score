@@ -307,9 +307,10 @@ CRITICAL RULES:
 12. If screenshot-confirmed meetings differ from calendar DB, TRUST the screenshot.
 13. CALENDAR MEETINGS ARE FIXED ANCHORS. Do NOT generate your own meeting blocks — they are provided as locked blocks and merged automatically.
 14. DO NOT duplicate a meeting that already exists.
-16. DO NOT schedule ANY blocks before ${workStart} or after ${workEnd}. This is a HARD boundary.
-17. ONLY use accounts from the NEW LOGO PROSPECTING list in Prep→Execute cycles. Current customers are NOT prospecting targets.
-18. CONSOLIDATE all non-prospecting, non-new-logo admin work (pipeline opp tasks, renewal tasks, email, CRM updates) into ONE "Admin & Pipeline Tasks" block. Do NOT scatter small admin blocks throughout the day. IMPORTANT: New Logo Account Prep blocks and Call Blitz blocks are NOT admin — they are the core prospecting workflow and should remain as their own dedicated paired cycles throughout the day.
+15. DO NOT schedule ANY blocks before ${workStart} or after ${workEnd}. This is a HARD boundary.
+16. ONLY use accounts from the NEW LOGO PROSPECTING list in Prep→Execute cycles. Current customers are NOT prospecting targets.
+17. CONSOLIDATE all non-prospecting admin work (pipeline opp tasks, renewal tasks, email, CRM updates) into ONE short "Admin & Pipeline Tasks" block (30 min max). New Logo Prep and Call Blitz blocks are NOT admin.
+18. Internal meetings like "Deal Desk" are OPTIONAL — do not treat them as locked anchors. Only external customer/prospect meetings are mandatory.
 
 WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL):
 
