@@ -513,6 +513,8 @@ Deno.serve(async (req) => {
     const dbResults = await Promise.all(dbQueries);
     const [accountsRes, oppsRes, renewalsRes, eventsRes, journalRes, quotaRes, resourcesRes, contactsRes, transcriptsRes] = dbResults;
 
+    const gradesRes = pageContext?.page === 'coach' ? dbResults[dbResults.length - 1] : null;
+
     const ctx: any = {
       accounts: accountsRes.data || [],
       opportunities: oppsRes.data || [],
