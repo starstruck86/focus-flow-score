@@ -581,6 +581,7 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
       setAccountId('');
       setOpportunityId('');
       setAutoDetected(null);
+      manuallySelected.current = false;
       setExpanded(false);
       onSaved();
     } catch (err: any) {
