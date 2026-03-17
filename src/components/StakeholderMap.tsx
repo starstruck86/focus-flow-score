@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { maybePromoteToResearching } from '@/lib/accountAutoStatus';
+import { autoInferHierarchy } from '@/lib/orgChartInference';
 import {
   Users,
   Sparkles,
@@ -35,6 +37,8 @@ import {
   Plus,
   Check,
   X,
+  RefreshCw,
+  Network,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
