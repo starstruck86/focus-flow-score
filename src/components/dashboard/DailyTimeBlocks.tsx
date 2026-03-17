@@ -693,6 +693,24 @@ export function DailyTimeBlocks() {
                   {/* Inline edit */}
                   {editingBlock === i ? (
                     <div className="space-y-2 mt-1">
+                      <div className="flex gap-2 items-center">
+                        <div className="flex items-center gap-1">
+                          <Clock className="h-3 w-3 text-muted-foreground" />
+                          <Input
+                            type="time"
+                            className="h-7 text-xs w-28"
+                            value={editStartTime}
+                            onChange={e => setEditStartTime(e.target.value)}
+                          />
+                          <span className="text-xs text-muted-foreground">–</span>
+                          <Input
+                            type="time"
+                            className="h-7 text-xs w-28"
+                            value={editEndTime}
+                            onChange={e => setEditEndTime(e.target.value)}
+                          />
+                        </div>
+                      </div>
                       <Input
                         className="h-7 text-xs"
                         value={editLabel}
