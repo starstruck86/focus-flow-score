@@ -230,7 +230,8 @@ function parseICS(icsContent: string): RawEvent[] {
           currentEvent.uid = value;
           break;
         case 'RECURRENCE-ID':
-          currentEvent.recurrenceId = value;
+          const recurrence = parseICSDate(value, keyPart);
+          currentEvent.recurrenceId = recurrence.date;
           break;
         case 'RRULE':
           currentEvent.rrule = value;
