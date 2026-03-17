@@ -220,8 +220,10 @@ serve(async (req) => {
     const renewals = renewalsRes.data || [];
     const activeTasks = tasksRes.data || [];
 
-    const newLogoAccounts = topAccounts.filter((a: any) => a.motion === 'new-logo' || !a.motion);
-    const renewalAccounts = topAccounts.filter((a: any) => a.motion === 'renewal');
+    // Identify ALL accounts that have ANY active opportunity (new logo OR renewal)
+    const allOppAccountIds = new Set(activeOpps.map((o: any) => o.account_id).filter(Boolean));
+    // Also identify accounts linked to upcoming renewals
+    const allRenewalAccountNames = new Set(renewals.map((r: any) => r.account_name?.toLowerCase()).filter(Boolean));
 
     const newLogoOpps = activeOpps.filter((o: any) => o.deal_type !== 'renewal');
     const renewalOpps = activeOpps.filter((o: any) => o.deal_type === 'renewal');
@@ -229,11 +231,13 @@ serve(async (req) => {
     const newLogoTasks = activeTasks.filter((t: any) => t.motion !== 'renewal');
     const renewalTasks = activeTasks.filter((t: any) => t.motion === 'renewal');
 
-    // Separate prospecting accounts (no active opp) from accounts with active opps
-    const newLogoAccountIds = new Set(newLogoOpps.map((o: any) => o.account_id).filter(Boolean));
-    const renewalAccountIds = new Set(renewalOpps.map((o: any) => o.account_id).filter(Boolean));
-    const prospectingAccounts = newLogoAccounts.filter((a: any) => !newLogoAccountIds.has(a.id));
-    const accountsWithNewLogoOpps = newLogoAccounts.filter((a: any) => newLogoAccountIds.has(a.id));
+    // PURE prospecting accounts: no active opp AND not a renewal/current customer account
+    const prospectingAccounts = topAccounts.filter((a: any) => {
+      if (allOppAccountIds.has(a.id)) return false; // Has an active opp — not prospecting
+      if (a.motion === 'renewal') return false; // Renewal motion — not prospecting
+      if (allRenewalAccountNames.has(a.name?.toLowerCase())) return false; // Has a renewal — current customer
+      return true;
+    });
 
     const pipelineContext = `
 NEW LOGO PROSPECTING ACCOUNTS (NO active opportunity — these need Prep→Call Blitz cycles):
