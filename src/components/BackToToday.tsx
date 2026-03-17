@@ -16,7 +16,7 @@ export function BackToToday() {
         <Button
           variant="outline"
           size="icon"
-          className="fixed bottom-[4.5rem] left-3 z-40 h-8 w-8 rounded-full shadow-lg bg-card/95 backdrop-blur-sm border-primary/20 hover:border-primary/40"
+          className="fixed bottom-[calc(6.5rem+env(safe-area-inset-bottom))] left-3 z-40 h-8 w-8 rounded-full shadow-lg bg-card/95 backdrop-blur-sm border-primary/20 hover:border-primary/40"
           onClick={() => navigate('/')}
         >
           <LayoutDashboard className="h-3.5 w-3.5 text-primary" />
