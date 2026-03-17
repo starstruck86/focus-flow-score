@@ -222,32 +222,104 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
     }
   }, [user, accountId, accountName, qc]);
 
-  // Build tree structure
+  // Infer seniority tier from title text when seniority field is missing
+  const inferSeniorityTier = useCallback((contact: ContactNode): number => {
+    // If explicit seniority is set, use it
+    const seniorityOrder: Record<string, number> = { 'c-suite': 0, 'vp': 1, 'director': 2, 'manager': 3, 'senior': 3, 'individual': 4 };
+    if (contact.seniority && seniorityOrder[contact.seniority] !== undefined) {
+      return seniorityOrder[contact.seniority];
+    }
+    // Infer from title keywords
+    const t = (contact.title || '').toLowerCase();
+    if (/\b(ceo|cfo|cmo|cro|cto|coo|chief|c-suite|president)\b/.test(t)) return 0;
+    if (/\b(svp|senior vice president|evp|executive vice president)\b/.test(t)) return 0.5;
+    if (/\b(vp|vice president)\b/.test(t)) return 1;
+    if (/\b(senior director)\b/.test(t)) return 1.5;
+    if (/\b(director)\b/.test(t)) return 2;
+    if (/\b(senior manager|head of)\b/.test(t)) return 2.5;
+    if (/\b(manager|lead)\b/.test(t)) return 3;
+    if (/\b(senior|specialist|coordinator|analyst)\b/.test(t)) return 3.5;
+    return 4;
+  }, []);
+
+  // Build tree structure with auto-inferred hierarchy
   const { roots, childrenMap } = useMemo(() => {
-    if (!contacts) return { roots: [], childrenMap: new Map<string, ContactNode[]>() };
+    if (!contacts || contacts.length === 0) return { roots: [], childrenMap: new Map<string, ContactNode[]>() };
     const map = new Map<string, ContactNode[]>();
     const nameToId = new Map<string, string>();
     for (const c of contacts) nameToId.set(c.name.toLowerCase(), c.id);
 
-    const roots: ContactNode[] = [];
+    // First pass: respect explicit reporting_to relationships
+    const hasExplicitParent = new Set<string>();
+    const explicitRoots: ContactNode[] = [];
+
     for (const c of contacts) {
-      if (!c.reporting_to) {
-        roots.push(c);
-      } else {
+      if (c.reporting_to) {
         const parentId = nameToId.get(c.reporting_to.toLowerCase());
         if (parentId) {
           if (!map.has(parentId)) map.set(parentId, []);
           map.get(parentId)!.push(c);
-        } else {
-          roots.push(c);
+          hasExplicitParent.add(c.id);
         }
       }
     }
 
-    const seniorityOrder: Record<string, number> = { 'c-suite': 0, 'vp': 1, 'director': 2, 'manager': 3, 'individual': 4 };
-    roots.sort((a, b) => (seniorityOrder[a.seniority || 'individual'] || 4) - (seniorityOrder[b.seniority || 'individual'] || 4));
+    // Collect contacts without explicit parents
+    const unplaced = contacts.filter(c => !hasExplicitParent.has(c.id));
+
+    // Check if ANY explicit relationships exist
+    const hasAnyExplicit = hasExplicitParent.size > 0;
+
+    if (hasAnyExplicit) {
+      // Some explicit relationships exist — remaining contacts are roots
+      explicitRoots.push(...unplaced);
+      const senioritySort = (a: ContactNode, b: ContactNode) => inferSeniorityTier(a) - inferSeniorityTier(b);
+      explicitRoots.sort(senioritySort);
+      return { roots: explicitRoots, childrenMap: map };
+    }
+
+    // No explicit relationships — auto-infer hierarchy from seniority tiers
+    const tiered = unplaced.map(c => ({ contact: c, tier: inferSeniorityTier(c) }));
+    tiered.sort((a, b) => a.tier - b.tier);
+
+    // Group by tier
+    const tierGroups = new Map<number, ContactNode[]>();
+    for (const { contact, tier } of tiered) {
+      if (!tierGroups.has(tier)) tierGroups.set(tier, []);
+      tierGroups.get(tier)!.push(contact);
+    }
+
+    const tierLevels = Array.from(tierGroups.keys()).sort((a, b) => a - b);
+    if (tierLevels.length <= 1) {
+      // All same seniority — flat layout
+      return { roots: unplaced, childrenMap: map };
+    }
+
+    // Top tier = roots, each subsequent tier reports to the tier above
+    const roots = tierGroups.get(tierLevels[0])!;
+
+    for (let i = 1; i < tierLevels.length; i++) {
+      const parentTierContacts = tierGroups.get(tierLevels[i - 1])!;
+      const childTierContacts = tierGroups.get(tierLevels[i])!;
+
+      // Distribute children among parents, preferring department match
+      for (const child of childTierContacts) {
+        // Try to find a parent in the same department
+        let bestParent = parentTierContacts.find(p =>
+          p.department && child.department &&
+          p.department.toLowerCase() === child.department.toLowerCase()
+        );
+
+        // Otherwise assign to first parent (round-robin would be better but simple is fine)
+        if (!bestParent) bestParent = parentTierContacts[0];
+
+        if (!map.has(bestParent.id)) map.set(bestParent.id, []);
+        map.get(bestParent.id)!.push(child);
+      }
+    }
+
     return { roots, childrenMap: map };
-  }, [contacts]);
+  }, [contacts, inferSeniorityTier]);
 
   // Render a single org chart node card
   const renderNodeCard = (contact: ContactNode) => {
