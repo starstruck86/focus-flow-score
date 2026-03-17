@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { ClaudeSynopsisModal } from '@/components/ClaudeSynopsisModal';
 import { OrgChartView } from '@/components/OrgChartView';
+import { MethodologyTracker } from '@/components/MethodologyTracker';
 import { cn } from '@/lib/utils';
 import type { OpportunityStage, OpportunityStatus, DealType, ChurnRisk } from '@/types';
 
