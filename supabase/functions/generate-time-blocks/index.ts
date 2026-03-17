@@ -87,6 +87,17 @@ serve(async (req) => {
     const { date, confirmedScreenshotEvents } = await req.json();
     const targetDate = date || new Date().toISOString().split("T")[0];
 
+    // Determine week boundaries (Mon-Fri) for the target date
+    const targetDateObj = new Date(targetDate + 'T12:00:00');
+    const dayOfWeek = targetDateObj.getDay(); // 0=Sun, 1=Mon, ...
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const weekMonday = new Date(targetDateObj);
+    weekMonday.setDate(targetDateObj.getDate() + mondayOffset);
+    const weekFriday = new Date(weekMonday);
+    weekFriday.setDate(weekMonday.getDate() + 4);
+    const weekMondayStr = weekMonday.toISOString().split('T')[0];
+    const weekFridayStr = weekFriday.toISOString().split('T')[0];
+
     // Gather context in parallel
     const [
       calendarRes,
@@ -99,6 +110,9 @@ serve(async (req) => {
       renewalsRes,
       tasksRes,
       prefsRes,
+      weekJournalRes,
+      weekCalendarRes,
+      battlePlanRes,
     ] = await Promise.all([
       // Convert EST day boundaries to UTC for correct timezone filtering
       (() => {
@@ -132,6 +146,30 @@ serve(async (req) => {
         .in("status", ["next", "in-progress"])
         .order("due_date", { ascending: true }).limit(20),
       supabase.from("daily_plan_preferences").select("*").maybeSingle(),
+      // This week's journal entries (to know what's already been done)
+      supabase.from("daily_journal_entries").select("date, dials, conversations, meetings_set, opportunities_created, daily_score")
+        .gte("date", weekMondayStr)
+        .lte("date", weekFridayStr)
+        .order("date"),
+      // Rest of week calendar (to understand meeting load distribution)
+      (() => {
+        const d = new Date(weekMondayStr + 'T00:00:00');
+        const month = d.getMonth();
+        const offsetHours = (month >= 2 && month <= 10) ? 4 : 5;
+        const weekStartUTC = new Date(d.getTime() + offsetHours * 60 * 60 * 1000).toISOString();
+        const fridayEnd = new Date(weekFriday.getTime() + offsetHours * 60 * 60 * 1000 + 24 * 60 * 60 * 1000 - 1000).toISOString();
+        return supabase.from("calendar_events").select("start_time, end_time, all_day, title")
+          .gte("start_time", weekStartUTC)
+          .lte("start_time", fridayEnd)
+          .order("start_time");
+      })(),
+      // Weekly battle plan
+      supabase.from("weekly_battle_plans").select("*")
+        .gte("week_start", weekMondayStr)
+        .lte("week_start", weekFridayStr)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     const events = calendarRes.data || [];
