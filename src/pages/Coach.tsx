@@ -41,6 +41,7 @@ import {
   CoachingStreaks,
   CoachingFocus,
   MockCallSimulator,
+  ObjectionDrillReps,
 } from '@/components/coach';
 
 const GRADE_COLORS: Record<string, string> = {
