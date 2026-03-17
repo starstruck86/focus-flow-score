@@ -1855,20 +1855,41 @@ export type Database = {
           actionable_feedback: string
           acumen_notes: string | null
           acumen_score: number
+          behavioral_flags: Json | null
           cadence_notes: string | null
           cadence_score: number
+          call_segments: Json | null
+          call_type: string | null
+          coaching_issue: string | null
+          coaching_why: string | null
+          commercial_score: number | null
+          cotm_score: number | null
+          cotm_signals: Json | null
           created_at: string
+          discovery_score: number | null
+          discovery_stats: Json | null
+          evidence: Json | null
           feedback_focus: string
           id: string
           improvements: string[] | null
+          meddicc_score: number | null
+          meddicc_signals: Json | null
           methodology_alignment: string | null
+          missed_opportunities: Json | null
+          next_step_score: number | null
           overall_grade: string
           overall_score: number
+          presence_score: number | null
+          presence_stats: Json | null
+          replacement_behavior: string | null
           strengths: string[] | null
+          structure_score: number | null
           style_notes: string | null
           style_score: number
+          suggested_questions: Json | null
           summary: string | null
           transcript_id: string
+          transcript_moment: string | null
           updated_at: string
           user_id: string
         }
@@ -1876,20 +1897,41 @@ export type Database = {
           actionable_feedback?: string
           acumen_notes?: string | null
           acumen_score?: number
+          behavioral_flags?: Json | null
           cadence_notes?: string | null
           cadence_score?: number
+          call_segments?: Json | null
+          call_type?: string | null
+          coaching_issue?: string | null
+          coaching_why?: string | null
+          commercial_score?: number | null
+          cotm_score?: number | null
+          cotm_signals?: Json | null
           created_at?: string
+          discovery_score?: number | null
+          discovery_stats?: Json | null
+          evidence?: Json | null
           feedback_focus?: string
           id?: string
           improvements?: string[] | null
+          meddicc_score?: number | null
+          meddicc_signals?: Json | null
           methodology_alignment?: string | null
+          missed_opportunities?: Json | null
+          next_step_score?: number | null
           overall_grade?: string
           overall_score?: number
+          presence_score?: number | null
+          presence_stats?: Json | null
+          replacement_behavior?: string | null
           strengths?: string[] | null
+          structure_score?: number | null
           style_notes?: string | null
           style_score?: number
+          suggested_questions?: Json | null
           summary?: string | null
           transcript_id: string
+          transcript_moment?: string | null
           updated_at?: string
           user_id: string
         }
@@ -1897,20 +1939,41 @@ export type Database = {
           actionable_feedback?: string
           acumen_notes?: string | null
           acumen_score?: number
+          behavioral_flags?: Json | null
           cadence_notes?: string | null
           cadence_score?: number
+          call_segments?: Json | null
+          call_type?: string | null
+          coaching_issue?: string | null
+          coaching_why?: string | null
+          commercial_score?: number | null
+          cotm_score?: number | null
+          cotm_signals?: Json | null
           created_at?: string
+          discovery_score?: number | null
+          discovery_stats?: Json | null
+          evidence?: Json | null
           feedback_focus?: string
           id?: string
           improvements?: string[] | null
+          meddicc_score?: number | null
+          meddicc_signals?: Json | null
           methodology_alignment?: string | null
+          missed_opportunities?: Json | null
+          next_step_score?: number | null
           overall_grade?: string
           overall_score?: number
+          presence_score?: number | null
+          presence_stats?: Json | null
+          replacement_behavior?: string | null
           strengths?: string[] | null
+          structure_score?: number | null
           style_notes?: string | null
           style_score?: number
+          suggested_questions?: Json | null
           summary?: string | null
           transcript_id?: string
+          transcript_moment?: string | null
           updated_at?: string
           user_id?: string
         }

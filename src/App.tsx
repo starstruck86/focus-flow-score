@@ -21,6 +21,7 @@ import Settings from "./pages/Settings";
 import AccountDetail from "./pages/AccountDetail";
 import OpportunityDetail from "./pages/OpportunityDetail";
 import Auth from "./pages/Auth";
+import Coach from "./pages/Coach";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -66,6 +67,7 @@ const App = () => (
                   <Route path="/recurring" element={<ProtectedPage><RecurringTasks /></ProtectedPage>} />
                   <Route path="/trends" element={<ProtectedPage><Trends /></ProtectedPage>} />
                   <Route path="/quota" element={<ProtectedPage><Quota /></ProtectedPage>} />
+                  <Route path="/coach" element={<ProtectedPage><Coach /></ProtectedPage>} />
                   <Route path="/settings" element={<ProtectedPage><Settings /></ProtectedPage>} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
