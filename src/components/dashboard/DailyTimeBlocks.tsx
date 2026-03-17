@@ -770,15 +770,31 @@ export function DailyTimeBlocks() {
       )}
 
       {/* Metric targets footer */}
-      {expanded && plan.key_metric_targets && Object.keys(plan.key_metric_targets).length > 0 && (
-        <div className="px-4 py-2.5 bg-muted/20 border-t border-border/30 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-          <span className="font-medium text-foreground">Today's targets:</span>
-          {plan.key_metric_targets.dials != null && <span>{plan.key_metric_targets.dials} dials</span>}
-          {plan.key_metric_targets.conversations != null && <span>{plan.key_metric_targets.conversations} convos</span>}
-          {plan.key_metric_targets.accounts_researched != null && <span>{plan.key_metric_targets.accounts_researched} researched</span>}
-          {plan.key_metric_targets.contacts_prepped != null && <span>{plan.key_metric_targets.contacts_prepped} prepped</span>}
-        </div>
-      )}
+      {expanded && plan.key_metric_targets && Object.keys(plan.key_metric_targets).length > 0 && (() => {
+        const actualDialsTotal = blocks
+          .filter(b => b.type === 'prospecting')
+          .reduce((s, b) => s + (b.actual_dials || 0), 0);
+        const targetDials = plan.key_metric_targets.dials;
+        const hasActuals = actualDialsTotal > 0;
+        
+        return (
+          <div className="px-4 py-2.5 bg-muted/20 border-t border-border/30 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+            <span className="font-medium text-foreground">Today's targets:</span>
+            {targetDials != null && (
+              <span className={cn(
+                hasActuals && actualDialsTotal >= targetDials && "text-status-green font-medium",
+                hasActuals && actualDialsTotal < targetDials && actualDialsTotal >= targetDials * 0.7 && "text-amber-500 font-medium",
+              )}>
+                {hasActuals ? `${actualDialsTotal}/${targetDials} dials` : `${targetDials} dials`}
+                {hasActuals && actualDialsTotal >= targetDials && ' ✓'}
+              </span>
+            )}
+            {plan.key_metric_targets.conversations != null && <span>{plan.key_metric_targets.conversations} convos</span>}
+            {plan.key_metric_targets.accounts_researched != null && <span>{plan.key_metric_targets.accounts_researched} researched</span>}
+            {plan.key_metric_targets.contacts_prepped != null && <span>{plan.key_metric_targets.contacts_prepped} prepped</span>}
+          </div>
+        );
+      })()}
 
       {/* Link Opportunity Dialog */}
       <Dialog open={linkOppBlockIdx !== null} onOpenChange={(open) => !open && setLinkOppBlockIdx(null)}>
