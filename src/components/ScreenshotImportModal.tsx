@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useStore } from '@/store/useStore';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { maybePromoteToResearching } from '@/lib/accountAutoStatus';
 import { cn } from '@/lib/utils';
 import type { Account } from '@/types';
 
@@ -381,6 +382,11 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
             } catch {
               // Non-critical — continue
             }
+          }
+
+          // Auto-promote inactive new-logo accounts with 3+ contacts
+          if (targetAccountId) {
+            await maybePromoteToResearching(targetAccountId);
           }
         }
 

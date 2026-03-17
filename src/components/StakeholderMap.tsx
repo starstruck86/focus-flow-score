@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { maybePromoteToResearching } from '@/lib/accountAutoStatus';
 import {
   Users,
   Sparkles,
@@ -173,9 +174,10 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
       });
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       qc.invalidateQueries({ queryKey: ['stakeholder-contacts', accountId] });
       toast.success('Contact added');
+      await maybePromoteToResearching(accountId);
     },
   });
 
@@ -322,6 +324,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
       }
 
       qc.invalidateQueries({ queryKey: ['stakeholder-contacts', accountId] });
+      await maybePromoteToResearching(accountId);
       toast.success(`Added ${added} contact(s)`, {
         description: allContacts.length > added ? `${allContacts.length - added} duplicate(s) skipped` : undefined,
       });
