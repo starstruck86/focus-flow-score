@@ -5,3 +5,4 @@ export { DealIntelligence } from './DealIntelligence';
 export { WeeklyCoachingDigest } from './WeeklyCoachingDigest';
 export { CoachingStreaks } from './CoachingStreaks';
 export { CoachingFocus } from './CoachingFocus';
+export { MockCallSimulator } from './MockCallSimulator';
