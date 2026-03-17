@@ -221,10 +221,10 @@ function CallScorecard({ grade }: { grade: TranscriptGrade }) {
               <div><p className="text-lg font-mono font-bold">{pres.talk_ratio_estimate || 0}%</p><p className="text-[10px] text-muted-foreground">Talk Ratio</p></div>
               <div><p className="text-lg font-mono font-bold">{pres.flow_control || 0}/5</p><p className="text-[10px] text-muted-foreground">Flow Control</p></div>
               <div className="text-xs text-muted-foreground col-span-2 flex gap-3 justify-center">
-                <span className={pres.rambling_detected ? 'text-red-400' : 'text-emerald-400'}>
+                <span className={pres.rambling_detected ? 'text-grade-failing' : 'text-grade-excellent'}>
                   {pres.rambling_detected ? '⚠ Rambling' : '✓ Concise'}
                 </span>
-                <span className={pres.interruptions_detected ? 'text-red-400' : 'text-emerald-400'}>
+                <span className={pres.interruptions_detected ? 'text-grade-failing' : 'text-grade-excellent'}>
                   {pres.interruptions_detected ? '⚠ Interrupts' : '✓ Listens'}
                 </span>
               </div>
