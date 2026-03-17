@@ -259,9 +259,71 @@ serve(async (req) => {
 
     // Quota targets context
     const targets = quotaRes.data;
+    const weeklyDialTarget = (targets?.target_dials_per_day || 60) * 5; // e.g., 300/week
+    const weeklyConnectsTarget = (targets?.target_connects_per_day || 6) * 5;
+
+    // Build weekly context: what's been done + what's left
+    const weekJournals = weekJournalRes.data || [];
+    const weekCalEvents = weekCalendarRes.data || [];
+    const battlePlan = battlePlanRes.data;
+
+    const weekDialsSoFar = weekJournals.reduce((sum: number, j: any) => sum + (j.dials || 0), 0);
+    const weekConvosSoFar = weekJournals.reduce((sum: number, j: any) => sum + (j.conversations || 0), 0);
+    const weekMeetingsSetSoFar = weekJournals.reduce((sum: number, j: any) => sum + (j.meetings_set || 0), 0);
+    const daysLoggedThisWeek = weekJournals.filter((j: any) => j.date < targetDate).length;
+
+    // Calculate meeting load per day for rest of week
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const weekDayMeetingMinutes: Record<string, number> = {};
+    weekCalEvents.forEach((evt: any) => {
+      if (evt.all_day || !evt.end_time) return;
+      const evtDate = new Date(evt.start_time);
+      const dateStr = evtDate.toISOString().split('T')[0];
+      const dur = Math.max(0, (new Date(evt.end_time).getTime() - evtDate.getTime()) / 60000);
+      weekDayMeetingMinutes[dateStr] = (weekDayMeetingMinutes[dateStr] || 0) + dur;
+    });
+
+    // Determine remaining workdays this week (including today)
+    const remainingDays: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(weekMonday);
+      d.setDate(weekMonday.getDate() + i);
+      const ds = d.toISOString().split('T')[0];
+      if (ds >= targetDate) remainingDays.push(ds);
+    }
+
+    const remainingDialsNeeded = Math.max(0, weeklyDialTarget - weekDialsSoFar);
+    const remainingDaysCount = remainingDays.length || 1;
+
+    // Calculate today's adjusted target based on meeting load relative to other days
+    const todayMeetingMin = weekDayMeetingMinutes[targetDate] || 0;
+    const totalWorkMinPerDay = toMinutes(workEnd) - toMinutes(workStart);
+    const todayFocusMin = Math.max(0, totalWorkMinPerDay - todayMeetingMin);
+
+    // Distribute remaining dials weighted by available focus time
+    const remainingDaysFocus = remainingDays.map(d => ({
+      date: d,
+      focusMin: Math.max(0, totalWorkMinPerDay - (weekDayMeetingMinutes[d] || 0)),
+    }));
+    const totalRemainingFocusMin = remainingDaysFocus.reduce((s, d) => s + d.focusMin, 0) || 1;
+    const todayDialTarget = Math.round(remainingDialsNeeded * (todayFocusMin / totalRemainingFocusMin));
+    const todayConvoTarget = Math.round((weeklyConnectsTarget - weekConvosSoFar) * (todayFocusMin / totalRemainingFocusMin));
+
+    const weeklyContext = `
+WEEKLY CONTEXT (this day fits into a bigger picture):
+- Week: ${weekMondayStr} to ${weekFridayStr}
+- Weekly targets: ${weeklyDialTarget} dials, ${weeklyConnectsTarget} connects, ${targets?.target_meetings_set_per_week || 3} meetings set
+- Progress so far this week (${daysLoggedThisWeek} days logged): ${weekDialsSoFar} dials, ${weekConvosSoFar} convos, ${weekMeetingsSetSoFar} meetings set
+- Remaining needed: ${remainingDialsNeeded} dials across ${remainingDaysCount} remaining days
+- TODAY'S ADJUSTED TARGETS (based on available focus time vs rest of week): ~${todayDialTarget} dials, ~${Math.max(1, todayConvoTarget)} convos
+- Today's meeting load: ${Math.round(todayMeetingMin / 60 * 10) / 10}h — ${todayMeetingMin > 180 ? 'HEAVY meeting day, lower activity targets are expected' : todayMeetingMin > 90 ? 'moderate meeting day' : 'light meeting day — push hard on dials'}
+${remainingDays.map(d => `  ${dayNames[new Date(d + 'T12:00:00').getDay()]}: ${Math.round((weekDayMeetingMinutes[d] || 0) / 60 * 10) / 10}h meetings`).join('\n')}
+${battlePlan?.strategy_summary ? `\nWEEKLY BATTLE PLAN STRATEGY:\n${battlePlan.strategy_summary}` : ''}
+${battlePlan?.moves?.length ? `\nTOP WEEKLY MOVES:\n${(battlePlan.moves as any[]).slice(0, 5).map((m: any) => `- ${m.action || m.title || m.description}`).join('\n')}` : ''}`;
+
     const quotaContext = targets
-      ? `Daily targets: ${targets.target_dials_per_day} dials, ${targets.target_connects_per_day} connects, ${targets.target_accounts_researched_per_day} accounts researched, ${targets.target_contacts_prepped_per_day} contacts prepped. Weekly: ${targets.target_meetings_set_per_week} meetings set, ${targets.target_opps_created_per_week} opps created, ${targets.target_customer_meetings_per_week} customer meetings.`
-      : "Default targets: 60 dials/day, 6 connects/day, 3 accounts researched/day.";
+      ? `WEEKLY targets: ${weeklyDialTarget} dials, ${weeklyConnectsTarget} connects. TODAY'S adjusted targets: ${todayDialTarget} dials, ${Math.max(1, todayConvoTarget)} convos, ${targets.target_accounts_researched_per_day} accounts researched, ${targets.target_contacts_prepped_per_day} contacts prepped.`
+      : `Default weekly targets: 300 dials, 30 connects. Adjust daily based on meeting load.`;
 
     // Build pipeline context
     const activeOpps = oppsRes.data || [];
