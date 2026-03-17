@@ -294,6 +294,20 @@ export function DailyTimeBlocks() {
       .eq('id', plan.id);
   }, [plan, todayStr, queryClient]);
 
+  // Update linked accounts on a prep block
+  const updateBlockLinkedAccounts = useCallback(async (blockIdx: number, linkedAccounts: { id: string; name: string }[]) => {
+    if (!plan) return;
+    const blocks = [...(plan.blocks as TimeBlock[])];
+    blocks[blockIdx] = { ...blocks[blockIdx], linked_accounts: linkedAccounts };
+
+    queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks });
+
+    await supabase
+      .from('daily_time_blocks' as any)
+      .update({ blocks })
+      .eq('id', plan.id);
+  }, [plan, todayStr, queryClient]);
+
   // Link opportunity to a block
   const linkOpportunity = useCallback((blockIdx: number, opp: { id: string; name: string }) => {
     setBlockOppLinks(prev => {
