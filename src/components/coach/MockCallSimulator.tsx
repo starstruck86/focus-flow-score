@@ -27,7 +27,7 @@ const CALL_TYPES = ['Discovery', 'Demo', 'Pricing', 'Objection Handling', 'Execu
 const INDUSTRIES = ['DTC / Ecommerce', 'SaaS', 'Financial Services', 'Healthcare', 'Retail', 'Manufacturing'];
 const PERSONAS = ['CMO', 'Director CRM', 'CFO', 'VP Sales', 'Head of Digital', 'Skeptical CMO', 'Friendly Champion', 'Analytical CFO', 'Distracted VP', 'Technical Evaluator'];
 const SKILL_MODES = [
-  { value: '', label: 'Full Call (no focus)' },
+  { value: 'full-call', label: 'Full Call (no focus)' },
   { value: 'discovery-only', label: '🔍 Discovery Only' },
   { value: 'objection-only', label: '🛡️ Objection Handling Only' },
   { value: 'pricing-only', label: '💰 Pricing Only' },
@@ -54,7 +54,7 @@ function ScenarioSetup({ onStart }: { onStart: (cfg: any) => void }) {
   const [industry, setIndustry] = useState('DTC / Ecommerce');
   const [persona, setPersona] = useState('CMO');
   const [difficulty, setDifficulty] = useState(2);
-  const [skillMode, setSkillMode] = useState('');
+  const [skillMode, setSkillMode] = useState('full-call');
 
   return (
     <div className="space-y-6">

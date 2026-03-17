@@ -131,7 +131,7 @@ serve(async (req) => {
       industry: config?.industry || 'DTC / Ecommerce',
       persona: config?.persona || 'CMO',
       difficulty: config?.difficulty || 2,
-      skillMode: config?.skillMode,
+      skillMode: config?.skillMode === 'full-call' ? undefined : config?.skillMode,
     };
 
     const systemPrompt = buildScenarioPrompt(scenarioConfig);
