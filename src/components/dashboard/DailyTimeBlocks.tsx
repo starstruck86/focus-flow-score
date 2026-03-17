@@ -127,6 +127,8 @@ export function DailyTimeBlocks() {
   const [showPreferences, setShowPreferences] = useState(false);
   const [accountSearchBlockIdx, setAccountSearchBlockIdx] = useState<number | null>(null);
   const [accountSearchQuery, setAccountSearchQuery] = useState('');
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
   const { data: plan, isLoading } = useQuery({
     queryKey: ['daily-time-blocks', todayStr],
