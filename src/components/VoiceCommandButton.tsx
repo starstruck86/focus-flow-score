@@ -65,7 +65,7 @@ export function VoiceCommandButton({ size = 'default' }: { size?: 'default' | 'l
         // Use TTS to speak the question if available
         if (command.question) {
           try {
-            await voice.speak(command.question);
+            await voice.playTTS(command.question);
           } catch { /* TTS optional */ }
         }
         break;
