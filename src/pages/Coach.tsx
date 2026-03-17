@@ -537,12 +537,16 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
         call_date: callDate,
         call_type: callType || undefined,
         participants: participants.trim() || undefined,
+        account_id: accountId || undefined,
+        opportunity_id: opportunityId || undefined,
       });
       toast.success('Transcript saved — ready to analyze');
       setPasteContent('');
       setTitle('');
       setCallType('');
       setParticipants('');
+      setAccountId('');
+      setOpportunityId('');
       setExpanded(false);
       onSaved();
     } catch (err: any) {
