@@ -135,6 +135,7 @@ function CopilotDialog() {
       messages: allMessages,
       mode: activeMode,
       accountId: state.accountId,
+      pageContext,
       onDelta: (chunk) => {
         assistantText += chunk;
         const content = assistantText; // capture for closure
