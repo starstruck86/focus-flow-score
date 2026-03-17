@@ -656,10 +656,10 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px]">Account</Label>
-                    <Select value={accountId} onValueChange={(v) => { setAccountId(v); setOpportunityId(''); }}>
+                    <Select value={accountId || "__none__"} onValueChange={(v) => { setAccountId(v === "__none__" ? "" : v); setOpportunityId(''); }}>
                       <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Link account..." /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="__none__">None</SelectItem>
                         {accounts.sort((a, b) => a.name.localeCompare(b.name)).map(a => (
                           <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
                         ))}
@@ -668,10 +668,10 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px]">Opportunity</Label>
-                    <Select value={opportunityId} onValueChange={setOpportunityId}>
+                    <Select value={opportunityId || "__none__"} onValueChange={(v) => setOpportunityId(v === "__none__" ? "" : v)}>
                       <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Link opp..." /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="__none__">None</SelectItem>
                         {opportunities
                           .filter(o => !accountId || o.accountId === accountId)
                           .sort((a, b) => a.name.localeCompare(b.name))
