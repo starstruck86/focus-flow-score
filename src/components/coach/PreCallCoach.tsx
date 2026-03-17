@@ -1,12 +1,12 @@
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Target, AlertTriangle, CheckCircle2, Brain, Crosshair, Lightbulb } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useStore } from '@/store/useStore';
 import { useAllTranscriptGrades, useBehavioralPatterns } from '@/hooks/useTranscriptGrades';
 import { useTranscriptsForAccount } from '@/hooks/useCallTranscripts';
+import { useOpportunityMethodology, type CallGoal } from '@/hooks/useOpportunityMethodology';
 import { format, parseISO } from 'date-fns';
 
 interface Props {
@@ -21,6 +21,7 @@ export function PreCallCoach({ accountId, opportunityId, callType }: Props) {
   const { data: allGrades } = useAllTranscriptGrades();
   const { patterns, weakestArea } = useBehavioralPatterns();
   const { data: accountTranscripts } = useTranscriptsForAccount(accountId);
+  const { data: methodology } = useOpportunityMethodology(opportunityId);
 
   const account = accounts.find(a => a.id === accountId);
   const opportunity = opportunities.find(o => o.id === opportunityId);
@@ -31,9 +32,45 @@ export function PreCallCoach({ accountId, opportunityId, callType }: Props) {
     return allGrades.filter((g: any) => g.call_transcripts?.account_id === accountId);
   }, [allGrades, accountId]);
 
+  // Build cumulative MEDDICC from methodology tracker (not just last call)
+  const meddiccGaps = useMemo(() => {
+    if (!methodology) return [];
+    const fields = [
+      { key: 'metrics', label: 'Metrics' },
+      { key: 'economic_buyer', label: 'Economic Buyer' },
+      { key: 'decision_criteria', label: 'Decision Criteria' },
+      { key: 'decision_process', label: 'Decision Process' },
+      { key: 'identify_pain', label: 'Identify Pain' },
+      { key: 'champion', label: 'Champion' },
+      { key: 'competition', label: 'Competition' },
+    ];
+    return fields.filter(f => !(methodology as any)[`${f.key}_confirmed`]);
+  }, [methodology]);
+
   // Build coaching plan
   const plan = useMemo(() => {
-    const items: { icon: any; label: string; detail: string; type: 'focus' | 'reminder' | 'context' }[] = [];
+    const items: { icon: any; label: string; detail: string; type: 'focus' | 'reminder' | 'context' | 'goal' }[] = [];
+
+    // Call goals from methodology tracker — top priority
+    const activeGoals = (methodology?.call_goals || []).filter((g: CallGoal) => !g.completed);
+    if (activeGoals.length > 0) {
+      items.push({
+        icon: Crosshair,
+        label: 'Call Goal Outcomes',
+        detail: activeGoals.map((g: CallGoal) => g.text).join(' • '),
+        type: 'goal',
+      });
+    }
+
+    // Cumulative MEDDICC gaps (from methodology tracker, not single call)
+    if (meddiccGaps.length > 0 && meddiccGaps.length < 6) {
+      items.push({
+        icon: Brain,
+        label: 'MEDDICC Gaps to Close',
+        detail: `Still need: ${meddiccGaps.map(g => g.label).join(', ')}`,
+        type: 'focus',
+      });
+    }
 
     // Account context
     if (account) {
@@ -47,7 +84,7 @@ export function PreCallCoach({ accountId, opportunityId, callType }: Props) {
       if (opportunity.nextStep) items.push({ icon: Crosshair, label: 'Opp Next Step', detail: opportunity.nextStep, type: 'context' });
     }
 
-    // Previous call insights
+    // Previous call insights — behavioral, not MEDDICC (cumulative MEDDICC is above)
     if (accountGrades.length > 0) {
       const lastGrade = accountGrades[0];
       if (lastGrade.coaching_issue) {
@@ -55,14 +92,6 @@ export function PreCallCoach({ accountId, opportunityId, callType }: Props) {
       }
       if (lastGrade.replacement_behavior) {
         items.push({ icon: Lightbulb, label: 'Behavior to Practice', detail: lastGrade.replacement_behavior, type: 'focus' });
-      }
-
-      // Check what MEDDICC elements are still missing
-      const lastMeddicc = lastGrade.meddicc_signals as any || {};
-      const missing = ['metrics', 'economic_buyer', 'decision_criteria', 'decision_process', 'identify_pain', 'champion', 'competition']
-        .filter(k => !lastMeddicc[k]);
-      if (missing.length > 0 && missing.length < 5) {
-        items.push({ icon: Brain, label: 'MEDDICC Gaps to Close', detail: `Uncover: ${missing.map(m => m.replace(/_/g, ' ')).join(', ')}`, type: 'focus' });
       }
     }
 
@@ -85,7 +114,7 @@ export function PreCallCoach({ accountId, opportunityId, callType }: Props) {
     }
 
     return items;
-  }, [account, opportunity, accountGrades, weakestArea, patterns, callType]);
+  }, [account, opportunity, accountGrades, weakestArea, patterns, callType, methodology, meddiccGaps]);
 
   if (!accountId && !opportunityId) {
     return (
@@ -106,6 +135,11 @@ export function PreCallCoach({ accountId, opportunityId, callType }: Props) {
           <Brain className="h-4 w-4 text-primary" />
           Pre-Call Coaching Plan
           {account && <Badge variant="outline" className="text-[10px]">{account.name}</Badge>}
+          {methodology && (
+            <Badge variant="outline" className="text-[10px] ml-auto">
+              MEDDICC {7 - meddiccGaps.length}/7
+            </Badge>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="px-4 pb-4 space-y-2">
@@ -119,6 +153,7 @@ export function PreCallCoach({ accountId, opportunityId, callType }: Props) {
                 key={i}
                 className={cn(
                   'flex items-start gap-2 p-2 rounded text-xs',
+                  item.type === 'goal' && 'bg-primary/5 border border-primary/20',
                   item.type === 'focus' && 'bg-grade-failing/5 border border-grade-failing/15',
                   item.type === 'reminder' && 'bg-grade-average/5 border border-grade-average/15',
                   item.type === 'context' && 'bg-muted/30',
@@ -126,6 +161,7 @@ export function PreCallCoach({ accountId, opportunityId, callType }: Props) {
               >
                 <Icon className={cn(
                   'h-3.5 w-3.5 flex-shrink-0 mt-0.5',
+                  item.type === 'goal' && 'text-primary',
                   item.type === 'focus' && 'text-grade-failing',
                   item.type === 'reminder' && 'text-grade-average',
                   item.type === 'context' && 'text-muted-foreground',
