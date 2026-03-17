@@ -279,6 +279,20 @@ export function DailyTimeBlocks() {
     toast.success('Meeting dismissed from plan');
   }, [plan]);
 
+  // Update actual dials/emails on a prospecting block
+  const updateBlockActual = useCallback(async (blockIdx: number, field: 'actual_dials' | 'actual_emails', value: number) => {
+    if (!plan) return;
+    const blocks = [...(plan.blocks as TimeBlock[])];
+    blocks[blockIdx] = { ...blocks[blockIdx], [field]: value };
+
+    queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks });
+
+    await supabase
+      .from('daily_time_blocks' as any)
+      .update({ blocks })
+      .eq('id', plan.id);
+  }, [plan, todayStr, queryClient]);
+
   // Link opportunity to a block
   const linkOpportunity = useCallback((blockIdx: number, opp: { id: string; name: string }) => {
     setBlockOppLinks(prev => {
