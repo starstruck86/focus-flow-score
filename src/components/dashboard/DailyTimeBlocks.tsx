@@ -25,6 +25,7 @@ import {
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { CalendarScreenshotDrop } from './CalendarScreenshotDrop';
 
 interface TimeBlock {
   start_time: string;
