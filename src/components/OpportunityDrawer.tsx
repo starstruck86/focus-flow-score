@@ -29,6 +29,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ResourceLinksPanel } from '@/components/ResourceLinksPanel';
 import { StakeholderMap } from '@/components/StakeholderMap';
+import { ClaudeSynopsisModal } from '@/components/ClaudeSynopsisModal';
 import {
   Phone,
   Mail,
@@ -36,7 +37,7 @@ import {
   MessageSquare,
   Timer,
   Plus,
-  Calendar,
+  Sparkles,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
