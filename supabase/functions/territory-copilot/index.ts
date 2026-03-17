@@ -421,6 +421,19 @@ ${ctx.journal ? `${ctx.journal.date} | Dials:${ctx.journal.dials} Conv:${ctx.jou
   prompt += resourceInstructions;
   prompt += transcriptInstructions;
 
+  // Supercharge #3: Include transcript grades for coach page
+  if (ctx.grades?.length) {
+    const avgScores: Record<string, number[]> = {};
+    ctx.grades.forEach((g: any) => {
+      for (const k of ['overall_score','style_score','acumen_score','cadence_score','structure_score','cotm_score','meddicc_score','discovery_score','presence_score','commercial_score','next_step_score']) {
+        if (g[k] != null) { (avgScores[k] = avgScores[k] || []).push(g[k]); }
+      }
+    });
+    const avgs = Object.entries(avgScores).map(([k, v]) => `${k.replace('_score','')}: ${(v.reduce((a,b)=>a+b,0)/v.length).toFixed(1)}`).join(', ');
+    const recentIssues = ctx.grades.slice(0,5).filter((g:any)=>g.coaching_issue).map((g:any)=>`- ${g.coaching_issue}: ${g.coaching_why || ''}`).join('\n');
+    prompt += `\n\n## Call Performance Grades (${ctx.grades.length} graded calls)\nAverages: ${avgs}\n${recentIssues ? `\nRecent coaching issues:\n${recentIssues}` : ''}`;
+  }
+
   if (researchData) {
     prompt += `\n\n## Live Web Research Results\n${researchData}`;
   }
