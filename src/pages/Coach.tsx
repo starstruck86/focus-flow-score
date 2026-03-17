@@ -380,9 +380,9 @@ function TrendsDashboard() {
 
       {/* Weakest area callout */}
       {weakestArea && (
-        <Card className="border-red-500/20 bg-red-500/5">
+        <Card className="border-grade-failing/20 bg-grade-failing/5">
           <CardContent className="p-3 flex items-center gap-3">
-            <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0" />
+            <AlertTriangle className="h-5 w-5 text-grade-failing flex-shrink-0" />
             <div>
               <p className="text-sm font-semibold">Consistent Gap: {CATEGORY_LABELS[weakestArea.category]?.label || weakestArea.category}</p>
               <p className="text-xs text-muted-foreground">Avg score: {weakestArea.avg.toFixed(1)}/5 — This is your highest-ROI improvement area</p>
