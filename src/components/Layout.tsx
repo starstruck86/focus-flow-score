@@ -21,6 +21,7 @@ import { WorkdayCheckInButton } from '@/components/WorkdayCheckInButton';
 import { GlobalSearch } from '@/components/GlobalSearch';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { TerritoryCopilot } from '@/components/TerritoryCopilot';
+import { VoiceCommandButton } from '@/components/VoiceCommandButton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { BackToToday } from '@/components/BackToToday';
 
