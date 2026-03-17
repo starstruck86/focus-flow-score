@@ -412,17 +412,17 @@ Deno.serve(async (req) => {
     // Use service role for database writes
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Clear old events for this user and insert new ones
+    // Full replace: delete ALL events for this user, then insert fresh set
     if (futureEvents.length > 0) {
-      // Delete old events first to handle removed/cancelled meetings
-      await supabase.from('calendar_events').delete().eq('user_id', userId).lt('start_time', now.toISOString());
+      await supabase.from('calendar_events').delete().eq('user_id', userId);
       
-      const { error } = await supabase
-        .from('calendar_events')
-        .upsert(futureEvents, { onConflict: 'external_id' });
-
-      if (error) {
-        throw error;
+      // Batch insert in chunks of 100
+      for (let i = 0; i < futureEvents.length; i += 100) {
+        const chunk = futureEvents.slice(i, i + 100);
+        const { error } = await supabase
+          .from('calendar_events')
+          .upsert(chunk, { onConflict: 'external_id' });
+        if (error) throw error;
       }
     }
 
