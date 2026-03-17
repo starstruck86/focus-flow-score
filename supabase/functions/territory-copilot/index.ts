@@ -267,7 +267,7 @@ async function executeToolCalls(toolCalls: any[], supabase: any, userId: string)
 }
 
 // ─── System prompts ──────────────────────────────────────
-function buildSystemPrompt(ctx: any, mode: CopilotMode, researchData?: string): string {
+function buildSystemPrompt(ctx: any, mode: CopilotMode, researchData?: string, pageContext?: any): string {
   const today = new Date().toISOString().split("T")[0];
   const dayOfWeek = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
@@ -366,7 +366,17 @@ Output the email in a ready-to-send format with Subject line, Body, and a brief 
 ${toolInstructions}`,
   };
 
-  let prompt = `${modeInstructions[mode]}
+  let pageCtxPrompt = '';
+  if (pageContext) {
+    pageCtxPrompt = `\n\n## CURRENT PAGE CONTEXT
+The user is currently viewing: **${pageContext.description || pageContext.page}**
+${pageContext.accountName ? `Focused Account: ${pageContext.accountName} (id: ${pageContext.accountId})` : ''}
+${pageContext.opportunityName ? `Focused Opportunity: ${pageContext.opportunityName} (id: ${pageContext.opportunityId})` : ''}
+
+IMPORTANT: Tailor your answers to the context of this page. If the user is on an account detail page, focus answers on that specific account. If on the coach page, relate answers to their call performance and skill development. If on the quota page, focus on pipeline math and attainment. If on the dashboard, focus on today's priorities and agenda. Always be contextually relevant.`;
+  }
+
+  let prompt = `${modeInstructions[mode]}${pageCtxPrompt}
 Today: ${dayOfWeek}, ${today}
 
 Key: T=Tier, S=Status, M=Motion, Fit=ICP Fit, Tim=Timing, Pri=Priority, LC=Lifecycle, LT=Last Touch, OS=Outreach Status, NS=Next Step, HPB=High Probability Buyer, TRIG=Triggered, NL=New Logo
@@ -420,10 +430,11 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { messages, mode: requestedMode, accountId } = body as {
+    const { messages, mode: requestedMode, accountId, pageContext } = body as {
       messages: any[];
       mode?: CopilotMode;
       accountId?: string;
+      pageContext?: { page: string; description: string; accountId?: string; accountName?: string; opportunityId?: string; opportunityName?: string };
     };
 
     if (!messages || !Array.isArray(messages)) {
@@ -451,7 +462,7 @@ Deno.serve(async (req) => {
 
     const mode: CopilotMode = requestedMode || "quick";
     const today = new Date().toISOString().split("T")[0];
-    const needsDeepContext = mode !== "quick";
+    const needsDeepContext = mode !== "quick" || !!pageContext?.accountId;
 
     // Gather DB context in parallel — always include resources & transcripts now
     const dbQueries: Promise<any>[] = [
@@ -495,8 +506,9 @@ Deno.serve(async (req) => {
     // If an account is focused, filter transcripts to that account for relevance
     // Resources are NEVER filtered — they are general methodology, always available
     let focusAccount: any = null;
-    if (accountId) {
-      focusAccount = ctx.accounts.find((a: any) => a.id === accountId);
+    const effectiveAccountId = accountId || pageContext?.accountId;
+    if (effectiveAccountId) {
+      focusAccount = ctx.accounts.find((a: any) => a.id === effectiveAccountId);
     } else {
       const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user")?.content || "";
       focusAccount = detectAccountFocus(lastUserMsg, ctx.accounts);
@@ -534,7 +546,7 @@ Deno.serve(async (req) => {
 
     const useProModel = mode === "deep" || mode === "deal-strategy";
     const model = useProModel ? "google/gemini-2.5-pro" : "google/gemini-3-flash-preview";
-    const systemPrompt = buildSystemPrompt(ctx, mode, researchData);
+    const systemPrompt = buildSystemPrompt(ctx, mode, researchData, pageContext);
 
     // First call: non-streaming with tools to get potential tool calls
     const aiPayload: any = {

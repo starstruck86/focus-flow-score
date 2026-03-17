@@ -70,7 +70,7 @@ const MessageBubble = memo(({ msg }: { msg: CopilotMsg }) => (
 MessageBubble.displayName = 'MessageBubble';
 
 function CopilotDialog() {
-  const { state, setOpen, clearInitialQuestion } = useCopilot();
+  const { state, setOpen, clearInitialQuestion, pageContext } = useCopilot();
   const [messages, setMessages] = useState<CopilotMsg[]>([]);
   const [input, setInput] = useState('');
   const [mode, setMode] = useState<CopilotMode>('quick');
@@ -135,6 +135,7 @@ function CopilotDialog() {
       messages: allMessages,
       mode: activeMode,
       accountId: state.accountId,
+      pageContext,
       onDelta: (chunk) => {
         assistantText += chunk;
         const content = assistantText; // capture for closure
@@ -162,7 +163,7 @@ function CopilotDialog() {
       },
       signal: abort.signal,
     });
-  }, [messages, mode, state.accountId]);
+  }, [messages, mode, state.accountId, pageContext]);
 
   const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); sendMessage(input); };
   const handleClear = useCallback(() => {
@@ -205,6 +206,11 @@ function CopilotDialog() {
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border shrink-0">
           <Sparkles className="h-4 w-4 text-primary" />
           <span className="font-display text-sm font-bold">Territory Intelligence</span>
+          {pageContext && (
+            <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full truncate max-w-[200px]">
+              {pageContext.accountName || pageContext.opportunityName || pageContext.description}
+            </span>
+          )}
           <div className="flex-1" />
           <ModeSelector mode={mode} onChange={setMode} disabled={isStreaming} />
           {messages.length > 0 && (
