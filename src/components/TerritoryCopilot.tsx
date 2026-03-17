@@ -81,6 +81,29 @@ function CopilotDialog() {
   const abortRef = useRef<AbortController | null>(null);
   const processedQuestionRef = useRef<string | null>(null);
   const streamingRef = useRef(false);
+  const voice = useVoiceMode();
+
+  const handleMicClick = useCallback(async () => {
+    if (voice.isRecording) {
+      try {
+        const transcript = await voice.stopRecording();
+        if (transcript) {
+          setInput('');
+          sendMessage(transcript);
+        }
+      } catch (err: any) {
+        if (err.message !== 'Recording too short') {
+          toast.error('Voice input failed', { description: err.message });
+        }
+      }
+    } else {
+      try {
+        await voice.startRecording();
+      } catch {
+        // handled in hook
+      }
+    }
+  }, [voice]);
 
   useEffect(() => {
     if (state.open) {
