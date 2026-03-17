@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useStore } from '@/store/useStore';
 import { ConversionBenchmarksSettings } from '@/components/settings/ConversionBenchmarksSettings';
 import { NotificationSettings } from '@/components/NotificationSettings';
 import { Layout } from '@/components/Layout';
@@ -157,7 +158,7 @@ function DataExportSection() {
   const handleExportJSON = async () => {
     setExporting(true);
     try {
-      const state = (await import('@/store/useStore')).useStore.getState();
+      const state = useStore.getState();
       const exportData = {
         exportedAt: new Date().toISOString(),
         version: 1,
@@ -188,7 +189,7 @@ function DataExportSection() {
   const handleExportCSV = async () => {
     setExporting(true);
     try {
-      const state = (await import('@/store/useStore')).useStore.getState();
+      const state = useStore.getState();
       
       // Accounts CSV
       const accountHeaders = ['Name', 'Website', 'Industry', 'Tier', 'Status', 'Motion', 'Outreach Status', 'Last Touch', 'Next Step', 'Notes'];
