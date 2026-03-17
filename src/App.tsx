@@ -21,6 +21,7 @@ import Settings from "./pages/Settings";
 import AccountDetail from "./pages/AccountDetail";
 import OpportunityDetail from "./pages/OpportunityDetail";
 import Auth from "./pages/Auth";
+import Coach from "./pages/Coach";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
