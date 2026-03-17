@@ -722,6 +722,8 @@ export default function Coach() {
               </div>
             ) : (
               <div className="space-y-4">
+                {/* Transcript ingestion */}
+                <TranscriptIngestion onSaved={() => refetchTranscripts()} />
                 {/* Ungraded transcripts */}
                 {ungraded.length > 0 && (
                   <div className="space-y-2">
