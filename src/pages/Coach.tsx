@@ -172,8 +172,8 @@ function CallScorecard({ grade }: { grade: TranscriptGrade }) {
             ].map(item => (
               <div key={item.key} className="flex items-center gap-1.5 text-xs">
                 {cotm[item.key]
-                  ? <CheckCircle2 className="h-3 w-3 text-emerald-400 flex-shrink-0" />
-                  : <ShieldAlert className="h-3 w-3 text-red-400 flex-shrink-0" />}
+                  ? <CheckCircle2 className="h-3 w-3 text-grade-excellent flex-shrink-0" />
+                  : <ShieldAlert className="h-3 w-3 text-grade-failing flex-shrink-0" />}
                 <span className={cotm[item.key] ? 'text-foreground' : 'text-muted-foreground'}>{item.label}</span>
               </div>
             ))}
