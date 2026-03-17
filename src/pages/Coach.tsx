@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Layout } from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,13 +6,21 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   GraduationCap, TrendingUp, Target, Mic, Sparkles, ArrowRight, ArrowUp, ArrowDown, Minus,
   CheckCircle2, AlertTriangle, Lightbulb, BarChart3, Loader2, MessageSquareQuote,
   ShieldCheck, ShieldAlert, Brain, Crosshair, Zap, Clock, Eye, FileText,
+  Upload, Plus, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCallTranscripts } from '@/hooks/useCallTranscripts';
+import { useSaveTranscript } from '@/hooks/useCallTranscripts';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 import {
   useAllTranscriptGrades, useGradeTranscript, useTranscriptGrade,
   useBehavioralPatterns, useMeddiccCompleteness,
@@ -466,10 +474,209 @@ function TrendsDashboard() {
   );
 }
 
+const CALL_TYPES = [
+  'Discovery Call', 'Demo', 'Technical Review', 'Executive Meeting',
+  'Pricing Discussion', 'Contract Review', 'Renewal Check-in',
+  'QBR', 'Follow-up', 'Other',
+];
+
+// ─── TRANSCRIPT INGESTION ──────────────────────────────────
+function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const [pasteContent, setPasteContent] = useState('');
+  const [title, setTitle] = useState('');
+  const [callType, setCallType] = useState('');
+  const [callDate, setCallDate] = useState(new Date().toISOString().split('T')[0]);
+  const [participants, setParticipants] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const [fileLoading, setFileLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const saveTranscript = useSaveTranscript();
+  const { user } = useAuth();
+
+  const handleFile = useCallback(async (file: File) => {
+    setFileLoading(true);
+    try {
+      const text = await file.text();
+      if (!text.trim()) {
+        toast.error('File appears to be empty');
+        return;
+      }
+      setPasteContent(text);
+      if (!title) setTitle(file.name.replace(/\.[^/.]+$/, ''));
+      toast.success(`Loaded ${file.name} (${(text.length / 1000).toFixed(0)}k chars)`);
+    } catch {
+      toast.error('Could not read file. Please use a text-based file (.txt, .md, .vtt, .srt)');
+    } finally {
+      setFileLoading(false);
+    }
+  }, [title]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFile(file);
+  }, [handleFile]);
+
+  const handleSave = async () => {
+    if (!pasteContent.trim()) {
+      toast.error('Paste or upload a transcript first');
+      return;
+    }
+    const autoTitle = title.trim() || `${callType || 'Call'} — ${callDate}`;
+    try {
+      const saved = await saveTranscript.mutateAsync({
+        title: autoTitle,
+        content: pasteContent.trim(),
+        call_date: callDate,
+        call_type: callType || undefined,
+        participants: participants.trim() || undefined,
+      });
+      toast.success('Transcript saved — ready to analyze');
+      setPasteContent('');
+      setTitle('');
+      setCallType('');
+      setParticipants('');
+      setExpanded(false);
+      onSaved();
+    } catch (err: any) {
+      toast.error('Failed to save', { description: err.message });
+    }
+  };
+
+  return (
+    <Card className={cn(
+      'border-dashed transition-all',
+      isDragging ? 'border-primary bg-primary/5' : 'border-border/50',
+    )}>
+      <CardContent
+        className="p-0"
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDrop}
+      >
+        {/* Collapsed header */}
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors rounded-lg"
+        >
+          <span className="flex items-center gap-2 text-sm font-medium">
+            <Plus className="h-4 w-4 text-primary" />
+            Add Transcript
+          </span>
+          <span className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>Paste or drag a file</span>
+            {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          </span>
+        </button>
+
+        <AnimatePresence>
+          {expanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="px-3 pb-3 space-y-3">
+                {/* Transcript input */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Transcript</Label>
+                    <div className="flex gap-1.5">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".txt,.md,.vtt,.srt,.doc,.csv,.text"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleFile(file);
+                          e.target.value = '';
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-6 text-[10px] gap-1"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={fileLoading}
+                      >
+                        {fileLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                        Upload File
+                      </Button>
+                    </div>
+                  </div>
+                  <Textarea
+                    placeholder="Paste your call transcript here, or drag & drop a .txt / .vtt / .srt file..."
+                    value={pasteContent}
+                    onChange={e => setPasteContent(e.target.value)}
+                    rows={6}
+                    className="font-mono text-xs resize-y"
+                  />
+                  {pasteContent && (
+                    <p className="text-[10px] text-muted-foreground">{(pasteContent.length / 1000).toFixed(1)}k characters</p>
+                  )}
+                </div>
+
+                {/* Metadata row */}
+                <div className="grid grid-cols-4 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Title</Label>
+                    <Input
+                      placeholder="Auto-generated"
+                      value={title}
+                      onChange={e => setTitle(e.target.value)}
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Call Type</Label>
+                    <Select value={callType} onValueChange={setCallType}>
+                      <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Type..." /></SelectTrigger>
+                      <SelectContent>
+                        {CALL_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Date</Label>
+                    <Input type="date" value={callDate} onChange={e => setCallDate(e.target.value)} className="h-7 text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Participants</Label>
+                    <Input placeholder="Names..." value={participants} onChange={e => setParticipants(e.target.value)} className="h-7 text-xs" />
+                  </div>
+                </div>
+
+                {/* Save button */}
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    onClick={handleSave}
+                    disabled={!pasteContent.trim() || saveTranscript.isPending}
+                    className="gap-1.5"
+                  >
+                    {saveTranscript.isPending
+                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving...</>
+                      : <><FileText className="h-3.5 w-3.5" /> Save & Ready to Analyze</>}
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── MAIN COACH PAGE ──────────────────────────────────────────
 export default function Coach() {
   const [tab, setTab] = useState('scorecard');
-  const { data: transcripts } = useCallTranscripts();
+  const { data: transcripts, refetch: refetchTranscripts } = useCallTranscripts();
   const { data: allGrades, isLoading } = useAllTranscriptGrades();
   const gradeTranscript = useGradeTranscript();
   const [selectedTranscriptId, setSelectedTranscriptId] = useState<string | null>(null);
@@ -515,6 +722,8 @@ export default function Coach() {
               </div>
             ) : (
               <div className="space-y-4">
+                {/* Transcript ingestion */}
+                <TranscriptIngestion onSaved={() => refetchTranscripts()} />
                 {/* Ungraded transcripts */}
                 {ungraded.length > 0 && (
                   <div className="space-y-2">
