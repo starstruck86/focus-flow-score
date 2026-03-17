@@ -510,12 +510,14 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
   const opportunities = useStore(s => s.opportunities);
 
   // Auto-detect account when content or participants change
+  const manuallySelected = useRef(false);
   useEffect(() => {
     if (!pasteContent && !participants) {
       setAutoDetected(null);
       return;
     }
-    if (accountId) return; // User already selected one
+    if (manuallySelected.current) return; // User manually picked one
+    if (accountId && !autoDetected) return; // Already has a manual selection
 
     const timer = setTimeout(() => {
       const result = detectAccountFromTranscript(pasteContent, participants, accounts);
@@ -528,7 +530,7 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [pasteContent, participants, accounts, accountId]);
+  }, [pasteContent, participants, accounts]); // removed accountId to prevent loops
 
   const handleFile = useCallback(async (file: File) => {
     setFileLoading(true);
@@ -579,6 +581,7 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
       setAccountId('');
       setOpportunityId('');
       setAutoDetected(null);
+      manuallySelected.current = false;
       setExpanded(false);
       onSaved();
     } catch (err: any) {
@@ -695,7 +698,7 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px]">Account {autoDetected && <span className="text-primary">(auto)</span>}</Label>
-                    <Select value={accountId || "__none__"} onValueChange={(v) => { setAccountId(v === "__none__" ? "" : v); setOpportunityId(''); setAutoDetected(null); }}>
+                    <Select value={accountId || "__none__"} onValueChange={(v) => { const val = v === "__none__" ? "" : v; setAccountId(val); setOpportunityId(''); setAutoDetected(null); manuallySelected.current = !!val; }}>
                       <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Link account..." /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none__">None</SelectItem>
