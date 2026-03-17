@@ -372,17 +372,7 @@ OPEN TASKS:
 New Logo: ${newLogoTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ') || '(none)'}
 Renewal: ${renewalTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`).join(', ') || '(none)'}`;
 
-    // Build user preferences context
-    const workStart = userPrefs?.work_start_time?.slice(0, 5) || '09:00';
-    const workEnd = userPrefs?.work_end_time?.slice(0, 5) || '17:00';
-    const noMeetingsBefore = userPrefs?.no_meetings_before?.slice(0, 5) || workStart;
-    const noMeetingsAfter = userPrefs?.no_meetings_after?.slice(0, 5) || workEnd;
-    const lunchStart = userPrefs?.lunch_start?.slice(0, 5) || '12:00';
-    const lunchEnd = userPrefs?.lunch_end?.slice(0, 5) || '13:00';
-    const minBlockMin = userPrefs?.min_block_minutes || 25;
-    const preferNewLogoMorning = userPrefs?.prefer_new_logo_morning !== false;
-    const maxBackToBack = userPrefs?.max_back_to_back_meetings || 3;
-    const personalRules: string[] = Array.isArray(userPrefs?.personal_rules) ? userPrefs.personal_rules : [];
+    // Build user preferences context (variables already extracted above)
 
     let prefsContext = `\n\nUSER SCHEDULING PREFERENCES (MUST FOLLOW — these override default rules):
 - Working hours: ${workStart} to ${workEnd} EST. ABSOLUTELY NO work or meeting blocks outside these hours.
