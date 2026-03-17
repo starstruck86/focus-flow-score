@@ -86,6 +86,7 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
 
   const [showConversationDialog, setShowConversationDialog] = useState(false);
   const [showCreateTaskDialog, setShowCreateTaskDialog] = useState(false);
+  const [showSynopsis, setShowSynopsis] = useState(false);
   const [newTask, setNewTask] = useState<Partial<Task>>({
     priority: 'P1',
     motion: 'new-logo',
