@@ -1142,6 +1142,80 @@ export type Database = {
         }
         Relationships: []
       }
+      mock_call_sessions: {
+        Row: {
+          call_type: string
+          created_at: string
+          difficulty: number
+          ended_at: string | null
+          grade_data: Json | null
+          id: string
+          industry: string | null
+          live_tracking: Json
+          messages: Json
+          overall_grade: string | null
+          overall_score: number | null
+          parent_session_id: string | null
+          persona: string
+          retry_from_index: number | null
+          scenario: Json
+          skill_mode: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          call_type?: string
+          created_at?: string
+          difficulty?: number
+          ended_at?: string | null
+          grade_data?: Json | null
+          id?: string
+          industry?: string | null
+          live_tracking?: Json
+          messages?: Json
+          overall_grade?: string | null
+          overall_score?: number | null
+          parent_session_id?: string | null
+          persona?: string
+          retry_from_index?: number | null
+          scenario?: Json
+          skill_mode?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          call_type?: string
+          created_at?: string
+          difficulty?: number
+          ended_at?: string | null
+          grade_data?: Json | null
+          id?: string
+          industry?: string | null
+          live_tracking?: Json
+          messages?: Json
+          overall_grade?: string | null
+          overall_score?: number | null
+          parent_session_id?: string | null
+          persona?: string
+          retry_from_index?: number | null
+          scenario?: Json
+          skill_mode?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mock_call_sessions_parent_session_id_fkey"
+            columns: ["parent_session_id"]
+            isOneToOne: false
+            referencedRelation: "mock_call_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       opportunities: {
         Row: {
           account_id: string | null
