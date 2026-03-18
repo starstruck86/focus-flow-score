@@ -99,6 +99,29 @@ serve(async (req) => {
     const weekFridayStr = weekFriday.toISOString().split('T')[0];
 
     // Gather context in parallel
+    // Helper: get UTC boundaries for a local ET day using proper Intl timezone conversion
+    function getEasternDayBoundsUTC(dateStr: string): { start: string; end: string } {
+      // Create wall-clock midnight and end-of-day in ET, then convert to UTC
+      const [y, m, d] = dateStr.split('-').map(Number);
+      
+      // Use Intl to find the actual UTC offset for this specific date (handles DST correctly)
+      const midnightET = new Date(Date.UTC(y, m - 1, d, 12, 0, 0)); // noon UTC as reference
+      const etParts = new Intl.DateTimeFormat('en-US', {
+        timeZone: EASTERN_TIMEZONE,
+        timeZoneName: 'shortOffset',
+      }).formatToParts(midnightET);
+      const offsetLabel = etParts.find(p => p.type === 'timeZoneName')?.value ?? 'GMT-5';
+      const offsetMatch = offsetLabel.match(/GMT([+-]\d{1,2})(?::?(\d{2}))?/i);
+      const offsetHours = offsetMatch ? -parseInt(offsetMatch[1], 10) : 5;
+      
+      // midnight ET in UTC = midnight + offset hours
+      const dayStartUTC = new Date(Date.UTC(y, m - 1, d, offsetHours, 0, 0)).toISOString();
+      const dayEndUTC = new Date(Date.UTC(y, m - 1, d, offsetHours + 24, 0, 0) - 1000).toISOString();
+      return { start: dayStartUTC, end: dayEndUTC };
+    }
+
+    const todayBounds = getEasternDayBoundsUTC(targetDate);
+
     const [
       calendarRes,
       journalRes,
@@ -114,18 +137,10 @@ serve(async (req) => {
       weekCalendarRes,
       battlePlanRes,
     ] = await Promise.all([
-      // Convert EST day boundaries to UTC for correct timezone filtering
-      (() => {
-        const d = new Date(targetDate + 'T00:00:00');
-        const month = d.getMonth();
-        const offsetHours = (month >= 2 && month <= 10) ? 4 : 5;
-        const dayStartUTC = new Date(d.getTime() + offsetHours * 60 * 60 * 1000).toISOString();
-        const dayEndUTC = new Date(d.getTime() + offsetHours * 60 * 60 * 1000 + 24 * 60 * 60 * 1000 - 1000).toISOString();
-        return supabase.from("calendar_events").select("*")
-          .gte("start_time", dayStartUTC)
-          .lte("start_time", dayEndUTC)
-          .order("start_time");
-      })(),
+      supabase.from("calendar_events").select("*")
+        .gte("start_time", todayBounds.start)
+        .lte("start_time", todayBounds.end)
+        .order("start_time"),
       supabase.from("daily_journal_entries").select("*")
         .eq("date", targetDate).maybeSingle(),
       supabase.from("accounts").select("id, name, tier, account_status, last_touch_date, cadence_name, contact_status, motion")
@@ -153,14 +168,11 @@ serve(async (req) => {
         .order("date"),
       // Rest of week calendar (to understand meeting load distribution)
       (() => {
-        const d = new Date(weekMondayStr + 'T00:00:00');
-        const month = d.getMonth();
-        const offsetHours = (month >= 2 && month <= 10) ? 4 : 5;
-        const weekStartUTC = new Date(d.getTime() + offsetHours * 60 * 60 * 1000).toISOString();
-        const fridayEnd = new Date(weekFriday.getTime() + offsetHours * 60 * 60 * 1000 + 24 * 60 * 60 * 1000 - 1000).toISOString();
+        const weekStartBounds = getEasternDayBoundsUTC(weekMondayStr);
+        const weekEndBounds = getEasternDayBoundsUTC(weekFridayStr);
         return supabase.from("calendar_events").select("start_time, end_time, all_day, title")
-          .gte("start_time", weekStartUTC)
-          .lte("start_time", fridayEnd)
+          .gte("start_time", weekStartBounds.start)
+          .lte("start_time", weekEndBounds.end)
           .order("start_time");
       })(),
       // Weekly battle plan

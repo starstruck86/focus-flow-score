@@ -22,12 +22,14 @@ export function useCalendarEvents() {
   return useQuery({
     queryKey: ['calendar-events'],
     queryFn: async () => {
-      // Fetch events from 2 hours ago (for post-meeting prompts) through future
-      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      // Fetch all events from start of today (local time) through future
+      // Use local date components to avoid UTC date shift issues
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
       const { data, error } = await supabase
         .from('calendar_events' as any)
         .select('*')
-        .gte('start_time', twoHoursAgo)
+        .gte('start_time', startOfToday.toISOString())
         .order('start_time', { ascending: true })
         .limit(50);
       
