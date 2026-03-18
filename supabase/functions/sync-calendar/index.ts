@@ -423,6 +423,10 @@ function parseICS(icsContent: string): RawEvent[] {
           currentEvent.start_time = start.date;
           currentEvent.timezone = start.timeZone;
           allDay = start.allDay;
+          // Debug logging for specific events
+          if (currentEvent.title && (currentEvent.title.includes('All Hands') || currentEvent.title.includes('Enterprise Sales'))) {
+            console.log(`[TZ-DEBUG] ${currentEvent.title} DTSTART raw="${value}" keyPart="${keyPart}" parsedUTC="${start.date.toISOString()}" tz="${start.timeZone}" allDay=${start.allDay}`);
+          }
           break;
         }
         case 'DTEND': {
