@@ -125,7 +125,7 @@ const CHURN_RISK_SORT_RANK: Record<string, number> = {
 };
 
 type SavedView = 'all' | 'active' | 'stalled' | 'next-step-due' | 'closing-this-quarter' | 'no-next-step';
-type GroupingMode = 'status' | 'quarter' | 'stage';
+type GroupingMode = 'status' | 'quarter' | 'stage' | 'account' | 'stalled-stage';
 
 /**
  * Normalize status: if stage says "Closed Won" or "Closed Lost" but status doesn't match, fix it.
@@ -543,6 +543,35 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       .map(stage => [STAGE_LABELS[stage] || stage || 'No Stage', groups[stage]] as [string, Opportunity[]]);
   }, [activeFilteredOpps]);
 
+  // Group by account
+  const accountGroupedOpportunities = useMemo(() => {
+    const groups: Record<string, Opportunity[]> = {};
+    activeFilteredOpps.forEach(opp => {
+      const acct = opp.accountId ? accountMap.get(opp.accountId) : undefined;
+      const key = acct?.name || 'No Account';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(opp);
+    });
+    return Object.entries(groups).sort(([a], [b]) => {
+      if (a === 'No Account') return 1;
+      if (b === 'No Account') return -1;
+      return a.localeCompare(b);
+    });
+  }, [activeFilteredOpps, accountMap]);
+
+  // Group by status + stage (e.g. "Stalled — 4 - Proposal")
+  const statusStageGroupedOpportunities = useMemo(() => {
+    const groups: Record<string, Opportunity[]> = {};
+    activeFilteredOpps.forEach(opp => {
+      const statusLabel = opp.status.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
+      const stageLabel = STAGE_LABELS[opp.stage || ''] || opp.stage || 'No Stage';
+      const key = `${statusLabel} — ${stageLabel}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(opp);
+    });
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+  }, [activeFilteredOpps]);
+
   const handleAddOpportunity = async () => {
     if (!newOppName.trim()) return;
     
@@ -742,7 +771,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 <Button
                   size="icon"
                   variant="ghost"
-                  className={cn("h-6 w-6 shrink-0", resourceOpenOppIds.has(opp.id) ? "text-primary" : "opacity-0 group-hover/row:opacity-100")}
+                  className={cn("h-6 w-6 shrink-0 text-muted-foreground", resourceOpenOppIds.has(opp.id) && "text-primary")}
                   onClick={(e) => toggleResourcePanel(opp.id, e)}
                   title="Resources"
                 >
@@ -891,7 +920,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 <Button
                   size="icon"
                   variant="ghost"
-                  className={cn("h-6 w-6 shrink-0", resourceOpenOppIds.has(opp.id) ? "text-primary" : "opacity-0 group-hover/row:opacity-100")}
+                  className={cn("h-6 w-6 shrink-0 text-muted-foreground", resourceOpenOppIds.has(opp.id) && "text-primary")}
                   onClick={(e) => toggleResourcePanel(opp.id, e)}
                   title="Resources"
                 >
@@ -1054,7 +1083,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               <Button
                 size="icon"
                 variant="ghost"
-                className={cn("h-6 w-6 shrink-0", resourceOpenOppIds.has(opp.id) ? "text-primary" : "opacity-0 group-hover/row:opacity-100")}
+                className={cn("h-6 w-6 shrink-0 text-muted-foreground", resourceOpenOppIds.has(opp.id) && "text-primary")}
                 onClick={(e) => toggleResourcePanel(opp.id, e)}
                 title="Resources"
               >
@@ -1253,6 +1282,8 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             <SelectItem value="status">Group: Status</SelectItem>
             <SelectItem value="quarter">Group: Quarter</SelectItem>
             <SelectItem value="stage">Group: Stage</SelectItem>
+            <SelectItem value="account">Group: Account</SelectItem>
+            <SelectItem value="stalled-stage">Group: Status + Stage</SelectItem>
           </SelectContent>
         </Select>
         <ManageColumnsPopover
@@ -1527,6 +1558,10 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               quarterGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
             ) : groupingMode === 'stage' ? (
               stageGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
+            ) : groupingMode === 'account' ? (
+              accountGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
+            ) : groupingMode === 'stalled-stage' ? (
+              statusStageGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
             ) : (
               STATUS_ORDER.map(status => renderStatusGroup(status, groupedOpportunities[status]))
             )}
