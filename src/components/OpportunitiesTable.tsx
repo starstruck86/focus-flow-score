@@ -543,6 +543,35 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
       .map(stage => [STAGE_LABELS[stage] || stage || 'No Stage', groups[stage]] as [string, Opportunity[]]);
   }, [activeFilteredOpps]);
 
+  // Group by account
+  const accountGroupedOpportunities = useMemo(() => {
+    const groups: Record<string, Opportunity[]> = {};
+    activeFilteredOpps.forEach(opp => {
+      const acct = opp.accountId ? accountMap.get(opp.accountId) : undefined;
+      const key = acct?.name || 'No Account';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(opp);
+    });
+    return Object.entries(groups).sort(([a], [b]) => {
+      if (a === 'No Account') return 1;
+      if (b === 'No Account') return -1;
+      return a.localeCompare(b);
+    });
+  }, [activeFilteredOpps, accountMap]);
+
+  // Group by status + stage (e.g. "Stalled — 4 - Proposal")
+  const statusStageGroupedOpportunities = useMemo(() => {
+    const groups: Record<string, Opportunity[]> = {};
+    activeFilteredOpps.forEach(opp => {
+      const statusLabel = opp.status.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
+      const stageLabel = STAGE_LABELS[opp.stage || ''] || opp.stage || 'No Stage';
+      const key = `${statusLabel} — ${stageLabel}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(opp);
+    });
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+  }, [activeFilteredOpps]);
+
   const handleAddOpportunity = async () => {
     if (!newOppName.trim()) return;
     
