@@ -206,6 +206,10 @@ export function ActivityRings() {
     return () => document.removeEventListener('mousedown', handler);
   }, [editing]);
 
+  useEffect(() => {
+    initializeToday();
+  }, [initializeToday]);
+
   const getValue = useCallback(
     (ring: RingConfig) => {
       if (ring.key === 'dials') return currentDay?.activityInputs.dials ?? 0;
