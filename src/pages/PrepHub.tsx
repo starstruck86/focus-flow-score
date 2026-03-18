@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { VoiceCommandButton } from '@/components/VoiceCommandButton';
+import { ResourceManager } from '@/components/prep/ResourceManager';
 
 // ---------- Types ----------
 interface EmailTemplate {
