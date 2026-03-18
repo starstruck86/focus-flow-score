@@ -1239,15 +1239,31 @@ export default function WeeklyOutreach() {
 
           {/* Accounts Tab - Funnel View */}
           <TabsContent value="accounts" className="space-y-4">
-            {/* Staleness & Urgency Summary */}
-            <StalenessAlert accounts={newLogoAccounts} />
+            <CollapsibleWidgetSection
+              label="Staleness & Urgency Summary"
+              collapsed={isOutreachSectionCollapsed('account-staleness')}
+              onToggle={() => outreachSectionLayout.collapseWidget('account-staleness')}
+            >
+              <StalenessAlert accounts={newLogoAccounts} />
+            </CollapsibleWidgetSection>
 
-            {/* Account Health Pulse */}
-            <WidgetErrorBoundary widgetId="account-health-pulse">
-              <AccountHealthPulseCard motionFilter="new-logo" />
-            </WidgetErrorBoundary>
-            {/* Funnel Health Bar */}
-            <FunnelHealthBar accounts={newLogoAccounts} />
+            <CollapsibleWidgetSection
+              label="Account Health Pulse"
+              collapsed={isOutreachSectionCollapsed('account-health-pulse')}
+              onToggle={() => outreachSectionLayout.collapseWidget('account-health-pulse')}
+            >
+              <WidgetErrorBoundary widgetId="account-health-pulse">
+                <AccountHealthPulseCard motionFilter="new-logo" />
+              </WidgetErrorBoundary>
+            </CollapsibleWidgetSection>
+
+            <CollapsibleWidgetSection
+              label="Funnel Health Bar"
+              collapsed={isOutreachSectionCollapsed('funnel-health-bar')}
+              onToggle={() => outreachSectionLayout.collapseWidget('funnel-health-bar')}
+            >
+              <FunnelHealthBar accounts={newLogoAccounts} />
+            </CollapsibleWidgetSection>
             
             {/* Actions Bar */}
             <div className="space-y-3">
