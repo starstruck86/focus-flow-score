@@ -25,6 +25,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { BackToToday } from '@/components/BackToToday';
 import { useCopilot, type PageContext } from '@/contexts/CopilotContext';
 import { DayTimeline } from '@/components/tasks/DayTimeline';
+import { ActivityRings } from '@/components/ActivityRings';
+import { GlobalWeekStrip } from '@/components/GlobalWeekStrip';
 
 const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
   '/': { page: 'dashboard', description: 'Today / Dashboard — daily plan, agenda, and key metrics' },
@@ -208,9 +210,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      {/* Main Content */}
-      {/* Today's Blocks — visible on every page */}
-      <div className="px-4 lg:px-6 max-w-4xl mx-auto w-full pt-2">
+      {/* Execution Header — Rings + Journal + Blocks */}
+      <div className="px-4 lg:px-6 max-w-4xl mx-auto w-full pt-2 space-y-2">
+        {/* Activity Rings + Week Strip row */}
+        <div className="flex items-start gap-4">
+          <ActivityRings />
+          <div className="flex-1 min-w-0">
+            <GlobalWeekStrip />
+          </div>
+        </div>
+        {/* Today's Blocks */}
         <DayTimeline />
       </div>
 
