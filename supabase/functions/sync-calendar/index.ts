@@ -87,7 +87,14 @@ function normalizeTimeZone(timeZone: string | null): string {
     return 'UTC';
   }
 
-  return normalized;
+  // Validate that the timezone is recognized by Intl before returning it
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: normalized });
+    return normalized;
+  } catch {
+    console.warn(`[TZ-WARN] Unrecognized timezone "${normalized}", falling back to ${DEFAULT_TIMEZONE}`);
+    return DEFAULT_TIMEZONE;
+  }
 }
 
 function getTimeZoneOffsetMinutes(date: Date, rawTimeZone: string | null): number {
