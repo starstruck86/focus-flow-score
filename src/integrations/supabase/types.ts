@@ -1683,6 +1683,50 @@ export type Database = {
           },
         ]
       }
+      resource_folders: {
+        Row: {
+          color: string | null
+          created_at: string
+          icon: string | null
+          id: string
+          name: string
+          parent_id: string | null
+          sort_order: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          icon?: string | null
+          id?: string
+          name: string
+          parent_id?: string | null
+          sort_order?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          icon?: string | null
+          id?: string
+          name?: string
+          parent_id?: string | null
+          sort_order?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resource_folders_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "resource_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       resource_links: {
         Row: {
           account_id: string | null
@@ -1743,6 +1787,129 @@ export type Database = {
             columns: ["renewal_id"]
             isOneToOne: false
             referencedRelation: "renewals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      resource_versions: {
+        Row: {
+          change_summary: string | null
+          content: string | null
+          created_at: string
+          file_url: string | null
+          id: string
+          resource_id: string
+          title: string
+          user_id: string
+          version_number: number
+        }
+        Insert: {
+          change_summary?: string | null
+          content?: string | null
+          created_at?: string
+          file_url?: string | null
+          id?: string
+          resource_id: string
+          title: string
+          user_id: string
+          version_number: number
+        }
+        Update: {
+          change_summary?: string | null
+          content?: string | null
+          created_at?: string
+          file_url?: string | null
+          id?: string
+          resource_id?: string
+          title?: string
+          user_id?: string
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resource_versions_resource_id_fkey"
+            columns: ["resource_id"]
+            isOneToOne: false
+            referencedRelation: "resources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      resources: {
+        Row: {
+          account_id: string | null
+          content: string | null
+          created_at: string
+          current_version: number | null
+          description: string | null
+          file_url: string | null
+          folder_id: string | null
+          id: string
+          is_template: boolean | null
+          opportunity_id: string | null
+          resource_type: string
+          tags: string[] | null
+          template_category: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          content?: string | null
+          created_at?: string
+          current_version?: number | null
+          description?: string | null
+          file_url?: string | null
+          folder_id?: string | null
+          id?: string
+          is_template?: boolean | null
+          opportunity_id?: string | null
+          resource_type?: string
+          tags?: string[] | null
+          template_category?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          content?: string | null
+          created_at?: string
+          current_version?: number | null
+          description?: string | null
+          file_url?: string | null
+          folder_id?: string | null
+          id?: string
+          is_template?: boolean | null
+          opportunity_id?: string | null
+          resource_type?: string
+          tags?: string[] | null
+          template_category?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resources_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resources_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "resource_folders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resources_opportunity_id_fkey"
+            columns: ["opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "opportunities"
             referencedColumns: ["id"]
           },
         ]

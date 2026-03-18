@@ -317,6 +317,21 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const [closedWonModalOpen, setClosedWonModalOpen] = useState(false);
   const [closedWonOpportunity, setClosedWonOpportunity] = useState<Opportunity | null>(null);
   const [expandedOppIds, setExpandedOppIds] = useState<Set<string>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(`collapsed-groups-${renewalsOnly ? 'renewals' : excludeRenewals ? 'newlogo' : 'global'}`);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch { return new Set(); }
+  });
+  const toggleGroupCollapse = (groupKey: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey); else next.add(groupKey);
+      const storageKey = `collapsed-groups-${renewalsOnly ? 'renewals' : excludeRenewals ? 'newlogo' : 'global'}`;
+      localStorage.setItem(storageKey, JSON.stringify([...next]));
+      return next;
+    });
+  };
   const [deleteDialogOpp, setDeleteDialogOpp] = useState<Opportunity | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
   const [groupingMode, setGroupingMode] = useState<GroupingMode>(renewalsOnly ? 'quarter' : 'status');
@@ -1061,12 +1076,14 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
 
     const statusLabel = status.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
     const groupArr = opps.reduce((sum, o) => sum + getDisplayArr(o), 0);
+    const isCollapsed = collapsedGroups.has(`status-${status}`);
 
     return (
       <React.Fragment key={status}>
-        <TableRow className="bg-muted/30 hover:bg-muted/30">
+        <TableRow className="bg-muted/30 hover:bg-muted/30 cursor-pointer" onClick={() => toggleGroupCollapse(`status-${status}`)}>
           <TableCell colSpan={99} className="py-2">
             <div className="flex items-center gap-2">
+              <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", isCollapsed && "-rotate-90")} />
               <Badge className={cn("text-xs", STATUS_COLORS[status])}>
                 {statusLabel}
               </Badge>
@@ -1081,7 +1098,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             </div>
           </TableCell>
         </TableRow>
-        {opps.map(renderOpportunityRow)}
+        {!isCollapsed && opps.map(renderOpportunityRow)}
       </React.Fragment>
     );
   };
@@ -1089,12 +1106,15 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const renderGenericGroup = (label: string, opps: Opportunity[]) => {
     if (opps.length === 0) return null;
     const groupArr = opps.reduce((sum, o) => sum + getDisplayArr(o), 0);
+    const groupKey = `generic-${label}`;
+    const isCollapsed = collapsedGroups.has(groupKey);
 
     return (
       <React.Fragment key={label}>
-        <TableRow className="bg-muted/30 hover:bg-muted/30">
+        <TableRow className="bg-muted/30 hover:bg-muted/30 cursor-pointer" onClick={() => toggleGroupCollapse(groupKey)}>
           <TableCell colSpan={99} className="py-2">
             <div className="flex items-center gap-2">
+              <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", isCollapsed && "-rotate-90")} />
               <Badge variant="outline" className="text-xs font-medium">
                 {label}
               </Badge>
@@ -1109,7 +1129,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             </div>
           </TableCell>
         </TableRow>
-        {opps.map(renderOpportunityRow)}
+        {!isCollapsed && opps.map(renderOpportunityRow)}
       </React.Fragment>
     );
   };
