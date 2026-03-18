@@ -28,7 +28,7 @@ interface OpportunityResourcesPanelProps {
   accountId?: string | null;
 }
 
-export function OpportunityResourcesPanel({ opportunityId, opportunityName }: OpportunityResourcesPanelProps) {
+export function OpportunityResourcesPanel({ opportunityId, opportunityName, accountId }: OpportunityResourcesPanelProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const createResource = useCreateResource();
