@@ -1302,18 +1302,41 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             <SelectItem value="no-next-step">No Next Step</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={groupingMode} onValueChange={(v) => setGroupingMode(v as GroupingMode)}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="Group by..." />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="status">Group: Status</SelectItem>
-            <SelectItem value="quarter">Group: Quarter</SelectItem>
-            <SelectItem value="stage">Group: Stage</SelectItem>
-            <SelectItem value="account">Group: Account</SelectItem>
-            <SelectItem value="stalled-stage">Group: Status + Stage</SelectItem>
-          </SelectContent>
-        </Select>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="w-auto gap-1.5 text-sm">
+              <span className="truncate max-w-[160px]">
+                Group: {groupDimensions.map(d => GROUP_DIMENSION_LABELS[d]).join(' + ') || 'None'}
+              </span>
+              <ChevronDown className="h-3.5 w-3.5 opacity-50 shrink-0" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-48 p-2" align="start">
+            {(['status', 'quarter', 'stage', 'account'] as GroupDimension[]).map(dim => {
+              const isActive = groupDimensions.includes(dim);
+              return (
+                <button
+                  key={dim}
+                  className={cn(
+                    "flex items-center gap-2 w-full px-2 py-1.5 rounded text-sm transition-colors",
+                    isActive ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted text-foreground"
+                  )}
+                  onClick={() => {
+                    if (isActive) {
+                      const next = groupDimensions.filter(d => d !== dim);
+                      setGroupDimensions(next.length > 0 ? next : ['status']);
+                    } else {
+                      setGroupDimensions([...groupDimensions, dim]);
+                    }
+                  }}
+                >
+                  <Checkbox checked={isActive} className="pointer-events-none" />
+                  {GROUP_DIMENSION_LABELS[dim]}
+                </button>
+              );
+            })}
+          </PopoverContent>
+        </Popover>
         <ManageColumnsPopover
           tabTarget={oppTabTarget}
           viewKey={`opportunities-${renewalsOnly ? 'renewals' : excludeRenewals ? 'newlogo' : 'global'}-${savedView}`}
