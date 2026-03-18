@@ -8,6 +8,7 @@ export interface WidgetConfig {
   visible: boolean;
   order: number;
   size?: 'sm' | 'md' | 'lg' | 'full';
+  collapsed?: boolean;
 }
 
 interface PageLayout {
@@ -92,6 +93,14 @@ export function useWidgetLayout(pageId: string, defaultWidgets: WidgetConfig[]) 
     });
   }, [persist]);
 
+  const collapseWidget = useCallback((id: string) => {
+    setWidgets(prev => {
+      const next = prev.map(w => w.id === id ? { ...w, collapsed: !w.collapsed } : w);
+      persist(next);
+      return next;
+    });
+  }, [persist]);
+
   const resetWidgets = useCallback(() => {
     setWidgets(defaultWidgets);
     persist(defaultWidgets);
@@ -111,6 +120,7 @@ export function useWidgetLayout(pageId: string, defaultWidgets: WidgetConfig[]) 
     moveWidget,
     reorderVisibleIds,
     resizeWidget,
+    collapseWidget,
     resetWidgets,
   };
 }
