@@ -1281,6 +1281,31 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
         </div>
       )}
 
+      {/* Inline Duplicate Warning */}
+      {duplicateOpportunities.length > 0 && (
+        <div className="flex items-center gap-3 px-3 py-2.5 bg-status-yellow/10 border border-status-yellow/30 rounded-lg text-sm">
+          <AlertTriangle className="h-4 w-4 text-status-yellow shrink-0" />
+          <span className="text-foreground">
+            <strong>{duplicateOpportunities.length}</strong> potential duplicate group{duplicateOpportunities.length !== 1 ? 's' : ''} detected
+          </span>
+          <span className="text-muted-foreground text-xs">
+            ({duplicateOpportunities.flatMap(g => g.items).map(i => i.name).join(', ')})
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="ml-auto h-7 text-xs gap-1 border-status-yellow/30 hover:bg-status-yellow/10"
+            onClick={() => {
+              const settingsLink = document.querySelector('[data-nav="settings"]') as HTMLAnchorElement;
+              if (settingsLink) settingsLink.click();
+              else window.location.hash = '/settings';
+            }}
+          >
+            <Merge className="h-3 w-3" /> Review & Merge
+          </Button>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-3">
         <div className="relative flex-1 min-w-0">
