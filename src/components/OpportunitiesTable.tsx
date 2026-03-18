@@ -1096,6 +1096,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 accountIndustry={linkedAccount?.industry}
                 opportunityContext={`${opp.name} - ${opp.stage} - $${opp.arr || 0} ARR`}
               />
+              {resourceOpenOppIds.has(opp.id) && (
+                <div className="mt-3">
+                  <OpportunityResourcesPanel opportunityId={opp.id} opportunityName={opp.name} />
+                </div>
+              )}
             </TableCell>
           </TableRow>
         )}
