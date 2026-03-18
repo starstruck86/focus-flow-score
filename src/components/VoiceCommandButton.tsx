@@ -151,7 +151,13 @@ export function VoiceCommandButton({ size = 'default' }: { size?: 'default' | 'l
     setTimeout(() => setShowFeedback(null), command.action === 'clarify' ? 6000 : 3000);
   }, [askCopilot, navigate, voice, dave]);
 
+  // Barge-in: if Dave is speaking and user taps mic, stop playback and start recording
   const handlePress = useCallback(async () => {
+    // Barge-in support — interrupt Dave's TTS to speak
+    if (voice.isPlaying) {
+      voice.stopPlayback();
+    }
+
     if (voice.isRecording) {
       try {
         const transcript = await voice.stopRecording();
