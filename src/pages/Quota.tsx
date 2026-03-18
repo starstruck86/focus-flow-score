@@ -36,7 +36,7 @@ import {
   formatCurrency,
 } from '@/lib/commissionCalculations';
 import type { QuotaConfig, Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
-import { DollarSign, Target, FileText, Settings2, AlertTriangle, Pencil, ChevronDown } from 'lucide-react';
+import { DollarSign, Target, FileText, Settings2, AlertTriangle, Pencil, ChevronDown, GripVertical } from 'lucide-react';
 import { useDbOpportunities, useUpdateOpportunity, type DbOpportunity } from '@/hooks/useAccountsData';
 import { toast } from 'sonner';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
