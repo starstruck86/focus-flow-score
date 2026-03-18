@@ -1076,12 +1076,14 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
 
     const statusLabel = status.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
     const groupArr = opps.reduce((sum, o) => sum + getDisplayArr(o), 0);
+    const isCollapsed = collapsedGroups.has(`status-${status}`);
 
     return (
       <React.Fragment key={status}>
-        <TableRow className="bg-muted/30 hover:bg-muted/30">
+        <TableRow className="bg-muted/30 hover:bg-muted/30 cursor-pointer" onClick={() => toggleGroupCollapse(`status-${status}`)}>
           <TableCell colSpan={99} className="py-2">
             <div className="flex items-center gap-2">
+              <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", isCollapsed && "-rotate-90")} />
               <Badge className={cn("text-xs", STATUS_COLORS[status])}>
                 {statusLabel}
               </Badge>
@@ -1096,7 +1098,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             </div>
           </TableCell>
         </TableRow>
-        {opps.map(renderOpportunityRow)}
+        {!isCollapsed && opps.map(renderOpportunityRow)}
       </React.Fragment>
     );
   };
