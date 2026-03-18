@@ -168,14 +168,11 @@ serve(async (req) => {
         .order("date"),
       // Rest of week calendar (to understand meeting load distribution)
       (() => {
-        const d = new Date(weekMondayStr + 'T00:00:00');
-        const month = d.getMonth();
-        const offsetHours = (month >= 2 && month <= 10) ? 4 : 5;
-        const weekStartUTC = new Date(d.getTime() + offsetHours * 60 * 60 * 1000).toISOString();
-        const fridayEnd = new Date(weekFriday.getTime() + offsetHours * 60 * 60 * 1000 + 24 * 60 * 60 * 1000 - 1000).toISOString();
+        const weekStartBounds = getEasternDayBoundsUTC(weekMondayStr);
+        const weekEndBounds = getEasternDayBoundsUTC(weekFridayStr);
         return supabase.from("calendar_events").select("start_time, end_time, all_day, title")
-          .gte("start_time", weekStartUTC)
-          .lte("start_time", fridayEnd)
+          .gte("start_time", weekStartBounds.start)
+          .lte("start_time", weekEndBounds.end)
           .order("start_time");
       })(),
       // Weekly battle plan
