@@ -1605,16 +1605,16 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               </TableRow>
             ) : isUserSorted ? (
               sortedOpportunities.map(renderOpportunityRow)
-            ) : groupingMode === 'quarter' ? (
-              quarterGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
-            ) : groupingMode === 'stage' ? (
-              stageGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
-            ) : groupingMode === 'account' ? (
-              accountGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
-            ) : groupingMode === 'stalled-stage' ? (
-              statusStageGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
-            ) : (
+            ) : groupDimensions.length === 1 && groupDimensions[0] === 'status' ? (
               STATUS_ORDER.map(status => renderStatusGroup(status, groupedOpportunities[status]))
+            ) : groupDimensions.length === 1 && groupDimensions[0] === 'quarter' ? (
+              quarterGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
+            ) : groupDimensions.length === 1 && groupDimensions[0] === 'stage' ? (
+              stageGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
+            ) : groupDimensions.length === 1 && groupDimensions[0] === 'account' ? (
+              accountGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
+            ) : (
+              dynamicGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
             )}
           </TableBody>
         </Table>
