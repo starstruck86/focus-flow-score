@@ -137,7 +137,7 @@ export default function Dashboard() {
   const { data: wtdMetrics, isLoading: wtdLoading } = useWeekToDateMetrics();
 
   // Widget layout system
-  const { widgets, visibleWidgets, toggleWidget, moveWidget, reorderVisible, resetWidgets } = useWidgetLayout('dashboard', DASHBOARD_WIDGETS);
+  const { widgets, visibleWidgets, visibleWidgetIds, toggleWidget, moveWidget, reorderVisibleIds, resetWidgets } = useWidgetLayout('dashboard', DASHBOARD_WIDGETS);
 
   const today = new Date();
   const todayStr = format(today, 'yyyy-MM-dd');
