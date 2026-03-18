@@ -101,9 +101,6 @@ export default function Tasks() {
   return (
     <Layout>
       <div className="p-4 lg:p-6 max-w-4xl mx-auto">
-        {/* Day Progress Timeline */}
-        <DayTimeline />
-
         <MomentumHeader workstreamFilter={filterWorkstream} />
 
         {/* Title row */}
