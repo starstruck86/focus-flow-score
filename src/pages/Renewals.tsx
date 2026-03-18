@@ -969,50 +969,65 @@ export default function Renewals() {
             </CollapsibleWidgetSection>
           </TabsContent>
           
-          <TabsContent value="renewals">
-          {/* Account Intelligence Cards */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-            <WidgetErrorBoundary widgetId="renewal-account-health-pulse">
-              <AccountHealthPulseCard motionFilter="renewal" />
-            </WidgetErrorBoundary>
-            <WidgetErrorBoundary widgetId="renewal-company-monitor">
-              <CompanyMonitorCard motionFilter="renewal" />
-            </WidgetErrorBoundary>
-          </div>
+          <TabsContent value="renewals" className="space-y-4">
+            <CollapsibleWidgetSection
+              label="Account Intelligence"
+              collapsed={isRenewalSectionCollapsed('renewal-account-intelligence')}
+              onToggle={() => renewalSectionLayout.collapseWidget('renewal-account-intelligence')}
+            >
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+                <WidgetErrorBoundary widgetId="renewal-account-health-pulse">
+                  <AccountHealthPulseCard motionFilter="renewal" />
+                </WidgetErrorBoundary>
+                <WidgetErrorBoundary widgetId="renewal-company-monitor">
+                  <CompanyMonitorCard motionFilter="renewal" />
+                </WidgetErrorBoundary>
+              </div>
+            </CollapsibleWidgetSection>
 
-          {/* Nearest Renewal Countdown + ARR at Risk */}
-          <RenewalUrgencyHeader renewals={renewals} formatCurrency={formatCurrency} />
-          
-          {/* Churn Risk Summary */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
-            {(['low', 'medium', 'high', 'certain'] as ChurnRisk[]).map(risk => {
-              const option = CHURN_RISK_OPTIONS.find(o => o.value === risk);
-              return (
-                <div 
-                  key={risk} 
-                  className={cn(
-                    "metric-card p-3 sm:p-4 border-l-4",
-                    risk === 'low' && "border-l-status-green",
-                    risk === 'medium' && "border-l-status-yellow",
-                    risk === 'high' && "border-l-status-red",
-                    risk === 'certain' && "border-l-purple-500",
-                  )}
-                >
-                  <div className="flex items-center justify-between mb-1 sm:mb-2">
-                    <span className={cn("text-xs sm:text-sm font-medium", CHURN_RISK_COLORS[risk].split(' ')[1])}>
-                      {option?.label || risk}
-                    </span>
-                    <Badge variant="outline" className={cn("text-xs", CHURN_RISK_COLORS[risk])}>
-                      {churnRiskSummary[risk].count}
-                    </Badge>
-                  </div>
-                  <div className="text-lg sm:text-xl font-bold font-mono">
-                    {formatCurrency(churnRiskSummary[risk].arr)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+            <CollapsibleWidgetSection
+              label="Renewal Urgency"
+              collapsed={isRenewalSectionCollapsed('renewal-urgency')}
+              onToggle={() => renewalSectionLayout.collapseWidget('renewal-urgency')}
+            >
+              <RenewalUrgencyHeader renewals={renewals} formatCurrency={formatCurrency} />
+            </CollapsibleWidgetSection>
+
+            <CollapsibleWidgetSection
+              label="Churn Risk Summary"
+              collapsed={isRenewalSectionCollapsed('renewal-risk-summary')}
+              onToggle={() => renewalSectionLayout.collapseWidget('renewal-risk-summary')}
+            >
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
+                {(['low', 'medium', 'high', 'certain'] as ChurnRisk[]).map(risk => {
+                  const option = CHURN_RISK_OPTIONS.find(o => o.value === risk);
+                  return (
+                    <div 
+                      key={risk} 
+                      className={cn(
+                        "metric-card p-3 sm:p-4 border-l-4",
+                        risk === 'low' && "border-l-status-green",
+                        risk === 'medium' && "border-l-status-yellow",
+                        risk === 'high' && "border-l-status-red",
+                        risk === 'certain' && "border-l-purple-500",
+                      )}
+                    >
+                      <div className="flex items-center justify-between mb-1 sm:mb-2">
+                        <span className={cn("text-xs sm:text-sm font-medium", CHURN_RISK_COLORS[risk].split(' ')[1])}>
+                          {option?.label || risk}
+                        </span>
+                        <Badge variant="outline" className={cn("text-xs", CHURN_RISK_COLORS[risk])}>
+                          {churnRiskSummary[risk].count}
+                        </Badge>
+                      </div>
+                      <div className="text-lg sm:text-xl font-bold font-mono">
+                        {formatCurrency(churnRiskSummary[risk].arr)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CollapsibleWidgetSection>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4">
             {/* Manage Columns */}

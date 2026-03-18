@@ -1759,14 +1759,20 @@ export default function WeeklyOutreach() {
 
           {/* Sourcing Tab */}
           <TabsContent value="sourcing" className="space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <WidgetErrorBoundary widgetId="icp-sourcing">
-                <IcpAccountSourcing />
-              </WidgetErrorBoundary>
-              <WidgetErrorBoundary widgetId="company-monitor">
-                <CompanyMonitorCard motionFilter="new-logo" />
-              </WidgetErrorBoundary>
-            </div>
+            <CollapsibleWidgetSection
+              label="Sourcing Intelligence"
+              collapsed={isOutreachSectionCollapsed('sourcing-intelligence')}
+              onToggle={() => outreachSectionLayout.collapseWidget('sourcing-intelligence')}
+            >
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <WidgetErrorBoundary widgetId="icp-sourcing">
+                  <IcpAccountSourcing />
+                </WidgetErrorBoundary>
+                <WidgetErrorBoundary widgetId="company-monitor">
+                  <CompanyMonitorCard motionFilter="new-logo" />
+                </WidgetErrorBoundary>
+              </div>
+            </CollapsibleWidgetSection>
           </TabsContent>
         </Tabs>
 
