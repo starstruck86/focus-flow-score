@@ -82,6 +82,8 @@ import { SortableHeader, useTableSort } from '@/components/table/SortableHeader'
 import { sortRenewalsDefault, applySortWithFallback, CHURN_RISK_SORT_RANK, CHURN_RISK_DISPLAY_LABELS } from '@/lib/sortUtils';
 import type { Renewal, HealthStatus, Opportunity, ChurnRisk, OpportunityStage } from '@/types';
 import { computeRenewalRiskScore } from '@/hooks/useTimeAllocation';
+import { useWidgetLayout, type WidgetConfig } from '@/hooks/useWidgetLayout';
+import { CollapsibleWidgetSection } from '@/components/CollapsibleWidgetSection';
 
 // ===== RENEWAL ENRICH BUTTON (for orphan renewals without linked account) =====
 import { RefreshCw } from 'lucide-react';

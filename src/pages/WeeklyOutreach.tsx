@@ -109,6 +109,8 @@ import {
   CONTACT_STATUS_DISPLAY_LABELS,
 } from '@/lib/sortUtils';
 import type { Account, AccountTier, AccountStatus, Opportunity, OpportunityStage } from '@/types';
+import { useWidgetLayout, type WidgetConfig } from '@/hooks/useWidgetLayout';
+import { CollapsibleWidgetSection } from '@/components/CollapsibleWidgetSection';
 
 // Quick Links
 const QUICK_LINKS = {
