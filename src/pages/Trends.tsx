@@ -1,15 +1,19 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { Reorder } from 'framer-motion';
 import { Layout } from '@/components/Layout';
 import {
   TrendingUp, BarChart3, Activity, Zap, Target, Brain,
   ArrowUpRight, ArrowDownRight, Minus, Phone, Users, Calendar,
-  Lightbulb, Gauge,
+  Lightbulb, Gauge, GripVertical,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { useTrendsData, type TrendRange } from '@/hooks/useTrendsData';
+import { useWidgetLayout, type WidgetConfig } from '@/hooks/useWidgetLayout';
+import { WidgetCustomizer } from '@/components/dashboard/WidgetCustomizer';
+import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ComposedChart,
@@ -23,9 +27,19 @@ const RANGES: { value: TrendRange; label: string }[] = [
   { value: '90d', label: '90 Days' },
 ];
 
+const TRENDS_WIDGETS: WidgetConfig[] = [
+  { id: 'summary-cards', label: 'Summary Cards', visible: true, order: 0 },
+  { id: 'daily-activity', label: 'Daily Activity', visible: true, order: 1 },
+  { id: 'funnel-weekly', label: 'Funnel & Weekly', visible: true, order: 2 },
+  { id: 'biometric', label: 'Biometric × Performance', visible: true, order: 3 },
+  { id: 'score-focus', label: 'Score & Focus Trend', visible: true, order: 4 },
+  { id: 'correlations', label: 'Correlations & Insights', visible: true, order: 5 },
+];
+
 export default function Trends() {
   const [range, setRange] = useState<TrendRange>('14d');
   const { data, isLoading } = useTrendsData(range);
+  const trendsLayout = useWidgetLayout('trends', TRENDS_WIDGETS);
 
   const metrics = data?.dailyMetrics || [];
   const weeks = data?.weeklyAggregates || [];
@@ -34,7 +48,6 @@ export default function Trends() {
 
   const hasData = metrics.length >= 3;
 
-  // Summary stats
   const avgScore = metrics.filter(m => m.dailyScore != null).length > 0
     ? Math.round(metrics.filter(m => m.dailyScore != null).reduce((s, m) => s + m.dailyScore!, 0) / metrics.filter(m => m.dailyScore != null).length * 10) / 10
     : null;
@@ -57,16 +70,18 @@ export default function Trends() {
             <p className="text-sm text-muted-foreground">
               Performance analytics, correlations & patterns
             </p>
+          <div className="flex items-center gap-2">
+            <WidgetCustomizer widgets={trendsLayout.widgets} onToggle={trendsLayout.toggleWidget} onMove={trendsLayout.moveWidget} onReset={trendsLayout.resetWidgets} />
+            <Tabs value={range} onValueChange={(v) => setRange(v as TrendRange)}>
+              <TabsList className="h-8">
+                {RANGES.map(r => (
+                  <TabsTrigger key={r.value} value={r.value} className="text-xs px-3 h-7">
+                    {r.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
           </div>
-          <Tabs value={range} onValueChange={(v) => setRange(v as TrendRange)}>
-            <TabsList className="h-8">
-              {RANGES.map(r => (
-                <TabsTrigger key={r.value} value={r.value} className="text-xs px-3 h-7">
-                  {r.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
         </div>
 
         {!hasData && !isLoading ? (
