@@ -1,5 +1,5 @@
 // Post-Meeting Prompt — surfaces after a calendar meeting ends to prompt next-step logging + transcript upload
-import { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, Clock, Building2, X, ExternalLink, ChevronRight, FileText, Upload, Sparkles, Loader2, ChevronDown } from 'lucide-react';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
@@ -38,7 +38,9 @@ export function PostMeetingPrompt() {
     try {
       const stored = sessionStorage.getItem(DISMISSED_KEY);
       return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch { return new Set(); }
+    } catch {
+      return new Set();
+    }
   });
   const [nextSteps, setNextSteps] = useState<Record<string, string>>({});
 
@@ -159,14 +161,13 @@ export function PostMeetingPrompt() {
   );
 }
 
-// --- Individual meeting card with inline transcript upload ---
-function PostMeetingCard({ item, nextStep, onNextStepChange, onLogNextStep, onDismiss }: {
+const PostMeetingCard = React.forwardRef<HTMLDivElement, {
   item: PostMeetingItem;
   nextStep: string;
   onNextStepChange: (val: string) => void;
   onLogNextStep: () => void;
   onDismiss: () => void;
-}) {
+}>(({ item, nextStep, onNextStepChange, onLogNextStep, onDismiss }, ref) => {
   const [showTranscript, setShowTranscript] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [autoExtract, setAutoExtract] = useState(true);
@@ -181,7 +182,6 @@ function PostMeetingCard({ item, nextStep, onNextStepChange, onLogNextStep, onDi
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Support .txt, .md, .vtt, .srt
     if (file.size > 5 * 1024 * 1024) {
       toast.error('File too large — max 5MB');
       return;
@@ -207,7 +207,7 @@ function PostMeetingCard({ item, nextStep, onNextStepChange, onLogNextStep, onDi
     setSaving(true);
     try {
       const title = `${item.eventTitle} - ${format(new Date(), 'yyyy-MM-dd')}`;
-      
+
       await saveTranscript.mutateAsync({
         title,
         content: transcript.trim(),
@@ -220,7 +220,6 @@ function PostMeetingCard({ item, nextStep, onNextStepChange, onLogNextStep, onDi
       setSaved(true);
       toast.success('Transcript saved & linked to account');
 
-      // Auto-extract tasks
       if (autoExtract) {
         setExtracting(true);
         try {
@@ -265,8 +264,7 @@ function PostMeetingCard({ item, nextStep, onNextStepChange, onLogNextStep, onDi
   };
 
   return (
-    <div className="rounded-lg bg-card border border-border/50 p-3 space-y-2">
-      {/* Header row */}
+    <div ref={ref} className="rounded-lg bg-card border border-border/50 p-3 space-y-2">
       <div className="flex items-center gap-3">
         <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
         <div className="flex-1 min-w-0">
@@ -280,7 +278,9 @@ function PostMeetingCard({ item, nextStep, onNextStepChange, onLogNextStep, onDi
         <div className="flex items-center gap-1 shrink-0">
           {item.salesforceLink && (
             <Button
-              size="sm" variant="outline" className="h-7 text-[11px] gap-1"
+              size="sm"
+              variant="outline"
+              className="h-7 text-[11px] gap-1"
               onClick={() => window.open(item.salesforceLink, '_blank')}
             >
               <ExternalLink className="h-3 w-3" /> SF
@@ -292,7 +292,6 @@ function PostMeetingCard({ item, nextStep, onNextStepChange, onLogNextStep, onDi
         </div>
       </div>
 
-      {/* Next step input */}
       <div className="flex gap-2">
         <Input
           placeholder="What's the next step? (e.g. Send proposal by Friday)"
@@ -306,17 +305,15 @@ function PostMeetingCard({ item, nextStep, onNextStepChange, onLogNextStep, onDi
         </Button>
       </div>
 
-      {/* Transcript toggle */}
       <button
         className="flex items-center gap-1.5 text-[11px] text-primary hover:text-primary/80 transition-colors font-medium w-full"
         onClick={() => setShowTranscript(!showTranscript)}
       >
         <FileText className="h-3 w-3" />
         {saved ? '✓ Transcript saved' : 'Add call transcript'}
-        <ChevronDown className={cn("h-3 w-3 ml-auto transition-transform", showTranscript && "rotate-180")} />
+        <ChevronDown className={cn('h-3 w-3 ml-auto transition-transform', showTranscript && 'rotate-180')} />
       </button>
 
-      {/* Inline transcript panel */}
       <AnimatePresence>
         {showTranscript && !saved && (
           <motion.div
@@ -334,7 +331,8 @@ function PostMeetingCard({ item, nextStep, onNextStepChange, onLogNextStep, onDi
                 onChange={handleFileUpload}
               />
               <Button
-                size="sm" variant="outline"
+                size="sm"
+                variant="outline"
                 className="h-7 text-[11px] gap-1"
                 onClick={() => fileInputRef.current?.click()}
               >
@@ -391,4 +389,6 @@ function PostMeetingCard({ item, nextStep, onNextStepChange, onLogNextStep, onDi
       </AnimatePresence>
     </div>
   );
-}
+});
+
+PostMeetingCard.displayName = 'PostMeetingCard';

@@ -559,6 +559,12 @@ function expandRecurringEvents(rawEvents: RawEvent[], rangeStart: Date, rangeEnd
   return Array.from(uniqueEvents.values());
 }
 
+function getStartOfDayInTimeZone(date: Date, rawTimeZone: string | null): Date {
+  const timeZone = normalizeTimeZone(rawTimeZone);
+  const parts = getTimeZoneParts(date, timeZone);
+  return createUtcDateFromTimeZone(parts.year, parts.month - 1, parts.day, 0, 0, 0, timeZone);
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -610,33 +616,29 @@ Deno.serve(async (req) => {
     console.log('Raw events parsed:', rawEvents.length);
     console.log('Events with RRULE:', rawEvents.filter(e => e.rrule).length);
 
-    const now = new Date();
-    const rangeEnd = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
-    const allEvents = expandRecurringEvents(rawEvents, now, rangeEnd, userId);
-    console.log('Expanded events:', allEvents.length);
-
-    const futureEvents = allEvents.filter(event => new Date(event.start_time) >= now);
-    console.log('Future events:', futureEvents.length);
+    const syncStart = getStartOfDayInTimeZone(new Date(), DEFAULT_TIMEZONE);
+    const rangeEnd = new Date(syncStart.getTime() + 90 * 24 * 60 * 60 * 1000);
+    const syncedEvents = expandRecurringEvents(rawEvents, syncStart, rangeEnd, userId);
+    console.log('Calendar sync window start:', syncStart.toISOString());
+    console.log('Expanded events from local day start:', syncedEvents.length);
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    if (futureEvents.length > 0) {
-      await supabase.from('calendar_events').delete().eq('user_id', userId);
+    await supabase.from('calendar_events').delete().eq('user_id', userId);
 
-      for (let i = 0; i < futureEvents.length; i += 100) {
-        const chunk = futureEvents.slice(i, i + 100);
-        const { error } = await supabase
-          .from('calendar_events')
-          .upsert(chunk, { onConflict: 'external_id' });
-        if (error) throw error;
-      }
+    for (let i = 0; i < syncedEvents.length; i += 100) {
+      const chunk = syncedEvents.slice(i, i + 100);
+      const { error } = await supabase
+        .from('calendar_events')
+        .upsert(chunk, { onConflict: 'external_id' });
+      if (error) throw error;
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        synced: futureEvents.length,
-        message: `Synced ${futureEvents.length} upcoming events`
+        synced: syncedEvents.length,
+        message: `Synced ${syncedEvents.length} events from today's local start onward`
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
