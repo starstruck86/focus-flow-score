@@ -164,7 +164,7 @@ export default function PrepHub() {
   const { ask: askCopilot } = useCopilot();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState('prep');
+  const [activeTab, setActiveTab] = useState('resources');
   const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null);
   const [showAddTemplate, setShowAddTemplate] = useState(false);
   const [newTemplate, setNewTemplate] = useState({ name: '', category: 'custom', subject: '', body: '' });
