@@ -473,6 +473,11 @@ function expandRecurringEvents(rawEvents: RawEvent[], rangeStart: Date, rangeEnd
         ? event.end_time
         : new Date(event.start_time.getTime() + fallbackDuration);
 
+      // Debug logging
+      if (event.title && (event.title.includes('All Hands') || event.title.includes('Enterprise Sales'))) {
+        console.log(`[TZ-DEBUG] Override instance: title="${event.title}" start="${event.start_time.toISOString()}" recurrenceId="${event.recurrenceId.toISOString()}" tz="${event.timezone}"`);
+      }
+
       expandedEvents.push({
         external_id: `${event.uid}_${event.start_time.toISOString()}`,
         title: event.title ?? baseEvent?.title ?? 'Untitled event',
