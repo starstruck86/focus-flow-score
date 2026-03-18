@@ -25,6 +25,7 @@ const TYPE_ICONS: Record<string, React.ElementType> = {
 interface OpportunityResourcesPanelProps {
   opportunityId: string;
   opportunityName: string;
+  accountId?: string | null;
 }
 
 export function OpportunityResourcesPanel({ opportunityId, opportunityName }: OpportunityResourcesPanelProps) {
