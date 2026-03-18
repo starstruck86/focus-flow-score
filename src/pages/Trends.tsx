@@ -72,15 +72,16 @@ export default function Trends() {
             </p>
           <div className="flex items-center gap-2">
             <WidgetCustomizer widgets={trendsLayout.widgets} onToggle={trendsLayout.toggleWidget} onMove={trendsLayout.moveWidget} onReset={trendsLayout.resetWidgets} />
-          <Tabs value={range} onValueChange={(v) => setRange(v as TrendRange)}>
-            <TabsList className="h-8">
-              {RANGES.map(r => (
-                <TabsTrigger key={r.value} value={r.value} className="text-xs px-3 h-7">
-                  {r.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
+            <Tabs value={range} onValueChange={(v) => setRange(v as TrendRange)}>
+              <TabsList className="h-8">
+                {RANGES.map(r => (
+                  <TabsTrigger key={r.value} value={r.value} className="text-xs px-3 h-7">
+                    {r.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </div>
         </div>
 
         {!hasData && !isLoading ? (
