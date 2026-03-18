@@ -160,13 +160,10 @@ export function PostMeetingPrompt() {
 }
 
 // --- Individual meeting card with inline transcript upload ---
-function PostMeetingCard({ item, nextStep, onNextStepChange, onLogNextStep, onDismiss }: {
-  item: PostMeetingItem;
-  nextStep: string;
-  onNextStepChange: (val: string) => void;
-  onLogNextStep: () => void;
-  onDismiss: () => void;
-}) {
+const PostMeetingCard = useMemo(() => {
+  return null;
+}, []);
+
   const [showTranscript, setShowTranscript] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [autoExtract, setAutoExtract] = useState(true);
