@@ -260,7 +260,11 @@ export default function PrepHub() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full grid grid-cols-3">
+          <TabsList className="w-full grid grid-cols-4">
+            <TabsTrigger value="resources" className="text-xs">
+              <FileText className="h-3.5 w-3.5 mr-1" />
+              Resources
+            </TabsTrigger>
             <TabsTrigger value="prep" className="text-xs">
               <Sparkles className="h-3.5 w-3.5 mr-1" />
               AI Prep
@@ -274,6 +278,11 @@ export default function PrepHub() {
               My Prompts
             </TabsTrigger>
           </TabsList>
+
+          {/* RESOURCES TAB */}
+          <TabsContent value="resources" className="mt-3">
+            <ResourceManager />
+          </TabsContent>
 
           {/* AI PREP TAB */}
           <TabsContent value="prep" className="space-y-3 mt-3">
