@@ -776,25 +776,36 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               </TableCell>
             ))}
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover:opacity-100">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => onOpenDrawer(opp)}>
-                    Open Details
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="text-destructive"
-                    onClick={() => setDeleteDialogOpp(opp)}
-                  >
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <div className="flex items-center gap-0.5">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className={cn("h-7 w-7", resourceOpenOppIds.has(opp.id) ? "text-primary" : "opacity-0 group-hover/row:opacity-100")}
+                  onClick={() => { if (!isExpanded) toggleExpand(opp.id); toggleResourcePanel(opp.id); }}
+                  title="Resources"
+                >
+                  <FolderOpen className="h-3.5 w-3.5" />
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover/row:opacity-100">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => onOpenDrawer(opp)}>
+                      Open Details
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={() => setDeleteDialogOpp(opp)}
+                    >
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </TableCell>
           </TableRow>
           {isExpanded && (
