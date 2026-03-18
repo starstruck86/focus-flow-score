@@ -109,6 +109,8 @@ import {
   CONTACT_STATUS_DISPLAY_LABELS,
 } from '@/lib/sortUtils';
 import type { Account, AccountTier, AccountStatus, Opportunity, OpportunityStage } from '@/types';
+import { useWidgetLayout, type WidgetConfig } from '@/hooks/useWidgetLayout';
+import { CollapsibleWidgetSection } from '@/components/CollapsibleWidgetSection';
 
 // Quick Links
 const QUICK_LINKS = {
@@ -790,6 +792,19 @@ export default function WeeklyOutreach() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<AccountStatus>>(
     new Set(['meeting-booked', 'disqualified'])
   );
+  const outreachSections = useMemo<WidgetConfig[]>(() => ([
+    { id: 'opportunity-stage-summary', label: 'Opportunity Stage Summary', visible: true, order: 0 },
+    { id: 'opportunities-table', label: 'Active Opportunities', visible: true, order: 1 },
+    { id: 'account-staleness', label: 'Staleness & Urgency Summary', visible: true, order: 2 },
+    { id: 'account-health-pulse', label: 'Account Health Pulse', visible: true, order: 3 },
+    { id: 'funnel-health-bar', label: 'Funnel Health Bar', visible: true, order: 4 },
+    { id: 'sourcing-intelligence', label: 'Sourcing Intelligence', visible: true, order: 5 },
+  ]), []);
+  const outreachSectionLayout = useWidgetLayout('weekly-outreach-sections', outreachSections);
+  const isOutreachSectionCollapsed = useCallback(
+    (id: string) => outreachSectionLayout.widgets.find((widget) => widget.id === id)?.collapsed ?? false,
+    [outreachSectionLayout.widgets]
+  );
 
   const toggleGroupCollapse = (status: AccountStatus) => {
     setCollapsedGroups(prev => {
@@ -1201,26 +1216,54 @@ export default function WeeklyOutreach() {
 
           {/* Opportunities Tab */}
           <TabsContent value="opportunities" className="space-y-4">
-            <OpportunitiesStageSummary 
-              activeStageFilter={stageFilter}
-              onStageFilterChange={(stage) => {
-                setStageFilter(stage);
-              }}
-            />
-            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} showChurnRisk={false} columnOrder="outreach" excludeRenewals stageFilter={stageFilter} onClearStageFilter={() => setStageFilter(null)} />
+            <CollapsibleWidgetSection
+              label="Opportunity Stage Summary"
+              collapsed={isOutreachSectionCollapsed('opportunity-stage-summary')}
+              onToggle={() => outreachSectionLayout.collapseWidget('opportunity-stage-summary')}
+            >
+              <OpportunitiesStageSummary 
+                activeStageFilter={stageFilter}
+                onStageFilterChange={(stage) => {
+                  setStageFilter(stage);
+                }}
+              />
+            </CollapsibleWidgetSection>
+            <CollapsibleWidgetSection
+              label="Active Opportunities"
+              collapsed={isOutreachSectionCollapsed('opportunities-table')}
+              onToggle={() => outreachSectionLayout.collapseWidget('opportunities-table')}
+            >
+              <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} showChurnRisk={false} columnOrder="outreach" excludeRenewals stageFilter={stageFilter} onClearStageFilter={() => setStageFilter(null)} />
+            </CollapsibleWidgetSection>
           </TabsContent>
 
           {/* Accounts Tab - Funnel View */}
           <TabsContent value="accounts" className="space-y-4">
-            {/* Staleness & Urgency Summary */}
-            <StalenessAlert accounts={newLogoAccounts} />
+            <CollapsibleWidgetSection
+              label="Staleness & Urgency Summary"
+              collapsed={isOutreachSectionCollapsed('account-staleness')}
+              onToggle={() => outreachSectionLayout.collapseWidget('account-staleness')}
+            >
+              <StalenessAlert accounts={newLogoAccounts} />
+            </CollapsibleWidgetSection>
 
-            {/* Account Health Pulse */}
-            <WidgetErrorBoundary widgetId="account-health-pulse">
-              <AccountHealthPulseCard motionFilter="new-logo" />
-            </WidgetErrorBoundary>
-            {/* Funnel Health Bar */}
-            <FunnelHealthBar accounts={newLogoAccounts} />
+            <CollapsibleWidgetSection
+              label="Account Health Pulse"
+              collapsed={isOutreachSectionCollapsed('account-health-pulse')}
+              onToggle={() => outreachSectionLayout.collapseWidget('account-health-pulse')}
+            >
+              <WidgetErrorBoundary widgetId="account-health-pulse">
+                <AccountHealthPulseCard motionFilter="new-logo" />
+              </WidgetErrorBoundary>
+            </CollapsibleWidgetSection>
+
+            <CollapsibleWidgetSection
+              label="Funnel Health Bar"
+              collapsed={isOutreachSectionCollapsed('funnel-health-bar')}
+              onToggle={() => outreachSectionLayout.collapseWidget('funnel-health-bar')}
+            >
+              <FunnelHealthBar accounts={newLogoAccounts} />
+            </CollapsibleWidgetSection>
             
             {/* Actions Bar */}
             <div className="space-y-3">
@@ -1716,14 +1759,20 @@ export default function WeeklyOutreach() {
 
           {/* Sourcing Tab */}
           <TabsContent value="sourcing" className="space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <WidgetErrorBoundary widgetId="icp-sourcing">
-                <IcpAccountSourcing />
-              </WidgetErrorBoundary>
-              <WidgetErrorBoundary widgetId="company-monitor">
-                <CompanyMonitorCard motionFilter="new-logo" />
-              </WidgetErrorBoundary>
-            </div>
+            <CollapsibleWidgetSection
+              label="Sourcing Intelligence"
+              collapsed={isOutreachSectionCollapsed('sourcing-intelligence')}
+              onToggle={() => outreachSectionLayout.collapseWidget('sourcing-intelligence')}
+            >
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <WidgetErrorBoundary widgetId="icp-sourcing">
+                  <IcpAccountSourcing />
+                </WidgetErrorBoundary>
+                <WidgetErrorBoundary widgetId="company-monitor">
+                  <CompanyMonitorCard motionFilter="new-logo" />
+                </WidgetErrorBoundary>
+              </div>
+            </CollapsibleWidgetSection>
           </TabsContent>
         </Tabs>
 
