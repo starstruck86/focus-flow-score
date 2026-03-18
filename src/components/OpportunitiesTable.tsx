@@ -818,7 +818,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           {resourceOpenOppIds.has(opp.id) && (
             <TableRow className="hover:bg-transparent">
               <TableCell colSpan={99} className="pt-0 pb-2">
-                <OpportunityResourcesPanel opportunityId={opp.id} opportunityName={opp.name} />
+                <OpportunityResourcesPanel opportunityId={opp.id} opportunityName={opp.name} accountId={opp.accountId} />
               </TableCell>
             </TableRow>
           )}
