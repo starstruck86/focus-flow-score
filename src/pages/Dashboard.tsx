@@ -119,36 +119,6 @@ const DASHBOARD_WIDGETS: WidgetConfig[] = [
   { id: 'commission-pacing', label: 'Commission Pacing', visible: true, order: 10 },
 ];
 
-// --- Draggable Widget Wrapper ---
-function DraggableWidget({ id, children, onDragStart, onDragOver, onDrop, isDragging }: {
-  id: string;
-  children: React.ReactNode;
-  onDragStart: (e: React.DragEvent, id: string) => void;
-  onDragOver: (e: React.DragEvent) => void;
-  onDrop: (e: React.DragEvent, id: string) => void;
-  isDragging: boolean;
-}) {
-  return (
-    <div
-      draggable
-      onDragStart={(e) => onDragStart(e, id)}
-      onDragOver={onDragOver}
-      onDrop={(e) => onDrop(e, id)}
-      className={cn(
-        "relative group transition-all duration-200",
-        isDragging && "opacity-40 scale-[0.98]"
-      )}
-    >
-      {/* Drag handle overlay */}
-      <div className="absolute -left-2 top-1/2 -translate-y-1/2 z-10 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing">
-        <div className="bg-muted/80 backdrop-blur-sm rounded-md p-1">
-          <GripVertical className="h-4 w-4 text-muted-foreground" />
-        </div>
-      </div>
-      {children}
-    </div>
-  );
-}
 
 export default function Dashboard() {
   const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
