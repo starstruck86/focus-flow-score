@@ -53,6 +53,16 @@ import {
 } from '@/components/dashboard';
 import { usePaceToQuota, usePerformanceRollups, useQuotaTargets } from '@/hooks/useSalesAge';
 import { DEFAULT_QUOTA_TARGETS } from '@/lib/salesAgeCalculations';
+import { useWidgetLayout, type WidgetConfig } from '@/hooks/useWidgetLayout';
+import { WidgetCustomizer } from '@/components/dashboard/WidgetCustomizer';
+
+// Default widget config for the Quota Dashboard tab
+const QUOTA_WIDGETS: WidgetConfig[] = [
+  { id: 'attainment-gauges', label: 'Attainment Gauges', visible: true, order: 0 },
+  { id: 'commission-remaining', label: 'Commission + Remaining', visible: true, order: 1 },
+  { id: 'quick-stats', label: 'Quick Stats', visible: true, order: 2 },
+  { id: 'strategic-planning', label: 'Strategic Planning', visible: true, order: 3 },
+];
 
 // Normalize status based on stage (e.g., stage="Closed Won" but status="active")
 function normalizeOppStatus(status: OpportunityStatus, stage: OpportunityStage): OpportunityStatus {
