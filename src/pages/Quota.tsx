@@ -263,20 +263,28 @@ export default function Quota() {
         
         {/* Tabs */}
         <Tabs defaultValue="dashboard" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="dashboard" className="gap-1.5">
-              <Target className="h-4 w-4" />
-              Dashboard
-            </TabsTrigger>
-            <TabsTrigger value="ledger" className="gap-1.5">
-              <FileText className="h-4 w-4" />
-              Deals Ledger
-            </TabsTrigger>
-            <TabsTrigger value="settings" className="gap-1.5">
-              <Settings2 className="h-4 w-4" />
-              Settings
-            </TabsTrigger>
-          </TabsList>
+          <div className="flex items-center justify-between">
+            <TabsList>
+              <TabsTrigger value="dashboard" className="gap-1.5">
+                <Target className="h-4 w-4" />
+                Dashboard
+              </TabsTrigger>
+              <TabsTrigger value="ledger" className="gap-1.5">
+                <FileText className="h-4 w-4" />
+                Deals Ledger
+              </TabsTrigger>
+              <TabsTrigger value="settings" className="gap-1.5">
+                <Settings2 className="h-4 w-4" />
+                Settings
+              </TabsTrigger>
+            </TabsList>
+            <WidgetCustomizer
+              widgets={quotaLayout.widgets}
+              onToggle={quotaLayout.toggleWidget}
+              onMove={quotaLayout.moveWidget}
+              onReset={quotaLayout.resetWidgets}
+            />
+          </div>
           
           {/* Dashboard Tab */}
           <TabsContent value="dashboard" className="space-y-6">
