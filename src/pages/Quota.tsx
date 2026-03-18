@@ -229,7 +229,68 @@ export default function Quota() {
   
   // All closed won count for header
   const closedWonCount = opportunities.filter(o => o.status === 'closed-won').length;
-  
+
+  // Widget renderer for Quota dashboard
+  const renderQuotaWidget = useCallback((widgetId: string) => {
+    switch (widgetId) {
+      case 'attainment-gauges':
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <QuotaGauge title="New ARR" booked={summary.newArrBooked} quota={summary.newArrQuota} attainment={summary.newArrAttainment} color="green" />
+            <QuotaGauge title="Renewal ARR" booked={summary.renewalArrBooked} quota={summary.renewalArrQuota} attainment={summary.renewalArrAttainment} color="blue" />
+            <div className="metric-card p-4">
+              <h3 className="text-sm font-medium text-muted-foreground mb-2">One-Time (Non-Quota)</h3>
+              <div className="text-xl font-bold">{formatCurrency(summary.oneTimeBooked)}</div>
+              <div className="text-sm text-status-green mt-1">+{formatCurrency(summary.oneTimeCommission)} commission @ 3%</div>
+            </div>
+          </div>
+        );
+      case 'commission-remaining':
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <CommissionCard totalCommission={summary.totalCommission} newArrBase={summary.newArrBaseCommission} newArrAccelerator={summary.newArrAcceleratorBonus} renewalArrBase={summary.renewalArrBaseCommission} renewalArrAccelerator={summary.renewalArrAcceleratorBonus} oneTimeCommission={summary.oneTimeCommission} />
+            <RemainingCard newArrRemaining={summary.newArrRemainingToHundred} renewalArrRemaining={summary.renewalArrRemainingToHundred} weeklyRateNeeded={weeklyRateNeeded} endDate={config.fiscalYearEnd} />
+          </div>
+        );
+      case 'quick-stats':
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="metric-card p-4 text-center"><div className="text-2xl font-bold text-primary">{ledgerEntries.filter(e => e.ledgerType === 'new-arr').length}</div><div className="text-xs text-muted-foreground">New ARR Deals</div></div>
+            <div className="metric-card p-4 text-center"><div className="text-2xl font-bold text-primary">{ledgerEntries.filter(e => e.ledgerType === 'renewal-arr').length}</div><div className="text-xs text-muted-foreground">Renewal Deals</div></div>
+            <div className="metric-card p-4 text-center"><div className="text-2xl font-bold text-primary">{ledgerEntries.filter(e => e.isMultiYear).length}</div><div className="text-xs text-muted-foreground">Multi-Year Deals</div></div>
+            <div className="metric-card p-4 text-center"><div className="text-2xl font-bold text-primary">{ledgerEntries.filter(e => e.isNewLogo).length}</div><div className="text-xs text-muted-foreground">New Logos</div></div>
+          </div>
+        );
+      case 'strategic-planning':
+        return (
+          <Collapsible open={strategicOpen} onOpenChange={setStrategicOpen}>
+            <CollapsibleTrigger className="flex items-center gap-2 w-full text-left py-3 group">
+              <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", strategicOpen && "rotate-180")} />
+              <span className="font-display text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">Strategic Planning & Pipeline Analysis</span>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-6 pt-2">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <WidgetErrorBoundary widgetId="pace-to-quota"><PaceToQuotaCard paceToQuota={paceToQuota} /></WidgetErrorBoundary>
+                <WidgetErrorBoundary widgetId="pipeline-hygiene"><PipelineHygieneCard /></WidgetErrorBoundary>
+              </div>
+              <WidgetErrorBoundary widgetId="unified-pipeline"><UnifiedPipeline /></WidgetErrorBoundary>
+              <WidgetErrorBoundary widgetId="next-45-risk"><Next45DaysRisk opportunities={opportunities} renewals={renewals} /></WidgetErrorBoundary>
+              <WidgetErrorBoundary widgetId="scenario-simulator"><QuotaScenarioSimulator /></WidgetErrorBoundary>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <WidgetErrorBoundary widgetId="performance-snapshot">
+                  <PerformanceSnapshot wtd={performanceRollups?.wtd || { dials: 0, conversations: 0, meetingsSet: 0, customerMeetingsHeld: 0, oppsCreated: 0, accountsResearched: 0, contactsPrepped: 0 }} mtd={performanceRollups?.mtd || { dials: 0, conversations: 0, meetingsSet: 0, customerMeetingsHeld: 0, oppsCreated: 0, accountsResearched: 0, contactsPrepped: 0 }} wtdDays={performanceRollups?.wtdDays || 0} mtdDays={performanceRollups?.mtdDays || 0} targets={performanceTargets} isLoading={rollupsLoading} />
+                </WidgetErrorBoundary>
+                <WidgetErrorBoundary widgetId="commission-snapshot">
+                  <CommissionSnapshot totalCommission={summary.totalCommission} newArrAttainment={summary.newArrAttainment} renewalArrAttainment={summary.renewalArrAttainment} combinedAttainment={combinedAttainment} projectedImpact={{ additionalNewArr: 50000, additionalCommission: 50000 * config.newArrAcr }} />
+                </WidgetErrorBoundary>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        );
+      default:
+        return null;
+    }
+  }, [summary, ledgerEntries, config, weeklyRateNeeded, strategicOpen, paceToQuota, performanceRollups, rollupsLoading, performanceTargets, combinedAttainment, opportunities, renewals]);
   return (
     <Layout>
       <div className="p-6 lg:p-8">
