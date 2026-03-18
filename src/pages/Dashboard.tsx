@@ -1,7 +1,7 @@
 // CrossFit-style Dashboard: Walk in → See the WOD → Execute → Score
 import { useState } from 'react';
-import { motion, Reorder } from 'framer-motion';
-import { Calendar, Target, Phone, MessageSquare, Users, TrendingUp, GripVertical } from 'lucide-react';
+import { motion, Reorder, AnimatePresence } from 'framer-motion';
+import { Calendar, Target, Phone, MessageSquare, Users, TrendingUp, GripVertical, ChevronDown } from 'lucide-react';
 import { StreakChip } from '@/components/StreakChip';
 import { Layout } from '@/components/Layout';
 import { DailyScorecardModal, JournalDashboardCard } from '@/components/journal';
