@@ -120,6 +120,7 @@ export function useWidgetLayout(pageId: string, defaultWidgets: WidgetConfig[]) 
     moveWidget,
     reorderVisibleIds,
     resizeWidget,
+    collapseWidget,
     resetWidgets,
   };
 }
