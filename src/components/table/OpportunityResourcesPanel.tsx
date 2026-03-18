@@ -5,11 +5,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Folder, FolderPlus, FilePlus, FileText, Presentation, Mail, BookOpen,
+  Folder, FileText, Presentation, Mail, BookOpen,
   Star, ChevronRight, ExternalLink, Plus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useCreateResource, useCreateFolder, type Resource, type ResourceFolder } from '@/hooks/useResources';
+import { useCreateResource, type Resource, type ResourceFolder } from '@/hooks/useResources';
 import { Input } from '@/components/ui/input';
 import { format, parseISO } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
@@ -25,9 +25,10 @@ const TYPE_ICONS: Record<string, React.ElementType> = {
 interface OpportunityResourcesPanelProps {
   opportunityId: string;
   opportunityName: string;
+  accountId?: string | null;
 }
 
-export function OpportunityResourcesPanel({ opportunityId, opportunityName }: OpportunityResourcesPanelProps) {
+export function OpportunityResourcesPanel({ opportunityId, opportunityName, accountId }: OpportunityResourcesPanelProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const createResource = useCreateResource();
@@ -35,7 +36,7 @@ export function OpportunityResourcesPanel({ opportunityId, opportunityName }: Op
   const [quickTitle, setQuickTitle] = useState('');
 
   // Fetch resources linked to this opportunity
-  const { data: resources = [] } = useQuery({
+  const { data: oppResources = [] } = useQuery({
     queryKey: ['resources', 'opportunity', opportunityId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -49,7 +50,23 @@ export function OpportunityResourcesPanel({ opportunityId, opportunityName }: Op
     enabled: !!user && !!opportunityId,
   });
 
-  // Fetch folders that might be linked (by naming convention or tag)
+  // Fetch account-level resources (shared across opps for same account)
+  const { data: accountResources = [] } = useQuery({
+    queryKey: ['resources', 'account', accountId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('resources')
+        .select('*')
+        .eq('account_id', accountId!)
+        .is('opportunity_id', null)
+        .order('updated_at', { ascending: false });
+      if (error) throw error;
+      return data as Resource[];
+    },
+    enabled: !!user && !!accountId,
+  });
+
+  // Fetch folders that might be linked (by naming convention)
   const { data: folders = [] } = useQuery({
     queryKey: ['resource-folders', 'opportunity', opportunityId],
     queryFn: async () => {
@@ -58,7 +75,6 @@ export function OpportunityResourcesPanel({ opportunityId, opportunityName }: Op
         .select('*')
         .order('sort_order', { ascending: true });
       if (error) throw error;
-      // Filter folders whose name matches opportunity name
       return (data as ResourceFolder[]).filter(f =>
         f.name.toLowerCase().includes(opportunityName.toLowerCase().split(' ')[0])
       );
@@ -74,7 +90,6 @@ export function OpportunityResourcesPanel({ opportunityId, opportunityName }: Op
       folder_id: null,
     }, {
       onSuccess: (result) => {
-        // Link to opportunity via update
         if (result?.id) {
           supabase.from('resources').update({ opportunity_id: opportunityId }).eq('id', result.id).then();
         }
@@ -88,6 +103,33 @@ export function OpportunityResourcesPanel({ opportunityId, opportunityName }: Op
     try { return format(parseISO(d), 'M/d'); } catch { return ''; }
   };
 
+  const renderResourceRow = (resource: Resource) => {
+    const Icon = TYPE_ICONS[resource.resource_type] || FileText;
+    return (
+      <button
+        key={resource.id}
+        className="flex items-center gap-2 w-full text-left px-2 py-1.5 rounded-md hover:bg-muted transition-colors group/res"
+        onClick={() => navigate('/prep')}
+      >
+        <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        <span className="text-xs truncate flex-1">{resource.title}</span>
+        {resource.is_template && (
+          <Badge variant="outline" className="text-[9px] h-4 px-1 shrink-0">
+            Template
+          </Badge>
+        )}
+        <span className="text-[10px] text-muted-foreground shrink-0">
+          v{resource.current_version || 1}
+        </span>
+        <span className="text-[10px] text-muted-foreground shrink-0">
+          {formatDate(resource.updated_at)}
+        </span>
+      </button>
+    );
+  };
+
+  const totalCount = oppResources.length + accountResources.length;
+
   return (
     <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
       <div className="flex items-center justify-between">
@@ -95,7 +137,7 @@ export function OpportunityResourcesPanel({ opportunityId, opportunityName }: Op
           <Folder className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-xs font-semibold text-muted-foreground">Resources</span>
           <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
-            {resources.length}
+            {totalCount}
           </Badge>
         </div>
         <div className="flex items-center gap-1">
@@ -152,39 +194,33 @@ export function OpportunityResourcesPanel({ opportunityId, opportunityName }: Op
         </div>
       )}
 
-      {/* Resources list */}
-      {resources.length > 0 ? (
+      {/* Opportunity-specific resources */}
+      {oppResources.length > 0 && (
         <div className="space-y-0.5">
-          {resources.map(resource => {
-            const Icon = TYPE_ICONS[resource.resource_type] || FileText;
-            return (
-              <button
-                key={resource.id}
-                className="flex items-center gap-2 w-full text-left px-2 py-1.5 rounded-md hover:bg-muted transition-colors group/res"
-                onClick={() => navigate('/prep')}
-              >
-                <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <span className="text-xs truncate flex-1">{resource.title}</span>
-                {resource.is_template && (
-                  <Badge variant="outline" className="text-[9px] h-4 px-1 shrink-0">
-                    Template
-                  </Badge>
-                )}
-                <span className="text-[10px] text-muted-foreground shrink-0">
-                  v{resource.current_version || 1}
-                </span>
-                <span className="text-[10px] text-muted-foreground shrink-0">
-                  {formatDate(resource.updated_at)}
-                </span>
-              </button>
-            );
-          })}
+          {accountResources.length > 0 && (
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 pt-1">
+              This Opportunity
+            </p>
+          )}
+          {oppResources.map(renderResourceRow)}
         </div>
-      ) : !showQuickAdd && folders.length === 0 ? (
+      )}
+
+      {/* Account-level resources (grouped separately) */}
+      {accountResources.length > 0 && (
+        <div className="space-y-0.5">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 pt-1">
+            Account Shared
+          </p>
+          {accountResources.map(renderResourceRow)}
+        </div>
+      )}
+
+      {totalCount === 0 && !showQuickAdd && folders.length === 0 && (
         <p className="text-[11px] text-muted-foreground text-center py-2">
           No resources linked yet. Click <strong>New</strong> to create one.
         </p>
-      ) : null}
+      )}
     </div>
   );
 }

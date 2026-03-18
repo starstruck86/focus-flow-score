@@ -319,7 +319,8 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const [closedWonOpportunity, setClosedWonOpportunity] = useState<Opportunity | null>(null);
   const [expandedOppIds, setExpandedOppIds] = useState<Set<string>>(new Set());
   const [resourceOpenOppIds, setResourceOpenOppIds] = useState<Set<string>>(new Set());
-  const toggleResourcePanel = (id: string) => {
+  const toggleResourcePanel = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setResourceOpenOppIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
@@ -642,19 +643,9 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   );
 
   const ActionsCell = ({ opp }: { opp: Opportunity }) => {
-    const isExpanded = expandedOppIds.has(opp.id);
     return (
       <TableCell onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-0.5">
-          <Button
-            size="icon"
-            variant="ghost"
-            className={cn("h-7 w-7", resourceOpenOppIds.has(opp.id) ? "text-primary" : "opacity-0 group-hover/row:opacity-100")}
-            onClick={() => { if (!isExpanded) toggleExpand(opp.id); toggleResourcePanel(opp.id); }}
-            title="Resources"
-          >
-            <FolderOpen className="h-3.5 w-3.5" />
-          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover/row:opacity-100">
@@ -737,16 +728,27 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               </Button>
             </TableCell>
             <TableCell className="align-top py-3">
-              <OpportunityNameCell
-                name={opp.name}
-                salesforceLink={opp.salesforceLink}
-                onNameChange={(name) => updateOpportunity(opp.id, { name })}
-                onSalesforceLinkChange={(link) => {
-                  const dbUpdates: Partial<DbOpportunity> = { salesforce_link: link || null };
-                  updateOpportunityMutation.mutate({ id: opp.id, updates: dbUpdates });
-                }}
-                onOpenDetails={() => onOpenDrawer(opp)}
-              />
+              <div className="flex items-center gap-1">
+                <OpportunityNameCell
+                  name={opp.name}
+                  salesforceLink={opp.salesforceLink}
+                  onNameChange={(name) => updateOpportunity(opp.id, { name })}
+                  onSalesforceLinkChange={(link) => {
+                    const dbUpdates: Partial<DbOpportunity> = { salesforce_link: link || null };
+                    updateOpportunityMutation.mutate({ id: opp.id, updates: dbUpdates });
+                  }}
+                  onOpenDetails={() => onOpenDrawer(opp)}
+                />
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className={cn("h-6 w-6 shrink-0", resourceOpenOppIds.has(opp.id) ? "text-primary" : "opacity-0 group-hover/row:opacity-100")}
+                  onClick={(e) => toggleResourcePanel(opp.id, e)}
+                  title="Resources"
+                >
+                  <FolderOpen className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </TableCell>
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <DisplaySelectCell
@@ -791,15 +793,6 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             ))}
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center gap-0.5">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className={cn("h-7 w-7", resourceOpenOppIds.has(opp.id) ? "text-primary" : "opacity-0 group-hover/row:opacity-100")}
-                  onClick={() => { if (!isExpanded) toggleExpand(opp.id); toggleResourcePanel(opp.id); }}
-                  title="Resources"
-                >
-                  <FolderOpen className="h-3.5 w-3.5" />
-                </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover/row:opacity-100">
@@ -822,6 +815,13 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               </div>
             </TableCell>
           </TableRow>
+          {resourceOpenOppIds.has(opp.id) && (
+            <TableRow className="hover:bg-transparent">
+              <TableCell colSpan={99} className="pt-0 pb-2">
+                <OpportunityResourcesPanel opportunityId={opp.id} opportunityName={opp.name} accountId={opp.accountId} />
+              </TableCell>
+            </TableRow>
+          )}
           {isExpanded && (
             <TableRow className="hover:bg-transparent border-b-2">
               <TableCell colSpan={99} className="pt-0 pb-3">
@@ -847,11 +847,6 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   accountIndustry={linkedAccount?.industry}
                   opportunityContext={`${opp.name} - ${opp.stage} - $${opp.arr || 0} ARR`}
                 />
-                {resourceOpenOppIds.has(opp.id) && (
-                  <div className="mt-3">
-                    <OpportunityResourcesPanel opportunityId={opp.id} opportunityName={opp.name} />
-                  </div>
-                )}
               </TableCell>
             </TableRow>
           )}
@@ -882,16 +877,27 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               />
             </TableCell>
             <TableCell className="align-top py-3">
-              <OpportunityNameCell
-                name={opp.name}
-                salesforceLink={opp.salesforceLink}
-                onNameChange={(name) => updateOpportunity(opp.id, { name })}
-                onSalesforceLinkChange={(link) => {
-                  const dbUpdates: Partial<DbOpportunity> = { salesforce_link: link || null };
-                  updateOpportunityMutation.mutate({ id: opp.id, updates: dbUpdates });
-                }}
-                onOpenDetails={() => onOpenDrawer(opp)}
-              />
+              <div className="flex items-center gap-1">
+                <OpportunityNameCell
+                  name={opp.name}
+                  salesforceLink={opp.salesforceLink}
+                  onNameChange={(name) => updateOpportunity(opp.id, { name })}
+                  onSalesforceLinkChange={(link) => {
+                    const dbUpdates: Partial<DbOpportunity> = { salesforce_link: link || null };
+                    updateOpportunityMutation.mutate({ id: opp.id, updates: dbUpdates });
+                  }}
+                  onOpenDetails={() => onOpenDrawer(opp)}
+                />
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className={cn("h-6 w-6 shrink-0", resourceOpenOppIds.has(opp.id) ? "text-primary" : "opacity-0 group-hover/row:opacity-100")}
+                  onClick={(e) => toggleResourcePanel(opp.id, e)}
+                  title="Resources"
+                >
+                  <FolderOpen className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </TableCell>
             {showChurnRisk && (
               <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
@@ -953,15 +959,6 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             ))}
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center gap-0.5">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className={cn("h-7 w-7", resourceOpenOppIds.has(opp.id) ? "text-primary" : "opacity-0 group-hover/row:opacity-100")}
-                  onClick={() => { if (!isExpanded) toggleExpand(opp.id); toggleResourcePanel(opp.id); }}
-                  title="Resources"
-                >
-                  <FolderOpen className="h-3.5 w-3.5" />
-                </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover/row:opacity-100">
@@ -984,6 +981,13 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               </div>
             </TableCell>
           </TableRow>
+          {resourceOpenOppIds.has(opp.id) && (
+            <TableRow className="hover:bg-transparent">
+              <TableCell colSpan={99} className="pt-0 pb-2">
+                <OpportunityResourcesPanel opportunityId={opp.id} opportunityName={opp.name} accountId={opp.accountId} />
+              </TableCell>
+            </TableRow>
+          )}
           {isExpanded && (
             <TableRow className="hover:bg-transparent border-b-2">
               <TableCell colSpan={99} className="pt-0 pb-3">
@@ -1009,11 +1013,6 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   accountIndustry={linkedAccount?.industry}
                   opportunityContext={`${opp.name} - ${opp.stage} - $${opp.arr || 0} ARR`}
                 />
-                {resourceOpenOppIds.has(opp.id) && (
-                  <div className="mt-3">
-                    <OpportunityResourcesPanel opportunityId={opp.id} opportunityName={opp.name} />
-                  </div>
-                )}
               </TableCell>
             </TableRow>
           )}
@@ -1041,16 +1040,27 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             />
           </TableCell>
           <TableCell className="align-top py-3">
-            <OpportunityNameCell
-              name={opp.name}
-              salesforceLink={opp.salesforceLink}
-              onNameChange={(name) => updateOpportunity(opp.id, { name })}
-              onSalesforceLinkChange={(link) => {
-                const dbUpdates: Partial<DbOpportunity> = { salesforce_link: link || null };
-                updateOpportunityMutation.mutate({ id: opp.id, updates: dbUpdates });
-              }}
-              onOpenDetails={() => onOpenDrawer(opp)}
-            />
+            <div className="flex items-center gap-1">
+              <OpportunityNameCell
+                name={opp.name}
+                salesforceLink={opp.salesforceLink}
+                onNameChange={(name) => updateOpportunity(opp.id, { name })}
+                onSalesforceLinkChange={(link) => {
+                  const dbUpdates: Partial<DbOpportunity> = { salesforce_link: link || null };
+                  updateOpportunityMutation.mutate({ id: opp.id, updates: dbUpdates });
+                }}
+                onOpenDetails={() => onOpenDrawer(opp)}
+              />
+              <Button
+                size="icon"
+                variant="ghost"
+                className={cn("h-6 w-6 shrink-0", resourceOpenOppIds.has(opp.id) ? "text-primary" : "opacity-0 group-hover/row:opacity-100")}
+                onClick={(e) => toggleResourcePanel(opp.id, e)}
+                title="Resources"
+              >
+                <FolderOpen className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </TableCell>
           <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
             <EditableNumberCell
@@ -1092,6 +1102,13 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             ))}
             <ActionsCell opp={opp} />
         </TableRow>
+        {resourceOpenOppIds.has(opp.id) && (
+          <TableRow className="hover:bg-transparent">
+            <TableCell colSpan={99} className="pt-0 pb-2">
+              <OpportunityResourcesPanel opportunityId={opp.id} opportunityName={opp.name} accountId={opp.accountId} />
+            </TableCell>
+          </TableRow>
+        )}
         {isExpanded && (
           <TableRow className="hover:bg-transparent border-b-2">
             <TableCell colSpan={99} className="pt-0 pb-3">
@@ -1110,11 +1127,6 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 accountIndustry={linkedAccount?.industry}
                 opportunityContext={`${opp.name} - ${opp.stage} - $${opp.arr || 0} ARR`}
               />
-              {resourceOpenOppIds.has(opp.id) && (
-                <div className="mt-3">
-                  <OpportunityResourcesPanel opportunityId={opp.id} opportunityName={opp.name} />
-                </div>
-              )}
             </TableCell>
           </TableRow>
         )}
