@@ -125,7 +125,13 @@ const CHURN_RISK_SORT_RANK: Record<string, number> = {
 };
 
 type SavedView = 'all' | 'active' | 'stalled' | 'next-step-due' | 'closing-this-quarter' | 'no-next-step';
-type GroupingMode = 'status' | 'quarter' | 'stage' | 'account' | 'stalled-stage';
+type GroupDimension = 'status' | 'quarter' | 'stage' | 'account';
+const GROUP_DIMENSION_LABELS: Record<GroupDimension, string> = {
+  status: 'Status',
+  quarter: 'Quarter',
+  stage: 'Stage',
+  account: 'Account',
+};
 
 /**
  * Normalize status: if stage says "Closed Won" or "Closed Lost" but status doesn't match, fix it.
