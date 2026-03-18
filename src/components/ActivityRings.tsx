@@ -125,19 +125,19 @@ function MiniRing({
   );
 }
 
-function EditPopover({
-  ring,
-  value,
-  goal,
-  onClose,
-  onUpdate,
-}: {
+const EditPopover = React.forwardRef<HTMLDivElement, {
   ring: RingConfig;
   value: number;
   goal: number;
   onClose: () => void;
   onUpdate: (newValue: number) => void;
-}) {
+}>(({
+  ring,
+  value,
+  goal,
+  onClose,
+  onUpdate,
+}, ref) => {
   const color = `hsl(var(${ring.colorVar}))`;
   
   return (
