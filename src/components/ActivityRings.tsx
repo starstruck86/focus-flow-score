@@ -1,6 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from '@/lib/utils';
+import { forwardRef, useCallback, useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useStore } from '@/store/useStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +10,6 @@ interface RingConfig {
   label: string;
   storeKey: string;
   storeSection: 'activity' | 'raw';
-  goalKey: string;
   defaultGoal: number;
   colorVar: string;
   glowVar: string;
@@ -23,7 +21,6 @@ const RINGS: RingConfig[] = [
     label: 'Dials',
     storeKey: 'dials',
     storeSection: 'activity',
-    goalKey: 'target_dials_per_day',
     defaultGoal: 60,
     colorVar: '--strain',
     glowVar: '--strain-glow',
@@ -33,7 +30,6 @@ const RINGS: RingConfig[] = [
     label: 'Connects',
     storeKey: 'coldCallsWithConversations',
     storeSection: 'raw',
-    goalKey: 'target_connects_per_day',
     defaultGoal: 6,
     colorVar: '--recovery',
     glowVar: '--recovery-glow',
@@ -43,7 +39,6 @@ const RINGS: RingConfig[] = [
     label: 'Emails',
     storeKey: 'emailsTotal',
     storeSection: 'activity',
-    goalKey: 'target_emails_per_day',
     defaultGoal: 30,
     colorVar: '--productivity',
     glowVar: '--productivity-glow',
@@ -78,11 +73,12 @@ function MiniRing({
 
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="flex flex-col items-center gap-0.5 group cursor-pointer transition-transform hover:scale-105 active:scale-95"
+      className="flex flex-col items-center gap-0.5 transition-transform hover:scale-105 active:scale-95"
     >
       <div className="relative">
-        <svg width={size} height={size} className="transform -rotate-90">
+        <svg width={size} height={size} className="-rotate-90 transform">
           <circle
             cx={size / 2}
             cy={size / 2}
@@ -110,51 +106,47 @@ function MiniRing({
           />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
-          <span
-            className="text-sm font-display font-bold"
-            style={{ color }}
-          >
+          <span className="text-sm font-display font-bold" style={{ color }}>
             {value}
           </span>
         </div>
       </div>
-      <span className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
+      <span className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
     </button>
   );
 }
 
-const EditPopover = React.forwardRef<HTMLDivElement, {
+const EditPopover = forwardRef<HTMLDivElement, {
   ring: RingConfig;
   value: number;
   goal: number;
   onClose: () => void;
   onUpdate: (newValue: number) => void;
-}>(({
-  ring,
-  value,
-  goal,
-  onClose,
-  onUpdate,
-}, ref) => {
+}>(({ ring, value, goal, onClose, onUpdate }, ref) => {
   const color = `hsl(var(${ring.colorVar}))`;
-  
+
   return (
     <motion.div
+      ref={ref}
       initial={{ opacity: 0, scale: 0.9, y: -4 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.9, y: -4 }}
-      className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 bg-card border border-border rounded-xl shadow-xl p-3 min-w-[160px]"
+      className="absolute left-1/2 top-full z-50 mt-2 min-w-[160px] -translate-x-1/2 rounded-xl border border-border bg-card p-3 shadow-xl"
     >
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold" style={{ color }}>{ring.label}</span>
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs font-semibold" style={{ color }}>
+          {ring.label}
+        </span>
+        <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground">
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
+
       <div className="flex items-center justify-center gap-2">
         <Button
+          type="button"
           variant="ghost"
           size="icon"
           className="h-8 w-8"
@@ -162,14 +154,21 @@ const EditPopover = React.forwardRef<HTMLDivElement, {
         >
           <Minus className="h-4 w-4" />
         </Button>
+
         <Input
-          type="number"
-          min={0}
-          value={value}
-          onChange={(e) => onUpdate(Math.max(0, parseInt(e.target.value) || 0))}
-          className="w-16 text-center text-lg font-bold h-9"
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={String(value)}
+          onChange={(e) => {
+            const digitsOnly = e.target.value.replace(/\D/g, '');
+            onUpdate(digitsOnly === '' ? 0 : parseInt(digitsOnly, 10));
+          }}
+          className="h-9 w-14 text-center text-lg font-bold [appearance:textfield]"
         />
+
         <Button
+          type="button"
           variant="ghost"
           size="icon"
           className="h-8 w-8"
@@ -178,42 +177,53 @@ const EditPopover = React.forwardRef<HTMLDivElement, {
           <Plus className="h-4 w-4" />
         </Button>
       </div>
-      <div className="text-[10px] text-muted-foreground text-center mt-1.5">
+
+      <div className="mt-1.5 text-center text-[10px] text-muted-foreground">
         Goal: {goal} / day
       </div>
     </motion.div>
   );
 });
+
 EditPopover.displayName = 'EditPopover';
 
 export function ActivityRings() {
-  const { currentDay, updateActivityInputs, updateRawInputs } = useStore();
+  const { currentDay, initializeToday, updateActivityInputs, updateRawInputs } = useStore();
   const [editing, setEditing] = useState<string | null>(null);
 
-  const getValue = useCallback((ring: RingConfig) => {
-    if (ring.storeSection === 'activity') {
-      return (currentDay?.activityInputs as any)?.[ring.storeKey] || 0;
-    }
-    return (currentDay?.rawInputs as any)?.[ring.storeKey] || 0;
-  }, [currentDay]);
+  useEffect(() => {
+    initializeToday();
+  }, [initializeToday]);
 
-  const getGoal = useCallback((ring: RingConfig) => {
-    return ring.defaultGoal;
-  }, []);
+  const getValue = useCallback(
+    (ring: RingConfig) => {
+      if (ring.storeSection === 'activity') {
+        return (currentDay?.activityInputs as Record<string, number> | undefined)?.[ring.storeKey] || 0;
+      }
 
-  const handleUpdate = useCallback((ring: RingConfig, newValue: number) => {
-    if (ring.storeSection === 'activity') {
-      updateActivityInputs({ [ring.storeKey]: newValue } as any);
-    } else {
-      updateRawInputs({ [ring.storeKey]: newValue } as any);
-    }
-  }, [updateActivityInputs, updateRawInputs]);
+      return (currentDay?.rawInputs as Record<string, number> | undefined)?.[ring.storeKey] || 0;
+    },
+    [currentDay],
+  );
+
+  const handleUpdate = useCallback(
+    (ring: RingConfig, newValue: number) => {
+      if (ring.storeSection === 'activity') {
+        updateActivityInputs({ [ring.storeKey]: newValue } as never);
+        return;
+      }
+
+      updateRawInputs({ [ring.storeKey]: newValue } as never);
+    },
+    [updateActivityInputs, updateRawInputs],
+  );
 
   return (
-    <div className="flex items-center gap-3 relative">
+    <div className="relative flex items-center gap-3">
       {RINGS.map((ring) => {
         const value = getValue(ring);
-        const goal = getGoal(ring);
+        const goal = ring.defaultGoal;
+
         return (
           <div key={ring.key} className="relative">
             <MiniRing
@@ -224,6 +234,7 @@ export function ActivityRings() {
               label={ring.label}
               onClick={() => setEditing(editing === ring.key ? null : ring.key)}
             />
+
             <AnimatePresence>
               {editing === ring.key && (
                 <EditPopover
@@ -231,7 +242,7 @@ export function ActivityRings() {
                   value={value}
                   goal={goal}
                   onClose={() => setEditing(null)}
-                  onUpdate={(v) => handleUpdate(ring, v)}
+                  onUpdate={(nextValue) => handleUpdate(ring, nextValue)}
                 />
               )}
             </AnimatePresence>
