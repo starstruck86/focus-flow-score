@@ -197,23 +197,26 @@ export function ActivityRings() {
 
   const getValue = useCallback(
     (ring: RingConfig) => {
-      if (ring.storeSection === 'activity') {
-        return (currentDay?.activityInputs as Record<string, number> | undefined)?.[ring.storeKey] || 0;
-      }
-
-      return (currentDay?.rawInputs as Record<string, number> | undefined)?.[ring.storeKey] || 0;
+      if (ring.key === 'dials') return currentDay?.activityInputs.dials ?? 0;
+      if (ring.key === 'connects') return currentDay?.rawInputs.coldCallsWithConversations ?? 0;
+      return currentDay?.activityInputs.emailsTotal ?? 0;
     },
     [currentDay],
   );
 
   const handleUpdate = useCallback(
     (ring: RingConfig, newValue: number) => {
-      if (ring.storeSection === 'activity') {
-        updateActivityInputs({ [ring.storeKey]: newValue } as never);
+      if (ring.key === 'dials') {
+        updateActivityInputs({ dials: newValue });
         return;
       }
 
-      updateRawInputs({ [ring.storeKey]: newValue } as never);
+      if (ring.key === 'connects') {
+        updateRawInputs({ coldCallsWithConversations: newValue });
+        return;
+      }
+
+      updateActivityInputs({ emailsTotal: newValue });
     },
     [updateActivityInputs, updateRawInputs],
   );
