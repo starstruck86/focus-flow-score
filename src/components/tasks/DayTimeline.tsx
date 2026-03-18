@@ -440,6 +440,30 @@ export function DayTimeline() {
             </div>
           )}
 
+          {/* Prep prompt */}
+          {(selected.type === 'meeting' || selected.type === 'prep') && (
+            <div className="ml-9 mt-2 rounded-md border border-border/30 bg-accent/30 px-2.5 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-[11px] font-medium text-foreground">
+                    {selected.type === 'meeting' ? 'Prep prompt' : 'Prep this block'}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {selected.type === 'meeting'
+                      ? 'Jump to your meeting prep workflow from this block.'
+                      : 'Open Prep Hub and work the linked accounts for this block.'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => window.location.assign(selected.type === 'meeting' ? '/' : '/prep')}
+                  className="rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground transition-colors hover:bg-accent"
+                >
+                  {selected.type === 'meeting' ? 'Open prep' : 'Open Prep Hub'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Thumbs feedback + reasoning */}
           <div className="flex items-center gap-2 mt-2 ml-9">
             <div className="flex gap-0.5">
