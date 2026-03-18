@@ -24,7 +24,7 @@ serve(async (req) => {
       });
     }
 
-    const { transcript } = await req.json();
+    const { transcript, conversationHistory, sessionId } = await req.json();
     if (!transcript) {
       return new Response(JSON.stringify({ error: "No transcript provided" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -52,53 +52,58 @@ serve(async (req) => {
         .limit(20),
     ]);
 
+    // Build conversation context section
+    const conversationSection = conversationHistory
+      ? `\n## CONVERSATION HISTORY (multi-turn session ${sessionId || 'unknown'})\nThe user has been speaking with you. Here is the recent conversation:\n${conversationHistory}\n\nUse this context to understand follow-up questions, resolve pronouns ("it", "that", "them"), and maintain continuity. If the user says something like "do that" or "yes" or "the first one", refer to the previous exchange.\n`
+      : '';
+
     const systemPrompt = `You are Dave — a concise, directive, context-aware voice AI operator embedded in a sales execution platform. You are NOT verbose. You are NOT an assistant. You are an operator.
 
 The user just gave you a voice command. Interpret their intent and return a structured JSON response.
 
 ## CRITICAL BEHAVIOR: ASK BEFORE ACTING
 When ambiguous, incomplete, or could be interpreted multiple ways, use the "clarify" action. Keep clarifying questions to ONE short sentence.
-
+${conversationSection}
 ## AVAILABLE ACTIONS
 
 1. "open_copilot" — AI question or analysis
-   { "action": "open_copilot", "question": "<question>", "mode": "quick|deep|meeting|deal-strategy|recap-email" }
+   { "action": "open_copilot", "question": "<question>", "mode": "quick|deep|meeting|deal-strategy|recap-email", "dave_response": "<brief spoken confirmation>" }
 
 2. "create_task" — Create a task (only when specifics are clear)
-   { "action": "create_task", "title": "<title>", "priority": "p0|p1|p2|p3", "accountName": "<optional>" }
+   { "action": "create_task", "title": "<title>", "priority": "p0|p1|p2|p3", "accountName": "<optional>", "dave_response": "<brief confirmation>" }
 
 3. "navigate" — Go somewhere in the app
-   { "action": "navigate", "path": "/|/tasks|/quota|/coach|/trends|/settings|/renewals|/outreach|/prep" }
+   { "action": "navigate", "path": "/|/tasks|/quota|/coach|/trends|/settings|/renewals|/outreach|/prep", "dave_response": "<brief confirmation>" }
 
 4. "log_activity" — Log dials, emails, meetings
-   { "action": "log_activity", "type": "quick_log" }
+   { "action": "log_activity", "type": "quick_log", "dave_response": "<brief confirmation>" }
 
 5. "start_roleplay" — Launch the sales roleplay simulator
-   { "action": "start_roleplay", "call_type": "discovery|demo|negotiation|cold_call", "difficulty": 1-4, "industry": "<optional>" }
+   { "action": "start_roleplay", "call_type": "discovery|demo|negotiation|cold_call", "difficulty": 1-4, "industry": "<optional>", "dave_response": "<brief confirmation>" }
 
 6. "start_drill" — Launch objection handling drills
-   { "action": "start_drill" }
+   { "action": "start_drill", "dave_response": "<brief confirmation>" }
 
 7. "prep_meeting" — Prepare for an upcoming meeting (auto-detects next meeting if unspecified)
-   { "action": "prep_meeting", "accountName": "<optional>", "meetingTitle": "<optional>" }
+   { "action": "prep_meeting", "accountName": "<optional>", "meetingTitle": "<optional>", "dave_response": "<brief confirmation>" }
 
 8. "update_account" — Update an account field
-   { "action": "update_account", "accountName": "<name>", "field": "next_step|notes|tier|priority|outreach_status", "value": "<new value>" }
+   { "action": "update_account", "accountName": "<name>", "field": "next_step|notes|tier|priority|outreach_status", "value": "<new value>", "dave_response": "<brief confirmation>" }
 
 9. "grade_call" — Trigger analysis of the latest ungraded transcript
-   { "action": "grade_call" }
+   { "action": "grade_call", "dave_response": "<brief confirmation>" }
 
 10. "show_methodology" — Open MEDDICC/CotM tracker for an opportunity
-    { "action": "show_methodology", "accountName": "<optional>", "opportunityName": "<optional>" }
+    { "action": "show_methodology", "accountName": "<optional>", "opportunityName": "<optional>", "dave_response": "<brief confirmation>" }
 
 11. "daily_briefing" — Walk through today's plan, priorities, and risks
-    { "action": "daily_briefing" }
+    { "action": "daily_briefing", "dave_response": "<brief confirmation>" }
 
-12. "clarify" — Need more info
-    { "action": "clarify", "question": "<your question>", "original_intent": "<what you think they meant>" }
+12. "clarify" — Need more info (MUST include dave_response for TTS)
+    { "action": "clarify", "question": "<your question>", "original_intent": "<what you think they meant>", "dave_response": "<the clarifying question to speak>" }
 
 13. "unknown" — Can't determine intent
-    { "action": "unknown", "suggestion": "<helpful suggestion>" }
+    { "action": "unknown", "suggestion": "<helpful suggestion>", "dave_response": "<spoken suggestion>" }
 
 ## CONTEXT
 Upcoming meetings: ${JSON.stringify(calendarRes.data || [])}
@@ -111,6 +116,8 @@ Current time: ${new Date().toLocaleString()}
 - For tasks, infer reasonable priority (default p2)
 - PREFER "clarify" over guessing when vague
 - Keep clarifying questions SHORT (1 sentence)
+- Always include "dave_response" — a brief spoken confirmation (max 15 words)
+- For multi-turn: resolve "it", "that", "yes" from conversation history
 - Return ONLY valid JSON`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -150,6 +157,7 @@ Current time: ${new Date().toLocaleString()}
                 industry: { type: "string", description: "Industry for roleplay" },
                 field: { type: "string", description: "Account field to update" },
                 value: { type: "string", description: "New value for the field" },
+                dave_response: { type: "string", description: "Brief spoken confirmation for TTS (max 15 words)" },
               },
               required: ["action"],
             },
@@ -182,7 +190,7 @@ Current time: ${new Date().toLocaleString()}
       });
     }
 
-    return new Response(JSON.stringify({ action: "unknown", suggestion: "I didn't understand that command." }), {
+    return new Response(JSON.stringify({ action: "unknown", suggestion: "I didn't understand that command.", dave_response: "Sorry, I didn't catch that." }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

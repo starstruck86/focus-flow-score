@@ -1,9 +1,10 @@
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, Loader2 } from 'lucide-react';
+import { Mic, MicOff, Loader2, MessageCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { useCopilot } from '@/contexts/CopilotContext';
+import { useDaveConversation } from '@/hooks/useDaveConversation';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -29,16 +30,22 @@ interface VoiceCommand {
   industry?: string;
   field?: string;
   value?: string;
+  dave_response?: string;
 }
 
 export function VoiceCommandButton({ size = 'default' }: { size?: 'default' | 'large' }) {
   const voice = useVoiceMode();
   const { ask: askCopilot } = useCopilot();
   const navigate = useNavigate();
+  const dave = useDaveConversation();
   const [isProcessing, setIsProcessing] = useState(false);
   const [showFeedback, setShowFeedback] = useState<string | null>(null);
 
   const executeCommand = useCallback(async (command: VoiceCommand) => {
+    // Record Dave's response in conversation history
+    const responseText = command.dave_response || command.question || command.suggestion || command.action;
+    dave.addDaveResponse(responseText, command.action);
+
     switch (command.action) {
       case 'open_copilot':
         askCopilot(command.question || '', command.mode || 'quick');
@@ -142,7 +149,7 @@ export function VoiceCommandButton({ size = 'default' }: { size?: 'default' | 'l
     }
 
     setTimeout(() => setShowFeedback(null), command.action === 'clarify' ? 6000 : 3000);
-  }, [askCopilot, navigate, voice]);
+  }, [askCopilot, navigate, voice, dave]);
 
   const handlePress = useCallback(async () => {
     if (voice.isRecording) {
@@ -150,10 +157,14 @@ export function VoiceCommandButton({ size = 'default' }: { size?: 'default' | 'l
         const transcript = await voice.stopRecording();
         if (!transcript) return;
 
+        // Record user message in conversation history
+        dave.addUserMessage(transcript);
         setIsProcessing(true);
         setShowFeedback(`🎙 "${transcript}"`);
 
         const { data: { session } } = await supabase.auth.getSession();
+        const conversationContext = dave.getConversationContext();
+        
         const resp = await fetch(COMMAND_URL, {
           method: 'POST',
           headers: {
@@ -161,7 +172,11 @@ export function VoiceCommandButton({ size = 'default' }: { size?: 'default' | 'l
             apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
             Authorization: `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
-          body: JSON.stringify({ transcript }),
+          body: JSON.stringify({ 
+            transcript,
+            conversationHistory: conversationContext || undefined,
+            sessionId: dave.sessionId,
+          }),
         });
 
         if (!resp.ok) {
@@ -187,10 +202,11 @@ export function VoiceCommandButton({ size = 'default' }: { size?: 'default' | 'l
         // handled in hook
       }
     }
-  }, [voice, executeCommand]);
+  }, [voice, executeCommand, dave]);
 
   const isActive = voice.isRecording || voice.isTranscribing || isProcessing;
   const isLarge = size === 'large';
+  const hasHistory = dave.messageCount > 0;
 
   return (
     <div className="relative">
@@ -203,6 +219,11 @@ export function VoiceCommandButton({ size = 'default' }: { size?: 'default' | 'l
             className="absolute bottom-full mb-2 right-0 bg-popover border border-border rounded-lg px-3 py-2 shadow-lg max-w-[280px]"
           >
             <p className="text-xs text-foreground whitespace-pre-wrap">{showFeedback}</p>
+            {hasHistory && (
+              <p className="text-[10px] text-muted-foreground mt-1">
+                💬 {dave.messageCount} messages in session
+              </p>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -213,7 +234,7 @@ export function VoiceCommandButton({ size = 'default' }: { size?: 'default' | 'l
         onClick={handlePress}
         disabled={voice.isTranscribing || isProcessing}
         className={cn(
-          "rounded-full flex items-center justify-center shadow-md transition-all",
+          "rounded-full flex items-center justify-center shadow-md transition-all relative",
           isLarge ? "h-14 w-14" : "h-10 w-10",
           voice.isRecording
             ? "bg-destructive text-destructive-foreground animate-pulse"
@@ -221,7 +242,7 @@ export function VoiceCommandButton({ size = 'default' }: { size?: 'default' | 'l
             ? "bg-primary/50 text-primary-foreground"
             : "bg-primary/10 hover:bg-primary/20 text-primary"
         )}
-        title={voice.isRecording ? "Stop & process command" : "Voice command"}
+        title={voice.isRecording ? "Stop & process command" : "Voice command (Dave)"}
       >
         {isProcessing || voice.isTranscribing ? (
           <Loader2 className={cn("animate-spin", isLarge ? "h-6 w-6" : "h-4 w-4")} />
@@ -229,6 +250,10 @@ export function VoiceCommandButton({ size = 'default' }: { size?: 'default' | 'l
           <MicOff className={cn(isLarge ? "h-6 w-6" : "h-4 w-4")} />
         ) : (
           <Mic className={cn(isLarge ? "h-6 w-6" : "h-4 w-4")} />
+        )}
+        {/* Conversation indicator dot */}
+        {hasHistory && !isActive && (
+          <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-primary animate-pulse" />
         )}
       </motion.button>
     </div>
