@@ -565,18 +565,40 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     });
   }, [activeFilteredOpps, accountMap]);
 
-  // Group by status + stage (e.g. "Stalled — 4 - Proposal")
-  const statusStageGroupedOpportunities = useMemo(() => {
+  // Dynamic composite grouping based on selected dimensions
+  const dynamicGroupedOpportunities = useMemo(() => {
+    if (groupDimensions.length === 0) return [];
+    
+    const getKeyParts = (opp: Opportunity): string[] => {
+      return groupDimensions.map(dim => {
+        switch (dim) {
+          case 'status':
+            return opp.status.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
+          case 'quarter': {
+            if (!opp.closeDate) return 'No Close Date';
+            try {
+              const date = parseISO(opp.closeDate);
+              return `FY${getYear(date)} Q${getQuarter(date)}`;
+            } catch { return 'No Close Date'; }
+          }
+          case 'stage':
+            return STAGE_LABELS[opp.stage || ''] || opp.stage || 'No Stage';
+          case 'account': {
+            const acct = opp.accountId ? accountMap.get(opp.accountId) : undefined;
+            return acct?.name || 'No Account';
+          }
+        }
+      });
+    };
+
     const groups: Record<string, Opportunity[]> = {};
     activeFilteredOpps.forEach(opp => {
-      const statusLabel = opp.status.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
-      const stageLabel = STAGE_LABELS[opp.stage || ''] || opp.stage || 'No Stage';
-      const key = `${statusLabel} — ${stageLabel}`;
+      const key = getKeyParts(opp).join(' — ');
       if (!groups[key]) groups[key] = [];
       groups[key].push(opp);
     });
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
-  }, [activeFilteredOpps]);
+  }, [activeFilteredOpps, groupDimensions, accountMap]);
 
   const handleAddOpportunity = async () => {
     if (!newOppName.trim()) return;
