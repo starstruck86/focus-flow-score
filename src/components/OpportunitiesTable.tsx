@@ -125,7 +125,7 @@ const CHURN_RISK_SORT_RANK: Record<string, number> = {
 };
 
 type SavedView = 'all' | 'active' | 'stalled' | 'next-step-due' | 'closing-this-quarter' | 'no-next-step';
-type GroupingMode = 'status' | 'quarter' | 'stage';
+type GroupingMode = 'status' | 'quarter' | 'stage' | 'account' | 'stalled-stage';
 
 /**
  * Normalize status: if stage says "Closed Won" or "Closed Lost" but status doesn't match, fix it.
