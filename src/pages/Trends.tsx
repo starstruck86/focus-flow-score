@@ -70,7 +70,8 @@ export default function Trends() {
             <p className="text-sm text-muted-foreground">
               Performance analytics, correlations & patterns
             </p>
-          </div>
+          <div className="flex items-center gap-2">
+            <WidgetCustomizer widgets={trendsLayout.widgets} onToggle={trendsLayout.toggleWidget} onMove={trendsLayout.moveWidget} onReset={trendsLayout.resetWidgets} />
           <Tabs value={range} onValueChange={(v) => setRange(v as TrendRange)}>
             <TabsList className="h-8">
               {RANGES.map(r => (
