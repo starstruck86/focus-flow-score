@@ -424,6 +424,18 @@ export default function Renewals() {
   const [activeTab, setActiveTab] = useState('opportunities');
   const [renewalStageFilter, setRenewalStageFilter] = useState<OpportunityStage | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
+  const renewalSections = useMemo<WidgetConfig[]>(() => ([
+    { id: 'renewal-opportunity-stage-summary', label: 'Renewal Opportunity Stage Summary', visible: true, order: 0 },
+    { id: 'renewal-opportunities-table', label: 'Renewal Opportunities', visible: true, order: 1 },
+    { id: 'renewal-account-intelligence', label: 'Account Intelligence', visible: true, order: 2 },
+    { id: 'renewal-urgency', label: 'Renewal Urgency', visible: true, order: 3 },
+    { id: 'renewal-risk-summary', label: 'Churn Risk Summary', visible: true, order: 4 },
+  ]), []);
+  const renewalSectionLayout = useWidgetLayout('renewals-sections', renewalSections);
+  const isRenewalSectionCollapsed = useCallback(
+    (id: string) => renewalSectionLayout.widgets.find((widget) => widget.id === id)?.collapsed ?? false,
+    [renewalSectionLayout.widgets]
+  );
 
   // Deep-link highlight from Work Queue via LinkedRecordContext
   const { currentRecord, clearCurrentRecord } = useLinkedRecordContext();

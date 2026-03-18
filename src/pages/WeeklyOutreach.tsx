@@ -792,6 +792,19 @@ export default function WeeklyOutreach() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<AccountStatus>>(
     new Set(['meeting-booked', 'disqualified'])
   );
+  const outreachSections = useMemo<WidgetConfig[]>(() => ([
+    { id: 'opportunity-stage-summary', label: 'Opportunity Stage Summary', visible: true, order: 0 },
+    { id: 'opportunities-table', label: 'Active Opportunities', visible: true, order: 1 },
+    { id: 'account-staleness', label: 'Staleness & Urgency Summary', visible: true, order: 2 },
+    { id: 'account-health-pulse', label: 'Account Health Pulse', visible: true, order: 3 },
+    { id: 'funnel-health-bar', label: 'Funnel Health Bar', visible: true, order: 4 },
+    { id: 'sourcing-intelligence', label: 'Sourcing Intelligence', visible: true, order: 5 },
+  ]), []);
+  const outreachSectionLayout = useWidgetLayout('weekly-outreach-sections', outreachSections);
+  const isOutreachSectionCollapsed = useCallback(
+    (id: string) => outreachSectionLayout.widgets.find((widget) => widget.id === id)?.collapsed ?? false,
+    [outreachSectionLayout.widgets]
+  );
 
   const toggleGroupCollapse = (status: AccountStatus) => {
     setCollapsedGroups(prev => {
