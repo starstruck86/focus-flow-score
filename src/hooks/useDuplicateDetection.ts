@@ -210,8 +210,8 @@ export function useDuplicateDetection() {
     const { tasks: currentTasks } = useStore.getState();
     for (const removeId of removeIds) {
       currentTasks
-        .filter(t => t.opportunityId === removeId)
-        .forEach(t => updateTask(t.id, { opportunityId: keepId }));
+        .filter(t => t.linkedOpportunityId === removeId)
+        .forEach(t => updateTask(t.id, { linkedOpportunityId: keepId }));
     }
 
     queryClient.invalidateQueries({ queryKey: ['opportunities'] });
