@@ -1,5 +1,5 @@
 import { NavLink as RouterNavLink, useLocation } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { 
   LayoutDashboard, 
   Users, 
@@ -37,26 +37,54 @@ const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
   '/settings': { page: 'settings', description: 'Settings — app configuration and preferences' },
 };
 
-const navRow1 = [
-  { to: '/', label: 'Today', icon: LayoutDashboard },
-  { to: '/tasks', label: 'Tasks', icon: CheckSquare },
-  { to: '/outreach', label: 'New Logo', icon: Users },
-  { to: '/renewals', label: 'Renewals', icon: RefreshCw },
+// Color-coded tab system — each tab has a distinct color identity
+type NavColor = 'today' | 'tasks' | 'outreach' | 'renewals' | 'prep' | 'coach' | 'trends' | 'quota' | 'settings';
+
+interface NavItemDef {
+  to: string;
+  label: string;
+  icon: React.ElementType;
+  color: NavColor;
+}
+
+const navRow1: NavItemDef[] = [
+  { to: '/', label: 'Today', icon: LayoutDashboard, color: 'today' },
+  { to: '/tasks', label: 'Tasks', icon: CheckSquare, color: 'tasks' },
+  { to: '/outreach', label: 'New Logo', icon: Users, color: 'outreach' },
+  { to: '/renewals', label: 'Renewals', icon: RefreshCw, color: 'renewals' },
 ];
 
-const navRow2 = [
-  { to: '/prep', label: 'Prep Hub', icon: FileText },
-  { to: '/coach', label: 'Coach', icon: Compass },
-  { to: '/trends', label: 'Trends', icon: TrendingUp },
-  { to: '/quota', label: 'Quota', icon: DollarSign },
-  { to: '/settings', label: 'Settings', icon: Settings },
+const navRow2: NavItemDef[] = [
+  { to: '/prep', label: 'Prep Hub', icon: FileText, color: 'prep' },
+  { to: '/coach', label: 'Coach', icon: Compass, color: 'coach' },
+  { to: '/trends', label: 'Trends', icon: TrendingUp, color: 'trends' },
+  { to: '/quota', label: 'Quota', icon: DollarSign, color: 'quota' },
+  { to: '/settings', label: 'Settings', icon: Settings, color: 'settings' },
 ];
 
-function NavItem({ item }: { item: { to: string; label: string; icon: React.ElementType } }) {
+const ALL_NAV = [...navRow1, ...navRow2];
+
+// Map color token names to CSS variable references
+const COLOR_VAR: Record<NavColor, string> = {
+  today: 'var(--nav-today)',
+  tasks: 'var(--nav-tasks)',
+  outreach: 'var(--nav-outreach)',
+  renewals: 'var(--nav-renewals)',
+  prep: 'var(--nav-prep)',
+  coach: 'var(--nav-coach)',
+  trends: 'var(--nav-trends)',
+  quota: 'var(--nav-quota)',
+  settings: 'var(--nav-settings)',
+};
+
+function NavItem({ item }: { item: NavItemDef }) {
   const location = useLocation();
   const isActive = item.to === '/'
     ? location.pathname === '/'
     : location.pathname.startsWith(item.to);
+
+  const colorStyle = isActive ? { color: `hsl(${COLOR_VAR[item.color]})` } : undefined;
+  const glowColor = `hsl(${COLOR_VAR[item.color]} / 0.5)`;
 
   return (
     <Tooltip>
@@ -66,20 +94,39 @@ function NavItem({ item }: { item: { to: string; label: string; icon: React.Elem
           className={cn(
             'relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full text-[10px] font-medium transition-all duration-200 rounded-lg',
             isActive
-              ? 'text-primary'
+              ? 'font-semibold'
               : 'text-muted-foreground hover:text-foreground'
           )}
+          style={colorStyle}
         >
           {isActive && (
-            <span className="absolute -top-px left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--nav-active-glow))]" />
+            <span
+              className="absolute -top-px left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full"
+              style={{
+                backgroundColor: `hsl(${COLOR_VAR[item.color]})`,
+                boxShadow: `0 0 8px ${glowColor}`,
+              }}
+            />
           )}
-          <item.icon className={cn("h-4 w-4 transition-transform duration-200", isActive && "text-primary scale-110")} />
+          <item.icon
+            className={cn("h-4 w-4 transition-transform duration-200", isActive && "scale-110")}
+            style={isActive ? { color: `hsl(${COLOR_VAR[item.color]})` } : undefined}
+          />
           <span className={cn("truncate transition-opacity", isActive ? "opacity-100" : "opacity-70")}>{item.label}</span>
         </RouterNavLink>
       </TooltipTrigger>
       <TooltipContent side="top" className="text-xs">{item.label}</TooltipContent>
     </Tooltip>
   );
+}
+
+/** Get the active tab's color for page-level accent */
+function useActiveTabColor(): NavColor {
+  const location = useLocation();
+  const match = ALL_NAV.find(item =>
+    item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to)
+  );
+  return match?.color || 'today';
 }
 
 function BottomNav() {
@@ -108,11 +155,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
   const location = useLocation();
   const { setPageContext } = useCopilot();
+  const activeColor = useActiveTabColor();
+
+  // Set page-accent CSS variable on the root element
+  useEffect(() => {
+    document.documentElement.style.setProperty('--page-accent', COLOR_VAR[activeColor]);
+  }, [activeColor]);
 
   // Set page context for copilot based on current route
   useEffect(() => {
     const path = location.pathname;
-    // Check exact matches first, then prefix matches for detail pages
     if (PAGE_CONTEXT_MAP[path]) {
       setPageContext(PAGE_CONTEXT_MAP[path]);
     } else if (path.startsWith('/accounts/')) {
@@ -123,12 +175,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
       setPageContext({ page: 'other', description: path });
     }
   }, [location.pathname, setPageContext]);
+
+  const headerAccentStyle = useMemo(() => ({
+    borderBottomColor: `hsl(${COLOR_VAR[activeColor]} / 0.2)`,
+  }), [activeColor]);
+
   return (
     <div className="min-h-screen bg-background flex flex-col w-full">
-      {/* Top bar — minimal, execution-focused */}
-      <header className="flex items-center justify-between px-4 py-2 border-b border-border/50 sticky top-0 z-40 bg-background/95 backdrop-blur-md">
+      {/* Top bar — minimal, color-accented */}
+      <header
+        className="flex items-center justify-between px-4 py-2 border-b sticky top-0 z-40 bg-background/95 backdrop-blur-md"
+        style={headerAccentStyle}
+      >
         <div className="flex items-center gap-2">
-          <Compass className="h-5 w-5 text-primary" />
+          <Compass className="h-5 w-5" style={{ color: `hsl(${COLOR_VAR[activeColor]})` }} />
           <span className="font-display text-sm font-bold">Quota Compass</span>
           <SaveIndicator />
         </div>
@@ -153,7 +213,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      {/* Bottom Nav - 2 rows */}
+      {/* Bottom Nav - 2 rows, color-coded */}
       <BottomNav />
       
       {/* Back to Today shortcut */}
