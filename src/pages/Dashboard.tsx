@@ -1,6 +1,6 @@
 // CrossFit-style Dashboard: Walk in → See the WOD → Execute → Score
-import { useState, useCallback, useRef } from 'react';
-import { motion, AnimatePresence, Reorder } from 'framer-motion';
+import { useState, useCallback } from 'react';
+import { motion, Reorder } from 'framer-motion';
 import { Calendar, Target, Phone, MessageSquare, Users, TrendingUp, GripVertical } from 'lucide-react';
 import { StreakChip } from '@/components/StreakChip';
 import { Layout } from '@/components/Layout';
@@ -119,36 +119,6 @@ const DASHBOARD_WIDGETS: WidgetConfig[] = [
   { id: 'commission-pacing', label: 'Commission Pacing', visible: true, order: 10 },
 ];
 
-// --- Draggable Widget Wrapper ---
-function DraggableWidget({ id, children, onDragStart, onDragOver, onDrop, isDragging }: {
-  id: string;
-  children: React.ReactNode;
-  onDragStart: (e: React.DragEvent, id: string) => void;
-  onDragOver: (e: React.DragEvent) => void;
-  onDrop: (e: React.DragEvent, id: string) => void;
-  isDragging: boolean;
-}) {
-  return (
-    <div
-      draggable
-      onDragStart={(e) => onDragStart(e, id)}
-      onDragOver={onDragOver}
-      onDrop={(e) => onDrop(e, id)}
-      className={cn(
-        "relative group transition-all duration-200",
-        isDragging && "opacity-40 scale-[0.98]"
-      )}
-    >
-      {/* Drag handle overlay */}
-      <div className="absolute -left-2 top-1/2 -translate-y-1/2 z-10 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing">
-        <div className="bg-muted/80 backdrop-blur-sm rounded-md p-1">
-          <GripVertical className="h-4 w-4 text-muted-foreground" />
-        </div>
-      </div>
-      {children}
-    </div>
-  );
-}
 
 export default function Dashboard() {
   const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
@@ -169,36 +139,24 @@ export default function Dashboard() {
   // Widget layout system
   const { widgets, visibleWidgets, toggleWidget, moveWidget, resetWidgets } = useWidgetLayout('dashboard', DASHBOARD_WIDGETS);
 
-  // Drag state
-  const [draggedId, setDraggedId] = useState<string | null>(null);
-
-  const handleDragStart = useCallback((e: React.DragEvent, id: string) => {
-    setDraggedId(id);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', id);
-  }, []);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent, targetId: string) => {
-    e.preventDefault();
-    const sourceId = e.dataTransfer.getData('text/plain');
-    if (sourceId && sourceId !== targetId) {
-      const fromIdx = widgets.findIndex(w => w.id === sourceId);
-      const toIdx = widgets.findIndex(w => w.id === targetId);
-      if (fromIdx >= 0 && toIdx >= 0) {
-        moveWidget(fromIdx, toIdx);
+  // Handle reorder from framer-motion
+  const handleReorder = useCallback((newOrder: WidgetConfig[]) => {
+    // Find what changed and call moveWidget
+    const oldIds = visibleWidgets.map(w => w.id);
+    const newIds = newOrder.map(w => w.id);
+    // Find the moved item
+    for (let i = 0; i < oldIds.length; i++) {
+      if (oldIds[i] !== newIds[i]) {
+        const movedId = newIds[i];
+        const fromIdx = widgets.findIndex(w => w.id === movedId);
+        const toIdx = widgets.findIndex(w => w.id === oldIds[i]);
+        if (fromIdx >= 0 && toIdx >= 0) {
+          moveWidget(fromIdx, toIdx);
+        }
+        break;
       }
     }
-    setDraggedId(null);
-  }, [widgets, moveWidget]);
-
-  const handleDragEnd = useCallback(() => {
-    setDraggedId(null);
-  }, []);
+  }, [widgets, visibleWidgets, moveWidget]);
 
   const today = new Date();
   const todayStr = format(today, 'yyyy-MM-dd');
@@ -358,22 +316,31 @@ export default function Dashboard() {
         )}
 
         {/* === MODULAR WIDGET GRID — Drag to reorder === */}
-        <div className="space-y-4" onDragEnd={handleDragEnd}>
+        <Reorder.Group
+          axis="y"
+          values={visibleWidgets}
+          onReorder={handleReorder}
+          className="space-y-4"
+        >
           {visibleWidgets.map((widget) => (
-            <DraggableWidget
+            <Reorder.Item
               key={widget.id}
-              id={widget.id}
-              onDragStart={handleDragStart}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              isDragging={draggedId === widget.id}
+              value={widget}
+              className="relative group"
+              whileDrag={{ scale: 1.02, boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 50 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
             >
+              <div className="absolute -left-3 top-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing">
+                <div className="bg-muted/80 backdrop-blur-sm rounded-md p-1">
+                  <GripVertical className="h-4 w-4 text-muted-foreground" />
+                </div>
+              </div>
               <WidgetErrorBoundary widgetId={widget.id}>
                 {renderWidget(widget.id)}
               </WidgetErrorBoundary>
-            </DraggableWidget>
+            </Reorder.Item>
           ))}
-        </div>
+        </Reorder.Group>
       </div>
       
       <CommissionPacingDetailModal
