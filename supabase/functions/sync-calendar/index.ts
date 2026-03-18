@@ -20,6 +20,21 @@ const WINDOWS_TIMEZONE_MAP: Record<string, string> = {
   'Greenwich Standard Time': 'Atlantic/Reykjavik',
   'W. Europe Standard Time': 'Europe/Berlin',
   'Romance Standard Time': 'Europe/Paris',
+  'India Standard Time': 'Asia/Kolkata',
+  'China Standard Time': 'Asia/Shanghai',
+  'Tokyo Standard Time': 'Asia/Tokyo',
+  'AUS Eastern Standard Time': 'Australia/Sydney',
+  'Singapore Standard Time': 'Asia/Singapore',
+  'Central European Standard Time': 'Europe/Warsaw',
+  'E. Europe Standard Time': 'Europe/Bucharest',
+  'FLE Standard Time': 'Europe/Helsinki',
+  'SE Asia Standard Time': 'Asia/Bangkok',
+  'Korea Standard Time': 'Asia/Seoul',
+  'Arab Standard Time': 'Asia/Riyadh',
+  'E. South America Standard Time': 'America/Sao_Paulo',
+  'SA Pacific Standard Time': 'America/Bogota',
+  'Mountain Standard Time (Mexico)': 'America/Chihuahua',
+  'Central Standard Time (Mexico)': 'America/Mexico_City',
 };
 
 interface CalendarEvent {
@@ -72,7 +87,14 @@ function normalizeTimeZone(timeZone: string | null): string {
     return 'UTC';
   }
 
-  return normalized;
+  // Validate that the timezone is recognized by Intl before returning it
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: normalized });
+    return normalized;
+  } catch {
+    console.warn(`[TZ-WARN] Unrecognized timezone "${normalized}", falling back to ${DEFAULT_TIMEZONE}`);
+    return DEFAULT_TIMEZONE;
+  }
 }
 
 function getTimeZoneOffsetMinutes(date: Date, rawTimeZone: string | null): number {
@@ -370,6 +392,11 @@ function parseICS(icsContent: string): RawEvent[] {
           ? currentEvent.end_time.getTime() - currentEvent.start_time.getTime()
           : 3600000; // default 1 hour
 
+        // Debug: log key events
+        if (currentEvent.title && (currentEvent.title.includes('All Hands') || currentEvent.title.includes('Enterprise Sales'))) {
+          console.log(`[TZ-DEBUG] VEVENT complete: title="${currentEvent.title}" rrule="${currentEvent.rrule}" recurrenceId=${currentEvent.recurrenceId?.toISOString()} startUTC="${currentEvent.start_time.toISOString()}" tz="${currentEvent.timezone}" duration=${duration}`);
+        }
+
         events.push({
           uid: currentEvent.uid,
           title: currentEvent.title || null,
@@ -423,6 +450,10 @@ function parseICS(icsContent: string): RawEvent[] {
           currentEvent.start_time = start.date;
           currentEvent.timezone = start.timeZone;
           allDay = start.allDay;
+          // Debug logging for specific events
+          if (currentEvent.title && (currentEvent.title.includes('All Hands') || currentEvent.title.includes('Enterprise Sales'))) {
+            console.log(`[TZ-DEBUG] ${currentEvent.title} DTSTART raw="${value}" keyPart="${keyPart}" parsedUTC="${start.date.toISOString()}" tz="${start.timeZone}" allDay=${start.allDay}`);
+          }
           break;
         }
         case 'DTEND': {
@@ -463,6 +494,11 @@ function expandRecurringEvents(rawEvents: RawEvent[], rangeStart: Date, rangeEnd
       const fallbackEndTime = event.end_time
         ? event.end_time
         : new Date(event.start_time.getTime() + fallbackDuration);
+
+      // Debug logging
+      if (event.title && (event.title.includes('All Hands') || event.title.includes('Enterprise Sales'))) {
+        console.log(`[TZ-DEBUG] Override instance: title="${event.title}" start="${event.start_time.toISOString()}" recurrenceId="${event.recurrenceId.toISOString()}" tz="${event.timezone}"`);
+      }
 
       expandedEvents.push({
         external_id: `${event.uid}_${event.start_time.toISOString()}`,
