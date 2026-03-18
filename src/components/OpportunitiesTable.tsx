@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { LayoutGrid, List, ChevronUp } from 'lucide-react';
+import { LayoutGrid, List, ChevronUp, FolderOpen } from 'lucide-react';
+import { OpportunityResourcesPanel } from '@/components/table/OpportunityResourcesPanel';
 import {
   Table,
   TableBody,
@@ -317,6 +318,14 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const [closedWonModalOpen, setClosedWonModalOpen] = useState(false);
   const [closedWonOpportunity, setClosedWonOpportunity] = useState<Opportunity | null>(null);
   const [expandedOppIds, setExpandedOppIds] = useState<Set<string>>(new Set());
+  const [resourceOpenOppIds, setResourceOpenOppIds] = useState<Set<string>>(new Set());
+  const toggleResourcePanel = (id: string) => {
+    setResourceOpenOppIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
     try {
       const stored = localStorage.getItem(`collapsed-groups-${renewalsOnly ? 'renewals' : excludeRenewals ? 'newlogo' : 'global'}`);
@@ -632,29 +641,43 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     </TableCell>
   );
 
-  const ActionsCell = ({ opp }: { opp: Opportunity }) => (
-    <TableCell>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover:opacity-100">
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => onOpenDrawer(opp)}>
-            Open Details
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            className="text-destructive"
-            onClick={() => setDeleteDialogOpp(opp)}
+  const ActionsCell = ({ opp }: { opp: Opportunity }) => {
+    const isExpanded = expandedOppIds.has(opp.id);
+    return (
+      <TableCell onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-0.5">
+          <Button
+            size="icon"
+            variant="ghost"
+            className={cn("h-7 w-7", resourceOpenOppIds.has(opp.id) ? "text-primary" : "opacity-0 group-hover/row:opacity-100")}
+            onClick={() => { if (!isExpanded) toggleExpand(opp.id); toggleResourcePanel(opp.id); }}
+            title="Resources"
           >
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </TableCell>
-  );
+            <FolderOpen className="h-3.5 w-3.5" />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover/row:opacity-100">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onOpenDrawer(opp)}>
+                Open Details
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive"
+                onClick={() => setDeleteDialogOpp(opp)}
+              >
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </TableCell>
+    );
+  };
 
   const toggleExpand = (id: string) => {
     setExpandedOppIds(prev => {
@@ -767,25 +790,36 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               </TableCell>
             ))}
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover:opacity-100">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => onOpenDrawer(opp)}>
-                    Open Details
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="text-destructive"
-                    onClick={() => setDeleteDialogOpp(opp)}
-                  >
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <div className="flex items-center gap-0.5">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className={cn("h-7 w-7", resourceOpenOppIds.has(opp.id) ? "text-primary" : "opacity-0 group-hover/row:opacity-100")}
+                  onClick={() => { if (!isExpanded) toggleExpand(opp.id); toggleResourcePanel(opp.id); }}
+                  title="Resources"
+                >
+                  <FolderOpen className="h-3.5 w-3.5" />
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover/row:opacity-100">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => onOpenDrawer(opp)}>
+                      Open Details
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={() => setDeleteDialogOpp(opp)}
+                    >
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </TableCell>
           </TableRow>
           {isExpanded && (
@@ -813,6 +847,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   accountIndustry={linkedAccount?.industry}
                   opportunityContext={`${opp.name} - ${opp.stage} - $${opp.arr || 0} ARR`}
                 />
+                {resourceOpenOppIds.has(opp.id) && (
+                  <div className="mt-3">
+                    <OpportunityResourcesPanel opportunityId={opp.id} opportunityName={opp.name} />
+                  </div>
+                )}
               </TableCell>
             </TableRow>
           )}
@@ -913,25 +952,36 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               </TableCell>
             ))}
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover:opacity-100">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => onOpenDrawer(opp)}>
-                    Open Details
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="text-destructive"
-                    onClick={() => setDeleteDialogOpp(opp)}
-                  >
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <div className="flex items-center gap-0.5">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className={cn("h-7 w-7", resourceOpenOppIds.has(opp.id) ? "text-primary" : "opacity-0 group-hover/row:opacity-100")}
+                  onClick={() => { if (!isExpanded) toggleExpand(opp.id); toggleResourcePanel(opp.id); }}
+                  title="Resources"
+                >
+                  <FolderOpen className="h-3.5 w-3.5" />
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover/row:opacity-100">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => onOpenDrawer(opp)}>
+                      Open Details
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={() => setDeleteDialogOpp(opp)}
+                    >
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </TableCell>
           </TableRow>
           {isExpanded && (
@@ -959,6 +1009,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   accountIndustry={linkedAccount?.industry}
                   opportunityContext={`${opp.name} - ${opp.stage} - $${opp.arr || 0} ARR`}
                 />
+                {resourceOpenOppIds.has(opp.id) && (
+                  <div className="mt-3">
+                    <OpportunityResourcesPanel opportunityId={opp.id} opportunityName={opp.name} />
+                  </div>
+                )}
               </TableCell>
             </TableRow>
           )}
@@ -1055,6 +1110,11 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 accountIndustry={linkedAccount?.industry}
                 opportunityContext={`${opp.name} - ${opp.stage} - $${opp.arr || 0} ARR`}
               />
+              {resourceOpenOppIds.has(opp.id) && (
+                <div className="mt-3">
+                  <OpportunityResourcesPanel opportunityId={opp.id} opportunityName={opp.name} />
+                </div>
+              )}
             </TableCell>
           </TableRow>
         )}
