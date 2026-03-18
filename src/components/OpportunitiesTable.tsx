@@ -57,6 +57,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
+import { useDuplicateDetection } from '@/hooks/useDuplicateDetection';
+import { AlertTriangle, Merge } from 'lucide-react';
 import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
 import { format, parseISO, isToday, isPast, isThisQuarter, getQuarter, getYear } from 'date-fns';
 import { 
