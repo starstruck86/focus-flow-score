@@ -10,7 +10,7 @@ import {
 import {
   Folder, FolderPlus, FilePlus, FileText, Presentation, Mail, BookOpen,
   ChevronRight, MoreHorizontal, Search, Trash2, Edit3, ArrowLeft, Clock,
-  Star, Tag, Copy, Template,
+  Star, Tag, Copy,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
