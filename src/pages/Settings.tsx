@@ -946,6 +946,9 @@ export default function Settings() {
           
           {/* Data Tab */}
           <TabsContent value="data" className="space-y-4">
+            {/* Duplicate Detection */}
+            <DuplicateDetector />
+            
             {/* Import Section */}
             <DataImportSection />
             
