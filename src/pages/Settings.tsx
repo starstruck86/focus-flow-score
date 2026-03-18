@@ -937,6 +937,23 @@ export default function Settings() {
               </div>
               <p className="text-sm text-muted-foreground">Coming soon...</p>
             </div>
+
+            {/* Build Info */}
+            <div className="metric-card">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <SettingsIcon className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold">Build Info</h3>
+                  <p className="text-sm text-muted-foreground">Current app version details</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between py-2 border-t border-border/50">
+                <span className="text-sm text-muted-foreground">Last built</span>
+                <span className="text-sm font-mono">{new Date(__BUILD_TIMESTAMP__).toLocaleString()}</span>
+              </div>
+            </div>
           </TabsContent>
           
           {/* Notifications Tab */}

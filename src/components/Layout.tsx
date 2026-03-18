@@ -194,6 +194,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-2">
           <Compass className="h-5 w-5" style={{ color: `hsl(${COLOR_VAR[activeColor]})` }} />
           <span className="font-display text-sm font-bold">Quota Compass</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-[10px] text-muted-foreground/60 hidden sm:inline cursor-default">
+                Updated {formatDistanceToNow(new Date(__BUILD_TIMESTAMP__), { addSuffix: true })}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              Build: {new Date(__BUILD_TIMESTAMP__).toLocaleString()}
+            </TooltipContent>
+          </Tooltip>
           <SaveIndicator />
         </div>
         <div className="flex items-center gap-1">
