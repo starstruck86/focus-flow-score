@@ -130,6 +130,7 @@ const EditPopover = forwardRef<HTMLDivElement, {
 
   return (
     <motion.div
+      data-ring-popover
       ref={ref}
       initial={{ opacity: 0, scale: 0.9, y: -4 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
