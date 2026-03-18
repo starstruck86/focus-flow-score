@@ -317,6 +317,21 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const [closedWonModalOpen, setClosedWonModalOpen] = useState(false);
   const [closedWonOpportunity, setClosedWonOpportunity] = useState<Opportunity | null>(null);
   const [expandedOppIds, setExpandedOppIds] = useState<Set<string>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(`collapsed-groups-${renewalsOnly ? 'renewals' : excludeRenewals ? 'newlogo' : 'global'}`);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch { return new Set(); }
+  });
+  const toggleGroupCollapse = (groupKey: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey); else next.add(groupKey);
+      const storageKey = `collapsed-groups-${renewalsOnly ? 'renewals' : excludeRenewals ? 'newlogo' : 'global'}`;
+      localStorage.setItem(storageKey, JSON.stringify([...next]));
+      return next;
+    });
+  };
   const [deleteDialogOpp, setDeleteDialogOpp] = useState<Opportunity | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
   const [groupingMode, setGroupingMode] = useState<GroupingMode>(renewalsOnly ? 'quarter' : 'status');
