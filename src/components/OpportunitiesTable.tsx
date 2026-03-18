@@ -54,6 +54,7 @@ import { useBulkSelection } from '@/hooks/useBulkSelection';
 import { BulkActionsBar } from '@/components/BulkActionsBar';
 import { KanbanBoard } from '@/components/KanbanBoard';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
@@ -125,7 +126,13 @@ const CHURN_RISK_SORT_RANK: Record<string, number> = {
 };
 
 type SavedView = 'all' | 'active' | 'stalled' | 'next-step-due' | 'closing-this-quarter' | 'no-next-step';
-type GroupingMode = 'status' | 'quarter' | 'stage' | 'account' | 'stalled-stage';
+type GroupDimension = 'status' | 'quarter' | 'stage' | 'account';
+const GROUP_DIMENSION_LABELS: Record<GroupDimension, string> = {
+  status: 'Status',
+  quarter: 'Quarter',
+  stage: 'Stage',
+  account: 'Account',
+};
 
 /**
  * Normalize status: if stage says "Closed Won" or "Closed Lost" but status doesn't match, fix it.
@@ -344,7 +351,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   };
   const [deleteDialogOpp, setDeleteDialogOpp] = useState<Opportunity | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
-  const [groupingMode, setGroupingMode] = useState<GroupingMode>(renewalsOnly ? 'quarter' : 'status');
+  const [groupDimensions, setGroupDimensions] = useState<GroupDimension[]>(renewalsOnly ? ['quarter'] : ['status']);
   const [showChurningOpps, setShowChurningOpps] = useState(false);
   const bulkSelection = useBulkSelection<Opportunity>();
 
@@ -559,18 +566,40 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     });
   }, [activeFilteredOpps, accountMap]);
 
-  // Group by status + stage (e.g. "Stalled — 4 - Proposal")
-  const statusStageGroupedOpportunities = useMemo(() => {
+  // Dynamic composite grouping based on selected dimensions
+  const dynamicGroupedOpportunities = useMemo(() => {
+    if (groupDimensions.length === 0) return [];
+    
+    const getKeyParts = (opp: Opportunity): string[] => {
+      return groupDimensions.map(dim => {
+        switch (dim) {
+          case 'status':
+            return opp.status.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
+          case 'quarter': {
+            if (!opp.closeDate) return 'No Close Date';
+            try {
+              const date = parseISO(opp.closeDate);
+              return `FY${getYear(date)} Q${getQuarter(date)}`;
+            } catch { return 'No Close Date'; }
+          }
+          case 'stage':
+            return STAGE_LABELS[opp.stage || ''] || opp.stage || 'No Stage';
+          case 'account': {
+            const acct = opp.accountId ? accountMap.get(opp.accountId) : undefined;
+            return acct?.name || 'No Account';
+          }
+        }
+      });
+    };
+
     const groups: Record<string, Opportunity[]> = {};
     activeFilteredOpps.forEach(opp => {
-      const statusLabel = opp.status.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
-      const stageLabel = STAGE_LABELS[opp.stage || ''] || opp.stage || 'No Stage';
-      const key = `${statusLabel} — ${stageLabel}`;
+      const key = getKeyParts(opp).join(' — ');
       if (!groups[key]) groups[key] = [];
       groups[key].push(opp);
     });
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
-  }, [activeFilteredOpps]);
+  }, [activeFilteredOpps, groupDimensions, accountMap]);
 
   const handleAddOpportunity = async () => {
     if (!newOppName.trim()) return;
@@ -1274,18 +1303,41 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             <SelectItem value="no-next-step">No Next Step</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={groupingMode} onValueChange={(v) => setGroupingMode(v as GroupingMode)}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="Group by..." />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="status">Group: Status</SelectItem>
-            <SelectItem value="quarter">Group: Quarter</SelectItem>
-            <SelectItem value="stage">Group: Stage</SelectItem>
-            <SelectItem value="account">Group: Account</SelectItem>
-            <SelectItem value="stalled-stage">Group: Status + Stage</SelectItem>
-          </SelectContent>
-        </Select>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="w-auto gap-1.5 text-sm">
+              <span className="truncate max-w-[160px]">
+                Group: {groupDimensions.map(d => GROUP_DIMENSION_LABELS[d]).join(' + ') || 'None'}
+              </span>
+              <ChevronDown className="h-3.5 w-3.5 opacity-50 shrink-0" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-48 p-2" align="start">
+            {(['status', 'quarter', 'stage', 'account'] as GroupDimension[]).map(dim => {
+              const isActive = groupDimensions.includes(dim);
+              return (
+                <button
+                  key={dim}
+                  className={cn(
+                    "flex items-center gap-2 w-full px-2 py-1.5 rounded text-sm transition-colors",
+                    isActive ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted text-foreground"
+                  )}
+                  onClick={() => {
+                    if (isActive) {
+                      const next = groupDimensions.filter(d => d !== dim);
+                      setGroupDimensions(next.length > 0 ? next : ['status']);
+                    } else {
+                      setGroupDimensions([...groupDimensions, dim]);
+                    }
+                  }}
+                >
+                  <Checkbox checked={isActive} className="pointer-events-none" />
+                  {GROUP_DIMENSION_LABELS[dim]}
+                </button>
+              );
+            })}
+          </PopoverContent>
+        </Popover>
         <ManageColumnsPopover
           tabTarget={oppTabTarget}
           viewKey={`opportunities-${renewalsOnly ? 'renewals' : excludeRenewals ? 'newlogo' : 'global'}-${savedView}`}
@@ -1554,16 +1606,16 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               </TableRow>
             ) : isUserSorted ? (
               sortedOpportunities.map(renderOpportunityRow)
-            ) : groupingMode === 'quarter' ? (
-              quarterGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
-            ) : groupingMode === 'stage' ? (
-              stageGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
-            ) : groupingMode === 'account' ? (
-              accountGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
-            ) : groupingMode === 'stalled-stage' ? (
-              statusStageGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
-            ) : (
+            ) : groupDimensions.length === 1 && groupDimensions[0] === 'status' ? (
               STATUS_ORDER.map(status => renderStatusGroup(status, groupedOpportunities[status]))
+            ) : groupDimensions.length === 1 && groupDimensions[0] === 'quarter' ? (
+              quarterGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
+            ) : groupDimensions.length === 1 && groupDimensions[0] === 'stage' ? (
+              stageGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
+            ) : groupDimensions.length === 1 && groupDimensions[0] === 'account' ? (
+              accountGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
+            ) : (
+              dynamicGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
             )}
           </TableBody>
         </Table>
