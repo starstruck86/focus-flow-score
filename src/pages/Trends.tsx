@@ -1,14 +1,19 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { Reorder } from 'framer-motion';
 import { Layout } from '@/components/Layout';
 import {
   TrendingUp, BarChart3, Activity, Zap, Target, Brain,
   ArrowUpRight, ArrowDownRight, Minus, Phone, Users, Calendar,
-  Lightbulb, Gauge,
+  Lightbulb, Gauge, GripVertical,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
+import { useTrendsData, type TrendRange } from '@/hooks/useTrendsData';
+import { useWidgetLayout, type WidgetConfig } from '@/hooks/useWidgetLayout';
+import { WidgetCustomizer } from '@/components/dashboard/WidgetCustomizer';
+import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 import { useTrendsData, type TrendRange } from '@/hooks/useTrendsData';
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, AreaChart, Area,
