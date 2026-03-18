@@ -272,6 +272,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   // Check if an opportunity exists in the database (has UUID format)
   const dbOpportunityIds = useMemo(() => new Set(dbOpportunities.map(o => o.id)), [dbOpportunities]);
   const { updateOpportunity: storeUpdateOpportunity } = useStore();
+  const { duplicateOpportunities, mergeOpportunities } = useDuplicateDetection();
 
   // Wrapper functions for mutations
   const updateOpportunity = (id: string, updates: Partial<Opportunity>) => {
