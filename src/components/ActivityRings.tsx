@@ -191,9 +191,18 @@ export function ActivityRings() {
   const { currentDay, initializeToday, updateActivityInputs, updateRawInputs } = useStore();
   const [editing, setEditing] = useState<string | null>(null);
 
+  // Close popover on outside click
   useEffect(() => {
-    initializeToday();
-  }, [initializeToday]);
+    if (!editing) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-ring-popover]') && !target.closest('[data-ring-trigger]')) {
+        setEditing(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [editing]);
 
   const getValue = useCallback(
     (ring: RingConfig) => {
