@@ -179,23 +179,6 @@ function getTimeZoneParts(date: Date, rawTimeZone: string | null) {
   };
 }
 
-function toWallClockDate(date: Date, rawTimeZone: string | null): Date {
-  const parts = getTimeZoneParts(date, rawTimeZone);
-  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second));
-}
-
-function fromWallClockDate(date: Date, rawTimeZone: string | null): Date {
-  return createUtcDateFromTimeZone(
-    date.getUTCFullYear(),
-    date.getUTCMonth(),
-    date.getUTCDate(),
-    date.getUTCHours(),
-    date.getUTCMinutes(),
-    date.getUTCSeconds(),
-    rawTimeZone,
-  );
-}
-
 function parseICSDate(dateStr: string, keyPart: string): ParsedICSDate {
   const tzidMatch = keyPart.match(/TZID=([^;:]+)/i);
   const timeZone = normalizeTimeZone(tzidMatch ? tzidMatch[1] : null);
@@ -230,6 +213,28 @@ function parseICSDate(dateStr: string, keyPart: string): ParsedICSDate {
   };
 }
 
+function addUtcDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function getUtcDateOnly(year: number, month: number, day: number): Date {
+  return new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
+}
+
+function buildOccurrenceFromLocalDate(dateOnly: Date, template: ReturnType<typeof getTimeZoneParts>, rawTimeZone: string | null): Date {
+  return createUtcDateFromTimeZone(
+    dateOnly.getUTCFullYear(),
+    dateOnly.getUTCMonth(),
+    dateOnly.getUTCDate(),
+    template.hour,
+    template.minute,
+    template.second,
+    rawTimeZone,
+  );
+}
+
 function parseRRule(rrule: string, startDate: Date, endRange: Date, rawTimeZone: string | null): Date[] {
   const occurrences: Date[] = [];
   const parts: Record<string, string> = {};
@@ -246,7 +251,7 @@ function parseRRule(rrule: string, startDate: Date, endRange: Date, rawTimeZone:
   const byDayRaw = parts['BYDAY']?.split(',') || [];
 
   const dayMap: Record<string, number> = {
-    'SU': 0, 'MO': 1, 'TU': 2, 'WE': 3, 'TH': 4, 'FR': 5, 'SA': 6
+    SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6,
   };
 
   const parsedByDay = byDayRaw.map(raw => {
@@ -255,130 +260,93 @@ function parseRRule(rrule: string, startDate: Date, endRange: Date, rawTimeZone:
     return { ordinal: match[1] ? parseInt(match[1]) : null, day: dayMap[match[2]] };
   }).filter(Boolean) as { ordinal: number | null; day: number }[];
 
-  const timeZone = normalizeTimeZone(rawTimeZone);
-  const startWallClock = toWallClockDate(startDate, timeZone);
-  let current = new Date(startWallClock);
-  let occurrenceCount = 0;
-  const maxOccurrences = count || 100;
+  const startParts = getTimeZoneParts(startDate, rawTimeZone);
+  const startDateOnly = getUtcDateOnly(startParts.year, startParts.month, startParts.day);
   const effectiveEnd = until && until < endRange ? until : endRange;
+  const effectiveEndParts = getTimeZoneParts(effectiveEnd, rawTimeZone);
+  const effectiveEndDateOnly = getUtcDateOnly(effectiveEndParts.year, effectiveEndParts.month, effectiveEndParts.day);
+  const maxOccurrences = count || 100;
 
-  while (occurrenceCount < maxOccurrences) {
-    if (freq === 'WEEKLY') {
-      if (parsedByDay.length > 0) {
-        for (const { day: targetDay } of parsedByDay) {
-          const weekStart = new Date(current);
-          weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay());
+  const pushOccurrence = (dateOnly: Date) => {
+    const occurrence = buildOccurrenceFromLocalDate(dateOnly, startParts, rawTimeZone);
+    if (occurrence >= startDate && occurrence <= effectiveEnd) {
+      occurrences.push(new Date(occurrence));
+      return true;
+    }
+    return false;
+  };
 
-          const occurrenceWallClock = new Date(weekStart);
-          occurrenceWallClock.setUTCDate(occurrenceWallClock.getUTCDate() + targetDay);
-          occurrenceWallClock.setUTCHours(
-            startWallClock.getUTCHours(),
-            startWallClock.getUTCMinutes(),
-            startWallClock.getUTCSeconds(),
-            0,
-          );
+  if (freq === 'DAILY') {
+    let currentDate = new Date(startDateOnly);
+    while (occurrences.length < maxOccurrences && currentDate <= effectiveEndDateOnly) {
+      pushOccurrence(currentDate);
+      currentDate = addUtcDays(currentDate, interval);
+    }
+    return occurrences;
+  }
 
-          const occurrence = fromWallClockDate(occurrenceWallClock, timeZone);
+  if (freq === 'WEEKLY') {
+    const targetDays = parsedByDay.length > 0 ? parsedByDay.map(({ day }) => day) : [startParts.weekday];
+    let currentWeekStart = addUtcDays(startDateOnly, -startParts.weekday);
 
-          if (occurrence >= startDate && occurrence <= effectiveEnd) {
-            occurrences.push(new Date(occurrence));
-            occurrenceCount++;
-            if (occurrenceCount >= maxOccurrences) break;
-          }
-        }
-
-        if (current > toWallClockDate(effectiveEnd, timeZone)) break;
-        current.setUTCDate(current.getUTCDate() + (7 * interval));
-      } else {
-        const occurrence = fromWallClockDate(current, timeZone);
-        if (occurrence >= startDate && occurrence <= effectiveEnd) {
-          occurrences.push(new Date(occurrence));
-          occurrenceCount++;
-        }
-        current.setUTCDate(current.getUTCDate() + (7 * interval));
+    while (occurrences.length < maxOccurrences && currentWeekStart <= effectiveEndDateOnly) {
+      for (const targetDay of targetDays) {
+        const candidateDate = addUtcDays(currentWeekStart, targetDay);
+        if (candidateDate < startDateOnly || candidateDate > effectiveEndDateOnly) continue;
+        if (pushOccurrence(candidateDate) && occurrences.length >= maxOccurrences) break;
       }
-    } else if (freq === 'DAILY') {
-      const occurrence = fromWallClockDate(current, timeZone);
-      if (occurrence >= startDate && occurrence <= effectiveEnd) {
-        occurrences.push(new Date(occurrence));
-        occurrenceCount++;
-      }
-      current.setUTCDate(current.getUTCDate() + interval);
-    } else if (freq === 'MONTHLY') {
+      currentWeekStart = addUtcDays(currentWeekStart, 7 * interval);
+    }
+
+    return occurrences;
+  }
+
+  if (freq === 'MONTHLY') {
+    let year = startParts.year;
+    let month = startParts.month;
+
+    while (occurrences.length < maxOccurrences) {
+      const monthStart = getUtcDateOnly(year, month, 1);
+      if (monthStart > effectiveEndDateOnly) break;
+
+      let candidateDate: Date | null = null;
+
       if (parsedByDay.length > 0 && parsedByDay[0].ordinal !== null) {
         const { ordinal, day: targetDay } = parsedByDay[0];
-        const year = current.getUTCFullYear();
-        const month = current.getUTCMonth();
-
-        let candidateWallClock: Date | null = null;
         if ((ordinal ?? 0) > 0) {
-          const firstOfMonth = new Date(Date.UTC(
-            year,
-            month,
-            1,
-            startWallClock.getUTCHours(),
-            startWallClock.getUTCMinutes(),
-            startWallClock.getUTCSeconds(),
-          ));
-          const firstDow = firstOfMonth.getUTCDay();
-          let dayOffset = targetDay - firstDow;
+          const firstDayWeekday = monthStart.getUTCDay();
+          let dayOffset = targetDay - firstDayWeekday;
           if (dayOffset < 0) dayOffset += 7;
-          const nthDay = 1 + dayOffset + ((ordinal as number) - 1) * 7;
-          const candidate = new Date(Date.UTC(
-            year,
-            month,
-            nthDay,
-            startWallClock.getUTCHours(),
-            startWallClock.getUTCMinutes(),
-            startWallClock.getUTCSeconds(),
-          ));
-          if (candidate.getUTCMonth() === month) {
-            candidateWallClock = candidate;
-          }
+          const candidateDay = 1 + dayOffset + ((ordinal as number) - 1) * 7;
+          const testDate = getUtcDateOnly(year, month, candidateDay);
+          if (testDate.getUTCMonth() === month - 1) candidateDate = testDate;
         } else if (ordinal === -1) {
-          const lastOfMonth = new Date(Date.UTC(year, month + 1, 0));
-          let d = lastOfMonth.getUTCDate();
-          while (new Date(Date.UTC(year, month, d)).getUTCDay() !== targetDay && d > 0) d--;
-          if (d > 0) {
-            candidateWallClock = new Date(Date.UTC(
-              year,
-              month,
-              d,
-              startWallClock.getUTCHours(),
-              startWallClock.getUTCMinutes(),
-              startWallClock.getUTCSeconds(),
-            ));
+          const lastDay = new Date(Date.UTC(year, month, 0));
+          let candidateDay = lastDay.getUTCDate();
+          while (candidateDay > 0 && new Date(Date.UTC(year, month - 1, candidateDay)).getUTCDay() !== targetDay) {
+            candidateDay -= 1;
           }
+          if (candidateDay > 0) candidateDate = getUtcDateOnly(year, month, candidateDay);
         }
-
-        if (candidateWallClock) {
-          const occurrence = fromWallClockDate(candidateWallClock, timeZone);
-          if (occurrence >= startDate && occurrence <= effectiveEnd) {
-            occurrences.push(new Date(occurrence));
-            occurrenceCount++;
-          }
-        }
-
-        current.setUTCMonth(current.getUTCMonth() + interval);
       } else {
-        const occurrence = fromWallClockDate(current, timeZone);
-        if (occurrence >= startDate && occurrence <= effectiveEnd) {
-          occurrences.push(new Date(occurrence));
-          occurrenceCount++;
-        }
-        current.setUTCMonth(current.getUTCMonth() + interval);
+        const lastDayOfMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+        candidateDate = getUtcDateOnly(year, month, Math.min(startParts.day, lastDayOfMonth));
       }
-    } else {
-      const occurrence = fromWallClockDate(current, timeZone);
-      if (occurrence <= effectiveEnd) {
-        occurrences.push(new Date(occurrence));
+
+      if (candidateDate && candidateDate >= startDateOnly && candidateDate <= effectiveEndDateOnly) {
+        pushOccurrence(candidateDate);
       }
-      break;
+
+      month += interval;
+      year += Math.floor((month - 1) / 12);
+      month = ((month - 1) % 12) + 1;
     }
 
-    if (current > toWallClockDate(effectiveEnd, timeZone)) {
-      break;
-    }
+    return occurrences;
+  }
+
+  if (startDate <= effectiveEnd) {
+    occurrences.push(new Date(startDate));
   }
 
   return occurrences;
