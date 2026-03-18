@@ -1,4 +1,4 @@
-import { GripVertical, Eye, EyeOff, RotateCcw } from 'lucide-react';
+import { GripVertical, Eye, EyeOff, RotateCcw, Maximize2, Minimize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Popover,
@@ -7,16 +7,17 @@ import {
 } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
-import type { DashboardWidget } from '@/hooks/useDashboardWidgets';
+import type { WidgetConfig } from '@/hooks/useWidgetLayout';
 
 interface WidgetCustomizerProps {
-  widgets: DashboardWidget[];
+  widgets: WidgetConfig[];
   onToggle: (id: string) => void;
   onMove: (from: number, to: number) => void;
   onReset: () => void;
+  onResize?: (id: string, size: WidgetConfig['size']) => void;
 }
 
-export function WidgetCustomizer({ widgets, onToggle, onMove, onReset }: WidgetCustomizerProps) {
+export function WidgetCustomizer({ widgets, onToggle, onMove, onReset, onResize }: WidgetCustomizerProps) {
   return (
     <Popover>
       <PopoverTrigger asChild>
