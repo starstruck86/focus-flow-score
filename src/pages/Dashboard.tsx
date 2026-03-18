@@ -1,7 +1,7 @@
 // CrossFit-style Dashboard: Walk in → See the WOD → Execute → Score
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Calendar, Target, Phone, MessageSquare, Users, TrendingUp } from 'lucide-react';
+import { useState, useCallback, useRef } from 'react';
+import { motion, AnimatePresence, Reorder } from 'framer-motion';
+import { Calendar, Target, Phone, MessageSquare, Users, TrendingUp, GripVertical } from 'lucide-react';
 import { StreakChip } from '@/components/StreakChip';
 import { Layout } from '@/components/Layout';
 import { DailyScorecardModal, JournalDashboardCard } from '@/components/journal';
@@ -41,6 +41,8 @@ import {
   WeeklyBattlePlanCard,
 } from '@/components/dashboard';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
+import { WidgetCustomizer } from '@/components/dashboard/WidgetCustomizer';
+import { useWidgetLayout, type WidgetConfig } from '@/hooks/useWidgetLayout';
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -71,7 +73,6 @@ function ActivityPulse({ entry }: { entry: any }) {
 
   return (
     <div className="flex items-center gap-3 flex-wrap">
-      {/* Score chip */}
       <div className={cn(
         "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border",
         goalMet 
@@ -83,8 +84,6 @@ function ActivityPulse({ entry }: { entry: any }) {
         <Target className="h-3 w-3" />
         {score}/8 pts
       </div>
-      
-      {/* Activity chips */}
       {metrics.map(m => {
         const hit = m.value >= m.target;
         const Icon = m.icon;
@@ -105,6 +104,52 @@ function ActivityPulse({ entry }: { entry: any }) {
   );
 }
 
+// --- DEFAULT WIDGET DEFINITIONS ---
+const DASHBOARD_WIDGETS: WidgetConfig[] = [
+  { id: 'daily-time-blocks', label: 'Daily Game Plan', visible: true, order: 0 },
+  { id: 'post-meeting', label: 'Post-Meeting Log', visible: true, order: 1 },
+  { id: 'meeting-prep', label: 'Upcoming Client Meetings', visible: true, order: 2 },
+  { id: 'research-checklist', label: 'Research Checklist', visible: true, order: 3 },
+  { id: 'coaching-feed', label: 'AI Coach', visible: true, order: 4 },
+  { id: 'progress-tabs', label: 'Today / Week-to-Date', visible: true, order: 5 },
+  { id: 'smart-work-queue', label: 'Daily Action Plan', visible: true, order: 6 },
+  { id: 'pclub-math', label: 'P-Club Math', visible: true, order: 7 },
+  { id: 'weekly-battle-plan', label: 'Weekly Battle Plan', visible: true, order: 8 },
+  { id: 'journal', label: 'Daily Scorecard', visible: true, order: 9 },
+  { id: 'commission-pacing', label: 'Commission Pacing', visible: true, order: 10 },
+];
+
+// --- Draggable Widget Wrapper ---
+function DraggableWidget({ id, children, onDragStart, onDragOver, onDrop, isDragging }: {
+  id: string;
+  children: React.ReactNode;
+  onDragStart: (e: React.DragEvent, id: string) => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent, id: string) => void;
+  isDragging: boolean;
+}) {
+  return (
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, id)}
+      onDragOver={onDragOver}
+      onDrop={(e) => onDrop(e, id)}
+      className={cn(
+        "relative group transition-all duration-200",
+        isDragging && "opacity-40 scale-[0.98]"
+      )}
+    >
+      {/* Drag handle overlay */}
+      <div className="absolute -left-2 top-1/2 -translate-y-1/2 z-10 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing">
+        <div className="bg-muted/80 backdrop-blur-sm rounded-md p-1">
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
   const [showCommissionDetail, setShowCommissionDetail] = useState(false);
@@ -120,6 +165,40 @@ export default function Dashboard() {
   const { data: commissionPacing, isLoading: pacingLoading } = useCommissionPacing();
   const { data: quotaTargets } = useQuotaTargets();
   const { data: wtdMetrics, isLoading: wtdLoading } = useWeekToDateMetrics();
+
+  // Widget layout system
+  const { widgets, visibleWidgets, toggleWidget, moveWidget, resetWidgets } = useWidgetLayout('dashboard', DASHBOARD_WIDGETS);
+
+  // Drag state
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+
+  const handleDragStart = useCallback((e: React.DragEvent, id: string) => {
+    setDraggedId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    const sourceId = e.dataTransfer.getData('text/plain');
+    if (sourceId && sourceId !== targetId) {
+      const fromIdx = widgets.findIndex(w => w.id === sourceId);
+      const toIdx = widgets.findIndex(w => w.id === targetId);
+      if (fromIdx >= 0 && toIdx >= 0) {
+        moveWidget(fromIdx, toIdx);
+      }
+    }
+    setDraggedId(null);
+  }, [widgets, moveWidget]);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedId(null);
+  }, []);
 
   const today = new Date();
   const todayStr = format(today, 'yyyy-MM-dd');
@@ -146,6 +225,98 @@ export default function Dashboard() {
     daysElapsedThisWeek
   ) : [];
 
+  // Widget renderer
+  const renderWidget = (widgetId: string) => {
+    switch (widgetId) {
+      case 'daily-time-blocks':
+        return <DailyTimeBlocks />;
+      case 'post-meeting':
+        return <PostMeetingPrompt />;
+      case 'meeting-prep':
+        return <MeetingPrepPrompt />;
+      case 'research-checklist':
+        return <ResearchChecklist />;
+      case 'coaching-feed':
+        return <CoachingFeed />;
+      case 'progress-tabs':
+        return (
+          <Tabs defaultValue="today" className="w-full">
+            <TabsList className="w-full grid grid-cols-2">
+              <TabsTrigger value="today">Today</TabsTrigger>
+              <TabsTrigger value="wtd">Week-to-Date</TabsTrigger>
+            </TabsList>
+            <TabsContent value="today" className="mt-2">
+              <ExpectedVsActualCard
+                title="Today's Progress"
+                subtitle={todayCheckedIn ? "Checked in ✓" : "Not yet checked in"}
+                metrics={todayJournalEntry ? [
+                  {
+                    metric: 'Points', expected: 8, actual: todayJournalEntry.dailyScore || 0,
+                    gap: 8 - (todayJournalEntry.dailyScore || 0),
+                    percentComplete: (todayJournalEntry.dailyScore || 0) / 8,
+                    status: (todayJournalEntry.dailyScore || 0) >= 8 ? 'ahead' : (todayJournalEntry.dailyScore || 0) >= 6 ? 'on-track' : 'behind',
+                  },
+                  {
+                    metric: 'Conversations', expected: defaultTemplate.conversations,
+                    actual: todayJournalEntry.activity.conversations,
+                    gap: defaultTemplate.conversations - todayJournalEntry.activity.conversations,
+                    percentComplete: defaultTemplate.conversations > 0 ? todayJournalEntry.activity.conversations / defaultTemplate.conversations : 0,
+                    status: todayJournalEntry.activity.conversations >= defaultTemplate.conversations ? 'ahead' : 'behind',
+                  },
+                  {
+                    metric: 'Prospects Added', expected: defaultTemplate.prospectsAdded,
+                    actual: todayJournalEntry.activity.prospectsAdded,
+                    gap: defaultTemplate.prospectsAdded - todayJournalEntry.activity.prospectsAdded,
+                    percentComplete: defaultTemplate.prospectsAdded > 0 ? todayJournalEntry.activity.prospectsAdded / defaultTemplate.prospectsAdded : 0,
+                    status: todayJournalEntry.activity.prospectsAdded >= defaultTemplate.prospectsAdded ? 'ahead' : 'behind',
+                  },
+                ] : []}
+                pointsEarned={todayJournalEntry?.dailyScore || 0}
+                pointsTarget={8}
+                isLoading={journalLoading}
+                compact
+              />
+            </TabsContent>
+            <TabsContent value="wtd" className="mt-2">
+              <ExpectedVsActualCard
+                title="Week-to-Date"
+                subtitle={`${daysElapsedThisWeek} of 5 workdays`}
+                metrics={expectedVsActualMetrics}
+                pointsEarned={wtdMetrics?.pointsEarned || 0}
+                pointsTarget={8 * daysElapsedThisWeek}
+                isLoading={wtdLoading}
+                compact
+              />
+            </TabsContent>
+          </Tabs>
+        );
+      case 'smart-work-queue':
+        return <SmartWorkQueue />;
+      case 'pclub-math':
+        return <PClubMathCard />;
+      case 'weekly-battle-plan':
+        return <WeeklyBattlePlanCard />;
+      case 'journal':
+        return <JournalDashboardCard />;
+      case 'commission-pacing':
+        return (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+            <CommissionPacingTile
+              projectedQuarterCommission={commissionPacing?.projectedQuarterCommission || 0}
+              weeklyPaceTrend={commissionPacing?.weeklyPaceTrend || 0}
+              projectedAttainment={commissionPacing?.projectedAttainment || 0}
+              status={commissionPacing?.status || 'stable'}
+              isLoading={pacingLoading}
+              onClick={() => setShowCommissionDetail(true)}
+              compact
+            />
+          </motion.div>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <Layout>
       <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto space-y-4">
@@ -165,11 +336,17 @@ export default function Dashboard() {
               </h1>
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              <WidgetCustomizer
+                widgets={widgets}
+                onToggle={toggleWidget}
+                onMove={moveWidget}
+                onReset={resetWidgets}
+              />
               <StreakChip />
             </div>
           </div>
           
-          {/* Live Activity Pulse — always know where you stand */}
+          {/* Live Activity Pulse */}
           <ActivityPulse entry={todayJournalEntry} />
         </div>
 
@@ -180,121 +357,23 @@ export default function Dashboard() {
           </WidgetErrorBoundary>
         )}
 
-        {/* === SECTION 1: THE WOD — Your Game Plan === */}
-        <WidgetErrorBoundary widgetId="daily-time-blocks">
-          <DailyTimeBlocks />
-        </WidgetErrorBoundary>
-
-        {/* === SECTION 2: POST-MEETING — Log next steps after meetings === */}
-        <WidgetErrorBoundary widgetId="post-meeting-prompt">
-          <PostMeetingPrompt />
-        </WidgetErrorBoundary>
-
-        {/* === SECTION 3: WHAT'S NEXT — Imminent meetings needing prep === */}
-        <div id="meeting-prep-section">
-        <WidgetErrorBoundary widgetId="meeting-prep-prompt">
-          <MeetingPrepPrompt />
-        </WidgetErrorBoundary>
+        {/* === MODULAR WIDGET GRID — Drag to reorder === */}
+        <div className="space-y-4" onDragEnd={handleDragEnd}>
+          {visibleWidgets.map((widget) => (
+            <DraggableWidget
+              key={widget.id}
+              id={widget.id}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              isDragging={draggedId === widget.id}
+            >
+              <WidgetErrorBoundary widgetId={widget.id}>
+                {renderWidget(widget.id)}
+              </WidgetErrorBoundary>
+            </DraggableWidget>
+          ))}
         </div>
-
-        {/* === SECTION 4: RESEARCH — Structured checklist for accounts in research === */}
-        <WidgetErrorBoundary widgetId="research-checklist">
-          <ResearchChecklist />
-        </WidgetErrorBoundary>
-
-        {/* === SECTION 3: COACH + ACCOUNTABILITY === */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <WidgetErrorBoundary widgetId="coaching-feed">
-            <CoachingFeed />
-          </WidgetErrorBoundary>
-          
-          <WidgetErrorBoundary widgetId="progress">
-            <Tabs defaultValue="today" className="w-full">
-              <TabsList className="w-full grid grid-cols-2">
-                <TabsTrigger value="today">Today</TabsTrigger>
-                <TabsTrigger value="wtd">Week-to-Date</TabsTrigger>
-              </TabsList>
-              <TabsContent value="today" className="mt-2">
-                <ExpectedVsActualCard
-                  title="Today's Progress"
-                  subtitle={todayCheckedIn ? "Checked in ✓" : "Not yet checked in"}
-                  metrics={todayJournalEntry ? [
-                    {
-                      metric: 'Points', expected: 8, actual: todayJournalEntry.dailyScore || 0,
-                      gap: 8 - (todayJournalEntry.dailyScore || 0),
-                      percentComplete: (todayJournalEntry.dailyScore || 0) / 8,
-                      status: (todayJournalEntry.dailyScore || 0) >= 8 ? 'ahead' : (todayJournalEntry.dailyScore || 0) >= 6 ? 'on-track' : 'behind',
-                    },
-                    {
-                      metric: 'Conversations', expected: defaultTemplate.conversations,
-                      actual: todayJournalEntry.activity.conversations,
-                      gap: defaultTemplate.conversations - todayJournalEntry.activity.conversations,
-                      percentComplete: defaultTemplate.conversations > 0 ? todayJournalEntry.activity.conversations / defaultTemplate.conversations : 0,
-                      status: todayJournalEntry.activity.conversations >= defaultTemplate.conversations ? 'ahead' : 'behind',
-                    },
-                    {
-                      metric: 'Prospects Added', expected: defaultTemplate.prospectsAdded,
-                      actual: todayJournalEntry.activity.prospectsAdded,
-                      gap: defaultTemplate.prospectsAdded - todayJournalEntry.activity.prospectsAdded,
-                      percentComplete: defaultTemplate.prospectsAdded > 0 ? todayJournalEntry.activity.prospectsAdded / defaultTemplate.prospectsAdded : 0,
-                      status: todayJournalEntry.activity.prospectsAdded >= defaultTemplate.prospectsAdded ? 'ahead' : 'behind',
-                    },
-                  ] : []}
-                  pointsEarned={todayJournalEntry?.dailyScore || 0}
-                  pointsTarget={8}
-                  isLoading={journalLoading}
-                  compact
-                />
-              </TabsContent>
-              <TabsContent value="wtd" className="mt-2">
-                <ExpectedVsActualCard
-                  title="Week-to-Date"
-                  subtitle={`${daysElapsedThisWeek} of 5 workdays`}
-                  metrics={expectedVsActualMetrics}
-                  pointsEarned={wtdMetrics?.pointsEarned || 0}
-                  pointsTarget={8 * daysElapsedThisWeek}
-                  isLoading={wtdLoading}
-                  compact
-                />
-              </TabsContent>
-            </Tabs>
-          </WidgetErrorBoundary>
-        </div>
-
-        {/* === SECTION 4: ACTION LIST — What to work on === */}
-        <WidgetErrorBoundary widgetId="smart-work-queue">
-          <SmartWorkQueue />
-        </WidgetErrorBoundary>
-
-        {/* === SECTION 5: STRATEGIC CONTEXT — P-Club Math + Battle Plan === */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <WidgetErrorBoundary widgetId="pclub-math">
-            <PClubMathCard />
-          </WidgetErrorBoundary>
-          <WidgetErrorBoundary widgetId="weekly-battle-plan">
-            <WeeklyBattlePlanCard />
-          </WidgetErrorBoundary>
-        </div>
-
-        {/* === SECTION 6: SCORECARD — Daily Journal === */}
-        <WidgetErrorBoundary widgetId="journal-dashboard-card">
-          <JournalDashboardCard />
-        </WidgetErrorBoundary>
-        
-        {/* === COMMISSION PACING — Compact at bottom === */}
-        <WidgetErrorBoundary widgetId="commission-pacing">
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-            <CommissionPacingTile
-              projectedQuarterCommission={commissionPacing?.projectedQuarterCommission || 0}
-              weeklyPaceTrend={commissionPacing?.weeklyPaceTrend || 0}
-              projectedAttainment={commissionPacing?.projectedAttainment || 0}
-              status={commissionPacing?.status || 'stable'}
-              isLoading={pacingLoading}
-              onClick={() => setShowCommissionDetail(true)}
-              compact
-            />
-          </motion.div>
-        </WidgetErrorBoundary>
       </div>
       
       <CommissionPacingDetailModal
