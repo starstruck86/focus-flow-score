@@ -1282,6 +1282,8 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             <SelectItem value="status">Group: Status</SelectItem>
             <SelectItem value="quarter">Group: Quarter</SelectItem>
             <SelectItem value="stage">Group: Stage</SelectItem>
+            <SelectItem value="account">Group: Account</SelectItem>
+            <SelectItem value="stalled-stage">Group: Status + Stage</SelectItem>
           </SelectContent>
         </Select>
         <ManageColumnsPopover
