@@ -54,6 +54,7 @@ import { useBulkSelection } from '@/hooks/useBulkSelection';
 import { BulkActionsBar } from '@/components/BulkActionsBar';
 import { KanbanBoard } from '@/components/KanbanBoard';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
