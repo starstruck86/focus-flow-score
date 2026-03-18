@@ -93,6 +93,14 @@ export function useWidgetLayout(pageId: string, defaultWidgets: WidgetConfig[]) 
     });
   }, [persist]);
 
+  const collapseWidget = useCallback((id: string) => {
+    setWidgets(prev => {
+      const next = prev.map(w => w.id === id ? { ...w, collapsed: !w.collapsed } : w);
+      persist(next);
+      return next;
+    });
+  }, [persist]);
+
   const resetWidgets = useCallback(() => {
     setWidgets(defaultWidgets);
     persist(defaultWidgets);
