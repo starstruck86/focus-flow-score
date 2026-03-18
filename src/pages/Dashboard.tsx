@@ -299,16 +299,16 @@ export default function Dashboard() {
         {/* === MODULAR WIDGET GRID — Drag to reorder === */}
         <Reorder.Group
           axis="y"
-          values={visibleWidgets}
-          onReorder={reorderVisible}
+          values={visibleWidgetIds}
+          onReorder={reorderVisibleIds}
           className="space-y-4"
         >
           {visibleWidgets.map((widget) => (
             <Reorder.Item
               key={widget.id}
-              value={widget}
-              className="relative group"
-              whileDrag={{ scale: 1.02, boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 50 }}
+              value={widget.id}
+              className="relative group list-none"
+              whileDrag={{ scale: 1.02, boxShadow: '0 8px 32px rgba(0,0,0,0.15)', zIndex: 50 }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
             >
               <div className="absolute -left-3 top-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing">
