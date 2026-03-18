@@ -65,11 +65,69 @@ export function VoiceCommandButton({ size = 'default' }: { size?: 'default' | 'l
         setShowFeedback(`📝 Opening quick log...`);
         break;
 
+      case 'start_roleplay':
+        navigate('/coach');
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('voice-start-roleplay', {
+            detail: { call_type: command.call_type, difficulty: command.difficulty, industry: command.industry },
+          }));
+        }, 300);
+        setShowFeedback(`⚔️ Starting ${command.call_type || 'discovery'} roleplay...`);
+        toast.success('Roleplay launching', { description: `${command.call_type || 'Discovery'} call simulation` });
+        break;
+
+      case 'start_drill':
+        navigate('/coach');
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('voice-start-drill'));
+        }, 300);
+        setShowFeedback(`🛡️ Opening objection drills...`);
+        break;
+
+      case 'prep_meeting':
+        if (command.accountName) {
+          askCopilot(`Prep me for my upcoming meeting with ${command.accountName}${command.meetingTitle ? ` — ${command.meetingTitle}` : ''}`, 'meeting');
+        } else {
+          askCopilot('Prep me for my next meeting', 'meeting');
+        }
+        setShowFeedback(`📋 Preparing meeting brief...`);
+        break;
+
+      case 'update_account':
+        if (command.accountName && command.field && command.value) {
+          window.dispatchEvent(new CustomEvent('voice-update-account', {
+            detail: { accountName: command.accountName, field: command.field, value: command.value },
+          }));
+          setShowFeedback(`✏️ Updating ${command.accountName}: ${command.field}`);
+          toast.success('Account updated', { description: `${command.accountName} → ${command.field}: ${command.value}` });
+        }
+        break;
+
+      case 'grade_call':
+        navigate('/coach');
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('voice-grade-call'));
+        }, 300);
+        setShowFeedback(`🎯 Grading latest transcript...`);
+        break;
+
+      case 'show_methodology':
+        if (command.accountName) {
+          window.dispatchEvent(new CustomEvent('voice-show-methodology', {
+            detail: { accountName: command.accountName, opportunityName: command.opportunityName },
+          }));
+        }
+        setShowFeedback(`📊 Opening methodology tracker...`);
+        break;
+
+      case 'daily_briefing':
+        askCopilot('Walk me through my day — priorities, meetings, risks, and what I should focus on', 'quick');
+        setShowFeedback(`☀️ Building your daily briefing...`);
+        break;
+
       case 'clarify':
-        // AI is asking for clarification — show question and re-engage mic
         setShowFeedback(`🤔 ${command.question}`);
         toast.info(command.question || "Could you give me more details?", { duration: 5000 });
-        // Use TTS to speak the question if available
         if (command.question) {
           try {
             await voice.playTTS(command.question);
