@@ -24,6 +24,7 @@ import { VoiceCommandButton } from '@/components/VoiceCommandButton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { BackToToday } from '@/components/BackToToday';
 import { useCopilot, type PageContext } from '@/contexts/CopilotContext';
+import { DayTimeline } from '@/components/tasks/DayTimeline';
 
 const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
   '/': { page: 'dashboard', description: 'Today / Dashboard — daily plan, agenda, and key metrics' },
