@@ -25,6 +25,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { BackToToday } from '@/components/BackToToday';
 import { useCopilot, type PageContext } from '@/contexts/CopilotContext';
 import { DayTimeline } from '@/components/tasks/DayTimeline';
+import { ActivityRings } from '@/components/ActivityRings';
+import { GlobalWeekStrip } from '@/components/GlobalWeekStrip';
 
 const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
   '/': { page: 'dashboard', description: 'Today / Dashboard — daily plan, agenda, and key metrics' },
