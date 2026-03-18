@@ -40,7 +40,6 @@ export function useWidgetLayout(pageId: string, defaultWidgets: WidgetConfig[]) 
     const layouts = loadLocal();
     const saved = layouts[pageId];
     if (saved?.widgets) {
-      // Merge with defaults to pick up new widgets
       return mergeWidgets(saved.widgets, defaultWidgets);
     }
     return defaultWidgets;
@@ -66,10 +65,23 @@ export function useWidgetLayout(pageId: string, defaultWidgets: WidgetConfig[]) 
       const next = [...prev];
       const [moved] = next.splice(fromIndex, 1);
       next.splice(toIndex, 0, moved);
-      // Re-assign order
       const ordered = next.map((w, i) => ({ ...w, order: i }));
       persist(ordered);
       return ordered;
+    });
+  }, [persist]);
+
+  /** Accept a reordered array of visible widgets from Reorder.Group */
+  const reorderVisible = useCallback((newVisible: WidgetConfig[]) => {
+    setWidgets(prev => {
+      // Rebuild full list: hidden widgets stay in place, visible ones get new order
+      const visibleIds = new Set(newVisible.map(w => w.id));
+      const hidden = prev.filter(w => !visibleIds.has(w.id));
+      // Interleave: put hidden widgets back at their original relative positions
+      // Simple approach: visible in new order first, then hidden
+      const next = [...newVisible, ...hidden].map((w, i) => ({ ...w, order: i }));
+      persist(next);
+      return next;
     });
   }, [persist]);
 
@@ -93,6 +105,7 @@ export function useWidgetLayout(pageId: string, defaultWidgets: WidgetConfig[]) 
     visibleWidgets,
     toggleWidget,
     moveWidget,
+    reorderVisible,
     resizeWidget,
     resetWidgets,
   };
