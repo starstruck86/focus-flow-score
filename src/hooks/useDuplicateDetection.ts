@@ -135,7 +135,7 @@ export function useDuplicateDetection() {
           type: 'opportunity',
           key: normalize(allOpps[i].name),
           items: cluster.map(o => {
-            const linkedTasks = tasks.filter(t => t.opportunityId === o.id).length;
+            const linkedTasks = tasks.filter(t => t.linkedOpportunityId === o.id).length;
             return {
               id: o.id,
               name: o.name,
