@@ -183,7 +183,8 @@ const EditPopover = React.forwardRef<HTMLDivElement, {
       </div>
     </motion.div>
   );
-}
+});
+EditPopover.displayName = 'EditPopover';
 
 export function ActivityRings() {
   const { currentDay, updateActivityInputs, updateRawInputs } = useStore();
