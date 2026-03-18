@@ -1,5 +1,5 @@
 // CrossFit-style Dashboard: Walk in → See the WOD → Execute → Score
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { motion, Reorder } from 'framer-motion';
 import { Calendar, Target, Phone, MessageSquare, Users, TrendingUp, GripVertical } from 'lucide-react';
 import { StreakChip } from '@/components/StreakChip';
@@ -137,26 +137,7 @@ export default function Dashboard() {
   const { data: wtdMetrics, isLoading: wtdLoading } = useWeekToDateMetrics();
 
   // Widget layout system
-  const { widgets, visibleWidgets, toggleWidget, moveWidget, resetWidgets } = useWidgetLayout('dashboard', DASHBOARD_WIDGETS);
-
-  // Handle reorder from framer-motion
-  const handleReorder = useCallback((newOrder: WidgetConfig[]) => {
-    // Find what changed and call moveWidget
-    const oldIds = visibleWidgets.map(w => w.id);
-    const newIds = newOrder.map(w => w.id);
-    // Find the moved item
-    for (let i = 0; i < oldIds.length; i++) {
-      if (oldIds[i] !== newIds[i]) {
-        const movedId = newIds[i];
-        const fromIdx = widgets.findIndex(w => w.id === movedId);
-        const toIdx = widgets.findIndex(w => w.id === oldIds[i]);
-        if (fromIdx >= 0 && toIdx >= 0) {
-          moveWidget(fromIdx, toIdx);
-        }
-        break;
-      }
-    }
-  }, [widgets, visibleWidgets, moveWidget]);
+  const { widgets, visibleWidgets, visibleWidgetIds, toggleWidget, moveWidget, reorderVisibleIds, resetWidgets } = useWidgetLayout('dashboard', DASHBOARD_WIDGETS);
 
   const today = new Date();
   const todayStr = format(today, 'yyyy-MM-dd');
@@ -318,16 +299,16 @@ export default function Dashboard() {
         {/* === MODULAR WIDGET GRID — Drag to reorder === */}
         <Reorder.Group
           axis="y"
-          values={visibleWidgets}
-          onReorder={handleReorder}
+          values={visibleWidgetIds}
+          onReorder={reorderVisibleIds}
           className="space-y-4"
         >
           {visibleWidgets.map((widget) => (
             <Reorder.Item
               key={widget.id}
-              value={widget}
-              className="relative group"
-              whileDrag={{ scale: 1.02, boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 50 }}
+              value={widget.id}
+              className="relative group list-none"
+              whileDrag={{ scale: 1.02, boxShadow: '0 8px 32px rgba(0,0,0,0.15)', zIndex: 50 }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
             >
               <div className="absolute -left-3 top-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing">

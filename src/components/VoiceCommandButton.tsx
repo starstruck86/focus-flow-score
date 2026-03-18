@@ -151,7 +151,13 @@ export function VoiceCommandButton({ size = 'default' }: { size?: 'default' | 'l
     setTimeout(() => setShowFeedback(null), command.action === 'clarify' ? 6000 : 3000);
   }, [askCopilot, navigate, voice, dave]);
 
+  // Barge-in: if Dave is speaking and user taps mic, stop playback and start recording
   const handlePress = useCallback(async () => {
+    // Barge-in support — interrupt Dave's TTS to speak
+    if (voice.isPlaying) {
+      voice.stopPlayback();
+    }
+
     if (voice.isRecording) {
       try {
         const transcript = await voice.stopRecording();
@@ -208,17 +214,47 @@ export function VoiceCommandButton({ size = 'default' }: { size?: 'default' | 'l
   const isLarge = size === 'large';
   const hasHistory = dave.messageCount > 0;
 
+  // Dave state label for accessibility and visual feedback
+  const daveState = voice.isRecording
+    ? 'listening'
+    : voice.isTranscribing
+    ? 'transcribing'
+    : isProcessing
+    ? 'thinking'
+    : voice.isPlaying
+    ? 'speaking'
+    : 'idle';
+
+  const stateLabel: Record<string, string> = {
+    listening: '🎙 Listening...',
+    transcribing: '✍️ Processing speech...',
+    thinking: '🧠 Thinking...',
+    speaking: '🔊 Dave is speaking',
+    idle: '',
+  };
+
   return (
     <div className="relative">
       <AnimatePresence>
-        {showFeedback && (
+        {(showFeedback || daveState !== 'idle') && (
           <motion.div
             initial={{ opacity: 0, y: 10, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.9 }}
             className="absolute bottom-full mb-2 right-0 bg-popover border border-border rounded-lg px-3 py-2 shadow-lg max-w-[280px]"
           >
-            <p className="text-xs text-foreground whitespace-pre-wrap">{showFeedback}</p>
+            {/* State indicator */}
+            {daveState !== 'idle' && !showFeedback && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                {daveState === 'listening' && <span className="h-2 w-2 rounded-full bg-destructive animate-pulse" />}
+                {daveState === 'thinking' && <Loader2 className="h-3 w-3 animate-spin" />}
+                {daveState === 'speaking' && <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />}
+                {stateLabel[daveState]}
+              </p>
+            )}
+            {showFeedback && (
+              <p className="text-xs text-foreground whitespace-pre-wrap">{showFeedback}</p>
+            )}
             {hasHistory && (
               <p className="text-[10px] text-muted-foreground mt-1">
                 💬 {dave.messageCount} messages in session
@@ -238,21 +274,29 @@ export function VoiceCommandButton({ size = 'default' }: { size?: 'default' | 'l
           isLarge ? "h-14 w-14" : "h-10 w-10",
           voice.isRecording
             ? "bg-destructive text-destructive-foreground animate-pulse"
+            : voice.isPlaying
+            ? "bg-primary text-primary-foreground"
             : isProcessing || voice.isTranscribing
             ? "bg-primary/50 text-primary-foreground"
             : "bg-primary/10 hover:bg-primary/20 text-primary"
         )}
-        title={voice.isRecording ? "Stop & process command" : "Voice command (Dave)"}
+        title={
+          voice.isPlaying ? "Tap to interrupt Dave"
+            : voice.isRecording ? "Stop & process command"
+            : "Voice command (Dave)"
+        }
       >
         {isProcessing || voice.isTranscribing ? (
           <Loader2 className={cn("animate-spin", isLarge ? "h-6 w-6" : "h-4 w-4")} />
         ) : voice.isRecording ? (
           <MicOff className={cn(isLarge ? "h-6 w-6" : "h-4 w-4")} />
+        ) : voice.isPlaying ? (
+          <MessageCircle className={cn(isLarge ? "h-6 w-6" : "h-4 w-4", "animate-pulse")} />
         ) : (
           <Mic className={cn(isLarge ? "h-6 w-6" : "h-4 w-4")} />
         )}
         {/* Conversation indicator dot */}
-        {hasHistory && !isActive && (
+        {hasHistory && !isActive && !voice.isPlaying && (
           <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-primary animate-pulse" />
         )}
       </motion.button>

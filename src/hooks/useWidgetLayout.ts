@@ -1,8 +1,6 @@
 // Modular widget layout persistence — per-page widget configs
 // Phase 3: Decoupled widget system — modules are presentation only
-import { useState, useCallback, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useState, useCallback, useMemo } from 'react';
 
 export interface WidgetConfig {
   id: string;
@@ -35,18 +33,15 @@ function saveLocal(layouts: Record<string, PageLayout>) {
 }
 
 export function useWidgetLayout(pageId: string, defaultWidgets: WidgetConfig[]) {
-  const { user } = useAuth();
   const [widgets, setWidgets] = useState<WidgetConfig[]>(() => {
     const layouts = loadLocal();
     const saved = layouts[pageId];
     if (saved?.widgets) {
-      // Merge with defaults to pick up new widgets
       return mergeWidgets(saved.widgets, defaultWidgets);
     }
     return defaultWidgets;
   });
 
-  // Persist on change
   const persist = useCallback((next: WidgetConfig[]) => {
     const layouts = loadLocal();
     layouts[pageId] = { pageId, widgets: next, updatedAt: Date.now() };
@@ -66,10 +61,26 @@ export function useWidgetLayout(pageId: string, defaultWidgets: WidgetConfig[]) 
       const next = [...prev];
       const [moved] = next.splice(fromIndex, 1);
       next.splice(toIndex, 0, moved);
-      // Re-assign order
       const ordered = next.map((w, i) => ({ ...w, order: i }));
       persist(ordered);
       return ordered;
+    });
+  }, [persist]);
+
+  /**
+   * Accept a reordered array of widget IDs from Reorder.Group.
+   * We use IDs (strings) as Reorder values for stable identity.
+   */
+  const reorderVisibleIds = useCallback((newIds: string[]) => {
+    setWidgets(prev => {
+      const widgetMap = new Map(prev.map(w => [w.id, w]));
+      const hiddenWidgets = prev.filter(w => !w.visible);
+      const reorderedVisible = newIds
+        .map(id => widgetMap.get(id))
+        .filter((w): w is WidgetConfig => !!w);
+      const next = [...reorderedVisible, ...hiddenWidgets].map((w, i) => ({ ...w, order: i }));
+      persist(next);
+      return next;
     });
   }, [persist]);
 
@@ -86,13 +97,19 @@ export function useWidgetLayout(pageId: string, defaultWidgets: WidgetConfig[]) 
     persist(defaultWidgets);
   }, [defaultWidgets, persist]);
 
-  const visibleWidgets = widgets.filter(w => w.visible);
+  // Stable visible widget list — only recomputes when widgets change
+  const visibleWidgets = useMemo(() => widgets.filter(w => w.visible), [widgets]);
+  
+  // Stable ID list for Reorder.Group values (strings are identity-stable)
+  const visibleWidgetIds = useMemo(() => visibleWidgets.map(w => w.id), [visibleWidgets]);
 
   return {
     widgets,
     visibleWidgets,
+    visibleWidgetIds,
     toggleWidget,
     moveWidget,
+    reorderVisibleIds,
     resizeWidget,
     resetWidgets,
   };
@@ -100,18 +117,15 @@ export function useWidgetLayout(pageId: string, defaultWidgets: WidgetConfig[]) 
 
 /** Merge saved config with defaults so new widgets appear */
 function mergeWidgets(saved: WidgetConfig[], defaults: WidgetConfig[]): WidgetConfig[] {
-  const savedMap = new Map(saved.map(w => [w.id, w]));
   const result: WidgetConfig[] = [];
   const seen = new Set<string>();
 
-  // Keep saved order/visibility
   for (const w of saved) {
     if (defaults.some(d => d.id === w.id)) {
       result.push(w);
       seen.add(w.id);
     }
   }
-  // Append new defaults
   for (const d of defaults) {
     if (!seen.has(d.id)) {
       result.push(d);
