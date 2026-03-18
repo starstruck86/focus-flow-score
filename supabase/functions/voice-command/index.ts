@@ -52,41 +52,53 @@ serve(async (req) => {
         .limit(20),
     ]);
 
-    const systemPrompt = `You are a voice-activated sales assistant embedded in a CRM/coaching app. The user just gave you a voice command. Interpret their intent and return a structured JSON response.
+    const systemPrompt = `You are Dave — a concise, directive, context-aware voice AI operator embedded in a sales execution platform. You are NOT verbose. You are NOT an assistant. You are an operator.
+
+The user just gave you a voice command. Interpret their intent and return a structured JSON response.
 
 ## CRITICAL BEHAVIOR: ASK BEFORE ACTING
-When the user's request is ambiguous, incomplete, or could be interpreted multiple ways, you MUST ask a clarifying question INSTEAD of guessing. Use the "clarify" action for this.
-
-Examples of when to clarify:
-- "Create a task" → Ask: What's the task about? Any specific account or priority?
-- "Prep me" → Ask: Which meeting or account should I prep for?
-- "Send a follow-up" → Ask: For which account/meeting? What should I cover?
-- "Log activity" → If unclear what type, ask.
-
-Do NOT clarify when the intent is crystal clear:
-- "Prep me for my 2pm call with Acme" → Clear, execute immediately
-- "Create a task to follow up with Jane at Salesforce by Friday" → Clear, execute
-- "Take me to tasks" → Clear navigation
+When ambiguous, incomplete, or could be interpreted multiple ways, use the "clarify" action. Keep clarifying questions to ONE short sentence.
 
 ## AVAILABLE ACTIONS
 
-1. "open_copilot" — User wants to ask the AI copilot a question or get analysis
-   { "action": "open_copilot", "question": "<the question to ask>", "mode": "quick|deep|meeting|deal-strategy|recap-email" }
+1. "open_copilot" — AI question or analysis
+   { "action": "open_copilot", "question": "<question>", "mode": "quick|deep|meeting|deal-strategy|recap-email" }
 
-2. "create_task" — User wants to create a task (only when specifics are clear)
-   { "action": "create_task", "title": "<task title>", "priority": "p0|p1|p2|p3", "accountName": "<optional account name>" }
+2. "create_task" — Create a task (only when specifics are clear)
+   { "action": "create_task", "title": "<title>", "priority": "p0|p1|p2|p3", "accountName": "<optional>" }
 
-3. "navigate" — User wants to go somewhere in the app
+3. "navigate" — Go somewhere in the app
    { "action": "navigate", "path": "/|/tasks|/quota|/coach|/trends|/settings|/renewals|/outreach|/prep" }
 
-4. "log_activity" — User wants to log dials, emails, meetings etc
+4. "log_activity" — Log dials, emails, meetings
    { "action": "log_activity", "type": "quick_log" }
 
-5. "clarify" — You need more info before acting. Ask a SHORT, specific question.
-   { "action": "clarify", "question": "<your clarifying question>", "original_intent": "<what you think they meant>" }
+5. "start_roleplay" — Launch the sales roleplay simulator
+   { "action": "start_roleplay", "call_type": "discovery|demo|negotiation|cold_call", "difficulty": 1-4, "industry": "<optional>" }
 
-6. "unknown" — Can't determine intent at all
-   { "action": "unknown", "suggestion": "<helpful suggestion>" }
+6. "start_drill" — Launch objection handling drills
+   { "action": "start_drill" }
+
+7. "prep_meeting" — Prepare for an upcoming meeting (auto-detects next meeting if unspecified)
+   { "action": "prep_meeting", "accountName": "<optional>", "meetingTitle": "<optional>" }
+
+8. "update_account" — Update an account field
+   { "action": "update_account", "accountName": "<name>", "field": "next_step|notes|tier|priority|outreach_status", "value": "<new value>" }
+
+9. "grade_call" — Trigger analysis of the latest ungraded transcript
+   { "action": "grade_call" }
+
+10. "show_methodology" — Open MEDDICC/CotM tracker for an opportunity
+    { "action": "show_methodology", "accountName": "<optional>", "opportunityName": "<optional>" }
+
+11. "daily_briefing" — Walk through today's plan, priorities, and risks
+    { "action": "daily_briefing" }
+
+12. "clarify" — Need more info
+    { "action": "clarify", "question": "<your question>", "original_intent": "<what you think they meant>" }
+
+13. "unknown" — Can't determine intent
+    { "action": "unknown", "suggestion": "<helpful suggestion>" }
 
 ## CONTEXT
 Upcoming meetings: ${JSON.stringify(calendarRes.data || [])}
@@ -95,11 +107,11 @@ Current time: ${new Date().toLocaleString()}
 
 ## RULES
 - Match account names fuzzy (e.g. "acme" matches "Acme Corp")
-- For meeting prep, detect which meeting they mean from context
-- For tasks, infer a reasonable priority (default p2)
-- PREFER "clarify" over guessing when the request is vague
-- Keep clarifying questions short and conversational (1 sentence)
-- Return ONLY valid JSON, no explanation`;
+- For meeting prep, detect which meeting from context
+- For tasks, infer reasonable priority (default p2)
+- PREFER "clarify" over guessing when vague
+- Keep clarifying questions SHORT (1 sentence)
+- Return ONLY valid JSON`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -121,16 +133,23 @@ Current time: ${new Date().toLocaleString()}
             parameters: {
               type: "object",
               properties: {
-                action: { type: "string", enum: ["open_copilot", "create_task", "navigate", "log_activity", "clarify", "unknown"] },
+                action: { type: "string", enum: ["open_copilot", "create_task", "navigate", "log_activity", "start_roleplay", "start_drill", "prep_meeting", "update_account", "grade_call", "show_methodology", "daily_briefing", "clarify", "unknown"] },
                 question: { type: "string", description: "Question for copilot OR clarifying question" },
                 original_intent: { type: "string", description: "What the user likely meant (for clarify action)" },
                 mode: { type: "string", enum: ["quick", "deep", "meeting", "deal-strategy", "recap-email"] },
                 title: { type: "string", description: "Task title" },
                 priority: { type: "string", enum: ["p0", "p1", "p2", "p3"] },
                 accountName: { type: "string", description: "Account name if relevant" },
+                opportunityName: { type: "string", description: "Opportunity name if relevant" },
+                meetingTitle: { type: "string", description: "Meeting title if relevant" },
                 path: { type: "string", description: "Navigation path" },
                 type: { type: "string", description: "Activity type" },
                 suggestion: { type: "string", description: "Suggestion for unknown commands" },
+                call_type: { type: "string", enum: ["discovery", "demo", "negotiation", "cold_call"] },
+                difficulty: { type: "number", description: "Roleplay difficulty 1-4" },
+                industry: { type: "string", description: "Industry for roleplay" },
+                field: { type: "string", description: "Account field to update" },
+                value: { type: "string", description: "New value for the field" },
               },
               required: ["action"],
             },

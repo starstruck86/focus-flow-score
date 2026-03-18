@@ -18,9 +18,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { GlobalFAB } from '@/components/fab';
-import { WorkdayCheckInButton } from '@/components/WorkdayCheckInButton';
 import { GlobalSearch } from '@/components/GlobalSearch';
-import { ThemeToggle } from '@/components/ThemeToggle';
 import { TerritoryCopilot } from '@/components/TerritoryCopilot';
 import { VoiceCommandButton } from '@/components/VoiceCommandButton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -127,19 +125,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }, [location.pathname, setPageContext]);
   return (
     <div className="min-h-screen bg-background flex flex-col w-full">
-      {/* Top bar */}
+      {/* Top bar — minimal, execution-focused */}
       <header className="flex items-center justify-between px-4 py-2 border-b border-border/50 sticky top-0 z-40 bg-background/95 backdrop-blur-md">
         <div className="flex items-center gap-2">
           <Compass className="h-5 w-5 text-primary" />
           <span className="font-display text-sm font-bold">Quota Compass</span>
-        </div>
-        <div className="flex items-center gap-1.5">
           <SaveIndicator />
+        </div>
+        <div className="flex items-center gap-1">
           <VoiceCommandButton />
-          <TerritoryCopilot />
           <GlobalSearch />
-          <ThemeToggle />
-          <WorkdayCheckInButton />
+          <TerritoryCopilot />
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={signOut}>
