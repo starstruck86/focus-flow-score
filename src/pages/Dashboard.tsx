@@ -139,36 +139,24 @@ export default function Dashboard() {
   // Widget layout system
   const { widgets, visibleWidgets, toggleWidget, moveWidget, resetWidgets } = useWidgetLayout('dashboard', DASHBOARD_WIDGETS);
 
-  // Drag state
-  const [draggedId, setDraggedId] = useState<string | null>(null);
-
-  const handleDragStart = useCallback((e: React.DragEvent, id: string) => {
-    setDraggedId(id);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', id);
-  }, []);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent, targetId: string) => {
-    e.preventDefault();
-    const sourceId = e.dataTransfer.getData('text/plain');
-    if (sourceId && sourceId !== targetId) {
-      const fromIdx = widgets.findIndex(w => w.id === sourceId);
-      const toIdx = widgets.findIndex(w => w.id === targetId);
-      if (fromIdx >= 0 && toIdx >= 0) {
-        moveWidget(fromIdx, toIdx);
+  // Handle reorder from framer-motion
+  const handleReorder = useCallback((newOrder: WidgetConfig[]) => {
+    // Find what changed and call moveWidget
+    const oldIds = visibleWidgets.map(w => w.id);
+    const newIds = newOrder.map(w => w.id);
+    // Find the moved item
+    for (let i = 0; i < oldIds.length; i++) {
+      if (oldIds[i] !== newIds[i]) {
+        const movedId = newIds[i];
+        const fromIdx = widgets.findIndex(w => w.id === movedId);
+        const toIdx = widgets.findIndex(w => w.id === oldIds[i]);
+        if (fromIdx >= 0 && toIdx >= 0) {
+          moveWidget(fromIdx, toIdx);
+        }
+        break;
       }
     }
-    setDraggedId(null);
-  }, [widgets, moveWidget]);
-
-  const handleDragEnd = useCallback(() => {
-    setDraggedId(null);
-  }, []);
+  }, [widgets, visibleWidgets, moveWidget]);
 
   const today = new Date();
   const todayStr = format(today, 'yyyy-MM-dd');
