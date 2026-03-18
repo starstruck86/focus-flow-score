@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { Task, TaskStatus, Workstream } from '@/types';
 import {
-  MomentumHeader, TaskCard, AddTaskDialog, FilterBar, OverdueSection, TaskBulkBar, DayTimeline,
+  MomentumHeader, TaskCard, AddTaskDialog, FilterBar, OverdueSection, TaskBulkBar,
   TaskKanbanBoard,
   STATUS_ORDER, STATUS_META, getWorkstream, sortTasks, getAccountName,
   type GroupMode,
