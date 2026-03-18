@@ -112,6 +112,7 @@ type TimeView = 'ytd' | 'qtd' | 'mtd';
 
 export default function Quota() {
   const [strategicOpen, setStrategicOpen] = useState(true);
+  const quotaLayout = useWidgetLayout('quota-dashboard', QUOTA_WIDGETS);
   // Use DB hooks for opportunities (source of truth)
   const { data: dbOpportunities = [] } = useDbOpportunities();
   const dbOpps = useMemo(() => dbOpportunities.map(dbToUiOpportunity), [dbOpportunities]);
