@@ -370,6 +370,11 @@ function parseICS(icsContent: string): RawEvent[] {
           ? currentEvent.end_time.getTime() - currentEvent.start_time.getTime()
           : 3600000; // default 1 hour
 
+        // Debug: log key events
+        if (currentEvent.title && (currentEvent.title.includes('All Hands') || currentEvent.title.includes('Enterprise Sales'))) {
+          console.log(`[TZ-DEBUG] VEVENT complete: title="${currentEvent.title}" rrule="${currentEvent.rrule}" recurrenceId=${currentEvent.recurrenceId?.toISOString()} startUTC="${currentEvent.start_time.toISOString()}" tz="${currentEvent.timezone}" duration=${duration}`);
+        }
+
         events.push({
           uid: currentEvent.uid,
           title: currentEvent.title || null,
