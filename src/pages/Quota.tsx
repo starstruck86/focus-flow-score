@@ -1,5 +1,6 @@
 // Quota & Commission Page - Single Source of Truth from Closed Won Opportunities
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
+import { Reorder } from 'framer-motion';
 import { Layout } from '@/components/Layout';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { 
