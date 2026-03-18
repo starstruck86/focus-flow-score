@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useStore } from '@/store/useStore';
@@ -125,19 +125,19 @@ function MiniRing({
   );
 }
 
-function EditPopover({
-  ring,
-  value,
-  goal,
-  onClose,
-  onUpdate,
-}: {
+const EditPopover = React.forwardRef<HTMLDivElement, {
   ring: RingConfig;
   value: number;
   goal: number;
   onClose: () => void;
   onUpdate: (newValue: number) => void;
-}) {
+}>(({
+  ring,
+  value,
+  goal,
+  onClose,
+  onUpdate,
+}, ref) => {
   const color = `hsl(var(${ring.colorVar}))`;
   
   return (
@@ -183,7 +183,8 @@ function EditPopover({
       </div>
     </motion.div>
   );
-}
+});
+EditPopover.displayName = 'EditPopover';
 
 export function ActivityRings() {
   const { currentDay, updateActivityInputs, updateRawInputs } = useStore();
