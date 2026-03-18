@@ -209,6 +209,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Main Content */}
+      {/* Today's Blocks — visible on every page */}
+      <div className="px-4 lg:px-6 max-w-4xl mx-auto w-full pt-2">
+        <DayTimeline />
+      </div>
+
       <Breadcrumbs />
       <main className="flex-1 overflow-auto pb-28">
         {children}
