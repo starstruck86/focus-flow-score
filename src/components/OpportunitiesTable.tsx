@@ -319,7 +319,8 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const [closedWonOpportunity, setClosedWonOpportunity] = useState<Opportunity | null>(null);
   const [expandedOppIds, setExpandedOppIds] = useState<Set<string>>(new Set());
   const [resourceOpenOppIds, setResourceOpenOppIds] = useState<Set<string>>(new Set());
-  const toggleResourcePanel = (id: string) => {
+  const toggleResourcePanel = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setResourceOpenOppIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
