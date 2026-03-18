@@ -14,7 +14,6 @@ import { useTrendsData, type TrendRange } from '@/hooks/useTrendsData';
 import { useWidgetLayout, type WidgetConfig } from '@/hooks/useWidgetLayout';
 import { WidgetCustomizer } from '@/components/dashboard/WidgetCustomizer';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
-import { useTrendsData, type TrendRange } from '@/hooks/useTrendsData';
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ComposedChart,
