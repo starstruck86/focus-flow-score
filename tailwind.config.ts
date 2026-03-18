@@ -104,9 +104,6 @@ export default {
           settings: "hsl(var(--nav-settings))",
           dave: "hsl(var(--nav-dave))",
         },
-          meddicc: "hsl(var(--coach-meddicc))",
-          discovery: "hsl(var(--coach-discovery))",
-        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
