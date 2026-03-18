@@ -742,7 +742,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 <Button
                   size="icon"
                   variant="ghost"
-                  className={cn("h-6 w-6 shrink-0", resourceOpenOppIds.has(opp.id) ? "text-primary" : "opacity-0 group-hover/row:opacity-100")}
+                  className={cn("h-6 w-6 shrink-0 text-muted-foreground", resourceOpenOppIds.has(opp.id) && "text-primary")}
                   onClick={(e) => toggleResourcePanel(opp.id, e)}
                   title="Resources"
                 >
