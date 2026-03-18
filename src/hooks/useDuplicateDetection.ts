@@ -89,7 +89,7 @@ export function useDuplicateDetection() {
           key: normalize(accounts[i].name),
           items: cluster.map(a => {
             const linkedOpps = opportunities.filter(o => o.accountId === a.id).length;
-            const linkedTasks = tasks.filter(t => t.accountId === a.id).length;
+            const linkedTasks = tasks.filter(t => t.linkedAccountId === a.id).length;
             return {
               id: a.id,
               name: a.name,
