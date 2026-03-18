@@ -1558,6 +1558,10 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               quarterGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
             ) : groupingMode === 'stage' ? (
               stageGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
+            ) : groupingMode === 'account' ? (
+              accountGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
+            ) : groupingMode === 'stalled-stage' ? (
+              statusStageGroupedOpportunities.map(([label, opps]) => renderGenericGroup(label, opps))
             ) : (
               STATUS_ORDER.map(status => renderStatusGroup(status, groupedOpportunities[status]))
             )}
