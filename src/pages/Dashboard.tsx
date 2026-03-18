@@ -300,7 +300,7 @@ export default function Dashboard() {
         <Reorder.Group
           axis="y"
           values={visibleWidgets}
-          onReorder={handleReorder}
+          onReorder={reorderVisible}
           className="space-y-4"
         >
           {visibleWidgets.map((widget) => (
