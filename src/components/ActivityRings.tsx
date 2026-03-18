@@ -74,6 +74,7 @@ function MiniRing({
   return (
     <button
       type="button"
+      data-ring-trigger
       onClick={onClick}
       className="flex flex-col items-center gap-0.5 transition-transform hover:scale-105 active:scale-95"
     >
@@ -129,6 +130,7 @@ const EditPopover = forwardRef<HTMLDivElement, {
 
   return (
     <motion.div
+      data-ring-popover
       ref={ref}
       initial={{ opacity: 0, scale: 0.9, y: -4 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -190,6 +192,19 @@ EditPopover.displayName = 'EditPopover';
 export function ActivityRings() {
   const { currentDay, initializeToday, updateActivityInputs, updateRawInputs } = useStore();
   const [editing, setEditing] = useState<string | null>(null);
+
+  // Close popover on outside click
+  useEffect(() => {
+    if (!editing) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-ring-popover]') && !target.closest('[data-ring-trigger]')) {
+        setEditing(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [editing]);
 
   useEffect(() => {
     initializeToday();
