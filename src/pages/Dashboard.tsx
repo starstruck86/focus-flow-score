@@ -137,26 +137,7 @@ export default function Dashboard() {
   const { data: wtdMetrics, isLoading: wtdLoading } = useWeekToDateMetrics();
 
   // Widget layout system
-  const { widgets, visibleWidgets, toggleWidget, moveWidget, resetWidgets } = useWidgetLayout('dashboard', DASHBOARD_WIDGETS);
-
-  // Handle reorder from framer-motion
-  const handleReorder = useCallback((newOrder: WidgetConfig[]) => {
-    // Find what changed and call moveWidget
-    const oldIds = visibleWidgets.map(w => w.id);
-    const newIds = newOrder.map(w => w.id);
-    // Find the moved item
-    for (let i = 0; i < oldIds.length; i++) {
-      if (oldIds[i] !== newIds[i]) {
-        const movedId = newIds[i];
-        const fromIdx = widgets.findIndex(w => w.id === movedId);
-        const toIdx = widgets.findIndex(w => w.id === oldIds[i]);
-        if (fromIdx >= 0 && toIdx >= 0) {
-          moveWidget(fromIdx, toIdx);
-        }
-        break;
-      }
-    }
-  }, [widgets, visibleWidgets, moveWidget]);
+  const { widgets, visibleWidgets, toggleWidget, moveWidget, reorderVisible, resetWidgets } = useWidgetLayout('dashboard', DASHBOARD_WIDGETS);
 
   const today = new Date();
   const todayStr = format(today, 'yyyy-MM-dd');
