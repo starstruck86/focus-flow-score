@@ -57,6 +57,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
+import { useDuplicateDetection } from '@/hooks/useDuplicateDetection';
+import { AlertTriangle, Merge } from 'lucide-react';
 import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
 import { format, parseISO, isToday, isPast, isThisQuarter, getQuarter, getYear } from 'date-fns';
 import { 
@@ -270,6 +272,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   // Check if an opportunity exists in the database (has UUID format)
   const dbOpportunityIds = useMemo(() => new Set(dbOpportunities.map(o => o.id)), [dbOpportunities]);
   const { updateOpportunity: storeUpdateOpportunity } = useStore();
+  const { duplicateOpportunities, mergeOpportunities } = useDuplicateDetection();
 
   // Wrapper functions for mutations
   const updateOpportunity = (id: string, updates: Partial<Opportunity>) => {
@@ -1275,6 +1278,31 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           <span className="text-muted-foreground">Filtered to stage:</span>
           <Badge className="text-xs">{STAGE_LABELS[stageFilter] || stageFilter || 'No Stage'}</Badge>
           <button onClick={onClearStageFilter} className="text-xs text-primary hover:text-primary/80 underline ml-1">Clear</button>
+        </div>
+      )}
+
+      {/* Inline Duplicate Warning */}
+      {duplicateOpportunities.length > 0 && (
+        <div className="flex items-center gap-3 px-3 py-2.5 bg-status-yellow/10 border border-status-yellow/30 rounded-lg text-sm">
+          <AlertTriangle className="h-4 w-4 text-status-yellow shrink-0" />
+          <span className="text-foreground">
+            <strong>{duplicateOpportunities.length}</strong> potential duplicate group{duplicateOpportunities.length !== 1 ? 's' : ''} detected
+          </span>
+          <span className="text-muted-foreground text-xs">
+            ({duplicateOpportunities.flatMap(g => g.items).map(i => i.name).join(', ')})
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="ml-auto h-7 text-xs gap-1 border-status-yellow/30 hover:bg-status-yellow/10"
+            onClick={() => {
+              const settingsLink = document.querySelector('[data-nav="settings"]') as HTMLAnchorElement;
+              if (settingsLink) settingsLink.click();
+              else window.location.hash = '/settings';
+            }}
+          >
+            <Merge className="h-3 w-3" /> Review & Merge
+          </Button>
         </div>
       )}
 
