@@ -74,6 +74,7 @@ function MiniRing({
   return (
     <button
       type="button"
+      data-ring-trigger
       onClick={onClick}
       className="flex flex-col items-center gap-0.5 transition-transform hover:scale-105 active:scale-95"
     >
