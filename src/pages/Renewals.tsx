@@ -952,9 +952,21 @@ export default function Renewals() {
             <TabsTrigger value="renewals">Renewals</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="opportunities">
-            <RenewalStageSummary activeStageFilter={renewalStageFilter} onStageFilterChange={setRenewalStageFilter} />
-            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} renewalsOnly columnOrder="outreach" highlightId={highlightId} stageFilter={renewalStageFilter} onClearStageFilter={() => setRenewalStageFilter(null)} />
+          <TabsContent value="opportunities" className="space-y-4">
+            <CollapsibleWidgetSection
+              label="Renewal Opportunity Stage Summary"
+              collapsed={isRenewalSectionCollapsed('renewal-opportunity-stage-summary')}
+              onToggle={() => renewalSectionLayout.collapseWidget('renewal-opportunity-stage-summary')}
+            >
+              <RenewalStageSummary activeStageFilter={renewalStageFilter} onStageFilterChange={setRenewalStageFilter} />
+            </CollapsibleWidgetSection>
+            <CollapsibleWidgetSection
+              label="Renewal Opportunities"
+              collapsed={isRenewalSectionCollapsed('renewal-opportunities-table')}
+              onToggle={() => renewalSectionLayout.collapseWidget('renewal-opportunities-table')}
+            >
+              <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} renewalsOnly columnOrder="outreach" highlightId={highlightId} stageFilter={renewalStageFilter} onClearStageFilter={() => setRenewalStageFilter(null)} />
+            </CollapsibleWidgetSection>
           </TabsContent>
           
           <TabsContent value="renewals">

@@ -1216,13 +1216,25 @@ export default function WeeklyOutreach() {
 
           {/* Opportunities Tab */}
           <TabsContent value="opportunities" className="space-y-4">
-            <OpportunitiesStageSummary 
-              activeStageFilter={stageFilter}
-              onStageFilterChange={(stage) => {
-                setStageFilter(stage);
-              }}
-            />
-            <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} showChurnRisk={false} columnOrder="outreach" excludeRenewals stageFilter={stageFilter} onClearStageFilter={() => setStageFilter(null)} />
+            <CollapsibleWidgetSection
+              label="Opportunity Stage Summary"
+              collapsed={isOutreachSectionCollapsed('opportunity-stage-summary')}
+              onToggle={() => outreachSectionLayout.collapseWidget('opportunity-stage-summary')}
+            >
+              <OpportunitiesStageSummary 
+                activeStageFilter={stageFilter}
+                onStageFilterChange={(stage) => {
+                  setStageFilter(stage);
+                }}
+              />
+            </CollapsibleWidgetSection>
+            <CollapsibleWidgetSection
+              label="Active Opportunities"
+              collapsed={isOutreachSectionCollapsed('opportunities-table')}
+              onToggle={() => outreachSectionLayout.collapseWidget('opportunities-table')}
+            >
+              <OpportunitiesTable onOpenDrawer={setSelectedOpportunity} showChurnRisk={false} columnOrder="outreach" excludeRenewals stageFilter={stageFilter} onClearStageFilter={() => setStageFilter(null)} />
+            </CollapsibleWidgetSection>
           </TabsContent>
 
           {/* Accounts Tab - Funnel View */}
