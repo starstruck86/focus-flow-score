@@ -20,6 +20,21 @@ const WINDOWS_TIMEZONE_MAP: Record<string, string> = {
   'Greenwich Standard Time': 'Atlantic/Reykjavik',
   'W. Europe Standard Time': 'Europe/Berlin',
   'Romance Standard Time': 'Europe/Paris',
+  'India Standard Time': 'Asia/Kolkata',
+  'China Standard Time': 'Asia/Shanghai',
+  'Tokyo Standard Time': 'Asia/Tokyo',
+  'AUS Eastern Standard Time': 'Australia/Sydney',
+  'Singapore Standard Time': 'Asia/Singapore',
+  'Central European Standard Time': 'Europe/Warsaw',
+  'E. Europe Standard Time': 'Europe/Bucharest',
+  'FLE Standard Time': 'Europe/Helsinki',
+  'SE Asia Standard Time': 'Asia/Bangkok',
+  'Korea Standard Time': 'Asia/Seoul',
+  'Arab Standard Time': 'Asia/Riyadh',
+  'E. South America Standard Time': 'America/Sao_Paulo',
+  'SA Pacific Standard Time': 'America/Bogota',
+  'Mountain Standard Time (Mexico)': 'America/Chihuahua',
+  'Central Standard Time (Mexico)': 'America/Mexico_City',
 };
 
 interface CalendarEvent {
