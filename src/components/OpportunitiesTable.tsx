@@ -318,6 +318,14 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   const [closedWonModalOpen, setClosedWonModalOpen] = useState(false);
   const [closedWonOpportunity, setClosedWonOpportunity] = useState<Opportunity | null>(null);
   const [expandedOppIds, setExpandedOppIds] = useState<Set<string>>(new Set());
+  const [resourceOpenOppIds, setResourceOpenOppIds] = useState<Set<string>>(new Set());
+  const toggleResourcePanel = (id: string) => {
+    setResourceOpenOppIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
     try {
       const stored = localStorage.getItem(`collapsed-groups-${renewalsOnly ? 'renewals' : excludeRenewals ? 'newlogo' : 'global'}`);
