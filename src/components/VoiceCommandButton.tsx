@@ -19,9 +19,16 @@ interface VoiceCommand {
   title?: string;
   priority?: string;
   accountName?: string;
+  opportunityName?: string;
+  meetingTitle?: string;
   path?: string;
   type?: string;
   suggestion?: string;
+  call_type?: string;
+  difficulty?: number;
+  industry?: string;
+  field?: string;
+  value?: string;
 }
 
 export function VoiceCommandButton({ size = 'default' }: { size?: 'default' | 'large' }) {
