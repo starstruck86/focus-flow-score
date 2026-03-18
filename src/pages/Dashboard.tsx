@@ -316,22 +316,31 @@ export default function Dashboard() {
         )}
 
         {/* === MODULAR WIDGET GRID — Drag to reorder === */}
-        <div className="space-y-4" onDragEnd={handleDragEnd}>
+        <Reorder.Group
+          axis="y"
+          values={visibleWidgets}
+          onReorder={handleReorder}
+          className="space-y-4"
+        >
           {visibleWidgets.map((widget) => (
-            <DraggableWidget
+            <Reorder.Item
               key={widget.id}
-              id={widget.id}
-              onDragStart={handleDragStart}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              isDragging={draggedId === widget.id}
+              value={widget}
+              className="relative group"
+              whileDrag={{ scale: 1.02, boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 50 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
             >
+              <div className="absolute -left-3 top-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing">
+                <div className="bg-muted/80 backdrop-blur-sm rounded-md p-1">
+                  <GripVertical className="h-4 w-4 text-muted-foreground" />
+                </div>
+              </div>
               <WidgetErrorBoundary widgetId={widget.id}>
                 {renderWidget(widget.id)}
               </WidgetErrorBoundary>
-            </DraggableWidget>
+            </Reorder.Item>
           ))}
-        </div>
+        </Reorder.Group>
       </div>
       
       <CommissionPacingDetailModal
