@@ -316,9 +316,39 @@ export default function Dashboard() {
                   <GripVertical className="h-4 w-4 text-muted-foreground" />
                 </div>
               </div>
-              <WidgetErrorBoundary widgetId={widget.id}>
-                {renderWidget(widget.id)}
-              </WidgetErrorBoundary>
+              <div className="absolute -right-3 top-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => collapseWidget(widget.id)}
+                  className="bg-muted/80 backdrop-blur-sm rounded-md p-1 hover:bg-muted transition-colors"
+                >
+                  <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", widget.collapsed && "-rotate-90")} />
+                </button>
+              </div>
+              <AnimatePresence initial={false}>
+                {widget.collapsed ? (
+                  <motion.div
+                    key="collapsed"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="rounded-lg border border-border/50 bg-card/50 px-4 py-2 cursor-pointer"
+                    onClick={() => collapseWidget(widget.id)}
+                  >
+                    <span className="text-xs font-medium text-muted-foreground">{widget.label}</span>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="expanded"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                  >
+                    <WidgetErrorBoundary widgetId={widget.id}>
+                      {renderWidget(widget.id)}
+                    </WidgetErrorBoundary>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </Reorder.Item>
           ))}
         </Reorder.Group>
