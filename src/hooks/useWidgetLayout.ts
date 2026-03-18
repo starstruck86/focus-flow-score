@@ -8,6 +8,7 @@ export interface WidgetConfig {
   visible: boolean;
   order: number;
   size?: 'sm' | 'md' | 'lg' | 'full';
+  collapsed?: boolean;
 }
 
 interface PageLayout {
