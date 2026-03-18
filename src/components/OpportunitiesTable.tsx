@@ -1102,6 +1102,13 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             ))}
             <ActionsCell opp={opp} />
         </TableRow>
+        {resourceOpenOppIds.has(opp.id) && (
+          <TableRow className="hover:bg-transparent">
+            <TableCell colSpan={99} className="pt-0 pb-2">
+              <OpportunityResourcesPanel opportunityId={opp.id} opportunityName={opp.name} />
+            </TableCell>
+          </TableRow>
+        )}
         {isExpanded && (
           <TableRow className="hover:bg-transparent border-b-2">
             <TableCell colSpan={99} className="pt-0 pb-3">
@@ -1120,11 +1127,6 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 accountIndustry={linkedAccount?.industry}
                 opportunityContext={`${opp.name} - ${opp.stage} - $${opp.arr || 0} ARR`}
               />
-              {resourceOpenOppIds.has(opp.id) && (
-                <div className="mt-3">
-                  <OpportunityResourcesPanel opportunityId={opp.id} opportunityName={opp.name} />
-                </div>
-              )}
             </TableCell>
           </TableRow>
         )}
