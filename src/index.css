@@ -75,8 +75,21 @@
     --coach-meddicc: 210 100% 50%;
     --coach-discovery: 160 84% 39%;
 
-    /* Bottom nav */
+    /* Bottom nav — color-coded tab system */
     --nav-active-glow: 210 100% 50% / 0.15;
+    --nav-today: 210 100% 50%;
+    --nav-tasks: 262 83% 58%;
+    --nav-outreach: 24 95% 53%;
+    --nav-renewals: 160 84% 39%;
+    --nav-prep: 38 92% 50%;
+    --nav-coach: 142 71% 45%;
+    --nav-trends: 280 70% 55%;
+    --nav-quota: 350 80% 55%;
+    --nav-settings: 220 10% 50%;
+    --nav-dave: 210 100% 50%;
+
+    /* Page accent — dynamically set by tab */
+    --page-accent: var(--primary);
 
     --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 220 20% 20%;
