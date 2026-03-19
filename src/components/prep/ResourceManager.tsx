@@ -29,6 +29,7 @@ import { VersionHistory } from './VersionHistory';
 import { ReorganizeModal } from './ReorganizeModal';
 import { DuplicateResourcesModal } from './DuplicateResourcesModal';
 import { useResourceDuplicates } from '@/hooks/useResourceDuplicates';
+import { useConsolidateFolders } from '@/hooks/useConsolidateFolders';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -76,6 +77,7 @@ const ACCEPTED_FILE_TYPES = '.pdf,.docx,.pptx,.txt,.md,.csv,.doc,.xlsx,.xls';
 
 export function ResourceManager() {
   const { user } = useAuth();
+  useConsolidateFolders();
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [folderPath, setFolderPath] = useState<{ id: string | null; name: string }[]>([{ id: null, name: 'All Resources' }]);
   const [searchQuery, setSearchQuery] = useState('');
