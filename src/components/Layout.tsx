@@ -97,7 +97,7 @@ function NavItem({ item }: { item: NavItemDef }) {
         <RouterNavLink
           to={item.to}
           className={cn(
-            'relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full text-[10px] font-medium transition-all duration-200 rounded-lg',
+            'relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full text-[11px] font-medium transition-all duration-200 rounded-lg',
             isActive
               ? 'font-semibold'
               : 'text-muted-foreground hover:text-foreground'
