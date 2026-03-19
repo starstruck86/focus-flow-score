@@ -98,26 +98,26 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Use signed URL instead of conversation token — allows prompt overrides from code
-    const signedUrlPromise = fetch(
-      `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${ELEVENLABS_AGENT_ID}`,
+    // Use conversation token (WebRTC) — recommended transport, supports overrides via client SDK
+    const tokenPromise = fetch(
+      `https://api.elevenlabs.io/v1/convai/conversation/token?agent_id=${ELEVENLABS_AGENT_ID}`,
       { headers: { "xi-api-key": ELEVENLABS_API_KEY } }
     );
 
     const contextPromise = fetchCrmContext(supabase, userId, conversationHistory);
 
-    const [signedUrlResp, crmContext] = await Promise.all([signedUrlPromise, contextPromise]);
+    const [tokenResp, crmContext] = await Promise.all([tokenPromise, contextPromise]);
 
-    if (!signedUrlResp.ok) {
-      const errBody = await signedUrlResp.text();
-      console.error("ElevenLabs signed URL error:", errBody);
+    if (!tokenResp.ok) {
+      const errBody = await tokenResp.text();
+      console.error("ElevenLabs token error:", errBody);
       return new Response(
-        JSON.stringify({ error: "Failed to generate signed URL", detail: errBody }),
+        JSON.stringify({ error: "Failed to generate conversation token", detail: errBody }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const { signed_url } = await signedUrlResp.json();
+    const { token } = await tokenResp.json();
 
     let contextString = DAVE_INSTRUCTIONS + "\n\n" + crmContext.sections.join("\n\n");
     // Hard cap context to 20k chars to prevent ElevenLabs latency/truncation
@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
     console.log(`dave-conversation-token completed in ${Date.now() - t0}ms | user: ${userId} | context: ${contextString.length} chars | firstMessage: ${firstMessage.length} chars`);
 
     return new Response(
-      JSON.stringify({ signed_url, context: contextString, firstMessage }),
+      JSON.stringify({ token, context: contextString, firstMessage }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

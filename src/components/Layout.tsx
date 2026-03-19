@@ -302,7 +302,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Dave Conversational AI Overlay — key forces remount with fresh overrides */}
       {daveOpen && daveSessionData && (
         <DaveConversationMode
-          key={daveSessionData.signed_url}
+          key={daveSessionData.token}
           isOpen={daveOpen}
           onClose={handleCloseDave}
           sessionData={daveSessionData}
