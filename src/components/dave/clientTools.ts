@@ -302,23 +302,18 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       const userId = await getUserId();
       if (!userId) return 'Not authenticated';
 
-      // Fetch quota targets
-      const { data: quotaData } = await supabase
-        .from('quota_targets')
-        .select('new_arr_quota, renewal_arr_quota, new_arr_closed, renewal_arr_closed')
-        .eq('user_id', userId)
-        .limit(1);
+      // Fetch quota targets and all opps in parallel
+      const [quotaRes, allOppsRes, closedWonRes] = await Promise.all([
+        supabase.from('quota_targets').select('new_arr_quota, renewal_arr_quota').eq('user_id', userId).limit(1),
+        supabase.from('opportunities').select('name, arr, deal_type, status').eq('user_id', userId).not('status', 'eq', 'closed-lost'),
+        supabase.from('opportunities').select('arr, deal_type').eq('user_id', userId).eq('status', 'closed-won'),
+      ]);
 
-      const quota = quotaData?.[0];
+      const quota = quotaRes.data?.[0];
+      const allOpps = allOppsRes.data || [];
+      const closedWon = closedWonRes.data || [];
 
-      // Fetch all active opps
-      const { data: allOpps } = await supabase
-        .from('opportunities')
-        .select('name, arr, deal_type, status')
-        .eq('user_id', userId)
-        .not('status', 'eq', 'closed-lost');
-
-      if (!allOpps?.length) return 'No active pipeline deals found.';
+      if (!allOpps.length) return 'No active pipeline deals found.';
 
       // Match requested deals
       const matched = params.dealNames.map(name => {
