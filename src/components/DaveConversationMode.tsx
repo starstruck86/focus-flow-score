@@ -83,13 +83,14 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
         reconnectAttemptRef.current = 0;
       }, STABILITY_WINDOW_MS);
 
-      // Inject full CRM context via sendContextualUpdate (supported SDK method)
+      // Fallback: also send context via sendContextualUpdate as backup
+      // (in case overrides aren't enabled on the ElevenLabs agent)
       if (sessionDataRef.current?.context) {
         try {
           conversation.sendContextualUpdate(sessionDataRef.current.context);
-          console.log('[Dave] Context injected via sendContextualUpdate (' + sessionDataRef.current.context.length + ' chars)');
+          console.log('[Dave] Backup context sent via sendContextualUpdate (' + sessionDataRef.current.context.length + ' chars)');
         } catch (e) {
-          console.warn('[Dave] Failed to send contextual update:', e);
+          console.warn('[Dave] Failed to send contextual update (fallback):', e);
         }
       }
 
