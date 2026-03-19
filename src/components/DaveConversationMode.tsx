@@ -235,7 +235,11 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
 
       // ─── CLEAN: startSession only needs the signedUrl ───
       console.log('[Dave] Starting session with signed URL | context:', sessionDataRef.current.context?.length, 'chars');
-      await conversation.startSession({ signedUrl: url });
+      console.log('[Dave] Signed URL prefix:', url?.substring(0, 60));
+      await conversation.startSession({
+        signedUrl: url,
+        connectionType: 'websocket',
+      } as any);
 
       console.log('[Dave] Session started successfully');
       clearTimeout(timeout);
