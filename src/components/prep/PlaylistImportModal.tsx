@@ -73,25 +73,20 @@ export function PlaylistImportModal({ open, onOpenChange }: PlaylistImportModalP
     setImportProgress({ done: 0, total: toImport.length });
 
     let successCount = 0;
-    // Process in batches of 3
-    for (let i = 0; i < toImport.length; i += 3) {
-      const batch = toImport.slice(i, i + 3);
-      await Promise.allSettled(
-        batch.map(async (video) => {
-          try {
-            const classification = await classify.mutateAsync({ url: video.url });
-            // Use the video title from playlist if classification gives a generic one
-            if (classification.title === 'Untitled' || classification.title.length < 3) {
-              classification.title = video.title;
-            }
-            await addUrl.mutateAsync({ url: video.url, classification });
-            successCount++;
-          } catch (e) {
-            console.error(`Failed to import ${video.title}:`, e);
-          }
-        })
-      );
-      setImportProgress({ done: Math.min(i + 3, toImport.length), total: toImport.length });
+    // Process sequentially to avoid overwhelming edge functions
+    for (let i = 0; i < toImport.length; i++) {
+      const video = toImport[i];
+      try {
+        const classification = await classify.mutateAsync({ url: video.url });
+        if (classification.title === 'Untitled' || classification.title.length < 3) {
+          classification.title = video.title;
+        }
+        await addUrl.mutateAsync({ url: video.url, classification });
+        successCount++;
+      } catch (e) {
+        console.error(`Failed to import ${video.title}:`, e);
+      }
+      setImportProgress({ done: i + 1, total: toImport.length });
     }
 
     toast.success(`Imported ${successCount} of ${toImport.length} videos`);
