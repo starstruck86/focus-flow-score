@@ -550,7 +550,7 @@ export function ResourceManager() {
               </Button>
             </div>
           </div>
-          {suggestions.filter((_, i) => !dismissedSuggestions.has(i)).map((s, i) => (
+          {suggestions.filter(s => !dismissedSuggestions.has(s.description)).map((s, i) => (
             <div key={i} className="flex items-start gap-2 p-2 rounded-md border border-border/50 bg-background text-xs">
               <div className="flex-1">
                 <p className="text-foreground">{s.description}</p>
