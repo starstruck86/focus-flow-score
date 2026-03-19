@@ -35,14 +35,37 @@ serve(async (req) => {
     if (tErr || !transcript) throw new Error("Transcript not found");
 
     // Fetch resources for methodology context
-    const { data: resources } = await supabase
-      .from("resource_links")
-      .select("label, category, url, notes")
-      .limit(20);
+    const [resourceLinksRes, digestsRes] = await Promise.all([
+      supabase
+        .from("resource_links")
+        .select("label, category, url, notes")
+        .limit(20),
+      supabase
+        .from("resource_digests")
+        .select("resource_id, grading_criteria")
+        .not("grading_criteria", "is", null),
+    ]);
 
-    const resourceContext = (resources || []).length > 0
-      ? `The user follows these sales methodologies:\n${(resources || []).map((r: any) => `- ${r.label} (${r.category})${r.notes ? ': ' + r.notes : ''}`).join('\n')}`
+    const resources = resourceLinksRes.data || [];
+    const digests = digestsRes.data || [];
+
+    const resourceContext = resources.length > 0
+      ? `The user follows these sales methodologies:\n${resources.map((r: any) => `- ${r.label} (${r.category})${r.notes ? ': ' + r.notes : ''}`).join('\n')}`
       : "No specific methodology resources uploaded. Use Command of the Message + MEDDICC as primary frameworks.";
+
+    // Build custom scorecard context from digested resources
+    let customScorecardContext = "";
+    const customCriteria: any[] = [];
+    if (digests.length > 0) {
+      for (const d of digests as any[]) {
+        if (d.grading_criteria && Array.isArray(d.grading_criteria)) {
+          customCriteria.push(...d.grading_criteria);
+        }
+      }
+      if (customCriteria.length > 0) {
+        customScorecardContext = `\n\n## CUSTOM SCORECARD CRITERIA\nIn addition to standard frameworks, also score the transcript against these custom criteria (1-5 each):\n${customCriteria.map((c: any, i: number) => `${i + 1}. ${c.category}: ${c.description} (weight: ${c.weight})`).join('\n')}`;
+      }
+    }
 
     let accountContext = "";
     if (transcript.account_id) {
@@ -101,7 +124,8 @@ Evaluate segments:
 - Tie all feedback to revenue, risk, or deal progression — never abstract advice.
 
 ${resourceContext}
-${accountContext}`;
+${accountContext}
+${customScorecardContext}`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -308,6 +332,22 @@ ${accountContext}`;
                 acumen_notes: { type: "string" },
                 cadence_notes: { type: "string" },
                 methodology_alignment: { type: "string" },
+
+                // Custom scorecard scores (if custom criteria provided)
+                custom_scores: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      category: { type: "string" },
+                      score: { type: "integer", minimum: 1, maximum: 5 },
+                      evidence: { type: "string" },
+                    },
+                    required: ["category", "score", "evidence"],
+                    additionalProperties: false,
+                  },
+                  description: "Scores for custom scorecard criteria, if any were provided",
+                },
               },
               required: [
                 "overall_score", "overall_grade", "summary",
@@ -396,6 +436,7 @@ ${accountContext}`;
         coaching_why: grade.coaching_why,
         transcript_moment: grade.transcript_moment,
         call_type: transcript.call_type,
+        custom_scorecard_results: grade.custom_scores?.length ? grade.custom_scores : null,
       }, { onConflict: "transcript_id" })
       .select()
       .single();

@@ -44,7 +44,40 @@ serve(async (req) => {
     let systemPrompt = "";
     let userPrompt = "";
 
-    if (type === "generate") {
+    if (type === "transform") {
+      // Transform a source resource into a new format
+      const { sourceResourceId, targetType } = await req.json().catch(() => ({}));
+      let sourceContent = "";
+      if (sourceResourceId) {
+        const { data: src } = await supabase
+          .from("resources")
+          .select("title, content, resource_type, tags")
+          .eq("id", sourceResourceId)
+          .single();
+        if (src) sourceContent = `SOURCE: "${src.title}" (${src.resource_type})\n${src.content || "(empty)"}`;
+      } else if (resourceIds?.length) {
+        const { data: srcs } = await supabase
+          .from("resources")
+          .select("title, content, resource_type")
+          .in("id", resourceIds);
+        if (srcs?.length) {
+          sourceContent = srcs.map((r: any) => `--- ${r.title} (${r.resource_type}) ---\n${r.content || "(empty)"}`).join("\n\n");
+        }
+      }
+
+      const transformPrompts: Record<string, string> = {
+        scorecard: "Transform this resource into a detailed scoring rubric/scorecard. Create specific categories with clear criteria for each score level (1-5). Include what 'good' and 'bad' looks like for each criterion. Format as a structured scorecard in Markdown with tables.",
+        checklist: "Transform this resource into a practical pre-call or execution checklist. Each item should be a specific, actionable step with context. Group by phase/stage. Include checkboxes (- [ ]) format.",
+        cadence: "Transform this resource into a structured outreach cadence. Define touchpoints by day, channel, and message theme. Include suggested talk tracks or email snippets for each touchpoint.",
+        training_guide: "Transform this resource into a training guide with exercises. Include learning objectives, key concepts, practice scenarios, and self-assessment questions. Structure for a 30-60 minute self-study session.",
+        one_pager: "Distill this resource into a crisp one-page reference sheet. Use dense formatting: key stats, decision trees, quick-reference tables, and the top 5 things to remember. Optimize for printing or quick mobile reference.",
+      };
+
+      systemPrompt = `You are a sales enablement architect. ${transformPrompts[targetType] || transformPrompts.checklist}\n\nOutput clean Markdown. Be specific and actionable — no filler.`;
+      userPrompt = sourceContent || prompt || "No source content provided.";
+      if (prompt) userPrompt += `\n\nAdditional instructions: ${prompt}`;
+      if (accountStr) userPrompt += accountStr;
+    } else if (type === "generate") {
       const typeInstructions: Record<string, string> = {
         document: "Create a professional, well-structured document with clear headings, bullet points, and actionable content.",
         email: "Write a professional sales email that is concise, personalized, and has a clear CTA.",

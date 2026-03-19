@@ -20,10 +20,13 @@ import {
 import { cn } from '@/lib/utils';
 import {
   useResourceFolders, useResources, useCreateFolder, useCreateResource,
-  useDeleteResource, useDeleteFolder, useRenameFolder, useUpdateResource, type Resource, type ResourceFolder,
+  useDeleteResource, useDeleteFolder, useRenameFolder, useUpdateResource,
+  useOperationalizeResource, useResourceSuggestions,
+  type Resource, type ResourceFolder, type ResourceSuggestion,
 } from '@/hooks/useResources';
 import { useClassifyResource, useUploadResource, useAddUrlResource, type ClassificationResult } from '@/hooks/useResourceUpload';
 import { ResourceEditor } from './ResourceEditor';
+import { AIGenerateDialog } from './AIGenerateDialog';
 import { ResourceFileViewer } from './ResourceFileViewer';
 import { VersionHistory } from './VersionHistory';
 import { ReorganizeModal } from './ReorganizeModal';
@@ -118,6 +121,12 @@ export function ResourceManager() {
   const [battlecardLoading, setBattlecardLoading] = useState(false);
   const [battlecardProgress, setBattlecardProgress] = useState('');
 
+  // AI Generate / Transform states
+  const [showAIGenerate, setShowAIGenerate] = useState(false);
+  const [generateSourceId, setGenerateSourceId] = useState<string | null>(null);
+  const [generateInitialType, setGenerateInitialType] = useState<string | undefined>();
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<number>>(new Set());
+
   const { data: folders = [] } = useResourceFolders();
   const { data: resources = [] } = useResources(currentFolderId === null ? undefined : currentFolderId);
   const createFolder = useCreateFolder();
@@ -130,6 +139,8 @@ export function ResourceManager() {
   const uploadResource = useUploadResource();
   const addUrlResource = useAddUrlResource();
   const { totalDuplicates } = useResourceDuplicates();
+  const operationalize = useOperationalizeResource();
+  const { data: suggestions = [], refetch: refetchSuggestions, isLoading: suggestionsLoading } = useResourceSuggestions();
 
   const currentFolders = folders.filter(f => f.parent_id === currentFolderId);
   const filteredResources = searchQuery
@@ -522,6 +533,46 @@ export function ResourceManager() {
         </Button>
       </div>
 
+      {/* AI Suggestions Banner */}
+      {suggestions.length > 0 && (
+        <div className="p-3 rounded-lg border border-accent/40 bg-accent/5 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              <span className="text-xs font-medium text-foreground">Smart Suggestions</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => refetchSuggestions()} disabled={suggestionsLoading}>
+                {suggestionsLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+              </Button>
+              <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setDismissedSuggestions(new Set(suggestions.map((_, i) => i)))}>
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+          {suggestions.filter((_, i) => !dismissedSuggestions.has(i)).map((s, i) => (
+            <div key={i} className="flex items-start gap-2 p-2 rounded-md border border-border/50 bg-background text-xs">
+              <div className="flex-1">
+                <p className="text-foreground">{s.description}</p>
+                {s.deal_context && <p className="text-muted-foreground mt-0.5 text-[10px]">📊 {s.deal_context}</p>}
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => {
+                  setGenerateSourceId(s.source_resource_ids[0] || null);
+                  setGenerateInitialType(s.target_type);
+                  setShowAIGenerate(true);
+                }}>
+                  Create
+                </Button>
+                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setDismissedSuggestions(prev => new Set([...prev, i]))}>
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Batch review panel */}
       {pendingItems.length > 0 && (
         <div className="p-4 rounded-lg border border-primary/30 bg-primary/5 space-y-3">
@@ -713,6 +764,20 @@ export function ResourceManager() {
                         });
                       }}>
                         <Copy className="h-3.5 w-3.5 mr-2" /> Duplicate
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={(e) => {
+                        e.stopPropagation();
+                        operationalize.mutate(resource.id);
+                      }}>
+                        <Sparkles className="h-3.5 w-3.5 mr-2" /> Operationalize
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={(e) => {
+                        e.stopPropagation();
+                        setGenerateSourceId(resource.id);
+                        setGenerateInitialType(undefined);
+                        setShowAIGenerate(true);
+                      }}>
+                        <Target className="h-3.5 w-3.5 mr-2" /> Generate From This
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem className="text-destructive" onClick={(e) => { e.stopPropagation(); deleteResource.mutate(resource.id); }}>
@@ -926,6 +991,22 @@ export function ResourceManager() {
       <DuplicateResourcesModal open={showDuplicates} onOpenChange={setShowDuplicates} />
       <PlaylistImportModal open={showPlaylistImport} onOpenChange={setShowPlaylistImport} />
       <WebpageImportModal open={showWebpageImport} onOpenChange={setShowWebpageImport} />
+      <AIGenerateDialog
+        open={showAIGenerate}
+        onOpenChange={(open) => { setShowAIGenerate(open); if (!open) { setGenerateSourceId(null); setGenerateInitialType(undefined); } }}
+        onGenerated={(markdown) => {
+          createResource.mutate({
+            title: 'AI Generated Resource',
+            folder_id: currentFolderId,
+            resource_type: generateInitialType || 'document',
+            content: markdown,
+          }, {
+            onSuccess: (data) => setEditingResource(data as Resource),
+          });
+        }}
+        sourceResourceId={generateSourceId}
+        initialOutputType={generateInitialType}
+      />
     </div>
   );
 }
