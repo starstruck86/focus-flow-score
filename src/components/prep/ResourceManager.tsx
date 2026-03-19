@@ -545,7 +545,7 @@ export function ResourceManager() {
               <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => refetchSuggestions()} disabled={suggestionsLoading}>
                 {suggestionsLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
               </Button>
-              <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setDismissedSuggestions(new Set(suggestions.map((_, i) => i)))}>
+              <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setDismissedSuggestions(new Set(suggestions.map(s => s.description)))}>
                 <X className="h-3 w-3" />
               </Button>
             </div>
