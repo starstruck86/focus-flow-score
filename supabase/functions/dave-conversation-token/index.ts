@@ -171,7 +171,7 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
       .select("id, name, next_step, last_touch_date, priority, account_status, tier, website, industry, motion, notes, tech_stack, icp_fit_score, outreach_status")
       .eq("user_id", userId)
       .order("updated_at", { ascending: false })
-      .limit(50),
+      .limit(30),
     // 3. Tasks (expanded)
     supabase
       .from("tasks")
