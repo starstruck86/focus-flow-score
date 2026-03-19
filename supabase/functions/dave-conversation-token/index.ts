@@ -114,6 +114,10 @@ Deno.serve(async (req) => {
 
     if (crmContext) {
       contextString = DAVE_INSTRUCTIONS + "\n\n" + crmContext.sections.join("\n\n");
+      // Hard cap context to 20k chars to prevent ElevenLabs latency/truncation
+      if (contextString.length > 20000) {
+        contextString = contextString.slice(0, 20000) + "\n\n[Context trimmed for performance]";
+      }
       firstMessage = buildFirstMessage(crmContext, tzOffsetHours);
     }
 
@@ -171,13 +175,13 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
       .select("id, name, next_step, last_touch_date, priority, account_status, tier, website, industry, motion, notes, tech_stack, icp_fit_score, outreach_status")
       .eq("user_id", userId)
       .order("updated_at", { ascending: false })
-      .limit(50),
+      .limit(30),
     // 3. Tasks (expanded)
     supabase
       .from("tasks")
       .select("title, due_date, priority, status, account_name, notes")
       .eq("user_id", userId)
-      .in("status", ["todo", "in_progress"])
+      .in("status", ["next", "in-progress"])
       .order("due_date", { ascending: true })
       .limit(30),
     // 4. Opportunities (expanded)
@@ -210,7 +214,7 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
       .select("name, title, email, buyer_role, influence_level, department, seniority, status, account_id")
       .eq("user_id", userId)
       .order("updated_at", { ascending: false })
-      .limit(50),
+      .limit(25),
     // 8. Resources (battlecards, frameworks, methodology docs)
     supabase
       .from("resources")
@@ -423,7 +427,7 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
           const useCases = (digest.use_cases || []).join(", ");
           return `- [${r.resource_type}] ${r.title}${r.tags?.length ? ` tags:${r.tags.join(",")}` : ""}\n  TAKEAWAYS: ${takeaways}\n  USE WHEN: ${useCases}`;
         }
-        return `- [${r.resource_type}] ${r.title}${r.tags?.length ? ` tags:${r.tags.join(",")}` : ""}${r.description ? ` — ${trunc(r.description, 100)}` : ""}${r.content ? `\n  CONTENT: ${trunc(r.content, 500)}` : ""}`;
+        return `- [${r.resource_type}] ${r.title}${r.tags?.length ? ` tags:${r.tags.join(",")}` : ""}${r.description ? ` — ${trunc(r.description, 100)}` : ""}${r.content ? `\n  CONTENT: ${trunc(r.content, 200)}` : ""}`;
       }).join("\n")
     );
   }
@@ -673,7 +677,7 @@ function trunc(s: string, max: number): string {
 function buildFirstMessage(ctx: CrmContext, tzOffsetHours: number): string {
   const now = new Date();
   const hour = now.getUTCHours();
-  const localHour = (hour - tzOffsetHours + 24) % 24;
+  const localHour = (hour + tzOffsetHours + 24) % 24;
 
   const lastSessionNote = ctx.hasLastSession ? " I remember our last conversation, so feel free to pick up where we left off." : "";
 

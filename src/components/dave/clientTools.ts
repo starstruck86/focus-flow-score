@@ -114,8 +114,9 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       const { error } = await supabase.from('tasks').insert({
         user_id: userId,
         title: params.title,
-        priority: params.priority || 'medium',
+        priority: params.priority || 'P2',
         status: 'next',
+        workstream: 'pg',
         linked_account_id: linkedAccountId,
         category: 'voice-created',
         due_date: dueDate,

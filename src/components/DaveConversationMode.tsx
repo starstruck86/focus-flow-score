@@ -197,7 +197,7 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
     try {
       // Get session data — pass conversation history on reconnects
       let sessionData = sessionDataRef.current;
-      if (!sessionData || !isReconnectRef.current) {
+      if (!sessionData || isReconnectRef.current) {
         const history = isReconnectRef.current ? getConversationContext() : undefined;
         sessionData = await getSession(history);
         sessionDataRef.current = sessionData;
