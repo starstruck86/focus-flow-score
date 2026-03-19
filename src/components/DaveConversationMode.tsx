@@ -144,7 +144,7 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
         reconnectAttemptRef.current++;
         isReconnectRef.current = true;
         setReconnectInfo(`Reconnecting (${reconnectAttemptRef.current}/${MAX_RECONNECTS})...`);
-        console.log(`[Dave] Auto-reconnecting in ${delay}ms (attempt ${reconnectAttemptRef.current})`);
+        logStatus(`Auto-reconnecting in ${delay}ms (attempt ${reconnectAttemptRef.current})`);
         reconnectTimerRef.current = setTimeout(() => {
           reconnectTimerRef.current = undefined;
           if (isOpenRef.current) startConversationRef.current?.();
