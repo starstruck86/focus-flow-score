@@ -30,9 +30,61 @@ const OPP_FIELDS: Record<string, string> = {
   arr: 'arr',
 };
 
+const MEDDICC_FIELDS: Record<string, string> = {
+  metrics: 'metrics',
+  'economic buyer': 'economic_buyer',
+  economic_buyer: 'economic_buyer',
+  'decision criteria': 'decision_criteria',
+  decision_criteria: 'decision_criteria',
+  'decision process': 'decision_process',
+  decision_process: 'decision_process',
+  pain: 'identify_pain',
+  identify_pain: 'identify_pain',
+  champion: 'champion',
+  competition: 'competition',
+};
+
 async function getUserId(): Promise<string | null> {
   const { data: { user } } = await supabase.auth.getUser();
   return user?.id ?? null;
+}
+
+function parseDueDate(input: string): string {
+  const lower = input.toLowerCase().trim();
+  const now = new Date();
+  
+  if (lower === 'today') return now.toISOString().split('T')[0];
+  if (lower === 'tomorrow') {
+    const d = new Date(now);
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  }
+  
+  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const dayIndex = days.indexOf(lower);
+  if (dayIndex >= 0) {
+    const d = new Date(now);
+    const diff = (dayIndex - d.getDay() + 7) % 7 || 7;
+    d.setDate(d.getDate() + diff);
+    return d.toISOString().split('T')[0];
+  }
+  
+  // Try ISO date
+  if (/^\d{4}-\d{2}-\d{2}$/.test(lower)) return lower;
+  
+  // Default to today
+  return now.toISOString().split('T')[0];
+}
+
+function parseTime(input: string): string | null {
+  const match = input.match(/^(\d{1,2}):?(\d{2})?\s*(am|pm)?$/i);
+  if (!match) return null;
+  let hours = parseInt(match[1]);
+  const minutes = parseInt(match[2] || '0');
+  const ampm = match[3]?.toLowerCase();
+  if (ampm === 'pm' && hours < 12) hours += 12;
+  if (ampm === 'am' && hours === 12) hours = 0;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
 export function createClientTools(navigate: NavigateFunction, askCopilot: AskCopilot) {
@@ -42,7 +94,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       return `Navigated to ${params.path}`;
     },
 
-    create_task: async (params: { title: string; priority?: string; accountName?: string }) => {
+    create_task: async (params: { title: string; priority?: string; accountName?: string; dueDate?: string; dueTime?: string }) => {
       const userId = await getUserId();
       if (!userId) return 'Not authenticated';
 
@@ -57,6 +109,8 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         linkedAccountId = accts?.[0]?.id ?? null;
       }
 
+      const dueDate = params.dueDate ? parseDueDate(params.dueDate) : null;
+
       const { error } = await supabase.from('tasks').insert({
         user_id: userId,
         title: params.title,
@@ -64,14 +118,29 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         status: 'next',
         linked_account_id: linkedAccountId,
         category: 'voice-created',
+        due_date: dueDate,
       });
 
       if (error) {
         console.error('Voice create_task error:', error);
         return `Failed to create task: ${error.message}`;
       }
-      toast.success('Task created', { description: params.title });
-      return `Task created: ${params.title}`;
+
+      // If a specific time was given, also create a voice reminder
+      if (params.dueTime && dueDate) {
+        const time = parseTime(params.dueTime);
+        if (time) {
+          const remindAt = new Date(`${dueDate}T${time}:00`);
+          await supabase.from('voice_reminders').insert({
+            user_id: userId,
+            message: params.title,
+            remind_at: remindAt.toISOString(),
+          });
+        }
+      }
+
+      toast.success('Task created', { description: `${params.title}${dueDate ? ` (due ${dueDate})` : ''}` });
+      return `Task created: ${params.title}${dueDate ? ` due ${dueDate}` : ''}`;
     },
 
     open_copilot: (params: { question: string; mode?: string }) => {
@@ -135,6 +204,193 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       if (error) return `Failed to update: ${error.message}`;
       toast.success('Deal updated', { description: `${opps[0].name}: ${params.field} → ${params.value}` });
       return `Updated ${opps[0].name} ${params.field} to ${params.value}`;
+    },
+
+    update_methodology: async (params: { opportunityName: string; field: string; confirmed?: boolean; notes?: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const fieldKey = MEDDICC_FIELDS[params.field.toLowerCase()];
+      if (!fieldKey) return `Unknown methodology field: ${params.field}. Valid: ${Object.keys(MEDDICC_FIELDS).join(', ')}`;
+
+      const { data: opps } = await supabase
+        .from('opportunities')
+        .select('id, name')
+        .eq('user_id', userId)
+        .ilike('name', `%${params.opportunityName}%`)
+        .limit(1);
+
+      if (!opps?.length) return `Opportunity "${params.opportunityName}" not found`;
+
+      const updates: Record<string, any> = {};
+      if (params.confirmed !== undefined) updates[`${fieldKey}_confirmed`] = params.confirmed;
+      if (params.notes) updates[`${fieldKey}_notes`] = params.notes;
+
+      const { error } = await (supabase.from('opportunity_methodology' as any) as any)
+        .upsert({
+          user_id: userId,
+          opportunity_id: opps[0].id,
+          ...updates,
+        }, { onConflict: 'user_id,opportunity_id' });
+
+      if (error) return `Failed to update methodology: ${error.message}`;
+      
+      const action = params.confirmed ? '✅ Confirmed' : params.notes ? '📝 Updated' : 'Updated';
+      toast.success('MEDDICC updated', { description: `${opps[0].name}: ${params.field} ${action}` });
+      return `${action} ${params.field} for ${opps[0].name}${params.notes ? `: ${params.notes}` : ''}`;
+    },
+
+    log_touch: async (params: { accountName: string; touchType: string; notes?: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const { data: accts } = await supabase
+        .from('accounts')
+        .select('id, name, notes, touches_this_week')
+        .eq('user_id', userId)
+        .ilike('name', `%${params.accountName}%`)
+        .limit(1);
+
+      if (!accts?.length) return `Account "${params.accountName}" not found`;
+
+      const timestamp = new Date().toLocaleString();
+      const touchNote = params.notes
+        ? `\n\n**${params.touchType}** (${timestamp}): ${params.notes}`
+        : '';
+
+      const { error } = await supabase
+        .from('accounts')
+        .update({
+          last_touch_date: new Date().toISOString().split('T')[0],
+          last_touch_type: params.touchType,
+          touches_this_week: (accts[0].touches_this_week || 0) + 1,
+          notes: (accts[0].notes || '') + touchNote,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', accts[0].id);
+
+      if (error) return `Failed to log touch: ${error.message}`;
+      toast.success('Touch logged', { description: `${accts[0].name}: ${params.touchType}` });
+      return `Logged ${params.touchType} touch for ${accts[0].name}`;
+    },
+
+    move_deal: async (params: { opportunityName: string; newStage: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const { data: opps } = await supabase
+        .from('opportunities')
+        .select('id, name, stage')
+        .eq('user_id', userId)
+        .ilike('name', `%${params.opportunityName}%`)
+        .limit(1);
+
+      if (!opps?.length) return `Opportunity "${params.opportunityName}" not found`;
+
+      const oldStage = opps[0].stage;
+      const { error } = await supabase
+        .from('opportunities')
+        .update({ stage: params.newStage, updated_at: new Date().toISOString() })
+        .eq('id', opps[0].id);
+
+      if (error) return `Failed to move deal: ${error.message}`;
+      toast.success('Deal moved', { description: `${opps[0].name}: ${oldStage || '—'} → ${params.newStage}` });
+      return `Moved ${opps[0].name} from ${oldStage || 'no stage'} to ${params.newStage}`;
+    },
+
+    scenario_calc: async (params: { dealNames: string[] }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      // Fetch quota targets
+      const { data: quotaData } = await supabase
+        .from('quota_targets')
+        .select('new_arr_quota, renewal_arr_quota, new_arr_closed, renewal_arr_closed')
+        .eq('user_id', userId)
+        .limit(1);
+
+      const quota = quotaData?.[0];
+
+      // Fetch all active opps
+      const { data: allOpps } = await supabase
+        .from('opportunities')
+        .select('name, arr, deal_type, status')
+        .eq('user_id', userId)
+        .not('status', 'eq', 'closed-lost');
+
+      if (!allOpps?.length) return 'No active pipeline deals found.';
+
+      // Match requested deals
+      const matched = params.dealNames.map(name => {
+        const lower = name.toLowerCase();
+        return allOpps.find(o => o.name.toLowerCase().includes(lower));
+      }).filter(Boolean);
+
+      if (!matched.length) return `Could not find any of those deals in your pipeline.`;
+
+      const scenarioArr = matched.reduce((sum, o: any) => sum + (o.arr || 0), 0);
+      const newLogoArr = matched.filter((o: any) => o.deal_type === 'new-logo').reduce((sum, o: any) => sum + (o.arr || 0), 0);
+      const renewalArr = scenarioArr - newLogoArr;
+
+      let summary = `If you close ${matched.map((o: any) => o.name).join(' and ')}, that's $${Math.round(scenarioArr / 1000)}k total ARR.`;
+
+      if (quota) {
+        const newTotal = (quota.new_arr_closed || 0) + newLogoArr;
+        const renewalTotal = (quota.renewal_arr_closed || 0) + renewalArr;
+        const newPct = quota.new_arr_quota ? Math.round((newTotal / quota.new_arr_quota) * 100) : 0;
+        const renewalPct = quota.renewal_arr_quota ? Math.round((renewalTotal / quota.renewal_arr_quota) * 100) : 0;
+        const newRemaining = Math.max(0, (quota.new_arr_quota || 0) - newTotal);
+        const renewalRemaining = Math.max(0, (quota.renewal_arr_quota || 0) - renewalTotal);
+
+        summary += ` New logo: $${Math.round(newTotal / 1000)}k of $${Math.round((quota.new_arr_quota || 0) / 1000)}k (${newPct}%).`;
+        summary += ` Renewal: $${Math.round(renewalTotal / 1000)}k of $${Math.round((quota.renewal_arr_quota || 0) / 1000)}k (${renewalPct}%).`;
+        summary += ` You'd still need $${Math.round(newRemaining / 1000)}k new and $${Math.round(renewalRemaining / 1000)}k renewal to hit quota.`;
+      }
+
+      return summary;
+    },
+
+    lookup_account: async (params: { accountName: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const { data: accts } = await supabase
+        .from('accounts')
+        .select('*')
+        .eq('user_id', userId)
+        .ilike('name', `%${params.accountName}%`)
+        .limit(1);
+
+      if (!accts?.length) return `Account "${params.accountName}" not found`;
+      const acct = accts[0];
+
+      // Fetch related data in parallel
+      const [contactsRes, oppsRes, transcriptsRes] = await Promise.all([
+        supabase.from('contacts').select('name, title, buyer_role, influence_level, email, department').eq('account_id', acct.id).limit(10),
+        supabase.from('opportunities').select('name, stage, arr, close_date, next_step, deal_type, status').eq('account_id', acct.id).not('status', 'eq', 'closed-lost').limit(10),
+        supabase.from('call_transcripts').select('title, call_date, call_type, summary').eq('account_id', acct.id).order('call_date', { ascending: false }).limit(5),
+      ]);
+
+      let summary = `📋 ${acct.name} [${acct.tier || '—'}/${acct.priority || '—'}]\n`;
+      summary += `Status: ${acct.account_status || '—'} | Motion: ${acct.motion || '—'} | Industry: ${acct.industry || '—'}\n`;
+      summary += `Last touch: ${acct.last_touch_date || 'never'} (${acct.last_touch_type || '—'})\n`;
+      if (acct.next_step) summary += `Next step: ${acct.next_step}\n`;
+      if (acct.notes) summary += `Notes: ${acct.notes.slice(0, 200)}\n`;
+
+      if (oppsRes.data?.length) {
+        const totalArr = oppsRes.data.reduce((s: number, o: any) => s + (o.arr || 0), 0);
+        summary += `\nPipeline ($${Math.round(totalArr / 1000)}k): ${oppsRes.data.map((o: any) => `${o.name} [${o.stage || '—'}] $${Math.round((o.arr || 0) / 1000)}k${o.next_step ? ` → ${o.next_step}` : ''}`).join('; ')}\n`;
+      }
+
+      if (contactsRes.data?.length) {
+        summary += `\nContacts: ${contactsRes.data.map((c: any) => `${c.name}${c.title ? ` (${c.title})` : ''} ${c.buyer_role || ''} ${c.influence_level || ''}`).join('; ')}\n`;
+      }
+
+      if (transcriptsRes.data?.length) {
+        summary += `\nRecent calls: ${transcriptsRes.data.map((t: any) => `${t.call_date}: ${t.title}${t.summary ? ` — ${t.summary.slice(0, 80)}` : ''}`).join('; ')}\n`;
+      }
+
+      return summary;
     },
 
     start_roleplay: (params: { call_type?: string; difficulty?: number; industry?: string }) => {
@@ -202,7 +458,6 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       const userId = await getUserId();
       if (!userId) return 'Not authenticated';
 
-      // Find the account
       const { data: accts } = await supabase
         .from('accounts')
         .select('id, name, notes')

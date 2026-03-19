@@ -25,7 +25,7 @@ export function useDaveContext() {
 
   useEffect(() => { locationRef.current = location.pathname; }, [location.pathname]);
 
-  const fetchSession = useCallback(async (): Promise<DaveSessionData> => {
+  const fetchSession = useCallback(async (conversationHistory?: string): Promise<DaveSessionData> => {
     const { data: { session } } = await supabase.auth.getSession();
     const tzOffsetHours = new Date().getTimezoneOffset() / -60;
 
@@ -39,6 +39,7 @@ export function useDaveContext() {
       body: JSON.stringify({
         tzOffsetHours,
         currentPage: locationRef.current,
+        conversationHistory: conversationHistory || '',
       }),
     });
 
@@ -67,7 +68,15 @@ export function useDaveContext() {
   }, [fetchSession, isFetching]);
 
   /** Get a valid session — returns cache if fresh, otherwise fetches */
-  const getSession = useCallback(async (): Promise<DaveSessionData> => {
+  const getSession = useCallback(async (conversationHistory?: string): Promise<DaveSessionData> => {
+    // If we have conversation history, always fetch fresh to include it
+    if (conversationHistory) {
+      const data = await fetchSession(conversationHistory);
+      setCachedSession(data);
+      fetchedAtRef.current = Date.now();
+      return data;
+    }
+    
     const age = Date.now() - fetchedAtRef.current;
     if (cachedSession && age < CACHE_TTL_MS) {
       return cachedSession;

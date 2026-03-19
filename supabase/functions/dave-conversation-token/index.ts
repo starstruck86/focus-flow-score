@@ -6,6 +6,55 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const DAVE_INSTRUCTIONS = `DAVE OPERATING INSTRUCTIONS:
+Your name is Dave. You are an elite sales strategist, coach, and collaborator. You are NOT a generic assistant — you are a seasoned sales expert who has closed millions in enterprise deals.
+
+IDENTITY & TONE:
+- Always refer to yourself as Dave. You are confident, direct, and supportive.
+- Speak like a trusted sales mentor — concise, action-oriented, occasionally challenging.
+- Use the user's data to give specific, personalized advice. Never be vague or generic.
+
+MEETING PREP PROTOCOL:
+When the user asks about a meeting or says "prep me":
+1. Match the meeting title against ACCOUNTS data (case-insensitive)
+2. Pull MEDDICC gaps, recent call summaries, key contacts, and relevant resources for that account
+3. Synthesize a brief: stakeholder map, gaps to close THIS call, 3 suggested questions, relevant framework excerpts
+4. Flag what's at risk and what to push for
+
+STRATEGY & COLLABORATION MODE:
+When the user wants to strategize about a deal or territory:
+- Go into Socratic coaching mode — ask clarifying questions, challenge assumptions
+- Reference specific contacts for multi-threading plays
+- Suggest which RESOURCES have frameworks relevant to the situation
+- Cross-reference MEDDICC completion vs deal stage — flag mismatches
+- Use COACHING HISTORY patterns to recommend behavior changes
+
+PROACTIVE COACHING:
+Before answering, scan the data for:
+- Overdue tasks — mention them naturally
+- Stale deals (14+ days no touch with active pipeline)
+- Deals closing within 30 days with MEDDICC gaps
+- Pending reminders that are due
+- Mention these when relevant, don't dump them all at once
+
+TASK & REMINDER HANDLING:
+When the user says "remind me", "don't forget", "I need to" — use create_task with appropriate due date and time.
+
+DEBRIEF PROTOCOL:
+After meetings, guide a structured debrief: What happened? Any MEDDICC updates? What are the next steps? Then persist via debrief/update_methodology tools.
+
+PIPELINE MATH:
+When asked "if I close X and Y, where am I?" — use scenario_calc tool for live quota math.
+
+OBJECTION HANDLING:
+When the user describes an objection, check COACHING HISTORY for recurring patterns and suggest replacement behaviors.
+
+DEAL ADVANCEMENT:
+When asked to move a deal or update a stage, use the move_deal tool. Confirm the change.
+
+ACCOUNT LOOKUP:
+When asked about a specific account in depth, use lookup_account tool for full context.`;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -16,6 +65,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const tzOffsetHours = body.tzOffsetHours ?? 0;
+    const conversationHistory = body.conversationHistory ?? "";
 
     const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
     const ELEVENLABS_AGENT_ID = Deno.env.get("ELEVENLABS_AGENT_ID");
@@ -44,7 +94,7 @@ Deno.serve(async (req) => {
       { headers: { "xi-api-key": ELEVENLABS_API_KEY } }
     );
 
-    const contextPromise = userId ? fetchCrmContext(supabase, userId) : Promise.resolve(null);
+    const contextPromise = userId ? fetchCrmContext(supabase, userId, conversationHistory) : Promise.resolve(null);
 
     const [tokenResp, crmContext] = await Promise.all([tokenPromise, contextPromise]);
 
@@ -63,7 +113,7 @@ Deno.serve(async (req) => {
     let firstMessage: string | null = null;
 
     if (crmContext) {
-      contextString = crmContext.sections.join("\n\n");
+      contextString = DAVE_INSTRUCTIONS + "\n\n" + crmContext.sections.join("\n\n");
       firstMessage = buildFirstMessage(crmContext, tzOffsetHours);
     }
 
@@ -88,21 +138,23 @@ interface CrmContext {
   firstMeeting: any;
   overdueCount: number;
   pendingReminders: string[];
+  hasLastSession: boolean;
 }
 
-async function fetchCrmContext(supabase: any, userId: string): Promise<CrmContext> {
+async function fetchCrmContext(supabase: any, userId: string, conversationHistory: string): Promise<CrmContext> {
   const now = new Date();
   const fourHoursLater = new Date(now.getTime() + 4 * 60 * 60 * 1000);
   const today = now.toISOString().split("T")[0];
   const fiveDaysAgo = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
 
-  // All 18 queries in parallel
+  // All queries in parallel (including previous session)
   const [
     calendarRes, accountsRes, tasksRes, oppsRes, remindersRes,
     renewalsRes, contactsRes, resourcesRes, quotaRes, benchmarksRes,
     streakRes, transcriptsRes, gradesRes, battlePlanRes, journalRes,
-    timeBlocksRes, methodologyRes,
+    timeBlocksRes, methodologyRes, lastSessionRes,
   ] = await Promise.all([
     // 1. Calendar events (next 4 hours)
     supabase
@@ -116,7 +168,7 @@ async function fetchCrmContext(supabase: any, userId: string): Promise<CrmContex
     // 2. Accounts (expanded)
     supabase
       .from("accounts")
-      .select("name, next_step, last_touch_date, priority, account_status, tier, website, industry, motion, notes, tech_stack, icp_fit_score, outreach_status")
+      .select("id, name, next_step, last_touch_date, priority, account_status, tier, website, industry, motion, notes, tech_stack, icp_fit_score, outreach_status")
       .eq("user_id", userId)
       .order("updated_at", { ascending: false })
       .limit(50),
@@ -227,6 +279,14 @@ async function fetchCrmContext(supabase: any, userId: string): Promise<CrmContex
       .from("opportunity_methodology")
       .select("opportunity_id, metrics_confirmed, metrics_notes, economic_buyer_confirmed, economic_buyer_notes, decision_criteria_confirmed, decision_criteria_notes, decision_process_confirmed, decision_process_notes, identify_pain_confirmed, identify_pain_notes, champion_confirmed, champion_notes, competition_confirmed, competition_notes, before_state_notes, after_state_notes, negative_consequences_notes, positive_business_outcomes_notes, required_capabilities_notes, metrics_value_notes, call_goals")
       .eq("user_id", userId),
+    // 18. Last Dave session (within 24h)
+    supabase
+      .from("dave_transcripts")
+      .select("messages, created_at")
+      .eq("user_id", userId)
+      .gte("created_at", twentyFourHoursAgo)
+      .order("created_at", { ascending: false })
+      .limit(1),
   ]);
 
   const sections: string[] = [];
@@ -234,6 +294,25 @@ async function fetchCrmContext(supabase: any, userId: string): Promise<CrmContex
   let firstMeeting: any = null;
   let overdueCount = 0;
   const pendingReminders: string[] = [];
+  let hasLastSession = false;
+
+  // --- Last Session Recall ---
+  if (lastSessionRes.data?.length) {
+    const lastMessages = lastSessionRes.data[0].messages;
+    if (Array.isArray(lastMessages) && lastMessages.length > 0) {
+      hasLastSession = true;
+      const recent = lastMessages.slice(-10);
+      sections.push(
+        "LAST SESSION (previous conversation):\n" +
+        recent.map((m: any) => `${m.role === 'user' ? 'User' : 'Dave'}: ${trunc(m.text || m.content || '', 150)}`).join("\n")
+      );
+    }
+  }
+
+  // --- Current Session Context ---
+  if (conversationHistory) {
+    sections.push("CURRENT SESSION CONTEXT:\n" + conversationHistory);
+  }
 
   // --- Calendar ---
   if (calendarRes.data?.length) {
@@ -249,11 +328,12 @@ async function fetchCrmContext(supabase: any, userId: string): Promise<CrmContex
   }
 
   // --- Accounts ---
-  if (accountsRes.data?.length) {
+  const accounts = accountsRes.data || [];
+  if (accounts.length) {
     sections.push(
-      `ACCOUNTS (${accountsRes.data.length}):\n` +
-      accountsRes.data.map((a: any) =>
-        `- ${a.name} [${a.tier || "—"}/${a.priority || "—"}] status:${a.account_status || "—"} motion:${a.motion || "—"}${a.industry ? ` ind:${a.industry}` : ""}${a.icp_fit_score ? ` icp:${a.icp_fit_score}` : ""}${a.next_step ? ` next:${a.next_step}` : ""}${a.notes ? ` notes:${trunc(a.notes, 80)}` : ""}`
+      `ACCOUNTS (${accounts.length}):\n` +
+      accounts.map((a: any) =>
+        `- ${a.name} [id:${a.id}] [${a.tier || "—"}/${a.priority || "—"}] status:${a.account_status || "—"} motion:${a.motion || "—"}${a.industry ? ` ind:${a.industry}` : ""}${a.icp_fit_score ? ` icp:${a.icp_fit_score}` : ""}${a.last_touch_date ? ` lastTouch:${a.last_touch_date}` : ""}${a.next_step ? ` next:${a.next_step}` : ""}${a.notes ? ` notes:${trunc(a.notes, 80)}` : ""}`
       ).join("\n")
     );
   }
@@ -274,13 +354,13 @@ async function fetchCrmContext(supabase: any, userId: string): Promise<CrmContex
   }
 
   // --- Opportunities ---
-  if (oppsRes.data?.length) {
-    const opps = oppsRes.data as any[];
+  const opps = oppsRes.data || [];
+  if (opps.length) {
     const totalPipeline = opps.reduce((sum: number, o: any) => sum + (o.arr || 0), 0);
     sections.push(
       `PIPELINE (${opps.length} deals, $${Math.round(totalPipeline / 1000)}k total):\n` +
       opps.slice(0, 20).map((o: any) =>
-        `- ${o.name}: ${o.stage || "—"} $${Math.round((o.arr || 0) / 1000)}k close:${o.close_date || "TBD"} type:${o.deal_type || "—"}${o.next_step ? ` → ${o.next_step}` : ""}${o.notes ? ` notes:${trunc(o.notes, 60)}` : ""}`
+        `- ${o.name} [id:${o.id}]: ${o.stage || "—"} $${Math.round((o.arr || 0) / 1000)}k close:${o.close_date || "TBD"} type:${o.deal_type || "—"} acct:${o.account_id || "—"}${o.last_touch_date ? ` lastTouch:${o.last_touch_date}` : ""}${o.next_step ? ` → ${o.next_step}` : ""}${o.notes ? ` notes:${trunc(o.notes, 60)}` : ""}`
       ).join("\n")
     );
   }
@@ -308,18 +388,18 @@ async function fetchCrmContext(supabase: any, userId: string): Promise<CrmContex
   }
 
   // --- Contacts ---
-  if (contactsRes.data?.length) {
+  const contacts = contactsRes.data || [];
+  if (contacts.length) {
     sections.push(
-      `CONTACTS (${contactsRes.data.length}):\n` +
-      (contactsRes.data as any[]).slice(0, 30).map((c: any) =>
-        `- ${c.name}${c.title ? ` (${c.title})` : ""} role:${c.buyer_role || "—"} influence:${c.influence_level || "—"} status:${c.status || "—"}${c.department ? ` dept:${c.department}` : ""}`
+      `CONTACTS (${contacts.length}):\n` +
+      contacts.slice(0, 30).map((c: any) =>
+        `- ${c.name}${c.title ? ` (${c.title})` : ""} role:${c.buyer_role || "—"} influence:${c.influence_level || "—"} status:${c.status || "—"}${c.department ? ` dept:${c.department}` : ""} acct:${c.account_id || "—"}`
       ).join("\n")
     );
   }
 
   // --- Resources (prefer digests over raw content) ---
   if (resourcesRes.data?.length) {
-    // Fetch digests for these resources
     const resourceIds = (resourcesRes.data as any[]).map((r: any) => r.id || "").filter(Boolean);
     let digestMap: Record<string, any> = {};
     if (resourceIds.length) {
@@ -382,11 +462,12 @@ async function fetchCrmContext(supabase: any, userId: string): Promise<CrmContex
   }
 
   // --- Call transcripts ---
-  if (transcriptsRes.data?.length) {
+  const transcripts = transcriptsRes.data || [];
+  if (transcripts.length) {
     sections.push(
-      `RECENT CALLS (${transcriptsRes.data.length}):\n` +
-      (transcriptsRes.data as any[]).slice(0, 10).map((t: any) =>
-        `- ${t.call_date}: ${t.title} [${t.call_type || "—"}]${t.summary ? ` — ${trunc(t.summary, 120)}` : ""}`
+      `RECENT CALLS (${transcripts.length}):\n` +
+      transcripts.slice(0, 10).map((t: any) =>
+        `- ${t.call_date}: ${t.title} [${t.call_type || "—"}] acct:${t.account_id || "—"}${t.summary ? ` — ${trunc(t.summary, 120)}` : ""}`
       ).join("\n")
     );
   }
@@ -440,14 +521,16 @@ async function fetchCrmContext(supabase: any, userId: string): Promise<CrmContex
   }
 
   // --- Opportunity methodology (MEDDICC / CotM) ---
-  if (methodologyRes.data?.length && oppsRes.data?.length) {
-    const oppMap = new Map((oppsRes.data as any[]).map((o: any) => [o.id, o.name]));
-    const methodRows = (methodologyRes.data as any[]).filter((m: any) => oppMap.has(m.opportunity_id));
+  const methodologyData = methodologyRes.data || [];
+  if (methodologyData.length && opps.length) {
+    const oppMap = new Map(opps.map((o: any) => [o.id, o]));
+    const methodRows = methodologyData.filter((m: any) => oppMap.has(m.opportunity_id));
     if (methodRows.length) {
       sections.push(
         `METHODOLOGY (MEDDICC/CotM) per deal:\n` +
         methodRows.slice(0, 10).map((m: any) => {
-          const oppName = oppMap.get(m.opportunity_id) || m.opportunity_id;
+          const opp = oppMap.get(m.opportunity_id);
+          const oppName = opp?.name || m.opportunity_id;
           const confirmed = [
             m.metrics_confirmed && "Metrics",
             m.economic_buyer_confirmed && "EconBuyer",
@@ -480,7 +563,106 @@ async function fetchCrmContext(supabase: any, userId: string): Promise<CrmContex
     }
   }
 
-  return { sections, calendarCount, firstMeeting, overdueCount, pendingReminders };
+  // --- MEETING PREP CROSS-REFERENCING ---
+  if (calendarRes.data?.length && accounts.length) {
+    const meetingPreps: string[] = [];
+    for (const event of calendarRes.data as any[]) {
+      const titleLower = (event.title || "").toLowerCase();
+      const matchedAccount = accounts.find((a: any) =>
+        titleLower.includes(a.name.toLowerCase()) || a.name.toLowerCase().includes(titleLower.replace(/meeting|call|sync|check-in|review/gi, "").trim())
+      );
+      if (!matchedAccount) continue;
+
+      const acctOpps = opps.filter((o: any) => o.account_id === matchedAccount.id);
+      const acctContacts = contacts.filter((c: any) => c.account_id === matchedAccount.id);
+      const acctTranscripts = transcripts.filter((t: any) => t.account_id === matchedAccount.id).slice(0, 3);
+      const acctMethodology = methodologyData.filter((m: any) => acctOpps.some((o: any) => o.id === m.opportunity_id));
+
+      let prep = `📋 MEETING PREP — ${event.title} (${new Date(event.start_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}):\n`;
+      prep += `  Account: ${matchedAccount.name} [${matchedAccount.tier || "—"}] ${matchedAccount.industry || ""}\n`;
+
+      if (acctOpps.length) {
+        prep += `  Pipeline: ${acctOpps.map((o: any) => `${o.name} ${o.stage || "—"} $${Math.round((o.arr || 0) / 1000)}k close:${o.close_date || "TBD"}`).join("; ")}\n`;
+      }
+
+      if (acctMethodology.length) {
+        for (const m of acctMethodology) {
+          const missing = [
+            !m.metrics_confirmed && "Metrics", !m.economic_buyer_confirmed && "EconBuyer",
+            !m.decision_criteria_confirmed && "DecCriteria", !m.decision_process_confirmed && "DecProcess",
+            !m.identify_pain_confirmed && "Pain", !m.champion_confirmed && "Champion",
+            !m.competition_confirmed && "Competition",
+          ].filter(Boolean);
+          if (missing.length) prep += `  MEDDICC gaps: ${missing.join(", ")}\n`;
+        }
+      }
+
+      if (acctContacts.length) {
+        prep += `  Key contacts: ${acctContacts.slice(0, 5).map((c: any) => `${c.name}${c.title ? ` (${c.title})` : ""} ${c.buyer_role || ""}`).join("; ")}\n`;
+      }
+
+      if (acctTranscripts.length) {
+        prep += `  Recent calls: ${acctTranscripts.map((t: any) => `${t.call_date}: ${t.title}${t.summary ? ` — ${trunc(t.summary, 80)}` : ""}`).join("; ")}\n`;
+      }
+
+      meetingPreps.push(prep);
+    }
+    if (meetingPreps.length) {
+      sections.push(meetingPreps.join("\n"));
+    }
+  }
+
+  // --- DEALS NEEDING ATTENTION ---
+  if (opps.length) {
+    const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const attentionItems: string[] = [];
+
+    for (const o of opps as any[]) {
+      if (o.status === "closed-won") continue;
+      const methodology = methodologyData.find((m: any) => m.opportunity_id === o.id);
+      const issues: string[] = [];
+
+      if (methodology) {
+        const gapCount = [
+          !methodology.metrics_confirmed, !methodology.economic_buyer_confirmed,
+          !methodology.decision_criteria_confirmed, !methodology.decision_process_confirmed,
+          !methodology.identify_pain_confirmed, !methodology.champion_confirmed,
+          !methodology.competition_confirmed,
+        ].filter(Boolean).length;
+        if (gapCount >= 3) issues.push(`${gapCount} MEDDICC gaps`);
+      }
+
+      if (o.close_date && o.close_date <= thirtyDaysFromNow && methodology) {
+        const hasGaps = !methodology.champion_confirmed || !methodology.economic_buyer_confirmed || !methodology.identify_pain_confirmed;
+        if (hasGaps) issues.push(`closes ${o.close_date} with critical gaps`);
+      }
+
+      const acct = accounts.find((a: any) => a.id === o.account_id);
+      if (acct && acct.last_touch_date && acct.last_touch_date < fourteenDaysAgo) {
+        issues.push(`no touch in 14+ days (last: ${acct.last_touch_date})`);
+      }
+
+      if (issues.length) {
+        attentionItems.push(`- ${o.name} ($${Math.round((o.arr || 0) / 1000)}k): ${issues.join(", ")}`);
+      }
+    }
+
+    // Also check renewals at risk
+    if (renewalsRes.data?.length) {
+      for (const r of renewalsRes.data as any[]) {
+        if ((r.churn_risk === "high" || r.churn_risk === "certain") || r.health_status === "red") {
+          attentionItems.push(`- RENEWAL: ${r.account_name} ($${Math.round((r.arr || 0) / 1000)}k) risk:${r.churn_risk} health:${r.health_status}`);
+        }
+      }
+    }
+
+    if (attentionItems.length) {
+      sections.push("⚠️ DEALS NEEDING ATTENTION:\n" + attentionItems.join("\n"));
+    }
+  }
+
+  return { sections, calendarCount, firstMeeting, overdueCount, pendingReminders, hasLastSession };
 }
 
 function trunc(s: string, max: number): string {
@@ -493,8 +675,10 @@ function buildFirstMessage(ctx: CrmContext, tzOffsetHours: number): string {
   const hour = now.getUTCHours();
   const localHour = (hour - tzOffsetHours + 24) % 24;
 
+  const lastSessionNote = ctx.hasLastSession ? " I remember our last conversation, so feel free to pick up where we left off." : "";
+
   if (localHour < 10) {
-    const parts: string[] = ["Good morning! Here's your quick briefing:"];
+    const parts: string[] = ["Good morning — it's Dave. Here's your quick briefing:"];
     if (ctx.calendarCount) {
       parts.push(`You have ${ctx.calendarCount} meetings in the next 4 hours.`);
       if (ctx.firstMeeting) {
@@ -503,14 +687,14 @@ function buildFirstMessage(ctx: CrmContext, tzOffsetHours: number): string {
     }
     if (ctx.overdueCount) parts.push(`Heads up — you have ${ctx.overdueCount} overdue tasks.`);
     if (ctx.pendingReminders.length) parts.push(`Reminder: ${ctx.pendingReminders[0]}`);
-    parts.push("What do you want to tackle first?");
+    parts.push("What do you want to tackle first?" + lastSessionNote);
     return parts.join(" ");
   } else if (localHour >= 16) {
-    return "Hey — wrapping up the day? I can help with a debrief, update your pipeline, or prep for tomorrow. What do you need?";
+    return `Hey, it's Dave. Wrapping up the day? I can help with a debrief, update your pipeline, or prep for tomorrow. What do you need?${lastSessionNote}`;
   }
 
   if (ctx.calendarCount) {
-    return `Hey! You've got ${ctx.calendarCount} meetings coming up. Need help prepping, or is there something else on your mind?`;
+    return `Hey, it's Dave. You've got ${ctx.calendarCount} meetings coming up — want me to prep you, or is there something else on your mind?${lastSessionNote}`;
   }
-  return "Hey! I'm here whenever you need me. What can I help with?";
+  return `Hey, it's Dave. I'm here whenever you need me — strategy, pipeline, prep, whatever you need.${lastSessionNote}`;
 }

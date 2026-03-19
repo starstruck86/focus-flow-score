@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mic, MicOff, Volume2, MessageSquare, Loader2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDaveContext } from '@/hooks/useDaveContext';
+import { useDaveConversation } from '@/hooks/useDaveConversation';
 import { useCopilot } from '@/contexts/CopilotContext';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -28,6 +29,7 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
   const navigate = useNavigate();
   const { ask: askCopilot } = useCopilot();
   const { getSession, invalidateCache } = useDaveContext();
+  const { addUserMessage, addDaveResponse, getConversationContext } = useDaveConversation();
   const [isConnecting, setIsConnecting] = useState(false);
   const [needsTap, setNeedsTap] = useState(true);
   const [showTranscript, setShowTranscript] = useState(false);
@@ -124,6 +126,7 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
       if (message?.type === 'user_transcript' && message?.user_transcription_event?.user_transcript) {
         const text = message.user_transcription_event.user_transcript;
         setTranscript(prev => [...prev, { role: 'user', text }]);
+        addUserMessage(text);
 
         const lower = text.toLowerCase();
         if (DISMISSAL_PHRASES.some(p => lower.includes(p))) {
@@ -131,7 +134,9 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
         }
       } else if (message?.type === 'agent_response' && message?.agent_response_event?.agent_response) {
         if (greetingWatchdogRef.current) { clearTimeout(greetingWatchdogRef.current); greetingWatchdogRef.current = undefined; }
-        setTranscript(prev => [...prev, { role: 'agent', text: message.agent_response_event.agent_response }]);
+        const text = message.agent_response_event.agent_response;
+        setTranscript(prev => [...prev, { role: 'agent', text }]);
+        addDaveResponse(text);
       }
     },
     onError: (err: any) => {
@@ -190,10 +195,11 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
     }, 15000);
 
     try {
-      // Get session data (cached if fresh, otherwise fetches)
+      // Get session data — pass conversation history on reconnects
       let sessionData = sessionDataRef.current;
       if (!sessionData || !isReconnectRef.current) {
-        sessionData = await getSession();
+        const history = isReconnectRef.current ? getConversationContext() : undefined;
+        sessionData = await getSession(history);
         sessionDataRef.current = sessionData;
       }
 
@@ -233,7 +239,7 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
       isReconnectRef.current = false;
       setReconnectInfo(null);
     }
-  }, [conversation, getSession, invalidateCache]);
+  }, [conversation, getSession, invalidateCache, getConversationContext]);
 
   useEffect(() => {
     startConversationRef.current = startConversation;
