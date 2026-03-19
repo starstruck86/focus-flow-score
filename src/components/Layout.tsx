@@ -114,7 +114,7 @@ function NavItem({ item }: { item: NavItemDef }) {
             />
           )}
           <item.icon
-            className={cn("h-4 w-4 transition-transform duration-200", isActive && "scale-110")}
+            className={cn("h-5 w-5 transition-transform duration-200", isActive && "scale-110")}
             style={isActive ? { color: `hsl(${COLOR_VAR[item.color]})` } : undefined}
           />
           <span className={cn("truncate transition-opacity", isActive ? "opacity-100" : "opacity-70")}>{item.label}</span>
