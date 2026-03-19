@@ -189,6 +189,14 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
       }
     }, 15000);
 
+    try {
+      // Get session data (cached if fresh, otherwise fetches)
+      let sessionData = sessionDataRef.current;
+      if (!sessionData || !isReconnectRef.current) {
+        sessionData = await getSession();
+        sessionDataRef.current = sessionData;
+      }
+
       // Build dynamicVariables for context delivery (supported SDK parameter)
       const dynamicVariables: Record<string, string | number | boolean> = {};
       if (sessionData.context) {
