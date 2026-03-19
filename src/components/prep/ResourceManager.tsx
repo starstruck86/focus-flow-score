@@ -495,6 +495,9 @@ export function ResourceManager() {
             <DropdownMenuItem onClick={() => setShowAddUrl(true)}>
               <Link2 className="h-3.5 w-3.5 mr-2" /> Add Link / URL
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setShowPlaylistImport(true)}>
+              <ListVideo className="h-3.5 w-3.5 mr-2" /> Import YouTube Playlist
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
