@@ -140,7 +140,7 @@ export function ResourceManager() {
   const addUrlResource = useAddUrlResource();
   const { totalDuplicates } = useResourceDuplicates();
   const operationalize = useOperationalizeResource();
-  const { data: suggestions = [], refetch: refetchSuggestions, isLoading: suggestionsLoading } = useResourceSuggestions();
+  const { data: suggestions = [], refetch: refetchSuggestions, isLoading: suggestionsLoading } = useResourceSuggestions(resources.length > 0);
 
   const currentFolders = folders.filter(f => f.parent_id === currentFolderId);
   const filteredResources = searchQuery
