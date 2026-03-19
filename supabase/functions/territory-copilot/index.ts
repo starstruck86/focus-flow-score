@@ -610,7 +610,28 @@ Deno.serve(async (req) => {
       }
     }
 
-    const useProModel = mode === "deep" || mode === "deal-strategy";
+    // For resource-qa mode, prioritize resources by keyword matching
+    if (mode === "resource-qa" && ctx.resources?.length) {
+      const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user")?.content?.toLowerCase() || "";
+      const keywords = lastUserMsg.split(/\s+/).filter((w: string) => w.length > 3);
+      
+      // Score resources by keyword relevance
+      const scored = ctx.resources.map((r: any) => {
+        let score = 0;
+        const searchable = `${r.title} ${r.description || ''} ${(r.tags || []).join(' ')}`.toLowerCase();
+        for (const kw of keywords) {
+          if (searchable.includes(kw)) score += 2;
+          if (r.content?.toLowerCase().includes(kw)) score += 1;
+        }
+        return { ...r, _score: score };
+      });
+      
+      // Sort by relevance and keep top 5 with content
+      scored.sort((a: any, b: any) => b._score - a._score);
+      ctx.resources = scored.slice(0, 10); // Keep top 10 for headers, content from top 5
+    }
+
+    const useProModel = mode === "deep" || mode === "deal-strategy" || mode === "resource-qa";
     const model = useProModel ? "google/gemini-2.5-pro" : "google/gemini-3-flash-preview";
     const systemPrompt = buildSystemPrompt(ctx, mode, researchData, pageContext);
 
