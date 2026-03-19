@@ -119,6 +119,7 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
           setTimeout(() => endConversation(), 1500);
         }
       } else if (message?.type === 'agent_response' && message?.agent_response_event?.agent_response) {
+        if (greetingWatchdogRef.current) { clearTimeout(greetingWatchdogRef.current); greetingWatchdogRef.current = undefined; }
         setTranscript(prev => [...prev, { role: 'agent', text: message.agent_response_event.agent_response }]);
       }
     },
