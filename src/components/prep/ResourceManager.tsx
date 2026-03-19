@@ -1,7 +1,9 @@
 import { useState, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
@@ -26,6 +28,16 @@ import { ReorganizeModal } from './ReorganizeModal';
 import { DuplicateResourcesModal } from './DuplicateResourcesModal';
 import { useResourceDuplicates } from '@/hooks/useResourceDuplicates';
 import { toast } from 'sonner';
+
+type PendingItem = {
+  id: string;
+  status: 'classifying' | 'classified' | 'error';
+  classification?: ClassificationResult;
+  source: 'file' | 'url';
+  file?: File;
+  url?: string;
+  error?: string;
+};
 
 const RESOURCE_TYPE_ICONS: Record<string, React.ElementType> = {
   document: FileText,
