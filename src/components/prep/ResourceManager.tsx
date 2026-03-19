@@ -546,7 +546,7 @@ export function ResourceManager() {
                     {item.status === 'classified' && item.classification && (
                       <div className="flex items-center gap-1.5 mt-1">
                         <Badge variant="secondary" className="text-[9px] capitalize">{item.classification.resource_type}</Badge>
-                        <Badge variant="outline" className="text-[9px]">{item.classification.suggested_folder}</Badge>
+                        <Badge variant="outline" className="text-[9px]">{item.classification.top_folder}{item.classification.sub_folder ? ` / ${item.classification.sub_folder}` : ''}</Badge>
                       </div>
                     )}
                   </div>
