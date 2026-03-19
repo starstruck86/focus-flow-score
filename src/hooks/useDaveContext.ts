@@ -6,7 +6,7 @@ const TOKEN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/dave-conver
 const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
 
 export interface DaveSessionData {
-  signed_url: string;
+  token: string;
   context: string;
   firstMessage: string | null;
 }

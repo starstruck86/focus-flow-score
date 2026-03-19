@@ -39,6 +39,7 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [reconnectInfo, setReconnectInfo] = useState<string | null>(null);
   const [vadActive, setVadActive] = useState(false);
+  const [statusLog, setStatusLog] = useState<string[]>([]);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const orbRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number>(0);
@@ -46,6 +47,7 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
   const reconnectAttemptRef = useRef(0);
   const startConversationRef = useRef<() => Promise<void>>();
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const messageReceivedRef = useRef(false);
 
   // Refs for stale closure fixes
   const isOpenRef = useRef(isOpen);
@@ -54,6 +56,13 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
   const isReconnectRef = useRef(false);
   const connectedAtRef = useRef<number>(0);
   const stabilityTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const logStatus = useCallback((msg: string) => {
+    const ts = new Date().toISOString().substring(11, 23);
+    const entry = `[${ts}] ${msg}`;
+    console.log(`[Dave] ${msg}`);
+    setStatusLog(prev => [...prev.slice(-9), entry]);
+  }, []);
 
   useEffect(() => { isOpenRef.current = isOpen; }, [isOpen]);
   useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
@@ -85,9 +94,8 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
       },
     },
     onConnect: () => {
-      console.log('[Dave] ✅ Connected — overrides applied via useConversation hook');
-      console.log('[Dave] Context length:', sessionDataRef.current?.context?.length, 'chars');
-      console.log('[Dave] First message:', sessionDataRef.current?.firstMessage?.substring(0, 80));
+      logStatus(`✅ Connected via WebRTC — context: ${sessionDataRef.current?.context?.length} chars, firstMessage: ${sessionDataRef.current?.firstMessage?.substring(0, 80)}`);
+      messageReceivedRef.current = false;
       setError(null);
       setReconnectInfo(null);
       setIsConnecting(false);
@@ -100,11 +108,11 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
 
       // Belt-and-suspenders: also send context via sendContextualUpdate
       if (sessionDataRef.current?.context) {
-        try {
+      try {
           conversation.sendContextualUpdate(sessionDataRef.current.context);
-          console.log('[Dave] Backup context sent via sendContextualUpdate');
+          logStatus('Backup context sent via sendContextualUpdate');
         } catch (e) {
-          console.warn('[Dave] Failed to send contextual update (fallback):', e);
+          logStatus(`Failed sendContextualUpdate fallback: ${e}`);
         }
       }
 
@@ -116,12 +124,12 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
     },
     onDisconnect: () => {
       const uptime = connectedAtRef.current ? Date.now() - connectedAtRef.current : 0;
-      console.log(`[Dave] ❌ Disconnected (uptime: ${uptime}ms)`);
+      logStatus(`❌ Disconnected (uptime: ${uptime}ms, messagesReceived: ${messageReceivedRef.current})`);
       if (stabilityTimerRef.current) clearTimeout(stabilityTimerRef.current);
 
       // If disconnected almost immediately, treat as error
       if (uptime > 0 && uptime < 2000) {
-        console.warn('[Dave] Immediate disconnect — likely transport or auth issue');
+        logStatus('⚠️ Immediate disconnect — likely transport or auth issue');
         setError('Connection dropped immediately. Tap to retry.');
       }
 
@@ -136,7 +144,7 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
         reconnectAttemptRef.current++;
         isReconnectRef.current = true;
         setReconnectInfo(`Reconnecting (${reconnectAttemptRef.current}/${MAX_RECONNECTS})...`);
-        console.log(`[Dave] Auto-reconnecting in ${delay}ms (attempt ${reconnectAttemptRef.current})`);
+        logStatus(`Auto-reconnecting in ${delay}ms (attempt ${reconnectAttemptRef.current})`);
         reconnectTimerRef.current = setTimeout(() => {
           reconnectTimerRef.current = undefined;
           if (isOpenRef.current) startConversationRef.current?.();
@@ -146,6 +154,7 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
       }
     },
     onMessage: (message: any) => {
+      messageReceivedRef.current = true;
       console.log('[Dave] Message:', message?.type, message);
       if (message?.type === 'user_transcript' && message?.user_transcription_event?.user_transcript) {
         const text = message.user_transcription_event.user_transcript;
@@ -164,7 +173,8 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
       }
     },
     onError: (err: any) => {
-      console.error('[Dave] Error:', err);
+      logStatus(`🔴 Error: ${JSON.stringify(err)}`);
+      console.error('[Dave] Full error object:', err);
       const msg = err?.message || String(err);
       if (/NotAllowedError|Permission denied/i.test(msg)) {
         setError('Microphone access required — check your browser settings');
@@ -221,27 +231,22 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
     try {
       // For reconnects, fetch fresh session with conversation history
       // For initial connect, use the pre-fetched sessionData from props
-      let url = sessionDataRef.current.signed_url;
+      let currentToken = sessionDataRef.current.token;
       if (isReconnectRef.current) {
         const history = getConversationContext();
         const freshSession = await getSession(history);
         sessionDataRef.current = freshSession;
-        url = freshSession.signed_url;
-        // NOTE: on reconnect, overrides won't update because useConversation
-        // was initialized with the original props. The component will need
-        // to be re-mounted (via key change in Layout) for new overrides.
-        // The sendContextualUpdate in onConnect serves as the fallback here.
+        currentToken = freshSession.token;
       }
 
-      // ─── CLEAN: startSession only needs the signedUrl ───
-      console.log('[Dave] Starting session with signed URL | context:', sessionDataRef.current.context?.length, 'chars');
-      console.log('[Dave] Signed URL prefix:', url?.substring(0, 60));
+      // ─── WebRTC + conversation token ───
+      logStatus(`Starting session (WebRTC) | context: ${sessionDataRef.current.context?.length} chars`);
       await conversation.startSession({
-        signedUrl: url,
-        connectionType: 'websocket',
+        conversationToken: currentToken,
+        connectionType: 'webrtc',
       } as any);
 
-      console.log('[Dave] Session started successfully');
+      logStatus('Session started successfully');
       clearTimeout(timeout);
     } catch (err: any) {
       clearTimeout(timeout);
