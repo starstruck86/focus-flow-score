@@ -124,12 +124,12 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
     },
     onDisconnect: () => {
       const uptime = connectedAtRef.current ? Date.now() - connectedAtRef.current : 0;
-      console.log(`[Dave] ❌ Disconnected (uptime: ${uptime}ms)`);
+      logStatus(`❌ Disconnected (uptime: ${uptime}ms, messagesReceived: ${messageReceivedRef.current})`);
       if (stabilityTimerRef.current) clearTimeout(stabilityTimerRef.current);
 
       // If disconnected almost immediately, treat as error
       if (uptime > 0 && uptime < 2000) {
-        console.warn('[Dave] Immediate disconnect — likely transport or auth issue');
+        logStatus('⚠️ Immediate disconnect — likely transport or auth issue');
         setError('Connection dropped immediately. Tap to retry.');
       }
 
