@@ -39,6 +39,7 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [reconnectInfo, setReconnectInfo] = useState<string | null>(null);
   const [vadActive, setVadActive] = useState(false);
+  const [statusLog, setStatusLog] = useState<string[]>([]);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const orbRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number>(0);
@@ -46,6 +47,7 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
   const reconnectAttemptRef = useRef(0);
   const startConversationRef = useRef<() => Promise<void>>();
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const messageReceivedRef = useRef(false);
 
   // Refs for stale closure fixes
   const isOpenRef = useRef(isOpen);
@@ -54,6 +56,13 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
   const isReconnectRef = useRef(false);
   const connectedAtRef = useRef<number>(0);
   const stabilityTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const logStatus = useCallback((msg: string) => {
+    const ts = new Date().toISOString().substring(11, 23);
+    const entry = `[${ts}] ${msg}`;
+    console.log(`[Dave] ${msg}`);
+    setStatusLog(prev => [...prev.slice(-9), entry]);
+  }, []);
 
   useEffect(() => { isOpenRef.current = isOpen; }, [isOpen]);
   useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
