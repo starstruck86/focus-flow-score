@@ -995,6 +995,7 @@ export function ResourceManager() {
       <ReorganizeModal open={showReorganize} onOpenChange={setShowReorganize} />
       <DuplicateResourcesModal open={showDuplicates} onOpenChange={setShowDuplicates} />
       <PlaylistImportModal open={showPlaylistImport} onOpenChange={setShowPlaylistImport} />
+      <PodcastImportModal open={showPodcastImport} onOpenChange={setShowPodcastImport} />
       <WebpageImportModal open={showWebpageImport} onOpenChange={setShowWebpageImport} />
       <AIGenerateDialog
         open={showAIGenerate}
