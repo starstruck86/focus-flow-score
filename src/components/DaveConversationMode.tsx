@@ -29,6 +29,7 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
   const { ask: askCopilot } = useCopilot();
   const { getSession, invalidateCache } = useDaveContext();
   const [isConnecting, setIsConnecting] = useState(false);
+  const [needsTap, setNeedsTap] = useState(true);
   const [showTranscript, setShowTranscript] = useState(false);
   const [transcript, setTranscript] = useState<Array<{ role: 'user' | 'agent'; text: string }>>([]);
   const [error, setError] = useState<string | null>(null);
