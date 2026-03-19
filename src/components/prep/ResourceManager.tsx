@@ -97,6 +97,16 @@ export function ResourceManager() {
   const [savingAll, setSavingAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // AI Discover states
+  const [showDiscover, setShowDiscover] = useState(false);
+  const [discoverQuery, setDiscoverQuery] = useState('');
+  const [discoverLoading, setDiscoverLoading] = useState(false);
+  const [competitorName, setCompetitorName] = useState('');
+  const [competitorUrl, setCompetitorUrl] = useState('');
+  const [competitorContext, setCompetitorContext] = useState('');
+  const [battlecardLoading, setBattlecardLoading] = useState(false);
+  const [battlecardProgress, setBattlecardProgress] = useState('');
+
   const { data: folders = [] } = useResourceFolders();
   const { data: resources = [] } = useResources(currentFolderId === null ? undefined : currentFolderId);
   const createFolder = useCreateFolder();
