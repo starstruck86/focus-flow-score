@@ -436,6 +436,7 @@ ${customScorecardContext}`;
         coaching_why: grade.coaching_why,
         transcript_moment: grade.transcript_moment,
         call_type: transcript.call_type,
+        custom_scorecard_results: grade.custom_scores?.length ? grade.custom_scores : null,
       }, { onConflict: "transcript_id" })
       .select()
       .single();
