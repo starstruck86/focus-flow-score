@@ -824,6 +824,82 @@ export function ResourceManager() {
         </DialogContent>
       </Dialog>
 
+      {/* AI Discover Dialog */}
+      <Dialog open={showDiscover} onOpenChange={setShowDiscover}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Radar className="h-5 w-5 text-primary" /> AI Resource Discovery</DialogTitle></DialogHeader>
+          <Tabs defaultValue="resources">
+            <TabsList className="w-full">
+              <TabsTrigger value="resources" className="flex-1 text-xs"><Globe className="h-3.5 w-3.5 mr-1" /> Find Resources</TabsTrigger>
+              <TabsTrigger value="competitor" className="flex-1 text-xs"><Shield className="h-3.5 w-3.5 mr-1" /> Competitor Intel</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="resources" className="space-y-3 mt-3">
+              <Textarea
+                value={discoverQuery}
+                onChange={e => setDiscoverQuery(e.target.value)}
+                placeholder={"e.g. Top 1% MEDDICC training resources, podcasts, and books for enterprise SaaS sales\n\nBest cold calling frameworks and YouTube channels for outbound B2B\n\nElite negotiation techniques and courses for complex deal cycles"}
+                rows={4}
+                className="text-sm"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Describe what you're looking for. AI will search the web for the best books, podcasts, videos, frameworks, and articles.
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setShowDiscover(false)}>Cancel</Button>
+                <Button size="sm" onClick={handleDiscoverResources} disabled={discoverLoading || !discoverQuery.trim()}>
+                  {discoverLoading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Radar className="h-3.5 w-3.5 mr-1" />}
+                  {discoverLoading ? 'Searching...' : 'Discover'}
+                </Button>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="competitor" className="space-y-3 mt-3">
+              <div className="space-y-2">
+                <Input
+                  value={competitorName}
+                  onChange={e => setCompetitorName(e.target.value)}
+                  placeholder="Competitor name (e.g. Klaviyo)"
+                  className="text-sm"
+                />
+                <Input
+                  value={competitorUrl}
+                  onChange={e => setCompetitorUrl(e.target.value)}
+                  placeholder="Website URL (e.g. https://klaviyo.com)"
+                  className="text-sm"
+                />
+                <Textarea
+                  value={competitorContext}
+                  onChange={e => setCompetitorContext(e.target.value)}
+                  placeholder="Optional context: What do you sell? What does your prospect use this competitor for?"
+                  rows={3}
+                  className="text-sm"
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                AI will deep-scrape the competitor's website (product, pricing, help docs) and build a comprehensive battlecard with strengths, weaknesses, and how to pitch against them.
+              </p>
+              {battlecardLoading && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>{battlecardProgress || 'Building battlecard...'}</span>
+                  </div>
+                  <Progress value={undefined} className="h-1.5" />
+                </div>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setShowDiscover(false)}>Cancel</Button>
+                <Button size="sm" onClick={handleBuildBattlecard} disabled={battlecardLoading || !competitorName.trim() || !competitorUrl.trim()}>
+                  {battlecardLoading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Shield className="h-3.5 w-3.5 mr-1" />}
+                  {battlecardLoading ? 'Scraping & Analyzing...' : 'Build Battlecard'}
+                </Button>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
+
       {/* Reorganize Modal */}
       <ReorganizeModal open={showReorganize} onOpenChange={setShowReorganize} />
       <DuplicateResourcesModal open={showDuplicates} onOpenChange={setShowDuplicates} />
