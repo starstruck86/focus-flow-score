@@ -666,25 +666,26 @@ export function ResourceManager() {
         </DialogContent>
       </Dialog>
 
-      {/* Add URL Dialog */}
+      {/* Add URLs Dialog */}
       <Dialog open={showAddUrl} onOpenChange={setShowAddUrl}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Add Link / URL</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Add Links / URLs</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <Input
+            <Textarea
               value={urlInput}
               onChange={e => setUrlInput(e.target.value)}
-              placeholder="https://docs.google.com/... or any URL"
+              placeholder={"https://docs.google.com/...\nhttps://loom.com/...\nhttps://zoom.us/..."}
+              rows={5}
               autoFocus
-              onKeyDown={e => e.key === 'Enter' && handleAddUrl()}
+              className="text-sm"
             />
             <p className="text-[10px] text-muted-foreground">
-              Google Drive, Notion, Thinkific, or any external resource
+              Paste one URL per line. Google Drive, Notion, Thinkific, Loom, or any external resource.
             </p>
             <div className="flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={() => setShowAddUrl(false)}>Cancel</Button>
-              <Button size="sm" onClick={handleAddUrl} disabled={!urlInput.trim()}>
-                <Sparkles className="h-3.5 w-3.5 mr-1" /> Classify & Add
+              <Button size="sm" onClick={handleAddUrls} disabled={!urlInput.trim()}>
+                <Sparkles className="h-3.5 w-3.5 mr-1" /> Classify All
               </Button>
             </div>
           </div>
