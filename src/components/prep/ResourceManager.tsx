@@ -91,13 +91,8 @@ export function ResourceManager() {
   // Upload/URL states
   const [showAddUrl, setShowAddUrl] = useState(false);
   const [urlInput, setUrlInput] = useState('');
-  const [classifying, setClassifying] = useState(false);
-  const [pendingClassification, setPendingClassification] = useState<{
-    classification: ClassificationResult;
-    source: 'file' | 'url';
-    file?: File;
-    url?: string;
-  } | null>(null);
+  const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
+  const [savingAll, setSavingAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: folders = [] } = useResourceFolders();
@@ -169,58 +164,113 @@ export function ResourceManager() {
     setRenameResourceTitle('');
   }, [renamingResourceId, renameResourceTitle, updateResource]);
 
-  // File upload handler
+  // Classify items in batches of 3
+  const classifyBatch = async (items: PendingItem[]) => {
+    for (let i = 0; i < items.length; i += 3) {
+      const batch = items.slice(i, i + 3);
+      await Promise.allSettled(
+        batch.map(async (item) => {
+          try {
+            let classification: ClassificationResult;
+            if (item.source === 'file' && item.file) {
+              const text = await extractTextPreview(item.file);
+              classification = await classify.mutateAsync({ text, filename: item.file.name });
+            } else if (item.source === 'url' && item.url) {
+              classification = await classify.mutateAsync({ url: item.url });
+            } else {
+              throw new Error('Invalid item');
+            }
+            setPendingItems(prev => prev.map(p =>
+              p.id === item.id ? { ...p, status: 'classified' as const, classification } : p
+            ));
+          } catch {
+            setPendingItems(prev => prev.map(p =>
+              p.id === item.id ? { ...p, status: 'error' as const, error: 'Classification failed' } : p
+            ));
+          }
+        })
+      );
+    }
+  };
+
+  // File upload handler — supports multiple files
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 20 * 1024 * 1024) {
-      toast.error('File must be under 20MB');
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const validFiles = files.filter(f => {
+      if (f.size > 20 * 1024 * 1024) {
+        toast.error(`${f.name} exceeds 20MB limit`);
+        return false;
+      }
+      return true;
+    });
+    if (!validFiles.length) return;
+
+    const newItems: PendingItem[] = validFiles.map(file => ({
+      id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      status: 'classifying' as const,
+      source: 'file' as const,
+      file,
+    }));
+    setPendingItems(prev => [...prev, ...newItems]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    classifyBatch(newItems);
+  };
+
+  // Bulk URL handler
+  const handleAddUrls = async () => {
+    const urls = urlInput
+      .split('\n')
+      .map(u => u.trim())
+      .filter(u => u && (u.startsWith('http://') || u.startsWith('https://')));
+    if (!urls.length) {
+      toast.error('No valid URLs found');
       return;
     }
-    setClassifying(true);
-    try {
-      const text = await extractTextPreview(file);
-      const classification = await classify.mutateAsync({
-        text,
-        filename: file.name,
-      });
-      setPendingClassification({ classification, source: 'file', file });
-    } catch {
-      toast.error('Classification failed — please try again');
-    } finally {
-      setClassifying(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  // URL handler
-  const handleAddUrl = async () => {
-    if (!urlInput.trim()) return;
-    setClassifying(true);
     setShowAddUrl(false);
-    try {
-      const classification = await classify.mutateAsync({ url: urlInput.trim() });
-      setPendingClassification({ classification, source: 'url', url: urlInput.trim() });
-      setUrlInput('');
-    } catch {
-      toast.error('Classification failed — please try again');
-    } finally {
-      setClassifying(false);
-    }
+    setUrlInput('');
+
+    const newItems: PendingItem[] = urls.map(url => ({
+      id: `url-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      status: 'classifying' as const,
+      source: 'url' as const,
+      url,
+    }));
+    setPendingItems(prev => [...prev, ...newItems]);
+    classifyBatch(newItems);
   };
 
-  // Confirm classification
-  const handleConfirmClassification = async () => {
-    if (!pendingClassification) return;
-    const { classification, source, file, url } = pendingClassification;
+  // Update a pending item's title
+  const updatePendingTitle = (id: string, title: string) => {
+    setPendingItems(prev => prev.map(p =>
+      p.id === id && p.classification ? { ...p, classification: { ...p.classification, title } } : p
+    ));
+  };
+
+  // Remove a pending item
+  const removePendingItem = (id: string) => {
+    setPendingItems(prev => prev.filter(p => p.id !== id));
+  };
+
+  // Confirm all classified items
+  const handleConfirmAll = async () => {
+    const readyItems = pendingItems.filter(p => p.status === 'classified' && p.classification);
+    if (!readyItems.length) return;
+    setSavingAll(true);
     try {
-      if (source === 'file' && file) {
-        await uploadResource.mutateAsync({ file, classification, folderId: currentFolderId });
-      } else if (source === 'url' && url) {
-        await addUrlResource.mutateAsync({ url, classification, folderId: currentFolderId });
+      for (const item of readyItems) {
+        if (item.source === 'file' && item.file && item.classification) {
+          await uploadResource.mutateAsync({ file: item.file, classification: item.classification, folderId: currentFolderId });
+        } else if (item.source === 'url' && item.url && item.classification) {
+          await addUrlResource.mutateAsync({ url: item.url, classification: item.classification, folderId: currentFolderId });
+        }
       }
+      setPendingItems(prev => prev.filter(p => p.status === 'error'));
+      toast.success(`${readyItems.length} resource${readyItems.length > 1 ? 's' : ''} saved`);
+    } catch {
+      toast.error('Some items failed to save');
     } finally {
-      setPendingClassification(null);
+      setSavingAll(false);
     }
   };
 
