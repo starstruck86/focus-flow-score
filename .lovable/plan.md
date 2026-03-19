@@ -1,57 +1,75 @@
 
 
-# Fix Dave: Both Diagnostic + WebRTC Switch
+# Three Changes
 
-## The smart approach
+## 1. Show "Last Updated" on mobile
 
-Do both in one shot. The ElevenLabs docs are clear: **WebRTC + conversation token is the recommended path**, and it supports overrides identically. The diagnostic logging goes in alongside, so if anything still fails we'll know exactly why.
+**File**: `src/components/Layout.tsx` (line 251)
 
-## What changes
+The build timestamp currently has `hidden sm:inline`, hiding it on mobile. Change to `inline` so it's always visible. Shorten the text on mobile to just the relative time (no "Updated" prefix) to save space.
 
-### 1. Edge function: conversation token instead of signed URL
-**File**: `supabase/functions/dave-conversation-token/index.ts`
+## 2. Raise YouTube playlist cap to 1,000
 
-- Change the ElevenLabs API call from `get-signed-url` to `conversation/token`
-- Return `{ token, context, firstMessage }` instead of `{ signed_url, ... }`
-- Everything else (CRM context building, DAVE_INSTRUCTIONS, first message logic) stays identical
+The current bottleneck is Firecrawl — it scrapes the playlist page and only sees the videos loaded in the initial HTML (~100). To get up to 1,000 videos:
 
-### 2. Client: WebRTC transport + diagnostic logging
-**File**: `src/components/DaveConversationMode.tsx`
+**File**: `supabase/functions/import-youtube-playlist/index.ts`
+- Switch from single `scrape` to using Firecrawl's `scrape` with `scrollToBottom` or multiple paginated fetches
+- Alternatively, use the YouTube Data API v3 `playlistItems.list` endpoint (supports pagination via `nextPageToken`, 50 items per page, up to 1,000 with 20 pages) — this is more reliable than scraping
+- This requires a YouTube API key. Check if one exists, otherwise ask the user to add one.
 
-- Use `conversationToken` + `connectionType: 'webrtc'` in `startSession`
-- Add status transition logging with timestamps in `onConnect`, `onDisconnect`, `onError`
-- Log the full error object (not just message) to capture override rejection reasons
-- Track whether any `onMessage` was received before disconnect (distinguishes "connected but silent" from "never connected")
-- Show last status transition in the UI during connection for debugging
+Actually, let me reconsider. Firecrawl has `actions` support for scrolling. The simpler reliable path: use YouTube's RSS/API or Firecrawl with scroll actions to load more videos.
 
-### 3. Update types and references
-- **`src/hooks/useDaveContext.ts`**: `DaveSessionData` interface — `signed_url` → `token`
-- **`src/components/Layout.tsx`**: React `key` prop — `daveSessionData.signed_url` → `daveSessionData.token`
+**Better approach**: Use Firecrawl with `actions: [{ type: "scroll", direction: "down", amount: 10000 }]` repeated multiple times to force-load more videos on the playlist page. This avoids needing a new API key.
 
-## What stays the same
+**File**: `src/components/prep/PlaylistImportModal.tsx`
+- Remove any client-side cap (there isn't one explicitly, but the edge function limits what comes back)
 
-- Dave's full 20k CRM context — built identically by the edge function
-- DAVE_INSTRUCTIONS — unchanged
-- Overrides in `useConversation()` (prompt + firstMessage) — unchanged
-- Client tools, dismissal phrases, transcript saving — unchanged
-- Post-connect `sendContextualUpdate` backup — unchanged
+## 3. Podcast import (Apple Podcasts + Spotify) — up to 1,000
 
-## Why this is safe
+Create a new edge function and modal for podcast imports:
 
-The ElevenLabs docs explicitly state conversation tokens support the same override architecture as signed URLs. The `useConversation({ overrides })` pattern works with both transports. Dave keeps his full brain — only the wire changes from WebSocket to WebRTC.
+**New file**: `supabase/functions/import-podcast/index.ts`
+- Accept a podcast URL (Apple Podcasts or Spotify show URL)
+- For Apple Podcasts: use the iTunes Search/Lookup API (`https://itunes.apple.com/lookup?id=...&entity=podcastEpisode&limit=200`) — free, no API key. Paginate with offset to get up to 1,000.
+- For Spotify: scrape the show page via Firecrawl to extract episode links and titles (Spotify API requires OAuth which is heavy for this use case)
+- Return `{ success: true, episodes: [{ title, url }] }`
 
-## Risk mitigation
+**New file**: `src/components/prep/PodcastImportModal.tsx`
+- Similar UI to `PlaylistImportModal` — paste URL, fetch episodes, select/deselect, import with progress bar
+- Support both Apple Podcasts and Spotify show URLs
+- Icon: `Podcast` from lucide
 
-The diagnostic logging means if WebRTC also fails, we'll see exactly:
-- Whether the connection was established at all
-- Whether overrides were rejected
-- Whether audio was flowing
-- The specific error payload from ElevenLabs
+**File**: `src/components/prep/ResourceManager.tsx` (or wherever the import menu lives)
+- Add "Import Podcast" option alongside the existing YouTube playlist and webpage import options
 
-No more guessing.
+---
 
-## Files
+## Technical Details
+
+### YouTube 1,000 cap
+Firecrawl's single scrape only gets initially-rendered videos (~100). To get more:
+- Use Firecrawl `actions` to scroll the page multiple times before extracting links
+- Each scroll loads ~20-30 more videos; 30+ scrolls should surface up to 1,000
+- oEmbed title fetching stays the same but batch size increases to 30 for speed
+
+### Apple Podcasts
+- iTunes Lookup API: `https://itunes.apple.com/lookup?id={PODCAST_ID}&entity=podcastEpisode&limit=200`
+- Max 200 per request. For more, the podcast's RSS feed URL is returned in the lookup response — parse the RSS XML to get all episodes (RSS feeds typically contain the full catalog)
+- Extract RSS feed URL from iTunes API response, then fetch and parse the RSS XML for complete episode list
+
+### Spotify
+- Scrape via Firecrawl with scroll actions to load episode list
+- Extract episode titles and Spotify URLs
+- Each episode URL pattern: `https://open.spotify.com/episode/...`
+
+### Files changed/created
 
 | File | Change |
 |------|--------|
-| `supabase/functions/dave-conversation-token/index.ts` | Token endpoint
+| `src/components/Layout.tsx` | Remove `hidden sm:` from build timestamp |
+| `supabase/functions/import-youtube-playlist/index.ts` | Add scroll actions, raise cap to 1,000 |
+| `supabase/functions/import-podcast/index.ts` | New — fetch episodes from Apple/Spotify |
+| `src/components/prep/PodcastImportModal.tsx` | New — podcast import UI |
+| `src/components/prep/PlaylistImportModal.tsx` | Update count labels |
+| Resource manager/menu file | Add podcast import trigger |
+
