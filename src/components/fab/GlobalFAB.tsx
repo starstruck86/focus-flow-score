@@ -129,23 +129,14 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
     
     // Listen for custom events
     const handleOpenPowerHour = () => setShowPowerHour(true);
-    const handleVoiceCreateTask = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.title) {
-        // Open quick add with pre-filled title
-        setShowAddTask(true);
-      }
-    };
     const handleVoiceQuickLog = () => setShowQuickLog(true);
     
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('open-power-hour', handleOpenPowerHour);
-    window.addEventListener('voice-create-task', handleVoiceCreateTask);
     window.addEventListener('voice-quick-log', handleVoiceQuickLog);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('open-power-hour', handleOpenPowerHour);
-      window.removeEventListener('voice-create-task', handleVoiceCreateTask);
       window.removeEventListener('voice-quick-log', handleVoiceQuickLog);
     };
   }, [isExpanded]);
@@ -284,8 +275,8 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
   
   // Position FAB above the 2-row bottom nav (nav is ~92px + safe-area)
   const positionClasses = position === 'bottom-right' 
-    ? 'right-4 bottom-[calc(6rem+env(safe-area-inset-bottom))]' 
-    : 'left-4 bottom-[calc(6rem+env(safe-area-inset-bottom))]';
+    ? 'right-4 bottom-[calc(7.5rem+env(safe-area-inset-bottom))]' 
+    : 'left-4 bottom-[calc(7.5rem+env(safe-area-inset-bottom))]';
   
   const menuAlignment = position === 'bottom-right' ? 'items-end' : 'items-start';
   

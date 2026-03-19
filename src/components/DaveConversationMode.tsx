@@ -7,6 +7,7 @@ import { useDaveContext } from '@/hooks/useDaveContext';
 import { useCopilot } from '@/contexts/CopilotContext';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 import { createClientTools } from './dave/clientTools';
 
 interface Props {
@@ -152,11 +153,31 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
     startConversationRef.current = startConversation;
   }, [startConversation]);
 
+  const sessionStartRef = useRef<number>(Date.now());
+
   const endConversation = useCallback(async () => {
     reconnectAttemptRef.current = maxReconnects;
+    
+    // Save transcript to database if there are messages
+    if (transcript.length > 0) {
+      const durationSeconds = Math.round((Date.now() - sessionStartRef.current) / 1000);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await (supabase.from('dave_transcripts' as any) as any).insert({
+            user_id: user.id,
+            messages: transcript as any,
+            duration_seconds: durationSeconds,
+          });
+        }
+      } catch (err) {
+        console.error('Failed to save Dave transcript:', err);
+      }
+    }
+    
     await conversation.endSession();
     onClose();
-  }, [conversation, onClose]);
+  }, [conversation, onClose, transcript]);
 
   // Auto-start when opened
   useEffect(() => {

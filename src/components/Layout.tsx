@@ -97,7 +97,7 @@ function NavItem({ item }: { item: NavItemDef }) {
         <RouterNavLink
           to={item.to}
           className={cn(
-            'relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full text-[10px] font-medium transition-all duration-200 rounded-lg',
+            'relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full text-[11px] font-medium transition-all duration-200 rounded-lg',
             isActive
               ? 'font-semibold'
               : 'text-muted-foreground hover:text-foreground'
@@ -114,7 +114,7 @@ function NavItem({ item }: { item: NavItemDef }) {
             />
           )}
           <item.icon
-            className={cn("h-4 w-4 transition-transform duration-200", isActive && "scale-110")}
+            className={cn("h-5 w-5 transition-transform duration-200", isActive && "scale-110")}
             style={isActive ? { color: `hsl(${COLOR_VAR[item.color]})` } : undefined}
           />
           <span className={cn("truncate transition-opacity", isActive ? "opacity-100" : "opacity-70")}>{item.label}</span>
@@ -140,15 +140,15 @@ function BottomNav() {
       style={{ background: 'linear-gradient(to top, hsl(var(--card)), hsl(var(--card) / 0.97))' }}
     >
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
-      <div className="max-w-3xl mx-auto px-1">
+      <div className="max-w-3xl mx-auto px-1 pb-1">
         {/* Row 1 — Primary nav */}
-        <div className="flex items-center justify-around h-11">
+        <div className="flex items-center justify-around h-12">
           {navRow1.map(item => <NavItem key={item.to} item={item} />)}
         </div>
         {/* Divider */}
         <div className="h-px bg-border/30 mx-4" />
         {/* Row 2 — Secondary nav */}
-        <div className="flex items-center justify-around h-10">
+        <div className="flex items-center justify-around h-12">
           {navRow2.map(item => <NavItem key={item.to} item={item} />)}
         </div>
       </div>
@@ -188,7 +188,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }), [activeColor]);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col w-full">
+    <div className="min-h-screen bg-background flex flex-col w-full pt-[env(safe-area-inset-top)]">
       {/* Top bar — minimal, color-accented */}
       <header
         className="flex items-center justify-between px-4 py-2 border-b sticky top-0 z-40 bg-background/95 backdrop-blur-md"
@@ -238,7 +238,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </div>
 
       <Breadcrumbs />
-      <main className="flex-1 overflow-auto pb-28">
+      <main className="flex-1 overflow-auto pb-[calc(8rem+env(safe-area-inset-bottom))]">
         {children}
       </main>
 
