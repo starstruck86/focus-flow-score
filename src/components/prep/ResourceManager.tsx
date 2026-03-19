@@ -149,6 +149,14 @@ export function ResourceManager() {
     setRenameFolderName('');
   }, [renamingFolder, renameFolderName, renameFolder]);
 
+  const handleRenameResource = useCallback(() => {
+    if (!renamingResourceId || !renameResourceTitle.trim()) return;
+    updateResource.mutate({ id: renamingResourceId, updates: { title: renameResourceTitle.trim() } });
+    toast.success('Resource renamed');
+    setRenamingResourceId(null);
+    setRenameResourceTitle('');
+  }, [renamingResourceId, renameResourceTitle, updateResource]);
+
   // File upload handler
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
