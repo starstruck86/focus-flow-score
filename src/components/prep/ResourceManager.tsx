@@ -236,18 +236,18 @@ export function ResourceManager() {
 
   // Bulk URL handler
   const handleAddUrls = async () => {
-    const urls = urlInput
-      .split('\n')
-      .map(u => u.trim())
-      .filter(u => u && (u.startsWith('http://') || u.startsWith('https://')));
-    if (!urls.length) {
+    // Extract all URLs from the input — handles newlines, spaces, commas, or mixed separators
+    const urlPattern = /https?:\/\/[^\s,<>"']+/gi;
+    const urls = (urlInput.match(urlPattern) || []).map(u => u.replace(/[)}\]]+$/, '').trim());
+    const uniqueUrls = [...new Set(urls)];
+    if (!uniqueUrls.length) {
       toast.error('No valid URLs found');
       return;
     }
     setShowAddUrl(false);
     setUrlInput('');
 
-    const newItems: PendingItem[] = urls.map(url => ({
+    const newItems: PendingItem[] = uniqueUrls.map(url => ({
       id: `url-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       status: 'classifying' as const,
       source: 'url' as const,
