@@ -358,15 +358,37 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
         </button>
 
         <div className="flex-1 flex items-center justify-center w-full">
-          <div
-            ref={orbRef}
-            className={cn(
-              'w-40 h-40 rounded-full transition-colors duration-700',
-              orbColor,
-              orbGlow,
-            )}
-            style={{ transition: 'transform 0.05s linear, background-color 0.7s, box-shadow 0.7s' }}
-          />
+          {needsTap && !isConnecting && !isConnected ? (
+            <button
+              onClick={() => {
+                setNeedsTap(false);
+                reconnectAttemptRef.current = 0;
+                isReconnectRef.current = false;
+                sessionDataRef.current = null;
+                startConversation();
+              }}
+              className="flex flex-col items-center gap-4"
+            >
+              <div
+                className={cn(
+                  'w-40 h-40 rounded-full transition-colors duration-700',
+                  'bg-emerald-500/30',
+                  'shadow-[0_0_60px_20px_rgba(16,185,129,0.3)]',
+                )}
+              />
+              <span className="text-white/60 text-sm">Tap to talk</span>
+            </button>
+          ) : (
+            <div
+              ref={orbRef}
+              className={cn(
+                'w-40 h-40 rounded-full transition-colors duration-700',
+                orbColor,
+                orbGlow,
+              )}
+              style={{ transition: 'transform 0.05s linear, background-color 0.7s, box-shadow 0.7s' }}
+            />
+          )}
         </div>
 
         <div className="flex flex-col items-center gap-3 pb-8" style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}>
