@@ -260,9 +260,11 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
     onClose();
   }, [conversation, onClose, clearReconnectTimer]);
 
-  // Start conversation on mount — no manual mic needed, SDK handles it
+  // Detect desktop to auto-start without tap
   useEffect(() => {
-    if (!startingRef.current) {
+    const isDesktop = navigator.maxTouchPoints === 0;
+    if (isDesktop && !startingRef.current) {
+      setNeedsTap(false);
       reconnectAttemptRef.current = 0;
       isReconnectRef.current = false;
       sessionDataRef.current = null;
