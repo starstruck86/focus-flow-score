@@ -15,7 +15,7 @@ import {
   Folder, FolderPlus, FilePlus, FileText, Presentation, Mail, BookOpen,
   ChevronRight, MoreHorizontal, Search, Trash2, Edit3, Clock,
   Star, Tag, Copy, Upload, Link2, Sparkles, Target, Shield,
-  GraduationCap, MessageSquare, Loader2, Check, X, AlertTriangle, Globe, Radar,
+  GraduationCap, MessageSquare, Loader2, Check, X, AlertTriangle, Globe, Radar, ListVideo,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -28,6 +28,7 @@ import { ResourceFileViewer } from './ResourceFileViewer';
 import { VersionHistory } from './VersionHistory';
 import { ReorganizeModal } from './ReorganizeModal';
 import { DuplicateResourcesModal } from './DuplicateResourcesModal';
+import { PlaylistImportModal } from './PlaylistImportModal';
 import { useResourceDuplicates } from '@/hooks/useResourceDuplicates';
 import { useConsolidateFolders } from '@/hooks/useConsolidateFolders';
 import { toast } from 'sonner';
@@ -101,6 +102,9 @@ export function ResourceManager() {
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [savingAll, setSavingAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Playlist import
+  const [showPlaylistImport, setShowPlaylistImport] = useState(false);
 
   // AI Discover states
   const [showDiscover, setShowDiscover] = useState(false);
@@ -490,6 +494,9 @@ export function ResourceManager() {
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setShowAddUrl(true)}>
               <Link2 className="h-3.5 w-3.5 mr-2" /> Add Link / URL
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setShowPlaylistImport(true)}>
+              <ListVideo className="h-3.5 w-3.5 mr-2" /> Import YouTube Playlist
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -912,6 +919,7 @@ export function ResourceManager() {
       {/* Reorganize Modal */}
       <ReorganizeModal open={showReorganize} onOpenChange={setShowReorganize} />
       <DuplicateResourcesModal open={showDuplicates} onOpenChange={setShowDuplicates} />
+      <PlaylistImportModal open={showPlaylistImport} onOpenChange={setShowPlaylistImport} />
     </div>
   );
 }
