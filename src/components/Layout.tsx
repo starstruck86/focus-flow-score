@@ -159,8 +159,10 @@ function BottomNav() {
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { setPageContext } = useCopilot();
   const activeColor = useActiveTabColor();
+  const [daveOpen, setDaveOpen] = useState(() => searchParams.get('dave') === '1');
 
   // Set page-accent CSS variable on the root element
   useEffect(() => {
