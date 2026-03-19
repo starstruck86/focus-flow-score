@@ -725,6 +725,20 @@ export function ResourceManager() {
                       }}>
                         <Copy className="h-3.5 w-3.5 mr-2" /> Duplicate
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={(e) => {
+                        e.stopPropagation();
+                        operationalize.mutate(resource.id);
+                      }}>
+                        <Sparkles className="h-3.5 w-3.5 mr-2" /> Operationalize
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={(e) => {
+                        e.stopPropagation();
+                        setGenerateSourceId(resource.id);
+                        setGenerateInitialType(undefined);
+                        setShowAIGenerate(true);
+                      }}>
+                        <Target className="h-3.5 w-3.5 mr-2" /> Generate From This
+                      </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem className="text-destructive" onClick={(e) => { e.stopPropagation(); deleteResource.mutate(resource.id); }}>
                         <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
