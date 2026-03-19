@@ -29,6 +29,7 @@ import { VersionHistory } from './VersionHistory';
 import { ReorganizeModal } from './ReorganizeModal';
 import { DuplicateResourcesModal } from './DuplicateResourcesModal';
 import { useResourceDuplicates } from '@/hooks/useResourceDuplicates';
+import { useConsolidateFolders } from '@/hooks/useConsolidateFolders';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
