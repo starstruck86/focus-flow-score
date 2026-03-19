@@ -80,6 +80,16 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
         reconnectAttemptRef.current = 0;
       }, STABILITY_WINDOW_MS);
 
+      // Inject full CRM context via sendContextualUpdate (supported SDK method)
+      if (sessionDataRef.current?.context) {
+        try {
+          conversation.sendContextualUpdate(sessionDataRef.current.context);
+          console.log('[Dave] Context injected via sendContextualUpdate (' + sessionDataRef.current.context.length + ' chars)');
+        } catch (e) {
+          console.warn('[Dave] Failed to send contextual update:', e);
+        }
+      }
+
       // Greeting watchdog: warn if no agent message within 5s
       if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
       greetingWatchdogRef.current = setTimeout(() => {
