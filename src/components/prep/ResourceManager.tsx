@@ -95,6 +95,7 @@ export function ResourceManager() {
   const deleteResource = useDeleteResource();
   const deleteFolder = useDeleteFolder();
   const renameFolder = useRenameFolder();
+  const updateResource = useUpdateResource();
   const classify = useClassifyResource();
   const uploadResource = useUploadResource();
   const addUrlResource = useAddUrlResource();
