@@ -388,65 +388,69 @@ export function ResourceManager() {
         </Button>
       </div>
 
-      {/* Classifying indicator */}
-      {classifying && (
-        <div className="flex items-center gap-2 p-3 rounded-lg border border-primary/30 bg-primary/5">
-          <Loader2 className="h-4 w-4 animate-spin text-primary" />
-          <span className="text-sm text-foreground">AI is classifying your content...</span>
-        </div>
-      )}
-
-      {/* Classification confirmation */}
-      {pendingClassification && (
+      {/* Batch review panel */}
+      {pendingItems.length > 0 && (
         <div className="p-4 rounded-lg border border-primary/30 bg-primary/5 space-y-3">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium text-foreground">AI Classification</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium text-foreground">
+                {pendingItems.filter(p => p.status === 'classifying').length > 0
+                  ? `Classifying ${pendingItems.filter(p => p.status === 'classifying').length} item(s)...`
+                  : `${pendingItems.filter(p => p.status === 'classified').length} item(s) ready`}
+              </span>
+            </div>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setPendingItems([])}>
+              <X className="h-3.5 w-3.5" />
+            </Button>
           </div>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground w-16">Title:</span>
-              <Input
-                value={pendingClassification.classification.title}
-                onChange={e => setPendingClassification(prev => prev ? {
-                  ...prev,
-                  classification: { ...prev.classification, title: e.target.value },
-                } : null)}
-                className="h-7 text-sm font-medium flex-1"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground w-16">Type:</span>
-              <Badge variant="secondary" className="text-xs capitalize">{pendingClassification.classification.resource_type}</Badge>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground w-16">Folder:</span>
-              <Badge variant="outline" className="text-xs">{pendingClassification.classification.suggested_folder}</Badge>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-muted-foreground w-16">Tags:</span>
-              {pendingClassification.classification.tags.map(t => (
-                <Badge key={t} variant="outline" className="text-[10px]">{t}</Badge>
+          <ScrollArea className="max-h-[300px]">
+            <div className="space-y-2">
+              {pendingItems.map(item => (
+                <div key={item.id} className="flex items-center gap-2 p-2 rounded-md border border-border/50 bg-background">
+                  {item.status === 'classifying' && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />}
+                  {item.status === 'classified' && <Check className="h-3.5 w-3.5 text-green-500 shrink-0" />}
+                  {item.status === 'error' && <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />}
+                  <div className="flex-1 min-w-0">
+                    {item.status === 'classified' && item.classification ? (
+                      <Input
+                        value={item.classification.title}
+                        onChange={e => updatePendingTitle(item.id, e.target.value)}
+                        className="h-7 text-xs"
+                      />
+                    ) : item.status === 'error' ? (
+                      <span className="text-xs text-destructive">{item.error}</span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground truncate block">
+                        {item.source === 'file' ? item.file?.name : item.url}
+                      </span>
+                    )}
+                    {item.status === 'classified' && item.classification && (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <Badge variant="secondary" className="text-[9px] capitalize">{item.classification.resource_type}</Badge>
+                        <Badge variant="outline" className="text-[9px]">{item.classification.suggested_folder}</Badge>
+                      </div>
+                    )}
+                  </div>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => removePendingItem(item.id)}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
               ))}
             </div>
-            {pendingClassification.classification.description && (
-              <p className="text-xs text-muted-foreground">{pendingClassification.classification.description}</p>
-            )}
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPendingClassification(null)}>
-              <X className="h-3.5 w-3.5 mr-1" /> Cancel
-            </Button>
-            <Button size="sm" onClick={handleConfirmClassification}
-              disabled={uploadResource.isPending || addUrlResource.isPending}>
-              {(uploadResource.isPending || addUrlResource.isPending) ? (
-                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-              ) : (
-                <Check className="h-3.5 w-3.5 mr-1" />
-              )}
-              Confirm & Save
-            </Button>
-          </div>
+          </ScrollArea>
+          {pendingItems.some(p => p.status === 'classified') && (
+            <div className="flex justify-end">
+              <Button size="sm" onClick={handleConfirmAll} disabled={savingAll}>
+                {savingAll ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                ) : (
+                  <Check className="h-3.5 w-3.5 mr-1" />
+                )}
+                Confirm All ({pendingItems.filter(p => p.status === 'classified').length})
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
