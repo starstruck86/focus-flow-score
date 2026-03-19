@@ -1,5 +1,5 @@
-import { NavLink as RouterNavLink, useLocation } from 'react-router-dom';
-import { useEffect, useMemo } from 'react';
+import { NavLink as RouterNavLink, useLocation, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { 
   LayoutDashboard, 
@@ -22,6 +22,7 @@ import { GlobalFAB } from '@/components/fab';
 import { GlobalSearch } from '@/components/GlobalSearch';
 import { TerritoryCopilot } from '@/components/TerritoryCopilot';
 import { VoiceCommandButton } from '@/components/VoiceCommandButton';
+import { DaveConversationMode } from '@/components/DaveConversationMode';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { BackToToday } from '@/components/BackToToday';
 import { useCopilot, type PageContext } from '@/contexts/CopilotContext';
