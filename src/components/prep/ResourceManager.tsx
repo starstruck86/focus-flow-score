@@ -84,7 +84,7 @@ export function ResourceManager() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: folders = [] } = useResourceFolders();
-  const { data: resources = [] } = useResources(currentFolderId);
+  const { data: resources = [] } = useResources(currentFolderId === null ? undefined : currentFolderId);
   const createFolder = useCreateFolder();
   const createResource = useCreateResource();
   const deleteResource = useDeleteResource();
