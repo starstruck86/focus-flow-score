@@ -207,7 +207,7 @@ async function fetchCrmContext(supabase: any, userId: string): Promise<CrmContex
   return { sections, calendarCount, firstMeeting, overdueCount, pendingReminders };
 }
 
-function buildFirstMessage(ctx: CrmContext, tzOffsetHours: number): string | null {
+function buildFirstMessage(ctx: CrmContext, tzOffsetHours: number): string {
   const now = new Date();
   const hour = now.getUTCHours();
   const localHour = (hour - tzOffsetHours + 24) % 24;
@@ -228,5 +228,9 @@ function buildFirstMessage(ctx: CrmContext, tzOffsetHours: number): string | nul
     return "Hey — wrapping up the day? I can help with a debrief, update your pipeline, or prep for tomorrow. What do you need?";
   }
 
-  return null;
+  // Midday greeting — always speak first so the user knows connection is live
+  if (ctx.calendarCount) {
+    return `Hey! You've got ${ctx.calendarCount} meetings coming up. Need help prepping, or is there something else on your mind?`;
+  }
+  return "Hey! I'm here whenever you need me. What can I help with?";
 }
