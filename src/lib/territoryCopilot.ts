@@ -135,7 +135,8 @@ export const SUGGESTED_QUESTIONS: { text: string; mode: CopilotMode }[] = [
   { text: "Prep me for my next client meeting", mode: "meeting" },
   { text: "Draft a recap email for my last call", mode: "recap-email" },
   { text: "Research & update my top pipeline accounts", mode: "deep" },
-  { text: "Analyze pipeline gaps using my frameworks", mode: "deal-strategy" },
+  { text: "Teach me about MEDDICC", mode: "resource-qa" },
+  { text: "Apply my frameworks to my top deal", mode: "resource-qa" },
   { text: "What changed in my territory this week?", mode: "deep" },
   { text: "Which deals need champion development?", mode: "deal-strategy" },
 ];
