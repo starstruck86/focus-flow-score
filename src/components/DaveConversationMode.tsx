@@ -154,6 +154,7 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
       }
     },
     onMessage: (message: any) => {
+      messageReceivedRef.current = true;
       console.log('[Dave] Message:', message?.type, message);
       if (message?.type === 'user_transcript' && message?.user_transcription_event?.user_transcript) {
         const text = message.user_transcription_event.user_transcript;
