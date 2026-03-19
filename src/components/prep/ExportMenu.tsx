@@ -100,7 +100,7 @@ export function ExportMenu({ title, markdown }: ExportMenuProps) {
       if (sections.length === 0) {
         const slide = pptx.addSlide();
         slide.addText(title, { x: 0.5, y: 0.5, w: 12, h: 1.2, fontSize: 28, bold: true, color: '1a1a1a' });
-        slide.addText(markdown.slice(0, 2000), { x: 0.5, y: 2, w: 12, h: 4.5, fontSize: 14, color: '333333', breakType: 'none' });
+        slide.addText(markdown.slice(0, 2000), { x: 0.5, y: 2, w: 12, h: 4.5, fontSize: 14, color: '333333' });
       } else {
         for (const section of sections) {
           const slide = pptx.addSlide();

@@ -237,26 +237,6 @@ export const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>
           </div>
         </div>
 
-        {/* Bubble menu for quick formatting */}
-        {editor && (
-          <BubbleMenu editor={editor} tippyOptions={{ duration: 150 }} className="flex items-center gap-0.5 bg-popover border border-border rounded-lg shadow-lg p-1">
-            <ToolbarButton active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} title="Bold">
-              <Bold className="h-3 w-3" />
-            </ToolbarButton>
-            <ToolbarButton active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} title="Italic">
-              <Italic className="h-3 w-3" />
-            </ToolbarButton>
-            <ToolbarButton active={editor.isActive('underline')} onClick={() => editor.chain().focus().toggleUnderline().run()} title="Underline">
-              <UnderlineIcon className="h-3 w-3" />
-            </ToolbarButton>
-            <ToolbarButton active={editor.isActive('highlight')} onClick={() => editor.chain().focus().toggleHighlight().run()} title="Highlight">
-              <Highlighter className="h-3 w-3" />
-            </ToolbarButton>
-            <ToolbarButton onClick={addLink} title="Link" active={editor.isActive('link')}>
-              <LinkIcon className="h-3 w-3" />
-            </ToolbarButton>
-          </BubbleMenu>
-        )}
 
         {/* Editor Content */}
         <EditorContent editor={editor} />
