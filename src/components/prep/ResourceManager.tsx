@@ -318,6 +318,8 @@ export function ResourceManager() {
           description: r.description,
           resource_type: r.resource_type,
           tags: r.tags,
+          top_folder: r.suggested_folder || r.top_folder || 'Tools & Reference',
+          sub_folder: r.sub_folder,
           suggested_folder: r.suggested_folder,
         },
       }));
