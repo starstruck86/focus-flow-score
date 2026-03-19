@@ -916,6 +916,30 @@ export type Database = {
         }
         Relationships: []
       }
+      dave_transcripts: {
+        Row: {
+          created_at: string
+          duration_seconds: number | null
+          id: string
+          messages: Json
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          messages?: Json
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          messages?: Json
+          user_id?: string
+        }
+        Relationships: []
+      }
       dismissed_action_items: {
         Row: {
           dismissed_at: string
