@@ -28,8 +28,10 @@ function isJunkUrl(link: string, sourceHost: string): boolean {
   }
   try {
     const u = new URL(link);
-    // Skip same-page anchors
-    if (u.pathname === '/' && u.hash && !u.search) return true;
+    // Skip same-page anchors (url ends with #, or path matches source with only a hash)
+    if (u.hash && (u.pathname === '/' || u.href.replace(u.hash, '').replace(/\/$/, '') === `${u.protocol}//${u.hostname}`)) return true;
+    // Skip if URL ends with just # after the source path
+    if (u.href.endsWith('#')) return true;
   } catch {
     return true;
   }
