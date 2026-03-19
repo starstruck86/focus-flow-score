@@ -533,6 +533,46 @@ export function ResourceManager() {
         </Button>
       </div>
 
+      {/* AI Suggestions Banner */}
+      {suggestions.length > 0 && (
+        <div className="p-3 rounded-lg border border-accent/40 bg-accent/5 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              <span className="text-xs font-medium text-foreground">Smart Suggestions</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => refetchSuggestions()} disabled={suggestionsLoading}>
+                {suggestionsLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+              </Button>
+              <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setDismissedSuggestions(new Set(suggestions.map((_, i) => i)))}>
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+          {suggestions.filter((_, i) => !dismissedSuggestions.has(i)).map((s, i) => (
+            <div key={i} className="flex items-start gap-2 p-2 rounded-md border border-border/50 bg-background text-xs">
+              <div className="flex-1">
+                <p className="text-foreground">{s.description}</p>
+                {s.deal_context && <p className="text-muted-foreground mt-0.5 text-[10px]">📊 {s.deal_context}</p>}
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => {
+                  setGenerateSourceId(s.source_resource_ids[0] || null);
+                  setGenerateInitialType(s.target_type);
+                  setShowAIGenerate(true);
+                }}>
+                  Create
+                </Button>
+                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setDismissedSuggestions(prev => new Set([...prev, i]))}>
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Batch review panel */}
       {pendingItems.length > 0 && (
         <div className="p-4 rounded-lg border border-primary/30 bg-primary/5 space-y-3">
