@@ -358,7 +358,7 @@ export function ResourceManager() {
       if (!folderId) {
         const { data: newFolder } = await supabase
           .from('resource_folders')
-          .insert({ name: 'Battlecards' })
+          .insert({ name: 'Battlecards', user_id: user!.id })
           .select('id')
           .single();
         folderId = newFolder?.id;
