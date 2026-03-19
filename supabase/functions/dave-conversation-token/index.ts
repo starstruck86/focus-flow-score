@@ -673,7 +673,7 @@ function trunc(s: string, max: number): string {
 function buildFirstMessage(ctx: CrmContext, tzOffsetHours: number): string {
   const now = new Date();
   const hour = now.getUTCHours();
-  const localHour = (hour - tzOffsetHours + 24) % 24;
+  const localHour = (hour + tzOffsetHours + 24) % 24;
 
   const lastSessionNote = ctx.hasLastSession ? " I remember our last conversation, so feel free to pick up where we left off." : "";
 
