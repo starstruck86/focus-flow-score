@@ -26,6 +26,7 @@ import {
 } from '@/hooks/useResources';
 import { useClassifyResource, useUploadResource, useAddUrlResource, type ClassificationResult } from '@/hooks/useResourceUpload';
 import { ResourceEditor } from './ResourceEditor';
+import { AIGenerateDialog } from './AIGenerateDialog';
 import { ResourceFileViewer } from './ResourceFileViewer';
 import { VersionHistory } from './VersionHistory';
 import { ReorganizeModal } from './ReorganizeModal';
