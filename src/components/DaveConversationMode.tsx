@@ -185,30 +185,9 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
         setError('Connection timed out. Tap to retry.');
         setIsConnecting(false);
         startingRef.current = false;
+        try { conversation.endSession(); } catch (_) {}
       }
     }, 15000);
-
-    try {
-      // Get session data (cached if fresh, otherwise fetches)
-      let sessionData = sessionDataRef.current;
-      if (!sessionData || !isReconnectRef.current) {
-        sessionData = await getSession();
-        sessionDataRef.current = sessionData;
-      }
-
-      // Mic permission pre-flight: ensure browser grants access before SDK tries
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(t => t.stop());
-        console.log('[Dave] Mic pre-flight OK');
-      } catch (micErr) {
-        console.error('[Dave] Mic pre-flight failed:', micErr);
-        setError('Microphone access required');
-        setIsConnecting(false);
-        startingRef.current = false;
-        clearTimeout(timeout);
-        return;
-      }
 
       // Build dynamicVariables for context delivery (supported SDK parameter)
       const dynamicVariables: Record<string, string | number | boolean> = {};
