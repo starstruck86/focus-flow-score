@@ -85,9 +85,12 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
       },
     },
     onConnect: () => {
-      console.log('[Dave] Connected — overrides applied via useConversation hook');
+      console.log('[Dave] ✅ Connected — overrides applied via useConversation hook');
+      console.log('[Dave] Context length:', sessionDataRef.current?.context?.length, 'chars');
+      console.log('[Dave] First message:', sessionDataRef.current?.firstMessage?.substring(0, 80));
       setError(null);
       setReconnectInfo(null);
+      setIsConnecting(false);
       connectedAtRef.current = Date.now();
 
       if (stabilityTimerRef.current) clearTimeout(stabilityTimerRef.current);
@@ -99,17 +102,17 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
       if (sessionDataRef.current?.context) {
         try {
           conversation.sendContextualUpdate(sessionDataRef.current.context);
-          console.log('[Dave] Backup context sent via sendContextualUpdate (' + sessionDataRef.current.context.length + ' chars)');
+          console.log('[Dave] Backup context sent via sendContextualUpdate');
         } catch (e) {
           console.warn('[Dave] Failed to send contextual update (fallback):', e);
         }
       }
 
-      // Greeting watchdog: warn if no agent message within 5s
+      // Greeting watchdog: warn if no agent message within 8s
       if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
       greetingWatchdogRef.current = setTimeout(() => {
-        console.warn('[Dave] No agent greeting received within 5s of connection — agent may not have activated');
-      }, 5000);
+        console.warn('[Dave] No agent greeting received within 8s of connection');
+      }, 8000);
     },
     onDisconnect: () => {
       console.log('[Dave] Disconnected');
