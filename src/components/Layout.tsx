@@ -140,15 +140,15 @@ function BottomNav() {
       style={{ background: 'linear-gradient(to top, hsl(var(--card)), hsl(var(--card) / 0.97))' }}
     >
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
-      <div className="max-w-3xl mx-auto px-1">
+      <div className="max-w-3xl mx-auto px-1 pb-1">
         {/* Row 1 — Primary nav */}
-        <div className="flex items-center justify-around h-11">
+        <div className="flex items-center justify-around h-12">
           {navRow1.map(item => <NavItem key={item.to} item={item} />)}
         </div>
         {/* Divider */}
         <div className="h-px bg-border/30 mx-4" />
         {/* Row 2 — Secondary nav */}
-        <div className="flex items-center justify-around h-10">
+        <div className="flex items-center justify-around h-12">
           {navRow2.map(item => <NavItem key={item.to} item={item} />)}
         </div>
       </div>
