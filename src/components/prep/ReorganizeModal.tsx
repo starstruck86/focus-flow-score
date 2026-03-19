@@ -198,7 +198,7 @@ export function ReorganizeModal({ open, onOpenChange }: Props) {
                         </div>
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <Badge variant="secondary" className="text-[10px] capitalize">{s.suggested.resource_type}</Badge>
-                          <Badge variant="outline" className="text-[10px]">{s.suggested.suggested_folder}</Badge>
+                          <Badge variant="outline" className="text-[10px]">{s.suggested.top_folder || s.suggested.suggested_folder}{s.suggested.sub_folder ? ` / ${s.suggested.sub_folder}` : ''}</Badge>
                           {s.suggested.tags.slice(0, 3).map(t => (
                             <Badge key={t} variant="outline" className="text-[10px] font-normal">{t}</Badge>
                           ))}
