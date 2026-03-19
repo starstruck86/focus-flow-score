@@ -110,9 +110,9 @@ export function ExportMenu({ title, markdown }: ExportMenuProps) {
 
           slide.addText(heading, { x: 0.5, y: 0.3, w: 12, h: 1, fontSize: 24, bold: true, color: '1a1a1a' });
           if (body) {
-            const bodyItems = body.split('\n').filter(Boolean).map(l => ({
+              const bodyItems = body.split('\n').filter(Boolean).map(l => ({
               text: l.replace(/^[-*]\s/, '• ').replace(/^\d+\.\s/, ''),
-              options: { fontSize: 14, color: '444444', breakType: 'none' as const },
+              options: { fontSize: 14, color: '444444' },
             }));
             slide.addText(bodyItems, { x: 0.5, y: 1.5, w: 12, h: 5, valign: 'top' });
           }

@@ -31,7 +31,7 @@ export function EditorFooter({ content, saveStatus, lastSaved }: EditorFooterPro
           </>
         )}
         {saveStatus === 'unsaved' && (
-          <span className={cn("text-status-orange")}>Unsaved changes</span>
+          <span className="text-[hsl(var(--status-orange))]">Unsaved changes</span>
         )}
       </div>
     </div>
