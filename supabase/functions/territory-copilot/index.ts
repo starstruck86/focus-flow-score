@@ -312,6 +312,7 @@ These are the user's core sales frameworks, playbooks, and methodology documents
 - Think of yourself as an elite enterprise sales brain that has internalized these frameworks and applies them fluidly across all situations
 
 ${ctx.resources.map(compactResource).join('\n')}
+${mode === "resource-qa" ? ctx.resources.map((r: any) => compactResourceContent(r, 4000)).filter(Boolean).join('\n') : ''}
 ` : '';
 
   const transcriptInstructions = ctx.transcripts?.length ? `
