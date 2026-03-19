@@ -6,13 +6,13 @@ const TOKEN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/dave-conver
 const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
 
 export interface DaveSessionData {
-  token: string;
+  signed_url: string;
   context: string;
   firstMessage: string | null;
 }
 
 /**
- * Pre-fetches and caches the Dave conversation token so that
+ * Pre-fetches and caches the Dave signed URL + context so that
  * startSession() can be called synchronously from a tap handler
  * (preserving the iOS gesture chain for getUserMedia).
  */
@@ -27,6 +27,12 @@ export function useDaveContext() {
 
   const fetchSession = useCallback(async (conversationHistory?: string): Promise<DaveSessionData> => {
     const { data: { session } } = await supabase.auth.getSession();
+
+    // Auth guard — don't proceed without a real user session
+    if (!session?.access_token) {
+      throw new Error('Not authenticated. Please sign in first.');
+    }
+
     const tzOffsetHours = new Date().getTimezoneOffset() / -60;
 
     const resp = await fetch(TOKEN_URL, {
@@ -34,7 +40,7 @@ export function useDaveContext() {
       headers: {
         'Content-Type': 'application/json',
         apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        Authorization: `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        Authorization: `Bearer ${session.access_token}`,
       },
       body: JSON.stringify({
         tzOffsetHours,
@@ -59,7 +65,7 @@ export function useDaveContext() {
       const data = await fetchSession();
       setCachedSession(data);
       fetchedAtRef.current = Date.now();
-      console.log('[Dave] Token pre-fetched');
+      console.log('[Dave] Session pre-fetched (signed URL + context:', data.context?.length, 'chars)');
     } catch (err) {
       console.warn('[Dave] Pre-fetch failed:', err);
     } finally {
