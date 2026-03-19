@@ -121,6 +121,12 @@ export function ResourceManager() {
   const [battlecardLoading, setBattlecardLoading] = useState(false);
   const [battlecardProgress, setBattlecardProgress] = useState('');
 
+  // AI Generate / Transform states
+  const [showAIGenerate, setShowAIGenerate] = useState(false);
+  const [generateSourceId, setGenerateSourceId] = useState<string | null>(null);
+  const [generateInitialType, setGenerateInitialType] = useState<string | undefined>();
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<number>>(new Set());
+
   const { data: folders = [] } = useResourceFolders();
   const { data: resources = [] } = useResources(currentFolderId === null ? undefined : currentFolderId);
   const createFolder = useCreateFolder();
@@ -133,6 +139,8 @@ export function ResourceManager() {
   const uploadResource = useUploadResource();
   const addUrlResource = useAddUrlResource();
   const { totalDuplicates } = useResourceDuplicates();
+  const operationalize = useOperationalizeResource();
+  const { data: suggestions = [], refetch: refetchSuggestions, isLoading: suggestionsLoading } = useResourceSuggestions();
 
   const currentFolders = folders.filter(f => f.parent_id === currentFolderId);
   const filteredResources = searchQuery
