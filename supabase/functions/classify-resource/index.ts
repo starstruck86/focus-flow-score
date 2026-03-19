@@ -23,7 +23,14 @@ ${existingTags?.length ? `Current tags: ${existingTags.join(", ")}` : ""}
 Content preview:
 ${contentHint}
 
-Analyze the content and classify it appropriately. Suggest a clear, professional title, a short description, the best resource type, relevant tags, and the most logical folder name.`;
+CRITICAL NAMING RULES:
+1. If the content contains an explicit document title, heading, or page title, USE IT as the primary basis for the resource title. Do NOT infer or guess a topic from body text when a clear title exists.
+2. Append source/author attribution after an em dash (—). Extract from URL domain (e.g., "Pavilion" from joinpavilion.zoom.us, "SamSales" from samsales-shorts.thinkific.com) or from author names found in the content.
+3. Format: "Descriptive Title — Source/Author"
+4. For training recordings, include session/class numbers if identifiable.
+5. Do NOT hallucinate titles from transcript text or body content fragments.
+
+Suggest a clear, professional title, a short description, the best resource type, relevant tags, and the most logical folder name.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
