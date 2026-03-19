@@ -128,6 +128,7 @@ serve(async (req) => {
 
     const prompt = `Classify this sales resource.
 ${scrapedTitle ? `PAGE TITLE (ground truth — use this as the primary basis for the resource title): "${scrapedTitle}"` : ""}
+${urlHints ? `\n${urlHints}` : ""}
 ${filename ? `Filename: ${filename}` : ""}
 ${url ? `URL: ${url}` : ""}
 ${existingTitle ? `Current title: ${existingTitle}` : ""}
@@ -139,7 +140,7 @@ ${contentHint}
 CRITICAL NAMING RULES:
 1. If a PAGE TITLE is provided above, USE IT as the primary basis for the resource title. It is the official document/page title and must be respected.
 2. If no PAGE TITLE is provided but the content contains an explicit document title, heading, or page title, USE IT as the primary basis for the resource title.
-3. Do NOT infer or guess a topic from body text or URL patterns when a clear title exists.
+3. For auth-gated URLs with no scraped content: use any available text/filename context. If none, create a descriptive title from the URL path segments and domain. NEVER use "Google Drive", "Sign In", or other login page titles.
 4. Append source/author attribution after an em dash (—). Extract from URL domain (e.g., "Pavilion" from joinpavilion.zoom.us, "SamSales" from samsales-shorts.thinkific.com) or from author names found in the content.
 5. Format: "Descriptive Title — Source/Author"
 6. For training recordings, include session/class numbers if identifiable.
