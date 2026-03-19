@@ -83,3 +83,6 @@ verify_jwt = false
 
 [functions.elevenlabs-stt]
 verify_jwt = false
+
+[functions.classify-resource]
+verify_jwt = false
