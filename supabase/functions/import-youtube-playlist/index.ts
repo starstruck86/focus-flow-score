@@ -5,7 +5,13 @@ const corsHeaders = {
 
 async function fetchTitle(videoUrl: string): Promise<string> {
   try {
-    const res = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(videoUrl)}&format=json`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(
+      `https://www.youtube.com/oembed?url=${encodeURIComponent(videoUrl)}&format=json`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeout);
     if (!res.ok) return '';
     const data = await res.json();
     return data.title || '';
@@ -48,7 +54,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         url: url.trim(),
         formats: ['links'],
-        waitFor: 3000,
+        waitFor: 5000,
       }),
     });
 
@@ -78,10 +84,11 @@ Deno.serve(async (req) => {
 
     console.log(`Found ${videoUrls.length} video URLs, fetching titles via oEmbed...`);
 
-    // Fetch titles in parallel batches of 5
+    // Fetch titles in parallel batches of 15 (larger batches for speed)
     const videos: { title: string; url: string }[] = [];
-    for (let i = 0; i < videoUrls.length; i += 5) {
-      const batch = videoUrls.slice(i, i + 5);
+    const BATCH_SIZE = 15;
+    for (let i = 0; i < videoUrls.length; i += BATCH_SIZE) {
+      const batch = videoUrls.slice(i, i + BATCH_SIZE);
       const titles = await Promise.all(batch.map(fetchTitle));
       batch.forEach((vUrl, j) => {
         videos.push({
