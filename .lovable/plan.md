@@ -1,71 +1,60 @@
 
 
-# Make Dave Bulletproof — Combined iOS Fix + Connection Stability
+# Confidence: 4 out of 10
 
-## The Real Problem
+The current plan has a fundamental flaw that explains why Dave connects but can't hear you — on **both desktop and mobile**.
 
-On iOS Safari and PWA Home Screen mode, `getUserMedia` **must** be called directly inside a user tap handler. The current flow breaks this:
+## What's Actually Wrong
 
-1. User taps mic → `setDaveOpen(true)` (React state update)
-2. React re-renders → `useEffect` fires → calls `startConversation()`
-3. `startConversation()` calls `getUserMedia` — gesture context is **lost**
+I verified the backend is working perfectly — token, context, and firstMessage all return correctly. The problem is 100% client-side, and it's this:
 
-iOS silently denies mic access, causing immediate failure, which triggers reconnect (also no gesture), creating the infinite disconnect/reconnect loop. This also explains why Dave can't hear you — the mic stream was never actually granted.
+**We're fighting the ElevenLabs SDK for the microphone.**
 
-Additionally, the auto-start `useEffect` (line 234) creates a competing start path that can double-fire or race with reconnect logic.
+The SDK's `conversation.startSession()` calls its own internal `getUserMedia()`. It does **not** accept a custom `MediaStream`. Our code grabs the mic first in the click handler, then the SDK tries to grab it again. On many devices, having two competing `getUserMedia` calls on the same mic causes the second one (the SDK's — the one that actually matters) to get a **silent or dead stream**.
 
-## Plan
+That's why you see "Connected" but Dave can't hear you. The WebRTC signaling succeeds, but the audio track feeding the SDK is empty.
 
-### Step 1: Acquire mic in the tap handler (iOS fix)
-**Files: `VoiceCommandButton.tsx`, `Layout.tsx`**
+On iOS, there's a second problem: `startSession()` runs inside a `useEffect` after mount, not in the click handler. Even with our "gesture fix," the SDK's internal `getUserMedia` still happens outside the gesture context because it's separated by the `await fetchSession()` call and the React render cycle.
 
-- In `VoiceCommandButton.onClick`, call `getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })` directly in the click handler — this preserves the iOS gesture chain
-- If mic is denied, show a toast and don't open Dave
-- Store the `MediaStream` in Layout state and pass it as a prop to `DaveConversationMode`
+## What Gets Us to 10/10
 
-### Step 2: Accept mic stream as prop, remove auto-start useEffect
-**File: `DaveConversationMode.tsx`**
+### 1. Remove ALL manual getUserMedia calls
+Stop grabbing the mic ourselves. The SDK handles it internally — our stream is never used and actively interferes. Remove `micStream` prop, state, and the pre-capture in `VoiceCommandButton`.
 
-- Accept `micStream: MediaStream` as a new prop
-- Remove the auto-start `useEffect` entirely (lines 234-245) — this is the primary source of double-starts and the iOS gesture break
-- Instead, start the session once on mount via a single `useEffect` that runs when `micStream` is available
-- Remove the `getUserMedia` call from `startConversation()` — the stream is already acquired
+### 2. Pre-fetch the token in the background
+Fetch and cache the Dave session token when the app loads (and refresh every 3 minutes). This eliminates the async `fetchSession()` gap between tap and `startSession()`.
 
-### Step 3: Reuse mic stream on reconnect
-**File: `DaveConversationMode.tsx`**
+### 3. Call startSession directly from the click handler
+When the user taps the mic button, call `conversation.startSession()` **immediately** with the cached token — no prior `await`, no React state update, no `useEffect`. The SDK's internal `getUserMedia` runs within the gesture context on iOS, and gets an uncontested mic on desktop.
 
-- On reconnect, check if existing stream tracks are still `live`; if ended, show "Mic disconnected" instead of silently failing
-- Never call `getUserMedia` again during reconnects
+### 4. Add VAD score monitoring
+Use `onVadScore` callback to show whether the mic is actually picking up speech. This gives immediate visual feedback and helps diagnose any remaining issues.
 
-### Step 4: Handle `?dave=1` URL opens (Siri Shortcuts)
-**File: `Layout.tsx`**
+### 5. Log all SDK messages
+Log every `onMessage` event (not just transcripts) to see exactly what the SDK is sending. This catches silent errors, missing event types, or configuration issues.
 
-- When `?dave=1` is detected on load, show a "Tap to talk to Dave" overlay button instead of auto-opening
-- This ensures the gesture requirement is met for URL-triggered opens
+## Architecture Change
 
-### Step 5: Single start path, kill competing timers
-**File: `DaveConversationMode.tsx`**
+```text
+CURRENT (broken):
+  Tap → getUserMedia (ours) → setState → render → useEffect → fetchSession → startSession → getUserMedia (SDK, gets dead mic)
 
-- Add a `reconnectTimerRef` to track the pending reconnect `setTimeout`
-- Clear it on manual close, successful end, and unmount
-- `onDisconnect` only schedules a reconnect if no timer is already pending
-- `endConversation` sets `reconnectAttemptRef = MAX_RECONNECTS` before ending (already done) AND clears the timer
+FIXED:
+  App load → fetchSession (cached in background)
+  Tap → startSession(cachedToken) → getUserMedia (SDK, clean mic, in gesture context)
+```
 
-### Step 6: Stop mic tracks on close
-**File: `DaveConversationMode.tsx`**
+## Files to Change
 
-- In `endConversation` and unmount cleanup, call `micStream.getTracks().forEach(t => t.stop())` to release the hardware
-- This prevents the iOS mic indicator from staying active after closing Dave
-
-## Files Modified
-- `src/components/VoiceCommandButton.tsx` — mic acquisition in click handler
-- `src/components/Layout.tsx` — stream state, pass as prop, `?dave=1` tap prompt
-- `src/components/DaveConversationMode.tsx` — accept stream prop, remove auto-start, reuse stream, cleanup
+- `src/components/VoiceCommandButton.tsx` — remove getUserMedia, call startSession directly with cached token
+- `src/components/Layout.tsx` — remove micStream state, add token pre-fetch, simplify Dave open/close
+- `src/components/DaveConversationMode.tsx` — remove micStream prop, remove mount useEffect, accept pre-fetched session data, add onVadScore, log all messages
+- `src/hooks/useDaveContext.ts` — add background token caching with TTL refresh
 
 ## Expected Outcome
-- Dave works on iOS Safari and PWA Home Screen mode
-- No more disconnect/reconnect loops
-- Mic is always granted before Dave opens
-- "Hey Dave" gets a response every time
-- Siri Shortcut opens require one tap to start (gesture requirement)
+- SDK gets exclusive, clean mic access
+- No gesture chain breaks on iOS
+- VAD feedback shows whether Dave hears you
+- Greeting plays on connect (already working server-side)
+- Works identically on desktop and mobile
 
