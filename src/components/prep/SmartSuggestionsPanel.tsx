@@ -132,5 +132,3 @@ export function SmartSuggestionsPanel({ content, documentType, onApply, onClose 
   );
 }
 
-// Small Sparkles import for the empty state button
-import { Sparkles } from 'lucide-react';

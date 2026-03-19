@@ -41,12 +41,13 @@ export function AIGenerateDialog({ open, onOpenChange, onGenerated, accountConte
   const [isGenerating, setIsGenerating] = useState(false);
   const { data: allResources = [] } = useAllResources();
 
-  // Apply initial values when dialog opens
+  // Reset and apply initial values when dialog opens
   useEffect(() => {
     if (open) {
-      if (initialPrompt) setPrompt(initialPrompt);
-      if (initialOutputType) setOutputType(initialOutputType);
-      if (sourceResourceId) setSelectedResourceIds([sourceResourceId]);
+      setPrompt(initialPrompt || '');
+      setOutputType(initialOutputType || 'document');
+      setSelectedResourceIds(sourceResourceId ? [sourceResourceId] : []);
+      setResourceSearch('');
     }
   }, [open, initialPrompt, initialOutputType, sourceResourceId]);
 

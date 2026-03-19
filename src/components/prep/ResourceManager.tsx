@@ -564,7 +564,7 @@ export function ResourceManager() {
                 }}>
                   Create
                 </Button>
-                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setDismissedSuggestions(prev => new Set([...prev, i]))}>
+                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setDismissedSuggestions(prev => new Set([...prev, s.description]))}>
                   <X className="h-3 w-3" />
                 </Button>
               </div>

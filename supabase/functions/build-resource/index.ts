@@ -46,7 +46,7 @@ serve(async (req) => {
 
     if (type === "transform") {
       // Transform a source resource into a new format
-      const { sourceResourceId, targetType } = await req.json().catch(() => ({}));
+      // sourceResourceId and targetType already destructured from initial req.json()
       let sourceContent = "";
       if (sourceResourceId) {
         const { data: src } = await supabase
