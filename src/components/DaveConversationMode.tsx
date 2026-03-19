@@ -164,7 +164,7 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          await supabase.from('dave_transcripts').insert({
+          await (supabase.from('dave_transcripts' as any) as any).insert({
             user_id: user.id,
             messages: transcript as any,
             duration_seconds: durationSeconds,
