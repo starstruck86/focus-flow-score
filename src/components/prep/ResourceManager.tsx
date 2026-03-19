@@ -75,6 +75,7 @@ const TEMPLATE_CATEGORIES = [
 const ACCEPTED_FILE_TYPES = '.pdf,.docx,.pptx,.txt,.md,.csv,.doc,.xlsx,.xls';
 
 export function ResourceManager() {
+  const { user } = useAuth();
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [folderPath, setFolderPath] = useState<{ id: string | null; name: string }[]>([{ id: null, name: 'All Resources' }]);
   const [searchQuery, setSearchQuery] = useState('');
