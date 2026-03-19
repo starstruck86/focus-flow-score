@@ -129,23 +129,14 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
     
     // Listen for custom events
     const handleOpenPowerHour = () => setShowPowerHour(true);
-    const handleVoiceCreateTask = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.title) {
-        // Open quick add with pre-filled title
-        setShowAddTask(true);
-      }
-    };
     const handleVoiceQuickLog = () => setShowQuickLog(true);
     
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('open-power-hour', handleOpenPowerHour);
-    window.addEventListener('voice-create-task', handleVoiceCreateTask);
     window.addEventListener('voice-quick-log', handleVoiceQuickLog);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('open-power-hour', handleOpenPowerHour);
-      window.removeEventListener('voice-create-task', handleVoiceCreateTask);
       window.removeEventListener('voice-quick-log', handleVoiceQuickLog);
     };
   }, [isExpanded]);
