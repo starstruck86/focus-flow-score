@@ -142,11 +142,11 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
     onDisconnect: () => {
       console.log('Dave disconnected');
     },
-    onMessage: (message) => {
-      if (message.type === 'user_transcript' && (message as any).user_transcription_event?.user_transcript) {
-        setTranscript(prev => [...prev, { role: 'user', text: (message as any).user_transcription_event.user_transcript }]);
-      } else if (message.type === 'agent_response' && (message as any).agent_response_event?.agent_response) {
-        setTranscript(prev => [...prev, { role: 'agent', text: (message as any).agent_response_event.agent_response }]);
+    onMessage: (message: any) => {
+      if (message?.type === 'user_transcript' && message?.user_transcription_event?.user_transcript) {
+        setTranscript(prev => [...prev, { role: 'user', text: message.user_transcription_event.user_transcript }]);
+      } else if (message?.type === 'agent_response' && message?.agent_response_event?.agent_response) {
+        setTranscript(prev => [...prev, { role: 'agent', text: message.agent_response_event.agent_response }]);
       }
     },
     onError: (error) => {
