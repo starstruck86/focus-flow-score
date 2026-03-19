@@ -1,20 +1,27 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import {
-  ArrowLeft, Save, Clock, Download, FileText, Sparkles, Bold, Italic,
-  List, ListOrdered, Heading1, Heading2, Link, Quote, Code, Minus,
+  ArrowLeft, Save, Clock, Sparkles, BookOpen, Lightbulb, PanelRight,
+  Building2, Search,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useUpdateResource, type Resource } from '@/hooks/useResources';
-import { useCopilot } from '@/contexts/CopilotContext';
+import { useUpdateResource, useAllResources, type Resource } from '@/hooks/useResources';
 import { toast } from 'sonner';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { RichTextEditor, type RichTextEditorRef, htmlToMarkdown } from './RichTextEditor';
+import { EditorFooter } from './EditorFooter';
+import { ExportMenu } from './ExportMenu';
+import { AIGenerateDialog } from './AIGenerateDialog';
+import { TemplatePicker } from './TemplatePicker';
+import { SmartSuggestionsPanel } from './SmartSuggestionsPanel';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ResourceEditorProps {
   resource: Resource;
@@ -22,40 +29,108 @@ interface ResourceEditorProps {
   onViewVersions: () => void;
 }
 
-const TOOLBAR_ACTIONS = [
-  { icon: Bold, label: 'Bold', prefix: '**', suffix: '**' },
-  { icon: Italic, label: 'Italic', prefix: '_', suffix: '_' },
-  { icon: Heading1, label: 'Heading 1', prefix: '# ', suffix: '' },
-  { icon: Heading2, label: 'Heading 2', prefix: '## ', suffix: '' },
-  { icon: List, label: 'Bullet List', prefix: '- ', suffix: '' },
-  { icon: ListOrdered, label: 'Numbered List', prefix: '1. ', suffix: '' },
-  { icon: Quote, label: 'Quote', prefix: '> ', suffix: '' },
-  { icon: Code, label: 'Code', prefix: '`', suffix: '`' },
-  { icon: Link, label: 'Link', prefix: '[', suffix: '](url)' },
-  { icon: Minus, label: 'Divider', prefix: '\n---\n', suffix: '' },
-];
-
 export function ResourceEditor({ resource, onBack, onViewVersions }: ResourceEditorProps) {
+  const { user } = useAuth();
   const [title, setTitle] = useState(resource.title);
   const [content, setContent] = useState(resource.content || '');
-  const [showPreview, setShowPreview] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const [lastSaved, setLastSaved] = useState<Date | undefined>();
   const [showSaveVersion, setShowSaveVersion] = useState(false);
   const [changeSummary, setChangeSummary] = useState('');
-  const [hasChanges, setHasChanges] = useState(false);
-  const [isAiGenerating, setIsAiGenerating] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const updateResource = useUpdateResource();
-  const { ask: askCopilot } = useCopilot();
+  const [showAIGenerate, setShowAIGenerate] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showReferencePanel, setShowReferencePanel] = useState(false);
+  const [linkedAccountId, setLinkedAccountId] = useState(resource.account_id || '');
+  const [linkedOppId, setLinkedOppId] = useState(resource.opportunity_id || '');
+  const [refSearch, setRefSearch] = useState('');
+  const [viewingRef, setViewingRef] = useState<Resource | null>(null);
 
+  const editorRef = useRef<RichTextEditorRef>(null);
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const updateResource = useUpdateResource();
+
+  // Fetch accounts for CRM linking
+  const { data: accounts = [] } = useQuery({
+    queryKey: ['accounts-select', user?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('accounts').select('id, name, industry').order('name');
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  // Fetch opportunities for CRM linking
+  const { data: opportunities = [] } = useQuery({
+    queryKey: ['opps-select', user?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('opportunities').select('id, name, stage, account_id').order('name');
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  // All resources for reference panel
+  const { data: allResources = [] } = useAllResources();
+  const filteredRefResources = allResources.filter(r =>
+    r.id !== resource.id && r.title.toLowerCase().includes(refSearch.toLowerCase())
+  );
+
+  // Account context for AI
+  const linkedAccount = accounts.find(a => a.id === linkedAccountId);
+  const accountContext = linkedAccount
+    ? { name: linkedAccount.name, industry: linkedAccount.industry || undefined }
+    : null;
+
+  // Track content changes
+  const handleContentChange = useCallback((md: string) => {
+    setContent(md);
+    setHasChanges(true);
+    setSaveStatus('unsaved');
+
+    // Auto-save after 2s
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      setSaveStatus('saving');
+      updateResource.mutate(
+        { id: resource.id, updates: { title, content: md, account_id: linkedAccountId || null, opportunity_id: linkedOppId || null } },
+        {
+          onSuccess: () => {
+            setSaveStatus('saved');
+            setLastSaved(new Date());
+            setHasChanges(false);
+          },
+          onError: () => setSaveStatus('unsaved'),
+        }
+      );
+    }, 2000);
+  }, [resource.id, title, linkedAccountId, linkedOppId, updateResource]);
+
+  // Title change triggers auto-save
   useEffect(() => {
-    setHasChanges(title !== resource.title || content !== (resource.content || ''));
-  }, [title, content, resource]);
+    if (title !== resource.title) {
+      setHasChanges(true);
+      setSaveStatus('unsaved');
+    }
+  }, [title, resource.title]);
 
   const handleSave = useCallback(() => {
-    updateResource.mutate({ id: resource.id, updates: { title, content } });
-    setHasChanges(false);
-    toast.success('Saved');
-  }, [resource.id, title, content, updateResource]);
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    setSaveStatus('saving');
+    updateResource.mutate(
+      { id: resource.id, updates: { title, content, account_id: linkedAccountId || null, opportunity_id: linkedOppId || null } },
+      {
+        onSuccess: () => {
+          setSaveStatus('saved');
+          setLastSaved(new Date());
+          setHasChanges(false);
+          toast.success('Saved');
+        },
+        onError: () => { setSaveStatus('unsaved'); toast.error('Save failed'); },
+      }
+    );
+  }, [resource.id, title, content, linkedAccountId, linkedOppId, updateResource]);
 
   const handleSaveVersion = useCallback(() => {
     updateResource.mutate({
@@ -64,78 +139,36 @@ export function ResourceEditor({ resource, onBack, onViewVersions }: ResourceEdi
       createVersion: { change_summary: changeSummary || undefined },
     });
     setHasChanges(false);
+    setSaveStatus('saved');
+    setLastSaved(new Date());
     setShowSaveVersion(false);
     setChangeSummary('');
     toast.success('Version saved');
   }, [resource.id, title, content, changeSummary, updateResource]);
 
-  const insertMarkdown = useCallback((prefix: string, suffix: string) => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
-    const selected = content.substring(start, end);
-    const newContent = content.substring(0, start) + prefix + selected + suffix + content.substring(end);
-    setContent(newContent);
-    setTimeout(() => {
-      ta.focus();
-      ta.setSelectionRange(start + prefix.length, start + prefix.length + selected.length);
-    }, 0);
-  }, [content]);
+  const handleAIGenerated = useCallback((markdown: string) => {
+    editorRef.current?.setContent(markdown);
+    setContent(markdown);
+    setHasChanges(true);
+    setSaveStatus('unsaved');
+  }, []);
 
-  const handleAiEnhance = useCallback(async () => {
-    if (!content.trim()) {
-      toast.error('Add some content first');
-      return;
-    }
-    setIsAiGenerating(true);
-    askCopilot(
-      `Improve and enhance this ${resource.resource_type} document. Make it more professional, well-structured, and actionable. Keep the same topic and key points but elevate the quality:\n\n${content}`,
-      'recap-email'
-    );
-    setIsAiGenerating(false);
-  }, [content, resource.resource_type, askCopilot]);
+  const handleTemplateSelect = useCallback((template: { title: string; content: string; type: string }) => {
+    setTitle(template.title);
+    editorRef.current?.setContent(template.content);
+    setContent(template.content);
+    setHasChanges(true);
+    setSaveStatus('unsaved');
+  }, []);
 
-  const handleExportPdf = useCallback(() => {
-    // Create a printable window with the content
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html><head><title>${title}</title>
-      <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #1a1a1a; }
-        h1 { font-size: 24px; margin-bottom: 8px; }
-        h2 { font-size: 20px; margin-top: 24px; }
-        h3 { font-size: 16px; margin-top: 20px; }
-        table { border-collapse: collapse; width: 100%; margin: 16px 0; }
-        th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
-        th { background: #f5f5f5; }
-        blockquote { border-left: 3px solid #ddd; margin: 16px 0; padding: 8px 16px; color: #666; }
-        code { background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-size: 14px; }
-        pre { background: #f5f5f5; padding: 16px; border-radius: 6px; overflow-x: auto; }
-        hr { border: none; border-top: 1px solid #ddd; margin: 24px 0; }
-      </style></head>
-      <body><h1>${title}</h1><div id="content"></div></body></html>
-    `);
-    // Simple markdown to HTML (basic)
-    const html = content
-      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/_(.+?)_/g, '<em>$1</em>')
-      .replace(/^- (.+)$/gm, '<li>$1</li>')
-      .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
-      .replace(/---/g, '<hr />')
-      .replace(/\n/g, '<br />');
-    printWindow.document.getElementById('content')!.innerHTML = html;
-    printWindow.document.close();
-    setTimeout(() => printWindow.print(), 500);
-    toast.success('PDF export opened — use your browser\'s print dialog');
-  }, [title, content]);
+  const handleSuggestionApply = useCallback((text: string) => {
+    editorRef.current?.insertContent('\n\n' + text);
+    setContent(prev => prev + '\n\n' + text);
+    setHasChanges(true);
+    setSaveStatus('unsaved');
+  }, []);
 
-  // Auto-save on Ctrl+S
+  // Ctrl+S
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
@@ -147,10 +180,13 @@ export function ResourceEditor({ resource, onBack, onViewVersions }: ResourceEdi
     return () => window.removeEventListener('keydown', handler);
   }, [handleSave]);
 
-  return (
-    <div className="space-y-3">
+  // Cleanup timer
+  useEffect(() => () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); }, []);
+
+  const mainEditor = (
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap p-3 border-b border-border">
         <Button variant="ghost" size="sm" className="h-8" onClick={onBack}>
           <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Back
         </Button>
@@ -164,18 +200,53 @@ export function ResourceEditor({ resource, onBack, onViewVersions }: ResourceEdi
           <Badge variant="secondary" className="text-[10px] capitalize">{resource.resource_type}</Badge>
           {resource.is_template && <Badge className="text-[10px] bg-primary/20 text-primary">Template</Badge>}
         </div>
-        <div className="flex items-center gap-1">
+      </div>
+
+      {/* Action bar */}
+      <div className="flex items-center gap-1 px-3 py-1.5 border-b border-border flex-wrap">
+        {/* CRM Linking */}
+        <Select value={linkedAccountId} onValueChange={setLinkedAccountId}>
+          <SelectTrigger className="h-7 text-[10px] w-[140px]">
+            <Building2 className="h-3 w-3 mr-1" />
+            <SelectValue placeholder="Link Account" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No Account</SelectItem>
+            {accounts.map(a => (
+              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className="ml-auto flex items-center gap-1">
+          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setShowTemplates(true)}>
+            <BookOpen className="h-3.5 w-3.5 mr-1" /> Templates
+          </Button>
+          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setShowAIGenerate(true)}>
+            <Sparkles className="h-3.5 w-3.5 mr-1" /> Generate
+          </Button>
           <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onViewVersions}>
             <Clock className="h-3.5 w-3.5 mr-1" /> History
           </Button>
-          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleExportPdf}>
-            <Download className="h-3.5 w-3.5 mr-1" /> PDF
+          <ExportMenu title={title} markdown={content} />
+          <Button
+            variant={showSuggestions ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => setShowSuggestions(!showSuggestions)}
+          >
+            <Lightbulb className="h-3.5 w-3.5 mr-1" /> Suggest
           </Button>
-          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleAiEnhance} disabled={isAiGenerating}>
-            <Sparkles className="h-3.5 w-3.5 mr-1" /> Enhance
+          <Button
+            variant={showReferencePanel ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => setShowReferencePanel(!showReferencePanel)}
+          >
+            <PanelRight className="h-3.5 w-3.5 mr-1" /> Reference
           </Button>
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowSaveVersion(true)} disabled={!hasChanges}>
-            <Save className="h-3.5 w-3.5 mr-1" /> Save Version
+            <Save className="h-3.5 w-3.5 mr-1" /> Version
           </Button>
           <Button size="sm" className="h-7 text-xs" onClick={handleSave} disabled={!hasChanges}>
             <Save className="h-3.5 w-3.5 mr-1" /> Save
@@ -183,46 +254,30 @@ export function ResourceEditor({ resource, onBack, onViewVersions }: ResourceEdi
         </div>
       </div>
 
-      {/* Formatting toolbar */}
-      <div className="flex items-center gap-0.5 border-b border-border pb-2">
-        {TOOLBAR_ACTIONS.map(action => (
-          <Button
-            key={action.label}
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            title={action.label}
-            onClick={() => insertMarkdown(action.prefix, action.suffix)}
-          >
-            <action.icon className="h-3.5 w-3.5" />
-          </Button>
-        ))}
-        <div className="ml-auto">
-          <Button
-            variant={showPreview ? 'secondary' : 'ghost'}
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => setShowPreview(!showPreview)}
-          >
-            {showPreview ? 'Edit' : 'Preview'}
-          </Button>
-        </div>
+      {/* Editor */}
+      <div className="flex-1 overflow-auto">
+        <RichTextEditor
+          ref={editorRef}
+          initialMarkdown={resource.content || ''}
+          onChange={handleContentChange}
+        />
       </div>
 
-      {/* Editor / Preview */}
-      {showPreview ? (
-        <div className="prose prose-sm dark:prose-invert max-w-none min-h-[500px] p-4 border rounded-lg bg-card">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-        </div>
-      ) : (
-        <Textarea
-          ref={textareaRef}
-          value={content}
-          onChange={e => setContent(e.target.value)}
-          placeholder="Start writing... (Markdown supported)"
-          className="min-h-[500px] text-sm font-mono resize-none"
-        />
-      )}
+      {/* Footer */}
+      <EditorFooter content={content} saveStatus={saveStatus} lastSaved={lastSaved} />
+
+      {/* Dialogs */}
+      <AIGenerateDialog
+        open={showAIGenerate}
+        onOpenChange={setShowAIGenerate}
+        onGenerated={handleAIGenerated}
+        accountContext={accountContext}
+      />
+      <TemplatePicker
+        open={showTemplates}
+        onOpenChange={setShowTemplates}
+        onSelect={handleTemplateSelect}
+      />
 
       {/* Save Version Dialog */}
       <Dialog open={showSaveVersion} onOpenChange={setShowSaveVersion}>
@@ -246,6 +301,90 @@ export function ResourceEditor({ resource, onBack, onViewVersions }: ResourceEdi
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+
+  // Reference panel content
+  const referencePanel = (
+    <div className="flex flex-col h-full border-l border-border">
+      <div className="px-3 py-2 border-b border-border">
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+          <Input
+            value={refSearch}
+            onChange={e => setRefSearch(e.target.value)}
+            placeholder="Search resources..."
+            className="h-7 text-xs pl-7"
+          />
+        </div>
+      </div>
+      <ScrollArea className="flex-1">
+        {viewingRef ? (
+          <div className="p-3">
+            <Button variant="ghost" size="sm" className="h-6 text-xs mb-2" onClick={() => setViewingRef(null)}>
+              <ArrowLeft className="h-3 w-3 mr-1" /> Back
+            </Button>
+            <h3 className="text-sm font-medium mb-2">{viewingRef.title}</h3>
+            <div className="prose prose-xs dark:prose-invert max-w-none text-xs">
+              {viewingRef.content || <span className="text-muted-foreground italic">No content</span>}
+            </div>
+          </div>
+        ) : (
+          <div className="p-2 space-y-0.5">
+            {filteredRefResources.slice(0, 30).map(r => (
+              <button
+                key={r.id}
+                onClick={() => setViewingRef(r)}
+                className="w-full text-left px-2 py-1.5 rounded text-xs hover:bg-accent/50 transition-colors flex items-center gap-2"
+              >
+                <span className="truncate flex-1">{r.title}</span>
+                <Badge variant="outline" className="text-[8px] shrink-0">{r.resource_type}</Badge>
+              </button>
+            ))}
+          </div>
+        )}
+      </ScrollArea>
+    </div>
+  );
+
+  return (
+    <div className="h-[calc(100vh-200px)] flex">
+      {showReferencePanel ? (
+        <ResizablePanelGroup direction="horizontal">
+          <ResizablePanel defaultSize={showSuggestions ? 50 : 65} minSize={40}>
+            {mainEditor}
+          </ResizablePanel>
+          <ResizableHandle withHandle />
+          <ResizablePanel defaultSize={showSuggestions ? 25 : 35} minSize={20}>
+            {referencePanel}
+          </ResizablePanel>
+          {showSuggestions && (
+            <>
+              <ResizableHandle />
+              <ResizablePanel defaultSize={25} minSize={18}>
+                <SmartSuggestionsPanel
+                  content={content}
+                  documentType={resource.resource_type}
+                  onApply={handleSuggestionApply}
+                  onClose={() => setShowSuggestions(false)}
+                />
+              </ResizablePanel>
+            </>
+          )}
+        </ResizablePanelGroup>
+      ) : showSuggestions ? (
+        <div className="flex w-full">
+          <div className="flex-1">{mainEditor}</div>
+          <SmartSuggestionsPanel
+            content={content}
+            documentType={resource.resource_type}
+            onApply={handleSuggestionApply}
+            onClose={() => setShowSuggestions(false)}
+          />
+        </div>
+      ) : (
+        <div className="w-full">{mainEditor}</div>
+      )}
     </div>
   );
 }
