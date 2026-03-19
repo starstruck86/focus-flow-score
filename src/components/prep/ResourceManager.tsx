@@ -96,6 +96,7 @@ export function ResourceManager() {
   const classify = useClassifyResource();
   const uploadResource = useUploadResource();
   const addUrlResource = useAddUrlResource();
+  const { totalDuplicates } = useResourceDuplicates();
 
   const currentFolders = folders.filter(f => f.parent_id === currentFolderId);
   const filteredResources = searchQuery
