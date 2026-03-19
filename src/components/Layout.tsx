@@ -12,6 +12,7 @@ import {
   Compass,
   LogOut,
   FileText,
+  Mic,
 } from 'lucide-react';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { SaveIndicator } from '@/components/SaveIndicator';
@@ -29,6 +30,7 @@ import { useCopilot, type PageContext } from '@/contexts/CopilotContext';
 import { DayTimeline } from '@/components/tasks/DayTimeline';
 import { ActivityRings } from '@/components/ActivityRings';
 import { GlobalWeekStrip } from '@/components/GlobalWeekStrip';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
   '/': { page: 'dashboard', description: 'Today / Dashboard — daily plan, agenda, and key metrics' },
@@ -156,13 +158,50 @@ function BottomNav() {
   );
 }
 
+/** Tap-to-talk prompt for ?dave=1 URL opens (Siri Shortcuts) */
+function DaveTapPrompt({ onTap }: { onTap: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[99] bg-black/90 flex flex-col items-center justify-center gap-6"
+    >
+      <motion.button
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={onTap}
+        className="w-32 h-32 rounded-full bg-primary/20 flex items-center justify-center text-primary shadow-[0_0_60px_20px_rgba(16,185,129,0.2)]"
+      >
+        <Mic className="h-12 w-12" />
+      </motion.button>
+      <p className="text-white/70 text-lg font-medium">Tap to talk to Dave</p>
+    </motion.div>
+  );
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
   const location = useLocation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { setPageContext } = useCopilot();
   const activeColor = useActiveTabColor();
-  const [daveOpen, setDaveOpen] = useState(() => searchParams.get('dave') === '1');
+  
+  // Dave state
+  const [daveOpen, setDaveOpen] = useState(false);
+  const [daveStream, setDaveStream] = useState<MediaStream | null>(null);
+  const [showDaveTapPrompt, setShowDaveTapPrompt] = useState(false);
+
+  // Handle ?dave=1 from Siri Shortcuts — show tap prompt instead of auto-opening
+  useEffect(() => {
+    if (searchParams.get('dave') === '1') {
+      setShowDaveTapPrompt(true);
+      // Clean URL param
+      const next = new URLSearchParams(searchParams);
+      next.delete('dave');
+      setSearchParams(next, { replace: true });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Set page-accent CSS variable on the root element
   useEffect(() => {
@@ -187,6 +226,29 @@ export function Layout({ children }: { children: React.ReactNode }) {
     borderBottomColor: `hsl(${COLOR_VAR[activeColor]} / 0.2)`,
   }), [activeColor]);
 
+  const handleOpenDave = (stream: MediaStream) => {
+    setDaveStream(stream);
+    setDaveOpen(true);
+    setShowDaveTapPrompt(false);
+  };
+
+  const handleCloseDave = () => {
+    setDaveOpen(false);
+    setDaveStream(null);
+  };
+
+  // Tap prompt handler — acquires mic in the gesture, then opens Dave
+  const handleDaveTapPromptTap = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      handleOpenDave(stream);
+    } catch {
+      setShowDaveTapPrompt(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col w-full pt-[env(safe-area-inset-top)]">
       {/* Top bar — minimal, color-accented */}
@@ -210,7 +272,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <SaveIndicator />
         </div>
         <div className="flex items-center gap-1">
-          <VoiceCommandButton onOpenDave={() => setDaveOpen(true)} />
+          <VoiceCommandButton onOpenDave={handleOpenDave} />
           <GlobalSearch />
           <TerritoryCopilot />
           <Tooltip>
@@ -251,8 +313,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Floating Action Button */}
       <GlobalFAB position="bottom-right" />
 
+      {/* Dave Tap Prompt for Siri Shortcut opens */}
+      <AnimatePresence>
+        {showDaveTapPrompt && !daveOpen && (
+          <DaveTapPrompt onTap={handleDaveTapPromptTap} />
+        )}
+      </AnimatePresence>
+
       {/* Dave Conversational AI Overlay */}
-      <DaveConversationMode isOpen={daveOpen} onClose={() => setDaveOpen(false)} />
+      {daveOpen && daveStream && (
+        <DaveConversationMode isOpen={daveOpen} onClose={handleCloseDave} micStream={daveStream} />
+      )}
     </div>
   );
 }
