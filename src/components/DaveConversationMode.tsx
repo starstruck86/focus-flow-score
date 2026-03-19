@@ -5,14 +5,19 @@ import { X, Mic, MicOff, Volume2, MessageSquare, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDaveContext } from '@/hooks/useDaveContext';
 import { useCopilot } from '@/contexts/CopilotContext';
-import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { createClientTools } from './dave/clientTools';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
 }
+
+const DISMISSAL_PHRASES = [
+  "we're done", "we are done", "thanks dave", "thank you dave",
+  "goodbye", "that's all", "thats all", "bye dave", "see you",
+];
 
 export function DaveConversationMode({ isOpen, onClose }: Props) {
   const navigate = useNavigate();
@@ -27,116 +32,13 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
   const animFrameRef = useRef<number>(0);
   const startingRef = useRef(false);
   const reconnectAttemptRef = useRef(0);
+  const startConversationRef = useRef<() => Promise<void>>();
   const maxReconnects = 3;
 
-  // Memoize client tools to prevent re-renders
-  const clientTools = useMemo(() => ({
-    navigate: (params: { path: string }) => {
-      navigate(params.path);
-      return `Navigated to ${params.path}`;
-    },
-    create_task: (params: { title: string; priority?: string; accountName?: string }) => {
-      window.dispatchEvent(new CustomEvent('voice-create-task', { detail: params }));
-      toast.success('Task created', { description: params.title });
-      return `Task created: ${params.title}`;
-    },
-    open_copilot: (params: { question: string; mode?: string }) => {
-      askCopilot(params.question, (params.mode as any) || 'quick');
-      return `Opened copilot with: ${params.question}`;
-    },
-    prep_meeting: (params: { accountName?: string; meetingTitle?: string }) => {
-      const q = params.accountName
-        ? `Prep me for my meeting with ${params.accountName}${params.meetingTitle ? ` — ${params.meetingTitle}` : ''}`
-        : 'Prep me for my next meeting';
-      askCopilot(q, 'meeting');
-      return `Preparing meeting brief`;
-    },
-    update_account: (params: { accountName: string; field: string; value: string }) => {
-      window.dispatchEvent(new CustomEvent('voice-update-account', { detail: params }));
-      toast.success('Account updated', { description: `${params.accountName}: ${params.field} → ${params.value}` });
-      return `Updated ${params.accountName} ${params.field} to ${params.value}`;
-    },
-    update_opportunity: (params: { opportunityName: string; field: string; value: string }) => {
-      window.dispatchEvent(new CustomEvent('voice-update-opportunity', { detail: params }));
-      toast.success('Deal updated', { description: `${params.opportunityName}: ${params.field} → ${params.value}` });
-      return `Updated ${params.opportunityName} ${params.field} to ${params.value}`;
-    },
-    start_roleplay: (params: { call_type?: string; difficulty?: number; industry?: string }) => {
-      navigate('/coach');
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('voice-start-roleplay', { detail: params }));
-      }, 500);
-      return `Launching ${params.call_type || 'discovery'} roleplay`;
-    },
-    start_drill: () => {
-      navigate('/coach');
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('voice-start-drill'));
-      }, 500);
-      return 'Opening objection drills';
-    },
-    grade_call: () => {
-      navigate('/coach');
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('voice-grade-call'));
-      }, 500);
-      return 'Grading latest transcript';
-    },
-    log_activity: () => {
-      window.dispatchEvent(new CustomEvent('voice-quick-log'));
-      return 'Opening quick log';
-    },
-    set_reminder: async (params: { message: string; minutes_from_now: number }) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return 'Not authenticated';
-      const remindAt = new Date(Date.now() + params.minutes_from_now * 60 * 1000);
-      await supabase.from('voice_reminders').insert({
-        user_id: user.id,
-        message: params.message,
-        remind_at: remindAt.toISOString(),
-      });
-      return `Reminder set for ${params.minutes_from_now} minutes from now: ${params.message}`;
-    },
-    pipeline_pulse: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return 'Not authenticated';
-      const { data: opps } = await supabase
-        .from('opportunities')
-        .select('name, stage, arr, close_date')
-        .eq('user_id', user.id)
-        .not('status', 'eq', 'closed-lost');
-      if (!opps?.length) return 'No active pipeline deals found.';
-      const total = opps.reduce((s, o) => s + (o.arr || 0), 0);
-      const summary = `You have ${opps.length} active deals worth $${Math.round(total / 1000)}k. ` +
-        opps.slice(0, 5).map(o => `${o.name}: ${o.stage || 'no stage'}, $${Math.round((o.arr || 0) / 1000)}k`).join('. ');
-      return summary;
-    },
-    daily_briefing: () => {
-      askCopilot('Walk me through my day — priorities, meetings, risks, and what I should focus on', 'quick');
-      return 'Building daily briefing in copilot';
-    },
-    debrief: (params: { accountName: string; keyTakeaways?: string; nextSteps?: string }) => {
-      const detail = {
-        accountName: params.accountName,
-        takeaways: params.keyTakeaways,
-        nextSteps: params.nextSteps,
-      };
-      window.dispatchEvent(new CustomEvent('voice-debrief', { detail }));
-      toast.success('Debrief logged', { description: params.accountName });
-      return `Debrief captured for ${params.accountName}`;
-    },
-    add_note: (params: { accountName: string; note: string }) => {
-      window.dispatchEvent(new CustomEvent('voice-add-note', { detail: params }));
-      toast.success('Note added', { description: `${params.accountName}: ${params.note.slice(0, 60)}...` });
-      return `Note added to ${params.accountName}`;
-    },
-    draft_email: (params: { to: string; subject: string; body: string }) => {
-      const emailText = `To: ${params.to}\nSubject: ${params.subject}\n\n${params.body}`;
-      navigator.clipboard?.writeText(emailText).catch(() => {});
-      toast.success('Email drafted & copied', { description: params.subject });
-      return `Email drafted for ${params.to}: "${params.subject}". I've copied it to your clipboard.`;
-    },
-  }), [navigate, askCopilot]);
+  const clientTools = useMemo(
+    () => createClientTools(navigate, askCopilot),
+    [navigate, askCopilot],
+  );
 
   const conversation = useConversation({
     clientTools,
@@ -147,19 +49,25 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
     },
     onDisconnect: () => {
       console.log('Dave disconnected');
-      // Auto-reconnect on unexpected disconnect
       if (isOpen && reconnectAttemptRef.current < maxReconnects && !startingRef.current) {
         const delay = Math.min(1000 * 2 ** reconnectAttemptRef.current, 8000);
         reconnectAttemptRef.current++;
         console.log(`Auto-reconnecting in ${delay}ms (attempt ${reconnectAttemptRef.current})`);
         setTimeout(() => {
-          if (isOpen) startConversation();
+          if (isOpen) startConversationRef.current?.();
         }, delay);
       }
     },
     onMessage: (message: any) => {
       if (message?.type === 'user_transcript' && message?.user_transcription_event?.user_transcript) {
-        setTranscript(prev => [...prev, { role: 'user', text: message.user_transcription_event.user_transcript }]);
+        const text = message.user_transcription_event.user_transcript;
+        setTranscript(prev => [...prev, { role: 'user', text }]);
+
+        // Voice dismissal detection
+        const lower = text.toLowerCase();
+        if (DISMISSAL_PHRASES.some(p => lower.includes(p))) {
+          setTimeout(() => endConversation(), 1500);
+        }
       } else if (message?.type === 'agent_response' && message?.agent_response_event?.agent_response) {
         setTranscript(prev => [...prev, { role: 'agent', text: message.agent_response_event.agent_response }]);
       }
@@ -179,19 +87,13 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
   // Volume-reactive orb animation
   useEffect(() => {
     if (conversation.status !== 'connected') return;
-
     const animate = () => {
       const orb = orbRef.current;
       if (!orb) return;
-
-      const inputVol = conversation.getInputVolume();
-      const outputVol = conversation.getOutputVolume();
-      const vol = Math.max(inputVol, outputVol);
-      const scale = 1 + vol * 0.5;
-      orb.style.transform = `scale(${scale})`;
+      const vol = Math.max(conversation.getInputVolume(), conversation.getOutputVolume());
+      orb.style.transform = `scale(${1 + vol * 0.5})`;
       animFrameRef.current = requestAnimationFrame(animate);
     };
-
     animFrameRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animFrameRef.current);
   }, [conversation.status, conversation]);
@@ -203,7 +105,6 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
     setError(null);
     setTranscript([]);
 
-    // Connection timeout
     const timeout = setTimeout(() => {
       if (startingRef.current) {
         setError('Connection timed out. Tap to retry.');
@@ -225,10 +126,7 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
         };
       }
       if (sessionData.firstMessage) {
-        overrides.agent = {
-          ...overrides.agent,
-          firstMessage: sessionData.firstMessage,
-        };
+        overrides.agent = { ...overrides.agent, firstMessage: sessionData.firstMessage };
       }
 
       await conversation.startSession({
@@ -249,8 +147,13 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
     }
   }, [conversation, fetchSession]);
 
+  // Keep ref in sync so reconnect never uses stale closure
+  useEffect(() => {
+    startConversationRef.current = startConversation;
+  }, [startConversation]);
+
   const endConversation = useCallback(async () => {
-    reconnectAttemptRef.current = maxReconnects; // Prevent auto-reconnect
+    reconnectAttemptRef.current = maxReconnects;
     await conversation.endSession();
     onClose();
   }, [conversation, onClose]);
@@ -316,7 +219,6 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center"
       >
-        {/* Close button */}
         <motion.button
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
@@ -327,7 +229,6 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
           <X className="h-6 w-6" />
         </motion.button>
 
-        {/* Transcript toggle */}
         <button
           onClick={() => setShowTranscript(!showTranscript)}
           className="absolute left-4 z-10 h-10 w-10 rounded-full bg-white/10 flex items-center justify-center text-white/60 hover:bg-white/20"
@@ -336,7 +237,6 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
           <MessageSquare className="h-4 w-4" />
         </button>
 
-        {/* Visual Orb */}
         <div className="flex-1 flex items-center justify-center w-full">
           <div
             ref={orbRef}
@@ -349,7 +249,6 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
           />
         </div>
 
-        {/* Status */}
         <div className="flex flex-col items-center gap-3 pb-8" style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}>
           <div className="flex items-center gap-2 text-white/70 text-sm">
             {statusIcon}
@@ -366,7 +265,6 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
           )}
         </div>
 
-        {/* Transcript Panel */}
         <AnimatePresence>
           {showTranscript && (
             <motion.div
