@@ -1,49 +1,47 @@
 
 
-# Implement All Remaining Optimizations
+# Make Dave Bulletproof — Connection Stability & Responsiveness
 
-## Overview
-Four workstreams: mobile layout fixes, coach event wiring, transcript persistence, and FAB cleanup.
+## Problems Found
 
-## Step 1: Fix viewport for iPhone safe areas
-**File: `index.html`**
-- Change viewport meta to include `viewport-fit=cover`
+1. **Reconnect loop fetches a new token every time** — each reconnect calls `fetchSession()` which hits the edge function for a brand new ElevenLabs token (350ms-2s+). By the time it returns, the connection may drop again, creating a vicious cycle. Also clears the transcript on every reconnect (`setTranscript([])`).
 
-## Step 2: Optimize bottom nav touch targets
-**File: `src/components/Layout.tsx`**
-- BottomNav: Row 1 `h-11` → `h-12`, Row 2 `h-10` → `h-12`
-- NavItem icons: `h-4 w-4` → `h-5 w-5`, text: `text-[10px]` → `text-[11px]`
-- Add extra inner padding to nav: `pb-1` inside the max-w container
-- Main content: `pb-28` → `pb-[calc(8rem+env(safe-area-inset-bottom))]`
-- Root div: add `pt-[env(safe-area-inset-top)]` for standalone PWA mode
+2. **`isOpen` is stale in `onDisconnect` closure** — the `useConversation` hook captures `isOpen` at creation time. If the user closes Dave while a reconnect timer is pending, the stale `true` value triggers another reconnect after close.
 
-## Step 3: Update floating element offsets
-**File: `src/components/BackToToday.tsx`**
-- Change `bottom-[calc(6.5rem+env(safe-area-inset-bottom))]` → `bottom-[calc(7.5rem+env(safe-area-inset-bottom))]`
+3. **No stability window** — `onConnect` immediately resets `reconnectAttemptRef` to 0. If the connection drops 500ms later, it restarts from attempt 0 with a 1-second delay, enabling rapid cycling.
 
-**File: `src/components/fab/GlobalFAB.tsx`**
-- Change `bottom-[calc(6rem+env(safe-area-inset-bottom))]` → `bottom-[calc(7.5rem+env(safe-area-inset-bottom))]`
-- Remove dead `voice-create-task` event listener (now handled by direct DB write in clientTools)
+4. **Dave is silent between 10 AM–4 PM** — `buildFirstMessage` returns `null` during midday. So when you say "Hey Dave," the agent starts with no first message and may not respond because there's no prompt to engage.
 
-## Step 4: Wire coach voice events
-**File: `src/pages/Coach.tsx`**
-- Add `useEffect` with listeners for `voice-start-roleplay`, `voice-start-drill`, `voice-grade-call`
-- `voice-start-roleplay`: switch to Mock Call tab and auto-start
-- `voice-start-drill`: switch to Objection Drills tab
-- `voice-grade-call`: switch to Grades tab and trigger grade on latest transcript
+5. **`endConversation` captures stale `transcript`** — the `useCallback` dependency on `transcript` means every new message recreates `endConversation`, but voice dismissal's `setTimeout` may hold a stale reference.
 
-## Step 5: Transcript persistence
-**Database migration**: Create `dave_transcripts` table with columns: `id`, `user_id`, `messages` (jsonb), `duration_seconds`, `created_at`. RLS policies for authenticated users (CRUD on own rows).
+## Plan
 
-**File: `src/components/DaveConversationMode.tsx`**
-- On `endConversation`, save the transcript array to `dave_transcripts` table if there are messages
+### Step 1: Cache token, reuse on reconnect
+- After the first successful `fetchSession()`, store the result in a `sessionDataRef`
+- On reconnect, reuse the cached token instead of hitting the edge function again
+- Only clear transcript on initial open, not on reconnect (use an `isReconnectRef` flag)
+
+### Step 2: Fix stale closures with refs
+- Create `isOpenRef` that mirrors `isOpen` — use this in `onDisconnect` instead of the prop
+- Store transcript in a `transcriptRef` alongside the state so `endConversation` always saves the latest messages
+
+### Step 3: Add connection stability window
+- After `onConnect`, set a 3-second timer before resetting `reconnectAttemptRef` to 0
+- If the connection drops within 3 seconds, treat it as an unstable connect and increment the attempt counter instead of resetting
+
+### Step 4: Reduce reconnects, increase delays
+- Reduce max reconnects from 3 to 2
+- Use fixed delays of 2s and 5s instead of exponential backoff starting at 1s
+- Show "Reconnecting (1/2)..." in the status text so the user knows what's happening
+
+### Step 5: Always provide a first message (midday fix)
+- Update `buildFirstMessage` in the edge function to return a greeting for 10 AM–4 PM:
+  `"Hey! I'm here whenever you need me. What can I help with?"`
+- This ensures Dave always speaks first, confirming the connection is live
+
+### Step 6: Guard against double-start
+- Add a `connectedAtRef` timestamp so the auto-start `useEffect` won't fire if we just connected moments ago
+- Add `conversation.status` to the auto-start effect's dependency array
 
 ## Files Modified
-- `index.html`
-- `src/components/Layout.tsx`
-- `src/components/BackToToday.tsx`
-- `src/components/fab/GlobalFAB.tsx`
-- `src/pages/Coach.tsx`
-- `src/components/DaveConversationMode.tsx`
-- New migration for `dave_transcripts` table
-
+- `src/components/DaveConversationMode.tsx` — token caching, ref-based state tracking, stability window, reconn
