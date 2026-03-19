@@ -90,4 +90,6 @@ verify_jwt = false
 [functions.discover-resources]
 
 [functions.build-resource]
+
+[functions.dave-conversation-token]
 verify_jwt = false
