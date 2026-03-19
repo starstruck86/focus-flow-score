@@ -2,7 +2,7 @@
 import { supabase } from '@/integrations/supabase/client';
 
 export type CopilotMsg = { role: "user" | "assistant"; content: string };
-export type CopilotMode = "quick" | "deep" | "meeting" | "deal-strategy" | "recap-email";
+export type CopilotMode = "quick" | "deep" | "meeting" | "deal-strategy" | "recap-email" | "resource-qa";
 
 const COPILOT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/territory-copilot`;
 
