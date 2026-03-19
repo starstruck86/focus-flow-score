@@ -1,5 +1,5 @@
-import { NavLink as RouterNavLink, useLocation } from 'react-router-dom';
-import { useEffect, useMemo } from 'react';
+import { NavLink as RouterNavLink, useLocation, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { 
   LayoutDashboard, 
@@ -22,6 +22,7 @@ import { GlobalFAB } from '@/components/fab';
 import { GlobalSearch } from '@/components/GlobalSearch';
 import { TerritoryCopilot } from '@/components/TerritoryCopilot';
 import { VoiceCommandButton } from '@/components/VoiceCommandButton';
+import { DaveConversationMode } from '@/components/DaveConversationMode';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { BackToToday } from '@/components/BackToToday';
 import { useCopilot, type PageContext } from '@/contexts/CopilotContext';
@@ -158,8 +159,10 @@ function BottomNav() {
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { setPageContext } = useCopilot();
   const activeColor = useActiveTabColor();
+  const [daveOpen, setDaveOpen] = useState(() => searchParams.get('dave') === '1');
 
   // Set page-accent CSS variable on the root element
   useEffect(() => {
@@ -207,7 +210,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <SaveIndicator />
         </div>
         <div className="flex items-center gap-1">
-          <VoiceCommandButton />
+          <VoiceCommandButton onOpenDave={() => setDaveOpen(true)} />
           <GlobalSearch />
           <TerritoryCopilot />
           <Tooltip>
@@ -247,6 +250,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       
       {/* Floating Action Button */}
       <GlobalFAB position="bottom-right" />
+
+      {/* Dave Conversational AI Overlay */}
+      <DaveConversationMode isOpen={daveOpen} onClose={() => setDaveOpen(false)} />
     </div>
   );
 }
