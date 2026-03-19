@@ -5,7 +5,63 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// URLs that are auth-gated and can't be scraped
+function isAuthGatedUrl(url: string): boolean {
+  const gatedPatterns = [
+    /drive\.google\.com/i,
+    /docs\.google\.com/i,
+    /sheets\.google\.com/i,
+    /slides\.google\.com/i,
+    /\.zoom\.us\//i,
+    /thinkific\.com/i,
+    /udemy\.com/i,
+    /coursera\.org/i,
+    /linkedin\.com\/learning/i,
+    /loom\.com/i,
+    /notion\.so/i,
+    /dropbox\.com/i,
+    /onedrive\.live\.com/i,
+    /sharepoint\.com/i,
+  ];
+  return gatedPatterns.some(p => p.test(url));
+}
+
+// Extract hints from URL patterns for auth-gated URLs
+function extractUrlHints(url: string): { type: string; source: string } {
+  const urlObj = new URL(url);
+  const host = urlObj.hostname.replace('www.', '');
+  let type = 'document';
+
+  if (/docs\.google\.com\/document/.test(url)) type = 'document';
+  else if (/docs\.google\.com\/spreadsheets/.test(url) || /sheets\.google\.com/.test(url)) type = 'spreadsheet';
+  else if (/docs\.google\.com\/presentation/.test(url) || /slides\.google\.com/.test(url)) type = 'presentation';
+  else if (/drive\.google\.com\/file/.test(url)) type = 'file';
+  else if (/\.zoom\.us\/rec/.test(url)) type = 'recording';
+  else if (/thinkific\.com/.test(url)) type = 'training course';
+  else if (/loom\.com/.test(url)) type = 'video recording';
+
+  // Extract source from domain
+  let source = host.split('.')[0];
+  if (host.includes('google.com')) source = 'Google Drive';
+  else if (host.includes('zoom.us')) {
+    const subdomain = host.split('.zoom.us')[0];
+    source = subdomain !== 'us02web' ? subdomain : 'Zoom';
+  }
+  else if (host.includes('thinkific.com')) {
+    const subdomain = host.split('.thinkific.com')[0];
+    source = subdomain || 'Thinkific';
+  }
+
+  return { type, source };
+}
+
 async function scrapeUrl(url: string): Promise<{ pageTitle: string; content: string } | null> {
+  // Skip scraping for auth-gated URLs — Firecrawl will get a login page
+  if (isAuthGatedUrl(url)) {
+    console.log("Skipping scrape for auth-gated URL:", url);
+    return null;
+  }
+
   const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
   if (!FIRECRAWL_API_KEY) {
     console.warn("FIRECRAWL_API_KEY not configured, skipping scrape");
