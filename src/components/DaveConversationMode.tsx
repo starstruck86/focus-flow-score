@@ -173,7 +173,8 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
       }
     },
     onError: (err: any) => {
-      console.error('[Dave] Error:', err);
+      logStatus(`🔴 Error: ${JSON.stringify(err)}`);
+      console.error('[Dave] Full error object:', err);
       const msg = err?.message || String(err);
       if (/NotAllowedError|Permission denied/i.test(msg)) {
         setError('Microphone access required — check your browser settings');
