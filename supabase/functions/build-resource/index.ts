@@ -11,7 +11,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { type, prompt, outputType, resourceIds, accountContext, content, documentType } = await req.json();
+    const { type, prompt, outputType, resourceIds, accountContext, content, documentType, sourceResourceId, targetType } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
@@ -46,7 +46,7 @@ serve(async (req) => {
 
     if (type === "transform") {
       // Transform a source resource into a new format
-      const { sourceResourceId, targetType } = await req.json().catch(() => ({}));
+      // sourceResourceId and targetType already destructured from initial req.json()
       let sourceContent = "";
       if (sourceResourceId) {
         const { data: src } = await supabase

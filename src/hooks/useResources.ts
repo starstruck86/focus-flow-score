@@ -418,7 +418,7 @@ export type ResourceSuggestion = {
   deal_context?: string;
 };
 
-export function useResourceSuggestions() {
+export function useResourceSuggestions(enabled = false) {
   const { user } = useAuth();
   return useQuery({
     queryKey: ['resource-suggestions', user?.id],
@@ -428,7 +428,7 @@ export function useResourceSuggestions() {
       if (data?.error) throw new Error(data.error);
       return (data?.suggestions || []) as ResourceSuggestion[];
     },
-    enabled: !!user,
+    enabled: !!user && enabled,
     staleTime: 10 * 60 * 1000, // 10 minutes
     refetchOnWindowFocus: false,
   });

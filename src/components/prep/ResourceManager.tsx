@@ -125,7 +125,7 @@ export function ResourceManager() {
   const [showAIGenerate, setShowAIGenerate] = useState(false);
   const [generateSourceId, setGenerateSourceId] = useState<string | null>(null);
   const [generateInitialType, setGenerateInitialType] = useState<string | undefined>();
-  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<number>>(new Set());
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(new Set());
 
   const { data: folders = [] } = useResourceFolders();
   const { data: resources = [] } = useResources(currentFolderId === null ? undefined : currentFolderId);
@@ -140,7 +140,7 @@ export function ResourceManager() {
   const addUrlResource = useAddUrlResource();
   const { totalDuplicates } = useResourceDuplicates();
   const operationalize = useOperationalizeResource();
-  const { data: suggestions = [], refetch: refetchSuggestions, isLoading: suggestionsLoading } = useResourceSuggestions();
+  const { data: suggestions = [], refetch: refetchSuggestions, isLoading: suggestionsLoading } = useResourceSuggestions(resources.length > 0);
 
   const currentFolders = folders.filter(f => f.parent_id === currentFolderId);
   const filteredResources = searchQuery
@@ -545,12 +545,12 @@ export function ResourceManager() {
               <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => refetchSuggestions()} disabled={suggestionsLoading}>
                 {suggestionsLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
               </Button>
-              <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setDismissedSuggestions(new Set(suggestions.map((_, i) => i)))}>
+              <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setDismissedSuggestions(new Set(suggestions.map(s => s.description)))}>
                 <X className="h-3 w-3" />
               </Button>
             </div>
           </div>
-          {suggestions.filter((_, i) => !dismissedSuggestions.has(i)).map((s, i) => (
+          {suggestions.filter(s => !dismissedSuggestions.has(s.description)).map((s, i) => (
             <div key={i} className="flex items-start gap-2 p-2 rounded-md border border-border/50 bg-background text-xs">
               <div className="flex-1">
                 <p className="text-foreground">{s.description}</p>
@@ -564,7 +564,7 @@ export function ResourceManager() {
                 }}>
                   Create
                 </Button>
-                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setDismissedSuggestions(prev => new Set([...prev, i]))}>
+                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setDismissedSuggestions(prev => new Set([...prev, s.description]))}>
                   <X className="h-3 w-3" />
                 </Button>
               </div>

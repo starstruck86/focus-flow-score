@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Lightbulb, Loader2, RefreshCw, ChevronRight, X } from 'lucide-react';
+import { Lightbulb, Loader2, RefreshCw, ChevronRight, X, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -132,5 +132,3 @@ export function SmartSuggestionsPanel({ content, documentType, onApply, onClose 
   );
 }
 
-// Small Sparkles import for the empty state button
-import { Sparkles } from 'lucide-react';
