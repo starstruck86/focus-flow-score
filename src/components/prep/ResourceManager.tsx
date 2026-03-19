@@ -462,9 +462,12 @@ export function ResourceManager() {
             className="pl-8 h-8 text-xs"
           />
         </div>
-        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setShowNewFolder(true)}>
-          <FolderPlus className="h-3.5 w-3.5 mr-1" /> Folder
-        </Button>
+        {/* Only show Folder button inside a folder, or at root if < 8 top-level folders */}
+        {(currentFolderId !== null || folders.filter(f => !f.parent_id).length < 8) && (
+          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setShowNewFolder(true)}>
+            <FolderPlus className="h-3.5 w-3.5 mr-1" /> {currentFolderId ? 'Sub-Folder' : 'Folder'}
+          </Button>
+        )}
 
         {/* Add dropdown */}
         <DropdownMenu>

@@ -59,27 +59,59 @@ export function ReorganizeModal({ open, onOpenChange }: Props) {
     const accepted = suggestions.filter(s => s.accepted);
 
     try {
-      // Collect unique folder names needed
-      const neededFolders = [...new Set(accepted.map(s => s.suggested.suggested_folder))];
-      const folderMap = new Map<string, string>();
+      // Resolve folders using taxonomy: top_folder → sub_folder hierarchy
+      const folderCache = new Map<string, string>();
 
-      for (const name of neededFolders) {
-        const existing = folders.find(f => f.name.toLowerCase() === name.toLowerCase());
-        if (existing) {
-          folderMap.set(name, existing.id);
+      const resolveFolderId = async (suggestion: ClassificationResult): Promise<string | undefined> => {
+        const topName = suggestion.top_folder || suggestion.suggested_folder;
+        if (!topName) return undefined;
+        const subName = suggestion.sub_folder;
+        const cacheKey = subName ? `${topName}/${subName}` : topName;
+
+        if (folderCache.has(cacheKey)) return folderCache.get(cacheKey);
+
+        // Find or create top-level folder
+        let topId: string;
+        const existingTop = folders.find(f => f.name.toLowerCase() === topName.toLowerCase() && !f.parent_id);
+        if (existingTop) {
+          topId = existingTop.id;
         } else {
           const { data } = await supabase
             .from('resource_folders')
-            .insert({ name, user_id: user.id })
+            .insert({ name: topName, user_id: user.id })
             .select()
             .single();
-          if (data) folderMap.set(name, data.id);
+          if (!data) return undefined;
+          topId = data.id;
         }
-      }
+
+        if (!subName) {
+          folderCache.set(cacheKey, topId);
+          return topId;
+        }
+
+        // Find or create sub-folder
+        const existingSub = folders.find(f => f.name.toLowerCase() === subName.toLowerCase() && f.parent_id === topId);
+        if (existingSub) {
+          folderCache.set(cacheKey, existingSub.id);
+          return existingSub.id;
+        }
+
+        const { data: subData } = await supabase
+          .from('resource_folders')
+          .insert({ name: subName, user_id: user.id, parent_id: topId })
+          .select()
+          .single();
+        if (subData) {
+          folderCache.set(cacheKey, subData.id);
+          return subData.id;
+        }
+        return topId;
+      };
 
       // Apply updates
       for (const s of accepted) {
-        const folderId = folderMap.get(s.suggested.suggested_folder);
+        const folderId = await resolveFolderId(s.suggested);
         await updateResource.mutateAsync({
           id: s.id,
           updates: {
