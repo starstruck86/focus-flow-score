@@ -240,14 +240,14 @@ export function ResourceManager() {
     const urlPattern = /https?:\/\/[^\s,<>"']+/gi;
     const urls = (urlInput.match(urlPattern) || []).map(u => u.replace(/[)}\]]+$/, '').trim());
     const uniqueUrls = [...new Set(urls)];
-    if (!urls.length) {
+    if (!uniqueUrls.length) {
       toast.error('No valid URLs found');
       return;
     }
     setShowAddUrl(false);
     setUrlInput('');
 
-    const newItems: PendingItem[] = urls.map(url => ({
+    const newItems: PendingItem[] = uniqueUrls.map(url => ({
       id: `url-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       status: 'classifying' as const,
       source: 'url' as const,
