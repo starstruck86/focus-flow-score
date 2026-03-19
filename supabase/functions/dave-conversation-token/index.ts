@@ -177,7 +177,7 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
       .from("tasks")
       .select("title, due_date, priority, status, account_name, notes")
       .eq("user_id", userId)
-      .in("status", ["todo", "in_progress"])
+      .in("status", ["next", "in-progress"])
       .order("due_date", { ascending: true })
       .limit(30),
     // 4. Opportunities (expanded)
