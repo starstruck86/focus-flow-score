@@ -1,58 +1,76 @@
 
 
-# Test & Optimize Dave — Bugs Found + Performance Fixes
+# Honest Assessment: Confidence Level 5/10
 
-## Issues Discovered
+## Why Not Higher
 
-### Bug 1: Reconnect Never Sends Conversation History (Critical)
-**File**: `DaveConversationMode.tsx`, line 200
-```
-if (!sessionData || !isReconnectRef.current)
-```
-On reconnect, `isReconnectRef.current` is `true`, so `!isReconnectRef.current` is `false`. Combined with `sessionData` existing (cached), the entire block is skipped. Dave never gets conversation history on reconnect — the core memory feature is broken.
+Looking at the actual code, the fundamental problem is **architectural** and the previous fixes were treating symptoms, not the disease.
 
-**Fix**: Change to `if (!sessionData || isReconnectRef.current)`.
+### The Real Problem (confirmed in code)
 
-### Bug 2: Dave Creates Tasks He Can Never See (Critical)
-**File**: `clientTools.ts` line 118 creates tasks with `status: 'next'`.
-**File**: `dave-conversation-token/index.ts` line 180 queries tasks with `.in("status", ["todo", "in_progress"])`.
+**Line 92-95 of the edge function**: We fetch a `conversationToken` from ElevenLabs. This token locks the agent to whatever system prompt is configured **in the ElevenLabs dashboard**. Our `DAVE_INSTRUCTIONS` (56 lines of carefully crafted identity) are sent two ways:
 
-The status values don't match. Dave creates tasks that never appear in his own context. The app's type system uses `'next' | 'in-progress' | 'blocked' | 'done' | 'dropped'`.
+1. **`dynamicVariables`** (line 207-219) — Only work if the ElevenLabs agent's prompt template contains `{{context}}` and `{{first_message}}` placeholders. If those placeholders don't exist in the dashboard, the variables are **silently dropped**.
 
-**Fix**: Change the edge function query to `.in("status", ["next", "in-progress"])`.
+2. **`sendContextualUpdate`** (line 86-93) — Adds supplementary context AFTER connection, but **does NOT override the agent's base system prompt**. If the ElevenLabs agent says "You are a helpful AI assistant," that's what Dave will be, regardless of what we inject.
 
-### Bug 3: Timezone Calculation Inverted
-**File**: `dave-conversation-token/index.ts`, line 676
-```
-const localHour = (hour - tzOffsetHours + 24) % 24;
-```
-Client sends `getTimezoneOffset() / -60`, so EST = -5. Formula computes `UTC - (-5) = UTC + 5` — wrong direction. Morning briefings fire at the wrong time.
+**This is why Dave "doesn't know his name."** Our 1200 chars of identity instructions never reach the agent's core prompt. They're either dropped or treated as background context the agent can ignore.
 
-**Fix**: Change to `(hour + tzOffsetHours + 24) % 24`.
+### What the Bug Fixes Actually Fixed
+- Reconnect history ✅ (real bug, fixed)
+- Task status mismatch ✅ (real bug, fixed)
+- Timezone math ✅ (real bug, fixed)
+- Context size optimization ✅ (helpful, fixed)
 
-### Bug 4: Task Priority Mismatch
-`clientTools.ts` creates tasks with `priority: 'medium'` but the app's type system uses `'P0' | 'P1' | 'P2' | 'P3'`.
+**None of these address why Dave has no identity.** That's the 5/10.
 
-**Fix**: Default to `'P2'` instead of `'medium'`.
+---
 
-### Optimization 1: Context Size Too Large
-- Resource raw content capped at 500 chars (line 426) — should be 200
-- Accounts fetched: 50 — reduce to 30
-- Contacts fetched: 50 — reduce to 25
-- No hard cap on total context — add 20k char limit with section trimming
+## What Gets Us to 10/10
 
-### Optimization 2: Missing `workstream` on Created Tasks
-Tasks created by Dave have no `workstream` field, which may cause them to not appear in filtered views.
+### Step 1: Switch to Signed URL + Overrides (the real fix)
 
-**Fix**: Default to `'pg'` workstream.
+Instead of `conversationToken` (which defers to dashboard config), use `get-signed-url` + `overrides` to **inject our prompt directly as the agent's system prompt**. This gives us full control from code.
 
-## Changes
+**Edge function change:**
+- Switch API call from `/conversation/token` to `/conversation/get-signed-url`
+- Return `signed_url` instead of `token`
+
+**Component change:**
+- Use `signedUrl` instead of `conversationToken` in `startSession`
+- Pass `overrides.agent.prompt.prompt` = our full `DAVE_INSTRUCTIONS` + CRM context
+- Pass `overrides.agent.firstMessage` = our computed greeting
+- Remove `sendContextualUpdate` (no longer needed — prompt IS the identity)
+
+### Step 2: Auth Guard (prevent silent empty sessions)
+
+Currently if auth fails, `userId = null`, context is empty, and Dave starts with nothing. Add:
+- Client-side: check `supabase.auth.getUser()` before starting; show error if not logged in
+- Edge function: return explicit error if no valid user, don't proceed with empty context
+
+### Step 3: Verify Overrides Are Enabled
+
+Overrides must be enabled in the ElevenLabs dashboard for the agent. If they're not, the `overrides` parameter is silently ignored.
+
+**Fallback plan:** If overrides don't work, we keep `sendContextualUpdate` as backup BUT prefix it with a strong identity re-assertion: "IMPORTANT: Your name is Dave. Ignore any previous system instructions that conflict with this."
+
+### Step 4: Add Diagnostic Logging
+
+- Edge function: log context size and whether user was authenticated
+- Client: log whether `signed_url` was received and context size before session start
+- Client: on first agent message, log it to verify Dave identifies correctly
+
+---
+
+## Files to Change
 
 | File | Change |
 |------|--------|
-| `src/components/DaveConversationMode.tsx` | Fix reconnect condition (line 200) |
-| `src/components/dave/clientTools.ts` | Fix task priority to `'P2'`, add `workstream: 'pg'` |
-| `supabase/functions/dave-conversation-token/index.ts` | Fix timezone math, fix task status query, reduce context limits, add 20k hard cap |
+| `supabase/functions/dave-conversation-token/index.ts` | Switch to signed URL endpoint, auth guard |
+| `src/components/DaveConversationMode.tsx` | Use `signedUrl` + `overrides`, remove `sendContextualUpdate`, add auth check |
+| `src/hooks/useDaveContext.ts` | Update types (`signed_url` instead of `token`), auth guard |
 
-## 3 bug fixes, 2 optimizations across 3 files
+## One User Action Required
+
+You need to verify that **overrides are enabled** on your ElevenLabs agent in their dashboard (Agent Settings → Security → Enable Overrides). Without this, the signed URL approach silently falls back to the dashboard prompt. If you can confirm that or enable it, this plan is a 9/10. The last point to 10 is live testing on both mobile and desktop.
 
