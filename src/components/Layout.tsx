@@ -210,8 +210,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <SaveIndicator />
         </div>
         <div className="flex items-center gap-1">
-          <VoiceCommandButton />
-          <GlobalSearch />
+          <VoiceCommandButton onOpenDave={() => setDaveOpen(true)} />
           <TerritoryCopilot />
           <Tooltip>
             <TooltipTrigger asChild>
