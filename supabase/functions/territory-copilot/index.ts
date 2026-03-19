@@ -84,7 +84,19 @@ function compactTranscript(t: any): string {
 }
 
 function compactResource(r: any): string {
-  return `[${r.category.toUpperCase()}] "${r.label}" → ${r.url}${r.notes ? ` (${r.notes.slice(0, 80)})` : ''}`;
+  // Support both resource_links format and resources table format
+  if (r.url) {
+    return `[${(r.category || r.resource_type || 'doc').toUpperCase()}] "${r.label || r.title}" → ${r.url}${r.notes ? ` (${r.notes.slice(0, 80)})` : ''}`;
+  }
+  const parts = [`[${(r.resource_type || 'doc').toUpperCase()}] "${r.title}"`];
+  if (r.description) parts.push(`— ${r.description.slice(0, 100)}`);
+  if (r.tags?.length) parts.push(`Tags: ${r.tags.join(', ')}`);
+  return parts.join(' ');
+}
+
+function compactResourceContent(r: any, maxChars: number = 4000): string {
+  if (!r.content || r.content.startsWith('[File:') || r.content.startsWith('[External')) return '';
+  return `\n### ${r.title}\n${r.content.slice(0, maxChars)}`;
 }
 
 // ─── Perplexity web research ──────────────────────────────
