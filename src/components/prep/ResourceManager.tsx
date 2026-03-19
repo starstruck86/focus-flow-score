@@ -73,6 +73,8 @@ export function ResourceManager() {
   const [renameFolderName, setRenameFolderName] = useState('');
   const [showReorganize, setShowReorganize] = useState(false);
   const [showDuplicates, setShowDuplicates] = useState(false);
+  const [renamingResourceId, setRenamingResourceId] = useState<string | null>(null);
+  const [renameResourceTitle, setRenameResourceTitle] = useState('');
 
   // Upload/URL states
   const [showAddUrl, setShowAddUrl] = useState(false);
