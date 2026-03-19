@@ -253,3 +253,117 @@ export function useRenameFolder() {
     },
   });
 }
+
+export function useTemplates() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ['resources', user?.id, 'templates'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('resources')
+        .select('*')
+        .eq('is_template', true)
+        .order('updated_at', { ascending: false });
+      if (error) throw error;
+      return data as Resource[];
+    },
+    enabled: !!user,
+  });
+}
+
+export type TemplateSuggestion = {
+  id: string;
+  user_id: string;
+  source_resource_id: string | null;
+  title: string;
+  description: string;
+  template_category: string;
+  suggested_content: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export function useTemplateSuggestions() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ['template-suggestions', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('template_suggestions')
+        .select('*')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(3);
+      if (error) throw error;
+      return data as TemplateSuggestion[];
+    },
+    enabled: !!user,
+  });
+}
+
+export function useDismissSuggestion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('template_suggestions')
+        .update({ status: 'dismissed' })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['template-suggestions'] });
+    },
+  });
+}
+
+export function useConfirmSuggestion() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async (suggestion: TemplateSuggestion) => {
+      if (!user) throw new Error('Not authenticated');
+      // Create the template resource
+      const { data: resource, error } = await supabase
+        .from('resources')
+        .insert({
+          user_id: user.id,
+          title: suggestion.title,
+          description: suggestion.description,
+          resource_type: 'template',
+          content: suggestion.suggested_content || '',
+          is_template: true,
+          template_category: suggestion.template_category,
+          source_resource_id: suggestion.source_resource_id,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+
+      // Create initial version
+      await supabase.from('resource_versions').insert({
+        resource_id: resource.id,
+        user_id: user.id,
+        version_number: 1,
+        title: suggestion.title,
+        content: suggestion.suggested_content || '',
+        change_summary: 'Created from AI suggestion',
+      });
+
+      // Mark suggestion as confirmed
+      await supabase
+        .from('template_suggestions')
+        .update({ status: 'confirmed' })
+        .eq('id', suggestion.id);
+
+      return resource;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['template-suggestions'] });
+      qc.invalidateQueries({ queryKey: ['resources'] });
+      toast.success('Template created from suggestion');
+    },
+    onError: () => toast.error('Failed to create template'),
+  });
+}

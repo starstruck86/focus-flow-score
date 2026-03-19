@@ -3,12 +3,28 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
+export const CORE_FOLDERS = [
+  'Frameworks',
+  'Playbooks',
+  'Templates',
+  'Training',
+  'Discovery',
+  'Presentations',
+  'Battlecards',
+  'Tools & Reference',
+] as const;
+
+export type CoreFolderName = typeof CORE_FOLDERS[number];
+
 export type ClassificationResult = {
   title: string;
   description: string;
   resource_type: string;
   tags: string[];
-  suggested_folder: string;
+  top_folder: CoreFolderName;
+  sub_folder?: string;
+  /** @deprecated Use top_folder instead */
+  suggested_folder?: string;
 };
 
 async function classifyResource(payload: {
@@ -30,9 +46,63 @@ async function extractTextFromFile(file: File): Promise<string> {
   if (['txt', 'md', 'csv', 'json', 'xml', 'html'].includes(ext || '')) {
     return await file.text();
   }
-  // For binary files (pdf, docx, pptx), we can't extract client-side
-  // Store the file and use filename for classification
   return '';
+}
+
+/**
+ * Resolves the folder hierarchy: finds/creates top-level folder, then optionally a sub-folder.
+ * Returns the target folder ID.
+ */
+async function resolveFolderHierarchy(
+  userId: string,
+  topFolderName: string,
+  subFolderName?: string
+): Promise<string | null> {
+  // Find or create top-level folder (parent_id IS NULL)
+  let topFolderId: string | null = null;
+
+  const { data: existingTop } = await supabase
+    .from('resource_folders')
+    .select('id, name')
+    .eq('user_id', userId)
+    .is('parent_id', null)
+    .ilike('name', topFolderName);
+
+  if (existingTop?.length) {
+    topFolderId = existingTop[0].id;
+  } else {
+    const { data: newFolder } = await supabase
+      .from('resource_folders')
+      .insert({ name: topFolderName, user_id: userId })
+      .select()
+      .single();
+    if (newFolder) topFolderId = newFolder.id;
+  }
+
+  if (!topFolderId) return null;
+
+  // If no sub-folder needed, return top-level
+  if (!subFolderName) return topFolderId;
+
+  // Find or create sub-folder under top-level
+  const { data: existingSub } = await supabase
+    .from('resource_folders')
+    .select('id, name')
+    .eq('user_id', userId)
+    .eq('parent_id', topFolderId)
+    .ilike('name', subFolderName);
+
+  if (existingSub?.length) {
+    return existingSub[0].id;
+  }
+
+  const { data: newSub } = await supabase
+    .from('resource_folders')
+    .insert({ name: subFolderName, user_id: userId, parent_id: topFolderId })
+    .select()
+    .single();
+
+  return newSub?.id || topFolderId;
 }
 
 export function useClassifyResource() {
@@ -64,31 +134,18 @@ export function useUploadResource() {
         .upload(filePath, file);
       if (uploadError) throw uploadError;
 
-      // Extract text content if possible
       const content = await extractTextFromFile(file);
 
-      // Ensure folder exists
+      // Resolve folder via taxonomy
       let finalFolderId = folderId;
-      if (!finalFolderId && classification.suggested_folder) {
-        const { data: existingFolders } = await supabase
-          .from('resource_folders')
-          .select('id, name')
-          .eq('user_id', user.id)
-          .ilike('name', classification.suggested_folder);
-
-        if (existingFolders?.length) {
-          finalFolderId = existingFolders[0].id;
-        } else {
-          const { data: newFolder } = await supabase
-            .from('resource_folders')
-            .insert({ name: classification.suggested_folder, user_id: user.id })
-            .select()
-            .single();
-          if (newFolder) finalFolderId = newFolder.id;
-        }
+      if (!finalFolderId && classification.top_folder) {
+        finalFolderId = await resolveFolderHierarchy(
+          user.id,
+          classification.top_folder,
+          classification.sub_folder
+        );
       }
 
-      // Create resource
       const { data: resource, error: resourceError } = await supabase
         .from('resources')
         .insert({
@@ -105,7 +162,6 @@ export function useUploadResource() {
         .single();
       if (resourceError) throw resourceError;
 
-      // Create initial version
       await supabase.from('resource_versions').insert({
         resource_id: resource.id,
         user_id: user.id,
@@ -143,23 +199,12 @@ export function useAddUrlResource() {
       if (!user) throw new Error('Not authenticated');
 
       let finalFolderId = folderId;
-      if (!finalFolderId && classification.suggested_folder) {
-        const { data: existingFolders } = await supabase
-          .from('resource_folders')
-          .select('id, name')
-          .eq('user_id', user.id)
-          .ilike('name', classification.suggested_folder);
-
-        if (existingFolders?.length) {
-          finalFolderId = existingFolders[0].id;
-        } else {
-          const { data: newFolder } = await supabase
-            .from('resource_folders')
-            .insert({ name: classification.suggested_folder, user_id: user.id })
-            .select()
-            .single();
-          if (newFolder) finalFolderId = newFolder.id;
-        }
+      if (!finalFolderId && classification.top_folder) {
+        finalFolderId = await resolveFolderHierarchy(
+          user.id,
+          classification.top_folder,
+          classification.sub_folder
+        );
       }
 
       const { data: resource, error } = await supabase
@@ -203,7 +248,6 @@ export function useReorganizeLibrary() {
     mutationFn: async (resources: { id: string; title: string; content: string | null; tags: string[] | null }[]) => {
       const results: { id: string; original: { title: string; tags: string[] | null }; suggested: ClassificationResult }[] = [];
 
-      // Process in batches of 3 to avoid rate limits
       for (let i = 0; i < resources.length; i += 3) {
         const batch = resources.slice(i, i + 3);
         const batchResults = await Promise.allSettled(
@@ -223,7 +267,6 @@ export function useReorganizeLibrary() {
         for (const result of batchResults) {
           if (result.status === 'fulfilled') results.push(result.value);
         }
-        // Small delay between batches
         if (i + 3 < resources.length) await new Promise(r => setTimeout(r, 500));
       }
 
@@ -234,7 +277,6 @@ export function useReorganizeLibrary() {
 
 export function useResourceFileUrl() {
   return async (path: string): Promise<string> => {
-    // Check if it's an external URL
     if (path.startsWith('http://') || path.startsWith('https://')) {
       return path;
     }

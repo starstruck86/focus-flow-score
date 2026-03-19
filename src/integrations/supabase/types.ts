@@ -1848,6 +1848,7 @@ export type Database = {
           is_template: boolean | null
           opportunity_id: string | null
           resource_type: string
+          source_resource_id: string | null
           tags: string[] | null
           template_category: string | null
           title: string
@@ -1866,6 +1867,7 @@ export type Database = {
           is_template?: boolean | null
           opportunity_id?: string | null
           resource_type?: string
+          source_resource_id?: string | null
           tags?: string[] | null
           template_category?: string | null
           title: string
@@ -1884,6 +1886,7 @@ export type Database = {
           is_template?: boolean | null
           opportunity_id?: string | null
           resource_type?: string
+          source_resource_id?: string | null
           tags?: string[] | null
           template_category?: string | null
           title?: string
@@ -1910,6 +1913,13 @@ export type Database = {
             columns: ["opportunity_id"]
             isOneToOne: false
             referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resources_source_resource_id_fkey"
+            columns: ["source_resource_id"]
+            isOneToOne: false
+            referencedRelation: "resources"
             referencedColumns: ["id"]
           },
         ]
@@ -2174,6 +2184,53 @@ export type Database = {
             columns: ["linked_opportunity_id"]
             isOneToOne: false
             referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      template_suggestions: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          source_resource_id: string | null
+          status: string
+          suggested_content: string | null
+          template_category: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          id?: string
+          source_resource_id?: string | null
+          status?: string
+          suggested_content?: string | null
+          template_category: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          source_resource_id?: string | null
+          status?: string
+          suggested_content?: string | null
+          template_category?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "template_suggestions_source_resource_id_fkey"
+            columns: ["source_resource_id"]
+            isOneToOne: false
+            referencedRelation: "resources"
             referencedColumns: ["id"]
           },
         ]

@@ -318,6 +318,8 @@ export function ResourceManager() {
           description: r.description,
           resource_type: r.resource_type,
           tags: r.tags,
+          top_folder: r.suggested_folder || r.top_folder || 'Tools & Reference',
+          sub_folder: r.sub_folder,
           suggested_folder: r.suggested_folder,
         },
       }));
@@ -462,9 +464,12 @@ export function ResourceManager() {
             className="pl-8 h-8 text-xs"
           />
         </div>
-        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setShowNewFolder(true)}>
-          <FolderPlus className="h-3.5 w-3.5 mr-1" /> Folder
-        </Button>
+        {/* Only show Folder button inside a folder, or at root if < 8 top-level folders */}
+        {(currentFolderId !== null || folders.filter(f => !f.parent_id).length < 8) && (
+          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setShowNewFolder(true)}>
+            <FolderPlus className="h-3.5 w-3.5 mr-1" /> {currentFolderId ? 'Sub-Folder' : 'Folder'}
+          </Button>
+        )}
 
         {/* Add dropdown */}
         <DropdownMenu>
@@ -543,7 +548,7 @@ export function ResourceManager() {
                     {item.status === 'classified' && item.classification && (
                       <div className="flex items-center gap-1.5 mt-1">
                         <Badge variant="secondary" className="text-[9px] capitalize">{item.classification.resource_type}</Badge>
-                        <Badge variant="outline" className="text-[9px]">{item.classification.suggested_folder}</Badge>
+                        <Badge variant="outline" className="text-[9px]">{item.classification.top_folder}{item.classification.sub_folder ? ` / ${item.classification.sub_folder}` : ''}</Badge>
                       </div>
                     )}
                   </div>
