@@ -11,7 +11,7 @@ import {
   Folder, FolderPlus, FilePlus, FileText, Presentation, Mail, BookOpen,
   ChevronRight, MoreHorizontal, Search, Trash2, Edit3, Clock,
   Star, Tag, Copy, Upload, Link2, Sparkles, Target, Shield,
-  GraduationCap, MessageSquare, Loader2, Check, X,
+  GraduationCap, MessageSquare, Loader2, Check, X, AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -23,6 +23,8 @@ import { ResourceEditor } from './ResourceEditor';
 import { ResourceFileViewer } from './ResourceFileViewer';
 import { VersionHistory } from './VersionHistory';
 import { ReorganizeModal } from './ReorganizeModal';
+import { DuplicateResourcesModal } from './DuplicateResourcesModal';
+import { useResourceDuplicates } from '@/hooks/useResourceDuplicates';
 import { toast } from 'sonner';
 
 const RESOURCE_TYPE_ICONS: Record<string, React.ElementType> = {
@@ -70,6 +72,7 @@ export function ResourceManager() {
   const [renamingFolder, setRenamingFolder] = useState<ResourceFolder | null>(null);
   const [renameFolderName, setRenameFolderName] = useState('');
   const [showReorganize, setShowReorganize] = useState(false);
+  const [showDuplicates, setShowDuplicates] = useState(false);
 
   // Upload/URL states
   const [showAddUrl, setShowAddUrl] = useState(false);
@@ -93,6 +96,7 @@ export function ResourceManager() {
   const classify = useClassifyResource();
   const uploadResource = useUploadResource();
   const addUrlResource = useAddUrlResource();
+  const { totalDuplicates } = useResourceDuplicates();
 
   const currentFolders = folders.filter(f => f.parent_id === currentFolderId);
   const filteredResources = searchQuery
@@ -299,6 +303,14 @@ export function ResourceManager() {
 
         <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setShowReorganize(true)}>
           <Sparkles className="h-3.5 w-3.5 mr-1" /> Reorganize
+        </Button>
+        <Button size="sm" variant="ghost" className="h-8 text-xs relative" onClick={() => setShowDuplicates(true)}>
+          <AlertTriangle className="h-3.5 w-3.5 mr-1" /> Duplicates
+          {totalDuplicates > 0 && (
+            <Badge variant="destructive" className="absolute -top-1.5 -right-1.5 h-4 min-w-4 text-[9px] px-1 flex items-center justify-center">
+              {totalDuplicates}
+            </Badge>
+          )}
         </Button>
       </div>
 
@@ -591,6 +603,7 @@ export function ResourceManager() {
 
       {/* Reorganize Modal */}
       <ReorganizeModal open={showReorganize} onOpenChange={setShowReorganize} />
+      <DuplicateResourcesModal open={showDuplicates} onOpenChange={setShowDuplicates} />
     </div>
   );
 }
