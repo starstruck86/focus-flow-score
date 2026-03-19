@@ -368,3 +368,84 @@ export function useConfirmSuggestion() {
     onError: () => toast.error('Failed to create template'),
   });
 }
+
+// --- Resource Digest / Operationalize ---
+
+export type ResourceDigest = {
+  id: string;
+  resource_id: string;
+  user_id: string;
+  takeaways: string[];
+  summary: string;
+  use_cases: string[];
+  grading_criteria: { category: string; description: string; weight: number }[] | null;
+  content_hash: string;
+  created_at: string;
+};
+
+export function useOperationalizeResource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (resourceId: string) => {
+      const { data, error } = await supabase.functions.invoke('operationalize-resource', {
+        body: { resource_id: resourceId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data as { digest: ResourceDigest; suggested_tasks: { title: string; description: string }[]; skipped: boolean };
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['resource-digests'] });
+      if (data.skipped) {
+        toast.info('Resource already operationalized (content unchanged)');
+      } else {
+        const taskCount = data.suggested_tasks?.length || 0;
+        const criteriaCount = data.digest?.grading_criteria?.length || 0;
+        toast.success(
+          `Operationalized! ${data.digest.takeaways.length} takeaways${criteriaCount ? `, ${criteriaCount} grading criteria` : ''}${taskCount ? `, ${taskCount} suggested tasks` : ''}`
+        );
+      }
+    },
+    onError: (e: any) => toast.error(e.message || 'Failed to operationalize resource'),
+  });
+}
+
+export type ResourceSuggestion = {
+  description: string;
+  action_type: 'transform' | 'combine' | 'templatize';
+  source_resource_ids: string[];
+  target_type: string;
+  deal_context?: string;
+};
+
+export function useResourceSuggestions() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ['resource-suggestions', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke('suggest-resource-uses');
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return (data?.suggestions || []) as ResourceSuggestion[];
+    },
+    enabled: !!user,
+    staleTime: 10 * 60 * 1000, // 10 minutes
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useResourceDigest(resourceId: string) {
+  return useQuery({
+    queryKey: ['resource-digests', resourceId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('resource_digests')
+        .select('*')
+        .eq('resource_id', resourceId)
+        .single();
+      if (error && error.code !== 'PGRST116') throw error;
+      return data as ResourceDigest | null;
+    },
+    enabled: !!resourceId,
+  });
+}
