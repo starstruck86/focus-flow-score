@@ -48,7 +48,7 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
   // Refs for stale closure fixes
   const isOpenRef = useRef(isOpen);
   const transcriptRef = useRef(transcript);
-  const sessionDataRef = useRef<{ token: string; context: string; firstMessage: string | null } | null>(null);
+  const sessionDataRef = useRef<{ signed_url: string; context: string; firstMessage: string | null } | null>(null);
   const isReconnectRef = useRef(false);
   const connectedAtRef = useRef<number>(0);
   const stabilityTimerRef = useRef<ReturnType<typeof setTimeout>>();

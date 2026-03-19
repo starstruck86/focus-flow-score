@@ -82,6 +82,7 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // Auth guard — require a real user, don't silently proceed with empty context
     let userId: string | null = null;
     if (authHeader?.startsWith("Bearer ")) {
       const token = authHeader.replace("Bearer ", "");
@@ -89,42 +90,46 @@ Deno.serve(async (req) => {
       userId = user?.id || null;
     }
 
-    const tokenPromise = fetch(
-      `https://api.elevenlabs.io/v1/convai/conversation/token?agent_id=${ELEVENLABS_AGENT_ID}`,
+    if (!userId) {
+      console.error("dave-conversation-token: No authenticated user — refusing to start empty session");
+      return new Response(
+        JSON.stringify({ error: "Authentication required. Please sign in first." }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Use signed URL instead of conversation token — allows prompt overrides from code
+    const signedUrlPromise = fetch(
+      `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${ELEVENLABS_AGENT_ID}`,
       { headers: { "xi-api-key": ELEVENLABS_API_KEY } }
     );
 
-    const contextPromise = userId ? fetchCrmContext(supabase, userId, conversationHistory) : Promise.resolve(null);
+    const contextPromise = fetchCrmContext(supabase, userId, conversationHistory);
 
-    const [tokenResp, crmContext] = await Promise.all([tokenPromise, contextPromise]);
+    const [signedUrlResp, crmContext] = await Promise.all([signedUrlPromise, contextPromise]);
 
-    if (!tokenResp.ok) {
-      const errBody = await tokenResp.text();
-      console.error("ElevenLabs token error:", errBody);
+    if (!signedUrlResp.ok) {
+      const errBody = await signedUrlResp.text();
+      console.error("ElevenLabs signed URL error:", errBody);
       return new Response(
-        JSON.stringify({ error: "Failed to generate conversation token", detail: errBody }),
+        JSON.stringify({ error: "Failed to generate signed URL", detail: errBody }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const { token } = await tokenResp.json();
+    const { signed_url } = await signedUrlResp.json();
 
-    let contextString = "";
-    let firstMessage: string | null = null;
-
-    if (crmContext) {
-      contextString = DAVE_INSTRUCTIONS + "\n\n" + crmContext.sections.join("\n\n");
-      // Hard cap context to 20k chars to prevent ElevenLabs latency/truncation
-      if (contextString.length > 20000) {
-        contextString = contextString.slice(0, 20000) + "\n\n[Context trimmed for performance]";
-      }
-      firstMessage = buildFirstMessage(crmContext, tzOffsetHours);
+    let contextString = DAVE_INSTRUCTIONS + "\n\n" + crmContext.sections.join("\n\n");
+    // Hard cap context to 20k chars to prevent ElevenLabs latency/truncation
+    if (contextString.length > 20000) {
+      contextString = contextString.slice(0, 20000) + "\n\n[Context trimmed for performance]";
     }
+    const firstMessage = buildFirstMessage(crmContext, tzOffsetHours);
 
-    console.log(`dave-conversation-token completed in ${Date.now() - t0}ms, context ${contextString.length} chars`);
+    console.log(`dave-conversation-token completed in ${Date.now() - t0}ms | user: ${userId} | context: ${contextString.length} chars | firstMessage: ${firstMessage.length} chars`);
 
     return new Response(
-      JSON.stringify({ token, context: contextString, firstMessage }),
+      JSON.stringify({ signed_url, context: contextString, firstMessage }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
