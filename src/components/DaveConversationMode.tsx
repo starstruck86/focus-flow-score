@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useConversation } from '@elevenlabs/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mic, MicOff, Volume2, MessageSquare, Loader2 } from 'lucide-react';
@@ -25,122 +25,137 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const orbRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number>(0);
+  const startingRef = useRef(false);
+  const reconnectAttemptRef = useRef(0);
+  const maxReconnects = 3;
+
+  // Memoize client tools to prevent re-renders
+  const clientTools = useMemo(() => ({
+    navigate: (params: { path: string }) => {
+      navigate(params.path);
+      return `Navigated to ${params.path}`;
+    },
+    create_task: (params: { title: string; priority?: string; accountName?: string }) => {
+      window.dispatchEvent(new CustomEvent('voice-create-task', { detail: params }));
+      toast.success('Task created', { description: params.title });
+      return `Task created: ${params.title}`;
+    },
+    open_copilot: (params: { question: string; mode?: string }) => {
+      askCopilot(params.question, (params.mode as any) || 'quick');
+      return `Opened copilot with: ${params.question}`;
+    },
+    prep_meeting: (params: { accountName?: string; meetingTitle?: string }) => {
+      const q = params.accountName
+        ? `Prep me for my meeting with ${params.accountName}${params.meetingTitle ? ` — ${params.meetingTitle}` : ''}`
+        : 'Prep me for my next meeting';
+      askCopilot(q, 'meeting');
+      return `Preparing meeting brief`;
+    },
+    update_account: (params: { accountName: string; field: string; value: string }) => {
+      window.dispatchEvent(new CustomEvent('voice-update-account', { detail: params }));
+      toast.success('Account updated', { description: `${params.accountName}: ${params.field} → ${params.value}` });
+      return `Updated ${params.accountName} ${params.field} to ${params.value}`;
+    },
+    update_opportunity: (params: { opportunityName: string; field: string; value: string }) => {
+      window.dispatchEvent(new CustomEvent('voice-update-opportunity', { detail: params }));
+      toast.success('Deal updated', { description: `${params.opportunityName}: ${params.field} → ${params.value}` });
+      return `Updated ${params.opportunityName} ${params.field} to ${params.value}`;
+    },
+    start_roleplay: (params: { call_type?: string; difficulty?: number; industry?: string }) => {
+      navigate('/coach');
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('voice-start-roleplay', { detail: params }));
+      }, 500);
+      return `Launching ${params.call_type || 'discovery'} roleplay`;
+    },
+    start_drill: () => {
+      navigate('/coach');
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('voice-start-drill'));
+      }, 500);
+      return 'Opening objection drills';
+    },
+    grade_call: () => {
+      navigate('/coach');
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('voice-grade-call'));
+      }, 500);
+      return 'Grading latest transcript';
+    },
+    log_activity: () => {
+      window.dispatchEvent(new CustomEvent('voice-quick-log'));
+      return 'Opening quick log';
+    },
+    set_reminder: async (params: { message: string; minutes_from_now: number }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return 'Not authenticated';
+      const remindAt = new Date(Date.now() + params.minutes_from_now * 60 * 1000);
+      await supabase.from('voice_reminders').insert({
+        user_id: user.id,
+        message: params.message,
+        remind_at: remindAt.toISOString(),
+      });
+      return `Reminder set for ${params.minutes_from_now} minutes from now: ${params.message}`;
+    },
+    pipeline_pulse: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return 'Not authenticated';
+      const { data: opps } = await supabase
+        .from('opportunities')
+        .select('name, stage, arr, close_date')
+        .eq('user_id', user.id)
+        .not('status', 'eq', 'closed-lost');
+      if (!opps?.length) return 'No active pipeline deals found.';
+      const total = opps.reduce((s, o) => s + (o.arr || 0), 0);
+      const summary = `You have ${opps.length} active deals worth $${Math.round(total / 1000)}k. ` +
+        opps.slice(0, 5).map(o => `${o.name}: ${o.stage || 'no stage'}, $${Math.round((o.arr || 0) / 1000)}k`).join('. ');
+      return summary;
+    },
+    daily_briefing: () => {
+      askCopilot('Walk me through my day — priorities, meetings, risks, and what I should focus on', 'quick');
+      return 'Building daily briefing in copilot';
+    },
+    debrief: (params: { accountName: string; keyTakeaways?: string; nextSteps?: string }) => {
+      const detail = {
+        accountName: params.accountName,
+        takeaways: params.keyTakeaways,
+        nextSteps: params.nextSteps,
+      };
+      window.dispatchEvent(new CustomEvent('voice-debrief', { detail }));
+      toast.success('Debrief logged', { description: params.accountName });
+      return `Debrief captured for ${params.accountName}`;
+    },
+    add_note: (params: { accountName: string; note: string }) => {
+      window.dispatchEvent(new CustomEvent('voice-add-note', { detail: params }));
+      toast.success('Note added', { description: `${params.accountName}: ${params.note.slice(0, 60)}...` });
+      return `Note added to ${params.accountName}`;
+    },
+    draft_email: (params: { to: string; subject: string; body: string }) => {
+      const emailText = `To: ${params.to}\nSubject: ${params.subject}\n\n${params.body}`;
+      navigator.clipboard?.writeText(emailText).catch(() => {});
+      toast.success('Email drafted & copied', { description: params.subject });
+      return `Email drafted for ${params.to}: "${params.subject}". I've copied it to your clipboard.`;
+    },
+  }), [navigate, askCopilot]);
 
   const conversation = useConversation({
-    clientTools: {
-      navigate: (params: { path: string }) => {
-        navigate(params.path);
-        return `Navigated to ${params.path}`;
-      },
-      create_task: (params: { title: string; priority?: string; accountName?: string }) => {
-        window.dispatchEvent(new CustomEvent('voice-create-task', { detail: params }));
-        toast.success('Task created', { description: params.title });
-        return `Task created: ${params.title}`;
-      },
-      open_copilot: (params: { question: string; mode?: string }) => {
-        askCopilot(params.question, (params.mode as any) || 'quick');
-        return `Opened copilot with: ${params.question}`;
-      },
-      prep_meeting: (params: { accountName?: string; meetingTitle?: string }) => {
-        const q = params.accountName
-          ? `Prep me for my meeting with ${params.accountName}${params.meetingTitle ? ` — ${params.meetingTitle}` : ''}`
-          : 'Prep me for my next meeting';
-        askCopilot(q, 'meeting');
-        return `Preparing meeting brief`;
-      },
-      update_account: (params: { accountName: string; field: string; value: string }) => {
-        window.dispatchEvent(new CustomEvent('voice-update-account', { detail: params }));
-        toast.success('Account updated', { description: `${params.accountName}: ${params.field} → ${params.value}` });
-        return `Updated ${params.accountName} ${params.field} to ${params.value}`;
-      },
-      update_opportunity: (params: { opportunityName: string; field: string; value: string }) => {
-        window.dispatchEvent(new CustomEvent('voice-update-opportunity', { detail: params }));
-        toast.success('Deal updated', { description: `${params.opportunityName}: ${params.field} → ${params.value}` });
-        return `Updated ${params.opportunityName} ${params.field} to ${params.value}`;
-      },
-      start_roleplay: (params: { call_type?: string; difficulty?: number; industry?: string }) => {
-        navigate('/coach');
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('voice-start-roleplay', { detail: params }));
-        }, 500);
-        return `Launching ${params.call_type || 'discovery'} roleplay`;
-      },
-      start_drill: () => {
-        navigate('/coach');
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('voice-start-drill'));
-        }, 500);
-        return 'Opening objection drills';
-      },
-      grade_call: () => {
-        navigate('/coach');
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('voice-grade-call'));
-        }, 500);
-        return 'Grading latest transcript';
-      },
-      log_activity: () => {
-        window.dispatchEvent(new CustomEvent('voice-quick-log'));
-        return 'Opening quick log';
-      },
-      set_reminder: async (params: { message: string; minutes_from_now: number }) => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return 'Not authenticated';
-        const remindAt = new Date(Date.now() + params.minutes_from_now * 60 * 1000);
-        await supabase.from('voice_reminders').insert({
-          user_id: user.id,
-          message: params.message,
-          remind_at: remindAt.toISOString(),
-        });
-        return `Reminder set for ${params.minutes_from_now} minutes from now: ${params.message}`;
-      },
-      pipeline_pulse: async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return 'Not authenticated';
-        const { data: opps } = await supabase
-          .from('opportunities')
-          .select('name, stage, arr, close_date')
-          .eq('user_id', user.id)
-          .not('status', 'eq', 'closed-lost');
-        if (!opps?.length) return 'No active pipeline deals found.';
-        const total = opps.reduce((s, o) => s + (o.arr || 0), 0);
-        const summary = `You have ${opps.length} active deals worth $${Math.round(total / 1000)}k. ` +
-          opps.slice(0, 5).map(o => `${o.name}: ${o.stage || 'no stage'}, $${Math.round((o.arr || 0) / 1000)}k`).join('. ');
-        return summary;
-      },
-      daily_briefing: () => {
-        askCopilot('Walk me through my day — priorities, meetings, risks, and what I should focus on', 'quick');
-        return 'Building daily briefing in copilot';
-      },
-      debrief: (params: { accountName: string; keyTakeaways?: string; nextSteps?: string }) => {
-        const detail = {
-          accountName: params.accountName,
-          takeaways: params.keyTakeaways,
-          nextSteps: params.nextSteps,
-        };
-        window.dispatchEvent(new CustomEvent('voice-debrief', { detail }));
-        toast.success('Debrief logged', { description: params.accountName });
-        return `Debrief captured for ${params.accountName}`;
-      },
-      add_note: (params: { accountName: string; note: string }) => {
-        window.dispatchEvent(new CustomEvent('voice-add-note', { detail: params }));
-        toast.success('Note added', { description: `${params.accountName}: ${params.note.slice(0, 60)}...` });
-        return `Note added to ${params.accountName}`;
-      },
-      draft_email: (params: { to: string; subject: string; body: string }) => {
-        // Copy to clipboard for easy paste
-        const emailText = `To: ${params.to}\nSubject: ${params.subject}\n\n${params.body}`;
-        navigator.clipboard?.writeText(emailText).catch(() => {});
-        toast.success('Email drafted & copied', { description: params.subject });
-        return `Email drafted for ${params.to}: "${params.subject}". I've copied it to your clipboard.`;
-      },
-    },
+    clientTools,
     onConnect: () => {
       console.log('Dave connected');
       setError(null);
+      reconnectAttemptRef.current = 0;
     },
     onDisconnect: () => {
       console.log('Dave disconnected');
+      // Auto-reconnect on unexpected disconnect
+      if (isOpen && reconnectAttemptRef.current < maxReconnects && !startingRef.current) {
+        const delay = Math.min(1000 * 2 ** reconnectAttemptRef.current, 8000);
+        reconnectAttemptRef.current++;
+        console.log(`Auto-reconnecting in ${delay}ms (attempt ${reconnectAttemptRef.current})`);
+        setTimeout(() => {
+          if (isOpen) startConversation();
+        }, delay);
+      }
     },
     onMessage: (message: any) => {
       if (message?.type === 'user_transcript' && message?.user_transcription_event?.user_transcript) {
@@ -182,9 +197,20 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
   }, [conversation.status, conversation]);
 
   const startConversation = useCallback(async () => {
+    if (startingRef.current) return;
+    startingRef.current = true;
     setIsConnecting(true);
     setError(null);
     setTranscript([]);
+
+    // Connection timeout
+    const timeout = setTimeout(() => {
+      if (startingRef.current) {
+        setError('Connection timed out. Tap to retry.');
+        setIsConnecting(false);
+        startingRef.current = false;
+      }
+    }, 15000);
 
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -210,23 +236,29 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
         connectionType: 'webrtc',
         overrides: Object.keys(overrides).length ? overrides : undefined,
       } as any);
+
+      clearTimeout(timeout);
     } catch (err: any) {
+      clearTimeout(timeout);
       console.error('Failed to start Dave:', err);
       setError(err.message || 'Failed to connect');
       toast.error('Could not start conversation', { description: err.message });
     } finally {
       setIsConnecting(false);
+      startingRef.current = false;
     }
   }, [conversation, fetchSession]);
 
   const endConversation = useCallback(async () => {
+    reconnectAttemptRef.current = maxReconnects; // Prevent auto-reconnect
     await conversation.endSession();
     onClose();
   }, [conversation, onClose]);
 
   // Auto-start when opened
   useEffect(() => {
-    if (isOpen && conversation.status === 'disconnected' && !isConnecting) {
+    if (isOpen && conversation.status === 'disconnected' && !isConnecting && !startingRef.current) {
+      reconnectAttemptRef.current = 0;
       startConversation();
     }
   }, [isOpen]);
@@ -234,6 +266,7 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      reconnectAttemptRef.current = maxReconnects;
       if (conversation.status === 'connected') {
         conversation.endSession();
       }
@@ -245,7 +278,6 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
   const isConnected = conversation.status === 'connected';
   const isSpeaking = conversation.isSpeaking;
 
-  // Orb color: green=listening, blue=speaking, amber=connecting
   const orbColor = !isConnected
     ? 'bg-amber-500/30'
     : isSpeaking
@@ -283,19 +315,13 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center"
-        onClick={(e) => {
-          // Tap anywhere except buttons to dismiss — but only if connected
-          if (e.target === e.currentTarget && isConnected) {
-            // Don't auto-dismiss, let them use the X button
-          }
-        }}
       >
         {/* Close button */}
         <motion.button
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
           onClick={endConversation}
-          className="absolute top-safe-top right-4 top-4 z-10 h-12 w-12 rounded-full bg-white/10 flex items-center justify-center text-white/80 hover:bg-white/20 transition-colors"
+          className="absolute right-4 z-10 h-12 w-12 rounded-full bg-white/10 flex items-center justify-center text-white/80 hover:bg-white/20 transition-colors"
           style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
         >
           <X className="h-6 w-6" />
@@ -304,7 +330,7 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
         {/* Transcript toggle */}
         <button
           onClick={() => setShowTranscript(!showTranscript)}
-          className="absolute top-4 left-4 z-10 h-10 w-10 rounded-full bg-white/10 flex items-center justify-center text-white/60 hover:bg-white/20"
+          className="absolute left-4 z-10 h-10 w-10 rounded-full bg-white/10 flex items-center justify-center text-white/60 hover:bg-white/20"
           style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
         >
           <MessageSquare className="h-4 w-4" />
@@ -330,10 +356,9 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
             <span>{statusText}</span>
           </div>
 
-          {/* Retry button on error */}
           {error && !isConnecting && (
             <button
-              onClick={startConversation}
+              onClick={() => { reconnectAttemptRef.current = 0; startConversation(); }}
               className="px-4 py-2 bg-white/10 rounded-full text-white/80 text-sm hover:bg-white/20"
             >
               Tap to retry
