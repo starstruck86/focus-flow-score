@@ -23,6 +23,8 @@ import { ResourceEditor } from './ResourceEditor';
 import { ResourceFileViewer } from './ResourceFileViewer';
 import { VersionHistory } from './VersionHistory';
 import { ReorganizeModal } from './ReorganizeModal';
+import { DuplicateResourcesModal } from './DuplicateResourcesModal';
+import { useResourceDuplicates } from '@/hooks/useResourceDuplicates';
 import { toast } from 'sonner';
 
 const RESOURCE_TYPE_ICONS: Record<string, React.ElementType> = {
