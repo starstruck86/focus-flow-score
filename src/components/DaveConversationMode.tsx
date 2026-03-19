@@ -204,21 +204,20 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
         sessionDataRef.current = sessionData;
       }
 
-      // Build dynamicVariables for context delivery (supported SDK parameter)
-      const dynamicVariables: Record<string, string | number | boolean> = {};
-      if (sessionData.context) {
-        dynamicVariables.context = sessionData.context;
-      }
-      if (sessionData.firstMessage) {
-        dynamicVariables.first_message = sessionData.firstMessage;
-      }
-
-      console.log('[Dave] Starting session...');
+      // Use signed URL with overrides to inject Dave's identity + CRM context
+      // This makes the prompt our code controls, not the ElevenLabs dashboard
+      console.log('[Dave] Starting session with signed URL + overrides | context:', sessionData.context?.length, 'chars');
       await conversation.startSession({
-        conversationToken: sessionData.token,
-        connectionType: 'webrtc',
-        ...(Object.keys(dynamicVariables).length ? { dynamicVariables } : {}),
-      });
+        signedUrl: sessionData.signed_url,
+        overrides: {
+          agent: {
+            prompt: {
+              prompt: sessionData.context || '',
+            },
+            firstMessage: sessionData.firstMessage || undefined,
+          },
+        },
+      } as any);
 
       console.log('[Dave] Session started successfully');
       clearTimeout(timeout);
