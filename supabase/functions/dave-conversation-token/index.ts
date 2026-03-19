@@ -162,7 +162,7 @@ async function fetchCrmContext(supabase: any, userId: string): Promise<CrmContex
     // 8. Resources (battlecards, frameworks, methodology docs)
     supabase
       .from("resources")
-      .select("title, resource_type, description, content, tags")
+      .select("id, title, resource_type, description, content, tags")
       .eq("user_id", userId)
       .order("updated_at", { ascending: false })
       .limit(30),
