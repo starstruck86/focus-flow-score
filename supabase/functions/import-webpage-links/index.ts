@@ -129,17 +129,28 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Deduplicate and filter
+    // Deduplicate and filter - group by title to prefer content URLs over redirect/tactics URLs
     const seen = new Set<string>();
+    const titleSeen = new Set<string>();
     const links: ExtractedLink[] = [];
 
-    // Process markdown links first (they have titles)
-    for (const [linkUrl, title] of titleMap.entries()) {
+    // Sort: prefer blog/content URLs over tactics/redirect subdomains
+    const sortedEntries = [...titleMap.entries()].sort((a, b) => {
+      const aIsBlog = a[0].includes('/blog/') ? 0 : 1;
+      const bIsBlog = b[0].includes('/blog/') ? 0 : 1;
+      return aIsBlog - bIsBlog;
+    });
+
+    for (const [linkUrl, title] of sortedEntries) {
       if (isJunkUrl(linkUrl, sourceHost)) continue;
       try {
         const normalized = new URL(linkUrl).href.replace(/\/+$/, '');
         if (seen.has(normalized)) continue;
+        // Deduplicate by title (catches tactics.30mpc.com vs 30mpc.com/blog dupes)
+        const titleKey = title.toLowerCase().trim();
+        if (titleSeen.has(titleKey)) continue;
         seen.add(normalized);
+        titleSeen.add(titleKey);
         links.push({
           title,
           url: linkUrl,
