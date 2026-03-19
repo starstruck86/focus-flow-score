@@ -1,33 +1,49 @@
 
 
-# Test and Optimize Dave — Stress Test Plan
+# Implement All Remaining Optimizations
 
-## Issues Found
+## Overview
+Four workstreams: mobile layout fixes, coach event wiring, transcript persistence, and FAB cleanup.
 
-### Critical: 6 client tools fire events with NO listeners
-`voice-update-account`, `voice-update-opportunity`, `voice-debrief`, `voice-add-note`, `voice-start-roleplay`, `voice-start-drill`, `voice-grade-call` — these `CustomEvent` dispatches go nowhere. Only `voice-create-task` and `voice-quick-log` have listeners in `GlobalFAB.tsx`. When Dave calls these tools, the user gets a toast but nothing actually happens in the database.
+## Step 1: Fix viewport for iPhone safe areas
+**File: `index.html`**
+- Change viewport meta to include `viewport-fit=cover`
 
-### Critical: `create_task` only opens a modal — doesn't actually create
-The `voice-create-task` handler in GlobalFAB just opens the Add Task dialog. The pre-filled title from the voice command is never passed to the dialog component — it's checked (`detail?.title`) but discarded.
+## Step 2: Optimize bottom nav touch targets
+**File: `src/components/Layout.tsx`**
+- BottomNav: Row 1 `h-11` → `h-12`, Row 2 `h-10` → `h-12`
+- NavItem icons: `h-4 w-4` → `h-5 w-5`, text: `text-[10px]` → `text-[11px]`
+- Add extra inner padding to nav: `pb-1` inside the max-w container
+- Main content: `pb-28` → `pb-[calc(8rem+env(safe-area-inset-bottom))]`
+- Root div: add `pt-[env(safe-area-inset-top)]` for standalone PWA mode
 
-### Bug: `update_account` and `update_opportunity` are fire-and-forget
-These tools show a toast and dispatch an event, but no code catches the event to perform the actual database update. Dave tells the user "Updated Acme's next step" but nothing changes.
+## Step 3: Update floating element offsets
+**File: `src/components/BackToToday.tsx`**
+- Change `bottom-[calc(6.5rem+env(safe-area-inset-bottom))]` → `bottom-[calc(7.5rem+env(safe-area-inset-bottom))]`
 
-### Bug: `debrief` and `add_note` similarly unhandled
-Same pattern — toast shown, event dispatched, no listener, no persistence.
+**File: `src/components/fab/GlobalFAB.tsx`**
+- Change `bottom-[calc(6rem+env(safe-area-inset-bottom))]` → `bottom-[calc(7.5rem+env(safe-area-inset-bottom))]`
+- Remove dead `voice-create-task` event listener (now handled by direct DB write in clientTools)
 
-### Bug: Auto-reconnect calls `startConversation` which references stale closure
-The `onDisconnect` callback captures `startConversation` via closure, but `startConversation` isn't in the dependency array of `useConversation`. This could cause stale state during reconnects.
+## Step 4: Wire coach voice events
+**File: `src/pages/Coach.tsx`**
+- Add `useEffect` with listeners for `voice-start-roleplay`, `voice-start-drill`, `voice-grade-call`
+- `voice-start-roleplay`: switch to Mock Call tab and auto-start
+- `voice-start-drill`: switch to Objection Drills tab
+- `voice-grade-call`: switch to Grades tab and trigger grade on latest transcript
 
-### Improvement: No voice dismissal support
-The memory mentions Dave should support "we're done" / "thanks Dave" voice dismissal, but there's no client-side detection for these phrases.
+## Step 5: Transcript persistence
+**Database migration**: Create `dave_transcripts` table with columns: `id`, `user_id`, `messages` (jsonb), `duration_seconds`, `created_at`. RLS policies for authenticated users (CRUD on own rows).
 
----
+**File: `src/components/DaveConversationMode.tsx`**
+- On `endConversation`, save the transcript array to `dave_transcripts` table if there are messages
 
-## Plan
+## Files Modified
+- `index.html`
+- `src/components/Layout.tsx`
+- `src/components/BackToToday.tsx`
+- `src/components/fab/GlobalFAB.tsx`
+- `src/pages/Coach.tsx`
+- `src/components/DaveConversationMode.tsx`
+- New migration for `dave_transcripts` table
 
-### Step 1: Wire up client tools to actually persist data
-
-For `update_account`, `update_opportunity`, `add_note`, and `debrief` — replace the fire-and-forget `CustomEvent` pattern with direct database writes inside the client tool callbacks:
-
-- **`update_account`**: Query `accounts` table by name + user_id, update the specified
