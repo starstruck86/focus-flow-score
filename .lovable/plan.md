@@ -1,111 +1,62 @@
 
 
-# Consolidated Plan: 6 Features for Resource Intelligence
+# Test & Optimize: 6 Resource Intelligence Features
 
-This plan combines all agreed-upon features into a single implementation scope.
+## Issues Found
 
----
+### Critical Bug: `build-resource` Transform Mode
+**Line 49** calls `await req.json()` a second time after the body was already consumed on line 14. In Deno, request bodies can only be read once — this will always return `{}`, meaning `sourceResourceId` and `targetType` are never extracted. The transform feature is completely broken.
 
-## Database Migration
+**Fix**: Destructure `sourceResourceId` and `targetType` from the initial `req.json()` call on line 14.
 
-**New table: `resource_digests`**
+### Bug: `useResourceSuggestions` Fires on Every Page Load
+The suggestions query runs on every authenticated page load regardless of route — it calls an expensive edge function even when the user isn't on the Prep Hub. This wastes AI credits.
 
-| Column | Type | Notes |
-|--------|------|-------|
-| id | uuid | PK |
-| resource_id | uuid | unique FK to resources |
-| user_id | uuid | for RLS |
-| takeaways | text[] | 5-10 actionable bullets |
-| summary | text | 2-3 sentence overview |
-| use_cases | text[] | "use when..." scenarios |
-| grading_criteria | jsonb | array of `{category, description, weight}` for scorecard auto-grading |
-| content_hash | text | md5 of source — skip re-digest if unchanged |
-| created_at | timestamptz | |
+**Fix**: Make the query lazy — only fetch when explicitly triggered or when the ResourceManager mounts. Change `enabled` to accept an explicit boolean prop, or use `enabled: false` + `refetch()`.
 
-RLS: authenticated users manage own rows (all commands).
+### Bug: `AIGenerateDialog` State Leak
+When the dialog closes and reopens without `sourceResourceId`, the previous `selectedResourceIds`, `prompt`, and `outputType` persist from the last session.
 
-**Alter `transcript_grades`**: add `custom_scorecard_results` (jsonb, nullable, default null).
+**Fix**: Reset state in the `useEffect` when `open` becomes true and source props are absent.
 
----
+### Optimization: `SmartSuggestionsPanel` Missing Import
+`Sparkles` is imported at the bottom of the file after it's used in JSX. This works in bundlers but is non-standard and fragile.
 
-## New Edge Functions
+**Fix**: Move the `Sparkles` import to the top with the other lucide-react imports.
 
-### 1. `operationalize-resource` (One-Click Operationalize + Digest)
-- Accepts `{ resource_id }`, validates auth
-- Fetches full resource content, computes content hash, skips if unchanged
-- Calls Gemini Flash with tool calling to extract: `takeaways`, `summary`, `use_cases`, `grading_criteria` (if resource is a playbook/framework/scorecard), `suggested_tasks`
-- Upserts into `resource_digests`
-- Returns all generated artifacts to client
+### Optimization: Suggestions Banner Dismiss Uses Index
+Dismissing suggestions by array index is fragile — if `refetchSuggestions()` returns a different order, dismissed items reappear or wrong items hide.
 
-### 2. `suggest-resource-uses` (Smart Suggestions + Deal-Aware)
-- Fetches user's resources (titles, types, tags) and active opportunities (stage, deal_type, close_date)
-- Calls Gemini Flash with tool calling to return 1-3 structured suggestions:
-  - `description`, `action_type` (transform | combine | templatize | cadence), `source_resource_ids`, `target_type`, `deal_context`
-- Examples: "Your Cold Calling Playbook could become a Scorecard", "Combine Discovery Framework + Objection Playbook into a Pre-Call Template", "3 deals in Tech Eval — generate a checklist from your MEDDICC Framework"
+**Fix**: Dismiss by a stable key (description hash or stringify).
 
 ---
 
-## Edge Function Updates
+## Changes
 
-### 3. `build-resource` — add `"transform"` type
-- Accepts `sourceResourceId` + `targetType` + optional `prompt`
-- Fetches source resource content via service role
-- Type-specific system prompts for: `scorecard`, `checklist`, `cadence`, `training_guide`, `one_pager`
-- Uses existing streaming pattern
+### 1. Fix `build-resource/index.ts` Transform Mode
+- Line 14: Add `sourceResourceId`, `targetType` to the initial destructure
+- Remove the duplicate `req.json()` call on line 49
 
-### 4. `dave-conversation-token` — prefer digests over raw content
-- Add parallel query for `resource_digests`
-- In RESOURCES section (lines 320-328), if digest exists: show `TAKEAWAYS: • bullet1 • bullet2 | USE WHEN: scenario1` instead of truncated raw content
-- Falls back to current `trunc(content, 500)` if no digest
+### 2. Fix `SmartSuggestionsPanel.tsx` Import Order
+- Move `Sparkles` import from bottom of file into the existing lucide-react import at top
 
-### 5. `grade-transcript` — custom scorecard integration
-- After existing resource context fetch, also query `resource_digests` where `grading_criteria IS NOT NULL`
-- If found, inject custom scoring criteria into system prompt alongside standard MEDDICC/CotM
-- Add `custom_scores` to tool call response schema
-- Store results in `custom_scorecard_results` column on `transcript_grades`
+### 3. Make `useResourceSuggestions` Lazy
+- Add `enabled` parameter to the hook
+- In `ResourceManager.tsx`, only enable when resources exist (to avoid wasting credits on empty libraries)
 
----
+### 4. Fix `AIGenerateDialog` State Reset
+- Clear `prompt`, `outputType`, and `selectedResourceIds` when dialog opens without initial values
 
-## Frontend Changes
-
-### 6. `src/hooks/useResources.ts`
-- Add `useOperationalizeResource()` mutation — calls edge function, returns digest
-- Add `useResourceSuggestions()` query — calls `suggest-resource-uses`
-- Fire-and-forget digest call after `useCreateResource` and `useUpdateResource` (when content changes)
-
-### 7. `src/components/prep/AIGenerateDialog.tsx`
-- Add output types: `scorecard`, `checklist`, `cadence`, `training_guide`, `one_pager`
-- Add optional `sourceResourceId` and `initialPrompt` props for pre-configured opening
-- When `sourceResourceId` set, use `type: "transform"` instead of `type: "generate"`
-
-### 8. `src/components/prep/ResourceManager.tsx`
-- Add "Operationalize" menu item (Sparkles icon) in the MoreHorizontal dropdown (after Duplicate, before Delete separator)
-- Add "Generate From This" menu item — opens AIGenerateDialog with source resource pre-selected
-- Add suggestions banner above the resource grid: shows 1-3 AI suggestions with one-click "Create" buttons that open AIGenerateDialog pre-configured. Dismiss/refresh controls. Auto-fetches on first load if resources exist.
-
----
-
-## Implementation Order
-
-1. Migration (new table + alter column)
-2. `operationalize-resource` edge function
-3. `useResources.ts` hooks + ResourceManager "Operationalize" and "Generate From This" menu items
-4. `build-resource` transform type + AIGenerateDialog new output types
-5. `suggest-resource-uses` edge function + suggestions banner UI
-6. `dave-conversation-token` digest preference
-7. `grade-transcript` custom scorecard integration
+### 5. Fix Suggestions Banner Dismiss Stability
+- Change `dismissedSuggestions` from `Set<number>` to `Set<string>` using description as key
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| Migration SQL | Create `resource_digests`, add `custom_scorecard_results` to `transcript_grades` |
-| `supabase/functions/operationalize-resource/index.ts` | New |
-| `supabase/functions/suggest-resource-uses/index.ts` | New |
-| `supabase/functions/build-resource/index.ts` | Add `"transform"` type |
-| `supabase/functions/dave-conversation-token/index.ts` | Query digests, prefer over raw |
-| `supabase/functions/grade-transcript/index.ts` | Inject custom scorecard criteria |
-| `src/hooks/useResources.ts` | Add operationalize + suggestions hooks, auto-digest on create/update |
-| `src/components/prep/AIGenerateDialog.tsx` | New output types + source pre-selection |
-| `src/components/prep/ResourceManager.tsx` | Menu items + suggestions banner |
+| `supabase/functions/build-resource/index.ts` | Fix double `req.json()` — transform mode now works |
+| `src/components/prep/SmartSuggestionsPanel.tsx` | Move Sparkles import to top |
+| `src/hooks/useResources.ts` | Add `enabled` param to `useResourceSuggestions` |
+| `src/components/prep/ResourceManager.tsx` | Pass enabled flag; fix dismiss-by-key |
+| `src/components/prep/AIGenerateDialog.tsx` | Reset state on open |
 
