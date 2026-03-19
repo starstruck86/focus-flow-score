@@ -500,6 +500,9 @@ export function ResourceManager() {
             <DropdownMenuItem onClick={() => setShowPlaylistImport(true)}>
               <ListVideo className="h-3.5 w-3.5 mr-2" /> Import YouTube Playlist
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setShowWebpageImport(true)}>
+              <Globe className="h-3.5 w-3.5 mr-2" /> Import from Webpage
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
