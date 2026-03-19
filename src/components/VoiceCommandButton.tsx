@@ -1,11 +1,10 @@
-import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Mic, Loader2 } from 'lucide-react';
+import { Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Props {
   size?: 'default' | 'large';
-  onOpenDave: () => void;
+  onOpenDave?: () => void;
 }
 
 export function VoiceCommandButton({ size = 'default', onOpenDave }: Props) {
