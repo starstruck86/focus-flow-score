@@ -134,9 +134,16 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
         setTranscript(prev => [...prev, { role: 'agent', text: message.agent_response_event.agent_response }]);
       }
     },
-    onError: (error) => {
-      console.error('[Dave] Error:', error);
-      setError('Connection error. Tap to retry.');
+    onError: (err: any) => {
+      console.error('[Dave] Error:', err);
+      const msg = err?.message || String(err);
+      if (/NotAllowedError|Permission denied/i.test(msg)) {
+        setError('Microphone access required — check your browser settings');
+      } else if (/NotFoundError|no audio/i.test(msg)) {
+        setError('No microphone found');
+      } else {
+        setError('Connection error. Tap to retry.');
+      }
       toast.error('Dave connection error');
     },
     onVadScore: (score: number) => {
