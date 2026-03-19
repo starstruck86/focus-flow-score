@@ -108,11 +108,11 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
 
       // Belt-and-suspenders: also send context via sendContextualUpdate
       if (sessionDataRef.current?.context) {
-        try {
+      try {
           conversation.sendContextualUpdate(sessionDataRef.current.context);
-          console.log('[Dave] Backup context sent via sendContextualUpdate');
+          logStatus('Backup context sent via sendContextualUpdate');
         } catch (e) {
-          console.warn('[Dave] Failed to send contextual update (fallback):', e);
+          logStatus(`Failed sendContextualUpdate fallback: ${e}`);
         }
       }
 
