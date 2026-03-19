@@ -110,6 +110,7 @@ export function ResourceManager() {
 
   // Playlist import
   const [showPlaylistImport, setShowPlaylistImport] = useState(false);
+  const [showPodcastImport, setShowPodcastImport] = useState(false);
   const [showWebpageImport, setShowWebpageImport] = useState(false);
 
   // AI Discover states
