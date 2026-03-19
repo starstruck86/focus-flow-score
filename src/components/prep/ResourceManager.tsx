@@ -5,7 +5,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Progress } from '@/components/ui/progress';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
@@ -13,7 +15,7 @@ import {
   Folder, FolderPlus, FilePlus, FileText, Presentation, Mail, BookOpen,
   ChevronRight, MoreHorizontal, Search, Trash2, Edit3, Clock,
   Star, Tag, Copy, Upload, Link2, Sparkles, Target, Shield,
-  GraduationCap, MessageSquare, Loader2, Check, X, AlertTriangle,
+  GraduationCap, MessageSquare, Loader2, Check, X, AlertTriangle, Globe, Radar,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -28,6 +30,8 @@ import { ReorganizeModal } from './ReorganizeModal';
 import { DuplicateResourcesModal } from './DuplicateResourcesModal';
 import { useResourceDuplicates } from '@/hooks/useResourceDuplicates';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 type PendingItem = {
   id: string;
@@ -71,6 +75,7 @@ const TEMPLATE_CATEGORIES = [
 const ACCEPTED_FILE_TYPES = '.pdf,.docx,.pptx,.txt,.md,.csv,.doc,.xlsx,.xls';
 
 export function ResourceManager() {
+  const { user } = useAuth();
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [folderPath, setFolderPath] = useState<{ id: string | null; name: string }[]>([{ id: null, name: 'All Resources' }]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -94,6 +99,16 @@ export function ResourceManager() {
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [savingAll, setSavingAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // AI Discover states
+  const [showDiscover, setShowDiscover] = useState(false);
+  const [discoverQuery, setDiscoverQuery] = useState('');
+  const [discoverLoading, setDiscoverLoading] = useState(false);
+  const [competitorName, setCompetitorName] = useState('');
+  const [competitorUrl, setCompetitorUrl] = useState('');
+  const [competitorContext, setCompetitorContext] = useState('');
+  const [battlecardLoading, setBattlecardLoading] = useState(false);
+  const [battlecardProgress, setBattlecardProgress] = useState('');
 
   const { data: folders = [] } = useResourceFolders();
   const { data: resources = [] } = useResources(currentFolderId === null ? undefined : currentFolderId);
@@ -274,6 +289,101 @@ export function ResourceManager() {
     }
   };
 
+  // AI Resource Discovery
+  const handleDiscoverResources = async () => {
+    if (!discoverQuery.trim()) return;
+    setDiscoverLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('discover-resources', {
+        body: { type: 'resource-search', query: discoverQuery.trim() },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const resources = data?.resources || [];
+      if (!resources.length) {
+        toast.info('No resources found. Try a different query.');
+        return;
+      }
+
+      const newItems: PendingItem[] = resources.map((r: any) => ({
+        id: `discover-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        status: 'classified' as const,
+        source: 'url' as const,
+        url: r.url,
+        classification: {
+          title: r.title,
+          description: r.description,
+          resource_type: r.resource_type,
+          tags: r.tags,
+          suggested_folder: r.suggested_folder,
+        },
+      }));
+      setPendingItems(prev => [...prev, ...newItems]);
+      setShowDiscover(false);
+      setDiscoverQuery('');
+      toast.success(`Found ${resources.length} resources — review and confirm below`);
+    } catch (e: any) {
+      toast.error(e.message || 'Discovery failed');
+    } finally {
+      setDiscoverLoading(false);
+    }
+  };
+
+  // Competitor Intel
+  const handleBuildBattlecard = async () => {
+    if (!competitorName.trim() || !competitorUrl.trim()) return;
+    setBattlecardLoading(true);
+    setBattlecardProgress('Mapping website...');
+    try {
+      const { data, error } = await supabase.functions.invoke('discover-resources', {
+        body: {
+          type: 'competitor-intel',
+          companyName: competitorName.trim(),
+          websiteUrl: competitorUrl.trim(),
+          context: competitorContext.trim(),
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      // Save battlecard as a resource
+      const { data: folder } = await supabase
+        .from('resource_folders')
+        .select('id')
+        .eq('name', 'Battlecards')
+        .maybeSingle();
+
+      let folderId = folder?.id;
+      if (!folderId) {
+        const { data: newFolder } = await supabase
+          .from('resource_folders')
+          .insert({ name: 'Battlecards', user_id: user!.id })
+          .select('id')
+          .single();
+        folderId = newFolder?.id;
+      }
+
+      await createResource.mutateAsync({
+        title: `${competitorName} — Competitive Battlecard`,
+        folder_id: folderId || null,
+        resource_type: 'battlecard',
+        content: data.markdown,
+      });
+
+      setShowDiscover(false);
+      setCompetitorName('');
+      setCompetitorUrl('');
+      setCompetitorContext('');
+      toast.success(`Battlecard created — ${data.pages_scraped} pages analyzed`);
+    } catch (e: any) {
+      toast.error(e.message || 'Battlecard generation failed');
+    } finally {
+      setBattlecardLoading(false);
+      setBattlecardProgress('');
+    }
+  };
+
   const handleResourceClick = (resource: Resource) => {
     if (resource.file_url) {
       setViewingResource(resource);
@@ -375,6 +485,9 @@ export function ResourceManager() {
           </DropdownMenuContent>
         </DropdownMenu>
 
+        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setShowDiscover(true)}>
+          <Radar className="h-3.5 w-3.5 mr-1" /> AI Discover
+        </Button>
         <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setShowReorganize(true)}>
           <Sparkles className="h-3.5 w-3.5 mr-1" /> Reorganize
         </Button>
@@ -708,6 +821,82 @@ export function ResourceManager() {
               <Button size="sm" onClick={handleRenameFolder}>Rename</Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Discover Dialog */}
+      <Dialog open={showDiscover} onOpenChange={setShowDiscover}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Radar className="h-5 w-5 text-primary" /> AI Resource Discovery</DialogTitle></DialogHeader>
+          <Tabs defaultValue="resources">
+            <TabsList className="w-full">
+              <TabsTrigger value="resources" className="flex-1 text-xs"><Globe className="h-3.5 w-3.5 mr-1" /> Find Resources</TabsTrigger>
+              <TabsTrigger value="competitor" className="flex-1 text-xs"><Shield className="h-3.5 w-3.5 mr-1" /> Competitor Intel</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="resources" className="space-y-3 mt-3">
+              <Textarea
+                value={discoverQuery}
+                onChange={e => setDiscoverQuery(e.target.value)}
+                placeholder={"e.g. Top 1% MEDDICC training resources, podcasts, and books for enterprise SaaS sales\n\nBest cold calling frameworks and YouTube channels for outbound B2B\n\nElite negotiation techniques and courses for complex deal cycles"}
+                rows={4}
+                className="text-sm"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Describe what you're looking for. AI will search the web for the best books, podcasts, videos, frameworks, and articles.
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setShowDiscover(false)}>Cancel</Button>
+                <Button size="sm" onClick={handleDiscoverResources} disabled={discoverLoading || !discoverQuery.trim()}>
+                  {discoverLoading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Radar className="h-3.5 w-3.5 mr-1" />}
+                  {discoverLoading ? 'Searching...' : 'Discover'}
+                </Button>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="competitor" className="space-y-3 mt-3">
+              <div className="space-y-2">
+                <Input
+                  value={competitorName}
+                  onChange={e => setCompetitorName(e.target.value)}
+                  placeholder="Competitor name (e.g. Klaviyo)"
+                  className="text-sm"
+                />
+                <Input
+                  value={competitorUrl}
+                  onChange={e => setCompetitorUrl(e.target.value)}
+                  placeholder="Website URL (e.g. https://klaviyo.com)"
+                  className="text-sm"
+                />
+                <Textarea
+                  value={competitorContext}
+                  onChange={e => setCompetitorContext(e.target.value)}
+                  placeholder="Optional context: What do you sell? What does your prospect use this competitor for?"
+                  rows={3}
+                  className="text-sm"
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                AI will deep-scrape the competitor's website (product, pricing, help docs) and build a comprehensive battlecard with strengths, weaknesses, and how to pitch against them.
+              </p>
+              {battlecardLoading && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>{battlecardProgress || 'Building battlecard...'}</span>
+                  </div>
+                  <Progress value={undefined} className="h-1.5" />
+                </div>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setShowDiscover(false)}>Cancel</Button>
+                <Button size="sm" onClick={handleBuildBattlecard} disabled={battlecardLoading || !competitorName.trim() || !competitorUrl.trim()}>
+                  {battlecardLoading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Shield className="h-3.5 w-3.5 mr-1" />}
+                  {battlecardLoading ? 'Scraping & Analyzing...' : 'Build Battlecard'}
+                </Button>
+              </div>
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
 

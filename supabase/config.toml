@@ -86,3 +86,6 @@ verify_jwt = false
 
 [functions.classify-resource]
 verify_jwt = false
+
+[functions.discover-resources]
+verify_jwt = false
