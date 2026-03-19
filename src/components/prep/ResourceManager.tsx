@@ -343,7 +343,14 @@ export function ResourceManager() {
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground w-16">Title:</span>
-              <span className="text-sm font-medium">{pendingClassification.classification.title}</span>
+              <Input
+                value={pendingClassification.classification.title}
+                onChange={e => setPendingClassification(prev => prev ? {
+                  ...prev,
+                  classification: { ...prev.classification, title: e.target.value },
+                } : null)}
+                className="h-7 text-sm font-medium flex-1"
+              />
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground w-16">Type:</span>
