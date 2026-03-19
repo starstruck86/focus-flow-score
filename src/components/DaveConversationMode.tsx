@@ -94,9 +94,8 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
       },
     },
     onConnect: () => {
-      console.log('[Dave] ✅ Connected — overrides applied via useConversation hook');
-      console.log('[Dave] Context length:', sessionDataRef.current?.context?.length, 'chars');
-      console.log('[Dave] First message:', sessionDataRef.current?.firstMessage?.substring(0, 80));
+      logStatus(`✅ Connected via WebRTC — context: ${sessionDataRef.current?.context?.length} chars, firstMessage: ${sessionDataRef.current?.firstMessage?.substring(0, 80)}`);
+      messageReceivedRef.current = false;
       setError(null);
       setReconnectInfo(null);
       setIsConnecting(false);
