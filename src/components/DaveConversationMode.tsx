@@ -65,6 +65,8 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
     }
   }, []);
 
+  const greetingWatchdogRef = useRef<ReturnType<typeof setTimeout>>();
+
   const conversation = useConversation({
     clientTools,
     onConnect: () => {
@@ -77,6 +79,12 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
       stabilityTimerRef.current = setTimeout(() => {
         reconnectAttemptRef.current = 0;
       }, STABILITY_WINDOW_MS);
+
+      // Greeting watchdog: warn if no agent message within 5s
+      if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
+      greetingWatchdogRef.current = setTimeout(() => {
+        console.warn('[Dave] No agent greeting received within 5s of connection — agent may not have activated');
+      }, 5000);
     },
     onDisconnect: () => {
       console.log('[Dave] Disconnected');
