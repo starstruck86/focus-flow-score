@@ -423,7 +423,7 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
           const useCases = (digest.use_cases || []).join(", ");
           return `- [${r.resource_type}] ${r.title}${r.tags?.length ? ` tags:${r.tags.join(",")}` : ""}\n  TAKEAWAYS: ${takeaways}\n  USE WHEN: ${useCases}`;
         }
-        return `- [${r.resource_type}] ${r.title}${r.tags?.length ? ` tags:${r.tags.join(",")}` : ""}${r.description ? ` — ${trunc(r.description, 100)}` : ""}${r.content ? `\n  CONTENT: ${trunc(r.content, 500)}` : ""}`;
+        return `- [${r.resource_type}] ${r.title}${r.tags?.length ? ` tags:${r.tags.join(",")}` : ""}${r.description ? ` — ${trunc(r.description, 100)}` : ""}${r.content ? `\n  CONTENT: ${trunc(r.content, 200)}` : ""}`;
       }).join("\n")
     );
   }
