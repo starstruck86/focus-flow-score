@@ -428,7 +428,28 @@ export function ResourceManager() {
                 <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground truncate">{resource.title}</span>
+                    {renamingResourceId === resource.id ? (
+                      <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                        <Input
+                          value={renameResourceTitle}
+                          onChange={e => setRenameResourceTitle(e.target.value)}
+                          className="h-6 text-sm px-1.5 w-48"
+                          autoFocus
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleRenameResource();
+                            if (e.key === 'Escape') { setRenamingResourceId(null); setRenameResourceTitle(''); }
+                          }}
+                        />
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleRenameResource}>
+                          <Check className="h-3 w-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setRenamingResourceId(null); setRenameResourceTitle(''); }}>
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-sm font-medium text-foreground truncate">{resource.title}</span>
+                    )}
                     {resource.is_template && <Badge variant="secondary" className="text-[10px] shrink-0">Template</Badge>}
                     {resource.template_category && <Badge variant="outline" className="text-[10px] shrink-0">{resource.template_category}</Badge>}
                     {hasFile && !isExternal && <Upload className="h-3 w-3 text-muted-foreground shrink-0" />}
