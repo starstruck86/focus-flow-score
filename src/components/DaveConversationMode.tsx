@@ -231,27 +231,22 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
     try {
       // For reconnects, fetch fresh session with conversation history
       // For initial connect, use the pre-fetched sessionData from props
-      let url = sessionDataRef.current.signed_url;
+      let currentToken = sessionDataRef.current.token;
       if (isReconnectRef.current) {
         const history = getConversationContext();
         const freshSession = await getSession(history);
         sessionDataRef.current = freshSession;
-        url = freshSession.signed_url;
-        // NOTE: on reconnect, overrides won't update because useConversation
-        // was initialized with the original props. The component will need
-        // to be re-mounted (via key change in Layout) for new overrides.
-        // The sendContextualUpdate in onConnect serves as the fallback here.
+        currentToken = freshSession.token;
       }
 
-      // ─── CLEAN: startSession only needs the signedUrl ───
-      console.log('[Dave] Starting session with signed URL | context:', sessionDataRef.current.context?.length, 'chars');
-      console.log('[Dave] Signed URL prefix:', url?.substring(0, 60));
+      // ─── WebRTC + conversation token ───
+      logStatus(`Starting session (WebRTC) | context: ${sessionDataRef.current.context?.length} chars`);
       await conversation.startSession({
-        signedUrl: url,
-        connectionType: 'websocket',
+        conversationToken: currentToken,
+        connectionType: 'webrtc',
       } as any);
 
-      console.log('[Dave] Session started successfully');
+      logStatus('Session started successfully');
       clearTimeout(timeout);
     } catch (err: any) {
       clearTimeout(timeout);
