@@ -485,6 +485,9 @@ export function ResourceManager() {
           </DropdownMenuContent>
         </DropdownMenu>
 
+        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setShowDiscover(true)}>
+          <Radar className="h-3.5 w-3.5 mr-1" /> AI Discover
+        </Button>
         <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setShowReorganize(true)}>
           <Sparkles className="h-3.5 w-3.5 mr-1" /> Reorganize
         </Button>
