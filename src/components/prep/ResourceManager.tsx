@@ -319,6 +319,7 @@ export function ResourceManager() {
         ref={fileInputRef}
         type="file"
         accept={ACCEPTED_FILE_TYPES}
+        multiple
         className="hidden"
         onChange={handleFileSelect}
       />
