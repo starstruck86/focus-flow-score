@@ -182,49 +182,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { setPageContext } = useCopilot();
   const activeColor = useActiveTabColor();
   
-  // Dave state — simplified, no mic stream management
+  // Dave state
   const [daveOpen, setDaveOpen] = useState(false);
   const [showDaveTapPrompt, setShowDaveTapPrompt] = useState(false);
-
-  // Handle ?dave=1 from Siri Shortcuts
-  useEffect(() => {
-    if (searchParams.get('dave') === '1') {
-      setShowDaveTapPrompt(true);
-      const next = new URLSearchParams(searchParams);
-      next.delete('dave');
-      setSearchParams(next, { replace: true });
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    document.documentElement.style.setProperty('--page-accent', COLOR_VAR[activeColor]);
-  }, [activeColor]);
-
-  useEffect(() => {
-    const path = location.pathname;
-    if (PAGE_CONTEXT_MAP[path]) {
-      setPageContext(PAGE_CONTEXT_MAP[path]);
-    } else if (path.startsWith('/accounts/')) {
-      setPageContext({ page: 'account-detail', description: 'Account Detail — deep-dive on a specific account' });
-    } else if (path.startsWith('/opportunities/')) {
-      setPageContext({ page: 'opportunity-detail', description: 'Opportunity Detail — deal-level view' });
-    } else {
-      setPageContext({ page: 'other', description: path });
-    }
-  }, [location.pathname, setPageContext]);
-
-  const headerAccentStyle = useMemo(() => ({
-    borderBottomColor: `hsl(${COLOR_VAR[activeColor]} / 0.2)`,
-  }), [activeColor]);
-
-  const handleOpenDave = () => {
-    setDaveOpen(true);
-    setShowDaveTapPrompt(false);
-  };
-
-  const handleCloseDave = () => {
-    setDaveOpen(false);
-  };
+  const [daveSessionData, setDaveSessionData] = useState<DaveSessionData | null>(null);
+  const { getSession: getDaveSession } = useDaveContext();
 
   return (
     <div className="min-h-screen bg-background flex flex-col w-full pt-[env(safe-area-inset-top)]">
