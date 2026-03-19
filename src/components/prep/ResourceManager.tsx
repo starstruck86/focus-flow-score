@@ -287,6 +287,101 @@ export function ResourceManager() {
     }
   };
 
+  // AI Resource Discovery
+  const handleDiscoverResources = async () => {
+    if (!discoverQuery.trim()) return;
+    setDiscoverLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('discover-resources', {
+        body: { type: 'resource-search', query: discoverQuery.trim() },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const resources = data?.resources || [];
+      if (!resources.length) {
+        toast.info('No resources found. Try a different query.');
+        return;
+      }
+
+      const newItems: PendingItem[] = resources.map((r: any) => ({
+        id: `discover-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        status: 'classified' as const,
+        source: 'url' as const,
+        url: r.url,
+        classification: {
+          title: r.title,
+          description: r.description,
+          resource_type: r.resource_type,
+          tags: r.tags,
+          suggested_folder: r.suggested_folder,
+        },
+      }));
+      setPendingItems(prev => [...prev, ...newItems]);
+      setShowDiscover(false);
+      setDiscoverQuery('');
+      toast.success(`Found ${resources.length} resources — review and confirm below`);
+    } catch (e: any) {
+      toast.error(e.message || 'Discovery failed');
+    } finally {
+      setDiscoverLoading(false);
+    }
+  };
+
+  // Competitor Intel
+  const handleBuildBattlecard = async () => {
+    if (!competitorName.trim() || !competitorUrl.trim()) return;
+    setBattlecardLoading(true);
+    setBattlecardProgress('Mapping website...');
+    try {
+      const { data, error } = await supabase.functions.invoke('discover-resources', {
+        body: {
+          type: 'competitor-intel',
+          companyName: competitorName.trim(),
+          websiteUrl: competitorUrl.trim(),
+          context: competitorContext.trim(),
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      // Save battlecard as a resource
+      const { data: folder } = await supabase
+        .from('resource_folders')
+        .select('id')
+        .eq('name', 'Battlecards')
+        .maybeSingle();
+
+      let folderId = folder?.id;
+      if (!folderId) {
+        const { data: newFolder } = await supabase
+          .from('resource_folders')
+          .insert({ name: 'Battlecards' })
+          .select('id')
+          .single();
+        folderId = newFolder?.id;
+      }
+
+      await createResource.mutateAsync({
+        title: `${competitorName} — Competitive Battlecard`,
+        folder_id: folderId || null,
+        resource_type: 'battlecard',
+        content: data.markdown,
+      });
+
+      setShowDiscover(false);
+      setCompetitorName('');
+      setCompetitorUrl('');
+      setCompetitorContext('');
+      toast.success(`Battlecard created — ${data.pages_scraped} pages analyzed`);
+    } catch (e: any) {
+      toast.error(e.message || 'Battlecard generation failed');
+    } finally {
+      setBattlecardLoading(false);
+      setBattlecardProgress('');
+    }
+  };
+
   const handleResourceClick = (resource: Resource) => {
     if (resource.file_url) {
       setViewingResource(resource);
