@@ -16,7 +16,7 @@ import {
 import { cn } from '@/lib/utils';
 import {
   useResourceFolders, useResources, useCreateFolder, useCreateResource,
-  useDeleteResource, useDeleteFolder, useRenameFolder, type Resource, type ResourceFolder,
+  useDeleteResource, useDeleteFolder, useRenameFolder, useUpdateResource, type Resource, type ResourceFolder,
 } from '@/hooks/useResources';
 import { useClassifyResource, useUploadResource, useAddUrlResource, type ClassificationResult } from '@/hooks/useResourceUpload';
 import { ResourceEditor } from './ResourceEditor';
@@ -73,6 +73,8 @@ export function ResourceManager() {
   const [renameFolderName, setRenameFolderName] = useState('');
   const [showReorganize, setShowReorganize] = useState(false);
   const [showDuplicates, setShowDuplicates] = useState(false);
+  const [renamingResourceId, setRenamingResourceId] = useState<string | null>(null);
+  const [renameResourceTitle, setRenameResourceTitle] = useState('');
 
   // Upload/URL states
   const [showAddUrl, setShowAddUrl] = useState(false);
@@ -93,6 +95,7 @@ export function ResourceManager() {
   const deleteResource = useDeleteResource();
   const deleteFolder = useDeleteFolder();
   const renameFolder = useRenameFolder();
+  const updateResource = useUpdateResource();
   const classify = useClassifyResource();
   const uploadResource = useUploadResource();
   const addUrlResource = useAddUrlResource();
@@ -145,6 +148,14 @@ export function ResourceManager() {
     setRenamingFolder(null);
     setRenameFolderName('');
   }, [renamingFolder, renameFolderName, renameFolder]);
+
+  const handleRenameResource = useCallback(() => {
+    if (!renamingResourceId || !renameResourceTitle.trim()) return;
+    updateResource.mutate({ id: renamingResourceId, updates: { title: renameResourceTitle.trim() } });
+    toast.success('Resource renamed');
+    setRenamingResourceId(null);
+    setRenameResourceTitle('');
+  }, [renamingResourceId, renameResourceTitle, updateResource]);
 
   // File upload handler
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -332,7 +343,14 @@ export function ResourceManager() {
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground w-16">Title:</span>
-              <span className="text-sm font-medium">{pendingClassification.classification.title}</span>
+              <Input
+                value={pendingClassification.classification.title}
+                onChange={e => setPendingClassification(prev => prev ? {
+                  ...prev,
+                  classification: { ...prev.classification, title: e.target.value },
+                } : null)}
+                className="h-7 text-sm font-medium flex-1"
+              />
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground w-16">Type:</span>
@@ -417,7 +435,28 @@ export function ResourceManager() {
                 <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground truncate">{resource.title}</span>
+                    {renamingResourceId === resource.id ? (
+                      <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                        <Input
+                          value={renameResourceTitle}
+                          onChange={e => setRenameResourceTitle(e.target.value)}
+                          className="h-6 text-sm px-1.5 w-48"
+                          autoFocus
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleRenameResource();
+                            if (e.key === 'Escape') { setRenamingResourceId(null); setRenameResourceTitle(''); }
+                          }}
+                        />
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleRenameResource}>
+                          <Check className="h-3 w-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setRenamingResourceId(null); setRenameResourceTitle(''); }}>
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-sm font-medium text-foreground truncate">{resource.title}</span>
+                    )}
                     {resource.is_template && <Badge variant="secondary" className="text-[10px] shrink-0">Template</Badge>}
                     {resource.template_category && <Badge variant="outline" className="text-[10px] shrink-0">{resource.template_category}</Badge>}
                     {hasFile && !isExternal && <Upload className="h-3 w-3 text-muted-foreground shrink-0" />}
@@ -454,6 +493,9 @@ export function ResourceManager() {
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setEditingResource(resource); }}>
                         <Edit3 className="h-3.5 w-3.5 mr-2" /> Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setRenamingResourceId(resource.id); setRenameResourceTitle(resource.title); }}>
+                        <Tag className="h-3.5 w-3.5 mr-2" /> Rename
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setViewingVersions(resource.id); }}>
                         <Clock className="h-3.5 w-3.5 mr-2" /> Version History

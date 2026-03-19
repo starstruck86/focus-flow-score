@@ -5,6 +5,44 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+async function scrapeUrl(url: string): Promise<{ pageTitle: string; content: string } | null> {
+  const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
+  if (!FIRECRAWL_API_KEY) {
+    console.warn("FIRECRAWL_API_KEY not configured, skipping scrape");
+    return null;
+  }
+
+  try {
+    const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url,
+        formats: ["markdown"],
+        onlyMainContent: true,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Firecrawl scrape failed:", response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const markdown = data.data?.markdown || data.markdown || "";
+    const metadata = data.data?.metadata || data.metadata || {};
+    const pageTitle = metadata.title || metadata.ogTitle || "";
+
+    return { pageTitle, content: markdown.slice(0, 3000) };
+  } catch (e) {
+    console.error("Firecrawl scrape error:", e);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -13,8 +51,21 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const contentHint = text?.slice(0, 3000) || "";
+    // If URL provided, scrape it first for ground-truth content
+    let scrapedTitle = "";
+    let scrapedContent = "";
+    if (url) {
+      const scraped = await scrapeUrl(url);
+      if (scraped) {
+        scrapedTitle = scraped.pageTitle;
+        scrapedContent = scraped.content;
+      }
+    }
+
+    const contentHint = scrapedContent || text?.slice(0, 3000) || "";
+
     const prompt = `Classify this sales resource.
+${scrapedTitle ? `PAGE TITLE (ground truth — use this as the primary basis for the resource title): "${scrapedTitle}"` : ""}
 ${filename ? `Filename: ${filename}` : ""}
 ${url ? `URL: ${url}` : ""}
 ${existingTitle ? `Current title: ${existingTitle}` : ""}
@@ -24,11 +75,13 @@ Content preview:
 ${contentHint}
 
 CRITICAL NAMING RULES:
-1. If the content contains an explicit document title, heading, or page title, USE IT as the primary basis for the resource title. Do NOT infer or guess a topic from body text when a clear title exists.
-2. Append source/author attribution after an em dash (—). Extract from URL domain (e.g., "Pavilion" from joinpavilion.zoom.us, "SamSales" from samsales-shorts.thinkific.com) or from author names found in the content.
-3. Format: "Descriptive Title — Source/Author"
-4. For training recordings, include session/class numbers if identifiable.
-5. Do NOT hallucinate titles from transcript text or body content fragments.
+1. If a PAGE TITLE is provided above, USE IT as the primary basis for the resource title. It is the official document/page title and must be respected.
+2. If no PAGE TITLE is provided but the content contains an explicit document title, heading, or page title, USE IT as the primary basis for the resource title.
+3. Do NOT infer or guess a topic from body text or URL patterns when a clear title exists.
+4. Append source/author attribution after an em dash (—). Extract from URL domain (e.g., "Pavilion" from joinpavilion.zoom.us, "SamSales" from samsales-shorts.thinkific.com) or from author names found in the content.
+5. Format: "Descriptive Title — Source/Author"
+6. For training recordings, include session/class numbers if identifiable.
+7. Do NOT hallucinate titles from transcript text or body content fragments.
 
 Suggest a clear, professional title, a short description, the best resource type, relevant tags, and the most logical folder name.`;
 
