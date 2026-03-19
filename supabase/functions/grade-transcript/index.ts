@@ -332,6 +332,22 @@ ${customScorecardContext}`;
                 acumen_notes: { type: "string" },
                 cadence_notes: { type: "string" },
                 methodology_alignment: { type: "string" },
+
+                // Custom scorecard scores (if custom criteria provided)
+                custom_scores: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      category: { type: "string" },
+                      score: { type: "integer", minimum: 1, maximum: 5 },
+                      evidence: { type: "string" },
+                    },
+                    required: ["category", "score", "evidence"],
+                    additionalProperties: false,
+                  },
+                  description: "Scores for custom scorecard criteria, if any were provided",
+                },
               },
               required: [
                 "overall_score", "overall_grade", "summary",
