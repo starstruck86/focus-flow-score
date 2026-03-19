@@ -110,7 +110,13 @@ serve(async (req) => {
     // If URL provided, scrape it first for ground-truth content
     let scrapedTitle = "";
     let scrapedContent = "";
+    let urlHints = "";
     if (url) {
+      // For auth-gated URLs, extract hints from URL pattern instead of scraping
+      if (isAuthGatedUrl(url)) {
+        const hints = extractUrlHints(url);
+        urlHints = `URL TYPE: ${hints.type} (from ${hints.source}). This is an auth-gated link that cannot be scraped. Classify based on the URL pattern, filename hints, and any provided text content. Do NOT use generic titles like "Google Drive" or "Sign In".`;
+      }
       const scraped = await scrapeUrl(url);
       if (scraped) {
         scrapedTitle = scraped.pageTitle;
