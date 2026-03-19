@@ -114,6 +114,10 @@ Deno.serve(async (req) => {
 
     if (crmContext) {
       contextString = DAVE_INSTRUCTIONS + "\n\n" + crmContext.sections.join("\n\n");
+      // Hard cap context to 20k chars to prevent ElevenLabs latency/truncation
+      if (contextString.length > 20000) {
+        contextString = contextString.slice(0, 20000) + "\n\n[Context trimmed for performance]";
+      }
       firstMessage = buildFirstMessage(crmContext, tzOffsetHours);
     }
 
