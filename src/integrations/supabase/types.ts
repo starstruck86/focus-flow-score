@@ -1707,6 +1707,50 @@ export type Database = {
           },
         ]
       }
+      resource_digests: {
+        Row: {
+          content_hash: string
+          created_at: string
+          grading_criteria: Json | null
+          id: string
+          resource_id: string
+          summary: string
+          takeaways: string[]
+          use_cases: string[]
+          user_id: string
+        }
+        Insert: {
+          content_hash?: string
+          created_at?: string
+          grading_criteria?: Json | null
+          id?: string
+          resource_id: string
+          summary?: string
+          takeaways?: string[]
+          use_cases?: string[]
+          user_id: string
+        }
+        Update: {
+          content_hash?: string
+          created_at?: string
+          grading_criteria?: Json | null
+          id?: string
+          resource_id?: string
+          summary?: string
+          takeaways?: string[]
+          use_cases?: string[]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resource_digests_resource_id_fkey"
+            columns: ["resource_id"]
+            isOneToOne: true
+            referencedRelation: "resources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       resource_folders: {
         Row: {
           color: string | null
@@ -2275,6 +2319,7 @@ export type Database = {
           cotm_score: number | null
           cotm_signals: Json | null
           created_at: string
+          custom_scorecard_results: Json | null
           discovery_score: number | null
           discovery_stats: Json | null
           evidence: Json | null
@@ -2317,6 +2362,7 @@ export type Database = {
           cotm_score?: number | null
           cotm_signals?: Json | null
           created_at?: string
+          custom_scorecard_results?: Json | null
           discovery_score?: number | null
           discovery_stats?: Json | null
           evidence?: Json | null
@@ -2359,6 +2405,7 @@ export type Database = {
           cotm_score?: number | null
           cotm_signals?: Json | null
           created_at?: string
+          custom_scorecard_results?: Json | null
           discovery_score?: number | null
           discovery_stats?: Json | null
           evidence?: Json | null
