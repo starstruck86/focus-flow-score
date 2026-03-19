@@ -409,7 +409,7 @@ export function ResourceManager() {
               {pendingItems.map(item => (
                 <div key={item.id} className="flex items-center gap-2 p-2 rounded-md border border-border/50 bg-background">
                   {item.status === 'classifying' && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />}
-                  {item.status === 'classified' && <Check className="h-3.5 w-3.5 text-green-500 shrink-0" />}
+                  {item.status === 'classified' && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
                   {item.status === 'error' && <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />}
                   <div className="flex-1 min-w-0">
                     {item.status === 'classified' && item.classification ? (
