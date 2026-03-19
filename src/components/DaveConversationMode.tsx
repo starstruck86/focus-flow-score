@@ -115,8 +115,15 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
       }, 8000);
     },
     onDisconnect: () => {
-      console.log('[Dave] Disconnected');
+      const uptime = connectedAtRef.current ? Date.now() - connectedAtRef.current : 0;
+      console.log(`[Dave] ❌ Disconnected (uptime: ${uptime}ms)`);
       if (stabilityTimerRef.current) clearTimeout(stabilityTimerRef.current);
+
+      // If disconnected almost immediately, treat as error
+      if (uptime > 0 && uptime < 2000) {
+        console.warn('[Dave] Immediate disconnect — likely transport or auth issue');
+        setError('Connection dropped immediately. Tap to retry.');
+      }
 
       if (
         isOpenRef.current &&
@@ -134,6 +141,8 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
           reconnectTimerRef.current = undefined;
           if (isOpenRef.current) startConversationRef.current?.();
         }, delay);
+      } else if (isOpenRef.current && reconnectAttemptRef.current >= MAX_RECONNECTS && !error) {
+        setError('Connection lost. Tap to retry.');
       }
     },
     onMessage: (message: any) => {
