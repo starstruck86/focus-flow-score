@@ -1,39 +1,52 @@
 
 
-# Fix Dave: Remove Overrides from startSession
+# Give Dave Full CRM + Resource Context
 
-## Root Cause (confirmed)
-Lines 184-189 in `DaveConversationMode.tsx` pass an `overrides` object to `conversation.startSession()`. The ElevenLabs SDK does NOT support overrides in `startSession()` — it silently aborts the agent after the WebRTC handshake succeeds. This is documented in [ElevenLabs GitHub issue #92](https://github.com/elevenlabs/packages/issues/92).
-
-The `as any` cast on line 189 hides the TypeScript error that would have caught this.
-
-## Fix (single file: `DaveConversationMode.tsx`)
-
-### 1. Remove overrides from startSession
-Strip lines 172-182 (the overrides object construction) and pass only `conversationToken` and `connectionType` to `startSession()`. Remove the `as any` cast.
-
-### 2. Add mic permission pre-flight
-Before calling `startSession()`, call `navigator.mediaDevices.getUserMedia({ audio: true })` and immediately stop the tracks. Per ElevenLabs docs: "Consider allowing access before the Conversation starts." This ensures the browser permission gate is cleared before the SDK tries internally.
-
-### 3. Add greeting watchdog
-After successful connection, set a 5-second timeout. If no `agent_response` message arrives, log a diagnostic warning. This helps catch future issues.
-
-### 4. Context delivery via dynamicVariables (best-effort)
-Pass the context string via `dynamicVariables` in `startSession()`, which IS a supported parameter. If the ElevenLabs agent dashboard has `{{context}}` configured in its prompt template, this will work. If not, Dave still connects and works — just without personalized context. No silent failure either way.
+## The concern
+You're right. For roleplay, Dave needs methodology frameworks (MEDDICC, CotM), battlecards, account-specific opportunity methodology data, and resource library content. Currently he gets none of this — the edge function only fetches 5 tables with tight limits, and the context isn't even delivered properly (no `sendContextualUpdate` call exists).
 
 ## What changes
 
-```text
-BEFORE (broken):
-  startSession({ conversationToken, connectionType, overrides }) as any
-  → SDK silently aborts agent
+### 1. Edge function: `supabase/functions/dave-conversation-token/index.ts`
+Expand `fetchCrmContext` from 5 parallel queries to 18. Add:
 
-AFTER (fixed):
-  getUserMedia → stop tracks (pre-flight)
-  startSession({ conversationToken, connectionType, dynamicVariables })
-  → SDK activates agent, greeting plays, VAD fires
-```
+| Table | Key fields | Limit |
+|-------|-----------|-------|
+| accounts (expand) | + website, industry, notes, motion, tech_stack, icp_fit_score | 50 |
+| opportunities (expand) | + deal_type, notes, status, term_months | 50 |
+| tasks (expand) | + workstream, category, notes | 30 |
+| calendar_events (expand) | keep fields | 15 |
+| renewals | account_name, arr, renewal_due, churn_risk, health_status, next_step, notes | 30 |
+| contacts | name, title, email, buyer_role, influence_level, department, seniority, status | 50 |
+| **resources** | **title, resource_type, description, content, tags** | **30** |
+| quota_targets | all fields | 1 |
+| conversion_benchmarks | all rates | 1 |
+| streak_events (last 7d) | date, checked_in, goal_met, daily_score | 7 |
+| call_transcripts | title, call_date, call_type, summary | 15 |
+| transcript_grades | overall_score, overall_grade, coaching_issue, strengths, improvements | 10 |
+| weekly_battle_plans | strategy_summary, moves, quota_gap | 1 |
+| weekly_reviews (if exists) | biggest_win, commitment_for_week | 1 |
+| opportunity_methodology | all MEDDICC + CotM fields, call_goals | all active opps |
+| daily_journal_entries (last 5d) | key activity metrics | 5 |
+| daily_time_blocks (today) | blocks, ai_reasoning | 1 |
 
-## File changes
-- `src/components/DaveConversationMode.tsx` — remove overrides object, clean startSession call, add mic pre-flight, add greeting watchdog
+The **resources** query includes `content` (truncated to ~500 chars each) so Dave actually knows what's in your battlecards, methodology docs, and frameworks — not just titles. The **opportunity_methodology** query gives him full MEDDICC/CotM state per deal so roleplay can reference real gaps.
+
+Each section is formatted as compressed text. Estimated total: ~12-15KB, within ElevenLabs limits.
+
+### 2. Client: `src/components/DaveConversationMode.tsx`
+Add `conversation.sendContextualUpdate(sessionDataRef.current.context)` in the `onConnect` callback after the greeting watchdog. This is the SDK's supported method for injecting background context — it works regardless of agent dashboard template configuration.
+
+## Why this solves the roleplay concern
+- Dave gets full MEDDICC/CotM field states per opportunity, so he can challenge you on real gaps
+- Dave gets resource content (battlecards, frameworks, competitor intel), so he can simulate realistic buyer objections
+- Dave gets coaching history (transcript grades, coaching issues), so roleplay scenarios target your actual weak spots
+- All data is injected via `sendContextualUpdate` — a reliable, supported SDK method
+
+## Files changed
+- `supabase/functions/dave-conversation-token/index.ts` — expand to 18 parallel queries
+- `src/components/DaveConversationMode.tsx` — add `sendContextualUpdate` in `onConnect`
+
+## Cost impact
+Zero additional AI/Cloud credits. These are all simple SELECT queries on your own data, run once per Dave session start.
 
