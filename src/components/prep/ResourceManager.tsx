@@ -991,6 +991,22 @@ export function ResourceManager() {
       <DuplicateResourcesModal open={showDuplicates} onOpenChange={setShowDuplicates} />
       <PlaylistImportModal open={showPlaylistImport} onOpenChange={setShowPlaylistImport} />
       <WebpageImportModal open={showWebpageImport} onOpenChange={setShowWebpageImport} />
+      <AIGenerateDialog
+        open={showAIGenerate}
+        onOpenChange={(open) => { setShowAIGenerate(open); if (!open) { setGenerateSourceId(null); setGenerateInitialType(undefined); } }}
+        onGenerated={(markdown) => {
+          createResource.mutate({
+            title: 'AI Generated Resource',
+            folder_id: currentFolderId,
+            resource_type: generateInitialType || 'document',
+            content: markdown,
+          }, {
+            onSuccess: (data) => setEditingResource(data as Resource),
+          });
+        }}
+        sourceResourceId={generateSourceId}
+        initialOutputType={generateInitialType}
+      />
     </div>
   );
 }
