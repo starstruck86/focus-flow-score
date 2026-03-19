@@ -179,7 +179,7 @@ export function useUpdateResource() {
   return useMutation({
     mutationFn: async ({ id, updates, createVersion }: {
       id: string;
-      updates: Partial<Pick<Resource, 'title' | 'content' | 'description' | 'folder_id' | 'is_template' | 'template_category' | 'tags' | 'resource_type'>>;
+      updates: Partial<Pick<Resource, 'title' | 'content' | 'description' | 'folder_id' | 'is_template' | 'template_category' | 'tags' | 'resource_type' | 'account_id' | 'opportunity_id'>>;
       createVersion?: { change_summary?: string };
     }) => {
       // Get current resource for version tracking
