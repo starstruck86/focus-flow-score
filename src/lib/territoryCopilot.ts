@@ -193,11 +193,11 @@ export const PAGE_SUGGESTED_QUESTIONS: Record<string, { text: string; mode: Copi
   ],
   'prep-hub': [
     { text: "Prep me for my next meeting", mode: "meeting" },
-    { text: "What call transcripts should I review before tomorrow?", mode: "quick" },
-    { text: "Summarize key themes from my recent calls", mode: "quick" },
-    { text: "What follow-ups are needed from last week's meetings?", mode: "quick" },
+    { text: "Teach me about MEDDICC", mode: "resource-qa" },
+    { text: "What are the key lessons from my training materials?", mode: "resource-qa" },
+    { text: "Apply my frameworks to my top deal", mode: "resource-qa" },
     { text: "Draft a recap email for my last call", mode: "recap-email" },
-    { text: "Research the account I'm meeting next", mode: "deep" },
+    { text: "If the author of my training reviewed my pipeline, what would they say?", mode: "resource-qa" },
   ],
   trends: [
     { text: "What's trending up or down in my performance?", mode: "quick" },
