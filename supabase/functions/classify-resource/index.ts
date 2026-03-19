@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// URLs that are auth-gated and can't be scraped
+// URLs that usually require auth and can't be deeply scraped
 function isAuthGatedUrl(url: string): boolean {
   const gatedPatterns = [
     /drive\.google\.com/i,
@@ -23,7 +23,56 @@ function isAuthGatedUrl(url: string): boolean {
     /onedrive\.live\.com/i,
     /sharepoint\.com/i,
   ];
-  return gatedPatterns.some(p => p.test(url));
+  return gatedPatterns.some((p) => p.test(url));
+}
+
+function shouldFetchSharedTitleDirectly(url: string): boolean {
+  return [
+    /drive\.google\.com/i,
+    /docs\.google\.com/i,
+    /sheets\.google\.com/i,
+    /slides\.google\.com/i,
+  ].some((p) => p.test(url));
+}
+
+function stripProviderSuffix(title: string): string {
+  return title
+    .replace(/\s*-\s*Google Drive$/i, "")
+    .replace(/\s*-\s*Google Docs$/i, "")
+    .replace(/\s*-\s*Google Sheets$/i, "")
+    .replace(/\s*-\s*Google Slides$/i, "")
+    .trim();
+}
+
+function extractHtmlTitle(html: string): string {
+  const ogTitleMatch = html.match(/property=["']og:title["'][^>]*content=["']([^"']+)["']/i)
+    || html.match(/content=["']([^"']+)["'][^>]*property=["']og:title["']/i);
+  const titleMatch = html.match(/<title>(.*?)<\/title>/is);
+  const candidate = (ogTitleMatch?.[1] || titleMatch?.[1] || "").replace(/\s+/g, " ").trim();
+
+  if (!candidate) return "";
+  if (/^(google drive|google docs|google sheets|google slides|sign in|login)$/i.test(candidate)) return "";
+
+  return stripProviderSuffix(candidate);
+}
+
+async function fetchDirectPageTitle(url: string): Promise<string> {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "text/html,application/xhtml+xml",
+      },
+    });
+
+    if (!response.ok) return "";
+
+    const html = await response.text();
+    return extractHtmlTitle(html);
+  } catch (e) {
+    console.error("Direct title fetch failed:", e);
+    return "";
+  }
 }
 
 // Extract hints from URL patterns for auth-gated URLs
@@ -40,7 +89,6 @@ function extractUrlHints(url: string): { type: string; source: string } {
   else if (/thinkific\.com/.test(url)) type = 'training course';
   else if (/loom\.com/.test(url)) type = 'video recording';
 
-  // Extract source from domain
   let source = host.split('.')[0];
   if (host.includes('google.com')) source = 'Google Drive';
   else if (host.includes('zoom.us')) {
@@ -56,16 +104,18 @@ function extractUrlHints(url: string): { type: string; source: string } {
 }
 
 async function scrapeUrl(url: string): Promise<{ pageTitle: string; content: string } | null> {
-  // Skip scraping for auth-gated URLs — Firecrawl will get a login page
+  const directTitle = shouldFetchSharedTitleDirectly(url) ? await fetchDirectPageTitle(url) : "";
+
+  // Skip deep scraping for auth-gated URLs, but still use directly fetched public page titles when available
   if (isAuthGatedUrl(url)) {
-    console.log("Skipping scrape for auth-gated URL:", url);
-    return null;
+    console.log("Skipping deep scrape for auth-gated URL:", url);
+    return directTitle ? { pageTitle: directTitle, content: "" } : null;
   }
 
   const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
   if (!FIRECRAWL_API_KEY) {
     console.warn("FIRECRAWL_API_KEY not configured, skipping scrape");
-    return null;
+    return directTitle ? { pageTitle: directTitle, content: "" } : null;
   }
 
   try {
@@ -84,18 +134,18 @@ async function scrapeUrl(url: string): Promise<{ pageTitle: string; content: str
 
     if (!response.ok) {
       console.error("Firecrawl scrape failed:", response.status);
-      return null;
+      return directTitle ? { pageTitle: directTitle, content: "" } : null;
     }
 
     const data = await response.json();
     const markdown = data.data?.markdown || data.markdown || "";
     const metadata = data.data?.metadata || data.metadata || {};
-    const pageTitle = metadata.title || metadata.ogTitle || "";
+    const pageTitle = stripProviderSuffix(metadata.title || metadata.ogTitle || directTitle || "");
 
     return { pageTitle, content: markdown.slice(0, 3000) };
   } catch (e) {
     console.error("Firecrawl scrape error:", e);
-    return null;
+    return directTitle ? { pageTitle: directTitle, content: "" } : null;
   }
 }
 
