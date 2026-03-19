@@ -103,6 +103,9 @@ export function ResourceManager() {
   const [savingAll, setSavingAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Playlist import
+  const [showPlaylistImport, setShowPlaylistImport] = useState(false);
+
   // AI Discover states
   const [showDiscover, setShowDiscover] = useState(false);
   const [discoverQuery, setDiscoverQuery] = useState('');
