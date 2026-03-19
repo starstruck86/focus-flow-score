@@ -244,4 +244,5 @@ export const MODE_CONFIG: Record<CopilotMode, { label: string; description: stri
   meeting: { label: "Meeting Prep", description: "Full brief using your frameworks + transcripts", icon: "📋" },
   "deal-strategy": { label: "Deal Strategy", description: "Framework-based deal analysis (MEDDICC, etc.)", icon: "🎯" },
   "recap-email": { label: "Recap Email", description: "Draft follow-up emails from call transcripts", icon: "✉️" },
+  "resource-qa": { label: "Resource Q&A", description: "Learn from your playbooks, frameworks & training", icon: "📚" },
 };
