@@ -330,8 +330,10 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       let summary = `If you close ${matched.map((o: any) => o.name).join(' and ')}, that's $${Math.round(scenarioArr / 1000)}k total ARR.`;
 
       if (quota) {
-        const newTotal = (quota.new_arr_closed || 0) + newLogoArr;
-        const renewalTotal = (quota.renewal_arr_closed || 0) + renewalArr;
+        const closedNewArr = closedWon.filter((o: any) => o.deal_type === 'new-logo').reduce((s: number, o: any) => s + (o.arr || 0), 0);
+        const closedRenewalArr = closedWon.filter((o: any) => o.deal_type !== 'new-logo').reduce((s: number, o: any) => s + (o.arr || 0), 0);
+        const newTotal = closedNewArr + newLogoArr;
+        const renewalTotal = closedRenewalArr + renewalArr;
         const newPct = quota.new_arr_quota ? Math.round((newTotal / quota.new_arr_quota) * 100) : 0;
         const renewalPct = quota.renewal_arr_quota ? Math.round((renewalTotal / quota.renewal_arr_quota) * 100) : 0;
         const newRemaining = Math.max(0, (quota.new_arr_quota || 0) - newTotal);
