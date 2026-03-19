@@ -919,6 +919,7 @@ export function ResourceManager() {
       {/* Reorganize Modal */}
       <ReorganizeModal open={showReorganize} onOpenChange={setShowReorganize} />
       <DuplicateResourcesModal open={showDuplicates} onOpenChange={setShowDuplicates} />
+      <PlaylistImportModal open={showPlaylistImport} onOpenChange={setShowPlaylistImport} />
     </div>
   );
 }
