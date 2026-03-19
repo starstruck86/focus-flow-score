@@ -1,7 +1,9 @@
 import { useState, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
@@ -26,6 +28,16 @@ import { ReorganizeModal } from './ReorganizeModal';
 import { DuplicateResourcesModal } from './DuplicateResourcesModal';
 import { useResourceDuplicates } from '@/hooks/useResourceDuplicates';
 import { toast } from 'sonner';
+
+type PendingItem = {
+  id: string;
+  status: 'classifying' | 'classified' | 'error';
+  classification?: ClassificationResult;
+  source: 'file' | 'url';
+  file?: File;
+  url?: string;
+  error?: string;
+};
 
 const RESOURCE_TYPE_ICONS: Record<string, React.ElementType> = {
   document: FileText,
@@ -79,13 +91,8 @@ export function ResourceManager() {
   // Upload/URL states
   const [showAddUrl, setShowAddUrl] = useState(false);
   const [urlInput, setUrlInput] = useState('');
-  const [classifying, setClassifying] = useState(false);
-  const [pendingClassification, setPendingClassification] = useState<{
-    classification: ClassificationResult;
-    source: 'file' | 'url';
-    file?: File;
-    url?: string;
-  } | null>(null);
+  const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
+  const [savingAll, setSavingAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: folders = [] } = useResourceFolders();
@@ -157,58 +164,113 @@ export function ResourceManager() {
     setRenameResourceTitle('');
   }, [renamingResourceId, renameResourceTitle, updateResource]);
 
-  // File upload handler
+  // Classify items in batches of 3
+  const classifyBatch = async (items: PendingItem[]) => {
+    for (let i = 0; i < items.length; i += 3) {
+      const batch = items.slice(i, i + 3);
+      await Promise.allSettled(
+        batch.map(async (item) => {
+          try {
+            let classification: ClassificationResult;
+            if (item.source === 'file' && item.file) {
+              const text = await extractTextPreview(item.file);
+              classification = await classify.mutateAsync({ text, filename: item.file.name });
+            } else if (item.source === 'url' && item.url) {
+              classification = await classify.mutateAsync({ url: item.url });
+            } else {
+              throw new Error('Invalid item');
+            }
+            setPendingItems(prev => prev.map(p =>
+              p.id === item.id ? { ...p, status: 'classified' as const, classification } : p
+            ));
+          } catch {
+            setPendingItems(prev => prev.map(p =>
+              p.id === item.id ? { ...p, status: 'error' as const, error: 'Classification failed' } : p
+            ));
+          }
+        })
+      );
+    }
+  };
+
+  // File upload handler — supports multiple files
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 20 * 1024 * 1024) {
-      toast.error('File must be under 20MB');
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const validFiles = files.filter(f => {
+      if (f.size > 20 * 1024 * 1024) {
+        toast.error(`${f.name} exceeds 20MB limit`);
+        return false;
+      }
+      return true;
+    });
+    if (!validFiles.length) return;
+
+    const newItems: PendingItem[] = validFiles.map(file => ({
+      id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      status: 'classifying' as const,
+      source: 'file' as const,
+      file,
+    }));
+    setPendingItems(prev => [...prev, ...newItems]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    classifyBatch(newItems);
+  };
+
+  // Bulk URL handler
+  const handleAddUrls = async () => {
+    const urls = urlInput
+      .split('\n')
+      .map(u => u.trim())
+      .filter(u => u && (u.startsWith('http://') || u.startsWith('https://')));
+    if (!urls.length) {
+      toast.error('No valid URLs found');
       return;
     }
-    setClassifying(true);
-    try {
-      const text = await extractTextPreview(file);
-      const classification = await classify.mutateAsync({
-        text,
-        filename: file.name,
-      });
-      setPendingClassification({ classification, source: 'file', file });
-    } catch {
-      toast.error('Classification failed — please try again');
-    } finally {
-      setClassifying(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  // URL handler
-  const handleAddUrl = async () => {
-    if (!urlInput.trim()) return;
-    setClassifying(true);
     setShowAddUrl(false);
-    try {
-      const classification = await classify.mutateAsync({ url: urlInput.trim() });
-      setPendingClassification({ classification, source: 'url', url: urlInput.trim() });
-      setUrlInput('');
-    } catch {
-      toast.error('Classification failed — please try again');
-    } finally {
-      setClassifying(false);
-    }
+    setUrlInput('');
+
+    const newItems: PendingItem[] = urls.map(url => ({
+      id: `url-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      status: 'classifying' as const,
+      source: 'url' as const,
+      url,
+    }));
+    setPendingItems(prev => [...prev, ...newItems]);
+    classifyBatch(newItems);
   };
 
-  // Confirm classification
-  const handleConfirmClassification = async () => {
-    if (!pendingClassification) return;
-    const { classification, source, file, url } = pendingClassification;
+  // Update a pending item's title
+  const updatePendingTitle = (id: string, title: string) => {
+    setPendingItems(prev => prev.map(p =>
+      p.id === id && p.classification ? { ...p, classification: { ...p.classification, title } } : p
+    ));
+  };
+
+  // Remove a pending item
+  const removePendingItem = (id: string) => {
+    setPendingItems(prev => prev.filter(p => p.id !== id));
+  };
+
+  // Confirm all classified items
+  const handleConfirmAll = async () => {
+    const readyItems = pendingItems.filter(p => p.status === 'classified' && p.classification);
+    if (!readyItems.length) return;
+    setSavingAll(true);
     try {
-      if (source === 'file' && file) {
-        await uploadResource.mutateAsync({ file, classification, folderId: currentFolderId });
-      } else if (source === 'url' && url) {
-        await addUrlResource.mutateAsync({ url, classification, folderId: currentFolderId });
+      for (const item of readyItems) {
+        if (item.source === 'file' && item.file && item.classification) {
+          await uploadResource.mutateAsync({ file: item.file, classification: item.classification, folderId: currentFolderId });
+        } else if (item.source === 'url' && item.url && item.classification) {
+          await addUrlResource.mutateAsync({ url: item.url, classification: item.classification, folderId: currentFolderId });
+        }
       }
+      setPendingItems(prev => prev.filter(p => p.status === 'error'));
+      toast.success(`${readyItems.length} resource${readyItems.length > 1 ? 's' : ''} saved`);
+    } catch {
+      toast.error('Some items failed to save');
     } finally {
-      setPendingClassification(null);
+      setSavingAll(false);
     }
   };
 
@@ -257,6 +319,7 @@ export function ResourceManager() {
         ref={fileInputRef}
         type="file"
         accept={ACCEPTED_FILE_TYPES}
+        multiple
         className="hidden"
         onChange={handleFileSelect}
       />
@@ -325,65 +388,69 @@ export function ResourceManager() {
         </Button>
       </div>
 
-      {/* Classifying indicator */}
-      {classifying && (
-        <div className="flex items-center gap-2 p-3 rounded-lg border border-primary/30 bg-primary/5">
-          <Loader2 className="h-4 w-4 animate-spin text-primary" />
-          <span className="text-sm text-foreground">AI is classifying your content...</span>
-        </div>
-      )}
-
-      {/* Classification confirmation */}
-      {pendingClassification && (
+      {/* Batch review panel */}
+      {pendingItems.length > 0 && (
         <div className="p-4 rounded-lg border border-primary/30 bg-primary/5 space-y-3">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium text-foreground">AI Classification</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium text-foreground">
+                {pendingItems.filter(p => p.status === 'classifying').length > 0
+                  ? `Classifying ${pendingItems.filter(p => p.status === 'classifying').length} item(s)...`
+                  : `${pendingItems.filter(p => p.status === 'classified').length} item(s) ready`}
+              </span>
+            </div>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setPendingItems([])}>
+              <X className="h-3.5 w-3.5" />
+            </Button>
           </div>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground w-16">Title:</span>
-              <Input
-                value={pendingClassification.classification.title}
-                onChange={e => setPendingClassification(prev => prev ? {
-                  ...prev,
-                  classification: { ...prev.classification, title: e.target.value },
-                } : null)}
-                className="h-7 text-sm font-medium flex-1"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground w-16">Type:</span>
-              <Badge variant="secondary" className="text-xs capitalize">{pendingClassification.classification.resource_type}</Badge>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground w-16">Folder:</span>
-              <Badge variant="outline" className="text-xs">{pendingClassification.classification.suggested_folder}</Badge>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-muted-foreground w-16">Tags:</span>
-              {pendingClassification.classification.tags.map(t => (
-                <Badge key={t} variant="outline" className="text-[10px]">{t}</Badge>
+          <ScrollArea className="max-h-[300px]">
+            <div className="space-y-2">
+              {pendingItems.map(item => (
+                <div key={item.id} className="flex items-center gap-2 p-2 rounded-md border border-border/50 bg-background">
+                  {item.status === 'classifying' && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />}
+                  {item.status === 'classified' && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+                  {item.status === 'error' && <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />}
+                  <div className="flex-1 min-w-0">
+                    {item.status === 'classified' && item.classification ? (
+                      <Input
+                        value={item.classification.title}
+                        onChange={e => updatePendingTitle(item.id, e.target.value)}
+                        className="h-7 text-xs"
+                      />
+                    ) : item.status === 'error' ? (
+                      <span className="text-xs text-destructive">{item.error}</span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground truncate block">
+                        {item.source === 'file' ? item.file?.name : item.url}
+                      </span>
+                    )}
+                    {item.status === 'classified' && item.classification && (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <Badge variant="secondary" className="text-[9px] capitalize">{item.classification.resource_type}</Badge>
+                        <Badge variant="outline" className="text-[9px]">{item.classification.suggested_folder}</Badge>
+                      </div>
+                    )}
+                  </div>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => removePendingItem(item.id)}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
               ))}
             </div>
-            {pendingClassification.classification.description && (
-              <p className="text-xs text-muted-foreground">{pendingClassification.classification.description}</p>
-            )}
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPendingClassification(null)}>
-              <X className="h-3.5 w-3.5 mr-1" /> Cancel
-            </Button>
-            <Button size="sm" onClick={handleConfirmClassification}
-              disabled={uploadResource.isPending || addUrlResource.isPending}>
-              {(uploadResource.isPending || addUrlResource.isPending) ? (
-                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-              ) : (
-                <Check className="h-3.5 w-3.5 mr-1" />
-              )}
-              Confirm & Save
-            </Button>
-          </div>
+          </ScrollArea>
+          {pendingItems.some(p => p.status === 'classified') && (
+            <div className="flex justify-end">
+              <Button size="sm" onClick={handleConfirmAll} disabled={savingAll}>
+                {savingAll ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                ) : (
+                  <Check className="h-3.5 w-3.5 mr-1" />
+                )}
+                Confirm All ({pendingItems.filter(p => p.status === 'classified').length})
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -599,25 +666,26 @@ export function ResourceManager() {
         </DialogContent>
       </Dialog>
 
-      {/* Add URL Dialog */}
+      {/* Add URLs Dialog */}
       <Dialog open={showAddUrl} onOpenChange={setShowAddUrl}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Add Link / URL</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Add Links / URLs</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <Input
+            <Textarea
               value={urlInput}
               onChange={e => setUrlInput(e.target.value)}
-              placeholder="https://docs.google.com/... or any URL"
+              placeholder={"https://docs.google.com/...\nhttps://loom.com/...\nhttps://zoom.us/..."}
+              rows={5}
               autoFocus
-              onKeyDown={e => e.key === 'Enter' && handleAddUrl()}
+              className="text-sm"
             />
             <p className="text-[10px] text-muted-foreground">
-              Google Drive, Notion, Thinkific, or any external resource
+              Paste one URL per line. Google Drive, Notion, Thinkific, Loom, or any external resource.
             </p>
             <div className="flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={() => setShowAddUrl(false)}>Cancel</Button>
-              <Button size="sm" onClick={handleAddUrl} disabled={!urlInput.trim()}>
-                <Sparkles className="h-3.5 w-3.5 mr-1" /> Classify & Add
+              <Button size="sm" onClick={handleAddUrls} disabled={!urlInput.trim()}>
+                <Sparkles className="h-3.5 w-3.5 mr-1" /> Classify All
               </Button>
             </div>
           </div>
