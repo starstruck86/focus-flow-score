@@ -29,6 +29,7 @@ import { VersionHistory } from './VersionHistory';
 import { ReorganizeModal } from './ReorganizeModal';
 import { DuplicateResourcesModal } from './DuplicateResourcesModal';
 import { PlaylistImportModal } from './PlaylistImportModal';
+import { WebpageImportModal } from './WebpageImportModal';
 import { useResourceDuplicates } from '@/hooks/useResourceDuplicates';
 import { useConsolidateFolders } from '@/hooks/useConsolidateFolders';
 import { toast } from 'sonner';
@@ -105,6 +106,7 @@ export function ResourceManager() {
 
   // Playlist import
   const [showPlaylistImport, setShowPlaylistImport] = useState(false);
+  const [showWebpageImport, setShowWebpageImport] = useState(false);
 
   // AI Discover states
   const [showDiscover, setShowDiscover] = useState(false);
@@ -497,6 +499,9 @@ export function ResourceManager() {
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setShowPlaylistImport(true)}>
               <ListVideo className="h-3.5 w-3.5 mr-2" /> Import YouTube Playlist
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setShowWebpageImport(true)}>
+              <Globe className="h-3.5 w-3.5 mr-2" /> Import from Webpage
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -920,6 +925,7 @@ export function ResourceManager() {
       <ReorganizeModal open={showReorganize} onOpenChange={setShowReorganize} />
       <DuplicateResourcesModal open={showDuplicates} onOpenChange={setShowDuplicates} />
       <PlaylistImportModal open={showPlaylistImport} onOpenChange={setShowPlaylistImport} />
+      <WebpageImportModal open={showWebpageImport} onOpenChange={setShowWebpageImport} />
     </div>
   );
 }
