@@ -125,7 +125,7 @@ export function ResourceManager() {
   const [showAIGenerate, setShowAIGenerate] = useState(false);
   const [generateSourceId, setGenerateSourceId] = useState<string | null>(null);
   const [generateInitialType, setGenerateInitialType] = useState<string | undefined>();
-  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<number>>(new Set());
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(new Set());
 
   const { data: folders = [] } = useResourceFolders();
   const { data: resources = [] } = useResources(currentFolderId === null ? undefined : currentFolderId);
