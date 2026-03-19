@@ -29,6 +29,7 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
   const { ask: askCopilot } = useCopilot();
   const { getSession, invalidateCache } = useDaveContext();
   const [isConnecting, setIsConnecting] = useState(false);
+  const [needsTap, setNeedsTap] = useState(true);
   const [showTranscript, setShowTranscript] = useState(false);
   const [transcript, setTranscript] = useState<Array<{ role: 'user' | 'agent'; text: string }>>([]);
   const [error, setError] = useState<string | null>(null);
@@ -133,9 +134,16 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
         setTranscript(prev => [...prev, { role: 'agent', text: message.agent_response_event.agent_response }]);
       }
     },
-    onError: (error) => {
-      console.error('[Dave] Error:', error);
-      setError('Connection error. Tap to retry.');
+    onError: (err: any) => {
+      console.error('[Dave] Error:', err);
+      const msg = err?.message || String(err);
+      if (/NotAllowedError|Permission denied/i.test(msg)) {
+        setError('Microphone access required — check your browser settings');
+      } else if (/NotFoundError|no audio/i.test(msg)) {
+        setError('No microphone found');
+      } else {
+        setError('Connection error. Tap to retry.');
+      }
       toast.error('Dave connection error');
     },
     onVadScore: (score: number) => {
@@ -177,6 +185,7 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
         setError('Connection timed out. Tap to retry.');
         setIsConnecting(false);
         startingRef.current = false;
+        try { conversation.endSession(); } catch (_) {}
       }
     }, 15000);
 
@@ -186,20 +195,6 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
       if (!sessionData || !isReconnectRef.current) {
         sessionData = await getSession();
         sessionDataRef.current = sessionData;
-      }
-
-      // Mic permission pre-flight: ensure browser grants access before SDK tries
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(t => t.stop());
-        console.log('[Dave] Mic pre-flight OK');
-      } catch (micErr) {
-        console.error('[Dave] Mic pre-flight failed:', micErr);
-        setError('Microphone access required');
-        setIsConnecting(false);
-        startingRef.current = false;
-        clearTimeout(timeout);
-        return;
       }
 
       // Build dynamicVariables for context delivery (supported SDK parameter)
@@ -273,9 +268,11 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
     onClose();
   }, [conversation, onClose, clearReconnectTimer]);
 
-  // Start conversation on mount — no manual mic needed, SDK handles it
+  // Detect desktop to auto-start without tap
   useEffect(() => {
-    if (!startingRef.current) {
+    const isDesktop = navigator.maxTouchPoints === 0;
+    if (isDesktop && !startingRef.current) {
+      setNeedsTap(false);
       reconnectAttemptRef.current = 0;
       isReconnectRef.current = false;
       sessionDataRef.current = null;
@@ -369,15 +366,37 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
         </button>
 
         <div className="flex-1 flex items-center justify-center w-full">
-          <div
-            ref={orbRef}
-            className={cn(
-              'w-40 h-40 rounded-full transition-colors duration-700',
-              orbColor,
-              orbGlow,
-            )}
-            style={{ transition: 'transform 0.05s linear, background-color 0.7s, box-shadow 0.7s' }}
-          />
+          {needsTap && !isConnecting && !isConnected ? (
+            <button
+              onClick={() => {
+                setNeedsTap(false);
+                reconnectAttemptRef.current = 0;
+                isReconnectRef.current = false;
+                sessionDataRef.current = null;
+                startConversation();
+              }}
+              className="flex flex-col items-center gap-4"
+            >
+              <div
+                className={cn(
+                  'w-40 h-40 rounded-full transition-colors duration-700',
+                  'bg-emerald-500/30',
+                  'shadow-[0_0_60px_20px_rgba(16,185,129,0.3)]',
+                )}
+              />
+              <span className="text-white/60 text-sm">Tap to talk</span>
+            </button>
+          ) : (
+            <div
+              ref={orbRef}
+              className={cn(
+                'w-40 h-40 rounded-full transition-colors duration-700',
+                orbColor,
+                orbGlow,
+              )}
+              style={{ transition: 'transform 0.05s linear, background-color 0.7s, box-shadow 0.7s' }}
+            />
+          )}
         </div>
 
         <div className="flex flex-col items-center gap-3 pb-8" style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}>
