@@ -3,7 +3,7 @@ import { useConversation } from '@elevenlabs/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mic, MicOff, Volume2, MessageSquare, Loader2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useDaveContext } from '@/hooks/useDaveContext';
+import { useDaveContext, type DaveSessionData } from '@/hooks/useDaveContext';
 import { useDaveConversation } from '@/hooks/useDaveConversation';
 import { useCopilot } from '@/contexts/CopilotContext';
 import { useNavigate } from 'react-router-dom';
@@ -14,6 +14,8 @@ import { createClientTools } from './dave/clientTools';
 interface Props {
   isOpen: boolean;
   onClose: () => void;
+  /** Pre-fetched session data — overrides are derived from this */
+  sessionData: DaveSessionData;
 }
 
 const DISMISSAL_PHRASES = [
@@ -25,7 +27,7 @@ const MAX_RECONNECTS = 2;
 const RECONNECT_DELAYS = [2000, 5000];
 const STABILITY_WINDOW_MS = 3000;
 
-export function DaveConversationMode({ isOpen, onClose }: Props) {
+export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
   const navigate = useNavigate();
   const { ask: askCopilot } = useCopilot();
   const { getSession, invalidateCache } = useDaveContext();
@@ -48,13 +50,14 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
   // Refs for stale closure fixes
   const isOpenRef = useRef(isOpen);
   const transcriptRef = useRef(transcript);
-  const sessionDataRef = useRef<{ signed_url: string; context: string; firstMessage: string | null } | null>(null);
+  const sessionDataRef = useRef<DaveSessionData>(sessionData);
   const isReconnectRef = useRef(false);
   const connectedAtRef = useRef<number>(0);
   const stabilityTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => { isOpenRef.current = isOpen; }, [isOpen]);
   useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
+  useEffect(() => { sessionDataRef.current = sessionData; }, [sessionData]);
 
   const clientTools = useMemo(
     () => createClientTools(navigate, askCopilot),
@@ -70,10 +73,19 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
 
   const greetingWatchdogRef = useRef<ReturnType<typeof setTimeout>>();
 
+  // ─── KEY FIX: overrides go HERE in useConversation, NOT in startSession ───
   const conversation = useConversation({
     clientTools,
+    overrides: {
+      agent: {
+        prompt: {
+          prompt: sessionData.context || '',
+        },
+        firstMessage: sessionData.firstMessage || undefined,
+      },
+    },
     onConnect: () => {
-      console.log('[Dave] Connected');
+      console.log('[Dave] Connected — overrides applied via useConversation hook');
       setError(null);
       setReconnectInfo(null);
       connectedAtRef.current = Date.now();
@@ -83,8 +95,7 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
         reconnectAttemptRef.current = 0;
       }, STABILITY_WINDOW_MS);
 
-      // Fallback: also send context via sendContextualUpdate as backup
-      // (in case overrides aren't enabled on the ElevenLabs agent)
+      // Belt-and-suspenders: also send context via sendContextualUpdate
       if (sessionDataRef.current?.context) {
         try {
           conversation.sendContextualUpdate(sessionDataRef.current.context);
@@ -196,28 +207,23 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
     }, 15000);
 
     try {
-      // Get session data — pass conversation history on reconnects
-      let sessionData = sessionDataRef.current;
-      if (!sessionData || isReconnectRef.current) {
-        const history = isReconnectRef.current ? getConversationContext() : undefined;
-        sessionData = await getSession(history);
-        sessionDataRef.current = sessionData;
+      // For reconnects, fetch fresh session with conversation history
+      // For initial connect, use the pre-fetched sessionData from props
+      let url = sessionDataRef.current.signed_url;
+      if (isReconnectRef.current) {
+        const history = getConversationContext();
+        const freshSession = await getSession(history);
+        sessionDataRef.current = freshSession;
+        url = freshSession.signed_url;
+        // NOTE: on reconnect, overrides won't update because useConversation
+        // was initialized with the original props. The component will need
+        // to be re-mounted (via key change in Layout) for new overrides.
+        // The sendContextualUpdate in onConnect serves as the fallback here.
       }
 
-      // Use signed URL with overrides to inject Dave's identity + CRM context
-      // This makes the prompt our code controls, not the ElevenLabs dashboard
-      console.log('[Dave] Starting session with signed URL + overrides | context:', sessionData.context?.length, 'chars');
-      await conversation.startSession({
-        signedUrl: sessionData.signed_url,
-        overrides: {
-          agent: {
-            prompt: {
-              prompt: sessionData.context || '',
-            },
-            firstMessage: sessionData.firstMessage || undefined,
-          },
-        },
-      } as any);
+      // ─── CLEAN: startSession only needs the signedUrl ───
+      console.log('[Dave] Starting session with signed URL | context:', sessionDataRef.current.context?.length, 'chars');
+      await conversation.startSession({ signedUrl: url });
 
       console.log('[Dave] Session started successfully');
       clearTimeout(timeout);
@@ -225,9 +231,8 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
       clearTimeout(timeout);
       console.error('[Dave] Failed to start:', err);
 
-      if (isReconnectRef.current && sessionDataRef.current) {
-        console.log('[Dave] Cached token failed, invalidating cache...');
-        sessionDataRef.current = null;
+      if (isReconnectRef.current) {
+        console.log('[Dave] Reconnect failed, invalidating cache...');
         invalidateCache();
       }
 
@@ -270,7 +275,6 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
     }
 
     await conversation.endSession();
-    sessionDataRef.current = null;
     onClose();
   }, [conversation, onClose, clearReconnectTimer]);
 
@@ -281,7 +285,6 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
       setNeedsTap(false);
       reconnectAttemptRef.current = 0;
       isReconnectRef.current = false;
-      sessionDataRef.current = null;
       startConversation();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -378,7 +381,6 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
                 setNeedsTap(false);
                 reconnectAttemptRef.current = 0;
                 isReconnectRef.current = false;
-                sessionDataRef.current = null;
                 startConversation();
               }}
               className="flex flex-col items-center gap-4"
@@ -413,7 +415,7 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
 
           {error && !isConnecting && !reconnectInfo && (
             <button
-              onClick={() => { reconnectAttemptRef.current = 0; isReconnectRef.current = false; sessionDataRef.current = null; invalidateCache(); startConversation(); }}
+              onClick={() => { reconnectAttemptRef.current = 0; isReconnectRef.current = false; invalidateCache(); startConversation(); }}
               className="px-4 py-2 bg-white/10 rounded-full text-white/80 text-sm hover:bg-white/20"
             >
               Tap to retry

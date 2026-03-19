@@ -1,5 +1,6 @@
 import { NavLink as RouterNavLink, useLocation, useSearchParams } from 'react-router-dom';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { 
   LayoutDashboard, 
@@ -30,6 +31,7 @@ import { useCopilot, type PageContext } from '@/contexts/CopilotContext';
 import { DayTimeline } from '@/components/tasks/DayTimeline';
 import { ActivityRings } from '@/components/ActivityRings';
 import { GlobalWeekStrip } from '@/components/GlobalWeekStrip';
+import { useDaveContext, type DaveSessionData } from '@/hooks/useDaveContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
@@ -181,9 +183,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { setPageContext } = useCopilot();
   const activeColor = useActiveTabColor();
   
-  // Dave state — simplified, no mic stream management
+  // Dave state
   const [daveOpen, setDaveOpen] = useState(false);
   const [showDaveTapPrompt, setShowDaveTapPrompt] = useState(false);
+  const [daveSessionData, setDaveSessionData] = useState<DaveSessionData | null>(null);
+  const { getSession: getDaveSession } = useDaveContext();
 
   // Handle ?dave=1 from Siri Shortcuts
   useEffect(() => {
@@ -216,14 +220,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
     borderBottomColor: `hsl(${COLOR_VAR[activeColor]} / 0.2)`,
   }), [activeColor]);
 
-  const handleOpenDave = () => {
-    setDaveOpen(true);
+  const handleOpenDave = useCallback(async () => {
     setShowDaveTapPrompt(false);
-  };
+    try {
+      const session = await getDaveSession();
+      setDaveSessionData(session);
+      setDaveOpen(true);
+    } catch (err: any) {
+      console.error('[Dave] Failed to pre-fetch session:', err);
+      toast.error('Could not start Dave', { description: err.message });
+    }
+  }, [getDaveSession]);
 
-  const handleCloseDave = () => {
+  const handleCloseDave = useCallback(() => {
     setDaveOpen(false);
-  };
+    setDaveSessionData(null);
+  }, []);
 
   return (
     <div className="min-h-screen bg-background flex flex-col w-full pt-[env(safe-area-inset-top)]">
@@ -287,9 +299,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
         )}
       </AnimatePresence>
 
-      {/* Dave Conversational AI Overlay — SDK handles mic internally */}
-      {daveOpen && (
-        <DaveConversationMode isOpen={daveOpen} onClose={handleCloseDave} />
+      {/* Dave Conversational AI Overlay — key forces remount with fresh overrides */}
+      {daveOpen && daveSessionData && (
+        <DaveConversationMode
+          key={daveSessionData.signed_url}
+          isOpen={daveOpen}
+          onClose={handleCloseDave}
+          sessionData={daveSessionData}
+        />
       )}
     </div>
   );
