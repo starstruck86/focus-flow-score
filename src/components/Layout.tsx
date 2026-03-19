@@ -250,6 +250,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       
       {/* Floating Action Button */}
       <GlobalFAB position="bottom-right" />
+
+      {/* Dave Conversational AI Overlay */}
+      <DaveConversationMode isOpen={daveOpen} onClose={() => setDaveOpen(false)} />
     </div>
   );
 }
