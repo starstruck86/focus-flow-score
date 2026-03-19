@@ -317,13 +317,34 @@ async function fetchCrmContext(supabase: any, userId: string): Promise<CrmContex
     );
   }
 
-  // --- Resources (battlecards, frameworks, methodology) ---
+  // --- Resources (prefer digests over raw content) ---
   if (resourcesRes.data?.length) {
+    // Fetch digests for these resources
+    const resourceIds = (resourcesRes.data as any[]).map((r: any) => r.id || "").filter(Boolean);
+    let digestMap: Record<string, any> = {};
+    if (resourceIds.length) {
+      const { data: digests } = await supabase
+        .from("resource_digests")
+        .select("resource_id, takeaways, use_cases, summary")
+        .in("resource_id", resourceIds);
+      if (digests?.length) {
+        for (const d of digests as any[]) {
+          digestMap[d.resource_id] = d;
+        }
+      }
+    }
+
     sections.push(
       `RESOURCES & FRAMEWORKS (${resourcesRes.data.length}):\n` +
-      (resourcesRes.data as any[]).map((r: any) =>
-        `- [${r.resource_type}] ${r.title}${r.tags?.length ? ` tags:${r.tags.join(",")}` : ""}${r.description ? ` — ${trunc(r.description, 100)}` : ""}${r.content ? `\n  CONTENT: ${trunc(r.content, 500)}` : ""}`
-      ).join("\n")
+      (resourcesRes.data as any[]).map((r: any) => {
+        const digest = digestMap[r.id];
+        if (digest) {
+          const takeaways = (digest.takeaways || []).map((t: string) => `• ${t}`).join(" ");
+          const useCases = (digest.use_cases || []).join(", ");
+          return `- [${r.resource_type}] ${r.title}${r.tags?.length ? ` tags:${r.tags.join(",")}` : ""}\n  TAKEAWAYS: ${takeaways}\n  USE WHEN: ${useCases}`;
+        }
+        return `- [${r.resource_type}] ${r.title}${r.tags?.length ? ` tags:${r.tags.join(",")}` : ""}${r.description ? ` — ${trunc(r.description, 100)}` : ""}${r.content ? `\n  CONTENT: ${trunc(r.content, 500)}` : ""}`;
+      }).join("\n")
     );
   }
 
