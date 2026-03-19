@@ -30,6 +30,7 @@ import { ReorganizeModal } from './ReorganizeModal';
 import { DuplicateResourcesModal } from './DuplicateResourcesModal';
 import { useResourceDuplicates } from '@/hooks/useResourceDuplicates';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 type PendingItem = {
   id: string;
