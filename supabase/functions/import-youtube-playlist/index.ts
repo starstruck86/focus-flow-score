@@ -43,7 +43,18 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('Scraping YouTube playlist:', url);
+    console.log('Scraping YouTube playlist with scroll actions:', url);
+
+    // Build scroll actions to load up to ~1000 videos
+    // Each scroll loads ~20-30 videos; 40 scrolls should cover ~1000
+    const scrollActions = [];
+    for (let i = 0; i < 40; i++) {
+      scrollActions.push({ type: 'scroll', direction: 'down', amount: 5000 });
+      // Small wait between scrolls for content to load
+      if (i % 5 === 4) {
+        scrollActions.push({ type: 'wait', milliseconds: 2000 });
+      }
+    }
 
     const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
@@ -54,7 +65,9 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         url: url.trim(),
         formats: ['links'],
-        waitFor: 5000,
+        actions: scrollActions,
+        waitFor: 3000,
+        timeout: 120000,
       }),
     });
 
@@ -80,13 +93,14 @@ Deno.serve(async (req) => {
       if (seen.has(videoId)) continue;
       seen.add(videoId);
       videoUrls.push(`https://www.youtube.com/watch?v=${videoId}`);
+      if (videoUrls.length >= 1000) break;
     }
 
     console.log(`Found ${videoUrls.length} video URLs, fetching titles via oEmbed...`);
 
-    // Fetch titles in parallel batches of 15 (larger batches for speed)
+    // Fetch titles in parallel batches of 30
     const videos: { title: string; url: string }[] = [];
-    const BATCH_SIZE = 15;
+    const BATCH_SIZE = 30;
     for (let i = 0; i < videoUrls.length; i += BATCH_SIZE) {
       const batch = videoUrls.slice(i, i + BATCH_SIZE);
       const titles = await Promise.all(batch.map(fetchTitle));

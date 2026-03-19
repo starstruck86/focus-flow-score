@@ -15,7 +15,7 @@ import {
   Folder, FolderPlus, FilePlus, FileText, Presentation, Mail, BookOpen,
   ChevronRight, MoreHorizontal, Search, Trash2, Edit3, Clock,
   Star, Tag, Copy, Upload, Link2, Sparkles, Target, Shield,
-  GraduationCap, MessageSquare, Loader2, Check, X, AlertTriangle, Globe, Radar, ListVideo,
+  GraduationCap, MessageSquare, Loader2, Check, X, AlertTriangle, Globe, Radar, ListVideo, Podcast,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -32,6 +32,7 @@ import { VersionHistory } from './VersionHistory';
 import { ReorganizeModal } from './ReorganizeModal';
 import { DuplicateResourcesModal } from './DuplicateResourcesModal';
 import { PlaylistImportModal } from './PlaylistImportModal';
+import { PodcastImportModal } from './PodcastImportModal';
 import { WebpageImportModal } from './WebpageImportModal';
 import { useResourceDuplicates } from '@/hooks/useResourceDuplicates';
 import { useConsolidateFolders } from '@/hooks/useConsolidateFolders';
@@ -109,6 +110,7 @@ export function ResourceManager() {
 
   // Playlist import
   const [showPlaylistImport, setShowPlaylistImport] = useState(false);
+  const [showPodcastImport, setShowPodcastImport] = useState(false);
   const [showWebpageImport, setShowWebpageImport] = useState(false);
 
   // AI Discover states
@@ -510,6 +512,9 @@ export function ResourceManager() {
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setShowPlaylistImport(true)}>
               <ListVideo className="h-3.5 w-3.5 mr-2" /> Import YouTube Playlist
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setShowPodcastImport(true)}>
+              <Podcast className="h-3.5 w-3.5 mr-2" /> Import Podcast
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setShowWebpageImport(true)}>
               <Globe className="h-3.5 w-3.5 mr-2" /> Import from Webpage
@@ -990,6 +995,7 @@ export function ResourceManager() {
       <ReorganizeModal open={showReorganize} onOpenChange={setShowReorganize} />
       <DuplicateResourcesModal open={showDuplicates} onOpenChange={setShowDuplicates} />
       <PlaylistImportModal open={showPlaylistImport} onOpenChange={setShowPlaylistImport} />
+      <PodcastImportModal open={showPodcastImport} onOpenChange={setShowPodcastImport} />
       <WebpageImportModal open={showWebpageImport} onOpenChange={setShowWebpageImport} />
       <AIGenerateDialog
         open={showAIGenerate}

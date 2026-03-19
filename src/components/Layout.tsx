@@ -248,8 +248,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <span className="font-display text-sm font-bold">Quota Compass</span>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="text-[10px] text-muted-foreground/60 hidden sm:inline cursor-default">
-                Updated {formatDistanceToNow(new Date(__BUILD_TIMESTAMP__), { addSuffix: true })}
+              <span className="text-[10px] text-muted-foreground/60 inline cursor-default">
+                {formatDistanceToNow(new Date(__BUILD_TIMESTAMP__), { addSuffix: true })}
               </span>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="text-xs">
