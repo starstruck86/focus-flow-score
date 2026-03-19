@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type CopilotMode = "quick" | "deep" | "meeting" | "deal-strategy" | "recap-email";
+type CopilotMode = "quick" | "deep" | "meeting" | "deal-strategy" | "recap-email" | "resource-qa";
 
 // ─── Compact serializers ──────────────────────────────────
 function compactAccount(a: any): string {
@@ -84,7 +84,19 @@ function compactTranscript(t: any): string {
 }
 
 function compactResource(r: any): string {
-  return `[${r.category.toUpperCase()}] "${r.label}" → ${r.url}${r.notes ? ` (${r.notes.slice(0, 80)})` : ''}`;
+  // Support both resource_links format and resources table format
+  if (r.url) {
+    return `[${(r.category || r.resource_type || 'doc').toUpperCase()}] "${r.label || r.title}" → ${r.url}${r.notes ? ` (${r.notes.slice(0, 80)})` : ''}`;
+  }
+  const parts = [`[${(r.resource_type || 'doc').toUpperCase()}] "${r.title}"`];
+  if (r.description) parts.push(`— ${r.description.slice(0, 100)}`);
+  if (r.tags?.length) parts.push(`Tags: ${r.tags.join(', ')}`);
+  return parts.join(' ');
+}
+
+function compactResourceContent(r: any, maxChars: number = 4000): string {
+  if (!r.content || r.content.startsWith('[File:') || r.content.startsWith('[External')) return '';
+  return `\n### ${r.title}\n${r.content.slice(0, maxChars)}`;
 }
 
 // ─── Perplexity web research ──────────────────────────────
@@ -300,6 +312,7 @@ These are the user's core sales frameworks, playbooks, and methodology documents
 - Think of yourself as an elite enterprise sales brain that has internalized these frameworks and applies them fluidly across all situations
 
 ${ctx.resources.map(compactResource).join('\n')}
+${mode === "resource-qa" ? ctx.resources.map((r: any) => compactResourceContent(r, 4000)).filter(Boolean).join('\n') : ''}
 ` : '';
 
   const transcriptInstructions = ctx.transcripts?.length ? `
@@ -363,6 +376,21 @@ The email should:
 - Match the user's frameworks (e.g., Command of the Message: tie back to business outcomes)
 
 Output the email in a ready-to-send format with Subject line, Body, and a brief strategy note about why you structured it this way.
+${toolInstructions}`,
+    "resource-qa": `You are Territory Intelligence running in RESOURCE Q&A mode.
+You are a world-class sales training expert who has DEEPLY STUDIED and INTERNALIZED all the user's resource library content below. You don't just reference these materials — you THINK THROUGH them as if you wrote them yourself.
+
+Your capabilities:
+1. **TEACH** — When the user asks to learn about a topic (MEDDICC, Command of the Message, etc.), deliver a masterclass drawing from their actual resource content. Use specific examples, frameworks, and principles from the documents.
+2. **APPLY** — When the user asks to apply a framework to a real deal, combine the resource content with their live CRM data to give specific, actionable analysis.
+3. **PERSONA** — When the user invokes an author or expert ("what would Ian Koniak say"), adopt that person's teaching style and principles based on the resource content attributed to them.
+4. **SYNTHESIZE** — Connect concepts across multiple resources. Show how MEDDICC relates to Command of the Message, how a training course principle applies to a specific deal.
+
+IMPORTANT:
+- Quote or paraphrase specific passages from the resources when teaching
+- Always tie advice back to the user's real accounts and deals
+- Be as specific as the resource content allows — never give generic advice when you have their actual playbooks
+- If the resource is a training course, teach it like you're the instructor
 ${toolInstructions}`,
   };
 
@@ -503,7 +531,7 @@ Deno.serve(async (req) => {
         .order("date", { ascending: false }).limit(1),
       supabase.from("quota_targets").select("*").eq("user_id", user.id).limit(1),
       // Always fetch resources
-      supabase.from("resource_links").select("*").eq("user_id", user.id).limit(100),
+      supabase.from("resources").select("id,title,description,content,tags,resource_type,file_url").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(50),
     ];
 
     // For modes that need deep context, also fetch contacts and transcripts
@@ -582,7 +610,28 @@ Deno.serve(async (req) => {
       }
     }
 
-    const useProModel = mode === "deep" || mode === "deal-strategy";
+    // For resource-qa mode, prioritize resources by keyword matching
+    if (mode === "resource-qa" && ctx.resources?.length) {
+      const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user")?.content?.toLowerCase() || "";
+      const keywords = lastUserMsg.split(/\s+/).filter((w: string) => w.length > 3);
+      
+      // Score resources by keyword relevance
+      const scored = ctx.resources.map((r: any) => {
+        let score = 0;
+        const searchable = `${r.title} ${r.description || ''} ${(r.tags || []).join(' ')}`.toLowerCase();
+        for (const kw of keywords) {
+          if (searchable.includes(kw)) score += 2;
+          if (r.content?.toLowerCase().includes(kw)) score += 1;
+        }
+        return { ...r, _score: score };
+      });
+      
+      // Sort by relevance and keep top 5 with content
+      scored.sort((a: any, b: any) => b._score - a._score);
+      ctx.resources = scored.slice(0, 10); // Keep top 10 for headers, content from top 5
+    }
+
+    const useProModel = mode === "deep" || mode === "deal-strategy" || mode === "resource-qa";
     const model = useProModel ? "google/gemini-2.5-pro" : "google/gemini-3-flash-preview";
     const systemPrompt = buildSystemPrompt(ctx, mode, researchData, pageContext);
 

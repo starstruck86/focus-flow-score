@@ -2,7 +2,7 @@
 import { supabase } from '@/integrations/supabase/client';
 
 export type CopilotMsg = { role: "user" | "assistant"; content: string };
-export type CopilotMode = "quick" | "deep" | "meeting" | "deal-strategy" | "recap-email";
+export type CopilotMode = "quick" | "deep" | "meeting" | "deal-strategy" | "recap-email" | "resource-qa";
 
 const COPILOT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/territory-copilot`;
 
@@ -135,7 +135,8 @@ export const SUGGESTED_QUESTIONS: { text: string; mode: CopilotMode }[] = [
   { text: "Prep me for my next client meeting", mode: "meeting" },
   { text: "Draft a recap email for my last call", mode: "recap-email" },
   { text: "Research & update my top pipeline accounts", mode: "deep" },
-  { text: "Analyze pipeline gaps using my frameworks", mode: "deal-strategy" },
+  { text: "Teach me about MEDDICC", mode: "resource-qa" },
+  { text: "Apply my frameworks to my top deal", mode: "resource-qa" },
   { text: "What changed in my territory this week?", mode: "deep" },
   { text: "Which deals need champion development?", mode: "deal-strategy" },
 ];
@@ -192,11 +193,11 @@ export const PAGE_SUGGESTED_QUESTIONS: Record<string, { text: string; mode: Copi
   ],
   'prep-hub': [
     { text: "Prep me for my next meeting", mode: "meeting" },
-    { text: "What call transcripts should I review before tomorrow?", mode: "quick" },
-    { text: "Summarize key themes from my recent calls", mode: "quick" },
-    { text: "What follow-ups are needed from last week's meetings?", mode: "quick" },
+    { text: "Teach me about MEDDICC", mode: "resource-qa" },
+    { text: "What are the key lessons from my training materials?", mode: "resource-qa" },
+    { text: "Apply my frameworks to my top deal", mode: "resource-qa" },
     { text: "Draft a recap email for my last call", mode: "recap-email" },
-    { text: "Research the account I'm meeting next", mode: "deep" },
+    { text: "If the author of my training reviewed my pipeline, what would they say?", mode: "resource-qa" },
   ],
   trends: [
     { text: "What's trending up or down in my performance?", mode: "quick" },
@@ -244,4 +245,5 @@ export const MODE_CONFIG: Record<CopilotMode, { label: string; description: stri
   meeting: { label: "Meeting Prep", description: "Full brief using your frameworks + transcripts", icon: "📋" },
   "deal-strategy": { label: "Deal Strategy", description: "Framework-based deal analysis (MEDDICC, etc.)", icon: "🎯" },
   "recap-email": { label: "Recap Email", description: "Draft follow-up emails from call transcripts", icon: "✉️" },
+  "resource-qa": { label: "Resource Q&A", description: "Learn from your playbooks, frameworks & training", icon: "📚" },
 };
