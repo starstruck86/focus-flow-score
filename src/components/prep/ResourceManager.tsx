@@ -236,10 +236,10 @@ export function ResourceManager() {
 
   // Bulk URL handler
   const handleAddUrls = async () => {
-    const urls = urlInput
-      .split('\n')
-      .map(u => u.trim())
-      .filter(u => u && (u.startsWith('http://') || u.startsWith('https://')));
+    // Extract all URLs from the input — handles newlines, spaces, commas, or mixed separators
+    const urlPattern = /https?:\/\/[^\s,<>"']+/gi;
+    const urls = (urlInput.match(urlPattern) || []).map(u => u.replace(/[)}\]]+$/, '').trim());
+    const uniqueUrls = [...new Set(urls)];
     if (!urls.length) {
       toast.error('No valid URLs found');
       return;
