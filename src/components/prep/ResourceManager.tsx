@@ -304,6 +304,14 @@ export function ResourceManager() {
         <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setShowReorganize(true)}>
           <Sparkles className="h-3.5 w-3.5 mr-1" /> Reorganize
         </Button>
+        <Button size="sm" variant="ghost" className="h-8 text-xs relative" onClick={() => setShowDuplicates(true)}>
+          <AlertTriangle className="h-3.5 w-3.5 mr-1" /> Duplicates
+          {totalDuplicates > 0 && (
+            <Badge variant="destructive" className="absolute -top-1.5 -right-1.5 h-4 min-w-4 text-[9px] px-1 flex items-center justify-center">
+              {totalDuplicates}
+            </Badge>
+          )}
+        </Button>
       </div>
 
       {/* Classifying indicator */}
