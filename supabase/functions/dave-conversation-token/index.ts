@@ -210,7 +210,7 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
       .select("name, title, email, buyer_role, influence_level, department, seniority, status, account_id")
       .eq("user_id", userId)
       .order("updated_at", { ascending: false })
-      .limit(50),
+      .limit(25),
     // 8. Resources (battlecards, frameworks, methodology docs)
     supabase
       .from("resources")
