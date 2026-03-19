@@ -531,7 +531,7 @@ Deno.serve(async (req) => {
         .order("date", { ascending: false }).limit(1),
       supabase.from("quota_targets").select("*").eq("user_id", user.id).limit(1),
       // Always fetch resources
-      supabase.from("resource_links").select("*").eq("user_id", user.id).limit(100),
+      supabase.from("resources").select("id,title,description,content,tags,resource_type,file_url").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(50),
     ];
 
     // For modes that need deep context, also fetch contacts and transcripts
