@@ -20,7 +20,9 @@ import {
 import { cn } from '@/lib/utils';
 import {
   useResourceFolders, useResources, useCreateFolder, useCreateResource,
-  useDeleteResource, useDeleteFolder, useRenameFolder, useUpdateResource, type Resource, type ResourceFolder,
+  useDeleteResource, useDeleteFolder, useRenameFolder, useUpdateResource,
+  useOperationalizeResource, useResourceSuggestions,
+  type Resource, type ResourceFolder, type ResourceSuggestion,
 } from '@/hooks/useResources';
 import { useClassifyResource, useUploadResource, useAddUrlResource, type ClassificationResult } from '@/hooks/useResourceUpload';
 import { ResourceEditor } from './ResourceEditor';
