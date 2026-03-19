@@ -205,6 +205,8 @@ export function ResourceManager() {
           }
         })
       );
+      // Small delay between batches to avoid rate limiting
+      if (i + 3 < items.length) await new Promise(r => setTimeout(r, 300));
     }
   };
 
