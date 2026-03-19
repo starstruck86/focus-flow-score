@@ -13,7 +13,6 @@ import { createClientTools } from './dave/clientTools';
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  micStream: MediaStream;
 }
 
 const DISMISSAL_PHRASES = [
@@ -25,15 +24,16 @@ const MAX_RECONNECTS = 2;
 const RECONNECT_DELAYS = [2000, 5000];
 const STABILITY_WINDOW_MS = 3000;
 
-export function DaveConversationMode({ isOpen, onClose, micStream }: Props) {
+export function DaveConversationMode({ isOpen, onClose }: Props) {
   const navigate = useNavigate();
   const { ask: askCopilot } = useCopilot();
-  const { fetchSession } = useDaveContext();
+  const { getSession, invalidateCache } = useDaveContext();
   const [isConnecting, setIsConnecting] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
   const [transcript, setTranscript] = useState<Array<{ role: 'user' | 'agent'; text: string }>>([]);
   const [error, setError] = useState<string | null>(null);
   const [reconnectInfo, setReconnectInfo] = useState<string | null>(null);
+  const [vadActive, setVadActive] = useState(false);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const orbRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number>(0);
@@ -49,12 +49,9 @@ export function DaveConversationMode({ isOpen, onClose, micStream }: Props) {
   const isReconnectRef = useRef(false);
   const connectedAtRef = useRef<number>(0);
   const stabilityTimerRef = useRef<ReturnType<typeof setTimeout>>();
-  const micStreamRef = useRef(micStream);
 
-  // Keep refs in sync
   useEffect(() => { isOpenRef.current = isOpen; }, [isOpen]);
   useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
-  useEffect(() => { micStreamRef.current = micStream; }, [micStream]);
 
   const clientTools = useMemo(
     () => createClientTools(navigate, askCopilot),
@@ -71,42 +68,32 @@ export function DaveConversationMode({ isOpen, onClose, micStream }: Props) {
   const conversation = useConversation({
     clientTools,
     onConnect: () => {
-      console.log('Dave connected');
+      console.log('[Dave] Connected');
       setError(null);
       setReconnectInfo(null);
       connectedAtRef.current = Date.now();
 
-      // Stability window: only reset reconnect counter after 3s of stable connection
       if (stabilityTimerRef.current) clearTimeout(stabilityTimerRef.current);
       stabilityTimerRef.current = setTimeout(() => {
         reconnectAttemptRef.current = 0;
       }, STABILITY_WINDOW_MS);
     },
     onDisconnect: () => {
-      console.log('Dave disconnected');
+      console.log('[Dave] Disconnected');
       if (stabilityTimerRef.current) clearTimeout(stabilityTimerRef.current);
 
-      // Use ref to check current isOpen value (not stale closure)
       if (
         isOpenRef.current &&
         reconnectAttemptRef.current < MAX_RECONNECTS &&
         !startingRef.current &&
-        !reconnectTimerRef.current // Don't schedule if one is already pending
+        !reconnectTimerRef.current
       ) {
-        // Check mic stream is still alive
-        const tracks = micStreamRef.current?.getTracks() ?? [];
-        const micAlive = tracks.some(t => t.readyState === 'live');
-        if (!micAlive) {
-          setError('Microphone disconnected. Close and reopen Dave.');
-          return;
-        }
-
         const attempt = reconnectAttemptRef.current;
         const delay = RECONNECT_DELAYS[attempt] ?? RECONNECT_DELAYS[RECONNECT_DELAYS.length - 1];
         reconnectAttemptRef.current++;
         isReconnectRef.current = true;
         setReconnectInfo(`Reconnecting (${reconnectAttemptRef.current}/${MAX_RECONNECTS})...`);
-        console.log(`Auto-reconnecting in ${delay}ms (attempt ${reconnectAttemptRef.current})`);
+        console.log(`[Dave] Auto-reconnecting in ${delay}ms (attempt ${reconnectAttemptRef.current})`);
         reconnectTimerRef.current = setTimeout(() => {
           reconnectTimerRef.current = undefined;
           if (isOpenRef.current) startConversationRef.current?.();
@@ -114,6 +101,7 @@ export function DaveConversationMode({ isOpen, onClose, micStream }: Props) {
       }
     },
     onMessage: (message: any) => {
+      console.log('[Dave] Message:', message?.type, message);
       if (message?.type === 'user_transcript' && message?.user_transcription_event?.user_transcript) {
         const text = message.user_transcription_event.user_transcript;
         setTranscript(prev => [...prev, { role: 'user', text }]);
@@ -127,11 +115,14 @@ export function DaveConversationMode({ isOpen, onClose, micStream }: Props) {
       }
     },
     onError: (error) => {
-      console.error('Dave error:', error);
+      console.error('[Dave] Error:', error);
       setError('Connection error. Tap to retry.');
       toast.error('Dave connection error');
     },
-  });
+    onVadScore: (score: number) => {
+      setVadActive(score > 0.5);
+    },
+  } as any);
 
   // Auto-scroll transcript
   useEffect(() => {
@@ -158,7 +149,6 @@ export function DaveConversationMode({ isOpen, onClose, micStream }: Props) {
     setIsConnecting(true);
     setError(null);
 
-    // Only clear transcript on fresh start, not reconnect
     if (!isReconnectRef.current) {
       setTranscript([]);
     }
@@ -172,12 +162,10 @@ export function DaveConversationMode({ isOpen, onClose, micStream }: Props) {
     }, 15000);
 
     try {
-      // Mic is already acquired via tap handler — no getUserMedia call here
-
-      // Reuse cached session data on reconnect, fetch fresh on first connect
+      // Get session data (cached if fresh, otherwise fetches)
       let sessionData = sessionDataRef.current;
       if (!sessionData || !isReconnectRef.current) {
-        sessionData = await fetchSession();
+        sessionData = await getSession();
         sessionDataRef.current = sessionData;
       }
 
@@ -193,22 +181,23 @@ export function DaveConversationMode({ isOpen, onClose, micStream }: Props) {
         overrides.agent = { ...overrides.agent, firstMessage: sessionData.firstMessage };
       }
 
+      console.log('[Dave] Starting session...');
       await conversation.startSession({
         conversationToken: sessionData.token,
         connectionType: 'webrtc',
         overrides: Object.keys(overrides).length ? overrides : undefined,
       } as any);
 
+      console.log('[Dave] Session started successfully');
       clearTimeout(timeout);
     } catch (err: any) {
       clearTimeout(timeout);
-      console.error('Failed to start Dave:', err);
+      console.error('[Dave] Failed to start:', err);
 
-      // If reconnect with cached token failed, try fresh token once
       if (isReconnectRef.current && sessionDataRef.current) {
-        console.log('Cached token failed, fetching fresh token...');
+        console.log('[Dave] Cached token failed, invalidating cache...');
         sessionDataRef.current = null;
-        isReconnectRef.current = false;
+        invalidateCache();
       }
 
       setError(err.message || 'Failed to connect');
@@ -219,25 +208,19 @@ export function DaveConversationMode({ isOpen, onClose, micStream }: Props) {
       isReconnectRef.current = false;
       setReconnectInfo(null);
     }
-  }, [conversation, fetchSession]);
+  }, [conversation, getSession, invalidateCache]);
 
-  // Keep ref in sync so reconnect never uses stale closure
   useEffect(() => {
     startConversationRef.current = startConversation;
   }, [startConversation]);
 
   const sessionStartRef = useRef<number>(Date.now());
 
-  const stopMicTracks = useCallback(() => {
-    micStreamRef.current?.getTracks().forEach(t => t.stop());
-  }, []);
-
   const endConversation = useCallback(async () => {
     reconnectAttemptRef.current = MAX_RECONNECTS;
     clearReconnectTimer();
     if (stabilityTimerRef.current) clearTimeout(stabilityTimerRef.current);
 
-    // Use ref for latest transcript (avoids stale closure)
     const currentTranscript = transcriptRef.current;
     if (currentTranscript.length > 0) {
       const durationSeconds = Math.round((Date.now() - sessionStartRef.current) / 1000);
@@ -251,26 +234,25 @@ export function DaveConversationMode({ isOpen, onClose, micStream }: Props) {
           });
         }
       } catch (err) {
-        console.error('Failed to save Dave transcript:', err);
+        console.error('[Dave] Failed to save transcript:', err);
       }
     }
 
     await conversation.endSession();
-    stopMicTracks();
     sessionDataRef.current = null;
     onClose();
-  }, [conversation, onClose, clearReconnectTimer, stopMicTracks]);
+  }, [conversation, onClose, clearReconnectTimer]);
 
-  // Single start on mount — mic is already acquired via gesture
+  // Start conversation on mount — no manual mic needed, SDK handles it
   useEffect(() => {
-    if (micStream && !startingRef.current) {
+    if (!startingRef.current) {
       reconnectAttemptRef.current = 0;
       isReconnectRef.current = false;
       sessionDataRef.current = null;
       startConversation();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount only
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -278,7 +260,6 @@ export function DaveConversationMode({ isOpen, onClose, micStream }: Props) {
       reconnectAttemptRef.current = MAX_RECONNECTS;
       clearReconnectTimer();
       if (stabilityTimerRef.current) clearTimeout(stabilityTimerRef.current);
-      stopMicTracks();
       if (conversation.status === 'connected') {
         conversation.endSession();
       }
@@ -295,12 +276,16 @@ export function DaveConversationMode({ isOpen, onClose, micStream }: Props) {
     ? 'bg-amber-500/30'
     : isSpeaking
     ? 'bg-blue-500/40'
+    : vadActive
+    ? 'bg-emerald-400/40'
     : 'bg-emerald-500/30';
 
   const orbGlow = !isConnected
     ? 'shadow-[0_0_60px_20px_rgba(245,158,11,0.3)]'
     : isSpeaking
     ? 'shadow-[0_0_80px_30px_rgba(59,130,246,0.4)]'
+    : vadActive
+    ? 'shadow-[0_0_80px_30px_rgba(16,185,129,0.5)]'
     : 'shadow-[0_0_60px_20px_rgba(16,185,129,0.3)]';
 
   const statusText = reconnectInfo
@@ -311,6 +296,8 @@ export function DaveConversationMode({ isOpen, onClose, micStream }: Props) {
     ? error || 'Disconnected'
     : isSpeaking
     ? 'Dave is speaking'
+    : vadActive
+    ? 'Hearing you...'
     : 'Listening...';
 
   const statusIcon = reconnectInfo ? (
@@ -371,7 +358,7 @@ export function DaveConversationMode({ isOpen, onClose, micStream }: Props) {
 
           {error && !isConnecting && !reconnectInfo && (
             <button
-              onClick={() => { reconnectAttemptRef.current = 0; isReconnectRef.current = false; sessionDataRef.current = null; startConversation(); }}
+              onClick={() => { reconnectAttemptRef.current = 0; isReconnectRef.current = false; sessionDataRef.current = null; invalidateCache(); startConversation(); }}
               className="px-4 py-2 bg-white/10 rounded-full text-white/80 text-sm hover:bg-white/20"
             >
               Tap to retry

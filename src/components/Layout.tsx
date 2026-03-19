@@ -44,7 +44,6 @@ const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
   '/settings': { page: 'settings', description: 'Settings — app configuration and preferences' },
 };
 
-// Color-coded tab system — each tab has a distinct color identity
 type NavColor = 'today' | 'tasks' | 'outreach' | 'renewals' | 'prep' | 'coach' | 'trends' | 'quota' | 'settings';
 
 interface NavItemDef {
@@ -71,7 +70,6 @@ const navRow2: NavItemDef[] = [
 
 const ALL_NAV = [...navRow1, ...navRow2];
 
-// Map color token names to CSS variable references
 const COLOR_VAR: Record<NavColor, string> = {
   today: 'var(--nav-today)',
   tasks: 'var(--nav-tasks)',
@@ -127,7 +125,6 @@ function NavItem({ item }: { item: NavItemDef }) {
   );
 }
 
-/** Get the active tab's color for page-level accent */
 function useActiveTabColor(): NavColor {
   const location = useLocation();
   const match = ALL_NAV.find(item =>
@@ -143,13 +140,10 @@ function BottomNav() {
     >
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
       <div className="max-w-3xl mx-auto px-1 pb-1">
-        {/* Row 1 — Primary nav */}
         <div className="flex items-center justify-around h-12">
           {navRow1.map(item => <NavItem key={item.to} item={item} />)}
         </div>
-        {/* Divider */}
         <div className="h-px bg-border/30 mx-4" />
-        {/* Row 2 — Secondary nav */}
         <div className="flex items-center justify-around h-12">
           {navRow2.map(item => <NavItem key={item.to} item={item} />)}
         </div>
@@ -187,28 +181,24 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { setPageContext } = useCopilot();
   const activeColor = useActiveTabColor();
   
-  // Dave state
+  // Dave state — simplified, no mic stream management
   const [daveOpen, setDaveOpen] = useState(false);
-  const [daveStream, setDaveStream] = useState<MediaStream | null>(null);
   const [showDaveTapPrompt, setShowDaveTapPrompt] = useState(false);
 
-  // Handle ?dave=1 from Siri Shortcuts — show tap prompt instead of auto-opening
+  // Handle ?dave=1 from Siri Shortcuts
   useEffect(() => {
     if (searchParams.get('dave') === '1') {
       setShowDaveTapPrompt(true);
-      // Clean URL param
       const next = new URLSearchParams(searchParams);
       next.delete('dave');
       setSearchParams(next, { replace: true });
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Set page-accent CSS variable on the root element
   useEffect(() => {
     document.documentElement.style.setProperty('--page-accent', COLOR_VAR[activeColor]);
   }, [activeColor]);
 
-  // Set page context for copilot based on current route
   useEffect(() => {
     const path = location.pathname;
     if (PAGE_CONTEXT_MAP[path]) {
@@ -226,32 +216,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
     borderBottomColor: `hsl(${COLOR_VAR[activeColor]} / 0.2)`,
   }), [activeColor]);
 
-  const handleOpenDave = (stream: MediaStream) => {
-    setDaveStream(stream);
+  const handleOpenDave = () => {
     setDaveOpen(true);
     setShowDaveTapPrompt(false);
   };
 
   const handleCloseDave = () => {
     setDaveOpen(false);
-    setDaveStream(null);
-  };
-
-  // Tap prompt handler — acquires mic in the gesture, then opens Dave
-  const handleDaveTapPromptTap = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-      handleOpenDave(stream);
-    } catch {
-      setShowDaveTapPrompt(false);
-    }
   };
 
   return (
     <div className="min-h-screen bg-background flex flex-col w-full pt-[env(safe-area-inset-top)]">
-      {/* Top bar — minimal, color-accented */}
       <header
         className="flex items-center justify-between px-4 py-2 border-b sticky top-0 z-40 bg-background/95 backdrop-blur-md"
         style={headerAccentStyle}
@@ -286,16 +261,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      {/* Execution Header — Rings + Journal + Blocks */}
       <div className="px-4 lg:px-6 max-w-4xl mx-auto w-full pt-2 space-y-2">
-        {/* Activity Rings + Week Strip row */}
         <div className="flex items-start gap-4">
           <div className="flex-1 min-w-0">
             <GlobalWeekStrip />
           </div>
           <ActivityRings />
         </div>
-        {/* Today's Blocks */}
         <DayTimeline />
       </div>
 
@@ -304,25 +276,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      {/* Bottom Nav - 2 rows, color-coded */}
       <BottomNav />
-      
-      {/* Back to Today shortcut */}
       <BackToToday />
-      
-      {/* Floating Action Button */}
       <GlobalFAB position="bottom-right" />
 
       {/* Dave Tap Prompt for Siri Shortcut opens */}
       <AnimatePresence>
         {showDaveTapPrompt && !daveOpen && (
-          <DaveTapPrompt onTap={handleDaveTapPromptTap} />
+          <DaveTapPrompt onTap={handleOpenDave} />
         )}
       </AnimatePresence>
 
-      {/* Dave Conversational AI Overlay */}
-      {daveOpen && daveStream && (
-        <DaveConversationMode isOpen={daveOpen} onClose={handleCloseDave} micStream={daveStream} />
+      {/* Dave Conversational AI Overlay — SDK handles mic internally */}
+      {daveOpen && (
+        <DaveConversationMode isOpen={daveOpen} onClose={handleCloseDave} />
       )}
     </div>
   );
