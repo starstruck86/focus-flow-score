@@ -85,9 +85,12 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
       },
     },
     onConnect: () => {
-      console.log('[Dave] Connected — overrides applied via useConversation hook');
+      console.log('[Dave] ✅ Connected — overrides applied via useConversation hook');
+      console.log('[Dave] Context length:', sessionDataRef.current?.context?.length, 'chars');
+      console.log('[Dave] First message:', sessionDataRef.current?.firstMessage?.substring(0, 80));
       setError(null);
       setReconnectInfo(null);
+      setIsConnecting(false);
       connectedAtRef.current = Date.now();
 
       if (stabilityTimerRef.current) clearTimeout(stabilityTimerRef.current);
@@ -99,21 +102,28 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
       if (sessionDataRef.current?.context) {
         try {
           conversation.sendContextualUpdate(sessionDataRef.current.context);
-          console.log('[Dave] Backup context sent via sendContextualUpdate (' + sessionDataRef.current.context.length + ' chars)');
+          console.log('[Dave] Backup context sent via sendContextualUpdate');
         } catch (e) {
           console.warn('[Dave] Failed to send contextual update (fallback):', e);
         }
       }
 
-      // Greeting watchdog: warn if no agent message within 5s
+      // Greeting watchdog: warn if no agent message within 8s
       if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
       greetingWatchdogRef.current = setTimeout(() => {
-        console.warn('[Dave] No agent greeting received within 5s of connection — agent may not have activated');
-      }, 5000);
+        console.warn('[Dave] No agent greeting received within 8s of connection');
+      }, 8000);
     },
     onDisconnect: () => {
-      console.log('[Dave] Disconnected');
+      const uptime = connectedAtRef.current ? Date.now() - connectedAtRef.current : 0;
+      console.log(`[Dave] ❌ Disconnected (uptime: ${uptime}ms)`);
       if (stabilityTimerRef.current) clearTimeout(stabilityTimerRef.current);
+
+      // If disconnected almost immediately, treat as error
+      if (uptime > 0 && uptime < 2000) {
+        console.warn('[Dave] Immediate disconnect — likely transport or auth issue');
+        setError('Connection dropped immediately. Tap to retry.');
+      }
 
       if (
         isOpenRef.current &&
@@ -131,6 +141,8 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
           reconnectTimerRef.current = undefined;
           if (isOpenRef.current) startConversationRef.current?.();
         }, delay);
+      } else if (isOpenRef.current && reconnectAttemptRef.current >= MAX_RECONNECTS && !error) {
+        setError('Connection lost. Tap to retry.');
       }
     },
     onMessage: (message: any) => {
@@ -223,7 +235,11 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
 
       // ─── CLEAN: startSession only needs the signedUrl ───
       console.log('[Dave] Starting session with signed URL | context:', sessionDataRef.current.context?.length, 'chars');
-      await conversation.startSession({ signedUrl: url });
+      console.log('[Dave] Signed URL prefix:', url?.substring(0, 60));
+      await conversation.startSession({
+        signedUrl: url,
+        connectionType: 'websocket',
+      } as any);
 
       console.log('[Dave] Session started successfully');
       clearTimeout(timeout);
