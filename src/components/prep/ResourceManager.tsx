@@ -487,6 +487,9 @@ export function ResourceManager() {
                       <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setEditingResource(resource); }}>
                         <Edit3 className="h-3.5 w-3.5 mr-2" /> Edit
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setRenamingResourceId(resource.id); setRenameResourceTitle(resource.title); }}>
+                        <Tag className="h-3.5 w-3.5 mr-2" /> Rename
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setViewingVersions(resource.id); }}>
                         <Clock className="h-3.5 w-3.5 mr-2" /> Version History
                       </DropdownMenuItem>
