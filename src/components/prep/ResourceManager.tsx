@@ -11,7 +11,7 @@ import {
   Folder, FolderPlus, FilePlus, FileText, Presentation, Mail, BookOpen,
   ChevronRight, MoreHorizontal, Search, Trash2, Edit3, Clock,
   Star, Tag, Copy, Upload, Link2, Sparkles, Target, Shield,
-  GraduationCap, MessageSquare, Loader2, Check, X,
+  GraduationCap, MessageSquare, Loader2, Check, X, AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
