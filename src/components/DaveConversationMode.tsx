@@ -65,6 +65,8 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
     }
   }, []);
 
+  const greetingWatchdogRef = useRef<ReturnType<typeof setTimeout>>();
+
   const conversation = useConversation({
     clientTools,
     onConnect: () => {
@@ -77,6 +79,12 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
       stabilityTimerRef.current = setTimeout(() => {
         reconnectAttemptRef.current = 0;
       }, STABILITY_WINDOW_MS);
+
+      // Greeting watchdog: warn if no agent message within 5s
+      if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
+      greetingWatchdogRef.current = setTimeout(() => {
+        console.warn('[Dave] No agent greeting received within 5s of connection — agent may not have activated');
+      }, 5000);
     },
     onDisconnect: () => {
       console.log('[Dave] Disconnected');
@@ -111,6 +119,7 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
           setTimeout(() => endConversation(), 1500);
         }
       } else if (message?.type === 'agent_response' && message?.agent_response_event?.agent_response) {
+        if (greetingWatchdogRef.current) { clearTimeout(greetingWatchdogRef.current); greetingWatchdogRef.current = undefined; }
         setTranscript(prev => [...prev, { role: 'agent', text: message.agent_response_event.agent_response }]);
       }
     },
@@ -169,24 +178,35 @@ export function DaveConversationMode({ isOpen, onClose }: Props) {
         sessionDataRef.current = sessionData;
       }
 
-      const overrides: any = {};
+      // Mic permission pre-flight: ensure browser grants access before SDK tries
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(t => t.stop());
+        console.log('[Dave] Mic pre-flight OK');
+      } catch (micErr) {
+        console.error('[Dave] Mic pre-flight failed:', micErr);
+        setError('Microphone access required');
+        setIsConnecting(false);
+        startingRef.current = false;
+        clearTimeout(timeout);
+        return;
+      }
+
+      // Build dynamicVariables for context delivery (supported SDK parameter)
+      const dynamicVariables: Record<string, string | number | boolean> = {};
       if (sessionData.context) {
-        overrides.agent = {
-          prompt: {
-            prompt: `DYNAMIC CONTEXT (current as of right now):\n${sessionData.context}\n\nUse this context to give informed, specific answers. Reference account names, meeting times, and deal values directly.`,
-          },
-        };
+        dynamicVariables.context = sessionData.context;
       }
       if (sessionData.firstMessage) {
-        overrides.agent = { ...overrides.agent, firstMessage: sessionData.firstMessage };
+        dynamicVariables.first_message = sessionData.firstMessage;
       }
 
       console.log('[Dave] Starting session...');
       await conversation.startSession({
         conversationToken: sessionData.token,
         connectionType: 'webrtc',
-        overrides: Object.keys(overrides).length ? overrides : undefined,
-      } as any);
+        ...(Object.keys(dynamicVariables).length ? { dynamicVariables } : {}),
+      });
 
       console.log('[Dave] Session started successfully');
       clearTimeout(timeout);
