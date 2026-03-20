@@ -231,6 +231,8 @@ export default function Dashboard() {
             </TabsContent>
           </Tabs>
         );
+      case 'deal-risk-alerts':
+        return <DealRiskAlerts />;
       case 'smart-work-queue':
         return <SmartWorkQueue />;
       case 'pclub-math':
