@@ -993,7 +993,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         .from('accounts')
         .select('id, name')
         .eq('user_id', userId)
-        .ilike('name', `%${params.name}%`)
+        .eq('name', params.name)
         .limit(1);
 
       if (existing?.length) return `Account "${existing[0].name}" already exists. Use update_account instead.`;
