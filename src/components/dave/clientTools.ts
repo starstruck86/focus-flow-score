@@ -579,6 +579,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
 
       const label = params.metric.charAt(0).toUpperCase() + params.metric.slice(1);
       toast.success(`${label} updated`, { description: `${oldValue} → ${newValue} (${mode === 'add' ? '+' : '='}${params.value})` });
+      emitMetricsUpdated({ [dbField]: newValue });
       return `Updated ${params.metric}: ${oldValue} → ${newValue}`;
     },
 
