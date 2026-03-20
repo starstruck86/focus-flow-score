@@ -86,6 +86,7 @@ function DaveHealthSection() {
   const [loading, setLoading] = useState(false);
   const [smokeLoading, setSmokeLoading] = useState(false);
   const [smokeResult, setSmokeResult] = useState<SmokeTestResult | null>(null);
+  const [registering, setRegistering] = useState(false);
 
   const runCheck = async () => {
     setLoading(true);
