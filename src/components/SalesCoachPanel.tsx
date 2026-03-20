@@ -130,6 +130,8 @@ export function SalesCoachPanel({ open, onOpenChange }: SalesCoachPanelProps) {
   const gradeTranscript = useGradeTranscript();
   const [selectedTranscriptId, setSelectedTranscriptId] = useState<string | null>(null);
   const { data: selectedGrade } = useTranscriptGrade(selectedTranscriptId || undefined);
+  const [reScoring, setReScoring] = useState(false);
+  const [reScoreProgress, setReScoreProgress] = useState({ current: 0, total: 0 });
 
   // Ungraded transcripts
   const gradedIds = new Set((allGrades || []).map(g => g.transcript_id));
