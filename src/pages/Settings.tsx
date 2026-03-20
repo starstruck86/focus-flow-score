@@ -77,6 +77,7 @@ interface SmokeTestResult {
   context: { pass: boolean; detail: string };
   identity: { pass: boolean; detail: string };
   firstMessage: { pass: boolean; detail: string };
+  overrides: { pass: boolean | null; detail: string };
 }
 
 function DaveHealthSection() {
