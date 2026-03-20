@@ -435,8 +435,9 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
   }
 
   if (quotaRes.data?.length) {
-    const q = quotaRes.data[0];
-    sections.push(`QUOTA: annual=$${q.annual_target?.toLocaleString() || "—"} quarterly=$${q.quarterly_target?.toLocaleString() || "—"} period=${q.quota_period || "—"}`);
+    const q = quotaRes.data[0] as any;
+    const totalQuota = (q.new_arr_quota || 0) + (q.renewal_arr_quota || 0);
+    sections.push(`QUOTA: total=$${totalQuota.toLocaleString()} new_logo=$${(q.new_arr_quota || 0).toLocaleString()} renewal=$${(q.renewal_arr_quota || 0).toLocaleString()} FY:${q.fiscal_year_start || "—"} to ${q.fiscal_year_end || "—"}`);
   }
 
   if (benchmarksRes.data?.length) {
