@@ -60,8 +60,8 @@ export function AIInsightsNarrator() {
     // Correlations
     if (data.correlations?.length > 0) {
       const strongest = data.correlations[0];
-      if (strongest.correlation > 0.5) {
-        results.push({ text: `${strongest.factor1} and ${strongest.factor2} are strongly correlated — leverage this`, type: 'neutral', icon: Lightbulb });
+      if (strongest.strength === 'strong') {
+        results.push({ text: `${strongest.label}: ${strongest.description}`, type: 'neutral', icon: Lightbulb });
       }
     }
 

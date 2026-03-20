@@ -16,7 +16,7 @@ export function RelationshipHealthCard({ accountId }: { accountId: string }) {
 
     const now = new Date();
     const engaged = acctContacts.filter(c => c.lastTouchDate && differenceInDays(now, new Date(c.lastTouchDate)) < 30);
-    const champions = acctContacts.filter(c => c.buyerRole === 'champion' || c.influenceLevel === 'high');
+    const champions = acctContacts.filter(c => c.status === 'engaged');
     const multiThreaded = new Set(acctContacts.map(c => c.department).filter(Boolean)).size >= 2;
 
     const score = Math.min(100, Math.round(
