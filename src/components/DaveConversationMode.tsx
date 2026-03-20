@@ -117,6 +117,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
           apiKey: data.apiKeyValid,
           agentId: data.agentIdSet,
           tokenOk: data.tokenGenOk,
+          overridesEnabled: data.overridesEnabled,
         });
       }
     }).catch(() => {});
