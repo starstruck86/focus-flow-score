@@ -1,9 +1,10 @@
 // Data Sync Bridge: Hydrates Zustand from DB on load, writes mutations back
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStore } from '@/store/useStore';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
 import type { Account, Contact, Renewal, Opportunity, Task, ChurnRisk } from '@/types';
 
 // ── Sync status (exported for save indicator) ─────────────
