@@ -239,6 +239,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         }, { onConflict: 'user_id,opportunity_id' });
 
       if (error) return `Failed to update methodology: ${error.message}`;
+      emitDataChanged('opportunities');
       
       const action = params.confirmed ? '✅ Confirmed' : params.notes ? '📝 Updated' : 'Updated';
       toast.success('MEDDICC updated', { description: `${opps[0].name}: ${params.field} ${action}` });
