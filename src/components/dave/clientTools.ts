@@ -227,7 +227,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       if (params.confirmed !== undefined) updates[`${fieldKey}_confirmed`] = params.confirmed;
       if (params.notes) updates[`${fieldKey}_notes`] = params.notes;
 
-      const { error } = await (supabase.from('opportunity_methodology' as any) as any)
+      const { error } = await supabase.from('opportunity_methodology')
         .upsert({
           user_id: userId,
           opportunity_id: opps[0].id,
@@ -801,8 +801,20 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
 
       const { data: tasks } = await query;
       if (!tasks?.length) return filter === 'today' ? 'No tasks due today.' : 'No matching tasks found.';
+
+      // Resolve linked_account_id to account names
+      const accountIds = [...new Set(tasks.map(t => t.linked_account_id).filter(Boolean))];
+      let accountMap: Record<string, string> = {};
+      if (accountIds.length) {
+        const { data: accts } = await supabase.from('accounts').select('id, name').in('id', accountIds);
+        if (accts) accountMap = Object.fromEntries(accts.map(a => [a.id, a.name]));
+      }
+
       return `${tasks.length} tasks${filter === 'today' ? ' for today' : ''}:\n` +
-        tasks.map(t => `• [${t.priority || 'P2'}] ${t.title}${t.due_date ? ` (due ${t.due_date})` : ''} — ${t.status}`).join('\n');
+        tasks.map(t => {
+          const acctName = t.linked_account_id ? accountMap[t.linked_account_id] : null;
+          return `• [${t.priority || 'P2'}] ${t.title}${acctName ? ` (${acctName})` : ''}${t.due_date ? ` due ${t.due_date}` : ''} — ${t.status}`;
+        }).join('\n');
     },
 
     // ── Calendar ───────────────────────────────────────────────────
@@ -1112,7 +1124,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
 
       const [quotaRes, closedRes] = await Promise.all([
         supabase.from('quota_targets').select('*').eq('user_id', userId).limit(1),
-        supabase.from('opportunities').select('arr, deal_type, one_time_amount').eq('user_id', userId).eq('status', 'closed-won'),
+        supabase.from('opportunities').select('arr, deal_type').eq('user_id', userId).eq('status', 'closed-won'),
       ]);
 
       const quota = quotaRes.data?.[0];
@@ -1121,7 +1133,6 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       const closed = closedRes.data || [];
       const newArr = closed.filter(o => o.deal_type === 'new-logo').reduce((s, o) => s + (o.arr || 0), 0);
       const renewalArr = closed.filter(o => o.deal_type !== 'new-logo').reduce((s, o) => s + (o.arr || 0), 0);
-      const oneTime = closed.reduce((s, o) => s + (o.one_time_amount || 0), 0);
       const totalQuota = (quota.new_arr_quota || 0) + (quota.renewal_arr_quota || 0);
       const totalClosed = newArr + renewalArr;
       const attainment = totalQuota ? Math.round((totalClosed / totalQuota) * 100) : 0;
@@ -1130,7 +1141,6 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       summary += `Total attainment: ${attainment}% ($${Math.round(totalClosed / 1000)}k of $${Math.round(totalQuota / 1000)}k)\n`;
       summary += `New logo: $${Math.round(newArr / 1000)}k of $${Math.round((quota.new_arr_quota || 0) / 1000)}k\n`;
       summary += `Renewal: $${Math.round(renewalArr / 1000)}k of $${Math.round((quota.renewal_arr_quota || 0) / 1000)}k\n`;
-      if (oneTime > 0) summary += `One-time revenue: $${Math.round(oneTime / 1000)}k\n`;
       summary += `Gap to quota: $${Math.round(Math.max(0, totalQuota - totalClosed) / 1000)}k`;
 
       if (attainment >= 100) summary += `\n🎉 You're at or above quota! Accelerators may apply.`;
@@ -1335,18 +1345,35 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       if (!userId) return 'Not authenticated';
 
       const entity = params.entity.toLowerCase();
-      if (!['accounts', 'opportunities', 'tasks'].includes(entity)) {
+
+      // Whitelist valid fields per entity to prevent invalid column errors
+      const VALID_FIELDS: Record<string, string[]> = {
+        accounts: ['account_status', 'tier', 'priority', 'motion', 'notes', 'next_step', 'outreach_status', 'industry', 'cadence_name'],
+        opportunities: ['stage', 'status', 'arr', 'close_date', 'next_step', 'notes', 'deal_type'],
+        tasks: ['status', 'priority', 'due_date', 'notes', 'category'],
+      };
+
+      if (!VALID_FIELDS[entity]) {
         return `Bulk update only supports accounts, opportunities, and tasks.`;
+      }
+
+      const filterField = ACCOUNT_FIELDS[params.filter_field.toLowerCase()] || params.filter_field;
+      const updateField = (entity === 'accounts' ? ACCOUNT_FIELDS[params.update_field.toLowerCase()] : null) || params.update_field;
+
+      if (!VALID_FIELDS[entity].includes(filterField) && filterField !== 'name' && filterField !== 'title') {
+        return `Invalid filter field "${params.filter_field}" for ${entity}. Valid: name, ${VALID_FIELDS[entity].join(', ')}`;
+      }
+      if (!VALID_FIELDS[entity].includes(updateField)) {
+        return `Invalid update field "${params.update_field}" for ${entity}. Valid: ${VALID_FIELDS[entity].join(', ')}`;
       }
 
       const table = entity as 'accounts' | 'opportunities' | 'tasks';
 
-      // Count matching records first
       const { data: matches, count } = await supabase
         .from(table)
         .select('id', { count: 'exact' })
         .eq('user_id', userId)
-        .ilike(params.filter_field, `%${params.filter_value}%`)
+        .ilike(filterField, `%${params.filter_value}%`)
         .limit(50);
 
       const matchCount = count || matches?.length || 0;
@@ -1355,7 +1382,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       const ids = (matches || []).map(m => m.id);
       const { error } = await supabase
         .from(table)
-        .update({ [params.update_field]: params.update_value, updated_at: new Date().toISOString() })
+        .update({ [updateField]: params.update_value, updated_at: new Date().toISOString() })
         .in('id', ids);
 
       if (error) return `Bulk update failed: ${error.message}`;
