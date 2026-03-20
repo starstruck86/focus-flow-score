@@ -7,20 +7,17 @@ const corsHeaders = {
 };
 
 function tool(name: string, description: string, properties: Record<string, any>, required?: string[]) {
-  const t: any = {
+  const params: any = { type: "object", properties };
+  if (required && required.length > 0) params.required = required;
+  return {
     type: "client",
-    name,
-    description,
-    parameters: {
-      type: "object",
-      properties,
+    client: {
+      name,
+      description,
+      parameters: params,
+      expects_response: true,
     },
-    expects_response: true,
   };
-  if (required && required.length > 0) {
-    t.parameters.required = required;
-  }
-  return t;
 }
 
 function str(desc: string, enumVals?: string[]) {
@@ -228,6 +225,9 @@ serve(async (req) => {
       );
     }
 
+    // Consume patch response
+    await patchRes.text();
+
     // Verify by re-fetching agent
     const verifyRes = await fetch(`https://api.elevenlabs.io/v1/convai/agents/${agentId}`, {
       headers: { "xi-api-key": apiKey },
@@ -235,7 +235,7 @@ serve(async (req) => {
     const verifyData = await verifyRes.json();
     const finalTools = verifyData?.conversation_config?.agent?.prompt?.tools || [];
     const clientToolCount = finalTools.filter((t: any) => t.type === "client").length;
-    const clientToolNames = finalTools.filter((t: any) => t.type === "client").map((t: any) => t.name);
+    const clientToolNames = finalTools.filter((t: any) => t.type === "client").map((t: any) => t.client?.name || t.name);
 
     return new Response(
       JSON.stringify({
