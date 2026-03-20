@@ -343,6 +343,11 @@ export default function AccountDetail() {
 
         <Separator />
 
+        {/* Relationship Health */}
+        <RelationshipHealthCard accountId={account.id} />
+
+        <Separator />
+
         {/* Resources & Links */}
         <CollapsibleSection title="Resources & Links" icon={FileText}>
           <ResourceLinksPanel recordType="account" recordId={account.id} />

@@ -415,6 +415,9 @@ export default function OpportunityDetail() {
             </div>
           )}
         </CollapsibleSection>
+
+        {/* Deal Velocity */}
+        <DealVelocityWidget opportunityId={opp.id} />
       </div>
 
       <ClaudeSynopsisModal
