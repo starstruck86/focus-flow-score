@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Reorder } from 'framer-motion';
+import { AIInsightsNarrator } from '@/components/dashboard/AIInsightsNarrator';
 import { Layout } from '@/components/Layout';
 import {
   TrendingUp, BarChart3, Activity, Zap, Target, Brain,
