@@ -78,7 +78,7 @@ export function CustomPromptsManager() {
   }, [user, editingPrompt, loadPrompts]);
 
   const handleDelete = useCallback(async (id: string) => {
-    const { error } = await supabase.from('custom_prompts').delete().eq('id', id);
+    const { error } = await (supabase as any).from('custom_prompts').delete().eq('id', id);
     if (error) toast.error(error.message);
     else { toast.success('Prompt deleted'); loadPrompts(); }
   }, [loadPrompts]);
