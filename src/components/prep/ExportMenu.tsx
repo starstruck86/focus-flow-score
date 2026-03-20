@@ -365,7 +365,7 @@ export function ExportMenu({ title, markdown, accountName }: ExportMenuProps) {
         }
 
         // Slide number
-        slide.addText({ text: '' }, { x: 12.3, y: 7.0, w: 0.8, h: 0.4, fontSize: 10, color: BRAND.gray, fontFace: 'Arial', align: 'right' });
+        slide.addText([{ text: '', options: { fontSize: 10, color: BRAND.gray, fontFace: 'Arial' } }], { x: 12.3, y: 7.0, w: 0.8, h: 0.4, align: 'right' });
       }
 
       // ── Closing Slide ──
