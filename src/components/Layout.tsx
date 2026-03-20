@@ -267,7 +267,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
       console.log('[Dave] Retry-via-remount: reopened with fresh session');
     } catch (err: any) {
       console.error('[Dave] Retry failed:', err);
-      toast.error('Could not restart Dave', { description: err.message });
+      if (err instanceof DaveSessionError && err.errorType === 'concurrency_limit') {
+        const waitSec = err.cooldownUntil ? Math.ceil((err.cooldownUntil - Date.now()) / 1000) : 30;
+        toast.error('Dave is at capacity', {
+          description: `Concurrency limit — try again in ${waitSec}s. Auto-retry blocked.`,
+          duration: 8000,
+        });
+      } else {
+        toast.error('Could not restart Dave', { description: err.message });
+      }
     }
   }, [getDaveSession, invalidateDaveCache]);
 

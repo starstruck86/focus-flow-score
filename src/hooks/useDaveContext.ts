@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 
 const TOKEN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/dave-conversation-token`;
 const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+const CONCURRENCY_COOLDOWN_MS = 30_000; // 30s cooldown after concurrency limit
+
+export type DaveErrorType = 'concurrency_limit' | 'auth_failed' | 'agent_error' | 'unknown' | null;
 
 export interface DaveSessionData {
   token: string;
@@ -11,10 +14,20 @@ export interface DaveSessionData {
   firstMessage: string | null;
 }
 
+export class DaveSessionError extends Error {
+  errorType: DaveErrorType;
+  cooldownUntil: number | null;
+
+  constructor(message: string, errorType: DaveErrorType, cooldownUntil: number | null = null) {
+    super(message);
+    this.errorType = errorType;
+    this.cooldownUntil = cooldownUntil;
+  }
+}
+
 /**
- * Pre-fetches and caches the Dave signed URL + context so that
- * startSession() can be called synchronously from a tap handler
- * (preserving the iOS gesture chain for getUserMedia).
+ * On-demand Dave session fetcher with concurrency backoff.
+ * No background pre-fetching — tokens are fetched only when the user taps the mic.
  */
 export function useDaveContext() {
   const location = useLocation();
@@ -23,14 +36,29 @@ export function useDaveContext() {
   const fetchedAtRef = useRef<number>(0);
   const locationRef = useRef(location.pathname);
 
-  useEffect(() => { locationRef.current = location.pathname; }, [location.pathname]);
+  // Concurrency backoff state
+  const concurrencyErrorCountRef = useRef(0);
+  const cooldownUntilRef = useRef<number>(0);
+
+  useCallback(() => { locationRef.current = location.pathname; }, [location.pathname]);
+  // Keep location ref updated
+  locationRef.current = location.pathname;
 
   const fetchSession = useCallback(async (conversationHistory?: string): Promise<DaveSessionData> => {
-    const { data: { session } } = await supabase.auth.getSession();
+    // Check cooldown
+    const now = Date.now();
+    if (cooldownUntilRef.current > now) {
+      const waitSec = Math.ceil((cooldownUntilRef.current - now) / 1000);
+      throw new DaveSessionError(
+        `Dave is at capacity — try again in ${waitSec}s`,
+        'concurrency_limit',
+        cooldownUntilRef.current,
+      );
+    }
 
-    // Auth guard — don't proceed without a real user session
+    const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) {
-      throw new Error('Not authenticated. Please sign in first.');
+      throw new DaveSessionError('Not authenticated. Please sign in first.', 'auth_failed');
     }
 
     const tzOffsetHours = new Date().getTimezoneOffset() / -60;
@@ -50,47 +78,69 @@ export function useDaveContext() {
     });
 
     if (!resp.ok) {
-      const err = await resp.json().catch(() => ({ error: 'Token fetch failed' }));
-      throw new Error(err.error || `Error ${resp.status}`);
+      const err = await resp.json().catch(() => ({ error: 'Token fetch failed', errorType: 'unknown' }));
+      const errorType: DaveErrorType = err.errorType || 'unknown';
+
+      // Apply concurrency backoff
+      if (errorType === 'concurrency_limit') {
+        concurrencyErrorCountRef.current++;
+        // Exponential backoff: 5s, 15s, 30s, 60s
+        const backoffMs = Math.min(
+          [5000, 15000, 30000, 60000][Math.min(concurrencyErrorCountRef.current - 1, 3)],
+          60000,
+        );
+        cooldownUntilRef.current = Date.now() + backoffMs;
+        const waitSec = Math.ceil(backoffMs / 1000);
+        throw new DaveSessionError(
+          `Dave is at capacity — try again in ${waitSec}s`,
+          'concurrency_limit',
+          cooldownUntilRef.current,
+        );
+      }
+
+      throw new DaveSessionError(
+        err.error || `Error ${resp.status}`,
+        errorType,
+      );
     }
+
+    // Success — reset concurrency counter
+    concurrencyErrorCountRef.current = 0;
+    cooldownUntilRef.current = 0;
 
     return resp.json();
   }, []);
-
-  /** Background pre-fetch — call on mount and periodically */
-  const prefetch = useCallback(async () => {
-    if (isFetching) return;
-    setIsFetching(true);
-    try {
-      const data = await fetchSession();
-      setCachedSession(data);
-      fetchedAtRef.current = Date.now();
-      console.log('[Dave] Session pre-fetched (signed URL + context:', data.context?.length, 'chars)');
-    } catch (err) {
-      console.warn('[Dave] Pre-fetch failed:', err);
-    } finally {
-      setIsFetching(false);
-    }
-  }, [fetchSession, isFetching]);
 
   /** Get a valid session — returns cache if fresh, otherwise fetches */
   const getSession = useCallback(async (conversationHistory?: string): Promise<DaveSessionData> => {
     // If we have conversation history, always fetch fresh to include it
     if (conversationHistory) {
-      const data = await fetchSession(conversationHistory);
-      setCachedSession(data);
-      fetchedAtRef.current = Date.now();
-      return data;
+      setIsFetching(true);
+      try {
+        const data = await fetchSession(conversationHistory);
+        setCachedSession(data);
+        fetchedAtRef.current = Date.now();
+        return data;
+      } finally {
+        setIsFetching(false);
+      }
     }
-    
+
     const age = Date.now() - fetchedAtRef.current;
     if (cachedSession && age < CACHE_TTL_MS) {
       return cachedSession;
     }
-    const data = await fetchSession();
-    setCachedSession(data);
-    fetchedAtRef.current = Date.now();
-    return data;
+
+    setIsFetching(true);
+    try {
+      const data = await fetchSession();
+      setCachedSession(data);
+      fetchedAtRef.current = Date.now();
+      console.log('[Dave] Session fetched on-demand (context:', data.context?.length, 'chars)');
+      return data;
+    } finally {
+      setIsFetching(false);
+    }
   }, [cachedSession, fetchSession]);
 
   /** Invalidate cache (e.g. after a failed start) */
@@ -99,12 +149,13 @@ export function useDaveContext() {
     fetchedAtRef.current = 0;
   }, []);
 
-  // Pre-fetch on mount and refresh periodically
-  useEffect(() => {
-    prefetch();
-    const interval = setInterval(prefetch, CACHE_TTL_MS);
-    return () => clearInterval(interval);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Get remaining cooldown in seconds (0 = no cooldown) */
+  const getCooldownRemaining = useCallback(() => {
+    const remaining = cooldownUntilRef.current - Date.now();
+    return remaining > 0 ? Math.ceil(remaining / 1000) : 0;
+  }, []);
 
-  return { getSession, invalidateCache, cachedSession, isFetching };
+  // No pre-fetch on mount, no interval — purely on-demand
+
+  return { getSession, invalidateCache, cachedSession, isFetching, getCooldownRemaining };
 }
