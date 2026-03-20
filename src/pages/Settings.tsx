@@ -143,11 +143,25 @@ function DaveHealthSection() {
       const identityOk = !!data.context && data.context.includes('DAVE');
       const firstMsgOk = !!data.firstMessage && data.firstMessage.length > 10;
 
+      // Also check overrides via health check
+      let overridesOk: boolean | null = null;
+      let overridesDetail = 'Not checked';
+      try {
+        const { data: hcData } = await supabase.functions.invoke('dave-health-check');
+        if (hcData) {
+          overridesOk = hcData.overridesEnabled;
+          overridesDetail = overridesOk === true ? 'Prompt + FirstMessage overrides enabled'
+            : overridesOk === false ? 'Overrides DISABLED — Dave will ignore identity instructions'
+            : 'Could not determine override status';
+        }
+      } catch { /* ignore */ }
+
       setSmokeResult({
         token: { pass: tokenOk, detail: tokenOk ? `${data.token.length} chars` : 'Missing or too short' },
         context: { pass: contextOk, detail: `${data.context?.length || 0} chars${contextOk ? '' : ' (need >500)'}` },
         identity: { pass: identityOk, detail: identityOk ? 'DAVE instructions found' : 'DAVE identity NOT found in context' },
         firstMessage: { pass: firstMsgOk, detail: firstMsgOk ? `"${data.firstMessage.substring(0, 80)}..."` : 'Missing or too short' },
+        overrides: { pass: overridesOk, detail: overridesDetail },
       });
 
       if (tokenOk && contextOk && identityOk && firstMsgOk) {
