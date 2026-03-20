@@ -188,7 +188,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [showDaveTapPrompt, setShowDaveTapPrompt] = useState(false);
   const [daveSessionData, setDaveSessionData] = useState<DaveSessionData | null>(null);
   const [daveRetryCount, setDaveRetryCount] = useState(0);
-  const { getSession: getDaveSession, invalidateCache: invalidateDaveCache } = useDaveContext();
+  const { getSession: getDaveSession, invalidateCache: invalidateDaveCache, isFetching: isFetchingDaveSession } = useDaveContext();
   // Handle ?dave=1 from Siri Shortcuts
   useEffect(() => {
     if (searchParams.get('dave') === '1') {
@@ -221,6 +221,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }), [activeColor]);
 
   const handleOpenDave = useCallback(async () => {
+    if (isFetchingDaveSession) return;
     setShowDaveTapPrompt(false);
     try {
       const session = await getDaveSession();
@@ -242,7 +243,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         toast.error('Could not start Dave', { description: err.message });
       }
     }
-  }, [getDaveSession]);
+  }, [getDaveSession, isFetchingDaveSession]);
 
   const handleCloseDave = useCallback(() => {
     setDaveOpen(false);
@@ -301,7 +302,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <SaveIndicator />
         </div>
         <div className="flex items-center gap-1">
-          <VoiceCommandButton onOpenDave={handleOpenDave} />
+          <VoiceCommandButton onOpenDave={handleOpenDave} disabled={isFetchingDaveSession} />
           <GlobalSearch />
           <TerritoryCopilot />
           <Tooltip>

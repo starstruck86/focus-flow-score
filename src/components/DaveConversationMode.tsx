@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useConversation } from '@elevenlabs/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Mic, MicOff, Volume2, MessageSquare, Loader2, RefreshCw } from 'lucide-react';
+import { X, Mic, MicOff, Volume2, MessageSquare, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type DaveSessionData } from '@/hooks/useDaveContext';
 import { useDaveConversation } from '@/hooks/useDaveConversation';
@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { createClientTools } from './dave/clientTools';
 import { DaveDiagnosticsPanel, type DiagnosticData } from './dave/DaveDiagnosticsPanel';
+import { classifyMicrophoneAccessError, releaseMicrophoneStream, requestMicrophoneAccess } from '@/lib/microphoneAccess';
 
 interface Props {
   isOpen: boolean;
@@ -80,12 +81,18 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
   const connectedAtRef = useRef<number>(0);
   const greetingWatchdogRef = useRef<ReturnType<typeof setTimeout>>();
   const greetingRetryRef = useRef<ReturnType<typeof setTimeout>>();
+  const preflightStreamRef = useRef<MediaStream | null>(null);
 
   const logStatus = useCallback((msg: string) => {
     const ts = new Date().toISOString().substring(11, 23);
     const entry = `[${ts}] ${msg}`;
     console.log(`[Dave] ${msg}`);
     setStatusLog(prev => [...prev.slice(-9), entry]);
+  }, []);
+
+  const releasePreflightStream = useCallback(() => {
+    releaseMicrophoneStream(preflightStreamRef.current);
+    preflightStreamRef.current = null;
   }, []);
 
   useEffect(() => { isOpenRef.current = isOpen; }, [isOpen]);
@@ -138,6 +145,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
     },
     onConnect: () => {
       logStatus(`✅ Connected — context: ${sessionData.context?.length} chars, firstMessage: "${sessionData.firstMessage?.substring(0, 60)}..."`);
+      releasePreflightStream();
       messageReceivedRef.current = false;
       messagesReceivedCountRef.current = 0;
       setError(null);
@@ -171,6 +179,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
       }, GREETING_RETRY_MS);
     },
     onDisconnect: () => {
+      releasePreflightStream();
       const uptime = connectedAtRef.current ? Date.now() - connectedAtRef.current : 0;
       logStatus(`❌ Disconnected (uptime: ${uptime}ms, msgs: ${messagesReceivedCountRef.current})`);
       if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
@@ -210,14 +219,10 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
       logStatus(`🔴 Error: ${msg}`);
       errorHistoryRef.current = [...errorHistoryRef.current.slice(-4), msg];
       console.error('[Dave] Full error object:', err);
-      if (/NotAllowedError|Permission denied/i.test(msg)) {
-        setError('Microphone access required — check your browser settings');
-      } else if (/NotFoundError|no audio/i.test(msg)) {
-        setError('No microphone found');
-      } else {
-        setError('Connection error. Tap to retry.');
-      }
-      toast.error('Dave connection error');
+      releasePreflightStream();
+      const friendlyMessage = classifyMicrophoneAccessError(err);
+      setError(friendlyMessage);
+      toast.error('Dave connection error', { description: friendlyMessage });
     },
     onVadScore: (score: number) => {
       setVadScore(score);
@@ -264,16 +269,27 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
 
     logStatus(`✅ Contract passed — token: ${sessionData.token.length} chars, context: ${sessionData.context.length} chars, firstMessage: "${sessionData.firstMessage?.substring(0, 50)}"`);
 
-    const timeout = setTimeout(() => {
-      if (startingRef.current) {
-        setError('Connection timed out. Tap to retry.');
-        setIsConnecting(false);
-        startingRef.current = false;
-        try { conversation.endSession(); } catch (_) {}
-      }
-    }, 15000);
+    const needsExplicitMicPermission = navigator.maxTouchPoints > 0;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
 
     try {
+      if (needsExplicitMicPermission) {
+        logStatus('🎤 Requesting microphone access');
+        releasePreflightStream();
+        preflightStreamRef.current = await requestMicrophoneAccess();
+        logStatus('🎤 Microphone access granted');
+      }
+
+      timeout = setTimeout(() => {
+        if (startingRef.current) {
+          setError('Connection timed out. Tap to retry.');
+          setIsConnecting(false);
+          startingRef.current = false;
+          try { conversation.endSession(); } catch (_) {}
+          releasePreflightStream();
+        }
+      }, 15000);
+
       logStatus(`Starting session (WebRTC) | context: ${sessionData.context.length} chars`);
       await conversation.startSession({
         conversationToken: sessionData.token,
@@ -281,17 +297,19 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
       } as any);
 
       logStatus('Session started successfully');
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
     } catch (err: any) {
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
       console.error('[Dave] Failed to start:', err);
-      setError(err.message || 'Failed to connect');
-      toast.error('Could not start conversation', { description: err.message });
+      const friendlyMessage = classifyMicrophoneAccessError(err);
+      setError(friendlyMessage);
+      toast.error('Could not start conversation', { description: friendlyMessage });
     } finally {
+      releasePreflightStream();
       setIsConnecting(false);
       startingRef.current = false;
     }
-  }, [conversation, sessionData, logStatus]);
+  }, [conversation, sessionData, logStatus, releasePreflightStream]);
 
   const sessionStartRef = useRef<number>(Date.now());
 
@@ -335,6 +353,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
     return () => {
       if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
       if (greetingRetryRef.current) clearTimeout(greetingRetryRef.current);
+      releasePreflightStream();
       if (conversation.status === 'connected') {
         conversation.endSession();
       }

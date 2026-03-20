@@ -5,9 +5,10 @@ import { cn } from '@/lib/utils';
 interface Props {
   size?: 'default' | 'large';
   onOpenDave?: () => void;
+  disabled?: boolean;
 }
 
-export function VoiceCommandButton({ size = 'default', onOpenDave }: Props) {
+export function VoiceCommandButton({ size = 'default', onOpenDave, disabled = false }: Props) {
   const isLarge = size === 'large';
 
   return (
@@ -15,10 +16,12 @@ export function VoiceCommandButton({ size = 'default', onOpenDave }: Props) {
       whileHover={{ scale: 1.05 }}
       whileTap={{ scale: 0.95 }}
       onClick={() => onOpenDave?.()}
+      disabled={disabled}
       className={cn(
         'rounded-full flex items-center justify-center shadow-md transition-all relative',
         isLarge ? 'h-14 w-14' : 'h-10 w-10',
-        'bg-primary/10 hover:bg-primary/20 text-primary',
+        'bg-primary/10 text-primary',
+        disabled ? 'cursor-not-allowed opacity-60' : 'hover:bg-primary/20',
       )}
       title="Talk to Dave"
     >
