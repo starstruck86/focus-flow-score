@@ -1400,6 +1400,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         .in('id', ids);
 
       if (error) return `Bulk update failed: ${error.message}`;
+      emitDataChanged(entity);
       toast.success(`Bulk updated ${matchCount} ${entity}`, { description: `${params.update_field} → ${params.update_value}` });
       return `Updated ${matchCount} ${entity} where ${params.filter_field} matches "${params.filter_value}": set ${params.update_field} = "${params.update_value}"`;
     },
