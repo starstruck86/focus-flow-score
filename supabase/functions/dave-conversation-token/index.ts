@@ -202,7 +202,7 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
       .limit(30),
     supabase
       .from("tasks")
-      .select("title, due_date, priority, status, account_name, notes")
+      .select("title, due_date, priority, status, linked_account_id, notes")
       .eq("user_id", userId)
       .in("status", ["next", "in-progress"])
       .order("due_date", { ascending: true })
