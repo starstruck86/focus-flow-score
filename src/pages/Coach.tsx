@@ -88,7 +88,7 @@ function ScoreBlock({ score, label, max = 5 }: { score: number; label: string; m
 }
 
 // ─── CALL SCORECARD ──────────────────────────────────────────
-function CallScorecard({ grade }: { grade: TranscriptGrade }) {
+function CallScorecard({ grade, onRegrade }: { grade: TranscriptGrade; onRegrade?: () => void }) {
   const [showEvidence, setShowEvidence] = useState(false);
 
   const categories = Object.entries(CATEGORY_LABELS).map(([key, { label, icon }]) => ({
