@@ -127,6 +127,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         console.error('Voice create_task error:', error);
         return `Failed to create task: ${error.message}`;
       }
+      emitDataChanged('tasks');
 
       // If a specific time was given, also create a voice reminder
       if (params.dueTime && dueDate) {
