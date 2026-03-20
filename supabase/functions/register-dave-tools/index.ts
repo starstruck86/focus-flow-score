@@ -225,24 +225,25 @@ serve(async (req) => {
       );
     }
 
-    // Consume patch response
-    await patchRes.text();
-
-    // Verify by re-fetching agent
-    const verifyRes = await fetch(`https://api.elevenlabs.io/v1/convai/agents/${agentId}`, {
-      headers: { "xi-api-key": apiKey },
-    });
-    const verifyData = await verifyRes.json();
-    const finalTools = verifyData?.conversation_config?.agent?.prompt?.tools || [];
-    const clientToolCount = finalTools.filter((t: any) => t.type === "client").length;
-    const clientToolNames = finalTools.filter((t: any) => t.type === "client").map((t: any) => t.client?.name || t.name);
+    const patchData = await patchRes.json();
+    const patchTools = patchData?.conversation_config?.agent?.prompt?.tools || [];
+    
+    // Debug: check what the PATCH response actually contains
+    const patchToolCount = patchTools.length;
+    const patchClientTools = patchTools.filter((t: any) => t.type === "client");
+    
+    // Also check the raw structure of the first tool if any
+    const sampleTool = patchTools[0] || null;
 
     return new Response(
       JSON.stringify({
-        success: true,
-        message: `Registered ${clientToolCount} client tools on agent`,
-        registeredTools: clientToolNames,
-        totalToolsOnAgent: finalTools.length,
+        success: patchToolCount > 0,
+        message: `PATCH response contains ${patchToolCount} tools (${patchClientTools.length} client)`,
+        sentToolCount: mergedTools.length,
+        patchResponseToolCount: patchToolCount,
+        sampleTool: sampleTool,
+        patchResponseKeys: Object.keys(patchData || {}),
+        agentKeys: Object.keys(patchData?.conversation_config?.agent?.prompt || {}),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
