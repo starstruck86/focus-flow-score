@@ -692,6 +692,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       });
 
       if (error) return `Failed to create opportunity: ${error.message}`;
+      emitDataChanged('opportunities');
       toast.success('Opportunity created', { description: `${params.name} — $${Math.round((params.arr || 0) / 1000)}k` });
       return `Created opportunity ${params.name}${params.arr ? ` at $${Math.round(params.arr / 1000)}k ARR` : ''}`;
     },
