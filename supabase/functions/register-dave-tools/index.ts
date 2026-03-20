@@ -125,6 +125,13 @@ const DAVE_TOOLS: ToolDef[] = [
 
   // ── Recurring Tasks ──────────────────────────────────────────
   { name: "create_recurring_task", description: "Create a recurring task with a schedule", parameters: { title: str("Task title"), recurrence: str("Recurrence rule like 'every Monday', 'daily', 'weekly', 'biweekly'"), accountName: str("Account to link to"), priority: str("Priority", ["P1", "P2", "P3"]) }, required: ["title", "recurrence"] },
+
+  // ── Guided Journal ───────────────────────────────────────────
+  { name: "guided_journal", description: "Get a checklist of today's journal fields — shows what's completed vs missing. Use this to walk the user through their daily journal step by step.", parameters: {} },
+  { name: "update_journal_field", description: "Update a qualitative or wellness field in the daily journal (what_worked_today, biggest_blocker, tomorrow_priority, daily_reflection, energy, focus_quality, stress, personal_development, clarity, what_drained_you)", parameters: { field: str("The journal field to update", ["what_worked_today", "biggest_blocker", "tomorrow_priority", "daily_reflection", "energy", "focus_quality", "stress", "personal_development", "clarity", "what_drained_you"]), value: str("The value to set — text for reflections, number 1-5 for wellness, yes/no for booleans") }, required: ["field", "value"] },
+
+  // ── Task Reminders ───────────────────────────────────────────
+  { name: "set_task_reminder", description: "Set a reminder on an existing task so the user gets notified at a specific time", parameters: { taskTitle: str("The task title or partial match to find"), reminderTime: str("When to remind — 'in 30 minutes', '3pm', or ISO datetime") }, required: ["taskTitle", "reminderTime"] },
 ];
 
 serve(async (req) => {

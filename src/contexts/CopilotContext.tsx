@@ -1,6 +1,7 @@
 // Copilot Context — allows any component to open the copilot with a question, mode, and page context
-import { createContext, useContext, useState, type ReactNode } from 'react';
-import type { CopilotMode } from '@/lib/territoryCopilot';
+import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { streamCopilot, type CopilotMode } from '@/lib/territoryCopilot';
+import { toast } from 'sonner';
 
 export interface PageContext {
   page: string;
@@ -20,15 +21,25 @@ interface CopilotState {
   accountId?: string;
 }
 
+interface BackgroundResult {
+  question: string;
+  mode: CopilotMode;
+  content: string;
+  accountId?: string;
+}
+
 interface CopilotContextValue {
   state: CopilotState;
   pageContext: PageContext | null;
   setPageContext: (ctx: PageContext | null) => void;
   ask: (question: string, mode?: CopilotMode, accountId?: string) => void;
+  askBackground: (question: string, mode?: CopilotMode, accountId?: string) => void;
   open: () => void;
   close: () => void;
   setOpen: (open: boolean) => void;
   clearInitialQuestion: () => void;
+  backgroundResult: BackgroundResult | null;
+  clearBackgroundResult: () => void;
 }
 
 const CopilotContext = createContext<CopilotContextValue | null>(null);
@@ -36,6 +47,7 @@ const CopilotContext = createContext<CopilotContextValue | null>(null);
 export function CopilotProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<CopilotState>({ open: false });
   const [pageContext, setPageContext] = useState<PageContext | null>(null);
+  const [backgroundResult, setBackgroundResult] = useState<BackgroundResult | null>(null);
 
   const ask = (question: string, mode?: CopilotMode, accountId?: string) =>
     setState({ open: true, initialQuestion: question, mode, accountId });
@@ -44,9 +56,43 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
   const setOpen = (o: boolean) => setState(prev => o ? { ...prev, open: o } : { open: false });
   const clearInitialQuestion = () =>
     setState(prev => ({ ...prev, initialQuestion: undefined, mode: undefined }));
+  const clearBackgroundResult = () => setBackgroundResult(null);
+
+  const askBackground = useCallback((question: string, mode: CopilotMode = 'quick', accountId?: string) => {
+    const toastId = toast.loading(`Building ${mode === 'meeting' ? 'meeting brief' : mode === 'deal-strategy' ? 'deal strategy' : 'response'}...`, {
+      duration: Infinity,
+    });
+
+    let content = '';
+    streamCopilot({
+      messages: [{ role: 'user', content: question }],
+      mode,
+      accountId,
+      pageContext,
+      onDelta: (chunk) => { content += chunk; },
+      onDone: () => {
+        setBackgroundResult({ question, mode, content, accountId });
+        toast.dismiss(toastId);
+        toast.success('AI response ready', {
+          description: 'Tap to view',
+          duration: 10000,
+          action: {
+            label: 'View',
+            onClick: () => {
+              setState({ open: true, initialQuestion: question, mode, accountId });
+            },
+          },
+        });
+      },
+      onError: (err) => {
+        toast.dismiss(toastId);
+        toast.error('Background AI failed', { description: err });
+      },
+    });
+  }, [pageContext]);
 
   return (
-    <CopilotContext.Provider value={{ state, pageContext, setPageContext, ask, open, close, setOpen, clearInitialQuestion }}>
+    <CopilotContext.Provider value={{ state, pageContext, setPageContext, ask, askBackground, open, close, setOpen, clearInitialQuestion, backgroundResult, clearBackgroundResult }}>
       {children}
     </CopilotContext.Provider>
   );

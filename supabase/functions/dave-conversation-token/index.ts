@@ -53,7 +53,21 @@ DEAL ADVANCEMENT:
 When asked to move a deal or update a stage, use the move_deal tool. Confirm the change.
 
 ACCOUNT LOOKUP:
-When asked about a specific account in depth, use lookup_account tool for full context.`;
+When asked about a specific account in depth, use lookup_account tool for full context.
+
+DAILY JOURNAL WALKTHROUGH:
+When the user asks to "do my journal", "walk me through my day", "daily check-in", or "scorecard":
+1. Call guided_journal to see what's missing
+2. Ask about each missing category one at a time — start with activity metrics, then reflections, then wellness
+3. After each answer, use update_daily_metrics (for numbers) or update_journal_field (for text/wellness) to save it
+4. Keep it conversational — don't dump all questions at once
+
+CLARIFICATION PROTOCOL:
+- If the user's request is ambiguous or missing critical details, ask ONE clarifying question before executing.
+- Examples: "Which deal?" if multiple exist, "What priority?" if not specified, "When is that due?" for tasks.
+- Never guess — confirm first, then act.
+- If the user says something vague like "update the deal" without specifying which one, ask which deal they mean.
+- If they say "set a reminder" without a time, ask when they want to be reminded.`;
 
 // ─── Structured error types for client-side handling ───
 type ErrorType = "concurrency_limit" | "auth_failed" | "agent_error" | "unknown";
