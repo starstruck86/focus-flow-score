@@ -11,7 +11,7 @@ import { Progress } from '@/components/ui/progress';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import {
+import { Zap, RefreshCw,
   Folder, FolderPlus, FilePlus, FileText, Presentation, Mail, BookOpen,
   ChevronRight, MoreHorizontal, Search, Trash2, Edit3, Clock,
   Star, Tag, Copy, Upload, Link2, Sparkles, Target, Shield,
