@@ -29,7 +29,7 @@ serve(async (req) => {
     const [resourcesRes, oppsRes] = await Promise.all([
       supabase
         .from("resources")
-        .select("id, title, resource_type, tags, description")
+        .select("id, title, resource_type, tags, description, content")
         .order("updated_at", { ascending: false })
         .limit(50),
       supabase
