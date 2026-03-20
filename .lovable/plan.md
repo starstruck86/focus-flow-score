@@ -1,74 +1,84 @@
 
 
-# Dave QA Report — Issues Found & Fix Plan
+# Dave QA Report — Remaining Issues & Fix Plan
 
-## QA Method
-Full code audit of: `DaveConversationMode.tsx`, `clientTools.ts` (1501 lines, 52 tools), `register-dave-tools/index.ts`, `dave-conversation-token/index.ts`, `dave-health-check/index.ts`, `useDaveContext.ts`, `useDaveConversation.ts`, `Layout.tsx` (retry-via-remount), and database schema validation.
+## Audit Scope
+Full line-by-line review of: `dave-conversation-token/index.ts` (570 lines), `clientTools.ts` (1528 lines, 52 tools), `register-dave-tools/index.ts` (244 lines), `DaveConversationMode.tsx` (line 326), and database schema types.
 
-## Architecture Status: Sound
-The core architecture is solid — retry-via-remount pattern, session contract assertions, greeting watchdog, concurrency backoff, context assembly, and diagnostics panel all look correct.
+## What's Working
+- 52 tools registered, parameter schemas aligned between registration and client handlers
+- Task context resolves `linked_account_id` → account names (lines 352-353)
+- Transcript context resolves `account_id` → account names (lines 454-455)
+- Field whitelists on `bulk_update` present and correct
+- Commission detail uses correct `new_arr_quota` / `renewal_arr_quota` columns
+- Concurrency backoff, retry-via-remount, greeting watchdog all intact
 
-## Issues Found
+## Issues Still Present
 
-### Issue 1: `account_name` field doesn't exist on `tasks` table (BREAKS data)
-**Location:** `dave-conversation-token/index.ts` line ~205
-The CRM context builder selects `account_name` from `tasks`, but the table only has `linked_account_id`. This means:
-- Task context sent to Dave shows `account_name: null` for every task
-- Dave can never tell the user which account a task is linked to
+### Issue 1 (HIGH): Quota context uses non-existent columns
+**File:** `dave-conversation-token/index.ts` line 436
+```
+`QUOTA: annual=$${q.annual_target...} quarterly=$${q.quarterly_target...} period=${q.quota_period...}`
+```
+The `quota_targets` table has: `new_arr_quota`, `renewal_arr_quota`, `fiscal_year_start`, `fiscal_year_end`, `new_arr_acr`, `renewal_arr_acr`. There is NO `annual_target`, `quarterly_target`, or `quota_period`. Dave's quota context always shows blanks/undefined.
 
-Similarly, `list_tasks` in `clientTools.ts` (line 789) selects `linked_account_id` but doesn't resolve it to a name — tasks are shown without account context.
+**Fix:** Replace line 436 with:
+```
+const totalQuota = (q.new_arr_quota || 0) + (q.renewal_arr_quota || 0);
+sections.push(`QUOTA: total=$${totalQuota.toLocaleString()} new_logo=$${(q.new_arr_quota || 0).toLocaleString()} renewal=$${(q.renewal_arr_quota || 0).toLocaleString()} FY:${q.fiscal_year_start || "—"} to ${q.fiscal_year_end || "—"}`);
+```
 
-**Fix:** In the token function, join or resolve `linked_account_id` to an account name. In `list_tasks`, add a follow-up query to resolve account names.
+### Issue 2 (MEDIUM): Pipeline context shows raw account_id UUIDs
+**File:** `dave-conversation-token/index.ts` line 373
+`acct:${o.account_id || "—"}` outputs raw UUIDs. The `accountIdMap` built at line 454 (for transcripts) should be built earlier and reused here.
 
-### Issue 2: `one_time_amount` doesn't exist on `opportunities` table
-**Location:** `clientTools.ts` line 1115 — `commission_detail` selects `one_time_amount` from opportunities.
-The `opportunities` table in the schema has no `one_time_amount` column. This will return null/undefined but won't crash — just gives wrong commission data.
+**Fix:** Move the `accountIdMap` construction (lines 454-455) to right after the accounts are loaded (after line 339), then use it at line 373 and line 403.
 
-**Fix:** Remove `one_time_amount` from the select, or check if the column exists in the DB and add it if needed.
+### Issue 3 (MEDIUM): Contacts context shows raw account_id UUIDs
+**File:** `dave-conversation-token/index.ts` line 403
+Same as Issue 2 — `acct:${c.account_id || "—"}` is a raw UUID.
 
-### Issue 3: Tool count mismatch — code says 51 but there are 52
-**Location:** `register-dave-tools/index.ts` comment line 29 says "ALL 51 TOOLS" but `clientTools.ts` has 52 handlers. Need to verify all tools in the registration array match the client handlers.
+**Fix:** Use the same `accountIdMap` to resolve.
 
-**Fix:** Count tools in both files and ensure 1:1 match.
+### Issue 4 (LOW): `dave_transcripts` insert uses unnecessary `as any` casts
+**File:** `DaveConversationMode.tsx` line 326
+```typescript
+await (supabase.from('dave_transcripts' as any) as any).insert({...})
+```
+The `dave_transcripts` table exists in generated types with proper schema. The cast bypasses TypeScript safety.
 
-### Issue 4: `as any` type casts on tables that exist in types
-**Location:** `clientTools.ts` lines 230, 326 — `opportunity_methodology` and `dave_transcripts` are cast with `as any` even though they exist in the generated types.
-This isn't a bug, but it means TypeScript won't catch schema mismatches.
+**Fix:** Replace with:
+```typescript
+await supabase.from('dave_transcripts').insert({
+  user_id: user.id,
+  messages: currentTranscript as unknown as Json,
+  duration_seconds: durationSeconds,
+});
+```
 
-**Fix:** Remove `as any` casts and use proper types.
+### Issue 5 (LOW): CORS headers in register-dave-tools missing Supabase client headers
+**File:** `register-dave-tools/index.ts` line 5-6
+Currently: `"authorization, x-client-info, apikey, content-type"`
+Missing the newer platform headers that other edge functions include.
 
-### Issue 5: `bulk_update` security concern
-**Location:** `clientTools.ts` line 1333
-The `bulk_update` tool accepts arbitrary `filter_field` and `update_field` strings from the voice agent and passes them directly to Supabase queries. While RLS protects against cross-user access, there's no validation that the field names are valid columns. An LLM hallucination could send invalid field names causing Postgres errors.
+**Fix:** Update to match the standard set:
+```
+"authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version"
+```
 
-**Fix:** Add a whitelist of valid fields per entity.
+## Summary
 
-### Issue 6: Console warning (non-Dave, minor)
-`MeetingCard` in `MeetingPrepPrompt.tsx` has a ref forwarding issue — cosmetic warning, not a Dave blocker.
+| # | Issue | File | Severity |
+|---|-------|------|----------|
+| 1 | Quota context uses non-existent columns | `dave-conversation-token/index.ts` | HIGH |
+| 2 | Pipeline context shows raw UUIDs | `dave-conversation-token/index.ts` | MEDIUM |
+| 3 | Contacts context shows raw UUIDs | `dave-conversation-token/index.ts` | MEDIUM |
+| 4 | `dave_transcripts` uses `as any` | `DaveConversationMode.tsx` | LOW |
+| 5 | Missing CORS headers | `register-dave-tools/index.ts` | LOW |
 
-## Summary of Fixes
+## Files to Modify
 
-| # | Fix | File | Severity |
-|---|-----|------|----------|
-| 1 | Resolve `linked_account_id` → account name in task context | `dave-conversation-token/index.ts` | High |
-| 2 | Remove `one_time_amount` from commission_detail | `clientTools.ts` | Medium |
-| 3 | Verify tool count parity (registration vs client) | Both files | Medium |
-| 4 | Remove unnecessary `as any` casts | `clientTools.ts` | Low |
-| 5 | Add field whitelists to `bulk_update` | `clientTools.ts` | Medium |
-| 6 | Fix `list_tasks` to resolve account names | `clientTools.ts` | Medium |
-
-## Implementation
-
-### `supabase/functions/dave-conversation-token/index.ts`
-- Change tasks query to select `linked_account_id` instead of `account_name`
-- After fetching tasks and accounts, resolve `linked_account_id` to account name using the accounts data already fetched
-
-### `src/components/dave/clientTools.ts`
-- `list_tasks`: After fetching tasks with `linked_account_id`, batch-resolve to account names
-- `commission_detail`: Remove `one_time_amount` from the select
-- `bulk_update`: Add field whitelists for accounts, opportunities, and tasks
-- Remove `as any` casts where types exist
-
-### `supabase/functions/register-dave-tools/index.ts`
-- Audit and fix the comment to match actual tool count
+1. **`supabase/functions/dave-conversation-token/index.ts`** — Fix quota context (line 434-437), build accountIdMap early (after line 339) and use it in pipeline (line 373) and contacts (line 403) sections
+2. **`src/components/DaveConversationMode.tsx`** — Remove `as any` casts on line 326
+3. **`supabase/functions/register-dave-tools/index.ts`** — Update CORS headers (line 5-6)
 
