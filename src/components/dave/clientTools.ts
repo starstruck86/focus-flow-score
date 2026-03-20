@@ -801,8 +801,20 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
 
       const { data: tasks } = await query;
       if (!tasks?.length) return filter === 'today' ? 'No tasks due today.' : 'No matching tasks found.';
+
+      // Resolve linked_account_id to account names
+      const accountIds = [...new Set(tasks.map(t => t.linked_account_id).filter(Boolean))];
+      let accountMap: Record<string, string> = {};
+      if (accountIds.length) {
+        const { data: accts } = await supabase.from('accounts').select('id, name').in('id', accountIds);
+        if (accts) accountMap = Object.fromEntries(accts.map(a => [a.id, a.name]));
+      }
+
       return `${tasks.length} tasks${filter === 'today' ? ' for today' : ''}:\n` +
-        tasks.map(t => `• [${t.priority || 'P2'}] ${t.title}${t.due_date ? ` (due ${t.due_date})` : ''} — ${t.status}`).join('\n');
+        tasks.map(t => {
+          const acctName = t.linked_account_id ? accountMap[t.linked_account_id] : null;
+          return `• [${t.priority || 'P2'}] ${t.title}${acctName ? ` (${acctName})` : ''}${t.due_date ? ` due ${t.due_date}` : ''} — ${t.status}`;
+        }).join('\n');
     },
 
     // ── Calendar ───────────────────────────────────────────────────
