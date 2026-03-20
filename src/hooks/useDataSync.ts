@@ -384,6 +384,9 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
         onHydrated?.(true);
         _lastSyncTime = Date.now();
         notifySyncListeners();
+
+        // Hydrate today's journal metrics into Zustand
+        await hydrateJournalToday(userId);
       } catch (err) {
         console.error('[DataSync] Hydration error:', err);
       } finally {
