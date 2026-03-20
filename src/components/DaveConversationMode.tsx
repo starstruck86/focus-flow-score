@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import type { Json } from '@/integrations/supabase/types';
 import { useConversation } from '@elevenlabs/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mic, MicOff, Volume2, MessageSquare, Loader2 } from 'lucide-react';
