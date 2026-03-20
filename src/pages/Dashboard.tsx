@@ -39,6 +39,7 @@ import {
   CoachingFeed,
   PClubMathCard,
   WeeklyBattlePlanCard,
+  DealRiskAlerts,
 } from '@/components/dashboard';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 import { WidgetCustomizer } from '@/components/dashboard/WidgetCustomizer';
