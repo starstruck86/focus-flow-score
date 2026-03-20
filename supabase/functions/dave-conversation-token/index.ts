@@ -75,7 +75,15 @@ SYNTHESIS TOOLS:
 - When the user makes a commitment or promise during conversation ("I'll do that", "I'll follow up") — use save_commitment to persist it.
 - When asked about a specific contact's engagement history — use contact_timeline.
 - When the user asks to add a note to a deal/opportunity (not an account) — use add_opportunity_note.
-- When the user wants to know what a resource says or asks about playbook content — use read_resource.`;
+- When the user wants to know what a resource says or asks about playbook content — use read_resource.
+
+CONTENT & WORKFLOW TOOLS:
+- When asked to draft an email, write a business case, or generate any content — use generate_content with full deal context (it auto-pulls transcripts, MEDDICC, contacts).
+- For complex content that needs user refinement — use open_content_builder to hand off to the Prep Hub with pre-filled context.
+- When asked "what's my riskiest deal?" or to assess deal risk — use assess_deal_risk for deep analysis.
+- When asked about competitors, "has X come up?", or competitive landscape — use competitive_intel to search all transcripts and notes.
+- When asked to "create tasks for MEDDICC gaps" or "close methodology gaps" — use create_methodology_tasks to auto-generate actionable tasks.
+- When asked to prep for a meeting or "brief me on my next call" — use meeting_brief for an inline prep brief (no need to open copilot).`;
 
 // ─── Structured error types for client-side handling ───
 type ErrorType = "concurrency_limit" | "auth_failed" | "agent_error" | "unknown";
