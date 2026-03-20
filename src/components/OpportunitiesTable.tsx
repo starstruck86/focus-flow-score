@@ -354,7 +354,19 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   };
   const [deleteDialogOpp, setDeleteDialogOpp] = useState<Opportunity | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
-  const [groupDimensions, setGroupDimensions] = useState<GroupDimension[]>(renewalsOnly ? ['quarter'] : ['status']);
+  const [showDuplicateReview, setShowDuplicateReview] = useState(false);
+  const groupStorageKey = `group-dimensions-${renewalsOnly ? 'renewals' : excludeRenewals ? 'newlogo' : 'all'}`;
+  const [groupDimensions, setGroupDimensions] = useState<GroupDimension[]>(() => {
+    try {
+      const stored = localStorage.getItem(groupStorageKey);
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return renewalsOnly ? ['quarter'] : ['status'];
+  });
+
+  useEffect(() => {
+    localStorage.setItem(groupStorageKey, JSON.stringify(groupDimensions));
+  }, [groupDimensions, groupStorageKey]);
   const [showChurningOpps, setShowChurningOpps] = useState(false);
   const bulkSelection = useBulkSelection<Opportunity>();
 
