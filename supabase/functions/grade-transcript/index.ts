@@ -188,14 +188,14 @@ ${customScorecardContext}`;
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: \`Bearer \${LOVABLE_API_KEY}\`,
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: \`Analyze this call transcript with full framework enforcement.\n\nTitle: \${transcript.title}\nType: \${transcript.call_type || 'Unknown'}\nParticipants: \${transcript.participants || 'Unknown'}\n\nTranscript:\n\${transcript.content.substring(0, 15000)}\` },
+          { role: "user", content: `Analyze this call transcript with full framework enforcement.\n\nTitle: ${transcript.title}\nType: ${transcript.call_type || 'Unknown'}\nParticipants: ${transcript.participants || 'Unknown'}\n\nTranscript:\n${transcript.content.substring(0, 15000)}` },
         ],
         tools: [{
           type: "function",
