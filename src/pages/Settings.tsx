@@ -132,6 +132,7 @@ function DaveHealthSection() {
           context: { pass: false, detail: 'Skipped (no token)' },
           identity: { pass: false, detail: 'Skipped (no token)' },
           firstMessage: { pass: false, detail: 'Skipped (no token)' },
+          overrides: { pass: null, detail: 'Skipped (no token)' },
         });
         return;
       }
