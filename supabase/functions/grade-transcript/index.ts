@@ -24,7 +24,7 @@ serve(async (req) => {
       });
     }
 
-    const { transcript_id } = await req.json();
+    const { transcript_id, call_goals } = await req.json();
     if (!transcript_id) throw new Error("transcript_id required");
 
     const { data: transcript, error: tErr } = await supabase
@@ -34,8 +34,8 @@ serve(async (req) => {
       .single();
     if (tErr || !transcript) throw new Error("Transcript not found");
 
-    // Fetch resources for methodology context
-    const [resourceLinksRes, digestsRes] = await Promise.all([
+    // Fetch resources, digests, prior grades for cumulative context, and opportunity data
+    const [resourceLinksRes, digestsRes, priorGradesRes, opportunityRes] = await Promise.all([
       supabase
         .from("resource_links")
         .select("label, category, url, notes")
@@ -44,10 +44,30 @@ serve(async (req) => {
         .from("resource_digests")
         .select("resource_id, grading_criteria")
         .not("grading_criteria", "is", null),
+      // Fetch prior grades for same opportunity to build cumulative MEDDICC context
+      transcript.opportunity_id
+        ? supabase
+            .from("transcript_grades")
+            .select("meddicc_signals, cotm_signals, overall_grade, call_goals_inferred, deal_progressed, created_at")
+            .eq("user_id", user.id)
+            .neq("transcript_id", transcript_id)
+            .order("created_at", { ascending: false })
+            .limit(5)
+        : Promise.resolve({ data: [] }),
+      // Fetch opportunity stage/next steps for cycle context
+      transcript.opportunity_id
+        ? supabase
+            .from("opportunities")
+            .select("name, stage, next_step, next_step_date, arr, close_date, status")
+            .eq("id", transcript.opportunity_id)
+            .single()
+        : Promise.resolve({ data: null }),
     ]);
 
     const resources = resourceLinksRes.data || [];
     const digests = digestsRes.data || [];
+    const priorGrades = priorGradesRes.data || [];
+    const opportunity = opportunityRes.data;
 
     const resourceContext = resources.length > 0
       ? `The user follows these sales methodologies:\n${resources.map((r: any) => `- ${r.label} (${r.category})${r.notes ? ': ' + r.notes : ''}`).join('\n')}`
@@ -67,6 +87,33 @@ serve(async (req) => {
       }
     }
 
+    // Build cumulative MEDDICC context from prior grades
+    let cumulativeContext = "";
+    if (priorGrades.length > 0) {
+      const confirmed: string[] = [];
+      const unconfirmed: string[] = [];
+      const meddiccFields = ['metrics', 'economic_buyer', 'decision_criteria', 'decision_process', 'identify_pain', 'champion', 'competition'];
+      const fieldLabels: Record<string, string> = { metrics: 'Metrics', economic_buyer: 'Economic Buyer', decision_criteria: 'Decision Criteria', decision_process: 'Decision Process', identify_pain: 'Identify Pain', champion: 'Champion', competition: 'Competition' };
+      
+      for (const field of meddiccFields) {
+        const everConfirmed = priorGrades.some((g: any) => g.meddicc_signals?.[field]);
+        if (everConfirmed) confirmed.push(fieldLabels[field]);
+        else unconfirmed.push(fieldLabels[field]);
+      }
+      
+      cumulativeContext = `\n\n## CUMULATIVE DEAL CONTEXT\nPrior calls have confirmed these MEDDICC elements: ${confirmed.join(', ') || 'None'}\nStill unconfirmed: ${unconfirmed.join(', ') || 'All confirmed'}\nPrior call count: ${priorGrades.length}\nPrior grades: ${priorGrades.map((g: any) => g.overall_grade).join(', ')}`;
+      
+      if (priorGrades.some((g: any) => g.deal_progressed)) {
+        cumulativeContext += "\nDeal has shown forward progression in prior calls.";
+      }
+    }
+
+    // Build opportunity context
+    let opportunityContext = "";
+    if (opportunity) {
+      opportunityContext = `\n\n## OPPORTUNITY CONTEXT\nDeal: ${opportunity.name}\nStage: ${opportunity.stage || 'Unknown'}\nARR: $${opportunity.arr || 0}\nClose Date: ${opportunity.close_date || 'Unknown'}\nNext Step: ${opportunity.next_step || 'None'}\nStatus: ${opportunity.status || 'active'}`;
+    }
+
     let accountContext = "";
     if (transcript.account_id) {
       const { data: account } = await supabase
@@ -78,6 +125,11 @@ serve(async (req) => {
         accountContext = `\nAccount: ${account.name} (${account.industry || 'unknown'}, Tier ${account.tier || 'B'}, ${account.motion || 'new-logo'})`;
       }
     }
+
+    // Build call goals context
+    const goalsContext = (call_goals || transcript.call_goals)
+      ? `\n\n## CALL GOALS (set by rep before this call)\n${(call_goals || transcript.call_goals).map((g: string, i: number) => `${i + 1}. ${g}`).join('\n')}\nEvaluate whether each goal was achieved in the transcript.`
+      : "";
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
@@ -116,28 +168,34 @@ Evaluate segments:
 - Executive Presence (talk ratio, rambling, interruptions, flow control)
 
 ## GRADING RULES
-- Use 1-5 scale for ALL category scores. Most reps are 2-3. A 5 requires exceptional execution.
+- Use 1-5 scale for ALL category scores. Grade based on OUTCOME and DEAL PROGRESSION, not just technique.
+- Score by call type: Discovery calls prioritize question depth + pain identification. Demo calls prioritize solution framing + business case. Negotiation calls prioritize commercial acumen + close control. QBR calls prioritize expansion + relationship deepening.
+- A score of 5 = the call achieved its objectives AND moved the deal forward measurably. A 4 = strong execution with minor gaps. A 3 = adequate but missed key opportunities. A 2 = significant methodology gaps. A 1 = call was counterproductive.
 - Overall score is 1-5 weighted average.
 - Be brutally honest. Generic praise is failure.
 - Every score MUST have evidence (exact transcript quotes).
 - ALWAYS identify the ONE highest-ROI coaching action.
 - Tie all feedback to revenue, risk, or deal progression — never abstract advice.
+- When cumulative context is provided, factor in what was ALREADY confirmed in prior calls vs what is NEW.
 
 ${resourceContext}
 ${accountContext}
+${opportunityContext}
+${cumulativeContext}
+${goalsContext}
 ${customScorecardContext}`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: \`Bearer \${LOVABLE_API_KEY}\`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `Analyze this call transcript with full framework enforcement.\n\nTitle: ${transcript.title}\nType: ${transcript.call_type || 'Unknown'}\nParticipants: ${transcript.participants || 'Unknown'}\n\nTranscript:\n${transcript.content.substring(0, 15000)}` },
+          { role: "user", content: \`Analyze this call transcript with full framework enforcement.\n\nTitle: \${transcript.title}\nType: \${transcript.call_type || 'Unknown'}\nParticipants: \${transcript.participants || 'Unknown'}\n\nTranscript:\n\${transcript.content.substring(0, 15000)}\` },
         ],
         tools: [{
           type: "function",
@@ -348,6 +406,35 @@ ${customScorecardContext}`;
                   },
                   description: "Scores for custom scorecard criteria, if any were provided",
                 },
+
+                // NEW: Outcome-based fields
+                call_goals_inferred: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "What were the likely goals/objectives of this call? Infer 2-5 goals from context and content.",
+                },
+                goals_achieved: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      goal: { type: "string" },
+                      achieved: { type: "boolean" },
+                      evidence: { type: "string" },
+                    },
+                    required: ["goal", "achieved", "evidence"],
+                    additionalProperties: false,
+                  },
+                  description: "For each call goal (inferred or provided), was it achieved?",
+                },
+                deal_progressed: { type: "boolean", description: "Did this call move the deal forward in a meaningful way?" },
+                progression_evidence: { type: "string", description: "Specific evidence of deal progression or lack thereof" },
+                likelihood_impact: { type: "string", enum: ["increased", "decreased", "unchanged"], description: "Did this call increase, decrease, or leave unchanged the likelihood of winning?" },
+                competitors_mentioned: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "List of competitor names mentioned in the transcript",
+                },
               },
               required: [
                 "overall_score", "overall_grade", "summary",
@@ -359,7 +446,8 @@ ${customScorecardContext}`;
                 "feedback_focus", "coaching_issue", "coaching_why",
                 "transcript_moment", "replacement_behavior", "actionable_feedback",
                 "strengths", "missed_opportunities", "suggested_questions",
-                "behavioral_flags", "style_notes", "acumen_notes", "cadence_notes"
+                "behavioral_flags", "style_notes", "acumen_notes", "cadence_notes",
+                "call_goals_inferred", "goals_achieved", "deal_progressed", "progression_evidence", "likelihood_impact", "competitors_mentioned"
               ],
               additionalProperties: false,
             },
@@ -437,6 +525,13 @@ ${customScorecardContext}`;
         transcript_moment: grade.transcript_moment,
         call_type: transcript.call_type,
         custom_scorecard_results: grade.custom_scores?.length ? grade.custom_scores : null,
+        // Outcome-based fields
+        call_goals_inferred: grade.call_goals_inferred || [],
+        goals_achieved: grade.goals_achieved || [],
+        deal_progressed: grade.deal_progressed || false,
+        progression_evidence: grade.progression_evidence || null,
+        likelihood_impact: grade.likelihood_impact || null,
+        competitors_mentioned: grade.competitors_mentioned || [],
       }, { onConflict: "transcript_id" })
       .select()
       .single();
@@ -547,6 +642,29 @@ ${customScorecardContext}`;
         console.log("Methodology tracker enriched for opportunity:", transcript.opportunity_id);
       } catch (enrichErr) {
         console.error("Methodology enrichment failed (non-fatal):", enrichErr);
+      }
+
+      // Auto-append structured summary to opportunity notes
+      try {
+        const goalsSummary = (grade.goals_achieved || [])
+          .map((g: any) => `${g.achieved ? '✅' : '❌'} ${g.goal}`)
+          .join('\n');
+        const noteEntry = `\n\n📞 ${transcript.title} (${transcript.call_date}) — Grade: ${grade.overall_grade}\n${grade.summary}\n${grade.deal_progressed ? '📈 Deal progressed' : '⚠️ No deal progression'} | Likelihood: ${grade.likelihood_impact || 'unchanged'}${goalsSummary ? '\nGoals:\n' + goalsSummary : ''}${(grade.competitors_mentioned || []).length ? '\n🏁 Competitors: ' + grade.competitors_mentioned.join(', ') : ''}`;
+
+        const { data: opp } = await supabase
+          .from("opportunities")
+          .select("notes")
+          .eq("id", transcript.opportunity_id)
+          .single();
+
+        await supabase
+          .from("opportunities")
+          .update({ notes: ((opp?.notes || '') + noteEntry).trim() })
+          .eq("id", transcript.opportunity_id);
+
+        console.log("Opportunity notes enriched for:", transcript.opportunity_id);
+      } catch (notesErr) {
+        console.error("Opportunity notes enrichment failed (non-fatal):", notesErr);
       }
     }
 

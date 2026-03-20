@@ -333,6 +333,7 @@ export type Database = {
         Row: {
           account_id: string | null
           call_date: string
+          call_goals: string[] | null
           call_type: string | null
           content: string
           created_at: string
@@ -352,6 +353,7 @@ export type Database = {
         Insert: {
           account_id?: string | null
           call_date?: string
+          call_goals?: string[] | null
           call_type?: string | null
           content: string
           created_at?: string
@@ -371,6 +373,7 @@ export type Database = {
         Update: {
           account_id?: string | null
           call_date?: string
+          call_goals?: string[] | null
           call_type?: string | null
           content?: string
           created_at?: string
@@ -2317,21 +2320,26 @@ export type Database = {
           behavioral_flags: Json | null
           cadence_notes: string | null
           cadence_score: number
+          call_goals_inferred: string[] | null
           call_segments: Json | null
           call_type: string | null
           coaching_issue: string | null
           coaching_why: string | null
           commercial_score: number | null
+          competitors_mentioned: string[] | null
           cotm_score: number | null
           cotm_signals: Json | null
           created_at: string
           custom_scorecard_results: Json | null
+          deal_progressed: boolean | null
           discovery_score: number | null
           discovery_stats: Json | null
           evidence: Json | null
           feedback_focus: string
+          goals_achieved: Json | null
           id: string
           improvements: string[] | null
+          likelihood_impact: string | null
           meddicc_score: number | null
           meddicc_signals: Json | null
           methodology_alignment: string | null
@@ -2341,6 +2349,7 @@ export type Database = {
           overall_score: number
           presence_score: number | null
           presence_stats: Json | null
+          progression_evidence: string | null
           replacement_behavior: string | null
           strengths: string[] | null
           structure_score: number | null
@@ -2360,21 +2369,26 @@ export type Database = {
           behavioral_flags?: Json | null
           cadence_notes?: string | null
           cadence_score?: number
+          call_goals_inferred?: string[] | null
           call_segments?: Json | null
           call_type?: string | null
           coaching_issue?: string | null
           coaching_why?: string | null
           commercial_score?: number | null
+          competitors_mentioned?: string[] | null
           cotm_score?: number | null
           cotm_signals?: Json | null
           created_at?: string
           custom_scorecard_results?: Json | null
+          deal_progressed?: boolean | null
           discovery_score?: number | null
           discovery_stats?: Json | null
           evidence?: Json | null
           feedback_focus?: string
+          goals_achieved?: Json | null
           id?: string
           improvements?: string[] | null
+          likelihood_impact?: string | null
           meddicc_score?: number | null
           meddicc_signals?: Json | null
           methodology_alignment?: string | null
@@ -2384,6 +2398,7 @@ export type Database = {
           overall_score?: number
           presence_score?: number | null
           presence_stats?: Json | null
+          progression_evidence?: string | null
           replacement_behavior?: string | null
           strengths?: string[] | null
           structure_score?: number | null
@@ -2403,21 +2418,26 @@ export type Database = {
           behavioral_flags?: Json | null
           cadence_notes?: string | null
           cadence_score?: number
+          call_goals_inferred?: string[] | null
           call_segments?: Json | null
           call_type?: string | null
           coaching_issue?: string | null
           coaching_why?: string | null
           commercial_score?: number | null
+          competitors_mentioned?: string[] | null
           cotm_score?: number | null
           cotm_signals?: Json | null
           created_at?: string
           custom_scorecard_results?: Json | null
+          deal_progressed?: boolean | null
           discovery_score?: number | null
           discovery_stats?: Json | null
           evidence?: Json | null
           feedback_focus?: string
+          goals_achieved?: Json | null
           id?: string
           improvements?: string[] | null
+          likelihood_impact?: string | null
           meddicc_score?: number | null
           meddicc_signals?: Json | null
           methodology_alignment?: string | null
@@ -2427,6 +2447,7 @@ export type Database = {
           overall_score?: number
           presence_score?: number | null
           presence_stats?: Json | null
+          progression_evidence?: string | null
           replacement_behavior?: string | null
           strengths?: string[] | null
           structure_score?: number | null

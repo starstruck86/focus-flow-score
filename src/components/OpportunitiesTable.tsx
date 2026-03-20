@@ -58,6 +58,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import { useDuplicateDetection } from '@/hooks/useDuplicateDetection';
+import { DuplicateDetector } from '@/components/DuplicateDetector';
 import { AlertTriangle, Merge } from 'lucide-react';
 import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
 import { format, parseISO, isToday, isPast, isThisQuarter, getQuarter, getYear } from 'date-fns';
@@ -354,7 +355,19 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
   };
   const [deleteDialogOpp, setDeleteDialogOpp] = useState<Opportunity | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
-  const [groupDimensions, setGroupDimensions] = useState<GroupDimension[]>(renewalsOnly ? ['quarter'] : ['status']);
+  const [showDuplicateReview, setShowDuplicateReview] = useState(false);
+  const groupStorageKey = `group-dimensions-${renewalsOnly ? 'renewals' : excludeRenewals ? 'newlogo' : 'all'}`;
+  const [groupDimensions, setGroupDimensions] = useState<GroupDimension[]>(() => {
+    try {
+      const stored = localStorage.getItem(groupStorageKey);
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return renewalsOnly ? ['quarter'] : ['status'];
+  });
+
+  useEffect(() => {
+    localStorage.setItem(groupStorageKey, JSON.stringify(groupDimensions));
+  }, [groupDimensions, groupStorageKey]);
   const [showChurningOpps, setShowChurningOpps] = useState(false);
   const bulkSelection = useBulkSelection<Opportunity>();
 
@@ -1295,15 +1308,16 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             size="sm"
             variant="outline"
             className="ml-auto h-7 text-xs gap-1 border-status-yellow/30 hover:bg-status-yellow/10"
-            onClick={() => {
-              const settingsLink = document.querySelector('[data-nav="settings"]') as HTMLAnchorElement;
-              if (settingsLink) settingsLink.click();
-              else window.location.hash = '/settings';
-            }}
+            onClick={() => setShowDuplicateReview(prev => !prev)}
           >
-            <Merge className="h-3 w-3" /> Review & Merge
+            <Merge className="h-3 w-3" /> {showDuplicateReview ? 'Hide' : 'Review & Merge'}
           </Button>
         </div>
+      )}
+
+      {/* Inline Duplicate Detector */}
+      {showDuplicateReview && (
+        <DuplicateDetector />
       )}
 
       {/* Filters */}

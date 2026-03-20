@@ -145,6 +145,12 @@ export function useDuplicateDetection() {
       await supabase.from('resources').update({ account_id: keepId }).eq('account_id', removeId);
       // Delete the duplicate account
       await supabase.from('accounts').delete().eq('id', removeId);
+
+      // Sync Zustand store
+      const store = useStore.getState();
+      if (typeof store.deleteAccount === 'function') {
+        store.deleteAccount(removeId);
+      }
     }
 
     // Invalidate queries
@@ -169,6 +175,12 @@ export function useDuplicateDetection() {
       await supabase.from('renewals').update({ linked_opportunity_id: keepId }).eq('linked_opportunity_id', removeId);
       // Delete the duplicate opportunity
       await supabase.from('opportunities').delete().eq('id', removeId);
+
+      // Sync Zustand store
+      const store = useStore.getState();
+      if (typeof store.deleteOpportunity === 'function') {
+        store.deleteOpportunity(removeId);
+      }
     }
 
     // Update tasks in store
