@@ -206,6 +206,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         .eq('id', opps[0].id);
 
       if (error) return `Failed to update: ${error.message}`;
+      emitDataChanged('opportunities');
       toast.success('Deal updated', { description: `${opps[0].name}: ${params.field} → ${params.value}` });
       return `Updated ${opps[0].name} ${params.field} to ${params.value}`;
     },
