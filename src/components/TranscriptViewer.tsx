@@ -4,8 +4,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { FileText, Search, Clock, Target, RefreshCw, Trash2, Building2, GraduationCap } from 'lucide-react';
-import { useCallTranscripts, useDeleteTranscript, type CallTranscript } from '@/hooks/useCallTranscripts';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { FileText, Search, Clock, Target, RefreshCw, Trash2, Building2, GraduationCap, Pencil, Save, X } from 'lucide-react';
+import { useCallTranscripts, useDeleteTranscript, useUpdateTranscript, type CallTranscript } from '@/hooks/useCallTranscripts';
 import { useGradeTranscript, useTranscriptGrade } from '@/hooks/useTranscriptGrades';
 import { useStore } from '@/store/useStore';
 import { format, parseISO } from 'date-fns';
@@ -13,12 +15,182 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { SalesCoachPanel } from '@/components/SalesCoachPanel';
 
+const CALL_TYPES = ['Discovery', 'Demo', 'Negotiation', 'QBR', 'Follow-up', 'Other'];
+
 interface TranscriptViewerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   accountId?: string;
   opportunityId?: string;
   renewalId?: string;
+}
+
+function TranscriptDetailPane({ selected, onDelete }: { selected: CallTranscript; onDelete: (id: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(selected.title);
+  const [editCallType, setEditCallType] = useState(selected.call_type || '');
+  const [editCallDate, setEditCallDate] = useState(selected.call_date);
+  const [editParticipants, setEditParticipants] = useState(selected.participants || '');
+  const [editNotes, setEditNotes] = useState(selected.notes || '');
+  const updateTranscript = useUpdateTranscript();
+
+  const startEdit = () => {
+    setEditTitle(selected.title);
+    setEditCallType(selected.call_type || '');
+    setEditCallDate(selected.call_date);
+    setEditParticipants(selected.participants || '');
+    setEditNotes(selected.notes || '');
+    setEditing(true);
+  };
+
+  const handleSave = async () => {
+    try {
+      await updateTranscript.mutateAsync({
+        id: selected.id,
+        updates: {
+          title: editTitle,
+          call_type: editCallType || null,
+          call_date: editCallDate,
+          participants: editParticipants || null,
+          notes: editNotes || null,
+        },
+      });
+      setEditing(false);
+      toast.success('Transcript updated');
+    } catch {
+      toast.error('Failed to update');
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between">
+        <div className="flex-1 min-w-0">
+          {editing ? (
+            <Input
+              value={editTitle}
+              onChange={e => setEditTitle(e.target.value)}
+              className="text-lg font-semibold h-8 mb-1"
+            />
+          ) : (
+            <h3 className="font-semibold text-lg">{selected.title || 'Untitled'}</h3>
+          )}
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+            {editing ? (
+              <>
+                <input
+                  type="date"
+                  value={editCallDate}
+                  onChange={e => setEditCallDate(e.target.value)}
+                  className="bg-muted border border-border rounded px-1.5 py-0.5 text-xs"
+                />
+                <Select value={editCallType} onValueChange={setEditCallType}>
+                  <SelectTrigger className="h-6 text-[10px] w-[120px]">
+                    <SelectValue placeholder="Call type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CALL_TYPES.map(ct => (
+                      <SelectItem key={ct} value={ct}>{ct}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            ) : (
+              <>
+                <span>{selected.call_date}</span>
+                {selected.call_type && <Badge variant="outline" className="text-[10px]">{selected.call_type}</Badge>}
+                {selected.duration_minutes && <span>{selected.duration_minutes} min</span>}
+              </>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          {editing ? (
+            <>
+              <Button variant="ghost" size="sm" className="h-7" onClick={() => setEditing(false)}>
+                <X className="h-3.5 w-3.5" />
+              </Button>
+              <Button size="sm" className="h-7" onClick={handleSave} disabled={updateTranscript.isPending}>
+                <Save className="h-3.5 w-3.5 mr-1" /> Save
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" size="sm" className="h-7" onClick={startEdit}>
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost" size="sm" className="text-destructive h-7"
+                onClick={() => onDelete(selected.id)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {editing ? (
+        <div className="space-y-2">
+          <div>
+            <label className="text-[11px] font-semibold text-muted-foreground">Participants</label>
+            <Input
+              value={editParticipants}
+              onChange={e => setEditParticipants(e.target.value)}
+              placeholder="e.g. John, Sarah, Mike"
+              className="h-7 text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold text-muted-foreground">Notes</label>
+            <Textarea
+              value={editNotes}
+              onChange={e => setEditNotes(e.target.value)}
+              className="text-sm min-h-[60px]"
+            />
+          </div>
+        </div>
+      ) : (
+        <>
+          {selected.participants && (
+            <div>
+              <p className="text-[11px] font-semibold text-muted-foreground mb-0.5">Participants</p>
+              <p className="text-sm">{selected.participants}</p>
+            </div>
+          )}
+
+          {selected.summary && (
+            <div className="p-3 rounded-lg bg-muted/50 border border-border/50">
+              <p className="text-[11px] font-semibold text-muted-foreground mb-1">Summary</p>
+              <p className="text-sm whitespace-pre-wrap">{selected.summary}</p>
+            </div>
+          )}
+
+          {selected.tags && selected.tags.length > 0 && (
+            <div className="flex gap-1 flex-wrap">
+              {selected.tags.map(tag => (
+                <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>
+              ))}
+            </div>
+          )}
+
+          {selected.notes && (
+            <div>
+              <p className="text-[11px] font-semibold text-muted-foreground mb-0.5">Notes</p>
+              <p className="text-sm whitespace-pre-wrap">{selected.notes}</p>
+            </div>
+          )}
+        </>
+      )}
+
+      <div>
+        <p className="text-[11px] font-semibold text-muted-foreground mb-1">Full Transcript</p>
+        <div className="text-sm whitespace-pre-wrap font-mono bg-muted/30 p-3 rounded-lg border border-border/50 max-h-[400px] overflow-y-auto">
+          {selected.content}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function TranscriptViewer({ open, onOpenChange, accountId, opportunityId, renewalId }: TranscriptViewerProps) {
@@ -142,60 +314,7 @@ export function TranscriptViewer({ open, onOpenChange, accountId, opportunityId,
           {/* Detail */}
           <div className="flex-1 overflow-y-auto">
             {selected ? (
-              <div className="space-y-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold text-lg">{selected.title || 'Untitled'}</h3>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                      <span>{selected.call_date}</span>
-                      {selected.call_type && <Badge variant="outline" className="text-[10px]">{selected.call_type}</Badge>}
-                      {selected.duration_minutes && <span>{selected.duration_minutes} min</span>}
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost" size="sm" className="text-destructive h-7"
-                    onClick={() => handleDelete(selected.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-
-                {selected.participants && (
-                  <div>
-                    <p className="text-[11px] font-semibold text-muted-foreground mb-0.5">Participants</p>
-                    <p className="text-sm">{selected.participants}</p>
-                  </div>
-                )}
-
-                {selected.summary && (
-                  <div className="p-3 rounded-lg bg-muted/50 border border-border/50">
-                    <p className="text-[11px] font-semibold text-muted-foreground mb-1">Summary</p>
-                    <p className="text-sm whitespace-pre-wrap">{selected.summary}</p>
-                  </div>
-                )}
-
-                {selected.tags && selected.tags.length > 0 && (
-                  <div className="flex gap-1 flex-wrap">
-                    {selected.tags.map(tag => (
-                      <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>
-                    ))}
-                  </div>
-                )}
-
-                {selected.notes && (
-                  <div>
-                    <p className="text-[11px] font-semibold text-muted-foreground mb-0.5">Notes</p>
-                    <p className="text-sm whitespace-pre-wrap">{selected.notes}</p>
-                  </div>
-                )}
-
-                <div>
-                  <p className="text-[11px] font-semibold text-muted-foreground mb-1">Full Transcript</p>
-                  <div className="text-sm whitespace-pre-wrap font-mono bg-muted/30 p-3 rounded-lg border border-border/50 max-h-[400px] overflow-y-auto">
-                    {selected.content}
-                  </div>
-                </div>
-              </div>
+              <TranscriptDetailPane selected={selected} onDelete={handleDelete} />
             ) : (
               <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
                 <div className="text-center">

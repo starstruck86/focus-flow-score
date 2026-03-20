@@ -9,13 +9,15 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Sparkles, FileText, Mail, BarChart3, Presentation,
-  Target, Loader2, Save, Copy, ChevronDown, X, Search
+  Target, Loader2, Save, Copy, ChevronDown, X, Search, Layout
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const CONTENT_TYPES = [
   { value: 'business_case', label: 'Business Case', icon: BarChart3 },
@@ -45,6 +47,12 @@ export function ContentBuilder() {
   const contentRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Template & resource reference state
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState('');
+  const [resources, setResources] = useState<any[]>([]);
+  const [selectedResources, setSelectedResources] = useState<string[]>([]);
+
   // Elapsed time tracker during generation
   useEffect(() => {
     if (generating) {
@@ -68,6 +76,39 @@ export function ContentBuilder() {
     };
     load();
   }, [user, selectedAccount]);
+
+  // Load templates (resources where is_template = true)
+  useEffect(() => {
+    if (!user) return;
+    const load = async () => {
+      const { data } = await supabase
+        .from('resources' as any)
+        .select('id, title, content')
+        .eq('user_id', user.id)
+        .eq('is_template', true)
+        .order('title')
+        .limit(50);
+      setTemplates(data || []);
+    };
+    load();
+  }, [user]);
+
+  // Load resource references (battlecards, one-pagers, etc.)
+  useEffect(() => {
+    if (!user) return;
+    const load = async () => {
+      const { data } = await supabase
+        .from('resources' as any)
+        .select('id, title, resource_type')
+        .eq('user_id', user.id)
+        .neq('is_template', true)
+        .in('resource_type', ['document', 'battlecard', 'one_pager', 'template'])
+        .order('updated_at', { ascending: false })
+        .limit(30);
+      setResources(data || []);
+    };
+    load();
+  }, [user]);
 
   // Listen for Dave context event
   useEffect(() => {
@@ -119,6 +160,13 @@ export function ContentBuilder() {
         contacts = data || [];
       }
 
+      // Fetch template content if selected
+      let templateContent = '';
+      if (selectedTemplate) {
+        const tmpl = templates.find(t => t.id === selectedTemplate);
+        if (tmpl?.content) templateContent = tmpl.content;
+      }
+
       const prompt = buildPrompt({
         contentType,
         instructions,
@@ -129,39 +177,92 @@ export function ContentBuilder() {
         contacts,
       });
 
-      const response = await supabase.functions.invoke('build-resource', {
-        body: {
-          type: 'build-content',
-          contentType,
-          prompt,
-          accountContext: account ? {
-            name: account.name,
-            industry: account.industry,
-            contacts: contacts.map(c => `${c.name} (${c.title})`).join(', '),
-            dealStage: opp?.stage,
-          } : undefined,
-        },
-      });
+      // Build request body
+      const body: any = {
+        type: 'build-content',
+        contentType,
+        prompt,
+        accountContext: account ? {
+          name: account.name,
+          industry: account.industry,
+          contacts: contacts.map(c => `${c.name} (${c.title})`).join(', '),
+          dealStage: opp?.stage,
+        } : undefined,
+      };
 
-      if (response.error) throw response.error;
+      if (templateContent) body.templateContent = templateContent;
+      if (selectedResources.length) body.resourceIds = selectedResources;
 
-      // Handle streaming response
-      const reader = response.data;
-      if (typeof reader === 'string') {
-        setGeneratedContent(reader);
-      } else if (reader?.error) {
-        throw new Error(reader.error);
-      } else {
-        // Try to parse SSE from the response
-        const text = typeof reader === 'object' ? JSON.stringify(reader) : String(reader);
-        setGeneratedContent(text);
+      // Use raw fetch for SSE streaming instead of supabase.functions.invoke
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/build-resource`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify(body),
+        }
+      );
+
+      if (!response.ok) {
+        const errText = await response.text();
+        try {
+          const errJson = JSON.parse(errText);
+          throw new Error(errJson.error || `Error ${response.status}`);
+        } catch {
+          throw new Error(errText || `Error ${response.status}`);
+        }
+      }
+
+      // Parse SSE stream
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No response body');
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let accumulated = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim();
+            if (data === '[DONE]') continue;
+            try {
+              const parsed = JSON.parse(data);
+              const token = parsed.choices?.[0]?.delta?.content;
+              if (token) {
+                accumulated += token;
+                setGeneratedContent(accumulated);
+              }
+            } catch {
+              // Skip malformed lines
+            }
+          }
+        }
+      }
+
+      if (!accumulated) {
+        setGeneratedContent('No content generated. Try adjusting your context or instructions.');
       }
     } catch (err: any) {
       toast.error(err.message || 'Generation failed');
     } finally {
       setGenerating(false);
     }
-  }, [user, selectedAccount, selectedOpp, contentType, instructions, selectedTranscripts, accounts, opportunities]);
+  }, [user, selectedAccount, selectedOpp, contentType, instructions, selectedTranscripts, selectedTemplate, selectedResources, accounts, opportunities, templates]);
 
   const handleSave = useCallback(async () => {
     if (!user || !generatedContent) return;
@@ -169,7 +270,7 @@ export function ContentBuilder() {
     try {
       const typeLabel = CONTENT_TYPES.find(t => t.value === contentType)?.label || 'Document';
       const title = `${typeLabel}${accountName ? ` — ${accountName}` : ''} (${new Date().toLocaleDateString()})`;
-      const { error } = await supabase.from('resources').insert({
+      const { error } = await supabase.from('resources' as any).insert({
         user_id: user.id,
         title,
         content: generatedContent,
@@ -196,6 +297,12 @@ export function ContentBuilder() {
   const toggleTranscript = (id: string) => {
     setSelectedTranscripts(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : prev.length < 5 ? [...prev, id] : prev
+    );
+  };
+
+  const toggleResource = (id: string) => {
+    setSelectedResources(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
   };
 
@@ -252,6 +359,47 @@ export function ContentBuilder() {
           </Select>
         </div>
       </div>
+
+      {/* Template Selector */}
+      {templates.length > 0 && (
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1 block flex items-center gap-1">
+            <Layout className="h-3 w-3" /> Base Template
+          </label>
+          <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
+            <SelectTrigger className="h-9 text-xs">
+              <SelectValue placeholder="None — generate from scratch" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None — generate from scratch</SelectItem>
+              {templates.map(t => (
+                <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Resource References */}
+      {resources.length > 0 && (
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1 block">
+            Reference Materials ({selectedResources.length} selected)
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {resources.slice(0, 12).map(r => (
+              <Badge
+                key={r.id}
+                variant={selectedResources.includes(r.id) ? 'default' : 'outline'}
+                className="cursor-pointer text-[10px]"
+                onClick={() => toggleResource(r.id)}
+              >
+                {r.title}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Transcript Selector */}
       {transcripts.length > 0 && (
@@ -311,8 +459,10 @@ export function ContentBuilder() {
           </CardHeader>
           <CardContent>
             <ScrollArea className="max-h-[400px]">
-              <div ref={contentRef} className="prose prose-sm dark:prose-invert max-w-none text-xs whitespace-pre-wrap">
-                {generatedContent}
+              <div ref={contentRef} className="prose prose-sm dark:prose-invert max-w-none text-xs">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {generatedContent}
+                </ReactMarkdown>
               </div>
             </ScrollArea>
           </CardContent>
