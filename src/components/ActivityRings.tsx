@@ -1,9 +1,12 @@
 import { forwardRef, useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useStore } from '@/store/useStore';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Minus, Plus, X } from 'lucide-react';
+import { format } from 'date-fns';
 
 interface RingConfig {
   key: 'dials' | 'connects' | 'emails';
@@ -191,6 +194,7 @@ EditPopover.displayName = 'EditPopover';
 
 export function ActivityRings() {
   const { currentDay, initializeToday, updateActivityInputs, updateRawInputs } = useStore();
+  const { user } = useAuth();
   const [editing, setEditing] = useState<string | null>(null);
 
   // Close popover on outside click
@@ -219,21 +223,45 @@ export function ActivityRings() {
     [currentDay],
   );
 
+  // Persist a ring update to DB so manual taps survive reload
+  const persistToDb = useCallback(async (dbField: string, value: number) => {
+    if (!user?.id) return;
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const { data: existing } = await supabase
+      .from('daily_journal_entries')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('date', today)
+      .limit(1);
+
+    if (existing?.length) {
+      await supabase.from('daily_journal_entries')
+        .update({ [dbField]: value, updated_at: new Date().toISOString() })
+        .eq('id', existing[0].id);
+    } else {
+      await supabase.from('daily_journal_entries')
+        .insert({ user_id: user.id, date: today, [dbField]: value });
+    }
+  }, [user?.id]);
+
   const handleUpdate = useCallback(
     (ring: RingConfig, newValue: number) => {
       if (ring.key === 'dials') {
         updateActivityInputs({ dials: newValue });
+        persistToDb('dials', newValue);
         return;
       }
 
       if (ring.key === 'connects') {
         updateRawInputs({ coldCallsWithConversations: newValue });
+        persistToDb('conversations', newValue);
         return;
       }
 
       updateActivityInputs({ emailsTotal: newValue });
+      persistToDb('manual_emails', newValue);
     },
-    [updateActivityInputs, updateRawInputs],
+    [updateActivityInputs, updateRawInputs, persistToDb],
   );
 
   return (

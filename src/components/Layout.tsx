@@ -32,6 +32,7 @@ import { DayTimeline } from '@/components/tasks/DayTimeline';
 import { ActivityRings } from '@/components/ActivityRings';
 import { GlobalWeekStrip } from '@/components/GlobalWeekStrip';
 import { useDaveContext, DaveSessionError, type DaveSessionData } from '@/hooks/useDaveContext';
+import { useVoiceReminders } from '@/hooks/useVoiceReminders';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
@@ -189,6 +190,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [daveSessionData, setDaveSessionData] = useState<DaveSessionData | null>(null);
   const [daveRetryCount, setDaveRetryCount] = useState(0);
   const { getSession: getDaveSession, invalidateCache: invalidateDaveCache, isFetching: isFetchingDaveSession } = useDaveContext();
+  useVoiceReminders();
   // Handle ?dave=1 from Siri Shortcuts
   useEffect(() => {
     if (searchParams.get('dave') === '1') {

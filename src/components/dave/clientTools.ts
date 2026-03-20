@@ -1,6 +1,7 @@
 import { NavigateFunction } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { emitMetricsUpdated, emitDataChanged } from '@/lib/daveEvents';
 
 type AskCopilot = (question: string, mode: string) => void;
 
@@ -126,6 +127,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         console.error('Voice create_task error:', error);
         return `Failed to create task: ${error.message}`;
       }
+      emitDataChanged('tasks');
 
       // If a specific time was given, also create a voice reminder
       if (params.dueTime && dueDate) {
@@ -177,6 +179,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         .eq('id', accts[0].id);
 
       if (error) return `Failed to update: ${error.message}`;
+      emitDataChanged('accounts');
       toast.success('Account updated', { description: `${accts[0].name}: ${params.field} → ${params.value}` });
       return `Updated ${accts[0].name} ${params.field} to ${params.value}`;
     },
@@ -203,6 +206,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         .eq('id', opps[0].id);
 
       if (error) return `Failed to update: ${error.message}`;
+      emitDataChanged('opportunities');
       toast.success('Deal updated', { description: `${opps[0].name}: ${params.field} → ${params.value}` });
       return `Updated ${opps[0].name} ${params.field} to ${params.value}`;
     },
@@ -235,6 +239,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         }, { onConflict: 'user_id,opportunity_id' });
 
       if (error) return `Failed to update methodology: ${error.message}`;
+      emitDataChanged('opportunities');
       
       const action = params.confirmed ? '✅ Confirmed' : params.notes ? '📝 Updated' : 'Updated';
       toast.success('MEDDICC updated', { description: `${opps[0].name}: ${params.field} ${action}` });
@@ -271,6 +276,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         .eq('id', accts[0].id);
 
       if (error) return `Failed to log touch: ${error.message}`;
+      emitDataChanged('accounts');
       toast.success('Touch logged', { description: `${accts[0].name}: ${params.touchType}` });
       return `Logged ${params.touchType} touch for ${accts[0].name}`;
     },
@@ -295,6 +301,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         .eq('id', opps[0].id);
 
       if (error) return `Failed to move deal: ${error.message}`;
+      emitDataChanged('opportunities');
       toast.success('Deal moved', { description: `${opps[0].name}: ${oldStage || '—'} → ${params.newStage}` });
       return `Moved ${opps[0].name} from ${oldStage || 'no stage'} to ${params.newStage}`;
     },
@@ -578,6 +585,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
 
       const label = params.metric.charAt(0).toUpperCase() + params.metric.slice(1);
       toast.success(`${label} updated`, { description: `${oldValue} → ${newValue} (${mode === 'add' ? '+' : '='}${params.value})` });
+      emitMetricsUpdated({ [dbField]: newValue });
       return `Updated ${params.metric}: ${oldValue} → ${newValue}`;
     },
 
@@ -626,6 +634,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       });
 
       if (error) return `Failed to add contact: ${error.message}`;
+      emitDataChanged('contacts');
       toast.success('Contact added', { description: `${params.name}${params.title ? ` — ${params.title}` : ''}` });
       return `Added contact ${params.name}${params.accountName ? ` at ${params.accountName}` : ''}`;
     },
@@ -683,6 +692,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       });
 
       if (error) return `Failed to create opportunity: ${error.message}`;
+      emitDataChanged('opportunities');
       toast.success('Opportunity created', { description: `${params.name} — $${Math.round((params.arr || 0) / 1000)}k` });
       return `Created opportunity ${params.name}${params.arr ? ` at $${Math.round(params.arr / 1000)}k ARR` : ''}`;
     },
@@ -732,7 +742,8 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         notes: 'notes',
       };
 
-      const dbField = RENEWAL_FIELDS[params.field.toLowerCase()] || params.field;
+      const dbField = RENEWAL_FIELDS[params.field.toLowerCase()];
+      if (!dbField) return `Invalid renewal field "${params.field}". Valid: ${Object.keys(RENEWAL_FIELDS).join(', ')}`;
 
       const { data: renewals } = await supabase
         .from('renewals')
@@ -749,6 +760,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         .eq('id', renewals[0].id);
 
       if (error) return `Failed to update renewal: ${error.message}`;
+      emitDataChanged('renewals');
       toast.success('Renewal updated', { description: `${renewals[0].account_name}: ${params.field} → ${params.value}` });
       return `Updated ${renewals[0].account_name} renewal ${params.field} to ${params.value}`;
     },
@@ -771,10 +783,11 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
 
       const { error } = await supabase
         .from('tasks')
-        .update({ status: 'done', updated_at: new Date().toISOString() })
+        .update({ status: 'done', completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
         .eq('id', tasks[0].id);
 
       if (error) return `Failed to complete task: ${error.message}`;
+      emitDataChanged('tasks');
       toast.success('Task completed', { description: tasks[0].title });
       return `Completed: ${tasks[0].title}`;
     },
@@ -980,7 +993,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         .from('accounts')
         .select('id, name')
         .eq('user_id', userId)
-        .ilike('name', `%${params.name}%`)
+        .eq('name', params.name)
         .limit(1);
 
       if (existing?.length) return `Account "${existing[0].name}" already exists. Use update_account instead.`;
@@ -996,6 +1009,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       });
 
       if (error) return `Failed to create account: ${error.message}`;
+      emitDataChanged('accounts');
       toast.success('Account created', { description: `${params.name}${params.tier ? ` [${params.tier}]` : ''}` });
       return `Created account ${params.name}${params.tier ? ` (Tier ${params.tier})` : ''}${params.motion ? `, ${params.motion} motion` : ''}`;
     },
@@ -1386,6 +1400,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         .in('id', ids);
 
       if (error) return `Bulk update failed: ${error.message}`;
+      emitDataChanged(entity);
       toast.success(`Bulk updated ${matchCount} ${entity}`, { description: `${params.update_field} → ${params.update_value}` });
       return `Updated ${matchCount} ${entity} where ${params.filter_field} matches "${params.filter_value}": set ${params.update_field} = "${params.update_value}"`;
     },
@@ -1424,6 +1439,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       });
 
       if (error) return `Failed to create recurring task: ${error.message}`;
+      emitDataChanged('tasks');
       toast.success('Recurring task created', { description: `${params.title} — ${params.recurrence}` });
       return `Created recurring task: "${params.title}" (${params.recurrence})${params.accountName ? ` linked to ${params.accountName}` : ''}`;
     },
@@ -1488,6 +1504,8 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         }
       }
 
+      emitDataChanged('accounts');
+      if (tasksCreated.length) emitDataChanged('tasks');
       toast.success('Smart debrief captured', {
         description: `${params.accountName}${tasksCreated.length ? ` + ${tasksCreated.length} tasks` : ''}`,
       });
