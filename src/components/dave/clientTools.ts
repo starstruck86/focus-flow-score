@@ -227,7 +227,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       if (params.confirmed !== undefined) updates[`${fieldKey}_confirmed`] = params.confirmed;
       if (params.notes) updates[`${fieldKey}_notes`] = params.notes;
 
-      const { error } = await (supabase.from('opportunity_methodology' as any) as any)
+      const { error } = await supabase.from('opportunity_methodology')
         .upsert({
           user_id: userId,
           opportunity_id: opps[0].id,

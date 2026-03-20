@@ -348,14 +348,18 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
 
   if (tasksRes.data?.length) {
     const tasks = tasksRes.data as any[];
+    // Resolve linked_account_id to account name using already-fetched accounts
+    const accountMap = new Map(accounts.map((a: any) => [a.id, a.name]));
+    const resolveAcct = (t: any) => t.linked_account_id ? accountMap.get(t.linked_account_id) || null : null;
+
     const overdue = tasks.filter((t: any) => t.due_date && t.due_date < today);
     const todayTasks = tasks.filter((t: any) => t.due_date === today);
     const upcoming = tasks.filter((t: any) => t.due_date && t.due_date > today);
     overdueCount = overdue.length;
 
     const lines: string[] = [];
-    if (overdue.length) lines.push(`⚠️ ${overdue.length} OVERDUE: ${overdue.map((t: any) => `${t.title}${t.account_name ? ` (${t.account_name})` : ""}`).join(", ")}`);
-    if (todayTasks.length) lines.push(`Today: ${todayTasks.map((t: any) => `${t.title}${t.account_name ? ` (${t.account_name})` : ""}`).join(", ")}`);
+    if (overdue.length) lines.push(`⚠️ ${overdue.length} OVERDUE: ${overdue.map((t: any) => { const acct = resolveAcct(t); return `${t.title}${acct ? ` (${acct})` : ""}`; }).join(", ")}`);
+    if (todayTasks.length) lines.push(`Today: ${todayTasks.map((t: any) => { const acct = resolveAcct(t); return `${t.title}${acct ? ` (${acct})` : ""}`; }).join(", ")}`);
     if (upcoming.length) lines.push(`Upcoming: ${upcoming.slice(0, 8).map((t: any) => `${t.title} due:${t.due_date}`).join(", ")}`);
     if (lines.length) sections.push("TASKS:\n" + lines.join("\n"));
   }
