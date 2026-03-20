@@ -526,6 +526,32 @@ export function ResourceManager() {
         <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setShowDiscover(true)}>
           <Radar className="h-3.5 w-3.5 mr-1" /> AI Discover
         </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 text-xs"
+          disabled={bulkEnriching}
+          onClick={async () => {
+            setBulkEnriching(true);
+            try {
+              const { data, error } = await supabase.functions.invoke('enrich-resource-content', {
+                body: { batch: true, limit: 50 },
+              });
+              if (error) throw error;
+              const r = data?.results;
+              if (r) {
+                toast.success(`Enriched ${r.enriched} resources (${r.failed} failed, ${r.skipped} skipped)`);
+              }
+            } catch (e: any) {
+              toast.error(e.message || 'Bulk enrich failed');
+            } finally {
+              setBulkEnriching(false);
+            }
+          }}
+        >
+          {bulkEnriching ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Zap className="h-3.5 w-3.5 mr-1" />}
+          Bulk Enrich
+        </Button>
         <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setShowReorganize(true)}>
           <Sparkles className="h-3.5 w-3.5 mr-1" /> Reorganize
         </Button>
