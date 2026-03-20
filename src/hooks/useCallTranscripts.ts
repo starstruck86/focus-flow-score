@@ -129,6 +129,26 @@ export function useSaveTranscript() {
   });
 }
 
+export function useUpdateTranscript() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<Omit<CallTranscript, 'id' | 'user_id' | 'created_at' | 'updated_at'>> }) => {
+      const { data, error } = await supabase
+        .from('call_transcripts' as any)
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as unknown as CallTranscript;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['call-transcripts'] });
+    },
+  });
+}
+
 export function useDeleteTranscript() {
   const queryClient = useQueryClient();
 

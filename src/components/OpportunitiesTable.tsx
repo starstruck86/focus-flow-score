@@ -1474,6 +1474,33 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             },
           },
           {
+            id: 'change-churn-risk',
+            label: 'Change Churn Risk',
+            options: [
+              { value: 'low', label: 'Low' },
+              { value: 'medium', label: 'Medium' },
+              { value: 'high', label: 'High' },
+              { value: 'certain', label: 'Certain' },
+            ],
+            onExecute: (ids, value) => {
+              ids.forEach(id => updateOpportunity(id, { churnRisk: value as ChurnRisk }));
+              bulkSelection.clear();
+            },
+          },
+          {
+            id: 'change-deal-type',
+            label: 'Change Deal Type',
+            options: [
+              { value: 'new-logo', label: 'New Logo' },
+              { value: 'renewal', label: 'Renewal' },
+              { value: 'expansion', label: 'Expansion' },
+            ],
+            onExecute: (ids, value) => {
+              ids.forEach(id => updateOpportunity(id, { dealType: value as DealType }));
+              bulkSelection.clear();
+            },
+          },
+          {
             id: 'delete',
             label: 'Delete',
             variant: 'destructive' as const,

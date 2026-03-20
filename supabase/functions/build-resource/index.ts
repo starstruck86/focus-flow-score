@@ -11,7 +11,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { type, prompt, outputType, resourceIds, accountContext, content, documentType, sourceResourceId, targetType, contentType } = await req.json();
+    const { type, prompt, outputType, resourceIds, accountContext, content, documentType, sourceResourceId, targetType, contentType, templateContent } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
@@ -117,8 +117,15 @@ serve(async (req) => {
         proposal: "Create a professional proposal document. Include executive summary, understanding of requirements, proposed solution, pricing/packaging options, implementation plan, team/support, and terms.",
         custom: "Create professional content based on the instructions provided. Be specific, actionable, and grounded in the context data.",
       };
-      systemPrompt = `You are an elite B2B sales content strategist. ${contentTypePrompts[contentType] || contentTypePrompts.custom}\n\nUse ALL context provided — account data, deal stage, MEDDICC insights, transcript summaries, and stakeholder map. Output clean, professional Markdown. Be specific, not generic.`;
+      let templateInstruction = "";
+      if (templateContent) {
+        templateInstruction = "\n\nIMPORTANT: A base template has been provided. Follow this template's structure, tone, headings, and sections exactly — populate each section with the deal-specific context provided. Do not deviate from the template layout.\n";
+      }
+      systemPrompt = `You are an elite B2B sales content strategist. ${contentTypePrompts[contentType] || contentTypePrompts.custom}${templateInstruction}\n\nUse ALL context provided — account data, deal stage, MEDDICC insights, transcript summaries, and stakeholder map. Output clean, professional Markdown. Be specific, not generic.`;
       userPrompt = prompt || "Generate content based on the provided context.";
+      if (templateContent) {
+        userPrompt += `\n\n## Base Template to Follow\n${templateContent}`;
+      }
       if (accountStr) userPrompt += accountStr;
     } else if (type === "suggest") {
       // Use tool calling for structured output
