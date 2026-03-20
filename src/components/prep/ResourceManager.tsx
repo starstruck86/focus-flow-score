@@ -745,6 +745,9 @@ export function ResourceManager() {
                     {resource.template_category && <Badge variant="outline" className="text-[10px] shrink-0">{resource.template_category}</Badge>}
                     {hasFile && !isExternal && <Upload className="h-3 w-3 text-muted-foreground shrink-0" />}
                     {isExternal && <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />}
+                    {isExternal && (resource as any).content_status === 'enriched' && <Check className="h-3 w-3 text-primary shrink-0" title="Content enriched" />}
+                    {isExternal && (resource as any).content_status === 'enriching' && <Loader2 className="h-3 w-3 text-primary animate-spin shrink-0" title="Enriching..." />}
+                    {isExternal && (resource as any).content_status === 'placeholder' && <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" title="Content not scraped" />}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-[10px] text-muted-foreground capitalize">{resource.resource_type}</span>
