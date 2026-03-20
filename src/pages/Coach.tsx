@@ -793,6 +793,18 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
                   </div>
                 </div>
 
+                {/* Call Goals */}
+                <div className="space-y-1">
+                  <Label className="text-[10px]">Call Goals <span className="text-muted-foreground">(one per line — optional)</span></Label>
+                  <Textarea
+                    placeholder="e.g.&#10;Confirm Economic Buyer&#10;Test Champion with CFO intro ask&#10;Discuss pricing model"
+                    value={callGoals}
+                    onChange={e => setCallGoals(e.target.value)}
+                    rows={2}
+                    className="text-xs resize-none"
+                  />
+                </div>
+
                 <div className="flex justify-end">
                   <Button
                     size="sm"
