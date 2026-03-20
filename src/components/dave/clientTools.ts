@@ -2030,5 +2030,505 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       toast.success('Commitment saved', { description: params.commitment });
       return `Saved commitment: "${params.commitment}"${accountId ? ` (linked to account)` : ''} — task created for ${dueDate}`;
     },
+
+    // ═══════════════════════════════════════════════════════════════
+    // PHASE 4: Advanced Synthesis & Workflow Tools
+    // ═══════════════════════════════════════════════════════════════
+
+    // ── Voice-Triggered Content Generation ─────────────────────────
+    generate_content: async (params: { contentType: string; accountName?: string; opportunityName?: string; contactName?: string; customInstructions?: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      // Resolve account
+      let accountContext: any = null;
+      let oppContext: any = null;
+      let transcriptContext = '';
+      let methodologyContext = '';
+
+      if (params.accountName) {
+        const { data: accounts } = await supabase
+          .from('accounts')
+          .select('id, name, industry, notes')
+          .eq('user_id', userId)
+          .ilike('name', `%${params.accountName}%`)
+          .limit(1);
+        if (accounts?.length) {
+          accountContext = accounts[0];
+
+          // Get latest transcript for this account
+          const { data: transcripts } = await supabase
+            .from('call_transcripts')
+            .select('summary, call_date, call_type')
+            .eq('user_id', userId)
+            .eq('account_id', accountContext.id)
+            .order('call_date', { ascending: false })
+            .limit(2);
+          if (transcripts?.length) {
+            transcriptContext = (transcripts as any[]).map(t => `[${t.call_date} ${t.call_type}]: ${t.summary || 'No summary'}`).join('\n');
+          }
+
+          // Get contacts
+          const { data: contacts } = await supabase
+            .from('contacts')
+            .select('name, title, buyer_role')
+            .eq('user_id', userId)
+            .eq('account_id', accountContext.id)
+            .limit(5);
+          if (contacts?.length) {
+            accountContext.contacts = (contacts as any[]).map(c => `${c.name} (${c.title || 'N/A'}, ${c.buyer_role || 'N/A'})`).join(', ');
+          }
+        }
+      }
+
+      if (params.opportunityName) {
+        const { data: opps } = await supabase
+          .from('opportunities')
+          .select('id, name, stage, arr, close_date, next_step')
+          .eq('user_id', userId)
+          .ilike('name', `%${params.opportunityName}%`)
+          .limit(1);
+        if (opps?.length) {
+          oppContext = opps[0];
+
+          // Get methodology
+          const { data: meth } = await supabase
+            .from('opportunity_methodology' as any)
+            .select('*')
+            .eq('opportunity_id', oppContext.id)
+            .maybeSingle();
+          if (meth) {
+            const m = meth as any;
+            const gaps = ['metrics', 'economic_buyer', 'decision_criteria', 'decision_process', 'identify_pain', 'champion', 'competition']
+              .filter(f => !m[`${f}_confirmed`]);
+            methodologyContext = `MEDDICC gaps: ${gaps.length ? gaps.join(', ') : 'All confirmed'}`;
+          }
+        }
+      }
+
+      // Build the prompt for build-resource
+      const contextParts: string[] = [];
+      if (accountContext) contextParts.push(`Account: ${accountContext.name} (${accountContext.industry || 'N/A'})`);
+      if (oppContext) contextParts.push(`Deal: ${oppContext.name} — Stage: ${oppContext.stage}, ARR: $${oppContext.arr}, Close: ${oppContext.close_date}`);
+      if (methodologyContext) contextParts.push(methodologyContext);
+      if (transcriptContext) contextParts.push(`Recent calls:\n${transcriptContext}`);
+      if (params.contactName) contextParts.push(`Key contact: ${params.contactName}`);
+
+      const fullPrompt = `${params.customInstructions || `Generate a professional ${params.contentType}`}\n\nContext:\n${contextParts.join('\n')}`;
+
+      try {
+        const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/build-resource`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            type: 'generate',
+            prompt: fullPrompt,
+            outputType: params.contentType || 'email',
+            accountContext: accountContext ? { name: accountContext.name, industry: accountContext.industry, contacts: accountContext.contacts } : undefined,
+          }),
+        });
+
+        if (!resp.ok) throw new Error(`Error ${resp.status}`);
+
+        // Stream response
+        const reader = resp.body?.getReader();
+        if (!reader) throw new Error('No stream');
+        const decoder = new TextDecoder();
+        let result = '';
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let idx;
+          while ((idx = buffer.indexOf('\n')) !== -1) {
+            let line = buffer.slice(0, idx);
+            buffer = buffer.slice(idx + 1);
+            if (line.endsWith('\r')) line = line.slice(0, -1);
+            if (!line.startsWith('data: ')) continue;
+            const json = line.slice(6).trim();
+            if (json === '[DONE]') break;
+            try {
+              const parsed = JSON.parse(json);
+              const content = parsed.choices?.[0]?.delta?.content;
+              if (content) result += content;
+            } catch { /* partial */ }
+          }
+        }
+
+        // Copy to clipboard
+        if (result && navigator.clipboard) {
+          try { await navigator.clipboard.writeText(result); } catch {}
+        }
+
+        toast.success(`${params.contentType} generated`, { description: 'Copied to clipboard' });
+        return `✅ Generated ${params.contentType}:\n\n${result.slice(0, 2000)}${result.length > 2000 ? '\n\n[...truncated, full content copied to clipboard]' : ''}`;
+      } catch (e: any) {
+        return `Failed to generate content: ${e.message}`;
+      }
+    },
+
+    // ── Open Content Builder in Prep Hub ────────────────────────────
+    open_content_builder: (params: { accountName?: string; opportunityName?: string; contentType?: string; customInstructions?: string }) => {
+      navigate('/prep');
+      // Dispatch event for Prep Hub to pick up
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('dave-open-content-builder', {
+          detail: {
+            accountName: params.accountName,
+            opportunityName: params.opportunityName,
+            contentType: params.contentType || 'email',
+            customInstructions: params.customInstructions,
+          },
+        }));
+      }, 500);
+      toast.info('Opening Prep Hub', { description: params.contentType || 'Content builder' });
+      return `Opened Prep Hub content builder${params.accountName ? ` for ${params.accountName}` : ''}`;
+    },
+
+    // ── AI Deal Risk Assessment ────────────────────────────────────
+    assess_deal_risk: async (params: { opportunityName?: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      // Get all active opps or a specific one
+      const query = supabase
+        .from('opportunities')
+        .select('id, name, stage, arr, close_date, last_touch_date, next_step, next_step_date, notes, account_id')
+        .eq('user_id', userId)
+        .not('status', 'eq', 'closed-won')
+        .not('status', 'eq', 'closed-lost');
+
+      if (params.opportunityName) {
+        query.ilike('name', `%${params.opportunityName}%`);
+      }
+
+      const { data: opps } = await query.order('arr', { ascending: false }).limit(params.opportunityName ? 1 : 10);
+      if (!opps?.length) return params.opportunityName ? `No active deal matching "${params.opportunityName}"` : 'No active deals found';
+
+      const risks: { name: string; arr: number; score: number; factors: string[] }[] = [];
+
+      for (const opp of opps as any[]) {
+        const factors: string[] = [];
+        let riskScore = 0;
+
+        // Staleness
+        if (opp.last_touch_date) {
+          const daysSince = Math.ceil((Date.now() - new Date(opp.last_touch_date).getTime()) / 86400000);
+          if (daysSince > 14) { riskScore += 30; factors.push(`${daysSince}d since last touch`); }
+          else if (daysSince > 7) { riskScore += 15; factors.push(`${daysSince}d since last touch`); }
+        } else {
+          riskScore += 20; factors.push('No touch date recorded');
+        }
+
+        // Close date proximity
+        if (opp.close_date) {
+          const daysToClose = Math.ceil((new Date(opp.close_date).getTime() - Date.now()) / 86400000);
+          if (daysToClose < 0) { riskScore += 40; factors.push(`Close date ${Math.abs(daysToClose)}d overdue`); }
+          else if (daysToClose < 14) { riskScore += 20; factors.push(`Closing in ${daysToClose}d`); }
+        }
+
+        // MEDDICC gaps
+        const { data: meth } = await supabase
+          .from('opportunity_methodology' as any)
+          .select('*')
+          .eq('opportunity_id', opp.id)
+          .maybeSingle();
+
+        if (meth) {
+          const m = meth as any;
+          const gaps = ['metrics', 'economic_buyer', 'decision_criteria', 'decision_process', 'identify_pain', 'champion', 'competition']
+            .filter(f => !m[`${f}_confirmed`]);
+          if (gaps.length >= 4) { riskScore += 30; factors.push(`${gaps.length} MEDDICC gaps: ${gaps.join(', ')}`); }
+          else if (gaps.length >= 2) { riskScore += 15; factors.push(`${gaps.length} MEDDICC gaps: ${gaps.join(', ')}`); }
+        } else {
+          riskScore += 25; factors.push('No MEDDICC data');
+        }
+
+        // No next step
+        if (!opp.next_step) { riskScore += 10; factors.push('No next step defined'); }
+
+        risks.push({ name: opp.name, arr: opp.arr || 0, score: riskScore, factors });
+      }
+
+      risks.sort((a, b) => b.score - a.score);
+
+      const riskLevel = (score: number) => score >= 50 ? '🔴 HIGH' : score >= 25 ? '🟡 MEDIUM' : '🟢 LOW';
+
+      if (params.opportunityName && risks.length === 1) {
+        const r = risks[0];
+        return `${riskLevel(r.score)} Risk — ${r.name} ($${(r.arr / 1000).toFixed(0)}k)\nRisk Score: ${r.score}/100\n\nRisk Factors:\n${r.factors.map(f => `• ${f}`).join('\n')}\n\nRecommendation: ${r.score >= 50 ? 'Needs immediate attention — schedule a call, confirm champion, and update next steps.' : r.score >= 25 ? 'Monitor closely — address the gaps above this week.' : 'On track — keep momentum.'}`;
+      }
+
+      return `📊 Deal Risk Assessment:\n\n${risks.slice(0, 5).map(r =>
+        `${riskLevel(r.score)} ${r.name} ($${(r.arr / 1000).toFixed(0)}k) — Score: ${r.score}\n  ${r.factors.slice(0, 3).join(' | ')}`
+      ).join('\n\n')}`;
+    },
+
+    // ── Competitive Intelligence Query ─────────────────────────────
+    competitive_intel: async (params: { query: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const searchTerm = params.query.toLowerCase();
+
+      // Search transcripts
+      const { data: transcripts } = await supabase
+        .from('call_transcripts')
+        .select('id, title, call_date, account_id, content')
+        .eq('user_id', userId)
+        .ilike('content', `%${params.query}%`)
+        .order('call_date', { ascending: false })
+        .limit(10);
+
+      // Search account notes
+      const { data: accounts } = await supabase
+        .from('accounts')
+        .select('id, name, notes')
+        .eq('user_id', userId)
+        .ilike('notes', `%${params.query}%`)
+        .limit(10);
+
+      // Search opportunity notes
+      const { data: opps } = await supabase
+        .from('opportunities')
+        .select('id, name, notes, account_id')
+        .eq('user_id', userId)
+        .ilike('notes', `%${params.query}%`)
+        .limit(10);
+
+      // Get transcript grades with competitor mentions
+      const { data: grades } = await supabase
+        .from('transcript_grades')
+        .select('transcript_id, competitors_mentioned')
+        .eq('user_id', userId)
+        .not('competitors_mentioned', 'is', null)
+        .limit(50);
+
+      const gradeMatches = (grades || []).filter((g: any) =>
+        (g.competitors_mentioned || []).some((c: string) => c.toLowerCase().includes(searchTerm))
+      );
+
+      // Resolve account names for transcript matches
+      const accountIds = [...new Set((transcripts || []).map((t: any) => t.account_id).filter(Boolean))];
+      let accountMap: Record<string, string> = {};
+      if (accountIds.length) {
+        const { data: accts } = await supabase
+          .from('accounts')
+          .select('id, name')
+          .in('id', accountIds);
+        accountMap = Object.fromEntries((accts || []).map((a: any) => [a.id, a.name]));
+      }
+
+      const results: string[] = [];
+
+      for (const t of (transcripts || []) as any[]) {
+        const acctName = accountMap[t.account_id] || 'Unknown';
+        // Extract snippet around mention
+        const idx = (t.content || '').toLowerCase().indexOf(searchTerm);
+        const snippet = idx >= 0 ? (t.content || '').slice(Math.max(0, idx - 50), idx + searchTerm.length + 100).trim() : '';
+        results.push(`📞 ${t.call_date} — ${acctName}: "${snippet.slice(0, 150)}..."`);
+      }
+
+      for (const a of (accounts || []) as any[]) {
+        results.push(`🏢 Account "${a.name}" notes mention "${params.query}"`);
+      }
+
+      for (const o of (opps || []) as any[]) {
+        results.push(`💼 Deal "${o.name}" notes mention "${params.query}"`);
+      }
+
+      if (gradeMatches.length) {
+        results.push(`📊 ${gradeMatches.length} call grade(s) flagged "${params.query}" as a competitor`);
+      }
+
+      if (!results.length) return `No mentions of "${params.query}" found in your transcripts, accounts, or deals.`;
+
+      return `🔍 Competitive Intel for "${params.query}":\n\n${results.slice(0, 10).join('\n\n')}${results.length > 10 ? `\n\n...and ${results.length - 10} more mentions` : ''}`;
+    },
+
+    // ── Create Methodology Tasks from Gaps ─────────────────────────
+    create_methodology_tasks: async (params: { opportunityName: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const { data: opps } = await supabase
+        .from('opportunities')
+        .select('id, name, close_date, arr, account_id')
+        .eq('user_id', userId)
+        .ilike('name', `%${params.opportunityName}%`)
+        .limit(1);
+
+      if (!opps?.length) return `No opportunity matching "${params.opportunityName}"`;
+      const opp = opps[0] as any;
+
+      const { data: meth } = await supabase
+        .from('opportunity_methodology' as any)
+        .select('*')
+        .eq('opportunity_id', opp.id)
+        .maybeSingle();
+
+      if (!meth) return `No methodology data for "${opp.name}" — update MEDDICC first.`;
+
+      const m = meth as any;
+      const MEDDICC_TASK_MAP: Record<string, string> = {
+        metrics: 'Confirm Metrics: Ask what success metrics they\'ll measure — tie to their KPIs',
+        economic_buyer: 'Identify Economic Buyer: Ask who signs off on budget and what their approval process looks like',
+        decision_criteria: 'Map Decision Criteria: Ask what they\'re evaluating vendors on — technical, commercial, and cultural fit',
+        decision_process: 'Map Decision Process: Ask about timeline, stakeholders involved, and approval steps',
+        identify_pain: 'Quantify Pain: Ask about the cost of inaction — lost revenue, wasted time, risk exposure',
+        champion: 'Test Champion: Ask your champion to introduce you to the economic buyer or set up a technical validation',
+        competition: 'Assess Competition: Ask who else they\'re evaluating and what criteria matter most',
+      };
+
+      const gaps = Object.entries(MEDDICC_TASK_MAP)
+        .filter(([field]) => !m[`${field}_confirmed`]);
+
+      if (!gaps.length) return `✅ All MEDDICC elements confirmed for "${opp.name}" — no tasks needed!`;
+
+      // Calculate due dates based on close date
+      const closeDate = opp.close_date ? new Date(opp.close_date) : new Date();
+      const now = new Date();
+      const daysToClose = Math.max(1, Math.ceil((closeDate.getTime() - now.getTime()) / 86400000));
+      const interval = Math.max(1, Math.floor(daysToClose / gaps.length));
+
+      const created: string[] = [];
+      for (let i = 0; i < gaps.length; i++) {
+        const [, taskTitle] = gaps[i];
+        const dueDate = new Date(now);
+        dueDate.setDate(dueDate.getDate() + Math.min(interval * (i + 1), daysToClose));
+
+        await supabase
+          .from('tasks')
+          .insert({
+            user_id: userId,
+            title: `[${opp.name}] ${taskTitle}`,
+            priority: i < 2 ? 'P1' : 'P2',
+            status: 'todo',
+            due_date: dueDate.toISOString().split('T')[0],
+            linked_account_id: opp.account_id,
+            source: 'dave-methodology',
+          } as any);
+
+        created.push(`• ${taskTitle} (due ${dueDate.toLocaleDateString()})`);
+      }
+
+      emitDataChanged('tasks');
+      toast.success(`${created.length} MEDDICC tasks created`, { description: opp.name });
+      return `Created ${created.length} tasks to close MEDDICC gaps on "${opp.name}":\n\n${created.join('\n')}`;
+    },
+
+    // ── Meeting Brief (Inline) ─────────────────────────────────────
+    meeting_brief: async (params: { meetingTitle?: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      // Get upcoming calendar events
+      const now = new Date().toISOString();
+      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const { data: events } = await supabase
+        .from('calendar_events')
+        .select('id, title, start_time, end_time, description')
+        .eq('user_id', userId)
+        .gte('start_time', now)
+        .lte('start_time', tomorrow)
+        .order('start_time', { ascending: true })
+        .limit(10);
+
+      if (!events?.length) return 'No upcoming meetings found in the next 24 hours.';
+
+      // Find the target meeting
+      let target = events[0] as any;
+      if (params.meetingTitle) {
+        const match = (events as any[]).find(e =>
+          e.title.toLowerCase().includes(params.meetingTitle!.toLowerCase())
+        );
+        if (match) target = match;
+      }
+
+      // Fuzzy match against accounts
+      const { data: accounts } = await supabase
+        .from('accounts')
+        .select('id, name, industry, tier, notes, last_touch_date, account_status')
+        .eq('user_id', userId);
+
+      const matchedAccount = (accounts || []).find((a: any) =>
+        target.title.toLowerCase().includes(a.name.toLowerCase()) ||
+        a.name.toLowerCase().includes(target.title.toLowerCase().replace(/meeting|call|sync|review|check-in|intro/gi, '').trim())
+      ) as any;
+
+      if (!matchedAccount) {
+        return `📅 Next meeting: "${target.title}" at ${new Date(target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n\nCouldn't match to an account — try "prep meeting for [account name]" for a full brief.`;
+      }
+
+      // Get opportunity context
+      const { data: opps } = await supabase
+        .from('opportunities')
+        .select('id, name, stage, arr, close_date, next_step')
+        .eq('user_id', userId)
+        .eq('account_id', matchedAccount.id)
+        .not('status', 'eq', 'closed-won')
+        .not('status', 'eq', 'closed-lost')
+        .limit(3);
+
+      // Get methodology for top opp
+      let methSummary = '';
+      if (opps?.length) {
+        const { data: meth } = await supabase
+          .from('opportunity_methodology' as any)
+          .select('*')
+          .eq('opportunity_id', opps[0].id)
+          .maybeSingle();
+        if (meth) {
+          const m = meth as any;
+          const gaps = ['metrics', 'economic_buyer', 'decision_criteria', 'decision_process', 'identify_pain', 'champion', 'competition']
+            .filter(f => !m[`${f}_confirmed`]);
+          methSummary = gaps.length ? `\n⚠️ MEDDICC Gaps: ${gaps.join(', ')}` : '\n✅ All MEDDICC confirmed';
+        }
+      }
+
+      // Get latest transcript
+      const { data: transcripts } = await supabase
+        .from('call_transcripts')
+        .select('summary, call_date')
+        .eq('user_id', userId)
+        .eq('account_id', matchedAccount.id)
+        .order('call_date', { ascending: false })
+        .limit(1);
+
+      // Get key contacts
+      const { data: contacts } = await supabase
+        .from('contacts')
+        .select('name, title, buyer_role')
+        .eq('user_id', userId)
+        .eq('account_id', matchedAccount.id)
+        .limit(5);
+
+      const meetTime = new Date(target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const minsAway = Math.round((new Date(target.start_time).getTime() - Date.now()) / 60000);
+
+      let brief = `📋 MEETING BRIEF: "${target.title}" at ${meetTime} (${minsAway > 0 ? `in ${minsAway} min` : 'now'})\n\n`;
+      brief += `🏢 ${matchedAccount.name} | ${matchedAccount.industry || 'N/A'} | Tier ${matchedAccount.tier || 'N/A'} | Status: ${matchedAccount.account_status || 'N/A'}\n`;
+
+      if (opps?.length) {
+        brief += `\n💼 Active Deals:\n${(opps as any[]).map(o => `• ${o.name} — ${o.stage} — $${((o.arr || 0) / 1000).toFixed(0)}k${o.close_date ? ` — Close: ${o.close_date}` : ''}`).join('\n')}`;
+        brief += methSummary;
+      }
+
+      if (contacts?.length) {
+        brief += `\n\n👥 Key Contacts:\n${(contacts as any[]).map(c => `• ${c.name}${c.title ? ` (${c.title})` : ''}${c.buyer_role ? ` — ${c.buyer_role}` : ''}`).join('\n')}`;
+      }
+
+      if (transcripts?.length) {
+        const t = transcripts[0] as any;
+        brief += `\n\n📞 Last Call (${t.call_date}):\n${(t.summary || 'No summary').slice(0, 300)}`;
+      }
+
+      return brief;
+    },
   };
 }

@@ -142,6 +142,16 @@ const DAVE_TOOLS: ToolDef[] = [
   { name: "next_action", description: "Synthesize the single highest-impact thing the user should do right now, considering overdue tasks, upcoming meetings, stale deals, methodology gaps, and journal status.", parameters: {} },
   { name: "contact_timeline", description: "Get engagement history for a specific contact — cross-references call transcripts, calendar events, and touch dates to show when and how you last engaged.", parameters: { contactName: str("The contact's name to look up") }, required: ["contactName"] },
   { name: "save_commitment", description: "Save a verbal commitment or promise made during conversation. Creates a task and optionally appends to account notes.", parameters: { commitment: str("What was committed to"), accountName: str("Account to link this commitment to"), dueDate: str("When this is due — YYYY-MM-DD, today, tomorrow, or weekday name") }, required: ["commitment"] },
+
+  // ═══════════════════════════════════════════════════════════════
+  // PHASE 4: Advanced Synthesis & Workflow Tools
+  // ═══════════════════════════════════════════════════════════════
+  { name: "generate_content", description: "Generate AI content (email, business case, ROI analysis, etc.) using full deal context — transcripts, MEDDICC, contacts. Copies result to clipboard.", parameters: { contentType: str("Type of content to generate", ["email", "business_case", "roi", "follow_up", "qbr_prep", "proposal", "executive_summary"]), accountName: str("Account name for context"), opportunityName: str("Opportunity name for deal context"), contactName: str("Contact name to personalize to"), customInstructions: str("Additional instructions or specifics for the content") }, required: ["contentType"] },
+  { name: "open_content_builder", description: "Open the Prep Hub content builder with pre-filled context for complex content creation that needs user refinement.", parameters: { accountName: str("Account name to pre-fill"), opportunityName: str("Opportunity to pre-fill"), contentType: str("Content type to pre-select"), customInstructions: str("Instructions to pre-fill") } },
+  { name: "assess_deal_risk", description: "Deep AI risk assessment on one deal or across the full portfolio. Analyzes staleness, MEDDICC gaps, close date proximity, and activity cadence.", parameters: { opportunityName: str("Specific deal to assess — omit for portfolio-wide analysis") } },
+  { name: "competitive_intel", description: "Search across all transcripts, account notes, and deal notes for mentions of a competitor or topic. Shows where and when it came up.", parameters: { query: str("Competitor name or topic to search for") }, required: ["query"] },
+  { name: "create_methodology_tasks", description: "Convert unconfirmed MEDDICC gaps on a deal into specific, actionable tasks with talk tracks and due dates based on close date.", parameters: { opportunityName: str("The opportunity to create MEDDICC tasks for") }, required: ["opportunityName"] },
+  { name: "meeting_brief", description: "Get a concise inline prep brief for an upcoming meeting. Auto-matches calendar title to account and pulls deal context, MEDDICC gaps, contacts, and last call summary.", parameters: { meetingTitle: str("Meeting title to match — omit for the next upcoming meeting") } },
 ];
 
 serve(async (req) => {
