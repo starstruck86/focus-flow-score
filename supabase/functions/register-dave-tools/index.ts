@@ -106,9 +106,9 @@ serve(async (req) => {
 
       const data = await res.json();
 
-      if (res.ok && data?.tool_id) {
-        toolIds.push(data.tool_id);
-        results.push({ name: t.name, toolId: data.tool_id });
+      if (res.ok && data?.id) {
+        toolIds.push(data.id);
+        results.push({ name: t.name, toolId: data.id });
       } else {
         results.push({ name: t.name, error: JSON.stringify(data) });
       }
