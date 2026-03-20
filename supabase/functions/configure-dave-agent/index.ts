@@ -16,70 +16,28 @@ serve(async (req) => {
 
   if (!apiKey || !agentId) {
     return new Response(
-      JSON.stringify({ error: "Missing ELEVENLABS_API_KEY or ELEVENLABS_AGENT_ID" }),
+      JSON.stringify({ error: "Missing secrets" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 
   try {
-    const patchBody = {
-      platform_settings: {
-        widget: {
-          variant: "full",
-          overridable: true,
-        },
-        overrides: {
-          conversation_config: {
-            agent: {
-              prompt: {
-                prompt: true,
-              },
-              first_message: true,
-            },
-          },
-        },
-      },
-    };
-
     const res = await fetch(`https://api.elevenlabs.io/v1/convai/agents/${agentId}`, {
-      method: "PATCH",
-      headers: {
-        "xi-api-key": apiKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(patchBody),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      return new Response(
-        JSON.stringify({ success: false, error: `PATCH failed: ${res.status}`, details: data }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
-
-    // Verify by reading back the agent config
-    const verifyRes = await fetch(`https://api.elevenlabs.io/v1/convai/agents/${agentId}`, {
       headers: { "xi-api-key": apiKey },
     });
-    const verifyData = await verifyRes.json();
-    const overrides = verifyData?.platform_settings?.overrides?.conversation_config?.agent;
+    const data = await res.json();
 
     return new Response(
       JSON.stringify({
-        success: true,
-        message: "Agent overrides enabled",
-        verification: {
-          promptOverride: !!overrides?.prompt?.prompt,
-          firstMessageOverride: !!overrides?.first_message,
-        },
-      }),
+        platform_settings: data.platform_settings,
+        conversation_config_agent_keys: Object.keys(data?.conversation_config?.agent || {}),
+        prompt_keys: Object.keys(data?.conversation_config?.agent?.prompt || {}),
+      }, null, 2),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
     return new Response(
-      JSON.stringify({ error: `Unexpected error: ${err.message}` }),
+      JSON.stringify({ error: err.message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
