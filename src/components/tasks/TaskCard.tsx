@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
-import { Calendar, Building2, Target, AlertCircle, Repeat, ChevronDown, Clock } from 'lucide-react';
+import { Calendar, Building2, Target, AlertCircle, Repeat, ChevronDown, Clock, Bell } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
