@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Activity, CheckCircle2, XCircle, AlertTriangle, Wifi, Shield } from 'lucide-react';
+import { Activity, CheckCircle2, XCircle, AlertTriangle, Wifi, Shield, Timer } from 'lucide-react';
 
 export interface DiagnosticData {
   connectionStatus: string;
@@ -15,8 +15,9 @@ export interface DiagnosticData {
   lastMessageAt: number | null;
   vadScore: number;
   errorHistory: string[];
-  healthCheck: { apiKey: boolean; agentId: boolean; tokenOk: boolean } | null;
+  healthCheck: { apiKey: boolean; agentId: boolean; tokenOk: boolean; overridesEnabled?: boolean | null } | null;
   greetingStatus: 'waiting' | 'received' | 'timeout' | 'retrying';
+  cooldownRemaining?: number;
 }
 
 interface Props {
@@ -24,8 +25,8 @@ interface Props {
   data: DiagnosticData;
 }
 
-function StatusDot({ ok }: { ok: boolean | null }) {
-  if (ok === null) return <div className="w-2 h-2 rounded-full bg-white/20 animate-pulse" />;
+function StatusDot({ ok }: { ok: boolean | null | undefined }) {
+  if (ok === null || ok === undefined) return <div className="w-2 h-2 rounded-full bg-white/20 animate-pulse" />;
   return ok
     ? <CheckCircle2 className="w-3 h-3 text-emerald-400" />
     : <XCircle className="w-3 h-3 text-red-400" />;
@@ -34,7 +35,6 @@ function StatusDot({ ok }: { ok: boolean | null }) {
 export function DaveDiagnosticsPanel({ visible, data }: Props) {
   const upSec = Math.round(data.uptimeMs / 1000);
 
-  // Derive failure stage label
   const failureLabel = data.connectionStatus !== 'connected'
     ? 'disconnected'
     : data.greetingStatus === 'timeout'
@@ -58,6 +58,16 @@ export function DaveDiagnosticsPanel({ visible, data }: Props) {
             <Activity className="w-3.5 h-3.5" />
             Dave Diagnostics
           </div>
+
+          {/* Cooldown Warning */}
+          {(data.cooldownRemaining ?? 0) > 0 && (
+            <div className="border border-amber-500/30 bg-amber-500/10 rounded-lg p-2 flex items-center gap-2">
+              <Timer className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-amber-400 font-semibold">
+                Concurrency cooldown: {data.cooldownRemaining}s remaining
+              </span>
+            </div>
+          )}
 
           {/* Identity / Contract Section */}
           <div className="border border-white/10 rounded-lg p-2 space-y-1">
@@ -132,6 +142,14 @@ export function DaveDiagnosticsPanel({ visible, data }: Props) {
               <div className="flex items-center gap-1.5"><StatusDot ok={data.healthCheck.apiKey} /> API Key</div>
               <div className="flex items-center gap-1.5"><StatusDot ok={data.healthCheck.agentId} /> Agent ID</div>
               <div className="flex items-center gap-1.5"><StatusDot ok={data.healthCheck.tokenOk} /> Token Gen</div>
+              {data.healthCheck.overridesEnabled !== undefined && (
+                <div className="flex items-center gap-1.5">
+                  <StatusDot ok={data.healthCheck.overridesEnabled} />
+                  <span className={data.healthCheck.overridesEnabled === false ? 'text-red-400' : ''}>
+                    Overrides {data.healthCheck.overridesEnabled ? 'enabled' : data.healthCheck.overridesEnabled === false ? 'DISABLED — Dave will ignore identity' : 'checking...'}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 

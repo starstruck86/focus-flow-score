@@ -81,7 +81,7 @@ interface SmokeTestResult {
 }
 
 function DaveHealthSection() {
-  const [health, setHealth] = useState<{ apiKey: boolean; agentId: boolean; tokenOk: boolean } | null>(null);
+  const [health, setHealth] = useState<{ apiKey: boolean; agentId: boolean; tokenOk: boolean; overridesEnabled?: boolean | null } | null>(null);
   const [loading, setLoading] = useState(false);
   const [smokeLoading, setSmokeLoading] = useState(false);
   const [smokeResult, setSmokeResult] = useState<SmokeTestResult | null>(null);
@@ -91,7 +91,12 @@ function DaveHealthSection() {
     try {
       const { data } = await supabase.functions.invoke('dave-health-check');
       if (data) {
-        setHealth({ apiKey: data.apiKeyValid, agentId: data.agentIdSet, tokenOk: data.tokenGenOk });
+        setHealth({
+          apiKey: data.apiKeyValid,
+          agentId: data.agentIdSet,
+          tokenOk: data.tokenGenOk,
+          overridesEnabled: data.overridesEnabled,
+        });
       }
     } catch {
       toast.error('Health check failed');
