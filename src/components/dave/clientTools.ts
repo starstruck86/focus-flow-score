@@ -1009,6 +1009,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       });
 
       if (error) return `Failed to create account: ${error.message}`;
+      emitDataChanged('accounts');
       toast.success('Account created', { description: `${params.name}${params.tier ? ` [${params.tier}]` : ''}` });
       return `Created account ${params.name}${params.tier ? ` (Tier ${params.tier})` : ''}${params.motion ? `, ${params.motion} motion` : ''}`;
     },
