@@ -203,9 +203,16 @@ function DaveHealthSection() {
             try {
               const { data, error } = await supabase.functions.invoke('register-dave-tools');
               if (error) throw error;
-              const created = data?.results?.filter((r: any) => r.status === 'created').length ?? 0;
-              const total = data?.results?.length ?? 0;
-              toast.success(`${created}/${total} tools registered`);
+              const failed = data?.failedTools?.length ?? 0;
+              const total = 67;
+              const succeeded = total - failed;
+              if (failed > 0) {
+                toast.warning(`${succeeded}/${total} tools synced (${failed} failed)`, {
+                  description: data?.failedTools?.map((f: any) => f.name).join(', '),
+                });
+              } else {
+                toast.success(`All ${total} tools synced successfully`);
+              }
             } catch (err: any) {
               toast.error('Tool sync failed', { description: err.message });
             } finally {
