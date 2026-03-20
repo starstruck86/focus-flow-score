@@ -1,91 +1,68 @@
 
 
-## Deep Content Ingestion Pipeline — Weapon-Grade Implementation
+## Plan: Make Dave Reliable and QA-able
 
-### The Problem in One Sentence
+### Root Cause Analysis
 
-Every URL resource stores `[External Link: URL]` as content, so Operationalize hallucinates, Build Resource generates filler, and your 100+ imported resources are decorative bookmarks instead of weapons.
+The token fetch works perfectly (200, 20k context, 174-char firstMessage). The problem is downstream — after the WebRTC connection opens. Three likely causes:
 
-### What Gets Built (9 Changes)
+1. **Double-context blast**: On connect, the code sends the entire 20k context *again* via `sendContextualUpdate` (line 110-116). The context was already injected via `overrides` in the hook constructor. Sending 20k chars immediately after connect can overwhelm the agent, causing it to freeze or skip the greeting.
 
-#### 1. Database Migration — `content_status` Column
+2. **ElevenLabs agent settings**: The overrides (system prompt + firstMessage) only work if "System prompt override" and "First message override" are **explicitly enabled** in the ElevenLabs agent dashboard. If these toggles are off, the agent silently ignores the overrides — connects fine but uses its default empty/generic prompt and no greeting.
 
-Add `content_status TEXT NOT NULL DEFAULT 'file'` to `resources`. Backfill existing rows: `'placeholder'` where content matches `[External Link:%`, `'file'` for everything else. Values: `placeholder`, `enriching`, `enriched`, `manual`, `file`.
+3. **No diagnostic visibility**: When something fails, you see a green orb and "Listening..." with zero insight into what went wrong. There's no way to tell if the greeting was sent, if audio is flowing, or if the prompt was accepted.
 
-#### 2. New Edge Function: `enrich-resource-content`
+### What Gets Built
 
-Source-aware Firecrawl scraping (15K char cap). Two modes:
+#### 1. Remove redundant `sendContextualUpdate` blast
+Delete the "belt-and-suspenders" `sendContextualUpdate` call in `onConnect`. The overrides in the constructor already handle prompt injection. Sending 20k chars again is harmful, not helpful.
 
-- **Single**: `{ resource_id }` — enriches one resource
-- **Batch**: `{ batch: true, limit?: 50 }` — queries all `content_status = 'placeholder'` resources with HTTP URLs, processes sequentially with 1s delay between scrapes
+#### 2. Add Dave Diagnostics Panel
+A toggleable debug overlay (tap status text 3x to reveal) showing:
+- Connection status + uptime
+- Token age and context size
+- Messages received count
+- Last message type + timestamp
+- VAD score (live)
+- Whether firstMessage was set
+- Error history
 
-Source detection:
-- **YouTube**: `waitFor: 5000`, captures description, chapters, transcript text
-- **Podcast** (Spotify/Apple): `waitFor: 5000` for JS-heavy show notes
-- **Generic web**: `onlyMainContent: true`, standard markdown
-- **Auth-gated**: skip, keep `placeholder` status
+This lets you immediately see: "Connected, but 0 messages received in 12s → greeting not firing → overrides not enabled."
 
-After each scrape: updates `resources.content`, sets `content_status = 'enriched'`, deletes stale `resource_digests` so Operationalize re-runs fresh.
+#### 3. Add greeting watchdog with auto-retry
+The current watchdog only `console.warn`s after 8s. Upgrade it to:
+- After 8s with no agent message: show visible warning "Dave connected but isn't responding"
+- After 12s: auto-disconnect, fetch fresh token, and retry once
+- After second failure: show actionable error "Dave's voice agent may need configuration — check ElevenLabs agent settings"
 
-#### 3. Patch `classify-resource`
+#### 4. Add connection health-check edge function
+New lightweight `dave-health-check` edge function that:
+- Verifies `ELEVENLABS_API_KEY` is set and valid (test API call)
+- Verifies `ELEVENLABS_AGENT_ID` is set
+- Checks if a conversation token can be generated
+- Returns a structured health report
 
-Line 111 truncates to 3K and discards. Return full `scraped_content` (up to 15K) in the response JSON alongside classification fields. Zero extra API calls — data already fetched.
+The diagnostics panel calls this on first open and shows green/red indicators.
 
-#### 4. Patch `useAddUrlResource` Hook
-
-- Accept `scraped_content` from classification response, store as `resource.content`
-- Set `content_status` accordingly
-- Fire-and-forget call to `enrich-resource-content` for deeper 15K background scrape
-
-#### 5. Patch `operationalize-resource` — Auto-Enrich + Template Extraction
-
-Before AI analysis: if content is placeholder and `file_url` is HTTP, scrape via Firecrawl inline, update DB, then proceed.
-
-Expand the extraction schema to include `template_sections` — structured methodology steps that can seed a template (section name, purpose, example content). This makes Operationalize produce template-ready intelligence, not just generic takeaways.
-
-#### 6. Patch `build-resource` — Add `template` Transform Type
-
-New transform prompt that extracts the methodology/framework from content and produces a reusable Markdown template with `{{placeholder}}` variables, section headings from the source framework, guidance notes, and example content. This is the "watch a video about executive business cases → get a fill-in-the-blank template" use case.
-
-Also improve all existing transform prompts: "Extract specific techniques, frameworks, and phrases from THIS content — not generic advice."
-
-#### 7. Patch `suggest-resource-uses` — Content-Aware Suggestions
-
-Currently only sends title/type/tags/description (line 55-57). Add first 2K chars of `resource.content` to the summary so suggestions are substance-based, not superficial.
-
-#### 8. UI: ResourceManager.tsx — Enrichment Status + Bulk Enrich
-
-- Status indicator on URL resources: spinner for `enriching`, checkmark for `enriched`, warning for `placeholder`
-- "Enrich Content" dropdown action for individual placeholder resources
-- **"Bulk Enrich All"** toolbar button — calls batch mode, shows progress toast, auto-enriches every existing placeholder resource in one click
-- After bulk enrich completes, toast with count of enriched/failed
-
-#### 9. Config
-
-Add `enrich-resource-content` entry to `supabase/config.toml` with `verify_jwt = false`.
+#### 5. Surface ElevenLabs config requirements in Settings
+Add a "Dave Voice Assistant" section in Settings page with:
+- Health check status (API key valid, agent ID set)
+- Reminder: "System prompt override" and "First message override" must be enabled in ElevenLabs
+- Test button that opens Dave with diagnostics visible
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| Migration | Add `content_status` column, backfill existing rows |
-| `supabase/functions/enrich-resource-content/index.ts` | **NEW** — source-aware scraping with batch mode |
-| `supabase/config.toml` | Add entry |
-| `supabase/functions/classify-resource/index.ts` | Return full `scraped_content` in response |
-| `supabase/functions/operationalize-resource/index.ts` | Auto-enrich + `template_sections` extraction |
-| `supabase/functions/build-resource/index.ts` | Add `template` targetType, sharpen all prompts |
-| `supabase/functions/suggest-resource-uses/index.ts` | Include content in AI context |
-| `src/hooks/useResourceUpload.ts` | Persist scraped content, background enrich, content_status |
-| `src/components/prep/ResourceManager.tsx` | Status badges, Enrich button, Bulk Enrich All |
+| `src/components/DaveConversationMode.tsx` | Remove `sendContextualUpdate`, add diagnostics panel, upgrade greeting watchdog |
+| `supabase/functions/dave-health-check/index.ts` | **NEW** — lightweight health check |
+| `src/pages/Settings.tsx` | Add Dave health section with test button |
 
-### End-to-End: "Executive Business Case" Video
+### QA Protocol After Implementation
 
-1. **Import** YouTube link → classify picks folder/tags fast, scraped content stored immediately
-2. **Background enrich** captures 15K of description, chapters, transcript
-3. **Operationalize** extracts "5-component executive business case framework" as specific takeaways + `template_sections` with methodology steps
-4. **Transform → Template** produces a reusable business case doc with `{{company}}`, `{{pain_points}}`, `{{ROI_metrics}}`, `{{executive_sponsor}}` drawn from the actual methodology
-5. **Transform → Checklist** produces exact pre-meeting steps from the video
-6. **Grade Transcript** uses real scoring criteria from the methodology
-7. **Suggest Uses** recommends "templatize for your Q2 enterprise deals" based on actual content
-8. **Bulk Enrich All** — one click backfills every existing placeholder resource, then each becomes available for all the above
+With the diagnostics panel, you can verify each step:
+1. Open Dave → diagnostics show "Token: ✅, Context: 20035 chars, FirstMessage: ✅"
+2. After connect → "Status: connected, Messages: 0" → within 3s → "Messages: 1 (agent_response)"
+3. Speak → "VAD: active, Messages: 2 (user_transcript)" → agent responds → "Messages: 3"
+4. If anything fails, the exact failure point is visible immediately
 
