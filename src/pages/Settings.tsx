@@ -918,10 +918,11 @@ export default function Settings() {
             <ConversionBenchmarksSettings />
           </TabsContent>
           
-          {/* Integrations Tab */}
-          <TabsContent value="integrations" className="space-y-4">
-            <WhoopIntegration />
-          </TabsContent>
+           {/* Integrations Tab */}
+           <TabsContent value="integrations" className="space-y-4">
+             <WhoopIntegration />
+             <DaveHealthSection />
+           </TabsContent>
           
           {/* Appearance Tab */}
           <TabsContent value="appearance" className="space-y-4">
