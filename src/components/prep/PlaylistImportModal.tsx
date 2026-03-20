@@ -108,6 +108,7 @@ export function PlaylistImportModal({ open, onOpenChange }: PlaylistImportModalP
             <ListVideo className="h-5 w-5 text-primary" />
             Import YouTube Playlist
           </DialogTitle>
+          <p className="text-sm text-muted-foreground">Paste a YouTube playlist URL to import up to 1,000 videos.</p>
         </DialogHeader>
 
         <div className="space-y-4">

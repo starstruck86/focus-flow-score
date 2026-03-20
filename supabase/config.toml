@@ -93,3 +93,9 @@ verify_jwt = false
 
 [functions.dave-conversation-token]
 verify_jwt = false
+
+[functions.import-youtube-playlist]
+verify_jwt = false
+
+[functions.import-podcast]
+verify_jwt = false
