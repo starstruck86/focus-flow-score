@@ -24,7 +24,7 @@ serve(async (req) => {
       });
     }
 
-    const { transcript_id } = await req.json();
+    const { transcript_id, call_goals } = await req.json();
     if (!transcript_id) throw new Error("transcript_id required");
 
     const { data: transcript, error: tErr } = await supabase
@@ -34,8 +34,8 @@ serve(async (req) => {
       .single();
     if (tErr || !transcript) throw new Error("Transcript not found");
 
-    // Fetch resources for methodology context
-    const [resourceLinksRes, digestsRes] = await Promise.all([
+    // Fetch resources, digests, prior grades for cumulative context, and opportunity data
+    const [resourceLinksRes, digestsRes, priorGradesRes, opportunityRes] = await Promise.all([
       supabase
         .from("resource_links")
         .select("label, category, url, notes")
@@ -44,10 +44,30 @@ serve(async (req) => {
         .from("resource_digests")
         .select("resource_id, grading_criteria")
         .not("grading_criteria", "is", null),
+      // Fetch prior grades for same opportunity to build cumulative MEDDICC context
+      transcript.opportunity_id
+        ? supabase
+            .from("transcript_grades")
+            .select("meddicc_signals, cotm_signals, overall_grade, call_goals_inferred, deal_progressed, created_at")
+            .eq("user_id", user.id)
+            .neq("transcript_id", transcript_id)
+            .order("created_at", { ascending: false })
+            .limit(5)
+        : Promise.resolve({ data: [] }),
+      // Fetch opportunity stage/next steps for cycle context
+      transcript.opportunity_id
+        ? supabase
+            .from("opportunities")
+            .select("name, stage, next_step, next_step_date, arr, close_date, status")
+            .eq("id", transcript.opportunity_id)
+            .single()
+        : Promise.resolve({ data: null }),
     ]);
 
     const resources = resourceLinksRes.data || [];
     const digests = digestsRes.data || [];
+    const priorGrades = priorGradesRes.data || [];
+    const opportunity = opportunityRes.data;
 
     const resourceContext = resources.length > 0
       ? `The user follows these sales methodologies:\n${resources.map((r: any) => `- ${r.label} (${r.category})${r.notes ? ': ' + r.notes : ''}`).join('\n')}`
@@ -67,6 +87,33 @@ serve(async (req) => {
       }
     }
 
+    // Build cumulative MEDDICC context from prior grades
+    let cumulativeContext = "";
+    if (priorGrades.length > 0) {
+      const confirmed: string[] = [];
+      const unconfirmed: string[] = [];
+      const meddiccFields = ['metrics', 'economic_buyer', 'decision_criteria', 'decision_process', 'identify_pain', 'champion', 'competition'];
+      const fieldLabels: Record<string, string> = { metrics: 'Metrics', economic_buyer: 'Economic Buyer', decision_criteria: 'Decision Criteria', decision_process: 'Decision Process', identify_pain: 'Identify Pain', champion: 'Champion', competition: 'Competition' };
+      
+      for (const field of meddiccFields) {
+        const everConfirmed = priorGrades.some((g: any) => g.meddicc_signals?.[field]);
+        if (everConfirmed) confirmed.push(fieldLabels[field]);
+        else unconfirmed.push(fieldLabels[field]);
+      }
+      
+      cumulativeContext = `\n\n## CUMULATIVE DEAL CONTEXT\nPrior calls have confirmed these MEDDICC elements: ${confirmed.join(', ') || 'None'}\nStill unconfirmed: ${unconfirmed.join(', ') || 'All confirmed'}\nPrior call count: ${priorGrades.length}\nPrior grades: ${priorGrades.map((g: any) => g.overall_grade).join(', ')}`;
+      
+      if (priorGrades.some((g: any) => g.deal_progressed)) {
+        cumulativeContext += "\nDeal has shown forward progression in prior calls.";
+      }
+    }
+
+    // Build opportunity context
+    let opportunityContext = "";
+    if (opportunity) {
+      opportunityContext = `\n\n## OPPORTUNITY CONTEXT\nDeal: ${opportunity.name}\nStage: ${opportunity.stage || 'Unknown'}\nARR: $${opportunity.arr || 0}\nClose Date: ${opportunity.close_date || 'Unknown'}\nNext Step: ${opportunity.next_step || 'None'}\nStatus: ${opportunity.status || 'active'}`;
+    }
+
     let accountContext = "";
     if (transcript.account_id) {
       const { data: account } = await supabase
@@ -78,6 +125,11 @@ serve(async (req) => {
         accountContext = `\nAccount: ${account.name} (${account.industry || 'unknown'}, Tier ${account.tier || 'B'}, ${account.motion || 'new-logo'})`;
       }
     }
+
+    // Build call goals context
+    const goalsContext = (call_goals || transcript.call_goals)
+      ? `\n\n## CALL GOALS (set by rep before this call)\n${(call_goals || transcript.call_goals).map((g: string, i: number) => `${i + 1}. ${g}`).join('\n')}\nEvaluate whether each goal was achieved in the transcript.`
+      : "";
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
