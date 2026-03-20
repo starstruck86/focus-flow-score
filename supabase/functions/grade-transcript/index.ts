@@ -643,6 +643,29 @@ ${customScorecardContext}`;
       } catch (enrichErr) {
         console.error("Methodology enrichment failed (non-fatal):", enrichErr);
       }
+
+      // Auto-append structured summary to opportunity notes
+      try {
+        const goalsSummary = (grade.goals_achieved || [])
+          .map((g: any) => `${g.achieved ? '✅' : '❌'} ${g.goal}`)
+          .join('\n');
+        const noteEntry = `\n\n📞 ${transcript.title} (${transcript.call_date}) — Grade: ${grade.overall_grade}\n${grade.summary}\n${grade.deal_progressed ? '📈 Deal progressed' : '⚠️ No deal progression'} | Likelihood: ${grade.likelihood_impact || 'unchanged'}${goalsSummary ? '\nGoals:\n' + goalsSummary : ''}${(grade.competitors_mentioned || []).length ? '\n🏁 Competitors: ' + grade.competitors_mentioned.join(', ') : ''}`;
+
+        const { data: opp } = await supabase
+          .from("opportunities")
+          .select("notes")
+          .eq("id", transcript.opportunity_id)
+          .single();
+
+        await supabase
+          .from("opportunities")
+          .update({ notes: ((opp?.notes || '') + noteEntry).trim() })
+          .eq("id", transcript.opportunity_id);
+
+        console.log("Opportunity notes enriched for:", transcript.opportunity_id);
+      } catch (notesErr) {
+        console.error("Opportunity notes enrichment failed (non-fatal):", notesErr);
+      }
     }
 
     return new Response(JSON.stringify(saved), {
