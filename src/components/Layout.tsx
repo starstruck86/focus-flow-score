@@ -31,7 +31,7 @@ import { useCopilot, type PageContext } from '@/contexts/CopilotContext';
 import { DayTimeline } from '@/components/tasks/DayTimeline';
 import { ActivityRings } from '@/components/ActivityRings';
 import { GlobalWeekStrip } from '@/components/GlobalWeekStrip';
-import { useDaveContext, type DaveSessionData } from '@/hooks/useDaveContext';
+import { useDaveContext, DaveSessionError, type DaveSessionData } from '@/hooks/useDaveContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
