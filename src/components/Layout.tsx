@@ -187,8 +187,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [daveOpen, setDaveOpen] = useState(false);
   const [showDaveTapPrompt, setShowDaveTapPrompt] = useState(false);
   const [daveSessionData, setDaveSessionData] = useState<DaveSessionData | null>(null);
-  const { getSession: getDaveSession } = useDaveContext();
-
+  const [daveRetryCount, setDaveRetryCount] = useState(0);
+  const { getSession: getDaveSession, invalidateCache: invalidateDaveCache } = useDaveContext();
   // Handle ?dave=1 from Siri Shortcuts
   useEffect(() => {
     if (searchParams.get('dave') === '1') {
