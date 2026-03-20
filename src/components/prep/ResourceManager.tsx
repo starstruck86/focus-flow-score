@@ -122,6 +122,7 @@ export function ResourceManager() {
   const [competitorContext, setCompetitorContext] = useState('');
   const [battlecardLoading, setBattlecardLoading] = useState(false);
   const [battlecardProgress, setBattlecardProgress] = useState('');
+  const [bulkEnriching, setBulkEnriching] = useState(false);
 
   // AI Generate / Transform states
   const [showAIGenerate, setShowAIGenerate] = useState(false);
