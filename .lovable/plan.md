@@ -1,61 +1,94 @@
 
 
-## Plan: Fix All Three Dave Failure Modes
+## Dave Capability Gap Analysis
 
-### Issue 1: Stop the Concurrency Cascade
-**File: `src/hooks/useDaveContext.ts`**
-- Remove the `setInterval(prefetch, CACHE_TTL_MS)` and the mount-time `prefetch()` call (lines 103-107)
-- Tokens are fetched on-demand only when the user taps the mic
-- Add a `lastErrorRef` with timestamp — if the last error was a concurrency limit within 30s, block the request and show a countdown instead of hammering the API
-- Add exponential backoff: 5s → 15s → 60s for repeated failures
+### What Dave CAN do today (21 tools)
+CRM writes (update_account, update_opportunity, update_methodology, log_touch, move_deal, add_note), task creation, reminders, lookups (lookup_account, pipeline_pulse, scenario_calc), coaching triggers (start_roleplay, start_drill, grade_call), navigation, copilot delegation, email drafting, debrief logging, daily briefing, activity logging.
 
-### Issue 2: Detect Missing Dashboard Overrides
-**File: `supabase/functions/dave-health-check/index.ts`**
-- After generating a test token, make a test `GET` to `https://api.elevenlabs.io/v1/convai/agents/{agent_id}` to check if the agent's `platform_settings` include override permissions
-- Return `overridesEnabled: true/false` in the health check response
-- Surface this in the diagnostics panel and Settings smoke test so the user sees: "System prompt override: OFF — Dave will ignore your identity instructions"
+### What Dave CANNOT do but SHOULD
 
-### Issue 3: Structured Error Responses
-**File: `supabase/functions/dave-conversation-token/index.ts`**
-- Parse the ElevenLabs error body for known statuses: `workspace_concurrency_limit_exceeded`, `invalid_api_key`, `agent_not_found`
-- Return a structured JSON error: `{ error: "...", errorType: "concurrency_limit" | "auth_failed" | "agent_error" | "unknown" }`
+#### 1. Daily Metrics (already planned)
+- **update_daily_metrics** — "Dave, add 5 calls to today" → upserts `daily_journal_entries`
+- **get_daily_metrics** — "How many connects do I have today?"
 
-**File: `src/hooks/useDaveContext.ts`**
-- Parse `errorType` from the response
-- For `concurrency_limit`: set a 30s cooldown, show specific message "Dave is at capacity — try again in 30s"
-- For `auth_failed`: show "ElevenLabs API key invalid"
-- For `agent_error`: show "ElevenLabs agent configuration issue"
+#### 2. Contact Management
+- **add_contact** — "Dave, add Sarah Chen, VP Sales at Acme, email sarah@acme.com" → inserts into `contacts`
+- **lookup_contact** — "Who do I know at Acme?" → queries contacts by account
 
-**File: `src/components/Layout.tsx`**
-- In `handleOpenDave` and `handleDaveRetry`, check for concurrency errors and block auto-retry — show a manual "Try Again" button with countdown instead
+#### 3. Opportunity Creation
+- **create_opportunity** — "Dave, create a new deal for Acme, 80k ARR, discovery stage" → inserts into `opportunities`
 
-### Issue 4: Diagnostics + Settings Updates
-**File: `src/components/dave/DaveDiagnosticsPanel.tsx`**
-- Add override permission status from health check
-- Show cooldown timer if concurrency-limited
+#### 4. Renewal Intelligence
+- **lookup_renewal** — "What renewals do I have coming up this quarter?" → queries `renewals` table by date range
+- **update_renewal** — "Dave, update the Acme renewal health to yellow, risk reason is low usage" → updates `renewals`
 
-**File: `src/pages/Settings.tsx`**
-- Smoke test now also checks override permissions
-- Show clear pass/fail for: API Key ✅ | Agent ID ✅ | Token Gen ✅ | Overrides Enabled ❓
+#### 5. Task Management (beyond create)
+- **complete_task** — "Dave, mark the Acme follow-up task done" → updates task status to 'done'
+- **list_tasks** — "What's on my plate today?" → queries tasks by due_date and status
 
-### Files Changed
+#### 6. Calendar Awareness
+- **get_calendar** — "What meetings do I have today/tomorrow?" → queries `calendar_events`
+
+#### 7. Quota & Commission Read
+- **quota_status** — "Where am I against quota?" → reads `quota_targets` + closed-won opps and returns % attainment
+
+#### 8. Journal / Check-in
+- **log_reflection** — "Dave, today's blocker was internal legal review, what worked was the multi-thread approach" → updates `daily_journal_entries` reflection fields
+- **check_in** — "Dave, check me in for today" → sets `checked_in = true` on today's journal entry
+
+#### 9. Transcript Lookup
+- **lookup_transcript** — "What did we talk about in my last call with Acme?" → queries `call_transcripts` by account
+
+#### 10. Power Hour
+- **start_power_hour** — "Dave, start a power hour" → navigates to power hour modal or dispatches event
+- **log_power_hour_stats** — "Dave, I just finished — 25 dials, 3 connects, 1 meeting set" → inserts `power_hour_sessions`
+
+### Implementation approach
+
+All tools go in `src/components/dave/clientTools.ts`. No database changes needed — all tables already exist with proper RLS.
+
+Each tool also needs a matching **client tool registration** in ElevenLabs with name, description, and parameter JSON schema.
+
+### Files to change
 
 | File | Change |
 |------|--------|
-| `src/hooks/useDaveContext.ts` | Remove pre-fetch interval, add backoff + cooldown for concurrency errors, parse structured error types |
-| `supabase/functions/dave-conversation-token/index.ts` | Return structured `errorType` field on failures |
-| `supabase/functions/dave-health-check/index.ts` | Check agent override permissions via ElevenLabs API |
-| `src/components/Layout.tsx` | Block auto-retry on concurrency errors, show specific messages |
-| `src/components/dave/DaveDiagnosticsPanel.tsx` | Show override status + cooldown timer |
-| `src/pages/Settings.tsx` | Smoke test checks override permissions |
+| `src/components/dave/clientTools.ts` | Add ~15 new tool functions |
 
-### What This Solves
+### ElevenLabs registrations needed
 
-After this, every failure has a specific label and a specific fix:
-- "Concurrency limit" → wait 30s, don't hammer
-- "Overrides not enabled" → go to ElevenLabs dashboard, enable toggles
-- "API key invalid" → update the secret
-- "Connected but silent for 12s" → retry-via-remount (already built)
+For each new tool, a client tool must be added in the ElevenLabs agent dashboard with:
+- **Name** (exact match to the key in `clientTools`)
+- **Description** (tells the agent when to use it)
+- **Parameters** (JSON schema)
 
-No more guessing.
+I'll provide the complete registration JSON for every new tool alongside the code.
+
+### Summary: Dave goes from 21 → ~36 tools
+
+```text
+Current (21)                    New (+15)
+─────────────────               ─────────────────
+create_task                     update_daily_metrics
+update_account                  get_daily_metrics
+update_opportunity              add_contact
+update_methodology              lookup_contact
+log_touch                       create_opportunity
+move_deal                       lookup_renewal
+add_note                        update_renewal
+lookup_account                  complete_task
+scenario_calc                   list_tasks
+pipeline_pulse                  get_calendar
+daily_briefing                  quota_status
+debrief                         log_reflection
+draft_email                     check_in
+set_reminder                    lookup_transcript
+navigate                        start_power_hour
+open_copilot
+prep_meeting
+start_roleplay
+start_drill
+grade_call
+log_activity
+```
 
