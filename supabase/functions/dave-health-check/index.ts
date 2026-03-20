@@ -24,13 +24,18 @@ serve(async (req) => {
     error: null as string | null,
   };
 
-  // Validate API key by hitting a lightweight endpoint
-  if (apiKey) {
+  // Validate API key using convai token endpoint (more reliable than /v1/user)
+  // The tokenGenOk check below covers this, but we do a quick agent fetch as validation
+  if (apiKey && agentId) {
     try {
-      const res = await fetch("https://api.elevenlabs.io/v1/user", {
-        headers: { "xi-api-key": apiKey },
-      });
+      const res = await fetch(
+        `https://api.elevenlabs.io/v1/convai/agents/${agentId}`,
+        { method: "GET", headers: { "xi-api-key": apiKey } }
+      );
       result.apiKeyValid = res.ok;
+      if (!res.ok) {
+        result.error = `API key validation failed (agent fetch): ${res.status}`;
+      }
     } catch (e) {
       result.error = `API key check failed: ${e.message}`;
     }
