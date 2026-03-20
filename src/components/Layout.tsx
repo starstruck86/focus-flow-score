@@ -190,6 +190,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [daveSessionData, setDaveSessionData] = useState<DaveSessionData | null>(null);
   const [daveRetryCount, setDaveRetryCount] = useState(0);
   const { getSession: getDaveSession, invalidateCache: invalidateDaveCache, isFetching: isFetchingDaveSession } = useDaveContext();
+  useVoiceReminders();
   // Handle ?dave=1 from Siri Shortcuts
   useEffect(() => {
     if (searchParams.get('dave') === '1') {

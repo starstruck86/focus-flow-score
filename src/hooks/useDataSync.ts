@@ -487,4 +487,100 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
+
+  // ── Listen for Dave CRM mutations → re-fetch affected table ──
+  useEffect(() => {
+    if (!userId || !hasHydrated.current) return;
+
+    const handler = async (e: Event) => {
+      const table = (e as CustomEvent).detail?.table;
+      if (!table) return;
+      console.log(`[DataSync] Dave changed ${table}, re-fetching...`);
+
+      _isHydrating = true;
+      try {
+        if (table === 'accounts') {
+          const { data } = await supabase.from('accounts').select('*').order('name');
+          if (data) {
+            const mapped = data.map(dbAccountToStore);
+            useStore.setState({ accounts: mapped });
+            if (prevState.current) prevState.current.accounts = mapped;
+          }
+        } else if (table === 'opportunities') {
+          const { data } = await supabase.from('opportunities').select('*').order('created_at', { ascending: false });
+          if (data) {
+            const mapped = data.map(dbOpportunityToStore);
+            useStore.setState({ opportunities: mapped });
+            if (prevState.current) prevState.current.opportunities = mapped;
+          }
+        } else if (table === 'renewals') {
+          const { data } = await supabase.from('renewals').select('*').order('renewal_due');
+          if (data) {
+            const mapped = data.map(dbRenewalToStore);
+            useStore.setState({ renewals: mapped });
+            if (prevState.current) prevState.current.renewals = mapped;
+          }
+        } else if (table === 'contacts') {
+          const { data } = await supabase.from('contacts').select('*').order('name');
+          if (data) {
+            const mapped = data.map(dbContactToStore);
+            useStore.setState({ contacts: mapped });
+            if (prevState.current) prevState.current.contacts = mapped;
+          }
+        } else if (table === 'tasks') {
+          const { data } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
+          if (data) {
+            const mapped = data.map(dbTaskToStore);
+            useStore.setState({ tasks: mapped });
+            if (prevState.current) prevState.current.tasks = mapped;
+          }
+        }
+        _lastSyncTime = Date.now();
+        notifySyncListeners();
+      } finally {
+        _isHydrating = false;
+      }
+    };
+
+    window.addEventListener('dave-data-changed', handler);
+    return () => window.removeEventListener('dave-data-changed', handler);
+  }, [userId]);
+
+  // ── Listen for Dave metrics updates → re-hydrate journal ──
+  useEffect(() => {
+    if (!userId) return;
+    const handler = () => { hydrateJournalToday(userId); };
+    window.addEventListener('dave-metrics-updated', handler);
+    return () => window.removeEventListener('dave-metrics-updated', handler);
+  }, [userId]);
+}
+
+// ── Journal hydration helper ──────────────────────────────────
+async function hydrateJournalToday(userId: string) {
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const { data } = await supabase
+    .from('daily_journal_entries')
+    .select('dials, conversations, manual_emails, meetings_set, prospects_added, customer_meetings_held, opportunities_created, accounts_researched, contacts_prepped, personal_development, daily_score, checked_in, goal_met')
+    .eq('user_id', userId)
+    .eq('date', today)
+    .limit(1);
+
+  if (!data?.length) return;
+  const row = data[0];
+
+  const store = useStore.getState();
+  store.initializeToday();
+  store.updateActivityInputs({
+    dials: row.dials || 0,
+    emailsTotal: row.manual_emails || 0,
+    customerMeetingsHeld: row.customer_meetings_held || 0,
+  });
+  store.updateRawInputs({
+    coldCallsWithConversations: row.conversations || 0,
+    initialMeetingsSet: row.meetings_set || 0,
+    prospectsAddedToCadence: row.prospects_added || 0,
+    opportunitiesCreated: row.opportunities_created || 0,
+    personalDevelopment: row.personal_development ? 1 : 0,
+  });
+  console.log(`[DataSync] Journal hydrated: ${row.dials} dials, ${row.conversations} connects, ${row.manual_emails} emails`);
 }
