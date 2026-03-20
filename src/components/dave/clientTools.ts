@@ -1133,7 +1133,6 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       const closed = closedRes.data || [];
       const newArr = closed.filter(o => o.deal_type === 'new-logo').reduce((s, o) => s + (o.arr || 0), 0);
       const renewalArr = closed.filter(o => o.deal_type !== 'new-logo').reduce((s, o) => s + (o.arr || 0), 0);
-      const oneTime = closed.reduce((s, o) => s + (o.one_time_amount || 0), 0);
       const totalQuota = (quota.new_arr_quota || 0) + (quota.renewal_arr_quota || 0);
       const totalClosed = newArr + renewalArr;
       const attainment = totalQuota ? Math.round((totalClosed / totalQuota) * 100) : 0;
@@ -1142,7 +1141,6 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       summary += `Total attainment: ${attainment}% ($${Math.round(totalClosed / 1000)}k of $${Math.round(totalQuota / 1000)}k)\n`;
       summary += `New logo: $${Math.round(newArr / 1000)}k of $${Math.round((quota.new_arr_quota || 0) / 1000)}k\n`;
       summary += `Renewal: $${Math.round(renewalArr / 1000)}k of $${Math.round((quota.renewal_arr_quota || 0) / 1000)}k\n`;
-      if (oneTime > 0) summary += `One-time revenue: $${Math.round(oneTime / 1000)}k\n`;
       summary += `Gap to quota: $${Math.round(Math.max(0, totalQuota - totalClosed) / 1000)}k`;
 
       if (attainment >= 100) summary += `\n🎉 You're at or above quota! Accelerators may apply.`;
