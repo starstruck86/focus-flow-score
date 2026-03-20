@@ -168,28 +168,34 @@ Evaluate segments:
 - Executive Presence (talk ratio, rambling, interruptions, flow control)
 
 ## GRADING RULES
-- Use 1-5 scale for ALL category scores. Most reps are 2-3. A 5 requires exceptional execution.
+- Use 1-5 scale for ALL category scores. Grade based on OUTCOME and DEAL PROGRESSION, not just technique.
+- Score by call type: Discovery calls prioritize question depth + pain identification. Demo calls prioritize solution framing + business case. Negotiation calls prioritize commercial acumen + close control. QBR calls prioritize expansion + relationship deepening.
+- A score of 5 = the call achieved its objectives AND moved the deal forward measurably. A 4 = strong execution with minor gaps. A 3 = adequate but missed key opportunities. A 2 = significant methodology gaps. A 1 = call was counterproductive.
 - Overall score is 1-5 weighted average.
 - Be brutally honest. Generic praise is failure.
 - Every score MUST have evidence (exact transcript quotes).
 - ALWAYS identify the ONE highest-ROI coaching action.
 - Tie all feedback to revenue, risk, or deal progression — never abstract advice.
+- When cumulative context is provided, factor in what was ALREADY confirmed in prior calls vs what is NEW.
 
 ${resourceContext}
 ${accountContext}
+${opportunityContext}
+${cumulativeContext}
+${goalsContext}
 ${customScorecardContext}`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: \`Bearer \${LOVABLE_API_KEY}\`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `Analyze this call transcript with full framework enforcement.\n\nTitle: ${transcript.title}\nType: ${transcript.call_type || 'Unknown'}\nParticipants: ${transcript.participants || 'Unknown'}\n\nTranscript:\n${transcript.content.substring(0, 15000)}` },
+          { role: "user", content: \`Analyze this call transcript with full framework enforcement.\n\nTitle: \${transcript.title}\nType: \${transcript.call_type || 'Unknown'}\nParticipants: \${transcript.participants || 'Unknown'}\n\nTranscript:\n\${transcript.content.substring(0, 15000)}\` },
         ],
         tools: [{
           type: "function",
