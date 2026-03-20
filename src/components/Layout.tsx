@@ -324,9 +324,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Dave Conversational AI Overlay — key forces remount with fresh overrides */}
       {daveOpen && daveSessionData && (
         <DaveConversationMode
-          key={daveSessionData.token}
+          key={`${daveSessionData.token}-${daveRetryCount}`}
           isOpen={daveOpen}
           onClose={handleCloseDave}
+          onRetry={handleDaveRetry}
           sessionData={daveSessionData}
         />
       )}
