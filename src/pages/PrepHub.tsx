@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,13 +9,14 @@ import { useCopilot } from '@/contexts/CopilotContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { 
-  FileText, Sparkles, Phone, Mail, 
-  MessageSquare, ChevronRight, Mic
+  FileText, Sparkles, Mail, 
+  MessageSquare, Wand2
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { VoiceCommandButton } from '@/components/VoiceCommandButton';
 import { ResourceManager } from '@/components/prep/ResourceManager';
 import { TemplateManager } from '@/components/prep/TemplateManager';
+import { ContentBuilder } from '@/components/prep/ContentBuilder';
+import { CustomPromptsManager } from '@/components/prep/CustomPromptsManager';
 
 const PREP_PROMPTS = [
   { label: 'Pre-Call Research Brief', prompt: 'Research and prep me for my upcoming call with {{account}}. Include company background, recent news, key stakeholders, potential pain points, and suggested discovery questions.', mode: 'meeting' as const },
@@ -31,8 +32,15 @@ const PREP_PROMPTS = [
 export default function PrepHub() {
   const { ask: askCopilot } = useCopilot();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('resources');
+  const [activeTab, setActiveTab] = useState('content-builder');
   const [promptAccount, setPromptAccount] = useState('');
+
+  // Listen for Dave navigation event
+  useEffect(() => {
+    const handler = () => setActiveTab('content-builder');
+    window.addEventListener('dave-open-content-builder', handler);
+    return () => window.removeEventListener('dave-open-content-builder', handler);
+  }, []);
 
   const handleRunPrompt = useCallback((prompt: string, mode: string) => {
     const filled = promptAccount ? prompt.replace(/\{\{account\}\}/g, promptAccount).replace(/\{\{competitor\}\}/g, 'the competitor') : prompt;
@@ -45,27 +53,22 @@ export default function PrepHub() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-foreground">Prep Hub</h1>
-            <p className="text-xs text-muted-foreground">Call prep, templates & AI-powered content</p>
+            <p className="text-xs text-muted-foreground">Content engine, call prep & AI-powered templates</p>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1">
-              <span className="text-xs text-muted-foreground">Account:</span>
-              <Input
-                value={promptAccount}
-                onChange={e => setPromptAccount(e.target.value)}
-                placeholder="e.g. Acme Corp"
-                className="h-7 w-36 text-xs bg-transparent border-0 p-0 focus-visible:ring-0"
-              />
-            </div>
             <VoiceCommandButton />
           </div>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full grid grid-cols-4">
+          <TabsList className="w-full grid grid-cols-5">
+            <TabsTrigger value="content-builder" className="text-xs">
+              <Wand2 className="h-3.5 w-3.5 mr-1" />
+              Build
+            </TabsTrigger>
             <TabsTrigger value="resources" className="text-xs">
               <FileText className="h-3.5 w-3.5 mr-1" />
-              Resources
+              Library
             </TabsTrigger>
             <TabsTrigger value="prep" className="text-xs">
               <Sparkles className="h-3.5 w-3.5 mr-1" />
@@ -77,9 +80,14 @@ export default function PrepHub() {
             </TabsTrigger>
             <TabsTrigger value="prompts" className="text-xs">
               <MessageSquare className="h-3.5 w-3.5 mr-1" />
-              My Prompts
+              Prompts
             </TabsTrigger>
           </TabsList>
+
+          {/* CONTENT BUILDER TAB */}
+          <TabsContent value="content-builder" className="mt-3">
+            <ContentBuilder />
+          </TabsContent>
 
           {/* RESOURCES TAB */}
           <TabsContent value="resources" className="mt-3">
@@ -88,9 +96,15 @@ export default function PrepHub() {
 
           {/* AI PREP TAB */}
           <TabsContent value="prep" className="space-y-3 mt-3">
-            <p className="text-xs text-muted-foreground">
-              {promptAccount ? `Prepping for: ${promptAccount}` : 'Enter an account name above for personalized prompts'}
-            </p>
+            <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1 w-fit">
+              <span className="text-xs text-muted-foreground">Account:</span>
+              <Input
+                value={promptAccount}
+                onChange={e => setPromptAccount(e.target.value)}
+                placeholder="e.g. Acme Corp"
+                className="h-7 w-36 text-xs bg-transparent border-0 p-0 focus-visible:ring-0"
+              />
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {PREP_PROMPTS.map((p, i) => (
                 <Card key={i} className="cursor-pointer hover:border-primary/40 transition-colors group" onClick={() => handleRunPrompt(p.prompt, p.mode)}>
@@ -114,18 +128,7 @@ export default function PrepHub() {
 
           {/* MY PROMPTS TAB */}
           <TabsContent value="prompts" className="space-y-3 mt-3">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Custom Prompts</CardTitle>
-              </CardHeader>
-              <CardContent className="text-xs text-muted-foreground">
-                <p>Save your own reusable AI prompts here. Coming soon — for now, use the AI Prep tab or speak to the mic to run any custom prompt.</p>
-                <div className="mt-3 flex items-center gap-2">
-                  <VoiceCommandButton />
-                  <span className="text-xs text-muted-foreground">Tap the mic and say what you need</span>
-                </div>
-              </CardContent>
-            </Card>
+            <CustomPromptsManager />
           </TabsContent>
         </Tabs>
       </div>
