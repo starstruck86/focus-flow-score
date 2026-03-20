@@ -1439,6 +1439,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       });
 
       if (error) return `Failed to create recurring task: ${error.message}`;
+      emitDataChanged('tasks');
       toast.success('Recurring task created', { description: `${params.title} — ${params.recurrence}` });
       return `Created recurring task: "${params.title}" (${params.recurrence})${params.accountName ? ` linked to ${params.accountName}` : ''}`;
     },
