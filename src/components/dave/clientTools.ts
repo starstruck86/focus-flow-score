@@ -1110,10 +1110,9 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       const userId = await getUserId();
       if (!userId) return 'Not authenticated';
 
-      const [quotaRes, closedRes, configRes] = await Promise.all([
+      const [quotaRes, closedRes] = await Promise.all([
         supabase.from('quota_targets').select('*').eq('user_id', userId).limit(1),
         supabase.from('opportunities').select('arr, deal_type, one_time_amount').eq('user_id', userId).eq('status', 'closed-won'),
-        supabase.from('commission_config').select('*').eq('user_id', userId).limit(1),
       ]);
 
       const quota = quotaRes.data?.[0];
