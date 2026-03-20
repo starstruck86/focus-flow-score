@@ -14,7 +14,9 @@ export function useVoiceReminders() {
 
     async function checkReminders() {
       const now = new Date().toISOString();
-      const { data } = await supabase
+
+      // Check voice reminders
+      const { data: voiceReminders } = await supabase
         .from('voice_reminders' as any)
         .select('id, message, remind_at')
         .eq('user_id', user!.id)
@@ -22,23 +24,44 @@ export function useVoiceReminders() {
         .lte('remind_at', now)
         .limit(5);
 
-      if (!data?.length) return;
+      if (voiceReminders?.length) {
+        for (const reminder of voiceReminders as any[]) {
+          toast.info('🔔 Reminder', {
+            description: reminder.message,
+            duration: 15000,
+          });
+          await supabase
+            .from('voice_reminders' as any)
+            .update({ delivered: true } as any)
+            .eq('id', reminder.id);
+        }
+      }
 
-      for (const reminder of data as any[]) {
-        toast.info('🔔 Reminder', {
-          description: reminder.message,
-          duration: 15000,
-        });
+      // Check task reminders
+      const { data: taskReminders } = await supabase
+        .from('tasks' as any)
+        .select('id, title, reminder_at')
+        .eq('user_id', user!.id)
+        .not('status', 'in', '("done","dropped")')
+        .not('reminder_at', 'is', null)
+        .lte('reminder_at', now)
+        .limit(5);
 
-        // Mark delivered
-        await supabase
-          .from('voice_reminders' as any)
-          .update({ delivered: true } as any)
-          .eq('id', reminder.id);
+      if (taskReminders?.length) {
+        for (const task of taskReminders as any[]) {
+          toast.info('⏰ Task Reminder', {
+            description: task.title,
+            duration: 15000,
+          });
+          // Null out reminder_at to prevent re-firing
+          await supabase
+            .from('tasks' as any)
+            .update({ reminder_at: null } as any)
+            .eq('id', task.id);
+        }
       }
     }
 
-    // Check immediately, then poll
     checkReminders();
     timerRef.current = setInterval(checkReminders, POLL_INTERVAL);
 

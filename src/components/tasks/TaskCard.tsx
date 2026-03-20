@@ -243,6 +243,12 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
                   {DRIVER_TAG_META[inferredTag].label}
                 </span>
               )}
+              {task.reminderAt && (
+                <span className="inline-flex items-center gap-1 text-[10px] text-primary bg-primary/10 px-2 py-1 rounded-md">
+                  <Bell className="h-3 w-3" />
+                  {new Date(task.reminderAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                </span>
+              )}
               {task.estimatedMinutes && (
                 <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
                   <Clock className="h-3 w-3" />

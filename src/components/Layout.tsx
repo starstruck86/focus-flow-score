@@ -285,27 +285,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background flex flex-col w-full pt-[env(safe-area-inset-top)]">
       <header
-        className="flex items-center justify-between px-4 py-2 border-b sticky top-0 z-40 bg-background/95 backdrop-blur-md"
+        className="flex items-center gap-2 px-3 py-2 border-b sticky top-0 z-40 bg-background/95 backdrop-blur-md"
         style={headerAccentStyle}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
           <Compass className="h-5 w-5" style={{ color: `hsl(${COLOR_VAR[activeColor]})` }} />
-          <span className="font-display text-sm font-bold">Quota Compass</span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="text-[10px] text-muted-foreground/60 inline cursor-default">
-                {formatDistanceToNow(new Date(__BUILD_TIMESTAMP__), { addSuffix: true })}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">
-              Build: {new Date(__BUILD_TIMESTAMP__).toLocaleString()}
-            </TooltipContent>
-          </Tooltip>
+          <span className="font-display text-sm font-bold hidden sm:inline">Quota Compass</span>
           <SaveIndicator />
         </div>
-        <div className="flex items-center gap-1">
+        <GlobalSearch className="flex-1 min-w-0" />
+        <div className="flex items-center gap-1 shrink-0">
           <VoiceCommandButton onOpenDave={handleOpenDave} disabled={isFetchingDaveSession} />
-          <GlobalSearch />
           <TerritoryCopilot />
           <Tooltip>
             <TooltipTrigger asChild>
