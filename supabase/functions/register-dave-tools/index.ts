@@ -11,9 +11,9 @@ function tool(name: string, description: string, properties: Record<string, any>
   if (required && required.length > 0) params.required = required;
   return {
     type: "client",
+    name,
+    description,
     client: {
-      name,
-      description,
       parameters: params,
       expects_response: true,
     },
