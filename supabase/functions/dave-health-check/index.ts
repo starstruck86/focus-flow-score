@@ -24,24 +24,7 @@ serve(async (req) => {
     error: null as string | null,
   };
 
-  // Validate API key using convai token endpoint (more reliable than /v1/user)
-  // The tokenGenOk check below covers this, but we do a quick agent fetch as validation
-  if (apiKey && agentId) {
-    try {
-      const res = await fetch(
-        `https://api.elevenlabs.io/v1/convai/agents/${agentId}`,
-        { method: "GET", headers: { "xi-api-key": apiKey } }
-      );
-      result.apiKeyValid = res.ok;
-      if (!res.ok) {
-        result.error = `API key validation failed (agent fetch): ${res.status}`;
-      }
-    } catch (e) {
-      result.error = `API key check failed: ${e.message}`;
-    }
-  }
-
-  // Try generating a conversation token
+  // Try generating a conversation token (validates both API key and agent)
   if (apiKey && agentId) {
     try {
       const res = await fetch(
@@ -50,6 +33,7 @@ serve(async (req) => {
       );
       const data = await res.json();
       result.tokenGenOk = !!data?.token;
+      result.apiKeyValid = res.ok;
       if (!result.tokenGenOk) {
         result.error = `Token gen failed: ${JSON.stringify(data)}`;
       }
@@ -67,22 +51,11 @@ serve(async (req) => {
       );
       if (res.ok) {
         const agentData = await res.json();
-        // Check platform_settings or conversation_config for override flags
-        const platformSettings = agentData?.platform_settings || {};
-        const convConfig = agentData?.conversation_config || {};
-        const agent = convConfig?.agent || {};
+        // Correct path: platform_settings.overrides.conversation_config_override.agent
+        const overrideAgent = agentData?.platform_settings?.overrides?.conversation_config_override?.agent;
 
-        // ElevenLabs uses different structures — check common paths
-        const promptOverride = !!(
-          platformSettings?.overrides?.prompt_overridable ||
-          agent?.prompt?.overridable ||
-          platformSettings?.widget?.overridable_prompt
-        );
-        const firstMessageOverride = !!(
-          platformSettings?.overrides?.first_message_overridable ||
-          agent?.first_message_overridable ||
-          platformSettings?.widget?.overridable_first_message
-        );
+        const promptOverride = !!overrideAgent?.prompt?.prompt;
+        const firstMessageOverride = !!overrideAgent?.first_message;
 
         result.overrideDetails = { promptOverride, firstMessageOverride };
         result.overridesEnabled = promptOverride && firstMessageOverride;
