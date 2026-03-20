@@ -373,7 +373,7 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
     sections.push(
       `PIPELINE (${opps.length} deals, $${Math.round(totalPipeline / 1000)}k total):\n` +
       opps.slice(0, 20).map((o: any) =>
-        `- ${o.name} [id:${o.id}]: ${o.stage || "—"} $${Math.round((o.arr || 0) / 1000)}k close:${o.close_date || "TBD"} type:${o.deal_type || "—"} acct:${o.account_id || "—"}${o.last_touch_date ? ` lastTouch:${o.last_touch_date}` : ""}${o.next_step ? ` → ${o.next_step}` : ""}${o.notes ? ` notes:${trunc(o.notes, 60)}` : ""}`
+        `- ${o.name} [id:${o.id}]: ${o.stage || "—"} $${Math.round((o.arr || 0) / 1000)}k close:${o.close_date || "TBD"} type:${o.deal_type || "—"} acct:${(o.account_id && accountIdMap[o.account_id]) || "—"}${o.last_touch_date ? ` lastTouch:${o.last_touch_date}` : ""}${o.next_step ? ` → ${o.next_step}` : ""}${o.notes ? ` notes:${trunc(o.notes, 60)}` : ""}`
       ).join("\n")
     );
   }
