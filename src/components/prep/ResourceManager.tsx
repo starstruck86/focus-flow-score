@@ -806,6 +806,22 @@ export function ResourceManager() {
                       }}>
                         <Sparkles className="h-3.5 w-3.5 mr-2" /> Operationalize
                       </DropdownMenuItem>
+                      {isExternal && (resource as any).content_status === 'placeholder' && (
+                        <DropdownMenuItem onClick={async (e) => {
+                          e.stopPropagation();
+                          toast.info('Enriching content...');
+                          try {
+                            await supabase.functions.invoke('enrich-resource-content', {
+                              body: { resource_id: resource.id },
+                            });
+                            toast.success('Content enriched');
+                          } catch {
+                            toast.error('Enrichment failed');
+                          }
+                        }}>
+                          <RefreshCw className="h-3.5 w-3.5 mr-2" /> Enrich Content
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem onClick={(e) => {
                         e.stopPropagation();
                         setGenerateSourceId(resource.id);
