@@ -634,6 +634,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       });
 
       if (error) return `Failed to add contact: ${error.message}`;
+      emitDataChanged('contacts');
       toast.success('Contact added', { description: `${params.name}${params.title ? ` — ${params.title}` : ''}` });
       return `Added contact ${params.name}${params.accountName ? ` at ${params.accountName}` : ''}`;
     },
