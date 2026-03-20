@@ -1,68 +1,85 @@
 
 
-# Dave QA & Fix Plan
+# Dave Tool Coverage Audit — Gaps & Expansion Plan
 
-## Current State — Health Check Results
+## Current State: 36 Tools
 
-The health check reveals **two critical issues**:
+The existing tools cover basic CRUD and lookups across accounts, opportunities, renewals, tasks, contacts, daily metrics, calendar, quota, journal, transcripts, coaching, and navigation. Solid foundation — but they only scratch the surface of what the app can do.
 
-1. **`apiKeyValid: false`** — The API key validation against `/v1/user` fails (but `tokenGenOk: true`, so the key works for tokens — this is likely a permissions issue on the `/v1/user` endpoint, not a real blocker)
+## Critical Gaps (High-Impact Missing Tools)
 
-2. **`overridesEnabled: false`** — Both `promptOverride` and `firstMessageOverride` are `false`. This is the **showstopper**. Dave's entire architecture depends on injecting CRM context and identity via prompt overrides. Without overrides enabled, Dave connects as a blank generic agent — no identity, no CRM data, no greeting.
+### 1. Create Account (voice can update but not create)
+Dave can't add a new account. If you hear about a prospect on a call, you have to leave voice mode and manually create it. Should support: `"Dave, add Acme Corp as a new account, tier B, new-logo motion"`
 
-## Root Cause
+### 2. Account Enrichment Trigger
+The app has a full enrichment pipeline (Firecrawl, Perplexity, AI fallback) but no voice trigger. Should support: `"Dave, enrich Acme Corp"` → kicks off the edge function and reports back.
 
-The ElevenLabs agent needs two settings enabled in its dashboard configuration:
-- **System prompt override** — allows the client to inject Dave's instructions + CRM context
-- **First message override** — allows a dynamic greeting based on time/meetings/tasks
+### 3. Cross-Entity Search
+GlobalSearch exists in the app but Dave can't search. Should support: `"Dave, search for anything related to cloud migration"` → searches accounts, opps, contacts, transcripts.
 
-These cannot be toggled via the API — they must be enabled in the **ElevenLabs Agent Dashboard** under the agent's settings.
+### 4. Weekly Battle Plan / Review
+The app generates weekly battle plans and review summaries via edge functions, but Dave can't trigger or summarize them. Should support: `"Dave, what's my battle plan this week?"` and `"Dave, run my weekly review"`
 
-## Fix Plan
+### 5. Commission & Pacing Detail
+`quota_status` gives attainment %, but the app has detailed commission pacing (CommissionPacingTile, CommissionSnapshot). Should support: `"Dave, what's my commission tracking at?"` with accelerator tiers, projected earnings, and P-Club math.
 
-### Step 1: Enable overrides via ElevenLabs API PATCH (automated)
-Update the `register-dave-tools` edge function (or create a new `configure-dave-agent` function) to PATCH the agent config with override permissions enabled. The ElevenLabs API supports setting `platform_settings` which controls override behavior:
+### 6. Account Prioritization
+The app has an AI Account Prioritizer but Dave can't ask for it. Should support: `"Dave, which accounts should I prioritize today?"` → returns ranked list with reasoning.
 
+### 7. Trend Queries
+The Trends page has rich analytics but Dave can't query them. Should support: `"Dave, how are my connects trending this month?"` or `"Dave, compare my activity this week vs last"`
+
+### 8. Stakeholder Intelligence
+StakeholderMap and OrgChart exist but Dave can't query them. Should support: `"Dave, who's the economic buyer at Acme?"` or `"Dave, map the org chart at Acme"`
+
+### 9. Territory Copilot
+Full territory analysis engine exists but has no voice interface. Should support: `"Dave, analyze my territory balance"` or `"Dave, which accounts are under-touched?"`
+
+### 10. Focus Timer (configurable)
+Only `start_power_hour` exists (fixed duration). Should support: `"Dave, start a 25-minute prospecting block for Acme"` with type, duration, and account linking.
+
+### 11. Resource / Prep Hub Access
+PrepHub has resources, templates, and AI-generated content but Dave can't access any of it. Should support: `"Dave, find my prep notes for Acme"` or `"Dave, what resources do I have on objection handling?"`
+
+### 12. Bulk / Batch Operations
+No multi-record voice commands. Should support: `"Dave, mark all tasks for Acme as done"` or `"Dave, set all Tier C accounts to inactive"`
+
+### 13. Create Recurring Task
+RecurringTasks page exists but Dave can't create them. Should support: `"Dave, create a recurring task to check in with Acme every Tuesday"`
+
+### 14. Smart Debrief with Auto-Tasks
+Current `debrief` logs notes but doesn't auto-generate follow-up tasks from takeaways. Should support: `"Dave, debrief Acme — they need a proposal by Friday and I need to loop in their VP"` → creates 2 tasks automatically.
+
+### 15. Pipeline Hygiene Report
+Edge function `pipeline-hygiene` exists but Dave can't trigger it. Should support: `"Dave, run pipeline hygiene"` → returns stale deals, missing close dates, MEDDICC gaps.
+
+## Summary: 15 New Tools to Add
+
+```text
+Category              New Tools
+──────────────────────────────────────────
+CRM Actions           create_account, enrich_account, bulk_update
+Search & Intel        search_crm, stakeholder_query, territory_analysis
+Strategy              weekly_battle_plan, weekly_review, pipeline_hygiene
+                      account_prioritize, commission_detail
+Analytics             trend_query
+Productivity          start_focus_timer, create_recurring_task
+Resources             search_resources
+Enhanced              smart_debrief (replaces debrief with auto-task creation)
 ```
-PATCH /v1/convai/agents/{agent_id}
-{
-  "platform_settings": {
-    "widget": {
-      "variant": "full",
-      "overridable": true
-    },
-    "overrides": {
-      "conversation_config": {
-        "agent": {
-          "prompt": {
-            "prompt": true
-          },
-          "first_message": true
-        }
-      }
-    }
-  }
-}
-```
 
-Create a one-shot edge function `configure-dave-agent` that:
-1. PATCHes the agent to enable prompt + first message overrides
-2. Returns the result for verification
+## Implementation Plan
 
-### Step 2: Fix the health check false negative
-The `apiKeyValid` check hits `/v1/user` which may require different permissions than convai endpoints. Update the health check to use a more reliable validation — e.g., check if the token generation succeeds (which it already does via `tokenGenOk`).
+### Step 1: Add 15 new client tool handlers to `clientTools.ts`
+Each tool follows the existing pattern — async function, getUserId, query/mutate database, return summary string, show toast.
 
-### Step 3: Re-run health check to verify
-After enabling overrides, invoke the health check again to confirm `overridesEnabled: true`.
+### Step 2: Update `register-dave-tools/index.ts` with all 51 tool definitions
+Delete old tools, create new set with correct parameter schemas matching client code.
 
-## Files to Create/Edit
+### Step 3: Re-register all tools on ElevenLabs agent
+Single invocation of the updated edge function.
 
-1. **Create** `supabase/functions/configure-dave-agent/index.ts` — One-shot function to enable overrides via PATCH
-2. **Edit** `supabase/functions/dave-health-check/index.ts` — Fix `apiKeyValid` to not report false negatives
-
-## What This Fixes
-- Dave will receive CRM context and identity instructions on every session
-- Dave will deliver personalized greetings instead of silence
-- The greeting timeout/retry loop will no longer trigger
-- All 36 client tools will work because Dave knows to use them via the injected prompt
+### Files to modify
+1. **`src/components/dave/clientTools.ts`** — Add 15 new tool handlers (~400 lines)
+2. **`supabase/functions/register-dave-tools/index.ts`** — Update DAVE_TOOLS array to 51 entries with corrected schemas for all tools (existing + new)
 
