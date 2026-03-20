@@ -49,7 +49,7 @@ export function CustomPromptsManager() {
       const vars = [...(editingPrompt.prompt_text.match(/\{\{(\w+)\}\}/g) || [])].map(v => v.replace(/\{\{|\}\}/g, ''));
 
       if (editingPrompt.id) {
-        const { error } = await supabase.from('custom_prompts').update({
+        const { error } = await (supabase as any).from('custom_prompts').update({
           title: editingPrompt.title,
           prompt_text: editingPrompt.prompt_text,
           content_type: editingPrompt.content_type || 'document',
