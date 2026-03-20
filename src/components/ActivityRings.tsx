@@ -1,9 +1,12 @@
 import { forwardRef, useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useStore } from '@/store/useStore';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Minus, Plus, X } from 'lucide-react';
+import { format } from 'date-fns';
 
 interface RingConfig {
   key: 'dials' | 'connects' | 'emails';
