@@ -1503,6 +1503,8 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         }
       }
 
+      emitDataChanged('accounts');
+      if (tasksCreated.length) emitDataChanged('tasks');
       toast.success('Smart debrief captured', {
         description: `${params.accountName}${tasksCreated.length ? ` + ${tasksCreated.length} tasks` : ''}`,
       });
