@@ -1345,18 +1345,35 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       if (!userId) return 'Not authenticated';
 
       const entity = params.entity.toLowerCase();
-      if (!['accounts', 'opportunities', 'tasks'].includes(entity)) {
+
+      // Whitelist valid fields per entity to prevent invalid column errors
+      const VALID_FIELDS: Record<string, string[]> = {
+        accounts: ['account_status', 'tier', 'priority', 'motion', 'notes', 'next_step', 'outreach_status', 'industry', 'cadence_name'],
+        opportunities: ['stage', 'status', 'arr', 'close_date', 'next_step', 'notes', 'deal_type'],
+        tasks: ['status', 'priority', 'due_date', 'notes', 'category'],
+      };
+
+      if (!VALID_FIELDS[entity]) {
         return `Bulk update only supports accounts, opportunities, and tasks.`;
+      }
+
+      const filterField = ACCOUNT_FIELDS[params.filter_field.toLowerCase()] || params.filter_field;
+      const updateField = (entity === 'accounts' ? ACCOUNT_FIELDS[params.update_field.toLowerCase()] : null) || params.update_field;
+
+      if (!VALID_FIELDS[entity].includes(filterField) && filterField !== 'name' && filterField !== 'title') {
+        return `Invalid filter field "${params.filter_field}" for ${entity}. Valid: name, ${VALID_FIELDS[entity].join(', ')}`;
+      }
+      if (!VALID_FIELDS[entity].includes(updateField)) {
+        return `Invalid update field "${params.update_field}" for ${entity}. Valid: ${VALID_FIELDS[entity].join(', ')}`;
       }
 
       const table = entity as 'accounts' | 'opportunities' | 'tasks';
 
-      // Count matching records first
       const { data: matches, count } = await supabase
         .from(table)
         .select('id', { count: 'exact' })
         .eq('user_id', userId)
-        .ilike(params.filter_field, `%${params.filter_value}%`)
+        .ilike(filterField, `%${params.filter_value}%`)
         .limit(50);
 
       const matchCount = count || matches?.length || 0;
@@ -1365,7 +1382,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       const ids = (matches || []).map(m => m.id);
       const { error } = await supabase
         .from(table)
-        .update({ [params.update_field]: params.update_value, updated_at: new Date().toISOString() })
+        .update({ [updateField]: params.update_value, updated_at: new Date().toISOString() })
         .in('id', ids);
 
       if (error) return `Bulk update failed: ${error.message}`;
