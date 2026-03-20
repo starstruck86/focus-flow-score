@@ -292,6 +292,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <Compass className="h-5 w-5" style={{ color: `hsl(${COLOR_VAR[activeColor]})` }} />
           <span className="font-display text-sm font-bold hidden sm:inline">Quota Compass</span>
           <SaveIndicator />
+          <span className="text-[10px] text-muted-foreground hidden sm:inline">
+            {formatDistanceToNow(new Date(), { addSuffix: false }).replace('less than a minute', 'just now')} ago
+          </span>
         </div>
         <GlobalSearch className="flex-1 min-w-0" />
         <div className="flex items-center gap-1 shrink-0">

@@ -174,6 +174,22 @@ export function SalesCoachPanel({ open, onOpenChange }: SalesCoachPanelProps) {
       (olderGrades.reduce((s, g) => s + g.overall_score, 0) / olderGrades.length)
     : 0;
 
+  const handleReScoreAll = async () => {
+    if (!transcripts?.length) return;
+    setReScoring(true);
+    setReScoreProgress({ current: 0, total: transcripts.length });
+    for (let i = 0; i < transcripts.length; i++) {
+      setReScoreProgress({ current: i + 1, total: transcripts.length });
+      try {
+        await gradeTranscript.mutateAsync(transcripts[i].id);
+      } catch {
+        // continue on error
+      }
+    }
+    setReScoring(false);
+    toast.success(`Re-scored ${transcripts.length} transcripts`);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
@@ -185,6 +201,21 @@ export function SalesCoachPanel({ open, onOpenChange }: SalesCoachPanelProps) {
               <Badge variant="secondary" className="ml-2">
                 {allGrades!.length} graded
               </Badge>
+            )}
+            {transcripts && transcripts.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="ml-auto text-xs"
+                onClick={handleReScoreAll}
+                disabled={reScoring}
+              >
+                {reScoring ? (
+                  <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Scoring {reScoreProgress.current}/{reScoreProgress.total}</>
+                ) : (
+                  <><Sparkles className="h-3.5 w-3.5 mr-1" /> Re-Score All</>
+                )}
+              </Button>
             )}
           </DialogTitle>
         </DialogHeader>

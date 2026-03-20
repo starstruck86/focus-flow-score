@@ -1632,6 +1632,19 @@ export default function WeeklyOutreach() {
                   },
                 },
                 {
+                  id: 'change-motion',
+                  label: 'Change Motion',
+                  options: [
+                    { value: 'new-logo', label: 'New Logo' },
+                    { value: 'renewal', label: 'Renewal' },
+                    { value: 'expansion', label: 'Expansion' },
+                  ],
+                  onExecute: (ids, value) => {
+                    ids.forEach(id => updateAccount(id, { motion: value }));
+                    bulkSelection.clear();
+                  },
+                },
+                {
                   id: 'enrich',
                   label: 'Enrich ICP',
                   onExecute: (ids) => {
