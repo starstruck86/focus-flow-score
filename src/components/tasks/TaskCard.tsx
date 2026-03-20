@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
-import { Calendar, Building2, Target, AlertCircle, Repeat, ChevronDown, Clock } from 'lucide-react';
+import { Calendar, Building2, Target, AlertCircle, Repeat, ChevronDown, Clock, Bell } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -241,6 +241,12 @@ export function TaskCard({ task, selected, onToggleSelect }: TaskCardProps) {
               {inferredTag && (
                 <span className={cn("text-[10px] px-2 py-1 rounded-full border font-medium", DRIVER_TAG_META[inferredTag].color)}>
                   {DRIVER_TAG_META[inferredTag].label}
+                </span>
+              )}
+              {task.reminderAt && (
+                <span className="inline-flex items-center gap-1 text-[10px] text-primary bg-primary/10 px-2 py-1 rounded-md">
+                  <Bell className="h-3 w-3" />
+                  {new Date(task.reminderAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                 </span>
               )}
               {task.estimatedMinutes && (

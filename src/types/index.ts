@@ -347,6 +347,7 @@ export interface Task {
   status: TaskStatus;
   priority: Priority;
   dueDate?: string;
+  reminderAt?: string;
   // Optional linking
   linkedAccountId?: string;
   linkedOpportunityId?: string;

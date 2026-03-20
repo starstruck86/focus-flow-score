@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/select';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
+import { Bell } from 'lucide-react';
 import type { Task, Priority, TaskStatus, Workstream } from '@/types';
 import { STATUS_ORDER, STATUS_META } from './constants';
 import { getWorkstream } from './helpers';
@@ -35,6 +36,7 @@ export function TaskEditDialog({ task, open, onOpenChange }: TaskEditDialogProps
       title: s.title, priority: s.priority, status: s.status,
       dueDate: s.dueDate, notes: s.notes, workstream: s.workstream,
       linkedAccountId: s.linkedAccountId, linkedOpportunityId: s.linkedOpportunityId,
+      reminderAt: s.reminderAt,
     };
     if (s.status === 'done' && task.status !== 'done') updates.completedAt = new Date().toISOString();
     if (s.status !== 'done') updates.completedAt = undefined;
@@ -92,6 +94,22 @@ export function TaskEditDialog({ task, open, onOpenChange }: TaskEditDialogProps
               <Label>Due Date</Label>
               <Input type="date" value={s.dueDate || ''} onChange={e => setS({ ...s, dueDate: e.target.value || undefined })} />
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1.5">
+              <Bell className="h-3.5 w-3.5 text-primary" />
+              Reminder
+            </Label>
+            <Input
+              type="datetime-local"
+              value={s.reminderAt ? s.reminderAt.slice(0, 16) : ''}
+              onChange={e => setS({ ...s, reminderAt: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
+            />
+            {s.reminderAt && (
+              <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground" onClick={() => setS({ ...s, reminderAt: undefined })}>
+                Clear reminder
+              </Button>
+            )}
           </div>
           <div className="space-y-2">
             <Label>Linked Account</Label>

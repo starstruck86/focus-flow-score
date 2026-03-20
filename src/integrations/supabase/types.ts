@@ -2191,6 +2191,7 @@ export type Database = {
           motion: string | null
           notes: string | null
           priority: string
+          reminder_at: string | null
           status: string
           subtasks: Json | null
           title: string
@@ -2213,6 +2214,7 @@ export type Database = {
           motion?: string | null
           notes?: string | null
           priority?: string
+          reminder_at?: string | null
           status?: string
           subtasks?: Json | null
           title: string
@@ -2235,6 +2237,7 @@ export type Database = {
           motion?: string | null
           notes?: string | null
           priority?: string
+          reminder_at?: string | null
           status?: string
           subtasks?: Json | null
           title?: string

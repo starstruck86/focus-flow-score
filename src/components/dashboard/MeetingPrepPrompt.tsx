@@ -210,7 +210,7 @@ function MeetingCard({ meeting, isExpanded, onToggle, onDismiss, onAddPrep }: {
   onDismiss: () => void;
   onAddPrep: () => void;
 }) {
-  const { ask } = useCopilot();
+  const { ask, askBackground } = useCopilot();
   const isUrgent = meeting.minutesUntil <= 30;
   const daysSinceTouch = meeting.lastTouchDate
     ? Math.floor((Date.now() - new Date(meeting.lastTouchDate).getTime()) / 86400000)
@@ -360,14 +360,14 @@ function MeetingCard({ meeting, isExpanded, onToggle, onDismiss, onAddPrep }: {
 
             {/* AI Actions */}
             <div className="flex gap-1.5 pt-1 border-t border-border/30">
-              <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-1" onClick={e => { e.stopPropagation(); ask(`Prep me for my meeting with ${meeting.accountName}`, 'meeting', meeting.accountId); }}>
+              <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-1" onClick={e => { e.stopPropagation(); askBackground(`Prep me for my meeting with ${meeting.accountName}`, 'meeting', meeting.accountId); }}>
                 <Sparkles className="h-3 w-3" /> AI Meeting Brief
               </Button>
-              <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-1" onClick={e => { e.stopPropagation(); ask(`Analyze my deal with ${meeting.accountName} using my frameworks`, 'deal-strategy', meeting.accountId); }}>
+              <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-1" onClick={e => { e.stopPropagation(); askBackground(`Analyze my deal with ${meeting.accountName} using my frameworks`, 'deal-strategy', meeting.accountId); }}>
                 <Target className="h-3 w-3" /> Deal Strategy
               </Button>
               {recentTranscripts && recentTranscripts.length > 0 && (
-                <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-1" onClick={e => { e.stopPropagation(); ask(`Draft a recap email for my last call with ${meeting.accountName}`, 'recap-email', meeting.accountId); }}>
+                <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1 flex-1" onClick={e => { e.stopPropagation(); askBackground(`Draft a recap email for my last call with ${meeting.accountName}`, 'recap-email', meeting.accountId); }}>
                   <Mail className="h-3 w-3" /> Recap Email
                 </Button>
               )}
