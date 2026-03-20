@@ -23,6 +23,7 @@ export type ClassificationResult = {
   tags: string[];
   top_folder: CoreFolderName;
   sub_folder?: string;
+  scraped_content?: string;
   /** @deprecated Use top_folder instead */
   suggested_folder?: string;
 };
