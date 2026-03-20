@@ -30,7 +30,7 @@ export function CustomPromptsManager() {
 
   const loadPrompts = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase
+    const { data } = await (supabase as any)
       .from('custom_prompts')
       .select('*')
       .eq('user_id', user.id)
