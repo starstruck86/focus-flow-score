@@ -1,68 +1,67 @@
 
 
-## Plan: Make Dave Reliable and QA-able
+## Plan: Make Dave Mission-Critical Reliable
 
-### Root Cause Analysis
+### The Actual Bug (Found in Code)
 
-The token fetch works perfectly (200, 20k context, 174-char firstMessage). The problem is downstream — after the WebRTC connection opens. Three likely causes:
+**Line 126-135 of `DaveConversationMode.tsx`** — the `useConversation` hook is initialized with `overrides` from the initial `sessionData` prop. But `useConversation` is a hook — its config object is read **once at mount time**. When the greeting watchdog triggers a retry (line 166-176), it:
 
-1. **Double-context blast**: On connect, the code sends the entire 20k context *again* via `sendContextualUpdate` (line 110-116). The context was already injected via `overrides` in the hook constructor. Sending 20k chars immediately after connect can overwhelm the agent, causing it to freeze or skip the greeting.
+1. Calls `conversation.endSession()`
+2. Fetches a fresh token via `getSession(history)` → stores in `sessionDataRef`
+3. Calls `startConversation()` which passes the new token to `startSession()`
 
-2. **ElevenLabs agent settings**: The overrides (system prompt + firstMessage) only work if "System prompt override" and "First message override" are **explicitly enabled** in the ElevenLabs agent dashboard. If these toggles are off, the agent silently ignores the overrides — connects fine but uses its default empty/generic prompt and no greeting.
+**But the overrides (prompt + firstMessage) are still the original values from mount.** The hook doesn't re-read overrides. So on retry, Dave connects with a fresh token but **stale or empty context** — making him a generic assistant with no identity.
 
-3. **No diagnostic visibility**: When something fails, you see a green orb and "Listening..." with zero insight into what went wrong. There's no way to tell if the greeting was sent, if audio is flowing, or if the prompt was accepted.
+Additionally, the component uses `key={daveSessionData.token}` (Layout line 305) which should force a remount — but the retry path inside the component bypasses this by staying mounted and calling `startSession` directly.
 
-### What Gets Built
+### What Gets Built (5 Changes)
 
-#### 1. Remove redundant `sendContextualUpdate` blast
-Delete the "belt-and-suspenders" `sendContextualUpdate` call in `onConnect`. The overrides in the constructor already handle prompt injection. Sending 20k chars again is harmful, not helpful.
+#### 1. Fix the Override Staleness Bug
+When retry fires, instead of trying to reconnect within the same component instance, close Dave and reopen with fresh session data. This triggers the `key=` remount in Layout, guaranteeing fresh overrides reach the hook constructor.
 
-#### 2. Add Dave Diagnostics Panel
-A toggleable debug overlay (tap status text 3x to reveal) showing:
-- Connection status + uptime
-- Token age and context size
-- Messages received count
-- Last message type + timestamp
-- VAD score (live)
-- Whether firstMessage was set
-- Error history
+Alternatively (and more robustly): restructure so the component **always remounts** on retry by having the retry logic live in Layout, not inside DaveConversationMode.
 
-This lets you immediately see: "Connected, but 0 messages received in 12s → greeting not firing → overrides not enabled."
+#### 2. Add Session Contract Assertions
+At the start of `startConversation()`, assert the contract before proceeding:
+- `sessionDataRef.current.token` exists and is non-empty
+- `sessionDataRef.current.context` exists and length > 500 (Dave's instructions alone are ~1200 chars)
+- `sessionDataRef.current.firstMessage` exists and length > 10
+- If any fail, log the exact failure and show actionable error — don't silently connect as a blank agent.
 
-#### 3. Add greeting watchdog with auto-retry
-The current watchdog only `console.warn`s after 8s. Upgrade it to:
-- After 8s with no agent message: show visible warning "Dave connected but isn't responding"
-- After 12s: auto-disconnect, fetch fresh token, and retry once
-- After second failure: show actionable error "Dave's voice agent may need configuration — check ElevenLabs agent settings"
+#### 3. Upgrade Diagnostics to Show Override Health
+Add to the diagnostics panel:
+- Context preview (first 200 chars) — so you can visually confirm Dave's instructions are present
+- FirstMessage preview (full text)
+- Override freshness: "from mount" vs "from retry" with timestamp
+- A "Context contains DAVE_INSTRUCTIONS" boolean check
 
-#### 4. Add connection health-check edge function
-New lightweight `dave-health-check` edge function that:
-- Verifies `ELEVENLABS_API_KEY` is set and valid (test API call)
-- Verifies `ELEVENLABS_AGENT_ID` is set
-- Checks if a conversation token can be generated
-- Returns a structured health report
+#### 4. Add a Deterministic Smoke Test Button in Settings
+Under the existing Dave health section, add a "Run Smoke Test" that:
+1. Fetches a fresh token (verifies auth + token gen)
+2. Asserts context contains "DAVE OPERATING INSTRUCTIONS" 
+3. Asserts firstMessage is non-empty and contains "Dave"
+4. Asserts context length > 1000
+5. Reports pass/fail for each check with actual values
 
-The diagnostics panel calls this on first open and shows green/red indicators.
+This can run without opening a voice session — it validates everything up to the WebRTC handshake.
 
-#### 5. Surface ElevenLabs config requirements in Settings
-Add a "Dave Voice Assistant" section in Settings page with:
-- Health check status (API key valid, agent ID set)
-- Reminder: "System prompt override" and "First message override" must be enabled in ElevenLabs
-- Test button that opens Dave with diagnostics visible
+#### 5. Add Retry-via-Remount Pattern
+Move the retry responsibility to Layout:
+- DaveConversationMode exposes an `onRetry` callback alongside `onClose`
+- When greeting timeout fires or connection fails after exhausting retries, call `onRetry` instead of trying to reconnect internally
+- Layout handles `onRetry` by: closing Dave → invalidating cache → fetching fresh session → reopening Dave (triggering full remount with new key)
+- This guarantees every retry gets fresh overrides in the hook constructor
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `src/components/DaveConversationMode.tsx` | Remove `sendContextualUpdate`, add diagnostics panel, upgrade greeting watchdog |
-| `supabase/functions/dave-health-check/index.ts` | **NEW** — lightweight health check |
-| `src/pages/Settings.tsx` | Add Dave health section with test button |
+| `src/components/DaveConversationMode.tsx` | Add contract assertions, expose `onRetry`, remove internal reconnect-with-stale-overrides path, upgrade diagnostics data |
+| `src/components/Layout.tsx` | Handle `onRetry` from Dave — close, fetch fresh session, reopen |
+| `src/components/dave/DaveDiagnosticsPanel.tsx` | Show context preview, firstMessage preview, override freshness, instruction presence check |
+| `src/pages/Settings.tsx` | Add smoke test button that validates token + context + firstMessage contract |
 
-### QA Protocol After Implementation
+### Why This Fixes It For Good
 
-With the diagnostics panel, you can verify each step:
-1. Open Dave → diagnostics show "Token: ✅, Context: 20035 chars, FirstMessage: ✅"
-2. After connect → "Status: connected, Messages: 0" → within 3s → "Messages: 1 (agent_response)"
-3. Speak → "VAD: active, Messages: 2 (user_transcript)" → agent responds → "Messages: 3"
-4. If anything fails, the exact failure point is visible immediately
+The root cause is that `useConversation` captures overrides at mount time. Every code path that starts a session must go through a fresh mount. The retry-via-remount pattern makes this structurally impossible to violate — there is no path where Dave connects without fresh overrides. The contract assertions catch any regression before it reaches ElevenLabs. The smoke test lets you verify the entire chain without needing to debug a live voice session.
 
