@@ -952,5 +952,550 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       window.dispatchEvent(new CustomEvent('voice-start-power-hour'));
       return 'Starting power hour timer. Go get it.';
     },
+
+    // ══════════════════════════════════════════════════════════════
+    // NEW TOOLS — Expansion Pack (15 tools)
+    // ══════════════════════════════════════════════════════════════
+
+    // ── Create Account ─────────────────────────────────────────────
+
+    create_account: async (params: { name: string; tier?: string; motion?: string; industry?: string; website?: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      // Check for duplicate
+      const { data: existing } = await supabase
+        .from('accounts')
+        .select('id, name')
+        .eq('user_id', userId)
+        .ilike('name', `%${params.name}%`)
+        .limit(1);
+
+      if (existing?.length) return `Account "${existing[0].name}" already exists. Use update_account instead.`;
+
+      const { error } = await supabase.from('accounts').insert({
+        user_id: userId,
+        name: params.name,
+        tier: params.tier || null,
+        motion: params.motion || null,
+        industry: params.industry || null,
+        website: params.website || null,
+        account_status: 'active',
+      });
+
+      if (error) return `Failed to create account: ${error.message}`;
+      toast.success('Account created', { description: `${params.name}${params.tier ? ` [${params.tier}]` : ''}` });
+      return `Created account ${params.name}${params.tier ? ` (Tier ${params.tier})` : ''}${params.motion ? `, ${params.motion} motion` : ''}`;
+    },
+
+    // ── Enrich Account ─────────────────────────────────────────────
+
+    enrich_account: async (params: { accountName: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const { data: accts } = await supabase
+        .from('accounts')
+        .select('id, name, website, industry')
+        .eq('user_id', userId)
+        .ilike('name', `%${params.accountName}%`)
+        .limit(1);
+
+      if (!accts?.length) return `Account "${params.accountName}" not found`;
+
+      toast.info(`Enriching ${accts[0].name}...`, { duration: 3000 });
+
+      const { data, error } = await supabase.functions.invoke('enrich-account', {
+        body: {
+          url: accts[0].website || '',
+          accountName: accts[0].name,
+          accountId: accts[0].id,
+          industry: accts[0].industry || '',
+        },
+      });
+
+      if (error) return `Enrichment failed: ${error.message}`;
+      if (!data?.success) return `Enrichment failed: ${data?.error || 'unknown error'}`;
+
+      const scores = data.scores || {};
+      toast.success(`Enriched ${accts[0].name}`, {
+        description: `ICP ${scores.icp_fit_score || '—'} • Tier ${scores.lifecycle_tier || '—'}`,
+      });
+      return `Enriched ${accts[0].name}: ICP fit ${scores.icp_fit_score || '—'}/100, Tier ${scores.lifecycle_tier || '—'}, priority ${scores.priority_score || '—'}. ${data.summary || ''}`;
+    },
+
+    // ── Search CRM ─────────────────────────────────────────────────
+
+    search_crm: async (params: { query: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const q = `%${params.query}%`;
+      const [accts, opps, contacts, transcripts] = await Promise.all([
+        supabase.from('accounts').select('name, tier, account_status').eq('user_id', userId).or(`name.ilike.${q},notes.ilike.${q},industry.ilike.${q}`).limit(5),
+        supabase.from('opportunities').select('name, stage, arr').eq('user_id', userId).or(`name.ilike.${q},notes.ilike.${q},next_step.ilike.${q}`).limit(5),
+        supabase.from('contacts').select('name, title, email').eq('user_id', userId).or(`name.ilike.${q},title.ilike.${q},email.ilike.${q}`).limit(5),
+        supabase.from('call_transcripts').select('title, call_date, summary').eq('user_id', userId).or(`title.ilike.${q},content.ilike.${q},summary.ilike.${q}`).limit(5),
+      ]);
+
+      const results: string[] = [];
+      if (accts.data?.length) results.push(`Accounts: ${accts.data.map(a => `${a.name} [${a.tier || '—'}]`).join(', ')}`);
+      if (opps.data?.length) results.push(`Deals: ${opps.data.map(o => `${o.name} (${o.stage || '—'}, $${Math.round((o.arr || 0) / 1000)}k)`).join(', ')}`);
+      if (contacts.data?.length) results.push(`Contacts: ${contacts.data.map(c => `${c.name}${c.title ? ` (${c.title})` : ''}`).join(', ')}`);
+      if (transcripts.data?.length) results.push(`Transcripts: ${transcripts.data.map(t => `${t.title} (${t.call_date})`).join(', ')}`);
+
+      if (!results.length) return `No results found for "${params.query}"`;
+      return `Search results for "${params.query}":\n${results.join('\n')}`;
+    },
+
+    // ── Weekly Battle Plan ─────────────────────────────────────────
+
+    weekly_battle_plan: async () => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      // Check for existing plan this week
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+      const weekStart = monday.toISOString().split('T')[0];
+
+      const { data: plans } = await supabase
+        .from('weekly_battle_plans')
+        .select('strategy_summary, moves, quota_gap, days_remaining, moves_completed')
+        .eq('user_id', userId)
+        .gte('week_start', weekStart)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (plans?.length) {
+        const plan = plans[0];
+        const moves = (plan.moves as any[]) || [];
+        const completed = (plan.moves_completed as any[]) || [];
+        return `This week's battle plan (${moves.length} moves, ${completed.length} completed):\n` +
+          `Quota gap: $${Math.round((plan.quota_gap as number || 0) / 1000)}k | ${plan.days_remaining || '—'} selling days left\n` +
+          `Strategy: ${plan.strategy_summary || 'Not set'}\n` +
+          `Top moves:\n${moves.slice(0, 5).map((m: any, i: number) => `${i + 1}. ${m.action || m.description || JSON.stringify(m)}`).join('\n')}`;
+      }
+
+      // Trigger generation via edge function
+      toast.info('Generating battle plan...', { duration: 3000 });
+      const { data, error } = await supabase.functions.invoke('weekly-battle-plan', {
+        body: {},
+      });
+
+      if (error) return `Failed to generate battle plan: ${error.message}`;
+      return data?.strategy_summary || 'Battle plan generated. Check your dashboard for the full plan.';
+    },
+
+    // ── Weekly Review ──────────────────────────────────────────────
+
+    weekly_review: async () => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      toast.info('Running weekly review...', { duration: 3000 });
+      const { data, error } = await supabase.functions.invoke('weekly-patterns', {
+        body: {},
+      });
+
+      if (error) return `Failed to run weekly review: ${error.message}`;
+      return data?.summary || data?.patterns_summary || 'Weekly review complete. Check the dashboard for details.';
+    },
+
+    // ── Commission Detail ──────────────────────────────────────────
+
+    commission_detail: async () => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const [quotaRes, closedRes] = await Promise.all([
+        supabase.from('quota_targets').select('*').eq('user_id', userId).limit(1),
+        supabase.from('opportunities').select('arr, deal_type, one_time_amount').eq('user_id', userId).eq('status', 'closed-won'),
+      ]);
+
+      const quota = quotaRes.data?.[0];
+      if (!quota) return 'No quota targets configured. Go to Settings to set them up.';
+
+      const closed = closedRes.data || [];
+      const newArr = closed.filter(o => o.deal_type === 'new-logo').reduce((s, o) => s + (o.arr || 0), 0);
+      const renewalArr = closed.filter(o => o.deal_type !== 'new-logo').reduce((s, o) => s + (o.arr || 0), 0);
+      const oneTime = closed.reduce((s, o) => s + (o.one_time_amount || 0), 0);
+      const totalQuota = (quota.new_arr_quota || 0) + (quota.renewal_arr_quota || 0);
+      const totalClosed = newArr + renewalArr;
+      const attainment = totalQuota ? Math.round((totalClosed / totalQuota) * 100) : 0;
+
+      let summary = `Commission snapshot:\n`;
+      summary += `Total attainment: ${attainment}% ($${Math.round(totalClosed / 1000)}k of $${Math.round(totalQuota / 1000)}k)\n`;
+      summary += `New logo: $${Math.round(newArr / 1000)}k of $${Math.round((quota.new_arr_quota || 0) / 1000)}k\n`;
+      summary += `Renewal: $${Math.round(renewalArr / 1000)}k of $${Math.round((quota.renewal_arr_quota || 0) / 1000)}k\n`;
+      if (oneTime > 0) summary += `One-time revenue: $${Math.round(oneTime / 1000)}k\n`;
+      summary += `Gap to quota: $${Math.round(Math.max(0, totalQuota - totalClosed) / 1000)}k`;
+
+      if (attainment >= 100) summary += `\n🎉 You're at or above quota! Accelerators may apply.`;
+      else if (attainment >= 80) summary += `\n🔥 Strong pace — closing $${Math.round((totalQuota - totalClosed) / 1000)}k more gets you there.`;
+
+      return summary;
+    },
+
+    // ── Account Prioritization ─────────────────────────────────────
+
+    account_prioritize: async () => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      toast.info('AI prioritizing accounts...', { duration: 3000 });
+      const { data, error } = await supabase.functions.invoke('prioritize-accounts', {
+        body: {},
+      });
+
+      if (error) return `Failed to prioritize: ${error.message}`;
+
+      const ranked = data?.ranked || data?.accounts || [];
+      if (!ranked.length) return 'No accounts to prioritize. Add accounts first.';
+
+      return `Top priority accounts:\n` +
+        ranked.slice(0, 8).map((a: any, i: number) =>
+          `${i + 1}. ${a.name || a.account_name} — ${a.reason || a.rationale || 'Priority account'}`
+        ).join('\n');
+    },
+
+    // ── Trend Query ────────────────────────────────────────────────
+
+    trend_query: async (params: { metric: string; period?: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const METRIC_MAP: Record<string, string> = {
+        dials: 'dials', calls: 'dials',
+        connects: 'conversations', conversations: 'conversations',
+        meetings: 'meetings_set', 'meetings set': 'meetings_set',
+        emails: 'manual_emails',
+        prospects: 'prospects_added',
+        'customer meetings': 'customer_meetings_held',
+        opps: 'opportunities_created',
+        'accounts researched': 'accounts_researched',
+        score: 'daily_score',
+      };
+
+      const dbField = METRIC_MAP[params.metric.toLowerCase()] || params.metric;
+      const period = (params.period || 'week').toLowerCase();
+      const daysBack = period.includes('month') ? 30 : period.includes('quarter') ? 90 : 7;
+
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - daysBack);
+
+      const { data: entries } = await supabase
+        .from('daily_journal_entries')
+        .select(`date, ${dbField}`)
+        .eq('user_id', userId)
+        .gte('date', startDate.toISOString().split('T')[0])
+        .order('date');
+
+      if (!entries?.length) return `No data for ${params.metric} in the last ${daysBack} days.`;
+
+      const values = entries.map(e => (e as any)[dbField] || 0);
+      const total = values.reduce((s: number, v: number) => s + v, 0);
+      const avg = Math.round((total / values.length) * 10) / 10;
+      const latest = values[values.length - 1];
+
+      // Compare first half vs second half for trend
+      const mid = Math.floor(values.length / 2);
+      const firstHalf = values.slice(0, mid);
+      const secondHalf = values.slice(mid);
+      const firstAvg = firstHalf.length ? firstHalf.reduce((s: number, v: number) => s + v, 0) / firstHalf.length : 0;
+      const secondAvg = secondHalf.length ? secondHalf.reduce((s: number, v: number) => s + v, 0) / secondHalf.length : 0;
+      const trend = secondAvg > firstAvg * 1.1 ? '📈 trending up' : secondAvg < firstAvg * 0.9 ? '📉 trending down' : '➡️ stable';
+
+      return `${params.metric} over last ${daysBack} days: Total ${total}, Avg ${avg}/day, Latest ${latest}. ${trend} (early avg ${Math.round(firstAvg * 10) / 10} → recent avg ${Math.round(secondAvg * 10) / 10}).`;
+    },
+
+    // ── Stakeholder Query ──────────────────────────────────────────
+
+    stakeholder_query: async (params: { accountName: string; role?: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const { data: accts } = await supabase
+        .from('accounts')
+        .select('id, name')
+        .eq('user_id', userId)
+        .ilike('name', `%${params.accountName}%`)
+        .limit(1);
+
+      if (!accts?.length) return `Account "${params.accountName}" not found`;
+
+      let query = supabase
+        .from('contacts')
+        .select('name, title, department, buyer_role, influence_level, email, reporting_to, status, seniority')
+        .eq('account_id', accts[0].id);
+
+      if (params.role) {
+        query = query.or(`buyer_role.ilike.%${params.role}%,title.ilike.%${params.role}%`);
+      }
+
+      const { data: contacts } = await query.limit(20);
+      if (!contacts?.length) return `No stakeholders found at ${accts[0].name}${params.role ? ` matching "${params.role}"` : ''}`;
+
+      const byInfluence = contacts.sort((a, b) => {
+        const levels: Record<string, number> = { high: 3, medium: 2, low: 1 };
+        return (levels[b.influence_level || ''] || 0) - (levels[a.influence_level || ''] || 0);
+      });
+
+      return `Stakeholders at ${accts[0].name}:\n` +
+        byInfluence.map(c =>
+          `• ${c.name}${c.title ? ` — ${c.title}` : ''}${c.department ? ` (${c.department})` : ''}\n  Role: ${c.buyer_role || '—'} | Influence: ${c.influence_level || '—'} | Status: ${c.status || '—'}${c.reporting_to ? ` | Reports to: ${c.reporting_to}` : ''}`
+        ).join('\n');
+    },
+
+    // ── Territory Analysis ─────────────────────────────────────────
+
+    territory_analysis: async () => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const { data: accounts } = await supabase
+        .from('accounts')
+        .select('name, tier, motion, account_status, last_touch_date, touches_this_week, priority_score, icp_fit_score')
+        .eq('user_id', userId)
+        .eq('account_status', 'active')
+        .limit(200);
+
+      if (!accounts?.length) return 'No active accounts found.';
+
+      const now = new Date();
+      const staleThreshold = new Date(now);
+      staleThreshold.setDate(staleThreshold.getDate() - 14);
+
+      const byTier: Record<string, number> = {};
+      const byMotion: Record<string, number> = {};
+      const staleAccounts: string[] = [];
+      const untouched: string[] = [];
+
+      accounts.forEach(a => {
+        byTier[a.tier || 'untiered'] = (byTier[a.tier || 'untiered'] || 0) + 1;
+        byMotion[a.motion || 'unset'] = (byMotion[a.motion || 'unset'] || 0) + 1;
+        if (!a.last_touch_date) {
+          untouched.push(a.name);
+        } else if (new Date(a.last_touch_date) < staleThreshold) {
+          staleAccounts.push(a.name);
+        }
+      });
+
+      let summary = `Territory snapshot (${accounts.length} active accounts):\n`;
+      summary += `By tier: ${Object.entries(byTier).map(([k, v]) => `${k}: ${v}`).join(', ')}\n`;
+      summary += `By motion: ${Object.entries(byMotion).map(([k, v]) => `${k}: ${v}`).join(', ')}\n`;
+      if (staleAccounts.length) summary += `⚠️ ${staleAccounts.length} stale (14+ days): ${staleAccounts.slice(0, 5).join(', ')}${staleAccounts.length > 5 ? ` +${staleAccounts.length - 5} more` : ''}\n`;
+      if (untouched.length) summary += `🚫 ${untouched.length} never touched: ${untouched.slice(0, 5).join(', ')}${untouched.length > 5 ? ` +${untouched.length - 5} more` : ''}`;
+
+      return summary;
+    },
+
+    // ── Start Focus Timer ──────────────────────────────────────────
+
+    start_focus_timer: (params: { duration_minutes?: number; focus_type?: string; accountName?: string }) => {
+      window.dispatchEvent(new CustomEvent('voice-start-focus-timer', {
+        detail: {
+          duration: params.duration_minutes || 25,
+          type: params.focus_type || 'prospecting',
+          account: params.accountName,
+        },
+      }));
+      toast.success('Focus timer started', {
+        description: `${params.duration_minutes || 25} min ${params.focus_type || 'prospecting'} block${params.accountName ? ` — ${params.accountName}` : ''}`,
+      });
+      return `Started ${params.duration_minutes || 25}-minute ${params.focus_type || 'prospecting'} block${params.accountName ? ` for ${params.accountName}` : ''}`;
+    },
+
+    // ── Search Resources ───────────────────────────────────────────
+
+    search_resources: async (params: { query: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const q = `%${params.query}%`;
+      const { data: resources } = await supabase
+        .from('resources')
+        .select('title, resource_type, template_category, created_at')
+        .eq('user_id', userId)
+        .or(`title.ilike.${q},content.ilike.${q},resource_type.ilike.${q}`)
+        .limit(10);
+
+      if (!resources?.length) return `No resources found matching "${params.query}"`;
+
+      return `Resources matching "${params.query}":\n` +
+        resources.map(r => `• ${r.title} [${r.resource_type || '—'}]${r.template_category ? ` (${r.template_category})` : ''}`).join('\n');
+    },
+
+    // ── Bulk Update ────────────────────────────────────────────────
+
+    bulk_update: async (params: { entity: string; filter_field: string; filter_value: string; update_field: string; update_value: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const entity = params.entity.toLowerCase();
+      if (!['accounts', 'opportunities', 'tasks'].includes(entity)) {
+        return `Bulk update only supports accounts, opportunities, and tasks.`;
+      }
+
+      const table = entity as 'accounts' | 'opportunities' | 'tasks';
+
+      // Count matching records first
+      const { data: matches, count } = await supabase
+        .from(table)
+        .select('id', { count: 'exact' })
+        .eq('user_id', userId)
+        .ilike(params.filter_field, `%${params.filter_value}%`)
+        .limit(50);
+
+      const matchCount = count || matches?.length || 0;
+      if (!matchCount) return `No ${entity} found matching ${params.filter_field} = "${params.filter_value}"`;
+
+      const ids = (matches || []).map(m => m.id);
+      const { error } = await supabase
+        .from(table)
+        .update({ [params.update_field]: params.update_value, updated_at: new Date().toISOString() })
+        .in('id', ids);
+
+      if (error) return `Bulk update failed: ${error.message}`;
+      toast.success(`Bulk updated ${matchCount} ${entity}`, { description: `${params.update_field} → ${params.update_value}` });
+      return `Updated ${matchCount} ${entity} where ${params.filter_field} matches "${params.filter_value}": set ${params.update_field} = "${params.update_value}"`;
+    },
+
+    // ── Create Recurring Task ──────────────────────────────────────
+
+    create_recurring_task: async (params: { title: string; recurrence: string; accountName?: string; priority?: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      let linkedAccountId: string | null = null;
+      if (params.accountName) {
+        const { data: accts } = await supabase
+          .from('accounts')
+          .select('id')
+          .eq('user_id', userId)
+          .ilike('name', `%${params.accountName}%`)
+          .limit(1);
+        linkedAccountId = accts?.[0]?.id ?? null;
+      }
+
+      // Create as a regular task with recurrence info in the category
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + 1);
+      while (dueDate.getDay() === 0 || dueDate.getDay() === 6) dueDate.setDate(dueDate.getDate() + 1);
+
+      const { error } = await supabase.from('tasks').insert({
+        user_id: userId,
+        title: `🔄 ${params.title}`,
+        priority: params.priority || 'P2',
+        status: 'next',
+        workstream: 'pg',
+        linked_account_id: linkedAccountId,
+        category: `recurring:${params.recurrence}`,
+        due_date: dueDate.toISOString().split('T')[0],
+      });
+
+      if (error) return `Failed to create recurring task: ${error.message}`;
+      toast.success('Recurring task created', { description: `${params.title} — ${params.recurrence}` });
+      return `Created recurring task: "${params.title}" (${params.recurrence})${params.accountName ? ` linked to ${params.accountName}` : ''}`;
+    },
+
+    // ── Smart Debrief (with auto-tasks) ────────────────────────────
+
+    smart_debrief: async (params: { accountName: string; summary: string; nextSteps?: string; sentiment?: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const { data: accts } = await supabase
+        .from('accounts')
+        .select('id, name, notes')
+        .eq('user_id', userId)
+        .ilike('name', `%${params.accountName}%`)
+        .limit(1);
+
+      const timestamp = new Date().toLocaleString();
+      const today = new Date().toISOString().split('T')[0];
+      const debriefText = `\n\n---\n**Voice Debrief** (${timestamp})\n` +
+        `**Summary:** ${params.summary}\n` +
+        (params.nextSteps ? `**Next Steps:** ${params.nextSteps}\n` : '') +
+        (params.sentiment ? `**Sentiment:** ${params.sentiment}\n` : '');
+
+      if (accts?.length) {
+        await supabase
+          .from('accounts')
+          .update({
+            notes: (accts[0].notes || '') + debriefText,
+            next_step: params.nextSteps || undefined,
+            last_touch_date: today,
+            last_touch_type: 'meeting',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', accts[0].id);
+      }
+
+      // Auto-create tasks from next steps
+      const tasksCreated: string[] = [];
+      if (params.nextSteps) {
+        const steps = params.nextSteps.split(/[,;]|(?:\band\b)/i).map(s => s.trim()).filter(s => s.length > 5);
+        for (const step of steps.slice(0, 5)) {
+          // Set due date to 3 business days from now
+          const due = new Date();
+          let added = 0;
+          while (added < 3) {
+            due.setDate(due.getDate() + 1);
+            if (due.getDay() !== 0 && due.getDay() !== 6) added++;
+          }
+
+          await supabase.from('tasks').insert({
+            user_id: userId,
+            title: step,
+            priority: 'P2',
+            status: 'next',
+            workstream: 'pg',
+            linked_account_id: accts?.[0]?.id ?? null,
+            category: 'debrief-generated',
+            due_date: due.toISOString().split('T')[0],
+          });
+          tasksCreated.push(step);
+        }
+      }
+
+      toast.success('Smart debrief captured', {
+        description: `${params.accountName}${tasksCreated.length ? ` + ${tasksCreated.length} tasks` : ''}`,
+      });
+      return `Debrief logged for ${params.accountName}. ${tasksCreated.length ? `Created ${tasksCreated.length} follow-up tasks: ${tasksCreated.join('; ')}` : 'No follow-up tasks extracted.'}`;
+    },
+
+    // ── Pipeline Hygiene ───────────────────────────────────────────
+
+    pipeline_hygiene: async () => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      // Check for recent scan first
+      const today = new Date().toISOString().split('T')[0];
+      const { data: recent } = await supabase
+        .from('pipeline_hygiene_scans')
+        .select('health_score, total_issues, critical_issues, summary, scan_date')
+        .eq('user_id', userId)
+        .order('scan_date', { ascending: false })
+        .limit(1);
+
+      if (recent?.length && recent[0].scan_date === today) {
+        const scan = recent[0];
+        const summary = scan.summary as any;
+        return `Pipeline hygiene (today's scan): Health ${scan.health_score}/100, ${scan.total_issues} issues (${scan.critical_issues} critical). ${summary?.top_issues ? `Top issues: ${(summary.top_issues as string[]).join(', ')}` : ''}`;
+      }
+
+      // Trigger new scan
+      toast.info('Running pipeline hygiene scan...', { duration: 3000 });
+      const { data, error } = await supabase.functions.invoke('pipeline-hygiene', {
+        body: {},
+      });
+
+      if (error) return `Pipeline hygiene scan failed: ${error.message}`;
+      return `Pipeline hygiene: Health ${data?.health_score || '—'}/100, ${data?.total_issues || 0} issues found (${data?.critical_issues || 0} critical). ${data?.summary?.top_issues ? `Top: ${data.summary.top_issues.join(', ')}` : 'Check dashboard for details.'}`;
+    },
   };
 }
