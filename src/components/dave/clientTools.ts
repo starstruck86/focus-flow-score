@@ -1552,5 +1552,190 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       if (error) return `Pipeline hygiene scan failed: ${error.message}`;
       return `Pipeline hygiene: Health ${data?.health_score || '—'}/100, ${data?.total_issues || 0} issues found (${data?.critical_issues || 0} critical). ${data?.summary?.top_issues ? `Top: ${data.summary.top_issues.join(', ')}` : 'Check dashboard for details.'}`;
     },
+
+    // ── Guided Journal ─────────────────────────────────────────────
+
+    guided_journal: async () => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const today = new Date().toISOString().split('T')[0];
+      const { data } = await supabase
+        .from('daily_journal_entries')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('date', today)
+        .limit(1);
+
+      const entry = data?.[0] as any;
+      const missing: string[] = [];
+      const completed: string[] = [];
+
+      // Activity metrics
+      const metrics = [
+        { field: 'dials', label: 'Dials', default: 0 },
+        { field: 'conversations', label: 'Connects/Conversations', default: 0 },
+        { field: 'manual_emails', label: 'Manual Emails', default: 0 },
+        { field: 'meetings_set', label: 'Meetings Set', default: 0 },
+        { field: 'customer_meetings_held', label: 'Customer Meetings Held', default: 0 },
+        { field: 'opportunities_created', label: 'Opportunities Created', default: 0 },
+        { field: 'prospects_added', label: 'Prospects Added', default: 0 },
+        { field: 'accounts_researched', label: 'Accounts Researched', default: 0 },
+        { field: 'contacts_prepped', label: 'Contacts Prepped', default: 0 },
+      ];
+
+      for (const m of metrics) {
+        const val = entry?.[m.field] ?? m.default;
+        if (val === 0 || val === m.default) missing.push(`📊 ${m.label} (currently ${val})`);
+        else completed.push(`✅ ${m.label}: ${val}`);
+      }
+
+      // Qualitative fields
+      const qualFields = [
+        { field: 'what_worked_today', label: 'What worked today' },
+        { field: 'biggest_blocker', label: 'Biggest blocker' },
+        { field: 'tomorrow_priority', label: 'Tomorrow\'s top priority' },
+        { field: 'daily_reflection', label: 'Daily reflection' },
+      ];
+      for (const q of qualFields) {
+        if (!entry?.[q.field]) missing.push(`💬 ${q.label}`);
+        else completed.push(`✅ ${q.label}`);
+      }
+
+      // Wellness
+      const wellnessFields = [
+        { field: 'energy', label: 'Energy level (1-5)' },
+        { field: 'focus_quality', label: 'Focus quality (1-5)' },
+        { field: 'stress', label: 'Stress level (1-5)' },
+      ];
+      for (const w of wellnessFields) {
+        if (!entry?.[w.field]) missing.push(`🧠 ${w.label}`);
+        else completed.push(`✅ ${w.label}: ${entry[w.field]}`);
+      }
+
+      // Accountability
+      if (!entry?.personal_development) missing.push('📚 Personal development (yes/no)');
+      else completed.push('✅ Personal development');
+
+      if (!entry) {
+        return `No journal entry for today yet. Let's walk through it step by step.\n\nMISSING (${missing.length}):\n${missing.join('\n')}\n\nStart by asking about the activity metrics first (dials, connects, emails, etc.), then move to reflections and wellness.`;
+      }
+
+      return `Journal progress for today:\n\nCOMPLETED (${completed.length}):\n${completed.join('\n')}\n\nSTILL NEEDED (${missing.length}):\n${missing.join('\n')}\n\nAsk about the missing items one by one, starting with activity metrics.`;
+    },
+
+    update_journal_field: async (params: { field: string; value: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const JOURNAL_FIELDS: Record<string, { column: string; type: 'text' | 'number' | 'boolean' }> = {
+        what_worked_today: { column: 'what_worked_today', type: 'text' },
+        what_worked: { column: 'what_worked_today', type: 'text' },
+        biggest_blocker: { column: 'biggest_blocker', type: 'text' },
+        blocker: { column: 'biggest_blocker', type: 'text' },
+        tomorrow_priority: { column: 'tomorrow_priority', type: 'text' },
+        tomorrow: { column: 'tomorrow_priority', type: 'text' },
+        daily_reflection: { column: 'daily_reflection', type: 'text' },
+        reflection: { column: 'daily_reflection', type: 'text' },
+        energy: { column: 'energy', type: 'number' },
+        focus_quality: { column: 'focus_quality', type: 'number' },
+        focus: { column: 'focus_quality', type: 'number' },
+        stress: { column: 'stress', type: 'number' },
+        personal_development: { column: 'personal_development', type: 'boolean' },
+        clarity: { column: 'clarity', type: 'number' },
+        what_drained_you: { column: 'what_drained_you', type: 'text' },
+        drained: { column: 'what_drained_you', type: 'text' },
+      };
+
+      const fieldDef = JOURNAL_FIELDS[params.field.toLowerCase().replace(/\s+/g, '_')];
+      if (!fieldDef) return `Unknown journal field "${params.field}". Valid: ${Object.keys(JOURNAL_FIELDS).filter(k => !k.includes('_') || k === params.field).join(', ')}`;
+
+      let dbValue: any;
+      if (fieldDef.type === 'number') {
+        dbValue = parseInt(params.value) || 0;
+        if (['energy', 'focus_quality', 'stress', 'clarity'].includes(fieldDef.column)) {
+          dbValue = Math.max(1, Math.min(5, dbValue));
+        }
+      } else if (fieldDef.type === 'boolean') {
+        dbValue = ['yes', 'true', '1', 'yeah', 'yep'].includes(params.value.toLowerCase());
+      } else {
+        dbValue = params.value;
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      const { data: existing } = await supabase
+        .from('daily_journal_entries')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('date', today)
+        .limit(1);
+
+      if (existing?.length) {
+        const { error } = await supabase
+          .from('daily_journal_entries')
+          .update({ [fieldDef.column]: dbValue, updated_at: new Date().toISOString() })
+          .eq('id', existing[0].id);
+        if (error) return `Failed to update: ${error.message}`;
+      } else {
+        const { error } = await supabase
+          .from('daily_journal_entries')
+          .insert({ user_id: userId, date: today, [fieldDef.column]: dbValue });
+        if (error) return `Failed to create entry: ${error.message}`;
+      }
+
+      emitMetricsUpdated({ [fieldDef.column]: dbValue });
+      toast.success('Journal updated', { description: `${params.field}: ${params.value}` });
+      return `Updated ${params.field} to "${params.value}"`;
+    },
+
+    // ── Task Reminder ──────────────────────────────────────────────
+
+    set_task_reminder: async (params: { taskTitle: string; reminderTime: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const { data: tasks } = await supabase
+        .from('tasks')
+        .select('id, title')
+        .eq('user_id', userId)
+        .not('status', 'in', '("done","dropped")')
+        .ilike('title', `%${params.taskTitle}%`)
+        .limit(1);
+
+      if (!tasks?.length) return `Task matching "${params.taskTitle}" not found`;
+
+      // Parse reminderTime — support relative ("in 30 minutes") or absolute
+      let reminderAt: Date;
+      const lower = params.reminderTime.toLowerCase().trim();
+      const relativeMatch = lower.match(/in\s+(\d+)\s*(minute|min|hour|hr|h|m)/i);
+      if (relativeMatch) {
+        const amount = parseInt(relativeMatch[1]);
+        const unit = relativeMatch[2].startsWith('h') ? 60 : 1;
+        reminderAt = new Date(Date.now() + amount * unit * 60 * 1000);
+      } else {
+        // Try as date/time string
+        reminderAt = new Date(params.reminderTime);
+        if (isNaN(reminderAt.getTime())) {
+          // Try as time today
+          const time = parseTime(params.reminderTime);
+          if (time) {
+            const today = new Date().toISOString().split('T')[0];
+            reminderAt = new Date(`${today}T${time}:00`);
+          } else {
+            return `Could not parse reminder time: "${params.reminderTime}". Try "in 30 minutes" or "3pm".`;
+          }
+        }
+      }
+
+      const { error } = await supabase
+        .from('tasks')
+        .update({ reminder_at: reminderAt.toISOString(), updated_at: new Date().toISOString() } as any)
+        .eq('id', tasks[0].id);
+
+      if (error) return `Failed to set reminder: ${error.message}`;
+      emitDataChanged('tasks');
+      toast.success('Reminder set', { description: `${tasks[0].title} — ${reminderAt.toLocaleString()}` });
+      return `Reminder set for "${tasks[0].title}" at ${reminderAt.toLocaleString()}`;
+    },
   };
 }
