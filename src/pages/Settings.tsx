@@ -20,6 +20,7 @@ import {
   FileSpreadsheet,
   Link2,
   ArrowRight,
+  RefreshCw,
 } from 'lucide-react';
 import { ImportWizard } from '@/components/import';
 import { DuplicateDetector } from '@/components/DuplicateDetector';
