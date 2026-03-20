@@ -164,7 +164,7 @@ function DaveHealthSection() {
         overrides: { pass: overridesOk, detail: overridesDetail },
       });
 
-      if (tokenOk && contextOk && identityOk && firstMsgOk) {
+      if (tokenOk && contextOk && identityOk && firstMsgOk && overridesOk !== false) {
         toast.success('Smoke test passed — Dave is ready');
       } else {
         toast.warning('Smoke test has failures — check results');
