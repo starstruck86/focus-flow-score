@@ -301,6 +301,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         .eq('id', opps[0].id);
 
       if (error) return `Failed to move deal: ${error.message}`;
+      emitDataChanged('opportunities');
       toast.success('Deal moved', { description: `${opps[0].name}: ${oldStage || '—'} → ${params.newStage}` });
       return `Moved ${opps[0].name} from ${oldStage || 'no stage'} to ${params.newStage}`;
     },
