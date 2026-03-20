@@ -1737,5 +1737,298 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       toast.success('Reminder set', { description: `${tasks[0].title} — ${reminderAt.toLocaleString()}` });
       return `Reminder set for "${tasks[0].title}" at ${reminderAt.toLocaleString()}`;
     },
+
+    // ═══════════════════════════════════════════════════════════════
+    // SYNTHESIS TOOLS — Cross-entity intelligence layer
+    // ═══════════════════════════════════════════════════════════════
+
+    // ── Add Note to Opportunity ────────────────────────────────────
+    add_opportunity_note: async (params: { opportunityName: string; note: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const { data: opps } = await supabase
+        .from('opportunities')
+        .select('id, name, notes')
+        .eq('user_id', userId)
+        .ilike('name', `%${params.opportunityName}%`)
+        .limit(1);
+
+      if (!opps?.length) return `Opportunity matching "${params.opportunityName}" not found`;
+
+      const opp = opps[0];
+      const updatedNotes = ((opp.notes || '') + `\n\n🎙️ ${new Date().toLocaleDateString()}: ${params.note}`).trim();
+
+      const { error } = await supabase
+        .from('opportunities')
+        .update({ notes: updatedNotes, updated_at: new Date().toISOString() })
+        .eq('id', opp.id);
+
+      if (error) return `Failed to add note: ${error.message}`;
+      emitDataChanged('opportunities');
+      toast.success('Note added to opportunity', { description: opp.name });
+      return `Added note to opportunity "${opp.name}"`;
+    },
+
+    // ── Read Resource Content ──────────────────────────────────────
+    read_resource: async (params: { title: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const { data: resources } = await supabase
+        .from('resources')
+        .select('id, title, content, type')
+        .eq('user_id', userId)
+        .ilike('title', `%${params.title}%`)
+        .limit(1);
+
+      if (!resources?.length) return `Resource matching "${params.title}" not found`;
+
+      const r = resources[0] as any;
+      const content = (r.content || '').substring(0, 3000);
+      return `📚 "${r.title}" (${r.type || 'document'}):\n\n${content}${(r.content || '').length > 3000 ? '\n\n... [truncated]' : ''}`;
+    },
+
+    // ── MEDDICC Gap Analysis (Cross-Deal) ──────────────────────────
+    methodology_gaps: async () => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      // Get active opportunities
+      const { data: opps } = await supabase
+        .from('opportunities')
+        .select('id, name, arr, close_date, stage, status')
+        .eq('user_id', userId)
+        .in('status', ['active', 'stalled'])
+        .order('arr', { ascending: false })
+        .limit(20);
+
+      if (!opps?.length) return 'No active opportunities found';
+
+      // Get methodology for all active opps
+      const oppIds = opps.map(o => o.id);
+      const { data: methodologies } = await supabase
+        .from('opportunity_methodology')
+        .select('*')
+        .eq('user_id', userId)
+        .in('opportunity_id', oppIds);
+
+      const methMap = new Map((methodologies || []).map((m: any) => [m.opportunity_id, m]));
+      const fields = ['metrics', 'economic_buyer', 'decision_criteria', 'decision_process', 'identify_pain', 'champion', 'competition'];
+      const fieldLabels: Record<string, string> = { metrics: 'Metrics', economic_buyer: 'Economic Buyer', decision_criteria: 'Decision Criteria', decision_process: 'Decision Process', identify_pain: 'Identify Pain', champion: 'Champion', competition: 'Competition' };
+
+      const gaps: { opp: string; arr: number; closeDate: string; missing: string[]; urgency: number }[] = [];
+
+      for (const opp of opps) {
+        const meth = methMap.get(opp.id) as any;
+        const missing = fields.filter(f => !meth || !meth[`${f}_confirmed`]).map(f => fieldLabels[f]);
+        if (missing.length === 0) continue;
+
+        // Urgency = ARR weight * close date proximity
+        const daysToClose = opp.close_date ? Math.max(1, Math.ceil((new Date(opp.close_date).getTime() - Date.now()) / 86400000)) : 90;
+        const urgency = (opp.arr || 0) / daysToClose;
+
+        gaps.push({ opp: opp.name, arr: opp.arr || 0, closeDate: opp.close_date || 'none', missing, urgency });
+      }
+
+      gaps.sort((a, b) => b.urgency - a.urgency);
+
+      if (gaps.length === 0) return '✅ All active deals have full MEDDICC coverage!';
+
+      return `🎯 MEDDICC Gaps (ranked by urgency):\n\n${gaps.slice(0, 5).map((g, i) => 
+        `${i + 1}. ${g.opp} ($${(g.arr / 1000).toFixed(0)}k, close: ${g.closeDate})\n   Missing: ${g.missing.join(', ')}`
+      ).join('\n\n')}${gaps.length > 5 ? `\n\n...and ${gaps.length - 5} more deals with gaps` : ''}`;
+    },
+
+    // ── Next Action Synthesizer ────────────────────────────────────
+    next_action: async () => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const today = new Date().toISOString().split('T')[0];
+      const now = new Date();
+
+      // Fetch in parallel: overdue tasks, upcoming meetings, stale deals, journal status
+      const [tasksRes, calendarRes, oppsRes, journalRes] = await Promise.all([
+        supabase
+          .from('tasks')
+          .select('id, title, due_date, priority, linked_account_id, linked_opportunity_id')
+          .eq('user_id', userId)
+          .not('status', 'in', '("done","dropped")')
+          .lte('due_date', today)
+          .order('priority', { ascending: true })
+          .limit(10),
+        supabase
+          .from('calendar_events')
+          .select('id, title, start_time, description')
+          .eq('user_id', userId)
+          .gte('start_time', now.toISOString())
+          .lte('start_time', new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString())
+          .order('start_time', { ascending: true })
+          .limit(3),
+        supabase
+          .from('opportunities')
+          .select('id, name, arr, close_date, last_touch_date, status')
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .order('arr', { ascending: false })
+          .limit(20),
+        supabase
+          .from('daily_journal_entries')
+          .select('checked_in, dials, conversations')
+          .eq('user_id', userId)
+          .eq('date', today)
+          .maybeSingle(),
+      ]);
+
+      const candidates: { action: string; score: number; reason: string }[] = [];
+
+      // Score overdue tasks
+      for (const task of (tasksRes.data || []) as any[]) {
+        const priorityWeight = task.priority === 'P1' ? 3 : task.priority === 'P2' ? 2 : 1;
+        candidates.push({
+          action: `Complete overdue task: "${task.title}"`,
+          score: 60 * priorityWeight,
+          reason: `Overdue ${task.priority || 'P3'} task`,
+        });
+      }
+
+      // Score upcoming meetings needing prep
+      for (const event of (calendarRes.data || []) as any[]) {
+        const minsAway = Math.max(0, (new Date(event.start_time).getTime() - now.getTime()) / 60000);
+        candidates.push({
+          action: `Prep for meeting: "${event.title}" (in ${Math.round(minsAway)} min)`,
+          score: minsAway < 30 ? 200 : 120,
+          reason: `Meeting in ${Math.round(minsAway)} minutes`,
+        });
+      }
+
+      // Score stale high-value deals
+      for (const opp of (oppsRes.data || []) as any[]) {
+        if (!opp.last_touch_date) continue;
+        const daysSinceTouch = Math.ceil((now.getTime() - new Date(opp.last_touch_date).getTime()) / 86400000);
+        if (daysSinceTouch >= 7) {
+          candidates.push({
+            action: `Re-engage stale deal: "${opp.name}" ($${((opp.arr || 0) / 1000).toFixed(0)}k)`,
+            score: (opp.arr || 0) / 1000 * (daysSinceTouch / 7),
+            reason: `${daysSinceTouch} days since last touch, $${((opp.arr || 0) / 1000).toFixed(0)}k ARR`,
+          });
+        }
+      }
+
+      // Journal check
+      const journal = journalRes.data as any;
+      if (!journal?.checked_in && now.getHours() >= 16) {
+        candidates.push({
+          action: 'Complete your daily journal check-in',
+          score: 40,
+          reason: 'After 4pm and not checked in yet',
+        });
+      }
+
+      candidates.sort((a, b) => b.score - a.score);
+
+      if (candidates.length === 0) return '✅ Nothing urgent — you\'re caught up! Consider prospecting or prepping for tomorrow.';
+
+      const top = candidates[0];
+      const runners = candidates.slice(1, 3);
+
+      return `🎯 #1 Priority Right Now:\n${top.action}\nWhy: ${top.reason}${runners.length ? `\n\nAlso consider:\n${runners.map((r, i) => `${i + 2}. ${r.action} (${r.reason})`).join('\n')}` : ''}`;
+    },
+
+    // ── Contact Engagement Timeline ────────────────────────────────
+    contact_timeline: async (params: { contactName: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      // Find the contact
+      const { data: contacts } = await supabase
+        .from('contacts')
+        .select('id, name, title, account_id, last_touch_date')
+        .eq('user_id', userId)
+        .ilike('name', `%${params.contactName}%`)
+        .limit(1);
+
+      if (!contacts?.length) return `Contact matching "${params.contactName}" not found`;
+      const contact = contacts[0] as any;
+
+      // Find transcripts mentioning this contact
+      const { data: transcripts } = await supabase
+        .from('call_transcripts')
+        .select('id, title, call_date, call_type')
+        .eq('user_id', userId)
+        .or(`participants.ilike.%${params.contactName}%,title.ilike.%${params.contactName}%`)
+        .order('call_date', { ascending: false })
+        .limit(5);
+
+      // Find calendar events with this contact
+      const { data: events } = await supabase
+        .from('calendar_events')
+        .select('id, title, start_time')
+        .eq('user_id', userId)
+        .ilike('title', `%${params.contactName}%`)
+        .order('start_time', { ascending: false })
+        .limit(5);
+
+      const engagements: string[] = [];
+      for (const t of (transcripts || []) as any[]) {
+        engagements.push(`📞 ${t.call_date}: ${t.title} (${t.call_type || 'call'})`);
+      }
+      for (const e of (events || []) as any[]) {
+        engagements.push(`📅 ${new Date(e.start_time).toLocaleDateString()}: ${e.title}`);
+      }
+
+      engagements.sort().reverse();
+
+      const staleDays = contact.last_touch_date
+        ? Math.ceil((Date.now() - new Date(contact.last_touch_date).getTime()) / 86400000)
+        : null;
+
+      return `👤 ${contact.name}${contact.title ? ` — ${contact.title}` : ''}\n${staleDays !== null ? `Last touch: ${staleDays} days ago${staleDays > 14 ? ' ⚠️ Going cold!' : ''}` : 'No touch date recorded'}\n\nEngagement History:\n${engagements.length ? engagements.slice(0, 8).join('\n') : 'No engagements found — consider reaching out!'}`;
+    },
+
+    // ── Save Commitment ────────────────────────────────────────────
+    save_commitment: async (params: { commitment: string; accountName?: string; dueDate?: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      let accountId: string | null = null;
+      if (params.accountName) {
+        const { data: accounts } = await supabase
+          .from('accounts')
+          .select('id, name, notes')
+          .eq('user_id', userId)
+          .ilike('name', `%${params.accountName}%`)
+          .limit(1);
+        if (accounts?.length) {
+          accountId = accounts[0].id;
+          // Append to account notes
+          const existing = (accounts[0] as any).notes || '';
+          await supabase
+            .from('accounts')
+            .update({ notes: `${existing}\n\n🤝 Commitment (${new Date().toLocaleDateString()}): ${params.commitment}`.trim() })
+            .eq('id', accountId);
+        }
+      }
+
+      // Create a task for the commitment
+      const dueDate = params.dueDate ? parseDueDate(params.dueDate) : new Date().toISOString().split('T')[0];
+      const { error } = await supabase
+        .from('tasks')
+        .insert({
+          user_id: userId,
+          title: `🤝 ${params.commitment}`,
+          priority: 'P2',
+          status: 'todo',
+          due_date: dueDate,
+          linked_account_id: accountId,
+          source: 'dave-commitment',
+        } as any);
+
+      if (error) return `Failed to save commitment: ${error.message}`;
+      emitDataChanged('tasks');
+      toast.success('Commitment saved', { description: params.commitment });
+      return `Saved commitment: "${params.commitment}"${accountId ? ` (linked to account)` : ''} — task created for ${dueDate}`;
+    },
   };
 }

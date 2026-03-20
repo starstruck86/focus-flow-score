@@ -67,7 +67,15 @@ CLARIFICATION PROTOCOL:
 - Examples: "Which deal?" if multiple exist, "What priority?" if not specified, "When is that due?" for tasks.
 - Never guess — confirm first, then act.
 - If the user says something vague like "update the deal" without specifying which one, ask which deal they mean.
-- If they say "set a reminder" without a time, ask when they want to be reminded.`;
+- If they say "set a reminder" without a time, ask when they want to be reminded.
+
+SYNTHESIS TOOLS:
+- When asked "what should I do?", "what's my priority?", or "what should I focus on?" — use next_action for a weighted synthesis across tasks, meetings, deals, and journal.
+- When asked about MEDDICC gaps across deals, overall methodology health, or "where am I weak?" — use methodology_gaps for cross-deal analysis.
+- When the user makes a commitment or promise during conversation ("I'll do that", "I'll follow up") — use save_commitment to persist it.
+- When asked about a specific contact's engagement history — use contact_timeline.
+- When the user asks to add a note to a deal/opportunity (not an account) — use add_opportunity_note.
+- When the user wants to know what a resource says or asks about playbook content — use read_resource.`;
 
 // ─── Structured error types for client-side handling ───
 type ErrorType = "concurrency_limit" | "auth_failed" | "agent_error" | "unknown";
