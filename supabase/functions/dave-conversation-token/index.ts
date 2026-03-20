@@ -337,6 +337,9 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
   }
 
   const accounts = accountsRes.data || [];
+  // Build account ID→name map early so pipeline, contacts, and transcripts can all use it
+  const accountIdMap: Record<string, string> = {};
+  for (const a of accounts) accountIdMap[(a as any).id] = (a as any).name;
   if (accounts.length) {
     sections.push(
       `ACCOUNTS (${accounts.length}):\n` +
