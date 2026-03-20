@@ -99,3 +99,11 @@ verify_jwt = false
 
 [functions.import-podcast]
 verify_jwt = false
+
+[functions.enrich-resource-content]
+verify_jwt = false
+
+[functions.operationalize-resource]
+verify_jwt = false
+
+[functions.suggest-resource-uses]
