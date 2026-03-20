@@ -1,6 +1,7 @@
 import { NavigateFunction } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { emitMetricsUpdated, emitDataChanged } from '@/lib/daveEvents';
 
 type AskCopilot = (question: string, mode: string) => void;
 
