@@ -179,6 +179,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         .eq('id', accts[0].id);
 
       if (error) return `Failed to update: ${error.message}`;
+      emitDataChanged('accounts');
       toast.success('Account updated', { description: `${accts[0].name}: ${params.field} → ${params.value}` });
       return `Updated ${accts[0].name} ${params.field} to ${params.value}`;
     },
