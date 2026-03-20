@@ -1307,15 +1307,16 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             size="sm"
             variant="outline"
             className="ml-auto h-7 text-xs gap-1 border-status-yellow/30 hover:bg-status-yellow/10"
-            onClick={() => {
-              const settingsLink = document.querySelector('[data-nav="settings"]') as HTMLAnchorElement;
-              if (settingsLink) settingsLink.click();
-              else window.location.hash = '/settings';
-            }}
+            onClick={() => setShowDuplicateReview(prev => !prev)}
           >
-            <Merge className="h-3 w-3" /> Review & Merge
+            <Merge className="h-3 w-3" /> {showDuplicateReview ? 'Hide' : 'Review & Merge'}
           </Button>
         </div>
+      )}
+
+      {/* Inline Duplicate Detector */}
+      {showDuplicateReview && (
+        <DuplicateDetector />
       )}
 
       {/* Filters */}
