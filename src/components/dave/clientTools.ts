@@ -1317,15 +1317,15 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       const q = `%${params.query}%`;
       const { data: resources } = await supabase
         .from('resources')
-        .select('title, category, folder, content_type, created_at')
+        .select('title, resource_type, template_category, created_at')
         .eq('user_id', userId)
-        .or(`title.ilike.${q},content.ilike.${q},folder.ilike.${q},category.ilike.${q}`)
+        .or(`title.ilike.${q},content.ilike.${q},resource_type.ilike.${q}`)
         .limit(10);
 
       if (!resources?.length) return `No resources found matching "${params.query}"`;
 
       return `Resources matching "${params.query}":\n` +
-        resources.map(r => `• ${r.title} [${r.category || r.content_type || '—'}]${r.folder ? ` 📁 ${r.folder}` : ''}`).join('\n');
+        resources.map(r => `• ${r.title} [${r.resource_type || '—'}]${r.template_category ? ` (${r.template_category})` : ''}`).join('\n');
     },
 
     // ── Bulk Update ────────────────────────────────────────────────
