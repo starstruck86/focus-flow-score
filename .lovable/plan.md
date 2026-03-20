@@ -1,85 +1,74 @@
 
 
-# Dave Tool Coverage Audit — Gaps & Expansion Plan
+# Dave QA Report — Issues Found & Fix Plan
 
-## Current State: 36 Tools
+## QA Method
+Full code audit of: `DaveConversationMode.tsx`, `clientTools.ts` (1501 lines, 52 tools), `register-dave-tools/index.ts`, `dave-conversation-token/index.ts`, `dave-health-check/index.ts`, `useDaveContext.ts`, `useDaveConversation.ts`, `Layout.tsx` (retry-via-remount), and database schema validation.
 
-The existing tools cover basic CRUD and lookups across accounts, opportunities, renewals, tasks, contacts, daily metrics, calendar, quota, journal, transcripts, coaching, and navigation. Solid foundation — but they only scratch the surface of what the app can do.
+## Architecture Status: Sound
+The core architecture is solid — retry-via-remount pattern, session contract assertions, greeting watchdog, concurrency backoff, context assembly, and diagnostics panel all look correct.
 
-## Critical Gaps (High-Impact Missing Tools)
+## Issues Found
 
-### 1. Create Account (voice can update but not create)
-Dave can't add a new account. If you hear about a prospect on a call, you have to leave voice mode and manually create it. Should support: `"Dave, add Acme Corp as a new account, tier B, new-logo motion"`
+### Issue 1: `account_name` field doesn't exist on `tasks` table (BREAKS data)
+**Location:** `dave-conversation-token/index.ts` line ~205
+The CRM context builder selects `account_name` from `tasks`, but the table only has `linked_account_id`. This means:
+- Task context sent to Dave shows `account_name: null` for every task
+- Dave can never tell the user which account a task is linked to
 
-### 2. Account Enrichment Trigger
-The app has a full enrichment pipeline (Firecrawl, Perplexity, AI fallback) but no voice trigger. Should support: `"Dave, enrich Acme Corp"` → kicks off the edge function and reports back.
+Similarly, `list_tasks` in `clientTools.ts` (line 789) selects `linked_account_id` but doesn't resolve it to a name — tasks are shown without account context.
 
-### 3. Cross-Entity Search
-GlobalSearch exists in the app but Dave can't search. Should support: `"Dave, search for anything related to cloud migration"` → searches accounts, opps, contacts, transcripts.
+**Fix:** In the token function, join or resolve `linked_account_id` to an account name. In `list_tasks`, add a follow-up query to resolve account names.
 
-### 4. Weekly Battle Plan / Review
-The app generates weekly battle plans and review summaries via edge functions, but Dave can't trigger or summarize them. Should support: `"Dave, what's my battle plan this week?"` and `"Dave, run my weekly review"`
+### Issue 2: `one_time_amount` doesn't exist on `opportunities` table
+**Location:** `clientTools.ts` line 1115 — `commission_detail` selects `one_time_amount` from opportunities.
+The `opportunities` table in the schema has no `one_time_amount` column. This will return null/undefined but won't crash — just gives wrong commission data.
 
-### 5. Commission & Pacing Detail
-`quota_status` gives attainment %, but the app has detailed commission pacing (CommissionPacingTile, CommissionSnapshot). Should support: `"Dave, what's my commission tracking at?"` with accelerator tiers, projected earnings, and P-Club math.
+**Fix:** Remove `one_time_amount` from the select, or check if the column exists in the DB and add it if needed.
 
-### 6. Account Prioritization
-The app has an AI Account Prioritizer but Dave can't ask for it. Should support: `"Dave, which accounts should I prioritize today?"` → returns ranked list with reasoning.
+### Issue 3: Tool count mismatch — code says 51 but there are 52
+**Location:** `register-dave-tools/index.ts` comment line 29 says "ALL 51 TOOLS" but `clientTools.ts` has 52 handlers. Need to verify all tools in the registration array match the client handlers.
 
-### 7. Trend Queries
-The Trends page has rich analytics but Dave can't query them. Should support: `"Dave, how are my connects trending this month?"` or `"Dave, compare my activity this week vs last"`
+**Fix:** Count tools in both files and ensure 1:1 match.
 
-### 8. Stakeholder Intelligence
-StakeholderMap and OrgChart exist but Dave can't query them. Should support: `"Dave, who's the economic buyer at Acme?"` or `"Dave, map the org chart at Acme"`
+### Issue 4: `as any` type casts on tables that exist in types
+**Location:** `clientTools.ts` lines 230, 326 — `opportunity_methodology` and `dave_transcripts` are cast with `as any` even though they exist in the generated types.
+This isn't a bug, but it means TypeScript won't catch schema mismatches.
 
-### 9. Territory Copilot
-Full territory analysis engine exists but has no voice interface. Should support: `"Dave, analyze my territory balance"` or `"Dave, which accounts are under-touched?"`
+**Fix:** Remove `as any` casts and use proper types.
 
-### 10. Focus Timer (configurable)
-Only `start_power_hour` exists (fixed duration). Should support: `"Dave, start a 25-minute prospecting block for Acme"` with type, duration, and account linking.
+### Issue 5: `bulk_update` security concern
+**Location:** `clientTools.ts` line 1333
+The `bulk_update` tool accepts arbitrary `filter_field` and `update_field` strings from the voice agent and passes them directly to Supabase queries. While RLS protects against cross-user access, there's no validation that the field names are valid columns. An LLM hallucination could send invalid field names causing Postgres errors.
 
-### 11. Resource / Prep Hub Access
-PrepHub has resources, templates, and AI-generated content but Dave can't access any of it. Should support: `"Dave, find my prep notes for Acme"` or `"Dave, what resources do I have on objection handling?"`
+**Fix:** Add a whitelist of valid fields per entity.
 
-### 12. Bulk / Batch Operations
-No multi-record voice commands. Should support: `"Dave, mark all tasks for Acme as done"` or `"Dave, set all Tier C accounts to inactive"`
+### Issue 6: Console warning (non-Dave, minor)
+`MeetingCard` in `MeetingPrepPrompt.tsx` has a ref forwarding issue — cosmetic warning, not a Dave blocker.
 
-### 13. Create Recurring Task
-RecurringTasks page exists but Dave can't create them. Should support: `"Dave, create a recurring task to check in with Acme every Tuesday"`
+## Summary of Fixes
 
-### 14. Smart Debrief with Auto-Tasks
-Current `debrief` logs notes but doesn't auto-generate follow-up tasks from takeaways. Should support: `"Dave, debrief Acme — they need a proposal by Friday and I need to loop in their VP"` → creates 2 tasks automatically.
+| # | Fix | File | Severity |
+|---|-----|------|----------|
+| 1 | Resolve `linked_account_id` → account name in task context | `dave-conversation-token/index.ts` | High |
+| 2 | Remove `one_time_amount` from commission_detail | `clientTools.ts` | Medium |
+| 3 | Verify tool count parity (registration vs client) | Both files | Medium |
+| 4 | Remove unnecessary `as any` casts | `clientTools.ts` | Low |
+| 5 | Add field whitelists to `bulk_update` | `clientTools.ts` | Medium |
+| 6 | Fix `list_tasks` to resolve account names | `clientTools.ts` | Medium |
 
-### 15. Pipeline Hygiene Report
-Edge function `pipeline-hygiene` exists but Dave can't trigger it. Should support: `"Dave, run pipeline hygiene"` → returns stale deals, missing close dates, MEDDICC gaps.
+## Implementation
 
-## Summary: 15 New Tools to Add
+### `supabase/functions/dave-conversation-token/index.ts`
+- Change tasks query to select `linked_account_id` instead of `account_name`
+- After fetching tasks and accounts, resolve `linked_account_id` to account name using the accounts data already fetched
 
-```text
-Category              New Tools
-──────────────────────────────────────────
-CRM Actions           create_account, enrich_account, bulk_update
-Search & Intel        search_crm, stakeholder_query, territory_analysis
-Strategy              weekly_battle_plan, weekly_review, pipeline_hygiene
-                      account_prioritize, commission_detail
-Analytics             trend_query
-Productivity          start_focus_timer, create_recurring_task
-Resources             search_resources
-Enhanced              smart_debrief (replaces debrief with auto-task creation)
-```
+### `src/components/dave/clientTools.ts`
+- `list_tasks`: After fetching tasks with `linked_account_id`, batch-resolve to account names
+- `commission_detail`: Remove `one_time_amount` from the select
+- `bulk_update`: Add field whitelists for accounts, opportunities, and tasks
+- Remove `as any` casts where types exist
 
-## Implementation Plan
-
-### Step 1: Add 15 new client tool handlers to `clientTools.ts`
-Each tool follows the existing pattern — async function, getUserId, query/mutate database, return summary string, show toast.
-
-### Step 2: Update `register-dave-tools/index.ts` with all 51 tool definitions
-Delete old tools, create new set with correct parameter schemas matching client code.
-
-### Step 3: Re-register all tools on ElevenLabs agent
-Single invocation of the updated edge function.
-
-### Files to modify
-1. **`src/components/dave/clientTools.ts`** — Add 15 new tool handlers (~400 lines)
-2. **`supabase/functions/register-dave-tools/index.ts`** — Update DAVE_TOOLS array to 51 entries with corrected schemas for all tools (existing + new)
+### `supabase/functions/register-dave-tools/index.ts`
+- Audit and fix the comment to match actual tool count
 
