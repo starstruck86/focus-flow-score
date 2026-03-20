@@ -403,7 +403,7 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
     sections.push(
       `CONTACTS (${contacts.length}):\n` +
       contacts.slice(0, 30).map((c: any) =>
-        `- ${c.name}${c.title ? ` (${c.title})` : ""} role:${c.buyer_role || "—"} influence:${c.influence_level || "—"} status:${c.status || "—"}${c.department ? ` dept:${c.department}` : ""} acct:${c.account_id || "—"}`
+        `- ${c.name}${c.title ? ` (${c.title})` : ""} role:${c.buyer_role || "—"} influence:${c.influence_level || "—"} status:${c.status || "—"}${c.department ? ` dept:${c.department}` : ""} acct:${(c.account_id && accountIdMap[c.account_id]) || "—"}`
       ).join("\n")
     );
   }
