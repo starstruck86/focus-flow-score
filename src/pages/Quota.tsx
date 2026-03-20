@@ -50,6 +50,7 @@ import {
   PerformanceSnapshot,
   CommissionSnapshot,
   Next45DaysRisk,
+  QuotaAccelerationCard,
 } from '@/components/dashboard';
 import { usePaceToQuota, usePerformanceRollups, useQuotaTargets } from '@/hooks/useSalesAge';
 import { DEFAULT_QUOTA_TARGETS } from '@/lib/salesAgeCalculations';
@@ -60,8 +61,9 @@ import { WidgetCustomizer } from '@/components/dashboard/WidgetCustomizer';
 const QUOTA_WIDGETS: WidgetConfig[] = [
   { id: 'attainment-gauges', label: 'Attainment Gauges', visible: true, order: 0 },
   { id: 'commission-remaining', label: 'Commission + Remaining', visible: true, order: 1 },
-  { id: 'quick-stats', label: 'Quick Stats', visible: true, order: 2 },
-  { id: 'strategic-planning', label: 'Strategic Planning', visible: true, order: 3 },
+  { id: 'quota-acceleration', label: 'Close the Gap', visible: true, order: 2 },
+  { id: 'quick-stats', label: 'Quick Stats', visible: true, order: 3 },
+  { id: 'strategic-planning', label: 'Strategic Planning', visible: true, order: 4 },
 ];
 
 // Normalize status based on stage (e.g., stage="Closed Won" but status="active")
