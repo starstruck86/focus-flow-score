@@ -112,6 +112,15 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
 
       const dueDate = params.dueDate ? parseDueDate(params.dueDate) : null;
 
+      // Build reminder_at from dueTime + dueDate
+      let reminderAt: string | null = null;
+      if (params.dueTime && dueDate) {
+        const time = parseTime(params.dueTime);
+        if (time) {
+          reminderAt = new Date(`${dueDate}T${time}:00`).toISOString();
+        }
+      }
+
       const { error } = await supabase.from('tasks').insert({
         user_id: userId,
         title: params.title,
@@ -121,6 +130,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         linked_account_id: linkedAccountId,
         category: 'voice-created',
         due_date: dueDate,
+        reminder_at: reminderAt,
       });
 
       if (error) {
@@ -129,7 +139,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       }
       emitDataChanged('tasks');
 
-      // If a specific time was given, also create a voice reminder
+      // Also create a voice reminder for backwards compat
       if (params.dueTime && dueDate) {
         const time = parseTime(params.dueTime);
         if (time) {
@@ -142,8 +152,8 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         }
       }
 
-      toast.success('Task created', { description: `${params.title}${dueDate ? ` (due ${dueDate})` : ''}` });
-      return `Task created: ${params.title}${dueDate ? ` due ${dueDate}` : ''}`;
+      toast.success('Task created', { description: `${params.title}${dueDate ? ` (due ${dueDate})` : ''}${reminderAt ? ' 🔔' : ''}` });
+      return `Task created: ${params.title}${dueDate ? ` due ${dueDate}` : ''}${reminderAt ? ' with reminder' : ''}`;
     },
 
     open_copilot: (params: { question: string; mode?: string }) => {
