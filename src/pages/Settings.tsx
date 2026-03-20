@@ -191,10 +191,29 @@ function DaveHealthSection() {
             <p className="text-sm text-muted-foreground">ElevenLabs Conversational AI</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={runCheck} disabled={loading}>
-          {loading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-          Health Check
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={runCheck} disabled={loading}>
+            {loading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+            Health Check
+          </Button>
+          <Button variant="outline" size="sm" onClick={async () => {
+            setRegistering(true);
+            try {
+              const { data, error } = await supabase.functions.invoke('register-dave-tools');
+              if (error) throw error;
+              const created = data?.results?.filter((r: any) => r.status === 'created').length ?? 0;
+              const total = data?.results?.length ?? 0;
+              toast.success(`${created}/${total} tools registered`);
+            } catch (err: any) {
+              toast.error('Tool sync failed', { description: err.message });
+            } finally {
+              setRegistering(false);
+            }
+          }} disabled={registering}>
+            {registering ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+            Sync Tools
+          </Button>
+        </div>
       </div>
 
       {health && (
