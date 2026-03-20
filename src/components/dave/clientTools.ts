@@ -553,7 +553,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       // Get or create today's entry
       const { data: existing } = await supabase
         .from('daily_journal_entries')
-        .select('id, ' + dbField)
+        .select('*')
         .eq('user_id', userId)
         .eq('date', today)
         .limit(1);
