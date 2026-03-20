@@ -22,7 +22,7 @@ function num(desc: string) {
   return { type: "number", description: desc };
 }
 function arr(desc: string, itemType: any) {
-  return { type: "array", description: desc, items: itemType };
+  return { type: "array", description: desc, items: { ...itemType, description: itemType.description || "Item" } };
 }
 
 // ═══════════════════════════════════════════════════════════════
