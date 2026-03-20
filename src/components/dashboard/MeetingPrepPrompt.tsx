@@ -210,7 +210,7 @@ function MeetingCard({ meeting, isExpanded, onToggle, onDismiss, onAddPrep }: {
   onDismiss: () => void;
   onAddPrep: () => void;
 }) {
-  const { ask } = useCopilot();
+  const { ask, askBackground } = useCopilot();
   const isUrgent = meeting.minutesUntil <= 30;
   const daysSinceTouch = meeting.lastTouchDate
     ? Math.floor((Date.now() - new Date(meeting.lastTouchDate).getTime()) / 86400000)
