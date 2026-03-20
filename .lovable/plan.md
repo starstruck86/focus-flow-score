@@ -1,84 +1,96 @@
 
 
-# Dave QA Report — Remaining Issues & Fix Plan
+# Dave Data Sync & Resilience — Expanded Fix Plan
 
-## Audit Scope
-Full line-by-line review of: `dave-conversation-token/index.ts` (570 lines), `clientTools.ts` (1528 lines, 52 tools), `register-dave-tools/index.ts` (244 lines), `DaveConversationMode.tsx` (line 326), and database schema types.
+## Problem Summary
+Dave writes directly to the database via Supabase, but the UI reads from an in-memory Zustand store. These two data stores are completely disconnected for **daily metrics** and **partially disconnected** for CRM entities. This causes:
+- "Log 5 dials" via Dave → DB updated, Activity Rings still show 0
+- Tasks created by Dave don't appear in the task list until page reload
+- Accounts/opps updated by Dave don't reflect in UI until refresh
+- No journal hydration from DB on app load
 
-## What's Working
-- 52 tools registered, parameter schemas aligned between registration and client handlers
-- Task context resolves `linked_account_id` → account names (lines 352-353)
-- Transcript context resolves `account_id` → account names (lines 454-455)
-- Field whitelists on `bulk_update` present and correct
-- Commission detail uses correct `new_arr_quota` / `renewal_arr_quota` columns
-- Concurrency backoff, retry-via-remount, greeting watchdog all intact
+## Root Cause Analysis
 
-## Issues Still Present
+### Data Flow Gap: Daily Metrics (the user's reported bug)
 
-### Issue 1 (HIGH): Quota context uses non-existent columns
-**File:** `dave-conversation-token/index.ts` line 436
-```
-`QUOTA: annual=$${q.annual_target...} quarterly=$${q.quarterly_target...} period=${q.quota_period...}`
-```
-The `quota_targets` table has: `new_arr_quota`, `renewal_arr_quota`, `fiscal_year_start`, `fiscal_year_end`, `new_arr_acr`, `renewal_arr_acr`. There is NO `annual_target`, `quarterly_target`, or `quota_period`. Dave's quota context always shows blanks/undefined.
+```text
+Dave: "Log 5 dials"
+  → clientTools.update_daily_metrics
+    → writes to daily_journal_entries table (DB)
+    → shows toast "Dials updated: 0 → 5"
+    → DONE (no Zustand update, no event)
 
-**Fix:** Replace line 436 with:
-```
-const totalQuota = (q.new_arr_quota || 0) + (q.renewal_arr_quota || 0);
-sections.push(`QUOTA: total=$${totalQuota.toLocaleString()} new_logo=$${(q.new_arr_quota || 0).toLocaleString()} renewal=$${(q.renewal_arr_quota || 0).toLocaleString()} FY:${q.fiscal_year_start || "—"} to ${q.fiscal_year_end || "—"}`);
-```
+Activity Rings read from:
+  → useStore().currentDay.activityInputs.dials  (Zustand, still 0)
+  → NEVER reads from daily_journal_entries
 
-### Issue 2 (MEDIUM): Pipeline context shows raw account_id UUIDs
-**File:** `dave-conversation-token/index.ts` line 373
-`acct:${o.account_id || "—"}` outputs raw UUIDs. The `accountIdMap` built at line 454 (for transcripts) should be built earlier and reused here.
-
-**Fix:** Move the `accountIdMap` construction (lines 454-455) to right after the accounts are loaded (after line 339), then use it at line 373 and line 403.
-
-### Issue 3 (MEDIUM): Contacts context shows raw account_id UUIDs
-**File:** `dave-conversation-token/index.ts` line 403
-Same as Issue 2 — `acct:${c.account_id || "—"}` is a raw UUID.
-
-**Fix:** Use the same `accountIdMap` to resolve.
-
-### Issue 4 (LOW): `dave_transcripts` insert uses unnecessary `as any` casts
-**File:** `DaveConversationMode.tsx` line 326
-```typescript
-await (supabase.from('dave_transcripts' as any) as any).insert({...})
-```
-The `dave_transcripts` table exists in generated types with proper schema. The cast bypasses TypeScript safety.
-
-**Fix:** Replace with:
-```typescript
-await supabase.from('dave_transcripts').insert({
-  user_id: user.id,
-  messages: currentTranscript as unknown as Json,
-  duration_seconds: durationSeconds,
-});
+Manual ring tap:
+  → updates Zustand store only
+  → DataSync does NOT sync daily_journal_entries (only accounts/opps/renewals/contacts/tasks)
+  → Value lost on reload
 ```
 
-### Issue 5 (LOW): CORS headers in register-dave-tools missing Supabase client headers
-**File:** `register-dave-tools/index.ts` line 5-6
-Currently: `"authorization, x-client-info, apikey, content-type"`
-Missing the newer platform headers that other edge functions include.
+### Data Flow Gap: CRM Entities (tasks, accounts, opps)
+Dave's `create_task`, `update_account`, `move_deal`, `complete_task`, `create_opportunity`, `smart_debrief`, `create_account`, `add_contact`, `log_touch`, `update_renewal`, `update_methodology`, `bulk_update` all write directly to the DB, bypassing Zustand. The UI won't reflect changes until the next full page reload triggers DataSync hydration.
 
-**Fix:** Update to match the standard set:
-```
-"authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version"
-```
+## What's Missing (6 Issues)
 
-## Summary
+### Issue 6 (HIGH): Daily metrics — Dave writes to DB, Rings read from Zustand
+Dave's `update_daily_metrics` writes to `daily_journal_entries`. Activity Rings and MomentumHeader read from `currentDay.activityInputs` / `currentDay.rawInputs` in Zustand. There's zero bridge between them.
 
-| # | Issue | File | Severity |
-|---|-------|------|----------|
-| 1 | Quota context uses non-existent columns | `dave-conversation-token/index.ts` | HIGH |
-| 2 | Pipeline context shows raw UUIDs | `dave-conversation-token/index.ts` | MEDIUM |
-| 3 | Contacts context shows raw UUIDs | `dave-conversation-token/index.ts` | MEDIUM |
-| 4 | `dave_transcripts` uses `as any` | `DaveConversationMode.tsx` | LOW |
-| 5 | Missing CORS headers | `register-dave-tools/index.ts` | LOW |
+**Fix — 3 parts:**
+
+**A. Hydrate Zustand from DB on load** — In `useDataSync.ts`, after hydrating accounts/opps/etc., also fetch today's `daily_journal_entries` row and call `updateActivityInputs()` / `updateRawInputs()` with DB values.
+
+Field mapping:
+| DB column | Store path |
+|---|---|
+| `dials` | `activityInputs.dials` |
+| `conversations` | `rawInputs.coldCallsWithConversations` |
+| `manual_emails` | `activityInputs.emailsTotal` |
+| `meetings_set` | `rawInputs.initialMeetingsSet` |
+| `prospects_added` | `rawInputs.prospectsAddedToCadence` |
+| `customer_meetings_held` | `activityInputs.customerMeetingsHeld` |
+| `opportunities_created` | `rawInputs.opportunitiesCreated` |
+| `personal_development` | `rawInputs.personalDevelopment` |
+| `accounts_researched` | `activityInputs (new)` |
+| `contacts_prepped` | `activityInputs (new)` |
+
+**B. Dave emits event after DB write** — After `update_daily_metrics` succeeds, dispatch `window.dispatchEvent(new CustomEvent('dave-metrics-updated'))`. ActivityRings and MomentumHeader listen for this event and re-fetch from DB to update the store.
+
+**C. Manual ring taps persist to DB** — When ActivityRings `handleUpdate` fires, also upsert the value to `daily_journal_entries` so manual changes survive reload.
+
+### Issue 7 (HIGH): CRM writes bypass Zustand — UI stale after Dave mutations
+All 14 CRM-mutating tools write to DB but don't update the Zustand store. The DataSync write-back watcher only catches Zustand→DB direction, not DB→Zustand.
+
+**Fix:** After each Dave DB mutation, dispatch a typed `CustomEvent('dave-data-changed', { detail: { table: 'tasks' | 'accounts' | ... } })`. A new listener in `useDataSync.ts` re-fetches the affected table and updates Zustand. This is surgical — only re-fetches the table that changed, not everything.
+
+### Issue 8 (MEDIUM): `set_reminder` has no delivery mechanism
+Dave can create voice reminders in `voice_reminders` table, and the token endpoint marks them as delivered, but there's no client-side polling or notification that actually alerts the user when a reminder fires.
+
+**Fix:** Add a lightweight polling hook (`useVoiceReminders`) that checks for due reminders every 60 seconds and shows a toast + optional browser notification.
+
+### Issue 9 (MEDIUM): `complete_task` doesn't set `completed_at`
+The `complete_task` tool sets `status: 'done'` but doesn't set `completed_at`, which other UI components use for streak tracking and completion timestamps.
+
+**Fix:** Add `completed_at: new Date().toISOString()` to the update payload.
+
+### Issue 10 (LOW): `update_renewal` allows arbitrary field writes
+Unlike `bulk_update` which has field whitelists, `update_renewal` falls back to using the raw `params.field` as `dbField` if it's not in `RENEWAL_FIELDS`. This could cause DB errors or unintended column writes.
+
+**Fix:** Add validation that `dbField` is in a known list, return an error if not.
+
+### Issue 11 (LOW): `create_account` uses `ilike` for duplicate check — false positives
+Searching `ilike '%Acme%'` would match "Acme Corp" when creating "Acme Industries", blocking legitimate creation.
+
+**Fix:** Use exact match (`eq('name', params.name)`) for duplicate detection instead of fuzzy `ilike`.
 
 ## Files to Modify
 
-1. **`supabase/functions/dave-conversation-token/index.ts`** — Fix quota context (line 434-437), build accountIdMap early (after line 339) and use it in pipeline (line 373) and contacts (line 403) sections
-2. **`src/components/DaveConversationMode.tsx`** — Remove `as any` casts on line 326
-3. **`supabase/functions/register-dave-tools/index.ts`** — Update CORS headers (line 5-6)
+1. **`src/hooks/useDataSync.ts`** — Add journal hydration on load; add `dave-data-changed` event listener to re-fetch affected tables
+2. **`src/components/dave/clientTools.ts`** — Dispatch `dave-metrics-updated` event in `update_daily_metrics`; dispatch `dave-data-changed` event in all CRM-mutating tools; fix `complete_task` to set `completed_at`; fix `update_renewal` field whitelist; fix `create_account` duplicate check
+3. **`src/components/ActivityRings.tsx`** — Listen for `dave-metrics-updated`; persist manual ring changes to DB
+4. **`src/components/tasks/MomentumHeader.tsx`** — Listen for `dave-metrics-updated` to refresh
+5. **New: `src/hooks/useVoiceReminders.ts`** — Polling hook for reminder delivery
+6. **`src/components/Layout.tsx`** — Mount `useVoiceReminders`
 
