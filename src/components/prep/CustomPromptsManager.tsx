@@ -91,7 +91,7 @@ export function CustomPromptsManager() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">Save reusable AI prompts with {{variables}}</p>
+        <p className="text-xs text-muted-foreground">Save reusable AI prompts with {'{{variables}}'}</p>
         <Button size="sm" onClick={() => { setEditingPrompt({ title: '', prompt_text: '', content_type: 'document' }); setEditDialog(true); }}>
           <Plus className="h-3.5 w-3.5 mr-1" /> New Prompt
         </Button>
