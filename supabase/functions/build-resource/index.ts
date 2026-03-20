@@ -106,6 +106,20 @@ serve(async (req) => {
       systemPrompt = "You are a document architect. Merge the following resources into a single, cohesive document. Deduplicate content, organize logically with clear headings, and ensure a consistent tone. Output clean Markdown.";
       userPrompt = resourceContext || "No resources provided.";
       if (accountStr) userPrompt += accountStr;
+    } else if (type === "build-content") {
+      // Full context content generation
+      const contentTypePrompts: Record<string, string> = {
+        business_case: "Create a compelling business case document. Include executive summary, current state challenges, proposed solution, ROI analysis, implementation timeline, and recommendation. Use specific data from the context provided.",
+        roi_analysis: "Create a detailed ROI analysis. Include cost analysis, expected returns, payback period, TCO comparison, and risk-adjusted projections. Ground all numbers in the context provided.",
+        executive_email: "Write a concise, high-impact executive email. Open with a strategic insight, connect to their business priorities, present a clear value proposition, and close with a specific CTA. Keep it under 200 words.",
+        follow_up: "Write a professional follow-up email that references the previous conversation, summarizes key discussion points, confirms agreed next steps, and provides any promised resources. Keep tone warm but professional.",
+        qbr: "Create a comprehensive QBR presentation outline. Include: performance metrics review, ROI delivered, adoption trends, success stories, strategic roadmap alignment, expansion opportunities, and recommended next steps.",
+        proposal: "Create a professional proposal document. Include executive summary, understanding of requirements, proposed solution, pricing/packaging options, implementation plan, team/support, and terms.",
+        custom: "Create professional content based on the instructions provided. Be specific, actionable, and grounded in the context data.",
+      };
+      systemPrompt = `You are an elite B2B sales content strategist. ${contentTypePrompts[contentType] || contentTypePrompts.custom}\n\nUse ALL context provided — account data, deal stage, MEDDICC insights, transcript summaries, and stakeholder map. Output clean, professional Markdown. Be specific, not generic.`;
+      userPrompt = prompt || "Generate content based on the provided context.";
+      if (accountStr) userPrompt += accountStr;
     } else if (type === "suggest") {
       // Use tool calling for structured output
       const body = {
