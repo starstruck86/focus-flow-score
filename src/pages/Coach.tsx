@@ -565,6 +565,7 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
   const [isDragging, setIsDragging] = useState(false);
   const [fileLoading, setFileLoading] = useState(false);
   const [autoDetected, setAutoDetected] = useState<{ name: string; confidence: number } | null>(null);
+  const [callGoals, setCallGoals] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const saveTranscript = useSaveTranscript();
   const { user } = useAuth();
