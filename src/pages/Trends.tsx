@@ -277,6 +277,9 @@ export default function Trends() {
               )}
             </div>
 
+            {/* AI Insights Narrator */}
+            <AIInsightsNarrator />
+
             {/* Correlations & Insights */}
             {correlations.length > 0 && (
               <Card>
