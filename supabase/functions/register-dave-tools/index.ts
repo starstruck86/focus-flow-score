@@ -26,7 +26,7 @@ function arr(desc: string, itemType: any) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ALL 61 TOOLS — Parameter schemas EXACTLY match clientTools.ts
+// ALL 67 TOOLS — Parameter schemas EXACTLY match clientTools.ts
 // ═══════════════════════════════════════════════════════════════
 
 const DAVE_TOOLS: ToolDef[] = [
