@@ -57,7 +57,7 @@ export function CustomPromptsManager() {
         }).eq('id', editingPrompt.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('custom_prompts').insert({
+        const { error } = await (supabase as any).from('custom_prompts').insert({
           user_id: user.id,
           title: editingPrompt.title,
           prompt_text: editingPrompt.prompt_text,
