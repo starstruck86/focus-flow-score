@@ -145,6 +145,12 @@ export function useDuplicateDetection() {
       await supabase.from('resources').update({ account_id: keepId }).eq('account_id', removeId);
       // Delete the duplicate account
       await supabase.from('accounts').delete().eq('id', removeId);
+
+      // Sync Zustand store
+      const store = useStore.getState();
+      if (typeof store.deleteAccount === 'function') {
+        store.deleteAccount(removeId);
+      }
     }
 
     // Invalidate queries
