@@ -69,6 +69,65 @@ import { useDbAccounts } from '@/hooks/useAccountsData';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { CheckCircle2, XCircle, Loader2, Mic } from 'lucide-react';
+
+function DaveHealthSection() {
+  const [health, setHealth] = useState<{ apiKey: boolean; agentId: boolean; tokenOk: boolean } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const runCheck = async () => {
+    setLoading(true);
+    try {
+      const { data } = await supabase.functions.invoke('dave-health-check');
+      if (data) {
+        setHealth({ apiKey: data.apiKeyValid, agentId: data.agentIdSet, tokenOk: data.tokenGenOk });
+      }
+    } catch {
+      toast.error('Health check failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const StatusIcon = ({ ok }: { ok: boolean | undefined }) => {
+    if (ok === undefined) return null;
+    return ok ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <XCircle className="w-4 h-4 text-destructive" />;
+  };
+
+  return (
+    <div className="metric-card">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-emerald-500/10 rounded-lg"><Mic className="h-5 w-5 text-emerald-500" /></div>
+          <div>
+            <h3 className="font-semibold">Dave Voice Assistant</h3>
+            <p className="text-sm text-muted-foreground">ElevenLabs Conversational AI</p>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={runCheck} disabled={loading}>
+          {loading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+          Run Health Check
+        </Button>
+      </div>
+
+      {health && (
+        <div className="space-y-2 mb-4">
+          <div className="flex items-center gap-2 text-sm"><StatusIcon ok={health.apiKey} /> API Key valid</div>
+          <div className="flex items-center gap-2 text-sm"><StatusIcon ok={health.agentId} /> Agent ID configured</div>
+          <div className="flex items-center gap-2 text-sm"><StatusIcon ok={health.tokenOk} /> Token generation working</div>
+        </div>
+      )}
+
+      <div className="p-3 bg-muted/50 rounded-lg text-xs text-muted-foreground space-y-1">
+        <p className="font-medium text-foreground text-sm">Required ElevenLabs Settings</p>
+        <p>• "System prompt override" must be <strong>enabled</strong> in agent settings</p>
+        <p>• "First message override" must be <strong>enabled</strong> in agent settings</p>
+        <p>• Triple-tap the status text in Dave to open diagnostics</p>
+      </div>
+    </div>
+  );
+}
 
 const DAYS_OF_WEEK = [
   { value: 0, label: 'Sun' },
@@ -918,10 +977,11 @@ export default function Settings() {
             <ConversionBenchmarksSettings />
           </TabsContent>
           
-          {/* Integrations Tab */}
-          <TabsContent value="integrations" className="space-y-4">
-            <WhoopIntegration />
-          </TabsContent>
+           {/* Integrations Tab */}
+           <TabsContent value="integrations" className="space-y-4">
+             <WhoopIntegration />
+             <DaveHealthSection />
+           </TabsContent>
           
           {/* Appearance Tab */}
           <TabsContent value="appearance" className="space-y-4">

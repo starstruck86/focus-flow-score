@@ -10,11 +10,11 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { createClientTools } from './dave/clientTools';
+import { DaveDiagnosticsPanel, type DiagnosticData } from './dave/DaveDiagnosticsPanel';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  /** Pre-fetched session data — overrides are derived from this */
   sessionData: DaveSessionData;
 }
 
@@ -26,6 +26,8 @@ const DISMISSAL_PHRASES = [
 const MAX_RECONNECTS = 2;
 const RECONNECT_DELAYS = [2000, 5000];
 const STABILITY_WINDOW_MS = 3000;
+const GREETING_WARN_MS = 8000;
+const GREETING_RETRY_MS = 12000;
 
 export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
   const navigate = useNavigate();
@@ -38,7 +40,7 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
   const [transcript, setTranscript] = useState<Array<{ role: 'user' | 'agent'; text: string }>>([]);
   const [error, setError] = useState<string | null>(null);
   const [reconnectInfo, setReconnectInfo] = useState<string | null>(null);
-  const [vadActive, setVadActive] = useState(false);
+  const [vadScore, setVadScore] = useState(0);
   const [statusLog, setStatusLog] = useState<string[]>([]);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const orbRef = useRef<HTMLDivElement>(null);
@@ -48,6 +50,18 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
   const startConversationRef = useRef<() => Promise<void>>();
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const messageReceivedRef = useRef(false);
+  const messagesReceivedCountRef = useRef(0);
+  const lastMessageTypeRef = useRef<string | null>(null);
+  const lastMessageAtRef = useRef<number | null>(null);
+  const errorHistoryRef = useRef<string[]>([]);
+
+  // Diagnostics state
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const diagTapCountRef = useRef(0);
+  const diagTapTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const [healthCheck, setHealthCheck] = useState<{ apiKey: boolean; agentId: boolean; tokenOk: boolean } | null>(null);
+  const [greetingStatus, setGreetingStatus] = useState<'waiting' | 'received' | 'timeout' | 'retrying'>('waiting');
+  const greetingRetryDoneRef = useRef(false);
 
   // Refs for stale closure fixes
   const isOpenRef = useRef(isOpen);
@@ -56,6 +70,8 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
   const isReconnectRef = useRef(false);
   const connectedAtRef = useRef<number>(0);
   const stabilityTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const greetingWatchdogRef = useRef<ReturnType<typeof setTimeout>>();
+  const greetingRetryRef = useRef<ReturnType<typeof setTimeout>>();
 
   const logStatus = useCallback((msg: string) => {
     const ts = new Date().toISOString().substring(11, 23);
@@ -80,9 +96,33 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
     }
   }, []);
 
-  const greetingWatchdogRef = useRef<ReturnType<typeof setTimeout>>();
+  // Triple-tap status text to toggle diagnostics
+  const handleStatusTap = useCallback(() => {
+    diagTapCountRef.current++;
+    if (diagTapTimerRef.current) clearTimeout(diagTapTimerRef.current);
+    if (diagTapCountRef.current >= 3) {
+      diagTapCountRef.current = 0;
+      setShowDiagnostics(prev => !prev);
+    } else {
+      diagTapTimerRef.current = setTimeout(() => { diagTapCountRef.current = 0; }, 600);
+    }
+  }, []);
 
-  // ─── KEY FIX: overrides go HERE in useConversation, NOT in startSession ───
+  // Run health check on first diagnostics open
+  useEffect(() => {
+    if (!showDiagnostics || healthCheck) return;
+    supabase.functions.invoke('dave-health-check').then(({ data }) => {
+      if (data) {
+        setHealthCheck({
+          apiKey: data.apiKeyValid,
+          agentId: data.agentIdSet,
+          tokenOk: data.tokenGenOk,
+        });
+      }
+    }).catch(() => {});
+  }, [showDiagnostics, healthCheck]);
+
+  // ─── useConversation — overrides go HERE, NOT in startSession ───
   const conversation = useConversation({
     clientTools,
     overrides: {
@@ -96,38 +136,52 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
     onConnect: () => {
       logStatus(`✅ Connected via WebRTC — context: ${sessionDataRef.current?.context?.length} chars, firstMessage: ${sessionDataRef.current?.firstMessage?.substring(0, 80)}`);
       messageReceivedRef.current = false;
+      messagesReceivedCountRef.current = 0;
       setError(null);
       setReconnectInfo(null);
       setIsConnecting(false);
       connectedAtRef.current = Date.now();
+      setGreetingStatus('waiting');
 
       if (stabilityTimerRef.current) clearTimeout(stabilityTimerRef.current);
       stabilityTimerRef.current = setTimeout(() => {
         reconnectAttemptRef.current = 0;
       }, STABILITY_WINDOW_MS);
 
-      // Belt-and-suspenders: also send context via sendContextualUpdate
-      if (sessionDataRef.current?.context) {
-      try {
-          conversation.sendContextualUpdate(sessionDataRef.current.context);
-          logStatus('Backup context sent via sendContextualUpdate');
-        } catch (e) {
-          logStatus(`Failed sendContextualUpdate fallback: ${e}`);
-        }
-      }
-
-      // Greeting watchdog: warn if no agent message within 8s
+      // Greeting watchdog: warn at 8s, auto-retry at 12s
       if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
+      if (greetingRetryRef.current) clearTimeout(greetingRetryRef.current);
+
       greetingWatchdogRef.current = setTimeout(() => {
-        console.warn('[Dave] No agent greeting received within 8s of connection');
-      }, 8000);
+        if (!messageReceivedRef.current && isOpenRef.current) {
+          logStatus('⚠️ No greeting after 8s — agent may not have overrides enabled');
+          setGreetingStatus('timeout');
+          toast.warning('Dave connected but isn\'t responding', {
+            description: 'Retrying with a fresh connection...',
+            duration: 4000,
+          });
+        }
+      }, GREETING_WARN_MS);
+
+      greetingRetryRef.current = setTimeout(() => {
+        if (!messageReceivedRef.current && isOpenRef.current && !greetingRetryDoneRef.current) {
+          logStatus('🔄 Greeting timeout — auto-retrying with fresh token');
+          greetingRetryDoneRef.current = true;
+          setGreetingStatus('retrying');
+          try { conversation.endSession(); } catch (_) {}
+          invalidateCache();
+          isReconnectRef.current = true;
+          setTimeout(() => startConversationRef.current?.(), 1000);
+        }
+      }, GREETING_RETRY_MS);
     },
     onDisconnect: () => {
       const uptime = connectedAtRef.current ? Date.now() - connectedAtRef.current : 0;
       logStatus(`❌ Disconnected (uptime: ${uptime}ms, messagesReceived: ${messageReceivedRef.current})`);
       if (stabilityTimerRef.current) clearTimeout(stabilityTimerRef.current);
+      if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
+      if (greetingRetryRef.current) clearTimeout(greetingRetryRef.current);
 
-      // If disconnected almost immediately, treat as error
       if (uptime > 0 && uptime < 2000) {
         logStatus('⚠️ Immediate disconnect — likely transport or auth issue');
         setError('Connection dropped immediately. Tap to retry.');
@@ -150,32 +204,42 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
           if (isOpenRef.current) startConversationRef.current?.();
         }, delay);
       } else if (isOpenRef.current && reconnectAttemptRef.current >= MAX_RECONNECTS && !error) {
-        setError('Connection lost. Tap to retry.');
+        if (greetingRetryDoneRef.current && !messageReceivedRef.current) {
+          setError('Dave\'s voice agent may need configuration — ensure "System prompt override" and "First message override" are enabled in ElevenLabs.');
+        } else {
+          setError('Connection lost. Tap to retry.');
+        }
       }
     },
     onMessage: (message: any) => {
       messageReceivedRef.current = true;
+      messagesReceivedCountRef.current++;
+      lastMessageTypeRef.current = message?.type || 'unknown';
+      lastMessageAtRef.current = Date.now();
       console.log('[Dave] Message:', message?.type, message);
+
       if (message?.type === 'user_transcript' && message?.user_transcription_event?.user_transcript) {
         const text = message.user_transcription_event.user_transcript;
         setTranscript(prev => [...prev, { role: 'user', text }]);
         addUserMessage(text);
-
         const lower = text.toLowerCase();
         if (DISMISSAL_PHRASES.some(p => lower.includes(p))) {
           setTimeout(() => endConversation(), 1500);
         }
       } else if (message?.type === 'agent_response' && message?.agent_response_event?.agent_response) {
         if (greetingWatchdogRef.current) { clearTimeout(greetingWatchdogRef.current); greetingWatchdogRef.current = undefined; }
+        if (greetingRetryRef.current) { clearTimeout(greetingRetryRef.current); greetingRetryRef.current = undefined; }
+        setGreetingStatus('received');
         const text = message.agent_response_event.agent_response;
         setTranscript(prev => [...prev, { role: 'agent', text }]);
         addDaveResponse(text);
       }
     },
     onError: (err: any) => {
-      logStatus(`🔴 Error: ${JSON.stringify(err)}`);
-      console.error('[Dave] Full error object:', err);
       const msg = err?.message || String(err);
+      logStatus(`🔴 Error: ${msg}`);
+      errorHistoryRef.current = [...errorHistoryRef.current.slice(-4), msg];
+      console.error('[Dave] Full error object:', err);
       if (/NotAllowedError|Permission denied/i.test(msg)) {
         setError('Microphone access required — check your browser settings');
       } else if (/NotFoundError|no audio/i.test(msg)) {
@@ -186,7 +250,7 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
       toast.error('Dave connection error');
     },
     onVadScore: (score: number) => {
-      setVadActive(score > 0.5);
+      setVadScore(score);
     },
   } as any);
 
@@ -214,6 +278,7 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
     startingRef.current = true;
     setIsConnecting(true);
     setError(null);
+    setGreetingStatus('waiting');
 
     if (!isReconnectRef.current) {
       setTranscript([]);
@@ -229,8 +294,6 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
     }, 15000);
 
     try {
-      // For reconnects, fetch fresh session with conversation history
-      // For initial connect, use the pre-fetched sessionData from props
       let currentToken = sessionDataRef.current.token;
       if (isReconnectRef.current) {
         const history = getConversationContext();
@@ -239,7 +302,6 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
         currentToken = freshSession.token;
       }
 
-      // ─── WebRTC + conversation token ───
       logStatus(`Starting session (WebRTC) | context: ${sessionDataRef.current.context?.length} chars`);
       await conversation.startSession({
         conversationToken: currentToken,
@@ -253,7 +315,6 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
       console.error('[Dave] Failed to start:', err);
 
       if (isReconnectRef.current) {
-        console.log('[Dave] Reconnect failed, invalidating cache...');
         invalidateCache();
       }
 
@@ -277,6 +338,8 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
     reconnectAttemptRef.current = MAX_RECONNECTS;
     clearReconnectTimer();
     if (stabilityTimerRef.current) clearTimeout(stabilityTimerRef.current);
+    if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
+    if (greetingRetryRef.current) clearTimeout(greetingRetryRef.current);
 
     const currentTranscript = transcriptRef.current;
     if (currentTranscript.length > 0) {
@@ -306,6 +369,7 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
       setNeedsTap(false);
       reconnectAttemptRef.current = 0;
       isReconnectRef.current = false;
+      greetingRetryDoneRef.current = false;
       startConversation();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -317,6 +381,8 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
       reconnectAttemptRef.current = MAX_RECONNECTS;
       clearReconnectTimer();
       if (stabilityTimerRef.current) clearTimeout(stabilityTimerRef.current);
+      if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
+      if (greetingRetryRef.current) clearTimeout(greetingRetryRef.current);
       if (conversation.status === 'connected') {
         conversation.endSession();
       }
@@ -324,10 +390,26 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Diagnostics data
+  const diagnosticData: DiagnosticData = {
+    connectionStatus: conversation.status,
+    uptimeMs: connectedAtRef.current ? Date.now() - connectedAtRef.current : 0,
+    contextSize: sessionDataRef.current?.context?.length || 0,
+    firstMessageSet: !!sessionDataRef.current?.firstMessage,
+    messagesReceived: messagesReceivedCountRef.current,
+    lastMessageType: lastMessageTypeRef.current,
+    lastMessageAt: lastMessageAtRef.current,
+    vadScore,
+    errorHistory: errorHistoryRef.current,
+    healthCheck,
+    greetingStatus,
+  };
+
   if (!isOpen) return null;
 
   const isConnected = conversation.status === 'connected';
   const isSpeaking = conversation.isSpeaking;
+  const vadActive = vadScore > 0.5;
 
   const orbColor = !isConnected
     ? 'bg-amber-500/30'
@@ -395,6 +477,8 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
           <MessageSquare className="h-4 w-4" />
         </button>
 
+        <DaveDiagnosticsPanel visible={showDiagnostics} data={diagnosticData} />
+
         <div className="flex-1 flex items-center justify-center w-full">
           {needsTap && !isConnecting && !isConnected ? (
             <button
@@ -402,6 +486,7 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
                 setNeedsTap(false);
                 reconnectAttemptRef.current = 0;
                 isReconnectRef.current = false;
+                greetingRetryDoneRef.current = false;
                 startConversation();
               }}
               className="flex flex-col items-center gap-4"
@@ -429,14 +514,17 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
         </div>
 
         <div className="flex flex-col items-center gap-3 pb-8" style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}>
-          <div className="flex items-center gap-2 text-white/70 text-sm">
+          <button
+            onClick={handleStatusTap}
+            className="flex items-center gap-2 text-white/70 text-sm bg-transparent border-none cursor-pointer"
+          >
             {statusIcon}
             <span>{statusText}</span>
-          </div>
+          </button>
 
           {error && !isConnecting && !reconnectInfo && (
             <button
-              onClick={() => { reconnectAttemptRef.current = 0; isReconnectRef.current = false; invalidateCache(); startConversation(); }}
+              onClick={() => { reconnectAttemptRef.current = 0; isReconnectRef.current = false; greetingRetryDoneRef.current = false; invalidateCache(); startConversation(); }}
               className="px-4 py-2 bg-white/10 rounded-full text-white/80 text-sm hover:bg-white/20"
             >
               Tap to retry

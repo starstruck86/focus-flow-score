@@ -107,3 +107,6 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.suggest-resource-uses]
+
+[functions.dave-health-check]
+verify_jwt = false
