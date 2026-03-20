@@ -110,15 +110,71 @@ function CallScorecard({ grade, onRegrade }: { grade: TranscriptGrade; onRegrade
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-start justify-between">
-        <div className="space-y-1">
+        <div className="space-y-1 flex-1 min-w-0">
           <p className="text-sm text-muted-foreground leading-relaxed">{grade.summary}</p>
         </div>
-        <div className="text-right flex-shrink-0 ml-4">
+        <div className="text-right flex-shrink-0 ml-4 space-y-1">
           <span className={cn('text-5xl font-black font-mono', GRADE_COLORS[grade.overall_grade])}>
             {grade.overall_grade}
           </span>
+          {onRegrade && (
+            <Button variant="ghost" size="sm" onClick={onRegrade} className="text-[10px] h-6 gap-1">
+              <Wand2 className="h-3 w-3" /> Re-analyze
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* Outcome Card — Deal Progression */}
+      {(grade as any).deal_progressed !== undefined && (
+        <Card className={cn("border-border/50", (grade as any).deal_progressed ? "bg-grade-excellent/5 border-grade-excellent/20" : "bg-grade-failing/5 border-grade-failing/20")}>
+          <CardContent className="p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              {(grade as any).deal_progressed ? <TrendingUp className="h-4 w-4 text-grade-excellent" /> : <AlertTriangle className="h-4 w-4 text-grade-failing" />}
+              <span className="text-xs font-bold uppercase tracking-wider">
+                {(grade as any).deal_progressed ? 'Deal Progressed' : 'No Deal Progression'}
+              </span>
+              {(grade as any).likelihood_impact && (
+                <Badge variant="outline" className={cn("text-[10px] ml-auto",
+                  (grade as any).likelihood_impact === 'increased' ? 'border-grade-excellent/30 text-grade-excellent' :
+                  (grade as any).likelihood_impact === 'decreased' ? 'border-grade-failing/30 text-grade-failing' :
+                  'border-muted-foreground/30 text-muted-foreground'
+                )}>
+                  Win likelihood: {(grade as any).likelihood_impact}
+                </Badge>
+              )}
+            </div>
+            {(grade as any).progression_evidence && (
+              <p className="text-xs text-muted-foreground">{(grade as any).progression_evidence}</p>
+            )}
+            {/* Goals achieved */}
+            {((grade as any).goals_achieved || []).length > 0 && (
+              <div className="space-y-1 pt-1 border-t border-border/30">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase">Call Goals</p>
+                {((grade as any).goals_achieved || []).map((g: any, i: number) => (
+                  <div key={i} className="flex items-start gap-1.5 text-xs">
+                    {g.achieved ? <CheckCircle2 className="h-3 w-3 text-grade-excellent mt-0.5 shrink-0" /> : <ShieldAlert className="h-3 w-3 text-grade-failing mt-0.5 shrink-0" />}
+                    <div>
+                      <span className={g.achieved ? 'text-foreground' : 'text-muted-foreground'}>{g.goal}</span>
+                      {g.evidence && <p className="text-[10px] text-muted-foreground">{g.evidence}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Competitors */}
+            {((grade as any).competitors_mentioned || []).length > 0 && (
+              <div className="flex items-center gap-1.5 pt-1 border-t border-border/30">
+                <Swords className="h-3 w-3 text-muted-foreground" />
+                <span className="text-[10px] text-muted-foreground">Competitors: </span>
+                {((grade as any).competitors_mentioned || []).map((c: string, i: number) => (
+                  <Badge key={i} variant="secondary" className="text-[10px] h-4">{c}</Badge>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Category scores grid */}
       <Card className="border-border/50">
