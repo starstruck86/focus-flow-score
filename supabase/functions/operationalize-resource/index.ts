@@ -36,6 +36,41 @@ serve(async (req) => {
       .single();
     if (rErr || !resource) throw new Error("Resource not found");
 
+    // Auto-enrich if placeholder URL resource
+    if (
+      resource.file_url?.startsWith("http") &&
+      (resource.content?.startsWith("[External Link:") || resource.content?.startsWith("[Enriching"))
+    ) {
+      const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
+      if (FIRECRAWL_API_KEY) {
+        const isYT = /youtube\.com|youtu\.be/i.test(resource.file_url);
+        const isPod = /spotify\.com|podcasts\.apple\.com/i.test(resource.file_url);
+        try {
+          const scrapeRes = await fetch("https://api.firecrawl.dev/v1/scrape", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              url: resource.file_url,
+              formats: ["markdown"],
+              onlyMainContent: true,
+              ...(isYT || isPod ? { waitFor: 5000 } : {}),
+            }),
+          });
+          if (scrapeRes.ok) {
+            const scrapeData = await scrapeRes.json();
+            const markdown = (scrapeData.data?.markdown || scrapeData.markdown || "").slice(0, 15000);
+            if (markdown.length > 50) {
+              resource.content = markdown;
+              await supabase.from("resources").update({ content: markdown, content_status: "enriched" }).eq("id", resource_id);
+              console.log(`Auto-enriched resource ${resource_id}: ${markdown.length} chars`);
+            }
+          }
+        } catch (e) {
+          console.error("Inline enrich failed:", e);
+        }
+      }
+    }
+
     // Compute content hash to skip if unchanged
     const encoder = new TextEncoder();
     const hashBuffer = await crypto.subtle.digest("SHA-256", encoder.encode(resource.content || ""));
