@@ -288,7 +288,7 @@ export function ContentBuilder() {
       {/* Generate Button */}
       <Button onClick={handleGenerate} disabled={generating} className="w-full">
         {generating ? (
-          <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating...</>
+          <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating... ({elapsedSeconds}s)</>
         ) : (
           <><Sparkles className="h-4 w-4 mr-2" /> Generate Content</>
         )}
