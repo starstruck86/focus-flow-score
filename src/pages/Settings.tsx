@@ -72,9 +72,18 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { CheckCircle2, XCircle, Loader2, Mic } from 'lucide-react';
 
+interface SmokeTestResult {
+  token: { pass: boolean; detail: string };
+  context: { pass: boolean; detail: string };
+  identity: { pass: boolean; detail: string };
+  firstMessage: { pass: boolean; detail: string };
+}
+
 function DaveHealthSection() {
   const [health, setHealth] = useState<{ apiKey: boolean; agentId: boolean; tokenOk: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [smokeLoading, setSmokeLoading] = useState(false);
+  const [smokeResult, setSmokeResult] = useState<SmokeTestResult | null>(null);
 
   const runCheck = async () => {
     setLoading(true);
@@ -87,6 +96,62 @@ function DaveHealthSection() {
       toast.error('Health check failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const runSmokeTest = async () => {
+    setSmokeLoading(true);
+    setSmokeResult(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        toast.error('Not authenticated');
+        return;
+      }
+
+      const TOKEN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/dave-conversation-token`;
+      const resp = await fetch(TOKEN_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ tzOffsetHours: new Date().getTimezoneOffset() / -60, currentPage: '/', conversationHistory: '' }),
+      });
+
+      if (!resp.ok) {
+        setSmokeResult({
+          token: { pass: false, detail: `Token fetch failed: HTTP ${resp.status}` },
+          context: { pass: false, detail: 'Skipped (no token)' },
+          identity: { pass: false, detail: 'Skipped (no token)' },
+          firstMessage: { pass: false, detail: 'Skipped (no token)' },
+        });
+        return;
+      }
+
+      const data = await resp.json();
+      const tokenOk = !!data.token && data.token.length > 10;
+      const contextOk = !!data.context && data.context.length > 500;
+      const identityOk = !!data.context && data.context.includes('DAVE');
+      const firstMsgOk = !!data.firstMessage && data.firstMessage.length > 10;
+
+      setSmokeResult({
+        token: { pass: tokenOk, detail: tokenOk ? `${data.token.length} chars` : 'Missing or too short' },
+        context: { pass: contextOk, detail: `${data.context?.length || 0} chars${contextOk ? '' : ' (need >500)'}` },
+        identity: { pass: identityOk, detail: identityOk ? 'DAVE instructions found' : 'DAVE identity NOT found in context' },
+        firstMessage: { pass: firstMsgOk, detail: firstMsgOk ? `"${data.firstMessage.substring(0, 80)}..."` : 'Missing or too short' },
+      });
+
+      if (tokenOk && contextOk && identityOk && firstMsgOk) {
+        toast.success('Smoke test passed — Dave is ready');
+      } else {
+        toast.warning('Smoke test has failures — check results');
+      }
+    } catch (err: any) {
+      toast.error('Smoke test error', { description: err.message });
+    } finally {
+      setSmokeLoading(false);
     }
   };
 
@@ -107,7 +172,7 @@ function DaveHealthSection() {
         </div>
         <Button variant="outline" size="sm" onClick={runCheck} disabled={loading}>
           {loading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-          Run Health Check
+          Health Check
         </Button>
       </div>
 
@@ -118,6 +183,34 @@ function DaveHealthSection() {
           <div className="flex items-center gap-2 text-sm"><StatusIcon ok={health.tokenOk} /> Token generation working</div>
         </div>
       )}
+
+      {/* Smoke Test */}
+      <div className="border border-border rounded-lg p-3 mb-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">Session Contract Smoke Test</p>
+            <p className="text-xs text-muted-foreground">Validates token, context, identity, and greeting without opening a voice session</p>
+          </div>
+          <Button variant="default" size="sm" onClick={runSmokeTest} disabled={smokeLoading}>
+            {smokeLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <ClipboardCheck className="w-4 h-4 mr-1" />}
+            Run Smoke Test
+          </Button>
+        </div>
+
+        {smokeResult && (
+          <div className="space-y-2">
+            {Object.entries(smokeResult).map(([key, val]) => (
+              <div key={key} className="flex items-start gap-2 text-sm">
+                <StatusIcon ok={val.pass} />
+                <div>
+                  <span className="font-medium capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                  <span className="text-muted-foreground ml-1.5 text-xs">{val.detail}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="p-3 bg-muted/50 rounded-lg text-xs text-muted-foreground space-y-1">
         <p className="font-medium text-foreground text-sm">Required ElevenLabs Settings</p>

@@ -187,8 +187,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [daveOpen, setDaveOpen] = useState(false);
   const [showDaveTapPrompt, setShowDaveTapPrompt] = useState(false);
   const [daveSessionData, setDaveSessionData] = useState<DaveSessionData | null>(null);
-  const { getSession: getDaveSession } = useDaveContext();
-
+  const [daveRetryCount, setDaveRetryCount] = useState(0);
+  const { getSession: getDaveSession, invalidateCache: invalidateDaveCache } = useDaveContext();
   // Handle ?dave=1 from Siri Shortcuts
   useEffect(() => {
     if (searchParams.get('dave') === '1') {
@@ -236,6 +236,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
     setDaveOpen(false);
     setDaveSessionData(null);
   }, []);
+
+  /** Retry-via-remount: close Dave, fetch fresh session, reopen with new key */
+  const handleDaveRetry = useCallback(async () => {
+    console.log('[Dave] Retry-via-remount triggered');
+    setDaveOpen(false);
+    setDaveSessionData(null);
+    invalidateDaveCache();
+    
+    // Small delay to ensure unmount completes
+    await new Promise(r => setTimeout(r, 300));
+    
+    try {
+      const freshSession = await getDaveSession();
+      setDaveSessionData(freshSession);
+      setDaveRetryCount(c => c + 1);
+      setDaveOpen(true);
+      console.log('[Dave] Retry-via-remount: reopened with fresh session');
+    } catch (err: any) {
+      console.error('[Dave] Retry failed:', err);
+      toast.error('Could not restart Dave', { description: err.message });
+    }
+  }, [getDaveSession, invalidateDaveCache]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col w-full pt-[env(safe-area-inset-top)]">
@@ -302,9 +324,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Dave Conversational AI Overlay — key forces remount with fresh overrides */}
       {daveOpen && daveSessionData && (
         <DaveConversationMode
-          key={daveSessionData.token}
+          key={`${daveSessionData.token}-${daveRetryCount}`}
           isOpen={daveOpen}
           onClose={handleCloseDave}
+          onRetry={handleDaveRetry}
           sessionData={daveSessionData}
         />
       )}

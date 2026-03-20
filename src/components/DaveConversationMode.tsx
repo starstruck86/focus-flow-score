@@ -3,7 +3,7 @@ import { useConversation } from '@elevenlabs/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mic, MicOff, Volume2, MessageSquare, Loader2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useDaveContext, type DaveSessionData } from '@/hooks/useDaveContext';
+import { type DaveSessionData } from '@/hooks/useDaveContext';
 import { useDaveConversation } from '@/hooks/useDaveConversation';
 import { useCopilot } from '@/contexts/CopilotContext';
 import { useNavigate } from 'react-router-dom';
@@ -15,6 +15,7 @@ import { DaveDiagnosticsPanel, type DiagnosticData } from './dave/DaveDiagnostic
 interface Props {
   isOpen: boolean;
   onClose: () => void;
+  onRetry: () => void; // Layout handles retry-via-remount
   sessionData: DaveSessionData;
 }
 
@@ -23,32 +24,43 @@ const DISMISSAL_PHRASES = [
   "goodbye", "that's all", "thats all", "bye dave", "see you",
 ];
 
-const MAX_RECONNECTS = 2;
-const RECONNECT_DELAYS = [2000, 5000];
-const STABILITY_WINDOW_MS = 3000;
 const GREETING_WARN_MS = 8000;
 const GREETING_RETRY_MS = 12000;
 
-export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
+// ─── Session Contract ───
+// These assertions must pass before we attempt a WebRTC handshake.
+// If they fail, Dave would connect as a generic blank agent — useless.
+function assertSessionContract(session: DaveSessionData): string | null {
+  if (!session.token || session.token.length < 10) {
+    return 'No valid token — token fetch may have failed.';
+  }
+  if (!session.context || session.context.length < 500) {
+    return `Context too short (${session.context?.length || 0} chars). Dave's instructions are ~1200+ chars — context assembly likely failed.`;
+  }
+  if (!session.context.includes('DAVE')) {
+    return 'Context missing DAVE identity instructions — Dave would connect as a generic assistant.';
+  }
+  if (!session.firstMessage || session.firstMessage.length < 10) {
+    return `firstMessage missing or too short ("${session.firstMessage || ''}"). Dave won't greet you.`;
+  }
+  return null; // all good
+}
+
+export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: Props) {
   const navigate = useNavigate();
   const { ask: askCopilot } = useCopilot();
-  const { getSession, invalidateCache } = useDaveContext();
-  const { addUserMessage, addDaveResponse, getConversationContext } = useDaveConversation();
+  const { addUserMessage, addDaveResponse } = useDaveConversation();
   const [isConnecting, setIsConnecting] = useState(false);
   const [needsTap, setNeedsTap] = useState(true);
   const [showTranscript, setShowTranscript] = useState(false);
   const [transcript, setTranscript] = useState<Array<{ role: 'user' | 'agent'; text: string }>>([]);
   const [error, setError] = useState<string | null>(null);
-  const [reconnectInfo, setReconnectInfo] = useState<string | null>(null);
   const [vadScore, setVadScore] = useState(0);
   const [statusLog, setStatusLog] = useState<string[]>([]);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const orbRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number>(0);
   const startingRef = useRef(false);
-  const reconnectAttemptRef = useRef(0);
-  const startConversationRef = useRef<() => Promise<void>>();
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const messageReceivedRef = useRef(false);
   const messagesReceivedCountRef = useRef(0);
   const lastMessageTypeRef = useRef<string | null>(null);
@@ -61,15 +73,11 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
   const diagTapTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const [healthCheck, setHealthCheck] = useState<{ apiKey: boolean; agentId: boolean; tokenOk: boolean } | null>(null);
   const [greetingStatus, setGreetingStatus] = useState<'waiting' | 'received' | 'timeout' | 'retrying'>('waiting');
-  const greetingRetryDoneRef = useRef(false);
 
   // Refs for stale closure fixes
   const isOpenRef = useRef(isOpen);
   const transcriptRef = useRef(transcript);
-  const sessionDataRef = useRef<DaveSessionData>(sessionData);
-  const isReconnectRef = useRef(false);
   const connectedAtRef = useRef<number>(0);
-  const stabilityTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const greetingWatchdogRef = useRef<ReturnType<typeof setTimeout>>();
   const greetingRetryRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -82,19 +90,11 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
 
   useEffect(() => { isOpenRef.current = isOpen; }, [isOpen]);
   useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
-  useEffect(() => { sessionDataRef.current = sessionData; }, [sessionData]);
 
   const clientTools = useMemo(
     () => createClientTools(navigate, askCopilot),
     [navigate, askCopilot],
   );
-
-  const clearReconnectTimer = useCallback(() => {
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = undefined;
-    }
-  }, []);
 
   // Triple-tap status text to toggle diagnostics
   const handleStatusTap = useCallback(() => {
@@ -122,7 +122,9 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
     }).catch(() => {});
   }, [showDiagnostics, healthCheck]);
 
-  // ─── useConversation — overrides go HERE, NOT in startSession ───
+  // ─── useConversation — overrides baked at mount time ───
+  // This is the ONLY place overrides are set. On retry, Layout remounts
+  // this component with fresh sessionData, guaranteeing fresh overrides.
   const conversation = useConversation({
     clientTools,
     overrides: {
@@ -134,21 +136,15 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
       },
     },
     onConnect: () => {
-      logStatus(`✅ Connected via WebRTC — context: ${sessionDataRef.current?.context?.length} chars, firstMessage: ${sessionDataRef.current?.firstMessage?.substring(0, 80)}`);
+      logStatus(`✅ Connected — context: ${sessionData.context?.length} chars, firstMessage: "${sessionData.firstMessage?.substring(0, 60)}..."`);
       messageReceivedRef.current = false;
       messagesReceivedCountRef.current = 0;
       setError(null);
-      setReconnectInfo(null);
       setIsConnecting(false);
       connectedAtRef.current = Date.now();
       setGreetingStatus('waiting');
 
-      if (stabilityTimerRef.current) clearTimeout(stabilityTimerRef.current);
-      stabilityTimerRef.current = setTimeout(() => {
-        reconnectAttemptRef.current = 0;
-      }, STABILITY_WINDOW_MS);
-
-      // Greeting watchdog: warn at 8s, auto-retry at 12s
+      // Greeting watchdog: warn at 8s
       if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
       if (greetingRetryRef.current) clearTimeout(greetingRetryRef.current);
 
@@ -163,52 +159,25 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
         }
       }, GREETING_WARN_MS);
 
+      // At 12s, trigger retry-via-remount (Layout handles this)
       greetingRetryRef.current = setTimeout(() => {
-        if (!messageReceivedRef.current && isOpenRef.current && !greetingRetryDoneRef.current) {
-          logStatus('🔄 Greeting timeout — auto-retrying with fresh token');
-          greetingRetryDoneRef.current = true;
+        if (!messageReceivedRef.current && isOpenRef.current) {
+          logStatus('🔄 Greeting timeout — requesting retry-via-remount');
           setGreetingStatus('retrying');
           try { conversation.endSession(); } catch (_) {}
-          invalidateCache();
-          isReconnectRef.current = true;
-          setTimeout(() => startConversationRef.current?.(), 1000);
+          onRetry(); // Layout will close, fetch fresh session, remount
         }
       }, GREETING_RETRY_MS);
     },
     onDisconnect: () => {
       const uptime = connectedAtRef.current ? Date.now() - connectedAtRef.current : 0;
-      logStatus(`❌ Disconnected (uptime: ${uptime}ms, messagesReceived: ${messageReceivedRef.current})`);
-      if (stabilityTimerRef.current) clearTimeout(stabilityTimerRef.current);
+      logStatus(`❌ Disconnected (uptime: ${uptime}ms, msgs: ${messagesReceivedCountRef.current})`);
       if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
       if (greetingRetryRef.current) clearTimeout(greetingRetryRef.current);
 
-      if (uptime > 0 && uptime < 2000) {
+      if (uptime > 0 && uptime < 2000 && isOpenRef.current) {
         logStatus('⚠️ Immediate disconnect — likely transport or auth issue');
         setError('Connection dropped immediately. Tap to retry.');
-      }
-
-      if (
-        isOpenRef.current &&
-        reconnectAttemptRef.current < MAX_RECONNECTS &&
-        !startingRef.current &&
-        !reconnectTimerRef.current
-      ) {
-        const attempt = reconnectAttemptRef.current;
-        const delay = RECONNECT_DELAYS[attempt] ?? RECONNECT_DELAYS[RECONNECT_DELAYS.length - 1];
-        reconnectAttemptRef.current++;
-        isReconnectRef.current = true;
-        setReconnectInfo(`Reconnecting (${reconnectAttemptRef.current}/${MAX_RECONNECTS})...`);
-        logStatus(`Auto-reconnecting in ${delay}ms (attempt ${reconnectAttemptRef.current})`);
-        reconnectTimerRef.current = setTimeout(() => {
-          reconnectTimerRef.current = undefined;
-          if (isOpenRef.current) startConversationRef.current?.();
-        }, delay);
-      } else if (isOpenRef.current && reconnectAttemptRef.current >= MAX_RECONNECTS && !error) {
-        if (greetingRetryDoneRef.current && !messageReceivedRef.current) {
-          setError('Dave\'s voice agent may need configuration — ensure "System prompt override" and "First message override" are enabled in ElevenLabs.');
-        } else {
-          setError('Connection lost. Tap to retry.');
-        }
       }
     },
     onMessage: (message: any) => {
@@ -279,10 +248,20 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
     setIsConnecting(true);
     setError(null);
     setGreetingStatus('waiting');
+    setTranscript([]);
 
-    if (!isReconnectRef.current) {
-      setTranscript([]);
+    // ─── CONTRACT ASSERTION ───
+    const contractError = assertSessionContract(sessionData);
+    if (contractError) {
+      logStatus(`🚫 CONTRACT FAIL: ${contractError}`);
+      setError(contractError);
+      setIsConnecting(false);
+      startingRef.current = false;
+      toast.error('Dave session invalid', { description: contractError, duration: 8000 });
+      return;
     }
+
+    logStatus(`✅ Contract passed — token: ${sessionData.token.length} chars, context: ${sessionData.context.length} chars, firstMessage: "${sessionData.firstMessage?.substring(0, 50)}"`);
 
     const timeout = setTimeout(() => {
       if (startingRef.current) {
@@ -294,17 +273,9 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
     }, 15000);
 
     try {
-      let currentToken = sessionDataRef.current.token;
-      if (isReconnectRef.current) {
-        const history = getConversationContext();
-        const freshSession = await getSession(history);
-        sessionDataRef.current = freshSession;
-        currentToken = freshSession.token;
-      }
-
-      logStatus(`Starting session (WebRTC) | context: ${sessionDataRef.current.context?.length} chars`);
+      logStatus(`Starting session (WebRTC) | context: ${sessionData.context.length} chars`);
       await conversation.startSession({
-        conversationToken: currentToken,
+        conversationToken: sessionData.token,
         connectionType: 'webrtc',
       } as any);
 
@@ -313,31 +284,17 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
     } catch (err: any) {
       clearTimeout(timeout);
       console.error('[Dave] Failed to start:', err);
-
-      if (isReconnectRef.current) {
-        invalidateCache();
-      }
-
       setError(err.message || 'Failed to connect');
       toast.error('Could not start conversation', { description: err.message });
     } finally {
       setIsConnecting(false);
       startingRef.current = false;
-      isReconnectRef.current = false;
-      setReconnectInfo(null);
     }
-  }, [conversation, getSession, invalidateCache, getConversationContext]);
-
-  useEffect(() => {
-    startConversationRef.current = startConversation;
-  }, [startConversation]);
+  }, [conversation, sessionData, logStatus]);
 
   const sessionStartRef = useRef<number>(Date.now());
 
   const endConversation = useCallback(async () => {
-    reconnectAttemptRef.current = MAX_RECONNECTS;
-    clearReconnectTimer();
-    if (stabilityTimerRef.current) clearTimeout(stabilityTimerRef.current);
     if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
     if (greetingRetryRef.current) clearTimeout(greetingRetryRef.current);
 
@@ -360,16 +317,13 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
 
     await conversation.endSession();
     onClose();
-  }, [conversation, onClose, clearReconnectTimer]);
+  }, [conversation, onClose]);
 
   // Detect desktop to auto-start without tap
   useEffect(() => {
     const isDesktop = navigator.maxTouchPoints === 0;
     if (isDesktop && !startingRef.current) {
       setNeedsTap(false);
-      reconnectAttemptRef.current = 0;
-      isReconnectRef.current = false;
-      greetingRetryDoneRef.current = false;
       startConversation();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -378,9 +332,6 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      reconnectAttemptRef.current = MAX_RECONNECTS;
-      clearReconnectTimer();
-      if (stabilityTimerRef.current) clearTimeout(stabilityTimerRef.current);
       if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
       if (greetingRetryRef.current) clearTimeout(greetingRetryRef.current);
       if (conversation.status === 'connected') {
@@ -390,12 +341,16 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Diagnostics data
+  // Diagnostics data — now includes identity checks
+  const hasInstructions = (sessionData.context || '').includes('DAVE');
   const diagnosticData: DiagnosticData = {
     connectionStatus: conversation.status,
     uptimeMs: connectedAtRef.current ? Date.now() - connectedAtRef.current : 0,
-    contextSize: sessionDataRef.current?.context?.length || 0,
-    firstMessageSet: !!sessionDataRef.current?.firstMessage,
+    contextSize: sessionData.context?.length || 0,
+    contextPreview: sessionData.context?.substring(0, 200) || '',
+    firstMessagePreview: sessionData.firstMessage || '',
+    firstMessageSet: !!sessionData.firstMessage,
+    hasInstructions,
     messagesReceived: messagesReceivedCountRef.current,
     lastMessageType: lastMessageTypeRef.current,
     lastMessageAt: lastMessageAtRef.current,
@@ -427,9 +382,7 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
     ? 'shadow-[0_0_80px_30px_rgba(16,185,129,0.5)]'
     : 'shadow-[0_0_60px_20px_rgba(16,185,129,0.3)]';
 
-  const statusText = reconnectInfo
-    ? reconnectInfo
-    : isConnecting
+  const statusText = isConnecting
     ? 'Connecting...'
     : !isConnected
     ? error || 'Disconnected'
@@ -439,9 +392,7 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
     ? 'Hearing you...'
     : 'Listening...';
 
-  const statusIcon = reconnectInfo ? (
-    <RefreshCw className="h-5 w-5 animate-spin" />
-  ) : isConnecting ? (
+  const statusIcon = isConnecting ? (
     <Loader2 className="h-5 w-5 animate-spin" />
   ) : isSpeaking ? (
     <Volume2 className="h-5 w-5 animate-pulse" />
@@ -484,9 +435,6 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
             <button
               onClick={() => {
                 setNeedsTap(false);
-                reconnectAttemptRef.current = 0;
-                isReconnectRef.current = false;
-                greetingRetryDoneRef.current = false;
                 startConversation();
               }}
               className="flex flex-col items-center gap-4"
@@ -522,9 +470,9 @@ export function DaveConversationMode({ isOpen, onClose, sessionData }: Props) {
             <span>{statusText}</span>
           </button>
 
-          {error && !isConnecting && !reconnectInfo && (
+          {error && !isConnecting && (
             <button
-              onClick={() => { reconnectAttemptRef.current = 0; isReconnectRef.current = false; greetingRetryDoneRef.current = false; invalidateCache(); startConversation(); }}
+              onClick={onRetry}
               className="px-4 py-2 bg-white/10 rounded-full text-white/80 text-sm hover:bg-white/20"
             >
               Tap to retry
