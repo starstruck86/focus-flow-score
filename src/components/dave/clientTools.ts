@@ -1124,7 +1124,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
 
       const [quotaRes, closedRes] = await Promise.all([
         supabase.from('quota_targets').select('*').eq('user_id', userId).limit(1),
-        supabase.from('opportunities').select('arr, deal_type, one_time_amount').eq('user_id', userId).eq('status', 'closed-won'),
+        supabase.from('opportunities').select('arr, deal_type').eq('user_id', userId).eq('status', 'closed-won'),
       ]);
 
       const quota = quotaRes.data?.[0];
