@@ -548,6 +548,39 @@ export type Database = {
         }
         Relationships: []
       }
+      custom_prompts: {
+        Row: {
+          content_type: string | null
+          created_at: string | null
+          id: string
+          prompt_text: string
+          title: string
+          updated_at: string | null
+          user_id: string
+          variables: string[] | null
+        }
+        Insert: {
+          content_type?: string | null
+          created_at?: string | null
+          id?: string
+          prompt_text: string
+          title: string
+          updated_at?: string | null
+          user_id: string
+          variables?: string[] | null
+        }
+        Update: {
+          content_type?: string | null
+          created_at?: string | null
+          id?: string
+          prompt_text?: string
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+          variables?: string[] | null
+        }
+        Relationships: []
+      }
       daily_digest_items: {
         Row: {
           account_id: string | null
@@ -1917,9 +1950,11 @@ export type Database = {
           file_url: string | null
           folder_id: string | null
           id: string
+          is_screenshot_template: boolean | null
           is_template: boolean | null
           opportunity_id: string | null
           resource_type: string
+          screenshot_structure: string | null
           source_resource_id: string | null
           tags: string[] | null
           template_category: string | null
@@ -1937,9 +1972,11 @@ export type Database = {
           file_url?: string | null
           folder_id?: string | null
           id?: string
+          is_screenshot_template?: boolean | null
           is_template?: boolean | null
           opportunity_id?: string | null
           resource_type?: string
+          screenshot_structure?: string | null
           source_resource_id?: string | null
           tags?: string[] | null
           template_category?: string | null
@@ -1957,9 +1994,11 @@ export type Database = {
           file_url?: string | null
           folder_id?: string | null
           id?: string
+          is_screenshot_template?: boolean | null
           is_template?: boolean | null
           opportunity_id?: string | null
           resource_type?: string
+          screenshot_structure?: string | null
           source_resource_id?: string | null
           tags?: string[] | null
           template_category?: string | null
