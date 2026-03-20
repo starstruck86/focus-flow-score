@@ -35,6 +35,7 @@ export function useDaveContext() {
   const [isFetching, setIsFetching] = useState(false);
   const fetchedAtRef = useRef<number>(0);
   const locationRef = useRef(location.pathname);
+  const inFlightRef = useRef<Promise<DaveSessionData> | null>(null);
 
   // Concurrency backoff state
   const concurrencyErrorCountRef = useRef(0);
@@ -113,6 +114,10 @@ export function useDaveContext() {
 
   /** Get a valid session — returns cache if fresh, otherwise fetches */
   const getSession = useCallback(async (conversationHistory?: string): Promise<DaveSessionData> => {
+    if (!conversationHistory && inFlightRef.current) {
+      return inFlightRef.current;
+    }
+
     // If we have conversation history, always fetch fresh to include it
     if (conversationHistory) {
       setIsFetching(true);
@@ -133,12 +138,15 @@ export function useDaveContext() {
 
     setIsFetching(true);
     try {
-      const data = await fetchSession();
+      const request = fetchSession();
+      inFlightRef.current = request;
+      const data = await request;
       setCachedSession(data);
       fetchedAtRef.current = Date.now();
       console.log('[Dave] Session fetched on-demand (context:', data.context?.length, 'chars)');
       return data;
     } finally {
+      inFlightRef.current = null;
       setIsFetching(false);
     }
   }, [cachedSession, fetchSession]);
@@ -147,6 +155,7 @@ export function useDaveContext() {
   const invalidateCache = useCallback(() => {
     setCachedSession(null);
     fetchedAtRef.current = 0;
+    inFlightRef.current = null;
   }, []);
 
   /** Get remaining cooldown in seconds (0 = no cooldown) */
