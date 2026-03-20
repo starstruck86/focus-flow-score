@@ -265,6 +265,8 @@ FOLDER RULES:
 
     // Backwards compat: also set suggested_folder for any old callers
     classification.suggested_folder = classification.top_folder;
+    // Return scraped content so callers can store it directly
+    if (scrapedContent) classification.scraped_content = scrapedContent;
 
     return new Response(JSON.stringify(classification), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

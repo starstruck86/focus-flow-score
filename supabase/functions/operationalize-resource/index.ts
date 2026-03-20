@@ -133,7 +133,7 @@ Extract:
                 takeaways: {
                   type: "array",
                   items: { type: "string" },
-                  description: "5-10 specific actionable bullets",
+                  description: "5-10 specific actionable bullets — techniques, phrases, frameworks from THIS document, not generic advice",
                 },
                 summary: { type: "string", description: "2-3 sentence overview" },
                 use_cases: {
@@ -155,6 +155,20 @@ Extract:
                   },
                   description: "Grading criteria for transcript scoring. Empty array if not a framework.",
                 },
+                template_sections: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      section_name: { type: "string", description: "Section heading from the methodology" },
+                      purpose: { type: "string", description: "What this section accomplishes" },
+                      example_content: { type: "string", description: "Example or fill-in-the-blank text" },
+                    },
+                    required: ["section_name", "purpose"],
+                    additionalProperties: false,
+                  },
+                  description: "Structured methodology steps that can seed a reusable template. Empty array if not a methodology/framework.",
+                },
                 suggested_tasks: {
                   type: "array",
                   items: {
@@ -169,7 +183,7 @@ Extract:
                   description: "1-3 practice tasks",
                 },
               },
-              required: ["takeaways", "summary", "use_cases", "grading_criteria", "suggested_tasks"],
+              required: ["takeaways", "summary", "use_cases", "grading_criteria", "template_sections", "suggested_tasks"],
               additionalProperties: false,
             },
           },
