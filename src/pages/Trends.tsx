@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Reorder } from 'framer-motion';
+import { AIInsightsNarrator } from '@/components/dashboard/AIInsightsNarrator';
 import { Layout } from '@/components/Layout';
 import {
   TrendingUp, BarChart3, Activity, Zap, Target, Brain,
@@ -33,7 +34,8 @@ const TRENDS_WIDGETS: WidgetConfig[] = [
   { id: 'funnel-weekly', label: 'Funnel & Weekly', visible: true, order: 2 },
   { id: 'biometric', label: 'Biometric × Performance', visible: true, order: 3 },
   { id: 'score-focus', label: 'Score & Focus Trend', visible: true, order: 4 },
-  { id: 'correlations', label: 'Correlations & Insights', visible: true, order: 5 },
+  { id: 'ai-insights', label: 'AI Insights', visible: true, order: 5 },
+  { id: 'correlations', label: 'Correlations & Insights', visible: true, order: 6 },
 ];
 
 export default function Trends() {
@@ -274,6 +276,9 @@ export default function Trends() {
                 </Card>
               )}
             </div>
+
+            {/* AI Insights Narrator */}
+            <AIInsightsNarrator />
 
             {/* Correlations & Insights */}
             {correlations.length > 0 && (

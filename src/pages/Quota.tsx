@@ -50,6 +50,7 @@ import {
   PerformanceSnapshot,
   CommissionSnapshot,
   Next45DaysRisk,
+  QuotaAccelerationCard,
 } from '@/components/dashboard';
 import { usePaceToQuota, usePerformanceRollups, useQuotaTargets } from '@/hooks/useSalesAge';
 import { DEFAULT_QUOTA_TARGETS } from '@/lib/salesAgeCalculations';
@@ -60,8 +61,9 @@ import { WidgetCustomizer } from '@/components/dashboard/WidgetCustomizer';
 const QUOTA_WIDGETS: WidgetConfig[] = [
   { id: 'attainment-gauges', label: 'Attainment Gauges', visible: true, order: 0 },
   { id: 'commission-remaining', label: 'Commission + Remaining', visible: true, order: 1 },
-  { id: 'quick-stats', label: 'Quick Stats', visible: true, order: 2 },
-  { id: 'strategic-planning', label: 'Strategic Planning', visible: true, order: 3 },
+  { id: 'quota-acceleration', label: 'Close the Gap', visible: true, order: 2 },
+  { id: 'quick-stats', label: 'Quick Stats', visible: true, order: 3 },
+  { id: 'strategic-planning', label: 'Strategic Planning', visible: true, order: 4 },
 ];
 
 // Normalize status based on stage (e.g., stage="Closed Won" but status="active")
@@ -261,6 +263,8 @@ export default function Quota() {
             <div className="metric-card p-4 text-center"><div className="text-2xl font-bold text-primary">{ledgerEntries.filter(e => e.isNewLogo).length}</div><div className="text-xs text-muted-foreground">New Logos</div></div>
           </div>
         );
+      case 'quota-acceleration':
+        return <QuotaAccelerationCard />;
       case 'strategic-planning':
         return (
           <Collapsible open={strategicOpen} onOpenChange={setStrategicOpen}>

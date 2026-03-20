@@ -976,6 +976,44 @@ export type Database = {
         }
         Relationships: []
       }
+      deal_patterns: {
+        Row: {
+          analysis: Json
+          created_at: string | null
+          id: string
+          opportunity_id: string | null
+          outcome: string
+          patterns_identified: string[] | null
+          user_id: string
+        }
+        Insert: {
+          analysis?: Json
+          created_at?: string | null
+          id?: string
+          opportunity_id?: string | null
+          outcome: string
+          patterns_identified?: string[] | null
+          user_id: string
+        }
+        Update: {
+          analysis?: Json
+          created_at?: string | null
+          id?: string
+          opportunity_id?: string | null
+          outcome?: string
+          patterns_identified?: string[] | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_patterns_opportunity_id_fkey"
+            columns: ["opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dismissed_action_items: {
         Row: {
           dismissed_at: string

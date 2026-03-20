@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { RelationshipHealthCard } from '@/components/dashboard/RelationshipHealthCard';
 import { useCopilot } from '@/contexts/CopilotContext';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
@@ -339,6 +340,11 @@ export default function AccountDetail() {
             </div>
           )}
         </CollapsibleSection>
+
+        <Separator />
+
+        {/* Relationship Health */}
+        <RelationshipHealthCard accountId={account.id} />
 
         <Separator />
 

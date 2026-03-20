@@ -39,6 +39,7 @@ import {
   CoachingFeed,
   PClubMathCard,
   WeeklyBattlePlanCard,
+  DealRiskAlerts,
 } from '@/components/dashboard';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 import { WidgetCustomizer } from '@/components/dashboard/WidgetCustomizer';
@@ -111,12 +112,13 @@ const DASHBOARD_WIDGETS: WidgetConfig[] = [
   { id: 'meeting-prep', label: 'Upcoming Client Meetings', visible: true, order: 2 },
   { id: 'research-checklist', label: 'Research Checklist', visible: true, order: 3 },
   { id: 'coaching-feed', label: 'AI Coach', visible: true, order: 4 },
-  { id: 'progress-tabs', label: 'Today / Week-to-Date', visible: true, order: 5 },
-  { id: 'smart-work-queue', label: 'Daily Action Plan', visible: true, order: 6 },
-  { id: 'pclub-math', label: 'P-Club Math', visible: true, order: 7 },
-  { id: 'weekly-battle-plan', label: 'Weekly Battle Plan', visible: true, order: 8 },
-  { id: 'journal', label: 'Daily Scorecard', visible: true, order: 9 },
-  { id: 'commission-pacing', label: 'Commission Pacing', visible: true, order: 10 },
+  { id: 'deal-risk-alerts', label: 'Deal Risk Alerts', visible: true, order: 5 },
+  { id: 'progress-tabs', label: 'Today / Week-to-Date', visible: true, order: 6 },
+  { id: 'smart-work-queue', label: 'Daily Action Plan', visible: true, order: 7 },
+  { id: 'pclub-math', label: 'P-Club Math', visible: true, order: 8 },
+  { id: 'weekly-battle-plan', label: 'Weekly Battle Plan', visible: true, order: 9 },
+  { id: 'journal', label: 'Daily Scorecard', visible: true, order: 10 },
+  { id: 'commission-pacing', label: 'Commission Pacing', visible: true, order: 11 },
 ];
 
 
@@ -229,6 +231,8 @@ export default function Dashboard() {
             </TabsContent>
           </Tabs>
         );
+      case 'deal-risk-alerts':
+        return <DealRiskAlerts />;
       case 'smart-work-queue':
         return <SmartWorkQueue />;
       case 'pclub-math':

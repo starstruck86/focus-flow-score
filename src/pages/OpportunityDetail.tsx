@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { DealVelocityWidget } from '@/components/dashboard/DealVelocityWidget';
 import { useCopilot } from '@/contexts/CopilotContext';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
@@ -414,6 +415,9 @@ export default function OpportunityDetail() {
             </div>
           )}
         </CollapsibleSection>
+
+        {/* Deal Velocity */}
+        <DealVelocityWidget opportunityId={opp.id} />
       </div>
 
       <ClaudeSynopsisModal
