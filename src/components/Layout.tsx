@@ -31,7 +31,7 @@ import { useCopilot, type PageContext } from '@/contexts/CopilotContext';
 import { DayTimeline } from '@/components/tasks/DayTimeline';
 import { ActivityRings } from '@/components/ActivityRings';
 import { GlobalWeekStrip } from '@/components/GlobalWeekStrip';
-import { useDaveContext, type DaveSessionData } from '@/hooks/useDaveContext';
+import { useDaveContext, DaveSessionError, type DaveSessionData } from '@/hooks/useDaveContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
@@ -227,8 +227,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
       setDaveSessionData(session);
       setDaveOpen(true);
     } catch (err: any) {
-      console.error('[Dave] Failed to pre-fetch session:', err);
-      toast.error('Could not start Dave', { description: err.message });
+      console.error('[Dave] Failed to fetch session:', err);
+      if (err instanceof DaveSessionError && err.errorType === 'concurrency_limit') {
+        const waitSec = err.cooldownUntil ? Math.ceil((err.cooldownUntil - Date.now()) / 1000) : 30;
+        toast.error('Dave is at capacity', {
+          description: `ElevenLabs concurrency limit — try again in ${waitSec}s`,
+          duration: 6000,
+        });
+      } else if (err instanceof DaveSessionError && err.errorType === 'auth_failed') {
+        toast.error('Dave authentication failed', { description: err.message });
+      } else if (err instanceof DaveSessionError && err.errorType === 'agent_error') {
+        toast.error('Dave configuration issue', { description: err.message });
+      } else {
+        toast.error('Could not start Dave', { description: err.message });
+      }
     }
   }, [getDaveSession]);
 
@@ -255,7 +267,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
       console.log('[Dave] Retry-via-remount: reopened with fresh session');
     } catch (err: any) {
       console.error('[Dave] Retry failed:', err);
-      toast.error('Could not restart Dave', { description: err.message });
+      if (err instanceof DaveSessionError && err.errorType === 'concurrency_limit') {
+        const waitSec = err.cooldownUntil ? Math.ceil((err.cooldownUntil - Date.now()) / 1000) : 30;
+        toast.error('Dave is at capacity', {
+          description: `Concurrency limit — try again in ${waitSec}s. Auto-retry blocked.`,
+          duration: 8000,
+        });
+      } else {
+        toast.error('Could not restart Dave', { description: err.message });
+      }
     }
   }, [getDaveSession, invalidateDaveCache]);
 

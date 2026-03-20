@@ -71,7 +71,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const diagTapCountRef = useRef(0);
   const diagTapTimerRef = useRef<ReturnType<typeof setTimeout>>();
-  const [healthCheck, setHealthCheck] = useState<{ apiKey: boolean; agentId: boolean; tokenOk: boolean } | null>(null);
+  const [healthCheck, setHealthCheck] = useState<{ apiKey: boolean; agentId: boolean; tokenOk: boolean; overridesEnabled?: boolean | null } | null>(null);
   const [greetingStatus, setGreetingStatus] = useState<'waiting' | 'received' | 'timeout' | 'retrying'>('waiting');
 
   // Refs for stale closure fixes
@@ -117,6 +117,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
           apiKey: data.apiKeyValid,
           agentId: data.agentIdSet,
           tokenOk: data.tokenGenOk,
+          overridesEnabled: data.overridesEnabled,
         });
       }
     }).catch(() => {});
