@@ -455,8 +455,7 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
   }
 
   if (transcriptsRes.data?.length) {
-    const accountIdMap: Record<string, string> = {};
-    for (const a of accounts) accountIdMap[a.id] = a.name;
+    // accountIdMap already built above — reuse it
 
     sections.push(
       `RECENT CALLS (${transcriptsRes.data.length}):\n` +

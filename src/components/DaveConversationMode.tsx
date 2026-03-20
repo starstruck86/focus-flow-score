@@ -324,9 +324,9 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          await (supabase.from('dave_transcripts' as any) as any).insert({
+          await supabase.from('dave_transcripts').insert({
             user_id: user.id,
-            messages: currentTranscript as any,
+            messages: currentTranscript as unknown as Json,
             duration_seconds: durationSeconds,
           });
         }
