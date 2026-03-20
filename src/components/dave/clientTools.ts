@@ -783,10 +783,11 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
 
       const { error } = await supabase
         .from('tasks')
-        .update({ status: 'done', updated_at: new Date().toISOString() })
+        .update({ status: 'done', completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
         .eq('id', tasks[0].id);
 
       if (error) return `Failed to complete task: ${error.message}`;
+      emitDataChanged('tasks');
       toast.success('Task completed', { description: tasks[0].title });
       return `Completed: ${tasks[0].title}`;
     },
