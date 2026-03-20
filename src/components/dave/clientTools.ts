@@ -760,6 +760,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         .eq('id', renewals[0].id);
 
       if (error) return `Failed to update renewal: ${error.message}`;
+      emitDataChanged('renewals');
       toast.success('Renewal updated', { description: `${renewals[0].account_name}: ${params.field} → ${params.value}` });
       return `Updated ${renewals[0].account_name} renewal ${params.field} to ${params.value}`;
     },
