@@ -1907,6 +1907,7 @@ export type Database = {
         Row: {
           account_id: string | null
           content: string | null
+          content_status: string
           created_at: string
           current_version: number | null
           description: string | null
@@ -1926,6 +1927,7 @@ export type Database = {
         Insert: {
           account_id?: string | null
           content?: string | null
+          content_status?: string
           created_at?: string
           current_version?: number | null
           description?: string | null
@@ -1945,6 +1947,7 @@ export type Database = {
         Update: {
           account_id?: string | null
           content?: string | null
+          content_status?: string
           created_at?: string
           current_version?: number | null
           description?: string | null
