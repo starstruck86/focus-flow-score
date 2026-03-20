@@ -1,39 +1,47 @@
 
-# Dave Data Sync & Resilience — COMPLETED
+# Five Features — COMPLETED
 
-## What Was Fixed
+## 1. ✅ Dave Guided Journal Walkthrough
+- `guided_journal` tool fetches today's entry, returns structured checklist of missing vs completed fields
+- `update_journal_field` writes qualitative/wellness fields (what_worked, blocker, reflection, energy, stress, etc.) with strict whitelist
+- Both emit `dave-metrics-updated` for UI sync
 
-### Issue 6 ✅ Daily metrics sync (Dave ↔ Rings ↔ DB)
-- **Journal hydration on load**: `useDataSync.ts` now fetches today's `daily_journal_entries` and populates Zustand's `activityInputs`/`rawInputs`
-- **Dave emits events**: `update_daily_metrics` dispatches `dave-metrics-updated` after DB writes, triggering re-hydration
-- **Manual ring taps persist to DB**: `ActivityRings.handleUpdate` upserts to `daily_journal_entries`
+## 2. ✅ Background AI Actions
+- `askBackground()` added to CopilotContext — streams AI responses via persistent toast while user navigates
+- Toast updates to "AI response ready — tap to view" with action button to open Copilot
+- MeetingPrepPrompt AI buttons (Meeting Brief, Deal Strategy, Recap Email) now use `askBackground`
 
-### Issue 7 ✅ CRM writes sync to UI
-- All 14 CRM-mutating tools now dispatch `dave-data-changed` with the affected table name
-- `useDataSync.ts` listens for this event and surgically re-fetches only the changed table into Zustand
-- Tools covered: `create_task`, `complete_task`, `update_account`, `update_opportunity`, `move_deal`, `update_methodology`, `log_touch`, `add_contact`, `create_opportunity`, `create_account`, `update_renewal`, `smart_debrief`, `create_recurring_task`, `bulk_update`
+## 3. ✅ Expanded Inline Search Bar
+- GlobalSearch redesigned from tiny button to full-width input spanning header center
+- Popover dropdown shows grouped results (accounts, opportunities, renewals, contacts, tasks) inline as user types
+- Layout header restructured: `[brand] [search flex-1] [actions]`
 
-### Issue 8 ✅ Voice reminders delivery
-- New `useVoiceReminders` hook polls every 60s for due reminders
-- Shows toast notifications and marks as delivered
-- Mounted in `Layout.tsx`
+## 4. ✅ Task Reminders
+- DB: `reminder_at` column added to tasks table
+- TaskEditDialog: datetime picker for setting reminders with clear button
+- TaskCard: bell icon showing reminder time
+- useVoiceReminders: polls both voice_reminders AND tasks with due reminder_at
+- Dave tools: `create_task` sets reminder_at from dueTime, new `set_task_reminder` tool
 
-### Issue 9 ✅ `complete_task` sets `completed_at`
-- Now sets `completed_at: new Date().toISOString()` alongside `status: 'done'`
+## 5. ✅ Dave Follow-up Questions
+- Clarification Protocol added to DAVE_INSTRUCTIONS prompt
+- Journal Walkthrough instructions added to prompt
+- Dave now asks clarifying questions for ambiguous requests
 
-### Issue 10 ✅ `update_renewal` field whitelist
-- Now returns an error if the field is not in the known whitelist (was falling through to raw field name)
-
-### Issue 11 ✅ `create_account` exact duplicate check
-- Changed from `ilike '%name%'` to `eq('name', params.name)` to prevent false positives
+## ElevenLabs Registration
+- 3 new tools registered: `guided_journal`, `update_journal_field`, `set_task_reminder`
+- Total tools: 55 (was 52)
 
 ## Files Modified
-1. `src/lib/daveEvents.ts` — NEW: centralized event dispatchers
-2. `src/hooks/useVoiceReminders.ts` — NEW: reminder polling hook
-3. `src/hooks/useDataSync.ts` — Journal hydration, dave-data-changed listener, dave-metrics-updated listener
-4. `src/components/dave/clientTools.ts` — Event dispatches on all mutations + bug fixes
-5. `src/components/ActivityRings.tsx` — DB persistence on manual ring taps
-6. `src/components/Layout.tsx` — Mount useVoiceReminders
-
-## Remaining from Original Plan (Issues 1-5)
-See previous plan entries for Dave QA Report items (quota context columns, pipeline UUID resolution, etc.)
+- `src/components/dave/clientTools.ts` — 3 new tools + create_task reminder_at
+- `supabase/functions/register-dave-tools/index.ts` — 3 new tool registrations
+- `supabase/functions/dave-conversation-token/index.ts` — Journal walkthrough + clarification protocol
+- `src/contexts/CopilotContext.tsx` — askBackground(), backgroundResult state
+- `src/components/dashboard/MeetingPrepPrompt.tsx` — askBackground for AI actions
+- `src/components/GlobalSearch.tsx` — Full redesign to inline search + popover
+- `src/components/Layout.tsx` — Header restructured for wide search bar
+- `src/types/index.ts` — reminderAt on Task interface
+- `src/components/tasks/TaskEditDialog.tsx` — Reminder datetime picker
+- `src/components/tasks/TaskCard.tsx` — Bell indicator for reminders
+- `src/hooks/useVoiceReminders.ts` — Task reminder polling
+- DB migration: `ALTER TABLE tasks ADD COLUMN reminder_at timestamptz`
