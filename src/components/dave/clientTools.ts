@@ -1380,13 +1380,20 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         linkedAccountId = accts?.[0]?.id ?? null;
       }
 
-      const { error } = await supabase.from('recurring_tasks').insert({
+      // Create as a regular task with recurrence info in the category
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + 1);
+      while (dueDate.getDay() === 0 || dueDate.getDay() === 6) dueDate.setDate(dueDate.getDate() + 1);
+
+      const { error } = await supabase.from('tasks').insert({
         user_id: userId,
-        title: params.title,
-        recurrence_rule: params.recurrence,
+        title: `🔄 ${params.title}`,
         priority: params.priority || 'P2',
+        status: 'next',
+        workstream: 'pg',
         linked_account_id: linkedAccountId,
-        active: true,
+        category: `recurring:${params.recurrence}`,
+        due_date: dueDate.toISOString().split('T')[0],
       });
 
       if (error) return `Failed to create recurring task: ${error.message}`;
