@@ -406,6 +406,35 @@ ${customScorecardContext}`;
                   },
                   description: "Scores for custom scorecard criteria, if any were provided",
                 },
+
+                // NEW: Outcome-based fields
+                call_goals_inferred: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "What were the likely goals/objectives of this call? Infer 2-5 goals from context and content.",
+                },
+                goals_achieved: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      goal: { type: "string" },
+                      achieved: { type: "boolean" },
+                      evidence: { type: "string" },
+                    },
+                    required: ["goal", "achieved", "evidence"],
+                    additionalProperties: false,
+                  },
+                  description: "For each call goal (inferred or provided), was it achieved?",
+                },
+                deal_progressed: { type: "boolean", description: "Did this call move the deal forward in a meaningful way?" },
+                progression_evidence: { type: "string", description: "Specific evidence of deal progression or lack thereof" },
+                likelihood_impact: { type: "string", enum: ["increased", "decreased", "unchanged"], description: "Did this call increase, decrease, or leave unchanged the likelihood of winning?" },
+                competitors_mentioned: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "List of competitor names mentioned in the transcript",
+                },
               },
               required: [
                 "overall_score", "overall_grade", "summary",
@@ -417,7 +446,8 @@ ${customScorecardContext}`;
                 "feedback_focus", "coaching_issue", "coaching_why",
                 "transcript_moment", "replacement_behavior", "actionable_feedback",
                 "strengths", "missed_opportunities", "suggested_questions",
-                "behavioral_flags", "style_notes", "acumen_notes", "cadence_notes"
+                "behavioral_flags", "style_notes", "acumen_notes", "cadence_notes",
+                "call_goals_inferred", "goals_achieved", "deal_progressed", "progression_evidence", "likelihood_impact", "competitors_mentioned"
               ],
               additionalProperties: false,
             },
