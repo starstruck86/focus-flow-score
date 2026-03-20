@@ -181,6 +181,7 @@ export function useDuplicateDetection() {
       if (typeof store.deleteOpportunity === 'function') {
         store.deleteOpportunity(removeId);
       }
+    }
 
     // Update tasks in store
     const { updateTask } = useStore.getState();
