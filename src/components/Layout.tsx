@@ -32,6 +32,7 @@ import { DayTimeline } from '@/components/tasks/DayTimeline';
 import { ActivityRings } from '@/components/ActivityRings';
 import { GlobalWeekStrip } from '@/components/GlobalWeekStrip';
 import { useDaveContext, DaveSessionError, type DaveSessionData } from '@/hooks/useDaveContext';
+import { useVoiceReminders } from '@/hooks/useVoiceReminders';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
