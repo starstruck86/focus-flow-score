@@ -742,7 +742,8 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         notes: 'notes',
       };
 
-      const dbField = RENEWAL_FIELDS[params.field.toLowerCase()] || params.field;
+      const dbField = RENEWAL_FIELDS[params.field.toLowerCase()];
+      if (!dbField) return `Invalid renewal field "${params.field}". Valid: ${Object.keys(RENEWAL_FIELDS).join(', ')}`;
 
       const { data: renewals } = await supabase
         .from('renewals')
