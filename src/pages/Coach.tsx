@@ -641,6 +641,7 @@ function TranscriptIngestion({ onSaved }: { onSaved: () => void }) {
       setTitle('');
       setCallType('');
       setParticipants('');
+      setCallGoals('');
       setAccountId('');
       setOpportunityId('');
       setAutoDetected(null);
