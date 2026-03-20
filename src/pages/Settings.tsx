@@ -202,6 +202,12 @@ function DaveHealthSection() {
           <div className="flex items-center gap-2 text-sm"><StatusIcon ok={health.apiKey} /> API Key valid</div>
           <div className="flex items-center gap-2 text-sm"><StatusIcon ok={health.agentId} /> Agent ID configured</div>
           <div className="flex items-center gap-2 text-sm"><StatusIcon ok={health.tokenOk} /> Token generation working</div>
+          {health.overridesEnabled !== undefined && (
+            <div className="flex items-center gap-2 text-sm">
+              <StatusIcon ok={health.overridesEnabled ?? undefined} />
+              {health.overridesEnabled ? 'Overrides enabled' : health.overridesEnabled === false ? 'Overrides DISABLED — enable in ElevenLabs agent settings' : 'Overrides status unknown'}
+            </div>
+          )}
         </div>
       )}
 
