@@ -29,7 +29,7 @@ serve(async (req) => {
     const [resourcesRes, oppsRes] = await Promise.all([
       supabase
         .from("resources")
-        .select("id, title, resource_type, tags, description")
+        .select("id, title, resource_type, tags, description, content")
         .order("updated_at", { ascending: false })
         .limit(50),
       supabase
@@ -52,9 +52,10 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const resourceSummary = resources.map(r =>
-      `- [${r.id}] "${r.title}" (${r.resource_type})${r.tags?.length ? ` tags:${r.tags.join(",")}` : ""}${r.description ? ` — ${r.description.substring(0, 100)}` : ""}`
-    ).join("\n");
+    const resourceSummary = resources.map((r: any) => {
+      const contentPreview = r.content && !r.content.startsWith("[External Link:") ? `\n  Content: ${r.content.substring(0, 2000)}` : "";
+      return `- [${r.id}] "${r.title}" (${r.resource_type})${r.tags?.length ? ` tags:${r.tags.join(",")}` : ""}${r.description ? ` — ${r.description.substring(0, 100)}` : ""}${contentPreview}`;
+    }).join("\n");
 
     const stageGroups: Record<string, number> = {};
     opportunities.forEach(o => {

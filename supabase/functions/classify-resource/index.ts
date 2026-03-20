@@ -108,7 +108,7 @@ async function scrapeUrl(url: string): Promise<{ pageTitle: string; content: str
     const markdown = data.data?.markdown || data.markdown || "";
     const metadata = data.data?.metadata || data.metadata || {};
     const pageTitle = stripProviderSuffix(metadata.title || metadata.ogTitle || directTitle || "");
-    return { pageTitle, content: markdown.slice(0, 3000) };
+    return { pageTitle, content: markdown.slice(0, 15000) };
   } catch (e) {
     console.error("Firecrawl scrape error:", e);
     return directTitle ? { pageTitle: directTitle, content: "" } : null;
@@ -265,6 +265,8 @@ FOLDER RULES:
 
     // Backwards compat: also set suggested_folder for any old callers
     classification.suggested_folder = classification.top_folder;
+    // Return scraped content so callers can store it directly
+    if (scrapedContent) classification.scraped_content = scrapedContent;
 
     return new Response(JSON.stringify(classification), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

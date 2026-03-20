@@ -23,6 +23,7 @@ export type ClassificationResult = {
   tags: string[];
   top_folder: CoreFolderName;
   sub_folder?: string;
+  scraped_content?: string;
   /** @deprecated Use top_folder instead */
   suggested_folder?: string;
 };
@@ -207,6 +208,12 @@ export function useAddUrlResource() {
         );
       }
 
+      // Use scraped content if available, otherwise placeholder
+      const contentToStore = classification.scraped_content && classification.scraped_content.length > 50
+        ? classification.scraped_content
+        : `[External Link: ${url}]`;
+      const contentStatus = contentToStore.startsWith('[External Link:') ? 'placeholder' : 'enriched';
+
       const { data: resource, error } = await supabase
         .from('resources')
         .insert({
@@ -217,8 +224,9 @@ export function useAddUrlResource() {
           tags: classification.tags,
           folder_id: finalFolderId,
           file_url: url,
-          content: `[External Link: ${url}]`,
-        })
+          content: contentToStore,
+          content_status: contentStatus,
+        } as any)
         .select()
         .single();
       if (error) throw error;
@@ -228,9 +236,16 @@ export function useAddUrlResource() {
         user_id: user.id,
         version_number: 1,
         title: classification.title,
-        content: `[External Link: ${url}]`,
+        content: contentToStore,
         change_summary: 'Initial link',
       });
+
+      // Fire-and-forget background deep enrich if still placeholder
+      if (contentStatus === 'placeholder') {
+        supabase.functions.invoke('enrich-resource-content', {
+          body: { resource_id: resource.id },
+        }).catch(() => {});
+      }
 
       return resource;
     },

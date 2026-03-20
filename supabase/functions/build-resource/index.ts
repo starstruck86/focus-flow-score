@@ -66,14 +66,15 @@ serve(async (req) => {
       }
 
       const transformPrompts: Record<string, string> = {
-        scorecard: "Transform this resource into a detailed scoring rubric/scorecard. Create specific categories with clear criteria for each score level (1-5). Include what 'good' and 'bad' looks like for each criterion. Format as a structured scorecard in Markdown with tables.",
-        checklist: "Transform this resource into a practical pre-call or execution checklist. Each item should be a specific, actionable step with context. Group by phase/stage. Include checkboxes (- [ ]) format.",
-        cadence: "Transform this resource into a structured outreach cadence. Define touchpoints by day, channel, and message theme. Include suggested talk tracks or email snippets for each touchpoint.",
-        training_guide: "Transform this resource into a training guide with exercises. Include learning objectives, key concepts, practice scenarios, and self-assessment questions. Structure for a 30-60 minute self-study session.",
-        one_pager: "Distill this resource into a crisp one-page reference sheet. Use dense formatting: key stats, decision trees, quick-reference tables, and the top 5 things to remember. Optimize for printing or quick mobile reference.",
+        scorecard: "Transform this resource into a detailed scoring rubric/scorecard. Extract the SPECIFIC criteria, categories, and evaluation methods from THIS content. Create score levels (1-5) based on the actual framework described. Include what 'good' and 'bad' looks like for each criterion using examples from the source material. Format as a structured scorecard in Markdown with tables.",
+        checklist: "Transform this resource into a practical pre-call or execution checklist. Extract the SPECIFIC steps, techniques, and frameworks from THIS content — not generic sales advice. Each item should reference a concept from the source material. Group by phase/stage. Include checkboxes (- [ ]) format.",
+        cadence: "Transform this resource into a structured outreach cadence. Extract specific messaging themes, talk tracks, and techniques from THIS content. Define touchpoints by day, channel, and message theme using the actual frameworks described. Include suggested talk tracks or email snippets drawn from the source material.",
+        training_guide: "Transform this resource into a training guide with exercises. Extract the KEY concepts, frameworks, and techniques from THIS content. Create practice scenarios that apply these specific concepts. Include self-assessment questions that test understanding of the actual material. Structure for a 30-60 minute self-study session.",
+        one_pager: "Distill this resource into a crisp one-page reference sheet. Extract the MOST important frameworks, stats, and decision points from THIS content. Use dense formatting: key stats, decision trees, quick-reference tables. Optimize for printing or quick mobile reference.",
+        template: "Extract the methodology, framework, or process from this content and create a reusable Markdown template. Include section headings from the source framework, {{placeholder}} variables for deal-specific data (e.g., {{company}}, {{pain_points}}, {{ROI_metrics}}, {{executive_sponsor}}), guidance notes explaining what to fill in each section, and example content drawn from the actual methodology. This should be a fill-in-the-blank document a rep can use immediately.",
       };
 
-      systemPrompt = `You are a sales enablement architect. ${transformPrompts[targetType] || transformPrompts.checklist}\n\nOutput clean Markdown. Be specific and actionable — no filler.`;
+      systemPrompt = `You are a sales enablement architect. ${transformPrompts[targetType] || transformPrompts.checklist}\n\nIMPORTANT: Extract specific techniques, frameworks, and phrases from THIS content — not generic advice. Every bullet, criterion, or section should trace back to something in the source material.\n\nOutput clean Markdown. Be specific and actionable — no filler.`;
       userPrompt = sourceContent || prompt || "No source content provided.";
       if (prompt) userPrompt += `\n\nAdditional instructions: ${prompt}`;
       if (accountStr) userPrompt += accountStr;

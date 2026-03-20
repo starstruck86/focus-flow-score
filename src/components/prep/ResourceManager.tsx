@@ -11,7 +11,7 @@ import { Progress } from '@/components/ui/progress';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import {
+import { Zap, RefreshCw,
   Folder, FolderPlus, FilePlus, FileText, Presentation, Mail, BookOpen,
   ChevronRight, MoreHorizontal, Search, Trash2, Edit3, Clock,
   Star, Tag, Copy, Upload, Link2, Sparkles, Target, Shield,
@@ -122,6 +122,7 @@ export function ResourceManager() {
   const [competitorContext, setCompetitorContext] = useState('');
   const [battlecardLoading, setBattlecardLoading] = useState(false);
   const [battlecardProgress, setBattlecardProgress] = useState('');
+  const [bulkEnriching, setBulkEnriching] = useState(false);
 
   // AI Generate / Transform states
   const [showAIGenerate, setShowAIGenerate] = useState(false);
@@ -525,6 +526,32 @@ export function ResourceManager() {
         <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setShowDiscover(true)}>
           <Radar className="h-3.5 w-3.5 mr-1" /> AI Discover
         </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 text-xs"
+          disabled={bulkEnriching}
+          onClick={async () => {
+            setBulkEnriching(true);
+            try {
+              const { data, error } = await supabase.functions.invoke('enrich-resource-content', {
+                body: { batch: true, limit: 50 },
+              });
+              if (error) throw error;
+              const r = data?.results;
+              if (r) {
+                toast.success(`Enriched ${r.enriched} resources (${r.failed} failed, ${r.skipped} skipped)`);
+              }
+            } catch (e: any) {
+              toast.error(e.message || 'Bulk enrich failed');
+            } finally {
+              setBulkEnriching(false);
+            }
+          }}
+        >
+          {bulkEnriching ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Zap className="h-3.5 w-3.5 mr-1" />}
+          Bulk Enrich
+        </Button>
         <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setShowReorganize(true)}>
           <Sparkles className="h-3.5 w-3.5 mr-1" /> Reorganize
         </Button>
@@ -718,6 +745,9 @@ export function ResourceManager() {
                     {resource.template_category && <Badge variant="outline" className="text-[10px] shrink-0">{resource.template_category}</Badge>}
                     {hasFile && !isExternal && <Upload className="h-3 w-3 text-muted-foreground shrink-0" />}
                     {isExternal && <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />}
+                    {isExternal && (resource as any).content_status === 'enriched' && <span className="shrink-0" aria-label="Content enriched"><Check className="h-3 w-3 text-primary" /></span>}
+                    {isExternal && (resource as any).content_status === 'enriching' && <span className="shrink-0" aria-label="Enriching"><Loader2 className="h-3 w-3 text-primary animate-spin" /></span>}
+                    {isExternal && (resource as any).content_status === 'placeholder' && <span className="shrink-0" aria-label="Content not scraped"><AlertTriangle className="h-3 w-3 text-warning" /></span>}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-[10px] text-muted-foreground capitalize">{resource.resource_type}</span>
@@ -776,6 +806,22 @@ export function ResourceManager() {
                       }}>
                         <Sparkles className="h-3.5 w-3.5 mr-2" /> Operationalize
                       </DropdownMenuItem>
+                      {isExternal && (resource as any).content_status === 'placeholder' && (
+                        <DropdownMenuItem onClick={async (e) => {
+                          e.stopPropagation();
+                          toast.info('Enriching content...');
+                          try {
+                            await supabase.functions.invoke('enrich-resource-content', {
+                              body: { resource_id: resource.id },
+                            });
+                            toast.success('Content enriched');
+                          } catch {
+                            toast.error('Enrichment failed');
+                          }
+                        }}>
+                          <RefreshCw className="h-3.5 w-3.5 mr-2" /> Enrich Content
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem onClick={(e) => {
                         e.stopPropagation();
                         setGenerateSourceId(resource.id);
