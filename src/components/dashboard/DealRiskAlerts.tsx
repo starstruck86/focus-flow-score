@@ -37,6 +37,9 @@ export function DealRiskAlerts() {
         const days = differenceInDays(now, parseISO(opp.last_touch_date));
         if (days > 21) risks.push({ label: `${days}d stale`, severity: 'high' });
         else if (days > 10) risks.push({ label: `${days}d since touch`, severity: 'medium' });
+      } else {
+        const daysSinceCreation = differenceInDays(now, parseISO(opp.created_at));
+        if (daysSinceCreation > 7) risks.push({ label: 'Never touched', severity: 'high' });
       }
 
       // Missing next step

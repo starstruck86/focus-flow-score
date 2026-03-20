@@ -79,7 +79,7 @@ export function AIInsightsNarrator() {
         </CardHeader>
         <CardContent>
           <p className="text-xs text-muted-foreground">
-            {isLoading ? 'Analyzing trends...' : 'Log more daily data to unlock AI insights.'}
+            {isLoading ? 'Analyzing trends...' : 'Log at least 5 days of journal data to unlock AI-powered trend insights and coaching recommendations.'}
           </p>
         </CardContent>
       </Card>

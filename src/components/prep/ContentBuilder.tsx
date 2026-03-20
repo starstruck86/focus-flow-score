@@ -41,7 +41,21 @@ export function ContentBuilder() {
   const [generating, setGenerating] = useState(false);
   const [generatedContent, setGeneratedContent] = useState('');
   const [saving, setSaving] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Elapsed time tracker during generation
+  useEffect(() => {
+    if (generating) {
+      setElapsedSeconds(0);
+      timerRef.current = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [generating]);
 
   // Load transcripts for selected account/opp
   useEffect(() => {
@@ -274,7 +288,7 @@ export function ContentBuilder() {
       {/* Generate Button */}
       <Button onClick={handleGenerate} disabled={generating} className="w-full">
         {generating ? (
-          <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating...</>
+          <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating... ({elapsedSeconds}s)</>
         ) : (
           <><Sparkles className="h-4 w-4 mr-2" /> Generate Content</>
         )}
