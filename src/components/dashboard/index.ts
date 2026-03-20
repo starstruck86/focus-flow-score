@@ -30,3 +30,8 @@ export { EnrichmentTimeline } from './EnrichmentTimeline';
 export { AccountHealthPulseCard } from './AccountHealthPulseCard';
 export { PostMeetingPrompt } from './PostMeetingPrompt';
 export { ResearchChecklist } from './ResearchChecklist';
+export { DealRiskAlerts } from './DealRiskAlerts';
+export { QuotaAccelerationCard } from './QuotaAccelerationCard';
+export { DealVelocityWidget } from './DealVelocityWidget';
+export { RelationshipHealthCard } from './RelationshipHealthCard';
+export { AIInsightsNarrator } from './AIInsightsNarrator';
