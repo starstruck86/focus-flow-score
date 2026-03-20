@@ -337,6 +337,9 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
   }
 
   const accounts = accountsRes.data || [];
+  // Build account ID→name map early so pipeline, contacts, and transcripts can all use it
+  const accountIdMap: Record<string, string> = {};
+  for (const a of accounts) accountIdMap[(a as any).id] = (a as any).name;
   if (accounts.length) {
     sections.push(
       `ACCOUNTS (${accounts.length}):\n` +
@@ -370,7 +373,7 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
     sections.push(
       `PIPELINE (${opps.length} deals, $${Math.round(totalPipeline / 1000)}k total):\n` +
       opps.slice(0, 20).map((o: any) =>
-        `- ${o.name} [id:${o.id}]: ${o.stage || "—"} $${Math.round((o.arr || 0) / 1000)}k close:${o.close_date || "TBD"} type:${o.deal_type || "—"} acct:${o.account_id || "—"}${o.last_touch_date ? ` lastTouch:${o.last_touch_date}` : ""}${o.next_step ? ` → ${o.next_step}` : ""}${o.notes ? ` notes:${trunc(o.notes, 60)}` : ""}`
+        `- ${o.name} [id:${o.id}]: ${o.stage || "—"} $${Math.round((o.arr || 0) / 1000)}k close:${o.close_date || "TBD"} type:${o.deal_type || "—"} acct:${(o.account_id && accountIdMap[o.account_id]) || "—"}${o.last_touch_date ? ` lastTouch:${o.last_touch_date}` : ""}${o.next_step ? ` → ${o.next_step}` : ""}${o.notes ? ` notes:${trunc(o.notes, 60)}` : ""}`
       ).join("\n")
     );
   }
@@ -400,7 +403,7 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
     sections.push(
       `CONTACTS (${contacts.length}):\n` +
       contacts.slice(0, 30).map((c: any) =>
-        `- ${c.name}${c.title ? ` (${c.title})` : ""} role:${c.buyer_role || "—"} influence:${c.influence_level || "—"} status:${c.status || "—"}${c.department ? ` dept:${c.department}` : ""} acct:${c.account_id || "—"}`
+        `- ${c.name}${c.title ? ` (${c.title})` : ""} role:${c.buyer_role || "—"} influence:${c.influence_level || "—"} status:${c.status || "—"}${c.department ? ` dept:${c.department}` : ""} acct:${(c.account_id && accountIdMap[c.account_id]) || "—"}`
       ).join("\n")
     );
   }
@@ -432,8 +435,9 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
   }
 
   if (quotaRes.data?.length) {
-    const q = quotaRes.data[0];
-    sections.push(`QUOTA: annual=$${q.annual_target?.toLocaleString() || "—"} quarterly=$${q.quarterly_target?.toLocaleString() || "—"} period=${q.quota_period || "—"}`);
+    const q = quotaRes.data[0] as any;
+    const totalQuota = (q.new_arr_quota || 0) + (q.renewal_arr_quota || 0);
+    sections.push(`QUOTA: total=$${totalQuota.toLocaleString()} new_logo=$${(q.new_arr_quota || 0).toLocaleString()} renewal=$${(q.renewal_arr_quota || 0).toLocaleString()} FY:${q.fiscal_year_start || "—"} to ${q.fiscal_year_end || "—"}`);
   }
 
   if (benchmarksRes.data?.length) {
@@ -451,8 +455,7 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
   }
 
   if (transcriptsRes.data?.length) {
-    const accountIdMap: Record<string, string> = {};
-    for (const a of accounts) accountIdMap[a.id] = a.name;
+    // accountIdMap already built above — reuse it
 
     sections.push(
       `RECENT CALLS (${transcriptsRes.data.length}):\n` +
