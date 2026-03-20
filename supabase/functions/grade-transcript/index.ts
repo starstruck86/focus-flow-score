@@ -525,6 +525,13 @@ ${customScorecardContext}`;
         transcript_moment: grade.transcript_moment,
         call_type: transcript.call_type,
         custom_scorecard_results: grade.custom_scores?.length ? grade.custom_scores : null,
+        // Outcome-based fields
+        call_goals_inferred: grade.call_goals_inferred || [],
+        goals_achieved: grade.goals_achieved || [],
+        deal_progressed: grade.deal_progressed || false,
+        progression_evidence: grade.progression_evidence || null,
+        likelihood_impact: grade.likelihood_impact || null,
+        competitors_mentioned: grade.competitors_mentioned || [],
       }, { onConflict: "transcript_id" })
       .select()
       .single();
