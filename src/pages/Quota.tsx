@@ -263,6 +263,8 @@ export default function Quota() {
             <div className="metric-card p-4 text-center"><div className="text-2xl font-bold text-primary">{ledgerEntries.filter(e => e.isNewLogo).length}</div><div className="text-xs text-muted-foreground">New Logos</div></div>
           </div>
         );
+      case 'quota-acceleration':
+        return <QuotaAccelerationCard />;
       case 'strategic-planning':
         return (
           <Collapsible open={strategicOpen} onOpenChange={setStrategicOpen}>
