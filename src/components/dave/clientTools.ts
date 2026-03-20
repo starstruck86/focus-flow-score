@@ -276,6 +276,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         .eq('id', accts[0].id);
 
       if (error) return `Failed to log touch: ${error.message}`;
+      emitDataChanged('accounts');
       toast.success('Touch logged', { description: `${accts[0].name}: ${params.touchType}` });
       return `Logged ${params.touchType} touch for ${accts[0].name}`;
     },
