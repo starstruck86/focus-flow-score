@@ -104,12 +104,23 @@ export function WhoopIntegration() {
         body: { action: 'sync' },
       });
       if (response.error) throw new Error(response.error.message);
+      if (response.data?.needsReconnect) {
+        setNeedsReconnect(true);
+        toast.error('WHOOP token expired — please reconnect');
+        return;
+      }
       const { synced } = response.data;
+      setNeedsReconnect(false);
       toast.success(`Synced ${synced} day(s) of WHOOP data`);
       await loadData();
     } catch (err: any) {
       console.error('Sync error:', err);
-      toast.error(err.message || 'Failed to sync WHOOP data');
+      if (err.message?.includes('Token refresh failed') || err.message?.includes('reconnect')) {
+        setNeedsReconnect(true);
+        toast.error('WHOOP token expired — please reconnect');
+      } else {
+        toast.error(err.message || 'Failed to sync WHOOP data');
+      }
     } finally {
       setSyncing(false);
     }
