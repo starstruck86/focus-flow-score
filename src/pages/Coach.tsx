@@ -10,11 +10,12 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   GraduationCap, TrendingUp, Target, Mic, Sparkles, ArrowRight, ArrowUp, ArrowDown, Minus,
   CheckCircle2, AlertTriangle, Lightbulb, BarChart3, Loader2, MessageSquareQuote,
   ShieldCheck, ShieldAlert, Brain, Crosshair, Zap, Clock, Eye, FileText,
-  Upload, Plus, ChevronDown, ChevronUp, Wand2, Swords, Shield,
+  Upload, Plus, ChevronDown, ChevronUp, Wand2, Swords, Shield, BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCallTranscripts, useSaveTranscript } from '@/hooks/useCallTranscripts';
@@ -43,6 +44,10 @@ import {
   MockCallSimulator,
   ObjectionDrillReps,
 } from '@/components/coach';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const GRADE_COLORS: Record<string, string> = {
   'A+': 'text-grade-excellent', A: 'text-grade-excellent', 'A-': 'text-grade-excellent',
