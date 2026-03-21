@@ -451,6 +451,8 @@ export function ResourceManager() {
 
   return (
     <div className="space-y-3">
+      {/* Resource Intelligence Dashboard */}
+      <ResourceIntelligenceDashboard />
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
