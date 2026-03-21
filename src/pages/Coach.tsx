@@ -71,13 +71,20 @@ const MEDDICC_LABELS: Record<string, string> = {
   competition: 'Competition',
 };
 
-function ScoreBlock({ score, label, max = 5 }: { score: number; label: string; max?: number }) {
+function ScoreBlock({ score, label, max = 5, onAsk }: { score: number; label: string; max?: number; onAsk?: () => void }) {
   const pct = (score / max) * 100;
   const color = pct >= 80 ? 'bg-grade-excellent' : pct >= 60 ? 'bg-grade-good' : pct >= 40 ? 'bg-grade-average' : 'bg-grade-failing';
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 group">
       <div className="flex justify-between text-xs">
-        <span className="text-muted-foreground">{label}</span>
+        <span className="text-muted-foreground flex items-center gap-1">
+          {label}
+          {onAsk && (
+            <button onClick={onAsk} className="opacity-0 group-hover:opacity-100 transition-opacity text-primary hover:text-primary/80" title="Ask about this score">
+              <MessageSquareQuote className="h-3 w-3" />
+            </button>
+          )}
+        </span>
         <span className="font-mono font-bold">{score}/{max}</span>
       </div>
       <div className="h-1.5 rounded-full bg-muted overflow-hidden">
