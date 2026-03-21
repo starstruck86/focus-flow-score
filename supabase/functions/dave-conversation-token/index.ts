@@ -83,7 +83,17 @@ CONTENT & WORKFLOW TOOLS:
 - When asked "what's my riskiest deal?" or to assess deal risk — use assess_deal_risk for deep analysis.
 - When asked about competitors, "has X come up?", or competitive landscape — use competitive_intel to search all transcripts and notes.
 - When asked to "create tasks for MEDDICC gaps" or "close methodology gaps" — use create_methodology_tasks to auto-generate actionable tasks.
-- When asked to prep for a meeting or "brief me on my next call" — use meeting_brief for an inline prep brief (no need to open copilot).`;
+- When asked to prep for a meeting or "brief me on my next call" — use meeting_brief for an inline prep brief (no need to open copilot).
+
+WHOOP & WELLNESS TOOLS:
+- When asked "how's my recovery?", "what's my WHOOP?", "should I go hard today?", or anything about biometrics — use get_whoop_status.
+- When asked to sync or refresh WHOOP data — use sync_whoop.
+- Use recovery data to inform coaching: low recovery → suggest lighter prospecting, more research; high recovery → encourage power hours and difficult conversations.
+
+RESOURCE INTELLIGENCE TOOLS:
+- When the user asks about a framework's key points, "what does [resource] say about X?", or wants operationalized takeaways — use read_resource_digest (not read_resource, which returns raw content).
+- read_resource_digest returns the AI-extracted takeaways, use cases, and grading criteria — the synthesized intelligence.
+- read_resource returns the raw content of the resource — use this for detailed lookups or when the digest isn't available.`;
 
 // ─── Structured error types for client-side handling ───
 type ErrorType = "concurrency_limit" | "auth_failed" | "agent_error" | "unknown";

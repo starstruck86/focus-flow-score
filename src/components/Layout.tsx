@@ -1,5 +1,5 @@
 import { NavLink as RouterNavLink, useLocation, useSearchParams } from 'react-router-dom';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { 
@@ -177,6 +177,9 @@ function DaveTapPrompt({ onTap }: { onTap: () => void }) {
   );
 }
 
+// ─── Cross-Tab Dave Guard ───
+const DAVE_CHANNEL_NAME = 'dave-session';
+
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
   const location = useLocation();
@@ -186,11 +189,44 @@ export function Layout({ children }: { children: React.ReactNode }) {
   
   // Dave state
   const [daveOpen, setDaveOpen] = useState(false);
+  const [daveMinimized, setDaveMinimized] = useState(false);
   const [showDaveTapPrompt, setShowDaveTapPrompt] = useState(false);
   const [daveSessionData, setDaveSessionData] = useState<DaveSessionData | null>(null);
   const [daveRetryCount, setDaveRetryCount] = useState(0);
+  const [daveBlockedByTab, setDaveBlockedByTab] = useState(false);
   const { getSession: getDaveSession, invalidateCache: invalidateDaveCache, isFetching: isFetchingDaveSession } = useDaveContext();
+  const daveChannelRef = useRef<BroadcastChannel | null>(null);
   useVoiceReminders();
+
+  // ─── BroadcastChannel cross-tab guard ───
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const channel = new BroadcastChannel(DAVE_CHANNEL_NAME);
+    daveChannelRef.current = channel;
+
+    channel.onmessage = (event) => {
+      if (event.data === 'dave-active') {
+        // Another tab opened Dave
+        if (!daveOpen) {
+          setDaveBlockedByTab(true);
+        }
+      } else if (event.data === 'dave-inactive') {
+        setDaveBlockedByTab(false);
+      }
+    };
+
+    return () => {
+      channel.close();
+      daveChannelRef.current = null;
+    };
+  }, [daveOpen]);
+
+  // Broadcast Dave state changes
+  useEffect(() => {
+    if (!daveChannelRef.current) return;
+    daveChannelRef.current.postMessage(daveOpen ? 'dave-active' : 'dave-inactive');
+  }, [daveOpen]);
+
   // Handle ?dave=1 from Siri Shortcuts
   useEffect(() => {
     if (searchParams.get('dave') === '1') {
@@ -224,10 +260,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const handleOpenDave = useCallback(async () => {
     if (isFetchingDaveSession) return;
+    
+    // Cross-tab guard
+    if (daveBlockedByTab) {
+      toast.error('Dave is active in another tab', {
+        description: 'Close Dave in the other tab first.',
+        duration: 4000,
+      });
+      return;
+    }
+
     setShowDaveTapPrompt(false);
     try {
       const session = await getDaveSession();
       setDaveSessionData(session);
+      setDaveMinimized(false);
       setDaveOpen(true);
     } catch (err: any) {
       console.error('[Dave] Failed to fetch session:', err);
@@ -245,21 +292,26 @@ export function Layout({ children }: { children: React.ReactNode }) {
         toast.error('Could not start Dave', { description: err.message });
       }
     }
-  }, [getDaveSession, isFetchingDaveSession]);
+  }, [getDaveSession, isFetchingDaveSession, daveBlockedByTab]);
 
   const handleCloseDave = useCallback(() => {
     setDaveOpen(false);
+    setDaveMinimized(false);
     setDaveSessionData(null);
+  }, []);
+
+  const handleToggleMinimize = useCallback(() => {
+    setDaveMinimized(prev => !prev);
   }, []);
 
   /** Retry-via-remount: close Dave, fetch fresh session, reopen with new key */
   const handleDaveRetry = useCallback(async () => {
     console.log('[Dave] Retry-via-remount triggered');
     setDaveOpen(false);
+    setDaveMinimized(false);
     setDaveSessionData(null);
     invalidateDaveCache();
     
-    // Small delay to ensure unmount completes
     await new Promise(r => setTimeout(r, 300));
     
     try {
@@ -337,7 +389,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         )}
       </AnimatePresence>
 
-      {/* Dave Conversational AI Overlay — key forces remount with fresh overrides */}
+      {/* Dave Conversational AI — floating panel with minimize support */}
       {daveOpen && daveSessionData && (
         <DaveConversationMode
           key={`${daveSessionData.token}-${daveRetryCount}`}
@@ -345,6 +397,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           onClose={handleCloseDave}
           onRetry={handleDaveRetry}
           sessionData={daveSessionData}
+          minimized={daveMinimized}
+          onMinimize={handleToggleMinimize}
         />
       )}
     </div>

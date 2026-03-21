@@ -414,6 +414,39 @@ export type Database = {
           },
         ]
       }
+      coaching_plans: {
+        Row: {
+          created_at: string | null
+          focus_category: string
+          id: string
+          start_date: string | null
+          status: string | null
+          target_score: number
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          focus_category: string
+          id?: string
+          start_date?: string | null
+          status?: string | null
+          target_score: number
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          focus_category?: string
+          id?: string
+          start_date?: string | null
+          status?: string | null
+          target_score?: number
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       contacts: {
         Row: {
           account_id: string | null
@@ -1932,6 +1965,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      resource_usage_events: {
+        Row: {
+          created_at: string | null
+          event_type: string
+          id: string
+          resource_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          event_type: string
+          id?: string
+          resource_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          event_type?: string
+          id?: string
+          resource_id?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       resource_versions: {
         Row: {

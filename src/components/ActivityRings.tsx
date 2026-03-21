@@ -196,6 +196,21 @@ export function ActivityRings() {
   const { currentDay, initializeToday, updateActivityInputs, updateRawInputs } = useStore();
   const { user } = useAuth();
   const [editing, setEditing] = useState<string | null>(null);
+  const [, forceRender] = useState(0);
+
+  // Listen for dave-metrics-updated to re-sync rings after voice updates
+  useEffect(() => {
+    const handler = () => {
+      initializeToday();
+      forceRender(c => c + 1);
+    };
+    window.addEventListener('dave-metrics-updated', handler);
+    window.addEventListener('dave-data-changed', handler);
+    return () => {
+      window.removeEventListener('dave-metrics-updated', handler);
+      window.removeEventListener('dave-data-changed', handler);
+    };
+  }, [initializeToday]);
 
   // Close popover on outside click
   useEffect(() => {
