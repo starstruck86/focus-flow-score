@@ -458,6 +458,35 @@ export function ContentBuilder() {
         </div>
       )}
 
+      {/* Transcript Intelligence Chips */}
+      {transcriptIntel.length > 0 && (
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1 block flex items-center gap-1">
+            <Brain className="h-3 w-3" /> Call Intelligence ({selectedIntel.length} injected)
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {transcriptIntel.map((chip, i) => (
+              <Badge
+                key={i}
+                variant={selectedIntel.includes(chip.text) ? 'default' : 'outline'}
+                className="cursor-pointer text-[10px]"
+                onClick={() => {
+                  setSelectedIntel(prev =>
+                    prev.includes(chip.text) ? prev.filter(x => x !== chip.text) : [...prev, chip.text]
+                  );
+                  // Inject into instructions
+                  if (!selectedIntel.includes(chip.text)) {
+                    setInstructions(prev => prev ? `${prev}\n• Address: ${chip.text}` : `• Address: ${chip.text}`);
+                  }
+                }}
+              >
+                {chip.label}: {chip.text.slice(0, 40)}{chip.text.length > 40 ? '…' : ''}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Instructions */}
       <div>
         <label className="text-xs font-medium text-muted-foreground mb-1 block">Custom Instructions</label>
