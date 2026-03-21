@@ -1148,10 +1148,22 @@ export default function Coach() {
                   <SideBySideViewer
                     transcriptContent={selectedTranscript.content}
                     grade={selectedGrade}
-                    renderScorecard={() => <CallScorecard grade={selectedGrade} onRegrade={() => gradeTranscript.mutate(selectedTranscriptId!)} />}
+                    renderScorecard={() => (
+                      <CallScorecard
+                        grade={selectedGrade}
+                        onRegrade={() => gradeTranscript.mutate(selectedTranscriptId!)}
+                        transcriptId={selectedTranscriptId!}
+                        transcriptContent={selectedTranscript?.content}
+                      />
+                    )}
                   />
                 ) : (
-                  <CallScorecard grade={selectedGrade} onRegrade={() => gradeTranscript.mutate(selectedTranscriptId!)} />
+                  <CallScorecard
+                    grade={selectedGrade}
+                    onRegrade={() => gradeTranscript.mutate(selectedTranscriptId!)}
+                    transcriptId={selectedTranscriptId!}
+                    transcriptContent={selectedTranscript?.content}
+                  />
                 )}
               </div>
             ) : (
