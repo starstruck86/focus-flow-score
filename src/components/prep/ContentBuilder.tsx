@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Sparkles, FileText, Mail, BarChart3, Presentation,
-  Target, Loader2, Save, Copy, ChevronDown, X, Search, Layout
+  Target, Loader2, Save, Copy, ChevronDown, X, Search, Layout, Brain
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';

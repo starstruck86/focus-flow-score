@@ -2665,11 +2665,10 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
   const logKey = `dave-activity-${today}`;
 
   for (const toolName of DB_WRITE_TOOLS) {
-    if (toolName in tools) {
-      const original = (tools as any)[toolName];
-      (tools as any)[toolName] = async (...args: any[]) => {
+    if (toolName in allTools) {
+      const original = (allTools as any)[toolName];
+      (allTools as any)[toolName] = async (...args: any[]) => {
         const result = await original(...args);
-        // Log activity
         try {
           const existing = JSON.parse(localStorage.getItem(logKey) || '[]');
           existing.push({ tool: toolName, result: typeof result === 'string' ? result.slice(0, 200) : '', ts: Date.now() });
@@ -2680,5 +2679,5 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
     }
   }
 
-  return tools;
+  return allTools;
 }
