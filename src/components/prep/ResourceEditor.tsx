@@ -2,13 +2,15 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import {
   ArrowLeft, Save, Clock, Sparkles, BookOpen, Lightbulb, PanelRight,
-  Building2, Search,
+  Building2, Search, Brain, ChevronDown, ChevronUp, RefreshCw, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUpdateResource, useAllResources, type Resource } from '@/hooks/useResources';
@@ -19,9 +21,100 @@ import { ExportMenu } from './ExportMenu';
 import { AIGenerateDialog } from './AIGenerateDialog';
 import { TemplatePicker } from './TemplatePicker';
 import { SmartSuggestionsPanel } from './SmartSuggestionsPanel';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+
+// ─── DIGEST VIEWER ────────────────────────────────────────────
+function DigestViewer({ resourceId }: { resourceId: string }) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [reOperationalizing, setReOperationalizing] = useState(false);
+
+  const { data: digest } = useQuery({
+    queryKey: ['resource-digest', resourceId],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data } = await supabase
+        .from('resource_digests')
+        .select('*')
+        .eq('resource_id', resourceId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  if (!digest) return null;
+
+  const handleReOperationalize = async () => {
+    setReOperationalizing(true);
+    try {
+      const { error } = await supabase.functions.invoke('operationalize-resource', {
+        body: { resource_id: resourceId },
+      });
+      if (error) throw error;
+      toast.success('Re-operationalized');
+      queryClient.invalidateQueries({ queryKey: ['resource-digest', resourceId] });
+    } catch (err: any) {
+      toast.error(err.message || 'Failed');
+    } finally {
+      setReOperationalizing(false);
+    }
+  };
+
+  const d = digest as any;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="border-b border-border">
+      <CollapsibleTrigger className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/30 transition-colors">
+        <Brain className="h-3 w-3 text-primary" />
+        <span className="font-medium text-primary">Intelligence Digest</span>
+        <Badge variant="outline" className="text-[9px] ml-1">{(d.takeaways || []).length} takeaways</Badge>
+        {open ? <ChevronUp className="h-3 w-3 ml-auto" /> : <ChevronDown className="h-3 w-3 ml-auto" />}
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="px-3 pb-3 space-y-2">
+          {d.summary && (
+            <p className="text-xs text-muted-foreground">{d.summary}</p>
+          )}
+          {(d.takeaways || []).length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase">Key Takeaways</p>
+              {(d.takeaways as string[]).map((t: string, i: number) => (
+                <p key={i} className="text-xs text-muted-foreground">• {t}</p>
+              ))}
+            </div>
+          )}
+          {(d.use_cases || []).length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase">Use Cases</p>
+              <div className="flex flex-wrap gap-1">
+                {(d.use_cases as string[]).map((uc: string, i: number) => (
+                  <Badge key={i} variant="outline" className="text-[9px]">{uc}</Badge>
+                ))}
+              </div>
+            </div>
+          )}
+          {d.grading_criteria && Array.isArray(d.grading_criteria) && (
+            <div>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase">Grading Criteria</p>
+              {(d.grading_criteria as any[]).map((c: any, i: number) => (
+                <p key={i} className="text-xs text-muted-foreground">• <strong>{c.category}:</strong> {c.description}</p>
+              ))}
+            </div>
+          )}
+          <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={handleReOperationalize} disabled={reOperationalizing}>
+            {reOperationalizing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+            Re-operationalize
+          </Button>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 interface ResourceEditorProps {
   resource: Resource;
@@ -253,6 +346,9 @@ export function ResourceEditor({ resource, onBack, onViewVersions }: ResourceEdi
           </Button>
         </div>
       </div>
+
+      {/* Digest Intelligence Section */}
+      <DigestViewer resourceId={resource.id} />
 
       {/* Editor */}
       <div className="flex-1 overflow-auto">

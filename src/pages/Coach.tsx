@@ -10,11 +10,12 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   GraduationCap, TrendingUp, Target, Mic, Sparkles, ArrowRight, ArrowUp, ArrowDown, Minus,
   CheckCircle2, AlertTriangle, Lightbulb, BarChart3, Loader2, MessageSquareQuote,
   ShieldCheck, ShieldAlert, Brain, Crosshair, Zap, Clock, Eye, FileText,
-  Upload, Plus, ChevronDown, ChevronUp, Wand2, Swords, Shield,
+  Upload, Plus, ChevronDown, ChevronUp, Wand2, Swords, Shield, BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCallTranscripts, useSaveTranscript } from '@/hooks/useCallTranscripts';
@@ -43,6 +44,10 @@ import {
   MockCallSimulator,
   ObjectionDrillReps,
 } from '@/components/coach';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const GRADE_COLORS: Record<string, string> = {
   'A+': 'text-grade-excellent', A: 'text-grade-excellent', 'A-': 'text-grade-excellent',
@@ -71,13 +76,20 @@ const MEDDICC_LABELS: Record<string, string> = {
   competition: 'Competition',
 };
 
-function ScoreBlock({ score, label, max = 5 }: { score: number; label: string; max?: number }) {
+function ScoreBlock({ score, label, max = 5, onAsk }: { score: number; label: string; max?: number; onAsk?: () => void }) {
   const pct = (score / max) * 100;
   const color = pct >= 80 ? 'bg-grade-excellent' : pct >= 60 ? 'bg-grade-good' : pct >= 40 ? 'bg-grade-average' : 'bg-grade-failing';
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 group">
       <div className="flex justify-between text-xs">
-        <span className="text-muted-foreground">{label}</span>
+        <span className="text-muted-foreground flex items-center gap-1">
+          {label}
+          {onAsk && (
+            <button onClick={onAsk} className="opacity-0 group-hover:opacity-100 transition-opacity text-primary hover:text-primary/80" title="Ask about this score">
+              <MessageSquareQuote className="h-3 w-3" />
+            </button>
+          )}
+        </span>
         <span className="font-mono font-bold">{score}/{max}</span>
       </div>
       <div className="h-1.5 rounded-full bg-muted overflow-hidden">
@@ -87,14 +99,203 @@ function ScoreBlock({ score, label, max = 5 }: { score: number; label: string; m
   );
 }
 
+// ─── SCORE Q&A DIALOG ────────────────────────────────────────
+function ScoreQADialog({ open, onClose, gradeData, transcriptExcerpt, category }: {
+  open: boolean; onClose: () => void; gradeData: any; transcriptExcerpt?: string; category?: string;
+}) {
+  const [question, setQuestion] = useState('');
+  const [answer, setAnswer] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (open && category) {
+      setQuestion(`Why did I get this score for ${category}? What would elite reps do differently?`);
+    }
+  }, [open, category]);
+
+  const handleAsk = async () => {
+    if (!question.trim()) return;
+    setLoading(true);
+    setAnswer('');
+    try {
+      const { data, error } = await supabase.functions.invoke('explain-score', {
+        body: { gradeData, transcriptExcerpt: transcriptExcerpt?.slice(0, 4000), question, category },
+      });
+      if (error) throw error;
+      setAnswer(data?.explanation || 'No explanation returned.');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to get explanation');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <MessageSquareQuote className="h-4 w-4 text-primary" />
+            Ask About {category ? CATEGORY_LABELS[category]?.label || category : 'This Score'}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <Input
+              value={question}
+              onChange={e => setQuestion(e.target.value)}
+              placeholder="What do you want to understand?"
+              className="text-xs"
+              onKeyDown={e => e.key === 'Enter' && handleAsk()}
+            />
+            <Button size="sm" onClick={handleAsk} disabled={loading || !question.trim()}>
+              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Ask'}
+            </Button>
+          </div>
+          {answer && (
+            <ScrollArea className="max-h-[400px]">
+              <div className="prose prose-sm dark:prose-invert max-w-none text-xs">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{answer}</ReactMarkdown>
+              </div>
+            </ScrollArea>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── STUDY MATERIAL LINKS ─────────────────────────────────────
+function StudyMaterialLinks({ weakCategories }: { weakCategories: string[] }) {
+  const { user } = useAuth();
+  const { data: digests } = useQuery({
+    queryKey: ['resource-digests-for-coaching', user?.id, weakCategories],
+    queryFn: async () => {
+      if (!user || !weakCategories.length) return [];
+      const { data } = await supabase
+        .from('resource_digests')
+        .select('resource_id, use_cases, takeaways, summary')
+        .eq('user_id', user.id);
+      if (!data?.length) return [];
+      // Match use_cases to weak categories
+      const matched = (data as any[]).filter(d =>
+        (d.use_cases || []).some((uc: string) =>
+          weakCategories.some(wc =>
+            uc.toLowerCase().includes(wc.toLowerCase()) ||
+            (CATEGORY_LABELS[wc]?.label || '').toLowerCase().split(' ').some(w => uc.toLowerCase().includes(w))
+          )
+        )
+      );
+      if (!matched.length) return [];
+      // Fetch resource titles
+      const ids = matched.map(m => m.resource_id);
+      const { data: resources } = await supabase
+        .from('resources' as any)
+        .select('id, title')
+        .in('id', ids);
+      return matched.map(m => ({
+        ...m,
+        title: (resources as any[])?.find(r => r.id === m.resource_id)?.title || 'Resource',
+      }));
+    },
+    enabled: !!user && weakCategories.length > 0,
+  });
+
+  if (!digests?.length) return null;
+
+  return (
+    <Card className="border-primary/20 bg-primary/[0.02]">
+      <CardContent className="p-3 space-y-2">
+        <p className="text-xs font-semibold text-primary flex items-center gap-1">
+          <BookOpen className="h-3 w-3" /> Study Material for Weak Areas
+        </p>
+        {digests.slice(0, 3).map((d: any, i: number) => (
+          <div key={i} className="text-xs text-muted-foreground border-l-2 border-primary/30 pl-2">
+            <p className="font-medium text-foreground">{d.title}</p>
+            {d.takeaways?.[0] && <p className="text-[10px]">💡 {d.takeaways[0]}</p>}
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── POST-CALL TASK CREATION ──────────────────────────────────
+function PostCallTaskPrompt({ grade, transcriptId }: { grade: TranscriptGrade; transcriptId: string }) {
+  const { user } = useAuth();
+  const [creating, setCreating] = useState(false);
+  const [created, setCreated] = useState(false);
+
+  const missedOpps = (grade.missed_opportunities as any[]) || [];
+  if (missedOpps.length === 0 || created) return null;
+
+  const handleCreate = async () => {
+    if (!user) return;
+    setCreating(true);
+    try {
+      // Get transcript for account/opp linkage
+      const { data: transcript } = await supabase
+        .from('call_transcripts')
+        .select('account_id, opportunity_id')
+        .eq('id', transcriptId)
+        .single();
+
+      const tasks = missedOpps.slice(0, 5).map(m => ({
+        user_id: user.id,
+        title: `Follow up: ${typeof m === 'string' ? m : m.opportunity || m.example || 'Action item'}`.slice(0, 200),
+        priority: 'P1',
+        status: 'next',
+        workstream: 'pg',
+        category: 'call',
+        linked_account_id: transcript?.account_id || null,
+        linked_opportunity_id: transcript?.opportunity_id || null,
+      }));
+
+      const { error } = await supabase.from('tasks').insert(tasks);
+      if (error) throw error;
+      toast.success(`Created ${tasks.length} follow-up tasks`);
+      setCreated(true);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create tasks');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <Card className="border-grade-average/30 bg-grade-average/5">
+      <CardContent className="p-3 space-y-2">
+        <p className="text-xs font-semibold flex items-center gap-1">
+          <Lightbulb className="h-3 w-3 text-grade-average" /> {missedOpps.length} Missed Opportunities → Follow-up Tasks?
+        </p>
+        <div className="space-y-1">
+          {missedOpps.slice(0, 3).map((m: any, i: number) => (
+            <p key={i} className="text-[11px] text-muted-foreground">• {typeof m === 'string' ? m : m.opportunity}</p>
+          ))}
+        </div>
+        <Button size="sm" variant="outline" onClick={handleCreate} disabled={creating} className="text-xs h-7">
+          {creating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Plus className="h-3 w-3 mr-1" />}
+          Create Follow-up Tasks
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── CALL SCORECARD ──────────────────────────────────────────
-function CallScorecard({ grade, onRegrade }: { grade: TranscriptGrade; onRegrade?: () => void }) {
+function CallScorecard({ grade, onRegrade, transcriptId, transcriptContent }: {
+  grade: TranscriptGrade; onRegrade?: () => void; transcriptId?: string; transcriptContent?: string;
+}) {
   const [showEvidence, setShowEvidence] = useState(false);
+  const [qaOpen, setQaOpen] = useState(false);
+  const [qaCategory, setQaCategory] = useState<string | undefined>();
 
   const categories = Object.entries(CATEGORY_LABELS).map(([key, { label, icon }]) => ({
     key, label, icon,
     score: (grade as any)[`${key}_score`] || 0,
   }));
+
+  const weakCategories = categories.filter(c => c.score < 3).map(c => c.key);
 
   const cotm = grade.cotm_signals || {} as any;
   const meddicc = grade.meddicc_signals || {} as any;
@@ -106,8 +307,22 @@ function CallScorecard({ grade, onRegrade }: { grade: TranscriptGrade; onRegrade
   const meddiccCovered = ['metrics', 'economic_buyer', 'decision_criteria', 'decision_process', 'identify_pain', 'champion', 'competition']
     .filter(k => meddicc[k]).length;
 
+  const handleAskCategory = (category: string) => {
+    setQaCategory(category);
+    setQaOpen(true);
+  };
+
   return (
     <div className="space-y-4">
+      {/* Score Q&A Dialog */}
+      <ScoreQADialog
+        open={qaOpen}
+        onClose={() => setQaOpen(false)}
+        gradeData={grade}
+        transcriptExcerpt={transcriptContent}
+        category={qaCategory}
+      />
+
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="space-y-1 flex-1 min-w-0">
@@ -117,11 +332,16 @@ function CallScorecard({ grade, onRegrade }: { grade: TranscriptGrade; onRegrade
           <span className={cn('text-5xl font-black font-mono', GRADE_COLORS[grade.overall_grade])}>
             {grade.overall_grade}
           </span>
-          {onRegrade && (
-            <Button variant="ghost" size="sm" onClick={onRegrade} className="text-[10px] h-6 gap-1">
-              <Wand2 className="h-3 w-3" /> Re-analyze
+          <div className="flex flex-col items-end gap-1">
+            {onRegrade && (
+              <Button variant="ghost" size="sm" onClick={onRegrade} className="text-[10px] h-6 gap-1">
+                <Wand2 className="h-3 w-3" /> Re-analyze
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={() => { setQaCategory(undefined); setQaOpen(true); }} className="text-[10px] h-6 gap-1">
+              <MessageSquareQuote className="h-3 w-3" /> Ask about grade
             </Button>
-          )}
+          </div>
         </div>
       </div>
 
@@ -182,7 +402,9 @@ function CallScorecard({ grade, onRegrade }: { grade: TranscriptGrade; onRegrade
           <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground">Category Scores</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-3 space-y-2">
-          {categories.map(c => <ScoreBlock key={c.key} score={c.score} label={c.label} />)}
+          {categories.map(c => (
+            <ScoreBlock key={c.key} score={c.score} label={c.label} onAsk={() => handleAskCategory(c.key)} />
+          ))}
         </CardContent>
       </Card>
 
@@ -213,6 +435,12 @@ function CallScorecard({ grade, onRegrade }: { grade: TranscriptGrade; onRegrade
           )}
         </CardContent>
       </Card>
+
+      {/* Post-call task creation prompt */}
+      {transcriptId && <PostCallTaskPrompt grade={grade} transcriptId={transcriptId} />}
+
+      {/* Study material links for weak categories */}
+      {weakCategories.length > 0 && <StudyMaterialLinks weakCategories={weakCategories} />}
 
       {/* Framework coverage */}
       <div className="grid grid-cols-2 gap-3">
@@ -920,10 +1148,22 @@ export default function Coach() {
                   <SideBySideViewer
                     transcriptContent={selectedTranscript.content}
                     grade={selectedGrade}
-                    renderScorecard={() => <CallScorecard grade={selectedGrade} onRegrade={() => gradeTranscript.mutate(selectedTranscriptId!)} />}
+                    renderScorecard={() => (
+                      <CallScorecard
+                        grade={selectedGrade}
+                        onRegrade={() => gradeTranscript.mutate(selectedTranscriptId!)}
+                        transcriptId={selectedTranscriptId!}
+                        transcriptContent={selectedTranscript?.content}
+                      />
+                    )}
                   />
                 ) : (
-                  <CallScorecard grade={selectedGrade} onRegrade={() => gradeTranscript.mutate(selectedTranscriptId!)} />
+                  <CallScorecard
+                    grade={selectedGrade}
+                    onRegrade={() => gradeTranscript.mutate(selectedTranscriptId!)}
+                    transcriptId={selectedTranscriptId!}
+                    transcriptContent={selectedTranscript?.content}
+                  />
                 )}
               </div>
             ) : (

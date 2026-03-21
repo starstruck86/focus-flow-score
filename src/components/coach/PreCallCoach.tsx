@@ -1,12 +1,15 @@
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Target, AlertTriangle, CheckCircle2, Brain, Crosshair, Lightbulb } from 'lucide-react';
+import { Target, AlertTriangle, CheckCircle2, Brain, Crosshair, Lightbulb, BookOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useStore } from '@/store/useStore';
 import { useAllTranscriptGrades, useBehavioralPatterns } from '@/hooks/useTranscriptGrades';
 import { useTranscriptsForAccount } from '@/hooks/useCallTranscripts';
 import { useOpportunityMethodology, type CallGoal } from '@/hooks/useOpportunityMethodology';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { format, parseISO } from 'date-fns';
 
 interface Props {
@@ -16,6 +19,7 @@ interface Props {
 }
 
 export function PreCallCoach({ accountId, opportunityId, callType }: Props) {
+  const { user } = useAuth();
   const accounts = useStore(s => s.accounts);
   const opportunities = useStore(s => s.opportunities);
   const { data: allGrades } = useAllTranscriptGrades();
@@ -46,6 +50,52 @@ export function PreCallCoach({ accountId, opportunityId, callType }: Props) {
     ];
     return fields.filter(f => !(methodology as any)[`${f.key}_confirmed`]);
   }, [methodology]);
+
+  // Pre-call resource recommendations from resource_digests
+  const { data: recommendedResources } = useQuery({
+    queryKey: ['precall-resources', user?.id, accountId, callType],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data: digests } = await supabase
+        .from('resource_digests')
+        .select('resource_id, use_cases, takeaways, summary')
+        .eq('user_id', user.id);
+      if (!digests?.length) return [];
+
+      // Build context terms from call type, account industry, MEDDICC gaps
+      const contextTerms: string[] = [];
+      if (callType) contextTerms.push(callType.toLowerCase());
+      if (account?.industry) contextTerms.push(account.industry.toLowerCase());
+      meddiccGaps.forEach(g => contextTerms.push(g.label.toLowerCase()));
+      if (weakestArea) contextTerms.push(weakestArea.category.replace(/_/g, ' ').toLowerCase());
+
+      if (contextTerms.length === 0) return [];
+
+      // Score digests by use_case relevance
+      const scored = (digests as any[]).map(d => {
+        const useCases = (d.use_cases || []) as string[];
+        const matches = useCases.filter((uc: string) =>
+          contextTerms.some(term => uc.toLowerCase().includes(term) || term.includes(uc.toLowerCase()))
+        ).length;
+        return { ...d, relevance: matches };
+      }).filter(d => d.relevance > 0).sort((a, b) => b.relevance - a.relevance);
+
+      if (!scored.length) return [];
+
+      // Fetch resource titles
+      const ids = scored.slice(0, 3).map(s => s.resource_id);
+      const { data: resources } = await supabase
+        .from('resources' as any)
+        .select('id, title')
+        .in('id', ids);
+
+      return scored.slice(0, 3).map(s => ({
+        title: (resources as any[])?.find(r => r.id === s.resource_id)?.title || 'Resource',
+        takeaway: s.takeaways?.[0] || s.summary?.slice(0, 100) || '',
+      }));
+    },
+    enabled: !!user && (!!accountId || !!callType),
+  });
 
   // Build coaching plan
   const plan = useMemo(() => {
@@ -173,6 +223,21 @@ export function PreCallCoach({ accountId, opportunityId, callType }: Props) {
               </div>
             );
           })
+        )}
+
+        {/* Pre-call resource recommendations */}
+        {(recommendedResources || []).length > 0 && (
+          <div className="pt-2 border-t border-border/50">
+            <p className="text-[10px] font-semibold text-primary uppercase tracking-wider mb-1 flex items-center gap-1">
+              <BookOpen className="h-3 w-3" /> Recommended Reading
+            </p>
+            {(recommendedResources || []).map((r, i) => (
+              <div key={i} className="text-[11px] text-muted-foreground py-0.5">
+                <span className="font-medium text-foreground">📚 {r.title}</span>
+                {r.takeaway && <span className="text-[10px]"> — {r.takeaway}</span>}
+              </div>
+            ))}
+          </div>
         )}
 
         {/* Recent transcript summaries */}

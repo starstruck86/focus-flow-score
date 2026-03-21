@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Sparkles, FileText, Mail, BarChart3, Presentation,
-  Target, Loader2, Save, Copy, ChevronDown, X, Search, Layout
+  Target, Loader2, Save, Copy, ChevronDown, X, Search, Layout, Brain
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -52,6 +52,10 @@ export function ContentBuilder() {
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [resources, setResources] = useState<any[]>([]);
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
+
+  // Transcript intelligence chips
+  const [transcriptIntel, setTranscriptIntel] = useState<{ label: string; text: string }[]>([]);
+  const [selectedIntel, setSelectedIntel] = useState<string[]>([]);
 
   // Elapsed time tracker during generation
   useEffect(() => {
@@ -123,6 +127,38 @@ export function ContentBuilder() {
     window.addEventListener('dave-open-content-builder', handler as any);
     return () => window.removeEventListener('dave-open-content-builder', handler as any);
   }, [accounts]);
+
+  // Fetch transcript intelligence when account changes
+  useEffect(() => {
+    if (!user || !selectedAccount) {
+      setTranscriptIntel([]);
+      return;
+    }
+    const load = async () => {
+      const { data: grades } = await supabase
+        .from('transcript_grades')
+        .select('coaching_issue, replacement_behavior, missed_opportunities, strengths, call_transcripts!inner(account_id)')
+        .eq('user_id', user.id)
+        .eq('call_transcripts.account_id', selectedAccount)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (!grades?.length) return;
+
+      const chips: { label: string; text: string }[] = [];
+      for (const g of grades as any[]) {
+        if (g.coaching_issue) chips.push({ label: '🎯 Issue', text: g.coaching_issue });
+        if (g.replacement_behavior) chips.push({ label: '💡 Fix', text: g.replacement_behavior });
+        const missed = g.missed_opportunities || [];
+        for (const m of missed.slice(0, 2)) {
+          const text = typeof m === 'string' ? m : m.opportunity;
+          if (text) chips.push({ label: '⚠️ Missed', text });
+        }
+      }
+      setTranscriptIntel(chips.slice(0, 8));
+    };
+    load();
+  }, [user, selectedAccount]);
 
   const filteredOpps = opportunities.filter(o => !selectedAccount || o.accountId === selectedAccount);
   const accountName = accounts.find(a => a.id === selectedAccount)?.name || '';
@@ -416,6 +452,35 @@ export function ContentBuilder() {
                 onClick={() => toggleTranscript(t.id)}
               >
                 {t.title || t.call_date}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Transcript Intelligence Chips */}
+      {transcriptIntel.length > 0 && (
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1 block flex items-center gap-1">
+            <Brain className="h-3 w-3" /> Call Intelligence ({selectedIntel.length} injected)
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {transcriptIntel.map((chip, i) => (
+              <Badge
+                key={i}
+                variant={selectedIntel.includes(chip.text) ? 'default' : 'outline'}
+                className="cursor-pointer text-[10px]"
+                onClick={() => {
+                  setSelectedIntel(prev =>
+                    prev.includes(chip.text) ? prev.filter(x => x !== chip.text) : [...prev, chip.text]
+                  );
+                  // Inject into instructions
+                  if (!selectedIntel.includes(chip.text)) {
+                    setInstructions(prev => prev ? `${prev}\n• Address: ${chip.text}` : `• Address: ${chip.text}`);
+                  }
+                }}
+              >
+                {chip.label}: {chip.text.slice(0, 40)}{chip.text.length > 40 ? '…' : ''}
               </Badge>
             ))}
           </div>
