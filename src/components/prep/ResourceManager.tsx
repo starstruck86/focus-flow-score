@@ -36,6 +36,7 @@ import { PodcastImportModal } from './PodcastImportModal';
 import { WebpageImportModal } from './WebpageImportModal';
 import { useResourceDuplicates } from '@/hooks/useResourceDuplicates';
 import { useConsolidateFolders } from '@/hooks/useConsolidateFolders';
+import { ResourceIntelligenceDashboard } from './ResourceIntelligenceDashboard';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
