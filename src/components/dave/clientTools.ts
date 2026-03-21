@@ -89,7 +89,7 @@ function parseTime(input: string): string | null {
 }
 
 export function createClientTools(navigate: NavigateFunction, askCopilot: AskCopilot) {
-  return {
+  const allTools: Record<string, any> = {
     navigate: (params: { path: string }) => {
       navigate(params.path);
       return `Navigated to ${params.path}`;
