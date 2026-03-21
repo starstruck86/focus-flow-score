@@ -254,6 +254,9 @@ export function ResourceEditor({ resource, onBack, onViewVersions }: ResourceEdi
         </div>
       </div>
 
+      {/* Digest Intelligence Section */}
+      <DigestViewer resourceId={resource.id} />
+
       {/* Editor */}
       <div className="flex-1 overflow-auto">
         <RichTextEditor
