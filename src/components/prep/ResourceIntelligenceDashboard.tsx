@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Brain, Search, AlertTriangle, CheckCircle, Loader2, Zap, BookOpen, BarChart3 } from 'lucide-react';
+import { Brain, Search, AlertTriangle, CheckCircle, Loader2, Zap, BookOpen, BarChart3, Clock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +29,12 @@ interface LibraryStats {
   enriched: number;
   operationalized: number;
   placeholder: number;
+  shallow: number;
+  stale: number;
 }
+
+const STALE_DAYS = 30;
+const SHALLOW_THRESHOLD = 5000;
 
 export function ResourceIntelligenceDashboard() {
   const { user } = useAuth();
@@ -40,6 +45,7 @@ export function ResourceIntelligenceDashboard() {
   const [loading, setLoading] = useState(true);
   const [findingGaps, setFindingGaps] = useState(false);
   const [bulkOperationalizing, setBulkOperationalizing] = useState(false);
+  const [reenrichingShallow, setReenrichingShallow] = useState(false);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -51,25 +57,29 @@ export function ResourceIntelligenceDashboard() {
     setLoading(true);
 
     try {
-      // Fetch resources and digests in parallel
       const [resourcesRes, digestsRes] = await Promise.all([
-        supabase.from('resources').select('id, title, content_status').eq('user_id', user.id),
+        supabase.from('resources').select('id, title, content_status, enriched_at, content_length').eq('user_id', user.id),
         supabase.from('resource_digests').select('resource_id, use_cases, takeaways').eq('user_id', user.id),
       ]);
 
       const resources = (resourcesRes.data || []) as any[];
       const digests = (digestsRes.data || []) as any[];
-      const digestResourceIds = new Set(digests.map(d => d.resource_id));
 
-      // Calculate stats
       const enriched = resources.filter(r => r.content_status === 'enriched').length;
       const placeholder = resources.filter(r => r.content_status === 'placeholder').length;
+
+      const now = Date.now();
+      const staleThreshold = STALE_DAYS * 86400000;
+      const shallow = resources.filter(r => r.content_status === 'enriched' && (r.content_length || 0) < SHALLOW_THRESHOLD).length;
+      const stale = resources.filter(r => r.content_status === 'enriched' && r.enriched_at && (now - new Date(r.enriched_at).getTime()) > staleThreshold).length;
 
       setStats({
         total: resources.length,
         enriched,
         operationalized: digests.length,
         placeholder,
+        shallow,
+        stale,
       });
 
       // Build topic clusters from use_cases
@@ -143,7 +153,6 @@ export function ResourceIntelligenceDashboard() {
     setBulkOperationalizing(true);
 
     try {
-      // Find resources without digests
       const { data: resources } = await supabase
         .from('resources')
         .select('id, title')
@@ -183,6 +192,40 @@ export function ResourceIntelligenceDashboard() {
       toast.error('Bulk operationalize failed', { description: err.message });
     } finally {
       setBulkOperationalizing(false);
+    }
+  }, [user?.id, loadStats]);
+
+  const handleReenrichShallow = useCallback(async () => {
+    if (!user?.id) return;
+    setReenrichingShallow(true);
+    try {
+      const { data: shallowResources } = await supabase
+        .from('resources')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('content_status', 'enriched')
+        .lt('content_length', SHALLOW_THRESHOLD)
+        .not('file_url', 'is', null)
+        .limit(20);
+
+      if (!shallowResources?.length) {
+        toast.info('No shallow resources to re-enrich');
+        return;
+      }
+
+      const ids = shallowResources.map(r => r.id);
+      const { data, error } = await supabase.functions.invoke('enrich-resource-content', {
+        body: { resource_ids: ids, force: true },
+      });
+      if (error) throw error;
+      const results = data?.results || [];
+      const enriched = results.filter((r: any) => r.status === 'enriched').length;
+      toast.success(`Re-enriched ${enriched}/${results.length} shallow resources`);
+      loadStats();
+    } catch (err: any) {
+      toast.error('Re-enrich failed', { description: err.message });
+    } finally {
+      setReenrichingShallow(false);
     }
   }, [user?.id, loadStats]);
 
@@ -260,6 +303,34 @@ export function ResourceIntelligenceDashboard() {
           </div>
         </div>
 
+        {/* Shallow / Stale alerts */}
+        {(stats.shallow > 0 || stats.stale > 0) && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {stats.shallow > 0 && (
+              <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-500 gap-1">
+                <AlertTriangle className="h-2.5 w-2.5" /> {stats.shallow} shallow (&lt;5K chars)
+              </Badge>
+            )}
+            {stats.stale > 0 && (
+              <Badge variant="outline" className="text-[10px] border-muted-foreground/50 text-muted-foreground gap-1">
+                <Clock className="h-2.5 w-2.5" /> {stats.stale} stale (&gt;30d)
+              </Badge>
+            )}
+            {stats.shallow > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-[10px] h-6 px-2"
+                onClick={handleReenrichShallow}
+                disabled={reenrichingShallow}
+              >
+                {reenrichingShallow ? <Loader2 className="h-2.5 w-2.5 animate-spin mr-1" /> : <Zap className="h-2.5 w-2.5 mr-1" />}
+                Re-enrich Shallow
+              </Button>
+            )}
+          </div>
+        )}
+
         {/* Topic coverage map */}
         {topics.length > 0 && (
           <div>
@@ -282,7 +353,6 @@ export function ResourceIntelligenceDashboard() {
                   {t.topic} ({t.count})
                 </Badge>
               ))}
-              {/* Show missing topics */}
               {['Discovery', 'Negotiation', 'Objection Handling', 'MEDDICC', 'Closing', 'Prospecting']
                 .filter(t => !topics.find(tc => tc.topic === t))
                 .map(t => (

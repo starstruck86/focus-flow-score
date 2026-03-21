@@ -199,6 +199,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const daveChannelRef = useRef<BroadcastChannel | null>(null);
   useVoiceReminders();
 
+  // Wake word — "Hey Dave"
+  const wakeWordEnabled = typeof window !== 'undefined' && localStorage.getItem('wake-word-enabled') === 'true';
+  useWakeWord({ onWake: () => { if (!daveOpen) handleOpenDave(); }, enabled: wakeWordEnabled && !daveOpen });
+
   // ─── BroadcastChannel cross-tab guard ───
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;
