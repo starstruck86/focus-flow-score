@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { format, parseISO, startOfWeek, addWeeks, subWeeks } from 'date-fns';
 import { ChevronLeft, ChevronRight, BookOpen } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -10,8 +10,25 @@ import { useJournalEntry } from '@/hooks/useDailyJournal';
 import { DailyScorecardModal } from './DailyScorecardModal';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { useQueryClient } from '@tanstack/react-query';
 
 export function JournalDashboardCard() {
+  const queryClient = useQueryClient();
+
+  // Listen for dave-metrics-updated to invalidate journal cache
+  useEffect(() => {
+    const handler = () => {
+      queryClient.invalidateQueries({ queryKey: ['journal-week'] });
+      queryClient.invalidateQueries({ queryKey: ['journal-entry'] });
+    };
+    window.addEventListener('dave-metrics-updated', handler);
+    window.addEventListener('dave-data-changed', handler);
+    return () => {
+      window.removeEventListener('dave-metrics-updated', handler);
+      window.removeEventListener('dave-data-changed', handler);
+    };
+  }, [queryClient]);
+
   const today = format(new Date(), 'yyyy-MM-dd');
   const [selectedDate, setSelectedDate] = useState(today);
   const [weekAnchor, setWeekAnchor] = useState(new Date());

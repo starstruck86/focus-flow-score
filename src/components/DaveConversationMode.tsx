@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import type { Json } from '@/integrations/supabase/types';
 import { useConversation } from '@elevenlabs/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Mic, MicOff, Volume2, MessageSquare, Loader2 } from 'lucide-react';
+import { X, Mic, MicOff, Volume2, MessageSquare, Loader2, Minimize2, Maximize2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type DaveSessionData } from '@/hooks/useDaveContext';
 import { useDaveConversation } from '@/hooks/useDaveConversation';
@@ -17,8 +17,10 @@ import { classifyMicrophoneAccessError, releaseMicrophoneStream, requestMicropho
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onRetry: () => void; // Layout handles retry-via-remount
+  onRetry: () => void;
   sessionData: DaveSessionData;
+  minimized?: boolean;
+  onMinimize?: () => void;
 }
 
 const DISMISSAL_PHRASES = [
@@ -29,9 +31,6 @@ const DISMISSAL_PHRASES = [
 const GREETING_WARN_MS = 8000;
 const GREETING_RETRY_MS = 12000;
 
-// ─── Session Contract ───
-// These assertions must pass before we attempt a WebRTC handshake.
-// If they fail, Dave would connect as a generic blank agent — useless.
 function assertSessionContract(session: DaveSessionData): string | null {
   if (!session.token || session.token.length < 10) {
     return 'No valid token — token fetch may have failed.';
@@ -45,10 +44,10 @@ function assertSessionContract(session: DaveSessionData): string | null {
   if (!session.firstMessage || session.firstMessage.length < 10) {
     return `firstMessage missing or too short ("${session.firstMessage || ''}"). Dave won't greet you.`;
   }
-  return null; // all good
+  return null;
 }
 
-export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: Props) {
+export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, minimized = false, onMinimize }: Props) {
   const navigate = useNavigate();
   const { ask: askCopilot } = useCopilot();
   const { addUserMessage, addDaveResponse } = useDaveConversation();
@@ -69,14 +68,12 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
   const lastMessageAtRef = useRef<number | null>(null);
   const errorHistoryRef = useRef<string[]>([]);
 
-  // Diagnostics state
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const diagTapCountRef = useRef(0);
   const diagTapTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const [healthCheck, setHealthCheck] = useState<{ apiKey: boolean; agentId: boolean; tokenOk: boolean; overridesEnabled?: boolean | null } | null>(null);
   const [greetingStatus, setGreetingStatus] = useState<'waiting' | 'received' | 'timeout' | 'retrying'>('waiting');
 
-  // Refs for stale closure fixes
   const isOpenRef = useRef(isOpen);
   const transcriptRef = useRef(transcript);
   const connectedAtRef = useRef<number>(0);
@@ -104,7 +101,6 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
     [navigate, askCopilot],
   );
 
-  // Triple-tap status text to toggle diagnostics
   const handleStatusTap = useCallback(() => {
     diagTapCountRef.current++;
     if (diagTapTimerRef.current) clearTimeout(diagTapTimerRef.current);
@@ -116,7 +112,6 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
     }
   }, []);
 
-  // Run health check on first diagnostics open
   useEffect(() => {
     if (!showDiagnostics || healthCheck) return;
     supabase.functions.invoke('dave-health-check').then(({ data }) => {
@@ -131,9 +126,6 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
     }).catch(() => {});
   }, [showDiagnostics, healthCheck]);
 
-  // ─── useConversation — overrides baked at mount time ───
-  // This is the ONLY place overrides are set. On retry, Layout remounts
-  // this component with fresh sessionData, guaranteeing fresh overrides.
   const conversation = useConversation({
     clientTools,
     overrides: {
@@ -154,7 +146,6 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
       connectedAtRef.current = Date.now();
       setGreetingStatus('waiting');
 
-      // Greeting watchdog: warn at 8s
       if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
       if (greetingRetryRef.current) clearTimeout(greetingRetryRef.current);
 
@@ -169,13 +160,12 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
         }
       }, GREETING_WARN_MS);
 
-      // At 12s, trigger retry-via-remount (Layout handles this)
       greetingRetryRef.current = setTimeout(() => {
         if (!messageReceivedRef.current && isOpenRef.current) {
           logStatus('🔄 Greeting timeout — requesting retry-via-remount');
           setGreetingStatus('retrying');
           try { conversation.endSession(); } catch (_) {}
-          onRetry(); // Layout will close, fetch fresh session, remount
+          onRetry();
         }
       }, GREETING_RETRY_MS);
     },
@@ -230,12 +220,10 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
     },
   } as any);
 
-  // Auto-scroll transcript
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [transcript]);
 
-  // Volume-reactive orb animation
   useEffect(() => {
     if (conversation.status !== 'connected') return;
     const animate = () => {
@@ -257,7 +245,6 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
     setGreetingStatus('waiting');
     setTranscript([]);
 
-    // ─── CONTRACT ASSERTION ───
     const contractError = assertSessionContract(sessionData);
     if (contractError) {
       logStatus(`🚫 CONTRACT FAIL: ${contractError}`);
@@ -339,7 +326,6 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
     onClose();
   }, [conversation, onClose]);
 
-  // Detect desktop to auto-start without tap
   useEffect(() => {
     const isDesktop = navigator.maxTouchPoints === 0;
     if (isDesktop && !startingRef.current) {
@@ -349,7 +335,6 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
@@ -362,7 +347,6 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Diagnostics data — now includes identity checks
   const hasInstructions = (sessionData.context || '').includes('DAVE');
   const diagnosticData: DiagnosticData = {
     connectionStatus: conversation.status,
@@ -423,109 +407,125 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData }: 
     <MicOff className="h-5 w-5" />
   );
 
+  // ─── MINIMIZED ORB ───
+  if (minimized) {
+    return (
+      <motion.button
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0, opacity: 0 }}
+        onClick={onMinimize}
+        className={cn(
+          'fixed bottom-28 right-4 z-50 w-14 h-14 rounded-full flex items-center justify-center',
+          'border border-border/50 backdrop-blur-xl',
+          isConnected ? 'bg-emerald-500/20' : 'bg-amber-500/20',
+          isConnected && 'shadow-[0_0_24px_8px_rgba(16,185,129,0.25)]',
+        )}
+      >
+        <div
+          ref={orbRef}
+          className={cn(
+            'w-10 h-10 rounded-full transition-colors duration-700',
+            orbColor,
+          )}
+          style={{ transition: 'transform 0.05s linear, background-color 0.7s' }}
+        />
+        {isSpeaking && (
+          <motion.div
+            className="absolute inset-0 rounded-full border-2 border-blue-400/50"
+            animate={{ scale: [1, 1.3, 1] }}
+            transition={{ duration: 1.5, repeat: Infinity }}
+          />
+        )}
+      </motion.button>
+    );
+  }
+
+  // ─── EXPANDED FLOATING PANEL ───
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center"
+        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 20, scale: 0.95 }}
+        className="fixed bottom-28 right-4 z-50 w-80 rounded-2xl border border-border/60 bg-card/95 backdrop-blur-xl shadow-2xl flex flex-col overflow-hidden"
+        style={{ maxHeight: '420px' }}
       >
-        <motion.button
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          onClick={endConversation}
-          className="absolute right-4 z-10 h-12 w-12 rounded-full bg-white/10 flex items-center justify-center text-white/80 hover:bg-white/20 transition-colors"
-          style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
-        >
-          <X className="h-6 w-6" />
-        </motion.button>
+        {/* Header */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-border/40">
+          <div className="flex items-center gap-2">
+            <div className={cn(
+              'w-2.5 h-2.5 rounded-full',
+              isConnected ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]' : 'bg-amber-500',
+            )} />
+            <span className="text-xs font-display font-bold text-foreground">Dave</span>
+            <span className="text-[10px] text-muted-foreground">
+              {isConnecting ? 'connecting...' : isConnected ? (isSpeaking ? 'speaking' : vadActive ? 'hearing you' : 'listening') : 'offline'}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            {onMinimize && (
+              <button onClick={onMinimize} className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
+                <Minimize2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+            <button onClick={endConversation} className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
 
-        <button
-          onClick={() => setShowTranscript(!showTranscript)}
-          className="absolute left-4 z-10 h-10 w-10 rounded-full bg-white/10 flex items-center justify-center text-white/60 hover:bg-white/20"
-          style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
-        >
-          <MessageSquare className="h-4 w-4" />
-        </button>
-
-        <DaveDiagnosticsPanel visible={showDiagnostics} data={diagnosticData} />
-
-        <div className="flex-1 flex items-center justify-center w-full">
+        {/* Orb area */}
+        <div className="flex items-center justify-center py-6 relative">
           {needsTap && !isConnecting && !isConnected ? (
             <button
-              onClick={() => {
-                setNeedsTap(false);
-                startConversation();
-              }}
-              className="flex flex-col items-center gap-4"
+              onClick={() => { setNeedsTap(false); startConversation(); }}
+              className="flex flex-col items-center gap-2"
             >
-              <div
-                className={cn(
-                  'w-40 h-40 rounded-full transition-colors duration-700',
-                  'bg-emerald-500/30',
-                  'shadow-[0_0_60px_20px_rgba(16,185,129,0.3)]',
-                )}
-              />
-              <span className="text-white/60 text-sm">Tap to talk</span>
+              <div className={cn('w-20 h-20 rounded-full bg-emerald-500/30 shadow-[0_0_40px_12px_rgba(16,185,129,0.2)]')} />
+              <span className="text-muted-foreground text-xs">Tap to talk</span>
             </button>
           ) : (
             <div
-              ref={orbRef}
-              className={cn(
-                'w-40 h-40 rounded-full transition-colors duration-700',
-                orbColor,
-                orbGlow,
-              )}
+              ref={!minimized ? orbRef : undefined}
+              className={cn('w-20 h-20 rounded-full transition-colors duration-700', orbColor, orbGlow)}
               style={{ transition: 'transform 0.05s linear, background-color 0.7s, box-shadow 0.7s' }}
             />
           )}
         </div>
 
-        <div className="flex flex-col items-center gap-3 pb-8" style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}>
+        {/* Status bar */}
+        <div className="flex items-center justify-center gap-2 px-3 pb-2">
           <button
             onClick={handleStatusTap}
-            className="flex items-center gap-2 text-white/70 text-sm bg-transparent border-none cursor-pointer"
+            className="flex items-center gap-1.5 text-muted-foreground text-xs"
           >
             {statusIcon}
             <span>{statusText}</span>
           </button>
-
           {error && !isConnecting && (
-            <button
-              onClick={onRetry}
-              className="px-4 py-2 bg-white/10 rounded-full text-white/80 text-sm hover:bg-white/20"
-            >
-              Tap to retry
+            <button onClick={onRetry} className="text-xs text-primary hover:underline">
+              Retry
             </button>
           )}
         </div>
 
-        <AnimatePresence>
-          {showTranscript && (
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 25 }}
-              className="absolute bottom-0 left-0 right-0 max-h-[50vh] bg-black/90 backdrop-blur border-t border-white/10 rounded-t-2xl overflow-hidden"
-            >
-              <div className="p-4 overflow-y-auto max-h-[calc(50vh-2rem)]">
-                <p className="text-white/40 text-xs mb-3 uppercase tracking-wider">Conversation</p>
-                {transcript.length === 0 && (
-                  <p className="text-white/30 text-sm italic">Waiting for conversation...</p>
-                )}
-                {transcript.map((msg, i) => (
-                  <div key={i} className={cn('mb-2 text-sm', msg.role === 'user' ? 'text-emerald-400' : 'text-blue-300')}>
-                    <span className="text-white/40 text-xs mr-1">{msg.role === 'user' ? 'You' : 'Dave'}:</span>
-                    {msg.text}
-                  </div>
-                ))}
-                <div ref={transcriptEndRef} />
+        {/* Transcript */}
+        <div className="flex-1 min-h-0 border-t border-border/30 overflow-y-auto px-3 py-2 max-h-[180px]">
+          {transcript.length === 0 ? (
+            <p className="text-muted-foreground text-xs italic text-center py-4">Waiting for conversation...</p>
+          ) : (
+            transcript.map((msg, i) => (
+              <div key={i} className={cn('mb-1.5 text-xs', msg.role === 'user' ? 'text-emerald-400' : 'text-blue-300')}>
+                <span className="text-muted-foreground text-[10px] mr-1">{msg.role === 'user' ? 'You' : 'Dave'}:</span>
+                {msg.text}
               </div>
-            </motion.div>
+            ))
           )}
-        </AnimatePresence>
+          <div ref={transcriptEndRef} />
+        </div>
+
+        <DaveDiagnosticsPanel visible={showDiagnostics} data={diagnosticData} />
       </motion.div>
     </AnimatePresence>
   );
