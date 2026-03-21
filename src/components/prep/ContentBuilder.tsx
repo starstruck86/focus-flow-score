@@ -128,6 +128,38 @@ export function ContentBuilder() {
     return () => window.removeEventListener('dave-open-content-builder', handler as any);
   }, [accounts]);
 
+  // Fetch transcript intelligence when account changes
+  useEffect(() => {
+    if (!user || !selectedAccount) {
+      setTranscriptIntel([]);
+      return;
+    }
+    const load = async () => {
+      const { data: grades } = await supabase
+        .from('transcript_grades')
+        .select('coaching_issue, replacement_behavior, missed_opportunities, strengths, call_transcripts!inner(account_id)')
+        .eq('user_id', user.id)
+        .eq('call_transcripts.account_id', selectedAccount)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (!grades?.length) return;
+
+      const chips: { label: string; text: string }[] = [];
+      for (const g of grades as any[]) {
+        if (g.coaching_issue) chips.push({ label: '🎯 Issue', text: g.coaching_issue });
+        if (g.replacement_behavior) chips.push({ label: '💡 Fix', text: g.replacement_behavior });
+        const missed = g.missed_opportunities || [];
+        for (const m of missed.slice(0, 2)) {
+          const text = typeof m === 'string' ? m : m.opportunity;
+          if (text) chips.push({ label: '⚠️ Missed', text });
+        }
+      }
+      setTranscriptIntel(chips.slice(0, 8));
+    };
+    load();
+  }, [user, selectedAccount]);
+
   const filteredOpps = opportunities.filter(o => !selectedAccount || o.accountId === selectedAccount);
   const accountName = accounts.find(a => a.id === selectedAccount)?.name || '';
 
