@@ -229,7 +229,13 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error('whoop-sync error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    const msg = error.message || 'Unknown error';
+    if (msg.includes('Token refresh failed') || msg.includes('reconnect')) {
+      return new Response(JSON.stringify({ success: false, needsReconnect: true, error: msg }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({ error: msg }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

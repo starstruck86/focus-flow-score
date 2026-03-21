@@ -2038,10 +2038,12 @@ export type Database = {
         Row: {
           account_id: string | null
           content: string | null
+          content_length: number | null
           content_status: string
           created_at: string
           current_version: number | null
           description: string | null
+          enriched_at: string | null
           file_url: string | null
           folder_id: string | null
           id: string
@@ -2060,10 +2062,12 @@ export type Database = {
         Insert: {
           account_id?: string | null
           content?: string | null
+          content_length?: number | null
           content_status?: string
           created_at?: string
           current_version?: number | null
           description?: string | null
+          enriched_at?: string | null
           file_url?: string | null
           folder_id?: string | null
           id?: string
@@ -2082,10 +2086,12 @@ export type Database = {
         Update: {
           account_id?: string | null
           content?: string | null
+          content_length?: number | null
           content_status?: string
           created_at?: string
           current_version?: number | null
           description?: string | null
+          enriched_at?: string | null
           file_url?: string | null
           folder_id?: string | null
           id?: string

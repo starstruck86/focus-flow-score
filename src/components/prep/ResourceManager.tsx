@@ -124,6 +124,8 @@ export function ResourceManager() {
   const [battlecardLoading, setBattlecardLoading] = useState(false);
   const [battlecardProgress, setBattlecardProgress] = useState('');
   const [bulkEnriching, setBulkEnriching] = useState(false);
+  const [selectedResourceIds, setSelectedResourceIds] = useState<Set<string>>(new Set());
+  const [bulkReenriching, setBulkReenriching] = useState(false);
 
   // AI Generate / Transform states
   const [showAIGenerate, setShowAIGenerate] = useState(false);
@@ -713,12 +715,38 @@ export function ResourceManager() {
             const Icon = RESOURCE_TYPE_ICONS[resource.resource_type] || FileText;
             const hasFile = !!resource.file_url;
             const isExternal = resource.file_url?.startsWith('http');
+            const resAny = resource as any;
+            const enrichedAt = resAny.enriched_at ? new Date(resAny.enriched_at) : null;
+            const contentLen = resAny.content_length as number | null;
+            const isShallow = isExternal && resAny.content_status === 'enriched' && (contentLen || 0) < 5000;
+            const isSelected = selectedResourceIds.has(resource.id);
+
+            const formatChars = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : `${n}`;
+            const formatAge = (d: Date) => {
+              const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+              if (days === 0) return 'today';
+              if (days === 1) return '1d ago';
+              return `${days}d ago`;
+            };
+
             return (
               <div
                 key={resource.id}
-                className="group flex items-center gap-3 p-3 rounded-lg border border-border/50 bg-card/50 hover:bg-card hover:border-primary/30 cursor-pointer transition-colors"
+                className={cn(
+                  "group flex items-center gap-3 p-3 rounded-lg border bg-card/50 hover:bg-card cursor-pointer transition-colors",
+                  isSelected ? "border-primary/50 bg-primary/5" : "border-border/50 hover:border-primary/30"
+                )}
                 onClick={() => handleResourceClick(resource)}
               >
+                {/* Selection checkbox */}
+                {(selectedResourceIds.size > 0 || isExternal) && (
+                  <div
+                    className={cn("shrink-0", selectedResourceIds.size === 0 && "opacity-0 group-hover:opacity-100 transition-opacity")}
+                    onClick={e => { e.stopPropagation(); setSelectedResourceIds(prev => { const next = new Set(prev); if (next.has(resource.id)) next.delete(resource.id); else next.add(resource.id); return next; }); }}
+                  >
+                    <input type="checkbox" checked={isSelected} readOnly className="rounded border-border cursor-pointer" />
+                  </div>
+                )}
                 <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -748,9 +776,10 @@ export function ResourceManager() {
                     {resource.template_category && <Badge variant="outline" className="text-[10px] shrink-0">{resource.template_category}</Badge>}
                     {hasFile && !isExternal && <Upload className="h-3 w-3 text-muted-foreground shrink-0" />}
                     {isExternal && <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />}
-                    {isExternal && (resource as any).content_status === 'enriched' && <span className="shrink-0" aria-label="Content enriched"><Check className="h-3 w-3 text-primary" /></span>}
-                    {isExternal && (resource as any).content_status === 'enriching' && <span className="shrink-0" aria-label="Enriching"><Loader2 className="h-3 w-3 text-primary animate-spin" /></span>}
-                    {isExternal && (resource as any).content_status === 'placeholder' && <span className="shrink-0" aria-label="Content not scraped"><AlertTriangle className="h-3 w-3 text-warning" /></span>}
+                    {isExternal && resAny.content_status === 'enriched' && !isShallow && <span className="shrink-0" aria-label="Content enriched"><Check className="h-3 w-3 text-primary" /></span>}
+                    {isExternal && resAny.content_status === 'enriching' && <span className="shrink-0" aria-label="Enriching"><Loader2 className="h-3 w-3 text-primary animate-spin" /></span>}
+                    {isExternal && resAny.content_status === 'placeholder' && <span className="shrink-0" aria-label="Content not scraped"><AlertTriangle className="h-3 w-3 text-warning" /></span>}
+                    {isShallow && <span className="shrink-0" aria-label="Shallow content"><AlertTriangle className="h-3 w-3 text-amber-500" /></span>}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-[10px] text-muted-foreground capitalize">{resource.resource_type}</span>
@@ -758,6 +787,12 @@ export function ResourceManager() {
                     <span className="text-[10px] text-muted-foreground">
                       {new Date(resource.updated_at).toLocaleDateString()}
                     </span>
+                    {/* Enrichment metadata */}
+                    {isExternal && enrichedAt && (
+                      <span className={cn("text-[10px]", isShallow ? "text-amber-500" : "text-muted-foreground")}>
+                        Enriched {formatAge(enrichedAt)}{contentLen ? ` · ${formatChars(contentLen)} chars` : ''}{isShallow ? ' ⚠️ shallow' : ''}
+                      </span>
+                    )}
                     {resource.tags && resource.tags.length > 0 && (
                       <div className="flex items-center gap-1 ml-1">
                         {resource.tags.slice(0, 3).map(t => (
@@ -809,20 +844,21 @@ export function ResourceManager() {
                       }}>
                         <Sparkles className="h-3.5 w-3.5 mr-2" /> Operationalize
                       </DropdownMenuItem>
-                      {isExternal && (resource as any).content_status === 'placeholder' && (
+                      {isExternal && (
                         <DropdownMenuItem onClick={async (e) => {
                           e.stopPropagation();
-                          toast.info('Enriching content...');
+                          const isReenrich = resAny.content_status === 'enriched';
+                          toast.info(isReenrich ? 'Re-enriching content...' : 'Enriching content...');
                           try {
-                            await supabase.functions.invoke('enrich-resource-content', {
-                              body: { resource_id: resource.id },
+                            const { data } = await supabase.functions.invoke('enrich-resource-content', {
+                              body: { resource_id: resource.id, force: true },
                             });
-                            toast.success('Content enriched');
+                            toast.success(`Content ${isReenrich ? 're-' : ''}enriched${data?.chars ? ` (${(data.chars / 1000).toFixed(1)}K chars)` : ''}`);
                           } catch {
                             toast.error('Enrichment failed');
                           }
                         }}>
-                          <RefreshCw className="h-3.5 w-3.5 mr-2" /> Enrich Content
+                          <RefreshCw className="h-3.5 w-3.5 mr-2" /> {resAny.content_status === 'enriched' ? 'Re-enrich' : 'Enrich Content'}
                         </DropdownMenuItem>
                       )}
                       <DropdownMenuItem onClick={(e) => {
@@ -1062,6 +1098,42 @@ export function ResourceManager() {
         sourceResourceId={generateSourceId}
         initialOutputType={generateInitialType}
       />
+
+      {/* Bulk selection bar */}
+      {selectedResourceIds.size > 0 && (
+        <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-card border border-border rounded-xl px-4 py-2.5 shadow-lg">
+          <span className="text-sm font-medium">{selectedResourceIds.size} selected</span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1"
+            disabled={bulkReenriching}
+            onClick={async () => {
+              setBulkReenriching(true);
+              try {
+                const { data, error } = await supabase.functions.invoke('enrich-resource-content', {
+                  body: { resource_ids: Array.from(selectedResourceIds), force: true },
+                });
+                if (error) throw error;
+                const results = data?.results || [];
+                const enriched = results.filter((r: any) => r.status === 'enriched').length;
+                toast.success(`Re-enriched ${enriched}/${results.length} resources`);
+                setSelectedResourceIds(new Set());
+              } catch (e: any) {
+                toast.error(e.message || 'Bulk re-enrich failed');
+              } finally {
+                setBulkReenriching(false);
+              }
+            }}
+          >
+            {bulkReenriching ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+            Re-enrich Selected
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSelectedResourceIds(new Set())}>
+            <X className="h-3 w-3 mr-1" /> Clear
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

@@ -32,6 +32,7 @@ export function WhoopIntegration() {
   const [connecting, setConnecting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [needsReconnect, setNeedsReconnect] = useState(false);
 
   // Handle OAuth callback result
   useEffect(() => {
@@ -103,12 +104,23 @@ export function WhoopIntegration() {
         body: { action: 'sync' },
       });
       if (response.error) throw new Error(response.error.message);
+      if (response.data?.needsReconnect) {
+        setNeedsReconnect(true);
+        toast.error('WHOOP token expired — please reconnect');
+        return;
+      }
       const { synced } = response.data;
+      setNeedsReconnect(false);
       toast.success(`Synced ${synced} day(s) of WHOOP data`);
       await loadData();
     } catch (err: any) {
       console.error('Sync error:', err);
-      toast.error(err.message || 'Failed to sync WHOOP data');
+      if (err.message?.includes('Token refresh failed') || err.message?.includes('reconnect')) {
+        setNeedsReconnect(true);
+        toast.error('WHOOP token expired — please reconnect');
+      } else {
+        toast.error(err.message || 'Failed to sync WHOOP data');
+      }
     } finally {
       setSyncing(false);
     }
@@ -217,10 +229,16 @@ export function WhoopIntegration() {
                 Last sync: {format(parseISO(connection.updated_at), 'MMM d, h:mm a')}
               </span>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={syncData} disabled={syncing} className="gap-1.5">
-                  {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                  Sync Now
-                </Button>
+                {needsReconnect ? (
+                  <Button variant="default" size="sm" onClick={async () => { setNeedsReconnect(false); await handleConnect(); }} className="gap-1.5">
+                    <Link2 className="h-3.5 w-3.5" /> Reconnect
+                  </Button>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={syncData} disabled={syncing} className="gap-1.5">
+                    {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                    Sync Now
+                  </Button>
+                )}
                 <Button variant="ghost" size="sm" onClick={handleDisconnect} disabled={disconnecting} className="gap-1.5 text-destructive hover:text-destructive">
                   {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unlink className="h-3.5 w-3.5" />}
                   Disconnect

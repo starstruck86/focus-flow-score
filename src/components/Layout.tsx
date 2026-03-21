@@ -33,6 +33,7 @@ import { ActivityRings } from '@/components/ActivityRings';
 import { GlobalWeekStrip } from '@/components/GlobalWeekStrip';
 import { useDaveContext, DaveSessionError, type DaveSessionData } from '@/hooks/useDaveContext';
 import { useVoiceReminders } from '@/hooks/useVoiceReminders';
+import { useWakeWord } from '@/hooks/useWakeWord';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
@@ -197,6 +198,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { getSession: getDaveSession, invalidateCache: invalidateDaveCache, isFetching: isFetchingDaveSession } = useDaveContext();
   const daveChannelRef = useRef<BroadcastChannel | null>(null);
   useVoiceReminders();
+
+  // Wake word — "Hey Dave"
+  const wakeWordEnabled = typeof window !== 'undefined' && localStorage.getItem('wake-word-enabled') === 'true';
+  useWakeWord({ onWake: () => { if (!daveOpen) handleOpenDave(); }, enabled: wakeWordEnabled && !daveOpen });
 
   // ─── BroadcastChannel cross-tab guard ───
   useEffect(() => {
