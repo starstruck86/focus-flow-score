@@ -32,6 +32,7 @@ export function WhoopIntegration() {
   const [connecting, setConnecting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [needsReconnect, setNeedsReconnect] = useState(false);
 
   // Handle OAuth callback result
   useEffect(() => {
