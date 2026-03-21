@@ -1098,6 +1098,42 @@ export function ResourceManager() {
         sourceResourceId={generateSourceId}
         initialOutputType={generateInitialType}
       />
+
+      {/* Bulk selection bar */}
+      {selectedResourceIds.size > 0 && (
+        <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-card border border-border rounded-xl px-4 py-2.5 shadow-lg">
+          <span className="text-sm font-medium">{selectedResourceIds.size} selected</span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1"
+            disabled={bulkReenriching}
+            onClick={async () => {
+              setBulkReenriching(true);
+              try {
+                const { data, error } = await supabase.functions.invoke('enrich-resource-content', {
+                  body: { resource_ids: Array.from(selectedResourceIds), force: true },
+                });
+                if (error) throw error;
+                const results = data?.results || [];
+                const enriched = results.filter((r: any) => r.status === 'enriched').length;
+                toast.success(`Re-enriched ${enriched}/${results.length} resources`);
+                setSelectedResourceIds(new Set());
+              } catch (e: any) {
+                toast.error(e.message || 'Bulk re-enrich failed');
+              } finally {
+                setBulkReenriching(false);
+              }
+            }}
+          >
+            {bulkReenriching ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+            Re-enrich Selected
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSelectedResourceIds(new Set())}>
+            <X className="h-3 w-3 mr-1" /> Clear
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
