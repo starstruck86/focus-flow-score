@@ -6,7 +6,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const CONTENT_CAP = 15000;
+const CONTENT_CAP = 60000;
+const SHALLOW_THRESHOLD = 5000;
 
 const AUTH_GATED_PATTERNS = [
   /drive\.google\.com/i, /docs\.google\.com/i, /sheets\.google\.com/i,
@@ -30,7 +31,8 @@ async function scrapeUrl(url: string, apiKey: string): Promise<string | null> {
   const source = detectSource(url);
   if (source === "auth-gated") return null;
 
-  const waitFor = source === "youtube" || source === "podcast" ? 5000 : undefined;
+  // YouTube needs longer wait for transcript loading
+  const waitFor = source === "youtube" ? 8000 : source === "podcast" ? 5000 : undefined;
 
   try {
     const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
@@ -84,9 +86,57 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { resource_id, batch, limit } = body;
+    const { resource_id, batch, limit, force, resource_ids } = body;
 
-    // Single mode
+    // ── Batch-by-IDs mode ──
+    if (resource_ids && Array.isArray(resource_ids) && resource_ids.length > 0) {
+      const { data: resources, error: qErr } = await supabase
+        .from("resources")
+        .select("id, file_url, content_status")
+        .in("id", resource_ids.slice(0, 50));
+
+      if (qErr) throw new Error("Query failed");
+
+      const results: { id: string; status: string; chars: number }[] = [];
+      for (const resource of resources || []) {
+        const url = resource.file_url;
+        if (!url || !url.startsWith("http")) {
+          results.push({ id: resource.id, status: "skipped", chars: 0 });
+          continue;
+        }
+
+        const source = detectSource(url);
+        if (source === "auth-gated") {
+          results.push({ id: resource.id, status: "auth-gated", chars: 0 });
+          continue;
+        }
+
+        await supabase.from("resources").update({ content_status: "enriching" }).eq("id", resource.id);
+
+        const content = await scrapeUrl(url, FIRECRAWL_API_KEY);
+        if (content) {
+          await supabase.from("resources").update({
+            content,
+            content_status: "enriched",
+            enriched_at: new Date().toISOString(),
+            content_length: content.length,
+          }).eq("id", resource.id);
+          await supabase.from("resource_digests").delete().eq("resource_id", resource.id);
+          results.push({ id: resource.id, status: "enriched", chars: content.length });
+        } else {
+          await supabase.from("resources").update({ content_status: "placeholder" }).eq("id", resource.id);
+          results.push({ id: resource.id, status: "failed", chars: 0 });
+        }
+
+        await new Promise(r => setTimeout(r, 1000));
+      }
+
+      return new Response(JSON.stringify({ success: true, results }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── Single mode ──
     if (resource_id && !batch) {
       const { data: resource, error: rErr } = await supabase
         .from("resources")
@@ -102,25 +152,30 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Mark as enriching
+      // Only allow re-enrichment when force=true
+      if (resource.content_status === "enriched" && !force) {
+        return new Response(JSON.stringify({ error: "Already enriched. Use force:true to re-enrich.", skipped: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       await supabase.from("resources").update({ content_status: "enriching" }).eq("id", resource_id);
 
       const content = await scrapeUrl(url, FIRECRAWL_API_KEY);
       if (!content) {
-        // Revert status if auth-gated or failed
-        await supabase.from("resources").update({ content_status: "placeholder" }).eq("id", resource_id);
+        await supabase.from("resources").update({ content_status: resource.content_status === "enriched" ? "enriched" : "placeholder" }).eq("id", resource_id);
         return new Response(JSON.stringify({ error: "Could not scrape URL", skipped: true }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Update resource content and status
       await supabase.from("resources").update({
         content,
         content_status: "enriched",
+        enriched_at: new Date().toISOString(),
+        content_length: content.length,
       }).eq("id", resource_id);
 
-      // Delete stale digest so operationalize re-runs
       await supabase.from("resource_digests").delete().eq("resource_id", resource_id);
 
       return new Response(JSON.stringify({ success: true, resource_id, chars: content.length }), {
@@ -128,7 +183,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Batch mode
+    // ── Batch mode (all placeholders) ──
     if (batch) {
       const batchLimit = Math.min(limit || 50, 50);
       const { data: placeholders, error: qErr } = await supabase
@@ -153,7 +208,12 @@ Deno.serve(async (req) => {
 
         const content = await scrapeUrl(resource.file_url!, FIRECRAWL_API_KEY);
         if (content) {
-          await supabase.from("resources").update({ content, content_status: "enriched" }).eq("id", resource.id);
+          await supabase.from("resources").update({
+            content,
+            content_status: "enriched",
+            enriched_at: new Date().toISOString(),
+            content_length: content.length,
+          }).eq("id", resource.id);
           await supabase.from("resource_digests").delete().eq("resource_id", resource.id);
           results.enriched++;
         } else {
@@ -161,7 +221,6 @@ Deno.serve(async (req) => {
           results.failed++;
         }
 
-        // 1s delay between scrapes
         await new Promise(r => setTimeout(r, 1000));
       }
 
@@ -170,7 +229,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ error: "Provide resource_id or batch: true" }), {
+    return new Response(JSON.stringify({ error: "Provide resource_id, resource_ids, or batch: true" }), {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
