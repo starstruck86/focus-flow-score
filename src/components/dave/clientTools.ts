@@ -2530,5 +2530,126 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
 
       return brief;
     },
+
+    // ═══════════════════════════════════════════════════════════════
+    // WHOOP & RESOURCE INTELLIGENCE TOOLS
+    // ═══════════════════════════════════════════════════════════════
+
+    get_whoop_status: async () => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const today = new Date().toISOString().split('T')[0];
+      const { data: metrics } = await supabase
+        .from('whoop_daily_metrics')
+        .select('*')
+        .eq('user_id', userId)
+        .order('date', { ascending: false })
+        .limit(3);
+
+      if (!metrics?.length) return 'No WHOOP data available. You may need to connect or sync WHOOP in Settings.';
+
+      const todayMetric = (metrics as any[]).find(m => m.date === today);
+      const latest = (metrics as any[])[0];
+      const m = todayMetric || latest;
+      const dateLabel = m.date === today ? 'Today' : m.date;
+
+      const recoveryZone = m.recovery_score >= 67 ? '🟢 Green (go hard)' : m.recovery_score >= 34 ? '🟡 Yellow (moderate)' : '🔴 Red (take it easy)';
+
+      let result = `📊 WHOOP Status (${dateLabel}):\n`;
+      result += `Recovery: ${m.recovery_score ?? 'N/A'}% — ${recoveryZone}\n`;
+      result += `Sleep: ${m.sleep_score ?? 'N/A'}%\n`;
+      result += `Strain: ${m.strain_score ?? 'N/A'}\n`;
+
+      if (m.recovery_score !== null && m.recovery_score < 34) {
+        result += '\n⚠️ Low recovery — consider lighter prospecting blocks, more account research, skip the power hour.';
+      } else if (m.recovery_score !== null && m.recovery_score >= 67) {
+        result += '\n💪 High recovery — great day for heavy calling, difficult conversations, and power hours.';
+      }
+
+      return result;
+    },
+
+    sync_whoop: async () => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return 'Not authenticated';
+
+        const resp = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whoop-sync`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ action: 'sync' }),
+          },
+        );
+
+        const result = await resp.json();
+        if (result.error) return `WHOOP sync failed: ${result.error}`;
+
+        toast.success('WHOOP synced', { description: `${result.synced || 0} days of data updated` });
+        return `WHOOP sync complete — ${result.synced || 0} days of data synced.`;
+      } catch (err: any) {
+        return `WHOOP sync error: ${err.message}`;
+      }
+    },
+
+    read_resource_digest: async (params: { title: string }) => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      // Find the resource by title match
+      const { data: resources } = await supabase
+        .from('resources')
+        .select('id, title')
+        .eq('user_id', userId)
+        .ilike('title', `%${params.title}%`)
+        .limit(5);
+
+      if (!resources?.length) return `No resource found matching "${params.title}". Try a different title.`;
+
+      const resourceIds = (resources as any[]).map(r => r.id);
+
+      const { data: digests } = await supabase
+        .from('resource_digests')
+        .select('*')
+        .eq('user_id', userId)
+        .in('resource_id', resourceIds);
+
+      if (!digests?.length) {
+        const titles = (resources as any[]).map(r => r.title).join(', ');
+        return `Found resources (${titles}) but none have been operationalized yet. Use "Operationalize" in the Prep Hub to extract intelligence.`;
+      }
+
+      const d = digests[0] as any;
+      const resource = (resources as any[]).find(r => r.id === d.resource_id);
+
+      let result = `📚 "${resource?.title || params.title}" — Intelligence Digest\n\n`;
+      result += `📝 Summary:\n${d.summary || 'No summary'}\n\n`;
+
+      if (d.takeaways?.length) {
+        result += `🎯 Key Takeaways:\n${(d.takeaways as string[]).map((t: string) => `• ${t}`).join('\n')}\n\n`;
+      }
+
+      if (d.use_cases?.length) {
+        result += `📋 Use Cases:\n${(d.use_cases as string[]).map((u: string) => `• ${u}`).join('\n')}\n\n`;
+      }
+
+      if (d.grading_criteria) {
+        const criteria = d.grading_criteria as any;
+        if (criteria.categories?.length) {
+          result += `📊 Grading Criteria:\n${criteria.categories.map((c: any) => `• ${c.name}: ${c.description || ''}`).join('\n')}`;
+        }
+      }
+
+      return result;
+    },
   };
 }

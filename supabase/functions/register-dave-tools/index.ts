@@ -152,6 +152,11 @@ const DAVE_TOOLS: ToolDef[] = [
   { name: "competitive_intel", description: "Search across all transcripts, account notes, and deal notes for mentions of a competitor or topic. Shows where and when it came up.", parameters: { query: str("Competitor name or topic to search for") }, required: ["query"] },
   { name: "create_methodology_tasks", description: "Convert unconfirmed MEDDICC gaps on a deal into specific, actionable tasks with talk tracks and due dates based on close date.", parameters: { opportunityName: str("The opportunity to create MEDDICC tasks for") }, required: ["opportunityName"] },
   { name: "meeting_brief", description: "Get a concise inline prep brief for an upcoming meeting. Auto-matches calendar title to account and pulls deal context, MEDDICC gaps, contacts, and last call summary.", parameters: { meetingTitle: str("Meeting title to match — omit for the next upcoming meeting") } },
+
+  // ── WHOOP & Resource Intelligence ────────────────────────────
+  { name: "get_whoop_status", description: "Get the user's WHOOP biometric data — recovery, sleep, and strain scores with coaching context", parameters: {} },
+  { name: "sync_whoop", description: "Trigger a manual WHOOP data sync to fetch the latest biometric data", parameters: {} },
+  { name: "read_resource_digest", description: "Read the operationalized intelligence digest of a resource — takeaways, use cases, grading criteria. Use when the user asks about a framework, playbook, or training material's key points.", parameters: { title: str("The resource title or partial match to find") }, required: ["title"] },
 ];
 
 serve(async (req) => {
