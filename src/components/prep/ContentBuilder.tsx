@@ -53,6 +53,10 @@ export function ContentBuilder() {
   const [resources, setResources] = useState<any[]>([]);
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
 
+  // Transcript intelligence chips
+  const [transcriptIntel, setTranscriptIntel] = useState<{ label: string; text: string }[]>([]);
+  const [selectedIntel, setSelectedIntel] = useState<string[]>([]);
+
   // Elapsed time tracker during generation
   useEffect(() => {
     if (generating) {
