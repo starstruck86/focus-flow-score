@@ -16,7 +16,7 @@ interface EnrichmentTimelineProps {
 
 export function EnrichmentTimeline({ enrichmentEvidence, triggerEvents, lastEnrichedAt, enrichmentSourceSummary }: EnrichmentTimelineProps) {
   const timeline = useMemo(() => {
-    const events: { date: string; type: string; title: string; detail: string; icon: any; color: string }[] = [];
+    const events: TimelineEntry[] = [];
 
     // Add enrichment event
     if (lastEnrichedAt) {
