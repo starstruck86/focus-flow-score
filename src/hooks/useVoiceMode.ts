@@ -1,8 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
-
-const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts-stream`;
-const STT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-stt`;
+import { authenticatedFetch } from '@/lib/authenticatedFetch';
 
 // ElevenLabs TTS has a 5000 char limit per request
 const TTS_CHUNK_LIMIT = 4500;
