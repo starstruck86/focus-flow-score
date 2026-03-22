@@ -68,7 +68,15 @@ function createWrapper(route = '/') {
 describe('Auth page', () => {
   it('renders sign-in button', async () => {
     const Auth = (await import('@/pages/Auth')).default;
-    const { container } = render(<Auth />, { wrapper: createWrapper('/auth') });
+    const { AuthProvider } = await import('@/contexts/AuthContext');
+    const Wrapper = createWrapper('/auth');
+    const { container } = render(
+      <Wrapper>
+        <AuthProvider>
+          <Auth />
+        </AuthProvider>
+      </Wrapper>
+    );
     expect(container.querySelector('[data-testid="auth-page"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="google-sign-in"]')).toBeTruthy();
   });
