@@ -35,13 +35,13 @@ export function useWeekJournalEntries(selectedDate?: Date) {
       if (error) throw error;
 
       const entryMap = new Map(
-        (data || []).map((d: any) => [d.date, d])
+        (data || []).map(d => [d.date, d])
       );
 
       const days = eachDayOfInterval({ start: weekStart, end: weekEnd }).filter(d => !isWeekend(d));
       return days.map((day): WeekDaySummary => {
         const dateStr = format(day, 'yyyy-MM-dd');
-        const entry = entryMap.get(dateStr) as any;
+        const entry = entryMap.get(dateStr);
         return {
           date: dateStr,
           dayLabel: format(day, 'EEE'),

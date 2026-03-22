@@ -68,7 +68,7 @@ function dbAccountToStore(db: any): Account {
     confidenceScore: db.confidence_score != null ? Number(db.confidence_score) : undefined,
     lastEnrichedAt: db.last_enriched_at ?? undefined,
     enrichmentSourceSummary: db.enrichment_source_summary ?? undefined,
-    enrichmentEvidence: (db as any).enrichment_evidence ?? undefined,
+    enrichmentEvidence: db.enrichment_evidence ?? undefined,
     lifecycleOverride: db.lifecycle_override ?? false,
     lifecycleOverrideReason: db.lifecycle_override_reason ?? undefined,
     icpScoreOverride: db.icp_score_override != null ? Number(db.icp_score_override) : undefined,
