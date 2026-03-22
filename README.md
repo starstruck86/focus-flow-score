@@ -57,6 +57,21 @@ npm run dev
 - Click on "New codespace" to launch a new Codespace environment.
 - Edit files directly within the Codespace and commit and push your changes once you're done.
 
+## Environment Variables
+
+This project uses Lovable Cloud, which auto-populates `.env` with backend credentials. If setting up locally:
+
+1. Copy `.env.example` to `.env`:
+   ```sh
+   cp .env.example .env
+   ```
+2. Fill in the values (available from your Lovable Cloud project settings):
+   - `VITE_SUPABASE_PROJECT_ID` — Your backend project ID
+   - `VITE_SUPABASE_PUBLISHABLE_KEY` — Your public/anon API key
+   - `VITE_SUPABASE_URL` — Your backend API URL
+
+> **Note:** These are publishable (client-safe) keys only. Private secrets are managed via Lovable Cloud's secrets manager and injected into backend functions at runtime.
+
 ## What technologies are used for this project?
 
 This project is built with:
