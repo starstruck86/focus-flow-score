@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { generateTraceId, normalizeError, recordError } from '@/lib/appError';
 import { createLogger } from '@/lib/logger';
 
