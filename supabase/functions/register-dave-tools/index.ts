@@ -166,6 +166,15 @@ const DAVE_TOOLS: ToolDef[] = [
   { name: "complete_action", description: "Mark the current primary action as completed and advance to the next one. Use after the user confirms they finished the action.", parameters: { actionId: str("The action ID that was completed") }, required: ["actionId"] },
   { name: "defer_action", description: "Defer the current primary action — it will be deprioritized and the next action surfaces. Use when the user says 'not now' or 'skip'.", parameters: { actionId: str("The action ID to defer"), reason: str("Optional reason for deferring") }, required: ["actionId"] },
   { name: "execution_brief", description: "Get a complete execution brief combining operating state + primary action + context. This is the main entry point for the Jarvis execution loop. Dave should use this at the start of conversations.", parameters: {} },
+
+  // ═══════════════════════════════════════════════════════════════
+  // JARVIS LAYER — Extended Intelligence
+  // ═══════════════════════════════════════════════════════════════
+  { name: "momentum_check", description: "Check deal momentum, pipeline creation velocity, and new logo cadence. Shows stalled vs moving deals and pipeline creation gaps.", parameters: {} },
+  { name: "pipeline_creation_suggest", description: "Suggest top 3-5 accounts to prospect this week based on ICP fit, trigger signals, and outreach status. Use when pipeline is dry or user asks for prospecting targets.", parameters: {} },
+  { name: "kill_switch", description: "Identify low-value or stale deals that should be deprioritized or closed lost. Helps free up focus for higher-ROI work.", parameters: {} },
+  { name: "behavior_summary", description: "Show the user's action completion patterns — what gets done vs ignored, broken down by entity type. Helps understand execution habits.", parameters: {} },
+  { name: "energy_match", description: "Recommend task types based on current energy level. Uses WHOOP biometrics if available, otherwise journal self-report.", parameters: {} },
 ];
 
 serve(async (req) => {
