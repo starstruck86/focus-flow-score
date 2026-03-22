@@ -6,6 +6,19 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import type { Account, Contact, Renewal, Opportunity, Task, ChurnRisk } from '@/types';
+import type { Database, Json } from '@/integrations/supabase/types';
+
+// Row types from the generated schema
+type AccountRow = Database['public']['Tables']['accounts']['Row'];
+type AccountInsert = Database['public']['Tables']['accounts']['Insert'];
+type OpportunityRow = Database['public']['Tables']['opportunities']['Row'];
+type OpportunityInsert = Database['public']['Tables']['opportunities']['Insert'];
+type RenewalRow = Database['public']['Tables']['renewals']['Row'];
+type RenewalInsert = Database['public']['Tables']['renewals']['Insert'];
+type ContactRow = Database['public']['Tables']['contacts']['Row'];
+type ContactInsert = Database['public']['Tables']['contacts']['Insert'];
+type TaskRow = Database['public']['Tables']['tasks']['Row'];
+type TaskInsert = Database['public']['Tables']['tasks']['Insert'];
 
 // ── Sync status (exported for save indicator) ─────────────
 let _lastSyncTime: number | null = null;
@@ -20,7 +33,7 @@ function notifySyncListeners() { _syncListeners.forEach(fn => fn()); }
 
 // ── DB → Zustand mappers ─────────────────────────────────
 
-function dbAccountToStore(db: any): Account {
+function dbAccountToStore(db: AccountRow): Account {
   return {
     id: db.id,
     name: db.name,
@@ -58,7 +71,7 @@ function dbAccountToStore(db: any): Account {
     mobileApp: db.mobile_app ?? undefined,
     marketingPlatformDetected: db.marketing_platform_detected ?? undefined,
     crmLifecycleTeamSize: db.crm_lifecycle_team_size ?? undefined,
-    triggerEvents: db.trigger_events ?? [],
+    triggerEvents: (db.trigger_events as Json[]) ?? [],
     icpFitScore: db.icp_fit_score != null ? Number(db.icp_fit_score) : undefined,
     timingScore: db.timing_score != null ? Number(db.timing_score) : undefined,
     priorityScore: db.priority_score != null ? Number(db.priority_score) : undefined,
@@ -76,7 +89,7 @@ function dbAccountToStore(db: any): Account {
   };
 }
 
-function storeAccountToDb(a: Account, userId: string): any {
+function storeAccountToDb(a: Account, userId: string): AccountInsert {
   return {
     id: a.id, user_id: userId, name: a.name,
     website: a.website || null, industry: a.industry || null,
@@ -99,7 +112,7 @@ function storeAccountToDb(a: Account, userId: string): any {
     mobile_app: a.mobileApp ?? null,
     marketing_platform_detected: a.marketingPlatformDetected || null,
     crm_lifecycle_team_size: a.crmLifecycleTeamSize ?? null,
-    trigger_events: a.triggerEvents || [],
+    trigger_events: (a.triggerEvents || []) as unknown as Json,
     icp_fit_score: a.icpFitScore ?? null, timing_score: a.timingScore ?? null,
     priority_score: a.priorityScore ?? null, lifecycle_tier: a.lifecycleTier || null,
     high_probability_buyer: a.highProbabilityBuyer ?? false,
@@ -107,7 +120,7 @@ function storeAccountToDb(a: Account, userId: string): any {
     confidence_score: a.confidenceScore ?? null,
     last_enriched_at: a.lastEnrichedAt || null,
     enrichment_source_summary: a.enrichmentSourceSummary || null,
-    enrichment_evidence: a.enrichmentEvidence || {},
+    enrichment_evidence: (a.enrichmentEvidence || {}) as Json,
     lifecycle_override: a.lifecycleOverride ?? false,
     lifecycle_override_reason: a.lifecycleOverrideReason || null,
     icp_score_override: a.icpScoreOverride ?? null,
@@ -115,7 +128,7 @@ function storeAccountToDb(a: Account, userId: string): any {
   };
 }
 
-function dbOpportunityToStore(db: any): Opportunity {
+function dbOpportunityToStore(db: OpportunityRow): Opportunity {
   return {
     id: db.id, name: db.name, accountId: db.account_id ?? undefined,
     salesforceLink: db.salesforce_link ?? undefined,
@@ -125,7 +138,7 @@ function dbOpportunityToStore(db: any): Opportunity {
     churnRisk: db.churn_risk ?? undefined, closeDate: db.close_date ?? undefined,
     nextStep: db.next_step ?? undefined, nextStepDate: db.next_step_date ?? undefined,
     lastTouchDate: db.last_touch_date ?? undefined, notes: db.notes ?? undefined,
-    activityLog: db.activity_log ?? [], createdAt: db.created_at,
+    activityLog: (db.activity_log as Json[]) ?? [], createdAt: db.created_at,
     updatedAt: db.updated_at, dealType: db.deal_type ?? undefined,
     paymentTerms: db.payment_terms ?? undefined, termMonths: db.term_months ?? undefined,
     priorContractArr: db.prior_contract_arr ?? undefined,
@@ -135,7 +148,7 @@ function dbOpportunityToStore(db: any): Opportunity {
   };
 }
 
-function storeOpportunityToDb(o: Opportunity, userId: string): any {
+function storeOpportunityToDb(o: Opportunity, userId: string): OpportunityInsert {
   return {
     id: o.id, user_id: userId, name: o.name,
     account_id: o.accountId || null, salesforce_link: o.salesforceLink || null,
@@ -143,7 +156,7 @@ function storeOpportunityToDb(o: Opportunity, userId: string): any {
     arr: o.arr ?? null, churn_risk: o.churnRisk || null,
     close_date: o.closeDate || null, next_step: o.nextStep || null,
     next_step_date: o.nextStepDate || null, last_touch_date: o.lastTouchDate || null,
-    notes: o.notes || null, activity_log: o.activityLog || [],
+    notes: o.notes || null, activity_log: (o.activityLog || []) as unknown as Json,
     deal_type: o.dealType || null, payment_terms: o.paymentTerms || null,
     term_months: o.termMonths ?? null, prior_contract_arr: o.priorContractArr ?? null,
     renewal_arr: o.renewalArr ?? null, one_time_amount: o.oneTimeAmount ?? null,
@@ -151,7 +164,7 @@ function storeOpportunityToDb(o: Opportunity, userId: string): any {
   };
 }
 
-function dbRenewalToStore(db: any): Renewal {
+function dbRenewalToStore(db: RenewalRow): Renewal {
   const dueDate = new Date(db.renewal_due);
   const today = new Date();
   const daysToRenewal = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -176,7 +189,7 @@ function dbRenewalToStore(db: any): Renewal {
   };
 }
 
-function storeRenewalToDb(r: Renewal, userId: string): any {
+function storeRenewalToDb(r: Renewal, userId: string): RenewalInsert {
   return {
     id: r.id, user_id: userId, account_id: r.accountId || null,
     account_name: r.accountName, csm: r.csm || null, arr: r.arr,
@@ -195,7 +208,7 @@ function storeRenewalToDb(r: Renewal, userId: string): any {
 
 // ── Contact mappers ───────────────────────────────────────
 
-function dbContactToStore(db: any): Contact {
+function dbContactToStore(db: ContactRow): Contact {
   return {
     id: db.id, accountId: db.account_id ?? '',
     name: db.name, title: db.title ?? undefined,
@@ -210,7 +223,7 @@ function dbContactToStore(db: any): Contact {
   };
 }
 
-function storeContactToDb(c: Contact, userId: string): any {
+function storeContactToDb(c: Contact, userId: string): ContactInsert {
   return {
     id: c.id, user_id: userId, account_id: c.accountId || null,
     name: c.name, title: c.title || null,
@@ -226,7 +239,7 @@ function storeContactToDb(c: Contact, userId: string): any {
 
 // ── Task mappers ──────────────────────────────────────────
 
-function dbTaskToStore(db: any): Task {
+function dbTaskToStore(db: TaskRow): Task {
   return {
     id: db.id, title: db.title,
     workstream: db.workstream ?? 'pg',
@@ -243,12 +256,12 @@ function dbTaskToStore(db: any): Task {
     linkedContactId: db.linked_contact_id ?? undefined,
     category: db.category ?? undefined,
     estimatedMinutes: db.estimated_minutes ?? undefined,
-    subtasks: db.subtasks ?? [],
+    subtasks: (db.subtasks as Json[]) ?? [],
     createdAt: db.created_at, updatedAt: db.updated_at,
   };
 }
 
-function storeTaskToDb(t: Task, userId: string): any {
+function storeTaskToDb(t: Task, userId: string): TaskInsert {
   return {
     id: t.id, user_id: userId, title: t.title,
     workstream: t.workstream, status: t.status, priority: t.priority,
@@ -261,8 +274,56 @@ function storeTaskToDb(t: Task, userId: string): any {
     linked_contact_id: t.linkedContactId || null,
     category: t.category || null,
     estimated_minutes: t.estimatedMinutes ?? null,
-    subtasks: t.subtasks || [],
+    subtasks: (t.subtasks || []) as unknown as Json,
   };
+}
+
+// ── Typed table write helpers ─────────────────────────────
+// These replace the dynamic `from(table as any)` pattern with
+// compile-time checked table access for each entity type.
+
+type SyncTableName = 'accounts' | 'opportunities' | 'renewals' | 'contacts' | 'tasks';
+
+async function typedUpsert(table: SyncTableName, rows: unknown[]): Promise<void> {
+  if (rows.length === 0) return;
+  switch (table) {
+    case 'accounts':
+      await supabase.from('accounts').upsert(rows as AccountInsert[]);
+      break;
+    case 'opportunities':
+      await supabase.from('opportunities').upsert(rows as OpportunityInsert[]);
+      break;
+    case 'renewals':
+      await supabase.from('renewals').upsert(rows as RenewalInsert[]);
+      break;
+    case 'contacts':
+      await supabase.from('contacts').upsert(rows as ContactInsert[]);
+      break;
+    case 'tasks':
+      await supabase.from('tasks').upsert(rows as TaskInsert[]);
+      break;
+  }
+}
+
+async function typedDelete(table: SyncTableName, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  switch (table) {
+    case 'accounts':
+      await supabase.from('accounts').delete().in('id', ids);
+      break;
+    case 'opportunities':
+      await supabase.from('opportunities').delete().in('id', ids);
+      break;
+    case 'renewals':
+      await supabase.from('renewals').delete().in('id', ids);
+      break;
+    case 'contacts':
+      await supabase.from('contacts').delete().in('id', ids);
+      break;
+    case 'tasks':
+      await supabase.from('tasks').delete().in('id', ids);
+      break;
+  }
 }
 
 // ── Sync Hook ─────────────────────────────────────────────
@@ -356,19 +417,19 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
 
         // Push local-only items to DB
         if (newLocalAccounts.length > 0) {
-          await supabase.from('accounts').upsert(newLocalAccounts.map(a => storeAccountToDb(a, userId)));
+          await typedUpsert('accounts', newLocalAccounts.map(a => storeAccountToDb(a, userId)));
         }
         if (newLocalOpps.length > 0) {
-          await supabase.from('opportunities').upsert(newLocalOpps.map(o => storeOpportunityToDb(o, userId)));
+          await typedUpsert('opportunities', newLocalOpps.map(o => storeOpportunityToDb(o, userId)));
         }
         if (newLocalRenewals.length > 0) {
-          await supabase.from('renewals').upsert(newLocalRenewals.map(r => storeRenewalToDb(r, userId)));
+          await typedUpsert('renewals', newLocalRenewals.map(r => storeRenewalToDb(r, userId)));
         }
         if (newLocalContacts.length > 0) {
-          await supabase.from('contacts').upsert(newLocalContacts.map(c => storeContactToDb(c, userId)));
+          await typedUpsert('contacts', newLocalContacts.map(c => storeContactToDb(c, userId)));
         }
         if (newLocalTasks.length > 0) {
-          await supabase.from('tasks').upsert(newLocalTasks.map(t => storeTaskToDb(t, userId)) as any);
+          await typedUpsert('tasks', newLocalTasks.map(t => storeTaskToDb(t, userId)));
         }
 
         // Snapshot for diffing
@@ -424,13 +485,13 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
         }, 1500);
       };
 
-      // Generic diff helper
+      // Generic diff helper — uses typed table helpers instead of dynamic `from(table)`
       const diffAndSync = <T extends { id: string; updatedAt?: string }>(
         key: string,
         prevItems: T[],
         currItems: T[],
-        toDb: (item: T, uid: string) => any,
-        table: string,
+        toDb: (item: T, uid: string) => unknown,
+        table: SyncTableName,
       ) => {
         if (currItems === prevItems) return;
         scheduleWrite(key, async () => {
@@ -445,10 +506,10 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
           const deletedIds = prevItems.filter(i => !currMap.has(i.id)).map(i => i.id);
           
           if (toUpsert.length > 0) {
-            await supabase.from(table as any).upsert(toUpsert.map(i => toDb(i, userId)));
+            await typedUpsert(table, toUpsert.map(i => toDb(i, userId)));
           }
           if (deletedIds.length > 0) {
-            await supabase.from(table as any).delete().in('id', deletedIds);
+            await typedDelete(table, deletedIds);
           }
           
           prevState.current = { ...prevState.current!, [key]: currItems };
