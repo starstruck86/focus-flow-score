@@ -149,10 +149,10 @@ export function useAccountEnrichment() {
         triggeredAccount: result.scores!.triggered_account,
         confidenceScore: result.scores!.confidence_score,
         lastEnrichedAt: new Date().toISOString(),
-        enrichmentSourceSummary: (data as any).summary || result.summary,
+        enrichmentSourceSummary: result.summary,
         enrichmentEvidence: result.evidence,
-        marTech: (data as any).marTech || account.marTech,
-        ecommerce: (data as any).ecommerce || account.ecommerce,
+        marTech: result.marTech || account.marTech,
+        ecommerce: result.ecommerce || account.ecommerce,
       };
 
       updateAccount(account.id, updates);
