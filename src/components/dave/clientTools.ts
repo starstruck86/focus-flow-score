@@ -2802,7 +2802,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       const [oppsRes, accountsRes] = await Promise.all([
         supabase.from('opportunities').select('id, name, arr, last_touch_date, created_at, deal_type, status')
           .eq('user_id', userId).eq('status', 'active'),
-        supabase.from('accounts').select('id, name, motion, last_touch_date, created_at')
+        supabase.from('accounts').select('id, name, motion, last_touch_date, created_at, outreach_status, contact_status, account_status')
           .eq('user_id', userId).not('account_status', 'in', '("inactive","disqualified")'),
       ]);
 
@@ -2812,17 +2812,21 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       const movingDeals = opps.filter((o: any) => o.last_touch_date && o.last_touch_date >= sevenStr).length;
       const stalledDeals = opps.filter((o: any) => !o.last_touch_date || o.last_touch_date < sevenStr).length;
       const newOpps14d = opps.filter((o: any) => o.created_at && o.created_at >= fourteenStr).length;
-      const newAccounts14d = accounts.filter((a: any) => a.created_at && a.created_at >= fourteenStr).length;
-      const newLogoAccounts = accounts.filter((a: any) => a.motion === 'new-logo');
-      const recentNewLogoTouch = newLogoAccounts.some((a: any) => a.last_touch_date && a.last_touch_date >= sevenStr);
+
+      const targetAccounts = accounts.filter((a: any) => a.motion === 'new-logo');
+      const targetWorked14d = targetAccounts.filter((a: any) => a.last_touch_date && a.last_touch_date >= fourteenStr).length;
+      const recentTargetTouch = targetAccounts.some((a: any) => a.last_touch_date && a.last_touch_date >= sevenStr);
+      const withOutreach = targetAccounts.filter((a: any) => a.outreach_status && !['not-started'].includes(a.outreach_status)).length;
+      const withMeetings = targetAccounts.filter((a: any) => ['meeting-set', 'opp-open', 'closed-won'].includes(a.outreach_status)).length;
 
       let summary = `📊 Momentum Check:\n`;
       summary += `Deal momentum: ${movingDeals} moving, ${stalledDeals} stalled of ${opps.length} active.\n`;
-      summary += `Pipeline creation (14d): ${newOpps14d} new opps, ${newAccounts14d} new accounts.\n`;
-      summary += `New logo activity: ${recentNewLogoTouch ? 'Active' : '⚠️ Gap detected — no new logo touches in 7+ days'}.\n`;
+      summary += `Target accounts (14d): ${targetWorked14d} worked, ${newOpps14d} new opps created.\n`;
+      summary += `Funnel: ${targetAccounts.length} target accounts → ${withOutreach} outreach started → ${withMeetings} meetings booked.\n`;
+      summary += `Target account activity: ${recentTargetTouch ? 'Active' : '⚠️ Gap — no target account touches in 7+ days'}.\n`;
 
       if (stalledDeals > movingDeals) summary += `\n⚠️ More deals stalled than moving — focus on re-engagement.`;
-      if (newOpps14d === 0 && newAccounts14d < 2) summary += `\n⚠️ Pipeline creation is dry — need to prospect.`;
+      if (targetWorked14d === 0 && newOpps14d === 0) summary += `\n⚠️ Pipeline creation is dry — select target accounts and start outreach.`;
 
       return summary;
     },
@@ -2831,10 +2835,9 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       const userId = await getUserId();
       if (!userId) return 'Not authenticated';
 
-      // Find accounts that are good prospecting targets
       const { data: accounts } = await supabase
         .from('accounts')
-        .select('id, name, tier, icp_fit_score, timing_score, priority_score, account_status, motion, outreach_status, last_touch_date, triggered_account, high_probability_buyer')
+        .select('id, name, tier, icp_fit_score, timing_score, priority_score, account_status, motion, outreach_status, contact_status, last_touch_date, triggered_account, high_probability_buyer')
         .eq('user_id', userId)
         .eq('motion', 'new-logo')
         .not('account_status', 'in', '("disqualified","inactive")')
@@ -2842,26 +2845,30 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
         .order('priority_score', { ascending: false })
         .limit(20);
 
-      if (!accounts?.length) return 'No prospecting accounts found. Add some new-logo accounts first.';
+      if (!accounts?.length) return 'No target accounts found. Add accounts with "new-logo" motion to start building pipeline.';
 
-      // Score and rank: prefer high ICP fit, triggered, untouched
       const scored = accounts.map((a: any) => {
         let s = (a.icp_fit_score || 0) + (a.timing_score || 0) + (a.priority_score || 0);
         if (a.triggered_account) s += 30;
         if (a.high_probability_buyer) s += 20;
-        if (!a.last_touch_date) s += 10; // untouched = needs outreach
+        if (!a.last_touch_date) s += 10;
         if (a.outreach_status === 'not-started') s += 15;
         return { ...a, score: s };
       }).sort((a: any, b: any) => b.score - a.score);
 
       const top5 = scored.slice(0, 5);
-      let result = `🎯 Top ${top5.length} accounts to prospect this week:\n\n`;
+      let result = `🎯 Top ${top5.length} target accounts to work this week:\n\n`;
       top5.forEach((a: any, i: number) => {
+        const stage = a.outreach_status === 'not-started'
+          ? (a.contact_status === 'ready' ? 'Contacts ready → start outreach' : 'Needs contacts')
+          : a.outreach_status === 'in-progress' || a.outreach_status === 'working'
+            ? 'Outreach active → push for meeting'
+            : `Status: ${a.outreach_status || '?'}`;
         result += `${i + 1}. **${a.name}** [${a.tier || '—'}]`;
         if (a.triggered_account) result += ' 🔥 Triggered';
         if (a.high_probability_buyer) result += ' ⭐ HPB';
-        result += `\n   ICP: ${a.icp_fit_score || '?'} | Status: ${a.outreach_status || a.account_status || '?'}`;
-        result += `\n   → Action: ${!a.last_touch_date ? 'Start outreach' : 'Re-engage'}\n\n`;
+        result += `\n   ICP: ${a.icp_fit_score || '?'} | ${stage}`;
+        result += `\n   → Next: ${!a.last_touch_date ? 'Add contacts and start outreach' : 'Continue working'}\n\n`;
       });
 
       result += `Ask me to generate outreach for any of these accounts.`;

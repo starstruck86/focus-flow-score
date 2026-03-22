@@ -11,9 +11,8 @@ export interface DelayImpact {
  * Calculate cost-of-delay for an opportunity with no next step.
  */
 export function oppNoNextStepDelay(arrK: number, daysSinceLastTouch: number): DelayImpact {
-  // High-value deals with no next step decay fast
-  const valueWeight = Math.min(arrK / 50, 3); // caps at 3x for $150k+
-  const stalenessFactor = Math.min(daysSinceLastTouch / 7, 4); // caps at 4x after 28 days
+  const valueWeight = Math.min(arrK / 50, 3);
+  const stalenessFactor = Math.min(daysSinceLastTouch / 7, 4);
 
   const decayMultiplier = 1 + (valueWeight * 0.3) + (stalenessFactor * 0.4);
 
@@ -86,7 +85,7 @@ export function renewalRiskDelay(arrK: number, daysToRenewal: number, churnRisk:
  */
 export function taskOverdueDelay(priority: string, daysOverdue: number, linkedArrK?: number): DelayImpact {
   const priorityWeight = priority === 'P0' ? 4 : priority === 'P1' ? 3 : priority === 'P2' ? 1.5 : 1;
-  const overdueFactor = Math.min(daysOverdue / 3, 4); // escalates every 3 days
+  const overdueFactor = Math.min(daysOverdue / 3, 4);
   const arrBonus = linkedArrK ? linkedArrK / 100 : 0;
 
   const decayMultiplier = priorityWeight * (1 + overdueFactor * 0.3) + arrBonus;
@@ -106,21 +105,38 @@ export function taskOverdueDelay(priority: string, daysOverdue: number, linkedAr
 }
 
 /**
- * Pipeline creation gap delay — when no new logo activity is happening.
+ * Target account pipeline gap — when target account activity is stalled.
  */
-export function pipelineGapDelay(daysSinceNewActivity: number): DelayImpact {
-  const decayMultiplier = 1 + Math.min(daysSinceNewActivity / 5, 4);
+export function pipelineGapDelay(daysSinceTargetActivity: number): DelayImpact {
+  const decayMultiplier = 1 + Math.min(daysSinceTargetActivity / 5, 4);
 
   let escalationLevel: DelayImpact['escalationLevel'] = 'low';
-  if (daysSinceNewActivity >= 14) escalationLevel = 'critical';
-  else if (daysSinceNewActivity >= 10) escalationLevel = 'high';
-  else if (daysSinceNewActivity >= 7) escalationLevel = 'moderate';
+  if (daysSinceTargetActivity >= 14) escalationLevel = 'critical';
+  else if (daysSinceTargetActivity >= 10) escalationLevel = 'high';
+  else if (daysSinceTargetActivity >= 7) escalationLevel = 'moderate';
 
-  const delayConsequence = daysSinceNewActivity >= 14
+  const delayConsequence = daysSinceTargetActivity >= 14
     ? 'Pipeline will dry up — future quota at risk'
-    : daysSinceNewActivity >= 7
-      ? 'New logo cadence broken — need to restart prospecting'
-      : 'Pipeline creation slowing';
+    : daysSinceTargetActivity >= 7
+      ? 'Target account cadence broken — need to restart outreach'
+      : 'Outreach activity slowing';
+
+  return { decayMultiplier, escalationLevel, delayConsequence };
+}
+
+/**
+ * Target account outreach gap — contacts identified but outreach not started.
+ */
+export function outreachGapDelay(accountsReadyNoOutreach: number): DelayImpact {
+  const decayMultiplier = 1 + Math.min(accountsReadyNoOutreach * 0.4, 3);
+
+  let escalationLevel: DelayImpact['escalationLevel'] = 'low';
+  if (accountsReadyNoOutreach >= 5) escalationLevel = 'high';
+  else if (accountsReadyNoOutreach >= 3) escalationLevel = 'moderate';
+
+  const delayConsequence = accountsReadyNoOutreach >= 3
+    ? `${accountsReadyNoOutreach} target accounts prepped but no outreach started`
+    : 'Outreach needed on prepped accounts';
 
   return { decayMultiplier, escalationLevel, delayConsequence };
 }
