@@ -13,7 +13,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Trash2, RefreshCw, Copy, ChevronDown, ChevronUp, Activity, Shield, Wifi, AlertTriangle, Database } from 'lucide-react';
+import { Trash2, RefreshCw, Copy, ChevronDown, ChevronUp, Activity, Shield, Wifi, AlertTriangle, Database, Layers } from 'lucide-react';
+import { useAllActiveJobs, useRetryJob } from '@/hooks/useResourceJobs';
+import { PIPELINE_STEPS } from '@/lib/resourcePipeline';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -79,6 +81,77 @@ function ErrorRow({ err, index }: { err: AppError; index: number }) {
 {JSON.stringify({ rawMessage: err.rawMessage, code: err.code, source: err.source, metadata: err.metadata }, null, 2)}
         </pre>
       )}
+    </div>
+  );
+}
+
+function JobsPanel() {
+  const { data: jobs, isLoading } = useAllActiveJobs();
+  const retryJob = useRetryJob();
+
+  if (isLoading) return <div className="text-center py-8 text-muted-foreground text-sm">Loading jobs…</div>;
+  if (!jobs || jobs.length === 0) return <div className="text-center py-12 text-muted-foreground text-sm">No active or recent resource jobs.</div>;
+
+  return (
+    <div className="space-y-2">
+      {jobs.map((job: any) => {
+        const steps = (job.resource_job_steps || []).sort((a: any, b: any) => a.sequence - b.sequence);
+        const completedCount = steps.filter((s: any) => s.status === 'completed').length;
+        const failedStep = steps.find((s: any) => s.status === 'failed');
+        const statusColor = job.status === 'completed' ? 'text-emerald-500' : job.status === 'failed' ? 'text-destructive' : job.status === 'running' ? 'text-primary' : 'text-amber-500';
+
+        return (
+          <Card key={job.id}>
+            <CardContent className="p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className={cn('text-[10px]', statusColor)}>{job.status}</Badge>
+                  <span className="text-xs text-muted-foreground font-mono">trace: {job.trace_id}</span>
+                </div>
+                <span className="text-[10px] text-muted-foreground">{completedCount}/{steps.length} steps</span>
+              </div>
+
+              {/* Step progress */}
+              <div className="flex gap-0.5">
+                {steps.map((s: any) => (
+                  <div
+                    key={s.id}
+                    className={cn(
+                      'h-1.5 flex-1 rounded-full',
+                      s.status === 'completed' ? 'bg-emerald-500' :
+                      s.status === 'failed' ? 'bg-destructive' :
+                      s.status === 'running' ? 'bg-primary animate-pulse' :
+                      'bg-muted'
+                    )}
+                    title={`${PIPELINE_STEPS.find(p => p.name === s.step_name)?.label || s.step_name}: ${s.status}`}
+                  />
+                ))}
+              </div>
+
+              {failedStep && (
+                <div className="text-xs text-destructive">
+                  Failed: {PIPELINE_STEPS.find(p => p.name === failedStep.step_name)?.label || failedStep.step_name}
+                  {failedStep.error_category && <span className="ml-1 opacity-70">({failedStep.error_category})</span>}
+                  {failedStep.error_message && <p className="text-[10px] mt-0.5 font-mono break-words">{failedStep.error_message}</p>}
+                </div>
+              )}
+
+              {(job.status === 'failed' || job.status === 'partial') && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs w-full gap-1.5"
+                  onClick={() => retryJob.mutate({ jobId: job.id, resourceId: job.resource_id })}
+                  disabled={retryJob.isPending}
+                >
+                  <RefreshCw className={cn('h-3 w-3', retryJob.isPending && 'animate-spin')} />
+                  Retry
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }
@@ -199,7 +272,11 @@ export default function Diagnostics() {
             </TabsTrigger>
             <TabsTrigger value="persisted" className="flex-1 gap-1.5">
               <Database className="h-3.5 w-3.5" />
-              History ({persistedErrors.length})
+              History
+            </TabsTrigger>
+            <TabsTrigger value="jobs" className="flex-1 gap-1.5">
+              <Layers className="h-3.5 w-3.5" />
+              Jobs
             </TabsTrigger>
           </TabsList>
 
@@ -251,6 +328,10 @@ export default function Diagnostics() {
                 <ErrorRow key={`${err.traceId}-${i}`} err={err} index={i} />
               ))}
             </div>
+          </TabsContent>
+
+          <TabsContent value="jobs" className="mt-3 space-y-3">
+            <JobsPanel />
           </TabsContent>
         </Tabs>
       </div>
