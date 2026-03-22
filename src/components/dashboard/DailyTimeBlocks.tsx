@@ -655,8 +655,8 @@ export function DailyTimeBlocks() {
                     });
                     queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks: fixedBlocks });
                     supabase
-                      .from('daily_time_blocks' as any)
-                      .update({ blocks: fixedBlocks })
+                      .from('daily_time_blocks' as 'daily_time_blocks')
+                      .update({ blocks: fixedBlocks as unknown as Json })
                       .eq('id', plan.id)
                       .then();
                     toast.success('Block reordered');
