@@ -47,7 +47,7 @@ export function IcpAccountSourcing() {
       if (opts && opts.moreLikeCompany) {
         body.feedback = `Find more companies similar to "${opts.moreLikeCompany}". ${feedback || ''}`.trim();
       }
-      const { data, error } = await trackedInvoke<any>('source-icp-accounts', { body });
+      const { data, error } = await trackedInvoke<{ success?: boolean; error?: string }>('source-icp-accounts', { body });
       if (error) throw new Error(error.message);
       if (!data?.success) throw new Error(data?.error || 'Sourcing failed');
       return data;
