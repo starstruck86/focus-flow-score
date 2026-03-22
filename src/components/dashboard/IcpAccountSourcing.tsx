@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { Crosshair, Sparkles, ThumbsUp, ThumbsDown, ExternalLink, RefreshCw, Linkedin, Users, Zap, Copy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAccountEnrichment } from '@/hooks/useAccountEnrichment';
+import type { IcpSourcedAccount, IcpSuggestedContact } from '@/types/dashboard';
 
 export function IcpAccountSourcing() {
   const { user } = useAuth();
