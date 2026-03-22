@@ -266,9 +266,9 @@ async function stepIngest(job: ResourceJob, resource: Record<string, unknown>) {
   await supabase.from('resource_jobs').update({
     metadata: {
       ...(job.metadata || {}),
-      resource_type: resource.resource_type,
-      content_length: resource.content_length || (resource.content as string)?.length || 0,
-    },
+      resource_type: String(resource.resource_type || ''),
+      content_length: Number(resource.content_length || (resource.content as string)?.length || 0),
+    } as any,
   }).eq('id', job.id);
 }
 
