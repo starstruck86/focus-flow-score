@@ -135,6 +135,9 @@ export function useVoiceMode() {
     const resp = await authenticatedFetch({
       functionName: 'elevenlabs-tts-stream',
       body: { text, voiceId },
+      retry: { maxAttempts: 2, baseDelayMs: 1_000 },
+      timeoutMs: 30_000,
+      componentName: 'VoiceMode-TTS',
     });
 
     if (!resp.ok) {

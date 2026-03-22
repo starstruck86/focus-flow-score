@@ -79,6 +79,9 @@ export function useDaveContext() {
         conversationHistory: conversationHistory || '',
       },
       traceId,
+      retry: false, // Dave has its own concurrency backoff — skip auto-retry
+      timeoutMs: 30_000,
+      componentName: 'DaveContext',
     });
 
     if (!resp.ok) {
