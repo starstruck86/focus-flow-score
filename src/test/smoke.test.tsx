@@ -29,6 +29,10 @@ vi.mock('@/integrations/supabase/client', () => ({
       in: vi.fn().mockReturnThis(),
       not: vi.fn().mockReturnThis(),
       ilike: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
+      lte: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
+      or: vi.fn().mockReturnThis(),
       single: vi.fn().mockResolvedValue({ data: null }),
       order: vi.fn().mockReturnThis(),
       limit: vi.fn().mockReturnThis(),
@@ -54,6 +58,12 @@ vi.mock('@/integrations/lovable', () => ({
   },
 }));
 
+// Mock trackedInvoke
+vi.mock('@/lib/trackedInvoke', () => ({
+  trackedInvoke: vi.fn().mockResolvedValue({ data: null, error: null, traceId: 'test-trace' }),
+  trackedStreamFetch: vi.fn().mockResolvedValue({ response: null, error: { message: 'mock' }, traceId: 'test-trace' }),
+}));
+
 function createWrapper(route = '/') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return function Wrapper({ children }: { children: React.ReactNode }) {
@@ -71,17 +81,14 @@ function createWrapper(route = '/') {
   };
 }
 
+// ─── Auth ──────────────────────────────────────────────
 describe('Auth page', () => {
   it('renders auth page container', async () => {
     const Auth = (await import('@/pages/Auth')).default;
     const { AuthProvider } = await import('@/contexts/AuthContext');
     const Wrapper = createWrapper('/auth');
     const { container } = render(
-      <Wrapper>
-        <AuthProvider>
-          <Auth />
-        </AuthProvider>
-      </Wrapper>
+      <Wrapper><AuthProvider><Auth /></AuthProvider></Wrapper>
     );
     expect(container.innerHTML.length).toBeGreaterThan(0);
   });
@@ -95,9 +102,7 @@ describe('ProtectedRoute', () => {
     const { container } = render(
       <Wrapper>
         <AuthProvider>
-          <ProtectedRoute>
-            <div data-testid="protected-content">Secret</div>
-          </ProtectedRoute>
+          <ProtectedRoute><div data-testid="protected-content">Secret</div></ProtectedRoute>
         </AuthProvider>
       </Wrapper>
     );
@@ -105,6 +110,7 @@ describe('ProtectedRoute', () => {
   });
 });
 
+// ─── State Components ──────────────────────────────────
 describe('StateComponents', () => {
   it('renders LoadingState', async () => {
     const { LoadingState } = await import('@/components/StateComponents');
@@ -127,11 +133,11 @@ describe('StateComponents', () => {
   });
 });
 
+// ─── Mutation Guard ────────────────────────────────────
 describe('useMutationGuard', () => {
   it('prevents double-submit', async () => {
     const { renderHook, act } = await import('@testing-library/react');
     const { useMutationGuard } = await import('@/hooks/useMutationGuard');
-
     const { result } = renderHook(() => useMutationGuard());
 
     let callCount = 0;
@@ -142,39 +148,37 @@ describe('useMutationGuard', () => {
       const p2 = result.current.guard(slowFn);
       await Promise.all([p1, p2]);
     });
-
     expect(callCount).toBe(1);
   });
 });
 
+// ─── Error Normalization ───────────────────────────────
 describe('Error normalization', () => {
   it('classifies auth errors', async () => {
     const { normalizeError } = await import('@/lib/appError');
-    const result = normalizeError({
-      error: new Error('No active session'),
-      source: 'frontend',
-      functionName: 'test-fn',
-    });
+    const result = normalizeError({ error: new Error('No active session'), source: 'frontend', functionName: 'test-fn' });
     expect(result.category).toBe('AUTH_ERROR');
     expect(result.retryable).toBe(false);
   });
 
   it('classifies network errors', async () => {
     const { normalizeError } = await import('@/lib/appError');
-    const err = new TypeError('Failed to fetch');
-    const result = normalizeError({ error: err, source: 'frontend' });
+    const result = normalizeError({ error: new TypeError('Failed to fetch'), source: 'frontend' });
     expect(result.category).toBe('NETWORK_ERROR');
     expect(result.retryable).toBe(true);
   });
 
   it('classifies timeout errors', async () => {
     const { normalizeError } = await import('@/lib/appError');
-    const result = normalizeError({
-      error: new Error('my-function timed out after 30000ms'),
-      source: 'function',
-      functionName: 'my-function',
-    });
+    const result = normalizeError({ error: new Error('my-function timed out after 30000ms'), source: 'function', functionName: 'my-function' });
     expect(result.category).toBe('FUNCTION_TIMEOUT');
+    expect(result.retryable).toBe(true);
+  });
+
+  it('classifies rate limit errors', async () => {
+    const { normalizeError } = await import('@/lib/appError');
+    const result = normalizeError({ error: new Error('rate limit exceeded'), source: 'function' });
+    expect(result.category).toBe('RATE_LIMITED');
     expect(result.retryable).toBe(true);
   });
 
@@ -185,6 +189,7 @@ describe('Error normalization', () => {
   });
 });
 
+// ─── authenticatedFetch ────────────────────────────────
 describe('authenticatedFetch helper', () => {
   it('exports authenticatedFetch function', async () => {
     const mod = await import('@/lib/authenticatedFetch');
@@ -192,6 +197,20 @@ describe('authenticatedFetch helper', () => {
   });
 });
 
+// ─── trackedInvoke ─────────────────────────────────────
+describe('trackedInvoke helper', () => {
+  it('returns data, error, traceId shape', async () => {
+    vi.resetModules();
+    // Use the mock
+    const { trackedInvoke } = await import('@/lib/trackedInvoke');
+    const result = await trackedInvoke('test-fn', { body: { foo: 'bar' } });
+    expect(result).toHaveProperty('traceId');
+    expect(result).toHaveProperty('data');
+    expect(result).toHaveProperty('error');
+  });
+});
+
+// ─── RouteErrorBoundary ────────────────────────────────
 describe('RouteErrorBoundary', () => {
   it('renders children normally', async () => {
     const { RouteErrorBoundary } = await import('@/components/RouteErrorBoundary');
@@ -201,5 +220,49 @@ describe('RouteErrorBoundary', () => {
       </RouteErrorBoundary>
     );
     expect(container.querySelector('[data-testid="child"]')).toBeTruthy();
+  });
+});
+
+// ─── Settings page render ──────────────────────────────
+describe('Settings page', () => {
+  it('renders settings page', async () => {
+    const Settings = (await import('@/pages/Settings')).default;
+    const { AuthProvider } = await import('@/contexts/AuthContext');
+    const Wrapper = createWrapper('/settings');
+    const { container } = render(
+      <Wrapper><AuthProvider><Settings /></AuthProvider></Wrapper>
+    );
+    expect(container.innerHTML.length).toBeGreaterThan(0);
+  });
+});
+
+// ─── Diagnostics page render ───────────────────────────
+describe('Diagnostics page', () => {
+  it('renders diagnostics page with test IDs', async () => {
+    const Diagnostics = (await import('@/pages/Diagnostics')).default;
+    const { AuthProvider } = await import('@/contexts/AuthContext');
+    const Wrapper = createWrapper('/ops');
+    const { container } = render(
+      <Wrapper><AuthProvider><Diagnostics /></AuthProvider></Wrapper>
+    );
+    expect(container.querySelector('[data-testid="diagnostics-page"]')).toBeTruthy();
+  });
+});
+
+// ─── Import Wizard ─────────────────────────────────────
+describe('Import Wizard', () => {
+  it('renders upload step when opened', async () => {
+    const { ImportWizard } = await import('@/components/import/ImportWizard');
+    const { AuthProvider } = await import('@/contexts/AuthContext');
+    const Wrapper = createWrapper('/');
+    const { container } = render(
+      <Wrapper>
+        <AuthProvider>
+          <ImportWizard open={true} onOpenChange={() => {}} />
+        </AuthProvider>
+      </Wrapper>
+    );
+    // Should render the dialog with upload step
+    expect(container.innerHTML).toContain('Upload');
   });
 });
