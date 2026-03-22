@@ -50,7 +50,7 @@ export function WeeklyBattlePlanCard() {
     );
   }
 
-  const moves = (plan?.moves as any[]) || [];
+  const moves = (plan?.moves as BattlePlanMove[]) || [];
   const completed = (plan?.moves_completed as number[]) || [];
   const completedCount = completed.length;
 
