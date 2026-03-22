@@ -12,7 +12,7 @@ export interface ResourceLink {
   renewal_id: string | null;
   url: string;
   label: string;
-  category: ResourceCategory;
+  category: string;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -32,7 +32,7 @@ export function useResourceLinks(filters?: Filters) {
     queryKey: ['resource-links', filters],
     queryFn: async () => {
       let query = supabase
-        .from('resource_links' as any)
+        .from('resource_links')
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -43,9 +43,9 @@ export function useResourceLinks(filters?: Filters) {
 
       const { data, error } = await query;
       if (error) throw error;
-      return (data || []) as unknown as ResourceLink[];
+      return data || [];
     },
-    enabled: !!user && !!filters, // Only fetch when filters are provided
+    enabled: !!user && !!filters,
   });
 }
 
@@ -62,7 +62,6 @@ export function useResourceLinksForRecord(
 
   const directLinks = useResourceLinks(recordId ? filters : undefined);
 
-  // Also fetch account-level links for opps/renewals
   const accountFilters: Filters | undefined =
     parentAccountId && recordType !== 'account' ? { accountId: parentAccountId } : undefined;
   const accountLinks = useResourceLinks(accountFilters);
@@ -76,7 +75,6 @@ export function useResourceLinksForRecord(
   };
 }
 
-// Fetch all resource links for global library view
 export function useAllResourceLinks() {
   const { user } = useAuth();
 
@@ -84,19 +82,18 @@ export function useAllResourceLinks() {
     queryKey: ['resource-links', 'all'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('resource_links' as any)
+        .from('resource_links')
         .select('*')
         .order('category', { ascending: true })
         .order('created_at', { ascending: false })
         .limit(200);
       if (error) throw error;
-      return (data || []) as unknown as ResourceLink[];
+      return data || [];
     },
     enabled: !!user,
   });
 }
 
-// Fetch resource links for a specific account (used in meeting prep)
 export function useResourceLinksForAccount(accountId?: string) {
   return useResourceLinks(accountId ? { accountId } : undefined);
 }
@@ -108,8 +105,8 @@ export function useAddResourceLink() {
   return useMutation({
     mutationFn: async (link: Omit<ResourceLink, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
       const { error } = await supabase
-        .from('resource_links' as any)
-        .insert({ ...link, user_id: user!.id } as any);
+        .from('resource_links')
+        .insert({ ...link, user_id: user!.id });
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['resource-links'] }),
@@ -122,8 +119,8 @@ export function useUpdateResourceLink() {
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<ResourceLink> & { id: string }) => {
       const { error } = await supabase
-        .from('resource_links' as any)
-        .update({ ...updates, updated_at: new Date().toISOString() } as any)
+        .from('resource_links')
+        .update({ ...updates, updated_at: new Date().toISOString() })
         .eq('id', id);
       if (error) throw error;
     },
@@ -137,7 +134,7 @@ export function useDeleteResourceLink() {
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
-        .from('resource_links' as any)
+        .from('resource_links')
         .delete()
         .eq('id', id);
       if (error) throw error;
@@ -161,7 +158,6 @@ export function detectUrlMeta(url: string): UrlMeta {
     const host = u.hostname.toLowerCase();
     const path = u.pathname.toLowerCase();
 
-    // Google suite
     if (host.includes('docs.google.com')) {
       if (path.includes('/document/')) return { suggestedLabel: 'Google Doc', suggestedCategory: 'template', docType: 'google-doc' };
       if (path.includes('/spreadsheets/')) return { suggestedLabel: 'Google Sheet', suggestedCategory: 'reference', docType: 'google-sheet' };
@@ -169,14 +165,8 @@ export function detectUrlMeta(url: string): UrlMeta {
       if (path.includes('/forms/')) return { suggestedLabel: 'Google Form', suggestedCategory: 'other', docType: 'google-form' };
     }
     if (host.includes('drive.google.com')) return { suggestedLabel: 'Google Drive', suggestedCategory: 'reference', docType: 'google-drive' };
-
-    // Notion
     if (host.includes('notion.so') || host.includes('notion.site')) return { suggestedLabel: 'Notion Page', suggestedCategory: 'playbook', docType: 'notion' };
-
-    // Figma
     if (host.includes('figma.com')) return { suggestedLabel: 'Figma Design', suggestedCategory: 'template', docType: 'figma' };
-
-    // Miro
     if (host.includes('miro.com')) return { suggestedLabel: 'Miro Board', suggestedCategory: 'framework', docType: 'miro' };
 
     return { suggestedLabel: host.replace('www.', ''), suggestedCategory: 'reference', docType: 'generic' };

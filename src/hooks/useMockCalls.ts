@@ -4,6 +4,7 @@ import { streamingFetch } from '@/lib/streamingFetch';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import type { Json } from '@/integrations/supabase/types';
 
 export interface MockCallSession {
   id: string;
@@ -13,10 +14,10 @@ export interface MockCallSession {
   industry: string | null;
   persona: string;
   difficulty: number;
-  scenario: any;
+  scenario: Json;
   messages: { role: 'user' | 'assistant'; content: string }[];
-  live_tracking: any;
-  grade_data: any;
+  live_tracking: Json;
+  grade_data: Json | null;
   overall_grade: string | null;
   overall_score: number | null;
   skill_mode: string | null;
@@ -27,15 +28,13 @@ export interface MockCallSession {
   ended_at: string | null;
 }
 
-// URL no longer needed — streamingFetch builds it from functionName
-
 export function useMockCallSessions() {
   const { user } = useAuth();
   return useQuery({
     queryKey: ['mock-call-sessions', user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('mock_call_sessions' as any)
+        .from('mock_call_sessions')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(50);
@@ -52,7 +51,7 @@ export function useCreateMockSession() {
   return useMutation({
     mutationFn: async (config: { call_type: string; industry: string; persona: string; difficulty: number; skill_mode?: string }) => {
       const { data, error } = await supabase
-        .from('mock_call_sessions' as any)
+        .from('mock_call_sessions')
         .insert({ user_id: user!.id, ...config })
         .select()
         .single();
@@ -65,10 +64,10 @@ export function useCreateMockSession() {
 
 export function useSaveMockMessages() {
   return useMutation({
-    mutationFn: async ({ sessionId, messages }: { sessionId: string; messages: any[] }) => {
+    mutationFn: async ({ sessionId, messages }: { sessionId: string; messages: { role: string; content: string }[] }) => {
       const { error } = await supabase
-        .from('mock_call_sessions' as any)
-        .update({ messages } as any)
+        .from('mock_call_sessions')
+        .update({ messages: messages as unknown as Json })
         .eq('id', sessionId);
       if (error) throw error;
     },
@@ -79,7 +78,7 @@ export function useGradeMockCall() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (sessionId: string) => {
-      const { data, error } = await trackedInvoke<any>('grade-mock-call', {
+      const { data, error } = await trackedInvoke<{ error?: string; overall_grade?: string }>('grade-mock-call', {
         body: { session_id: sessionId },
       });
       if (error) throw error;

@@ -17,7 +17,7 @@ export function useVoiceReminders() {
 
       // Check voice reminders
       const { data: voiceReminders } = await supabase
-        .from('voice_reminders' as any)
+        .from('voice_reminders')
         .select('id, message, remind_at')
         .eq('user_id', user!.id)
         .eq('delivered', false)
@@ -25,21 +25,21 @@ export function useVoiceReminders() {
         .limit(5);
 
       if (voiceReminders?.length) {
-        for (const reminder of voiceReminders as any[]) {
+        for (const reminder of voiceReminders) {
           toast.info('🔔 Reminder', {
             description: reminder.message,
             duration: 15000,
           });
           await supabase
-            .from('voice_reminders' as any)
-            .update({ delivered: true } as any)
+            .from('voice_reminders')
+            .update({ delivered: true })
             .eq('id', reminder.id);
         }
       }
 
       // Check task reminders
       const { data: taskReminders } = await supabase
-        .from('tasks' as any)
+        .from('tasks')
         .select('id, title, reminder_at')
         .eq('user_id', user!.id)
         .not('status', 'in', '("done","dropped")')
@@ -48,15 +48,15 @@ export function useVoiceReminders() {
         .limit(5);
 
       if (taskReminders?.length) {
-        for (const task of taskReminders as any[]) {
+        for (const task of taskReminders) {
           toast.info('⏰ Task Reminder', {
             description: task.title,
             duration: 15000,
           });
           // Null out reminder_at to prevent re-firing
           await supabase
-            .from('tasks' as any)
-            .update({ reminder_at: null } as any)
+            .from('tasks')
+            .update({ reminder_at: null })
             .eq('id', task.id);
         }
       }

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import type { Json } from '@/integrations/supabase/types';
 
 export interface OpportunityMethodology {
   id: string;
@@ -45,7 +46,7 @@ export function useOpportunityMethodology(opportunityId: string | undefined) {
     queryFn: async () => {
       if (!opportunityId || !user) return null;
       const { data, error } = await supabase
-        .from('opportunity_methodology' as any)
+        .from('opportunity_methodology')
         .select('*')
         .eq('opportunity_id', opportunityId)
         .maybeSingle();
@@ -58,13 +59,18 @@ export function useOpportunityMethodology(opportunityId: string | undefined) {
   const upsert = useMutation({
     mutationFn: async (updates: Partial<OpportunityMethodology>) => {
       if (!opportunityId || !user) throw new Error('Missing context');
+      // Convert call_goals array to Json for Supabase compatibility
+      const dbUpdates: Record<string, unknown> = { ...updates };
+      if ('call_goals' in dbUpdates) {
+        dbUpdates.call_goals = dbUpdates.call_goals as unknown as Json;
+      }
       const { data, error } = await supabase
-        .from('opportunity_methodology' as any)
+        .from('opportunity_methodology')
         .upsert({
           user_id: user.id,
           opportunity_id: opportunityId,
-          ...updates,
-        } as any, { onConflict: 'user_id,opportunity_id' })
+          ...dbUpdates,
+        }, { onConflict: 'user_id,opportunity_id' })
         .select()
         .single();
       if (error) throw error;

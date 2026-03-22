@@ -32,7 +32,7 @@ export function useCallTranscripts(filters?: {
     queryKey: ['call-transcripts', filters],
     queryFn: async () => {
       let query = supabase
-        .from('call_transcripts' as any)
+        .from('call_transcripts')
         .select('*')
         .order('call_date', { ascending: false });
 
@@ -51,7 +51,7 @@ export function useCallTranscripts(filters?: {
 
       const { data, error } = await query.limit(100);
       if (error) throw error;
-      return (data || []) as unknown as CallTranscript[];
+      return data || [];
     },
   });
 }
@@ -62,13 +62,13 @@ export function useTranscriptsForAccount(accountId: string | undefined) {
     queryFn: async () => {
       if (!accountId) return [];
       const { data, error } = await supabase
-        .from('call_transcripts' as any)
+        .from('call_transcripts')
         .select('*')
         .eq('account_id', accountId)
         .order('call_date', { ascending: false })
         .limit(20);
       if (error) throw error;
-      return (data || []) as unknown as CallTranscript[];
+      return data || [];
     },
     enabled: !!accountId,
   });
@@ -80,13 +80,13 @@ export function useRecentTranscriptsForMeetingPrep(accountId: string | undefined
     queryFn: async () => {
       if (!accountId) return [];
       const { data, error } = await supabase
-        .from('call_transcripts' as any)
+        .from('call_transcripts')
         .select('id, title, call_date, call_type, summary, participants, notes')
         .eq('account_id', accountId)
         .order('call_date', { ascending: false })
         .limit(3);
       if (error) throw error;
-      return (data || []) as unknown as Partial<CallTranscript>[];
+      return data || [];
     },
     enabled: !!accountId,
   });
@@ -113,7 +113,7 @@ export function useSaveTranscript() {
     }) => {
       if (!user) throw new Error('Not authenticated');
       const { data, error } = await supabase
-        .from('call_transcripts' as any)
+        .from('call_transcripts')
         .insert({
           ...transcript,
           user_id: user.id,
@@ -121,7 +121,7 @@ export function useSaveTranscript() {
         .select()
         .single();
       if (error) throw error;
-      return data as unknown as CallTranscript;
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['call-transcripts'] });
@@ -135,13 +135,13 @@ export function useUpdateTranscript() {
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<Omit<CallTranscript, 'id' | 'user_id' | 'created_at' | 'updated_at'>> }) => {
       const { data, error } = await supabase
-        .from('call_transcripts' as any)
+        .from('call_transcripts')
         .update(updates)
         .eq('id', id)
         .select()
         .single();
       if (error) throw error;
-      return data as unknown as CallTranscript;
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['call-transcripts'] });
@@ -155,7 +155,7 @@ export function useDeleteTranscript() {
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
-        .from('call_transcripts' as any)
+        .from('call_transcripts')
         .delete()
         .eq('id', id);
       if (error) throw error;

@@ -141,7 +141,7 @@ export function ResourceLibraryModal({ open, onOpenChange }: ResourceLibraryModa
   const startEdit = (link: ResourceLink) => {
     setEditingId(link.id);
     setEditLabel(link.label);
-    setEditCategory(link.category);
+    setEditCategory(link.category as ResourceCategory);
     setEditNotes(link.notes || '');
   };
 
