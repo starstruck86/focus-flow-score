@@ -102,12 +102,8 @@ export function useVoiceMode() {
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
 
-      const resp = await fetch(STT_URL, {
-        method: 'POST',
-        headers: {
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
+      const resp = await authenticatedFetch({
+        functionName: 'elevenlabs-stt',
         body: formData,
       });
 
