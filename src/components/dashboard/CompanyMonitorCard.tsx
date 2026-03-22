@@ -47,7 +47,7 @@ export function CompanyMonitorCard({ motionFilter }: CompanyMonitorCardProps = {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [isScanning, setIsScanning] = useState(false);
-  const [outreachModal, setOutreachModal] = useState<{ open: boolean; item: any | null; draft: string; loading: boolean }>({ open: false, item: null, draft: '', loading: false });
+  const [outreachModal, setOutreachModal] = useState<OutreachModalState>({ open: false, item: null, draft: '', loading: false });
   const { createTasksFromSignals } = useSignalTriggeredTasks();
 
   const { data: digestItems, isLoading } = useQuery({
