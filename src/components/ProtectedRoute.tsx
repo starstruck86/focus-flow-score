@@ -6,8 +6,15 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
+  // TEMPORARY: bypass auth for testing — remove this line to re-enable auth
+  const BYPASS_AUTH = true;
+
   const { session, user, loading } = useAuth();
   const location = useLocation();
+
+  if (BYPASS_AUTH) {
+    return <>{children}</>;
+  }
 
   if (loading) {
     return (
