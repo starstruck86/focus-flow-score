@@ -23,19 +23,17 @@ export function useCalendarEvents() {
   return useQuery({
     queryKey: ['calendar-events'],
     queryFn: async () => {
-      // Fetch all events from start of today (local time) through future
-      // Use local date components to avoid UTC date shift issues
       const now = new Date();
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
       const { data, error } = await supabase
-        .from('calendar_events' as any)
+        .from('calendar_events')
         .select('*')
         .gte('start_time', startOfToday.toISOString())
         .order('start_time', { ascending: true })
         .limit(50);
       
       if (error) throw error;
-      return data as unknown as CalendarEvent[];
+      return data || [];
     },
   });
 }
@@ -45,7 +43,7 @@ export function useSyncCalendar() {
   
   return useMutation({
     mutationFn: async () => {
-      const response = await trackedInvoke<any>('sync-calendar');
+      const response = await trackedInvoke<{ synced?: number }>('sync-calendar');
       if (response.error) throw response.error;
       return response.data;
     },

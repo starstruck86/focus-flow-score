@@ -3,77 +3,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import type { MeddiccSignals } from './useTranscriptGrades.types';
 
-export interface CotmSignals {
-  before_identified: boolean;
-  before_evidence?: string;
-  negative_consequences: boolean;
-  negative_consequences_evidence?: string;
-  after_defined: boolean;
-  after_evidence?: string;
-  pbo_articulated: boolean;
-  pbo_evidence?: string;
-  required_capabilities: boolean;
-  capabilities_evidence?: string;
-  metrics_captured: boolean;
-  metrics_evidence?: string;
-}
-
-export interface MeddiccSignals {
-  metrics: boolean;
-  metrics_detail?: string;
-  economic_buyer: boolean;
-  economic_buyer_detail?: string;
-  decision_criteria: boolean;
-  decision_criteria_detail?: string;
-  decision_process: boolean;
-  decision_process_detail?: string;
-  identify_pain: boolean;
-  identify_pain_detail?: string;
-  champion: boolean;
-  champion_detail?: string;
-  competition: boolean;
-  competition_detail?: string;
-}
-
-export interface DiscoveryStats {
-  total_questions: number;
-  open_ended_pct: number;
-  impact_questions: number;
-  follow_up_depth: number;
-}
-
-export interface PresenceStats {
-  talk_ratio_estimate: number;
-  rambling_detected: boolean;
-  interruptions_detected: boolean;
-  flow_control: number;
-}
-
-export interface CallSegment {
-  segment: string;
-  quality: number;
-  notes: string;
-}
-
-export interface EvidenceItem {
-  category: string;
-  score_given: number;
-  quote: string;
-  assessment: string;
-}
-
-export interface MissedOpportunity {
-  opportunity: string;
-  moment: string;
-  example: string;
-}
-
-export interface SuggestedQuestion {
-  question: string;
-  framework: string;
-  why: string;
-}
+export type { CotmSignals, MeddiccSignals, DiscoveryStats, PresenceStats, CallSegment, EvidenceItem, MissedOpportunity, SuggestedQuestion } from './useTranscriptGrades.types';
 
 export interface TranscriptGrade {
   id: string;
@@ -103,14 +35,14 @@ export interface TranscriptGrade {
   presence_score: number;
   commercial_score: number;
   next_step_score: number;
-  call_segments: CallSegment[];
-  cotm_signals: CotmSignals;
-  meddicc_signals: MeddiccSignals;
-  discovery_stats: DiscoveryStats;
-  presence_stats: PresenceStats;
-  evidence: EvidenceItem[];
-  missed_opportunities: MissedOpportunity[];
-  suggested_questions: SuggestedQuestion[];
+  call_segments: unknown[];
+  cotm_signals: unknown;
+  meddicc_signals: MeddiccSignals | null;
+  discovery_stats: unknown;
+  presence_stats: unknown;
+  evidence: unknown[];
+  missed_opportunities: unknown[];
+  suggested_questions: unknown[];
   behavioral_flags: string[];
   replacement_behavior: string | null;
   coaching_issue: string | null;
@@ -119,13 +51,21 @@ export interface TranscriptGrade {
   call_type: string | null;
 }
 
+/** Score category keys used for aggregate scoring */
+const SCORE_CATEGORIES = ['structure_score', 'cotm_score', 'meddicc_score', 'discovery_score', 'presence_score', 'commercial_score', 'next_step_score'] as const;
+type ScoreCategory = typeof SCORE_CATEGORIES[number];
+
+function getScoreCategoryValue(grade: TranscriptGrade, cat: ScoreCategory): number {
+  return grade[cat] || 0;
+}
+
 export function useTranscriptGrade(transcriptId: string | undefined) {
   return useQuery({
     queryKey: ['transcript-grade', transcriptId],
     queryFn: async () => {
       if (!transcriptId) return null;
       const { data, error } = await supabase
-        .from('transcript_grades' as any)
+        .from('transcript_grades')
         .select('*')
         .eq('transcript_id', transcriptId)
         .maybeSingle();
@@ -142,7 +82,7 @@ export function useAllTranscriptGrades() {
     queryKey: ['transcript-grades', user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('transcript_grades' as any)
+        .from('transcript_grades')
         .select('*, call_transcripts!inner(title, call_date, call_type, account_id)')
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -200,10 +140,9 @@ export function useBehavioralPatterns() {
     .sort((a, b) => b.count - a.count);
 
   // Find weakest category
-  const categories = ['structure_score', 'cotm_score', 'meddicc_score', 'discovery_score', 'presence_score', 'commercial_score', 'next_step_score'] as const;
-  const avgScores = categories.map(cat => ({
+  const avgScores = SCORE_CATEGORIES.map(cat => ({
     category: cat.replace('_score', ''),
-    avg: allGrades.reduce((s, g) => s + ((g as any)[cat] || 0), 0) / allGrades.length,
+    avg: allGrades.reduce((s, g) => s + getScoreCategoryValue(g, cat), 0) / allGrades.length,
   }));
   const weakestArea = avgScores.sort((a, b) => a.avg - b.avg)[0];
 
@@ -212,9 +151,9 @@ export function useBehavioralPatterns() {
   const older = allGrades.slice(3, 6);
   const trendSummary: { dimension: string; direction: 'improving' | 'declining' | 'stable'; delta: number }[] = [];
   if (recent.length >= 2 && older.length >= 2) {
-    categories.forEach(cat => {
-      const recentAvg = recent.reduce((s, g) => s + ((g as any)[cat] || 0), 0) / recent.length;
-      const olderAvg = older.reduce((s, g) => s + ((g as any)[cat] || 0), 0) / older.length;
+    SCORE_CATEGORIES.forEach(cat => {
+      const recentAvg = recent.reduce((s, g) => s + getScoreCategoryValue(g, cat), 0) / recent.length;
+      const olderAvg = older.reduce((s, g) => s + getScoreCategoryValue(g, cat), 0) / older.length;
       const delta = recentAvg - olderAvg;
       trendSummary.push({
         dimension: cat.replace('_score', ''),
@@ -250,7 +189,10 @@ export function useMeddiccCompleteness() {
 
   const fields = ['metrics', 'economic_buyer', 'decision_criteria', 'decision_process', 'identify_pain', 'champion', 'competition'] as const;
   const completeness = fields.map(field => {
-    const covered = allGrades.filter(g => g.meddicc_signals && (g.meddicc_signals as any)[field]).length;
+    const covered = allGrades.filter(g => {
+      const signals = g.meddicc_signals as MeddiccSignals | null;
+      return signals && signals[field];
+    }).length;
     return { field, covered, total: allGrades.length, pct: Math.round((covered / allGrades.length) * 100) };
   });
 
