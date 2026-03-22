@@ -94,7 +94,7 @@ export function ResourceLinksPanel({ recordType, recordId, parentAccountId, comp
     setEditingLink(link);
     setUrl(link.url);
     setLabel(link.label);
-    setCategory(link.category);
+    setCategory(link.category as ResourceCategory);
     setNotes(link.notes || '');
     setShowAdd(true);
   };
