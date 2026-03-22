@@ -135,7 +135,7 @@ export function DailyTimeBlocks() {
     queryKey: ['daily-time-blocks', todayStr],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('daily_time_blocks' as any)
+        .from('daily_time_blocks' as 'daily_time_blocks')
         .select('*')
         .eq('plan_date', todayStr)
         .maybeSingle();
