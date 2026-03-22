@@ -64,6 +64,29 @@ vi.mock('@/lib/trackedInvoke', () => ({
   trackedStreamFetch: vi.fn().mockResolvedValue({ response: null, error: { message: 'mock' }, traceId: 'test-trace' }),
 }));
 
+// Mock CopilotContext
+vi.mock('@/contexts/CopilotContext', () => ({
+  CopilotProvider: ({ children }: { children: React.ReactNode }) => children,
+  useCopilot: () => ({
+    state: { open: false },
+    pageContext: null,
+    setPageContext: vi.fn(),
+    ask: vi.fn(),
+    askBackground: vi.fn(),
+    open: vi.fn(),
+    close: vi.fn(),
+    setOpen: vi.fn(),
+    clearInitialQuestion: vi.fn(),
+    backgroundResult: null,
+    clearBackgroundResult: vi.fn(),
+  }),
+}));
+
+// Mock territoryCopilot (streaming)
+vi.mock('@/lib/territoryCopilot', () => ({
+  streamCopilot: vi.fn(),
+}));
+
 function createWrapper(route = '/') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return function Wrapper({ children }: { children: React.ReactNode }) {
