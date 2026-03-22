@@ -285,7 +285,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </div>
 
       <Breadcrumbs />
-      <main className="flex-1 overflow-auto pb-[calc(8rem+env(safe-area-inset-bottom))]">
+      <main data-testid="main-content" className="flex-1 overflow-x-hidden overflow-y-auto pb-[calc(8rem+env(safe-area-inset-bottom))]">
         {children}
       </main>
 
