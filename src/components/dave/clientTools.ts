@@ -2118,50 +2118,18 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       const fullPrompt = `${params.customInstructions || `Generate a professional ${params.contentType}`}\n\nContext:\n${contextParts.join('\n')}`;
 
       try {
-        const { data: { session: authSession } } = await supabase.auth.getSession();
-        const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/build-resource`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${authSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({
+        const { streamToString } = await import('@/lib/streamingFetch');
+        const { text: result, error } = await streamToString({
+          functionName: 'build-resource',
+          body: {
             type: 'generate',
             prompt: fullPrompt,
             outputType: params.contentType || 'email',
             accountContext: accountContext ? { name: accountContext.name, industry: accountContext.industry, contacts: accountContext.contacts } : undefined,
-          }),
+          },
         });
 
-        if (!resp.ok) throw new Error(`Error ${resp.status}`);
-
-        // Stream response
-        const reader = resp.body?.getReader();
-        if (!reader) throw new Error('No stream');
-        const decoder = new TextDecoder();
-        let result = '';
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          let idx;
-          while ((idx = buffer.indexOf('\n')) !== -1) {
-            let line = buffer.slice(0, idx);
-            buffer = buffer.slice(idx + 1);
-            if (line.endsWith('\r')) line = line.slice(0, -1);
-            if (!line.startsWith('data: ')) continue;
-            const json = line.slice(6).trim();
-            if (json === '[DONE]') break;
-            try {
-              const parsed = JSON.parse(json);
-              const content = parsed.choices?.[0]?.delta?.content;
-              if (content) result += content;
-            } catch { /* partial */ }
-          }
-        }
+        if (error) throw new Error(error);
 
         // Copy to clipboard
         if (result && navigator.clipboard) {
