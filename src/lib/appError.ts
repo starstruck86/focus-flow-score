@@ -188,7 +188,7 @@ async function flushErrors() {
       component_name: e.componentName,
       route: e.route,
       retryable: e.retryable,
-      metadata: e.metadata,
+      metadata: e.metadata as Record<string, unknown> as any,
     }));
 
     await supabase.from('error_logs').insert(rows);
