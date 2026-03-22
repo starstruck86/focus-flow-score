@@ -1,50 +1,27 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  getResourceLinks,
+  getAllResourceLinks,
+  insertResourceLink,
+  updateResourceLink as updateResourceLinkQuery,
+  deleteResourceLink as deleteResourceLinkQuery,
+  type ResourceLinkRow,
+  type ResourceLinkFilters,
+} from '@/data/resource-links';
 
 export type ResourceCategory = 'template' | 'framework' | 'playbook' | 'reference' | 'other';
 
-export interface ResourceLink {
-  id: string;
-  user_id: string;
-  account_id: string | null;
-  opportunity_id: string | null;
-  renewal_id: string | null;
-  url: string;
-  label: string;
-  category: string;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
-}
+export type ResourceLink = ResourceLinkRow;
 
-interface Filters {
-  accountId?: string;
-  opportunityId?: string;
-  renewalId?: string;
-  category?: ResourceCategory;
-}
+type Filters = ResourceLinkFilters & { category?: ResourceCategory };
 
 export function useResourceLinks(filters?: Filters) {
   const { user } = useAuth();
 
   return useQuery({
     queryKey: ['resource-links', filters],
-    queryFn: async () => {
-      let query = supabase
-        .from('resource_links')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (filters?.accountId) query = query.eq('account_id', filters.accountId);
-      if (filters?.opportunityId) query = query.eq('opportunity_id', filters.opportunityId);
-      if (filters?.renewalId) query = query.eq('renewal_id', filters.renewalId);
-      if (filters?.category) query = query.eq('category', filters.category);
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return data || [];
-    },
+    queryFn: () => getResourceLinks(filters),
     enabled: !!user && !!filters,
   });
 }
@@ -80,16 +57,7 @@ export function useAllResourceLinks() {
 
   return useQuery({
     queryKey: ['resource-links', 'all'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('resource_links')
-        .select('*')
-        .order('category', { ascending: true })
-        .order('created_at', { ascending: false })
-        .limit(200);
-      if (error) throw error;
-      return data || [];
-    },
+    queryFn: () => getAllResourceLinks(),
     enabled: !!user,
   });
 }
@@ -103,11 +71,8 @@ export function useAddResourceLink() {
   const { user } = useAuth();
 
   return useMutation({
-    mutationFn: async (link: Omit<ResourceLink, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
-      const { error } = await supabase
-        .from('resource_links')
-        .insert({ ...link, user_id: user!.id });
-      if (error) throw error;
+    mutationFn: async (link: Omit<ResourceLinkRow, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
+      return insertResourceLink({ ...link, user_id: user!.id });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['resource-links'] }),
   });
@@ -117,12 +82,8 @@ export function useUpdateResourceLink() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, ...updates }: Partial<ResourceLink> & { id: string }) => {
-      const { error } = await supabase
-        .from('resource_links')
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq('id', id);
-      if (error) throw error;
+    mutationFn: async ({ id, ...updates }: Partial<ResourceLinkRow> & { id: string }) => {
+      return updateResourceLinkQuery(id, updates);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['resource-links'] }),
   });
@@ -132,13 +93,7 @@ export function useDeleteResourceLink() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('resource_links')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
-    },
+    mutationFn: deleteResourceLinkQuery,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['resource-links'] }),
   });
 }

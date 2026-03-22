@@ -166,7 +166,7 @@ function dbToUiOpportunity(db: DbOpportunity): Opportunity {
     nextStepDate: db.next_step_date ?? undefined,
     lastTouchDate: db.last_touch_date ?? undefined,
     notes: db.notes ?? undefined,
-    activityLog: (db.activity_log as OpportunityActivity[]) || [],
+    activityLog: (db.activity_log as unknown as OpportunityActivity[]) || [],
     createdAt: db.created_at,
     updatedAt: db.updated_at,
     dealType: (db.deal_type as DealType) ?? undefined,
