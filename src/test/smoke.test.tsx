@@ -85,6 +85,17 @@ vi.mock('@/contexts/CopilotContext', () => ({
 // Mock territoryCopilot (streaming)
 vi.mock('@/lib/territoryCopilot', () => ({
   streamCopilot: vi.fn(),
+  SUGGESTED_QUESTIONS: [],
+}));
+
+// Mock LinkedRecordContext
+vi.mock('@/contexts/LinkedRecordContext', () => ({
+  LinkedRecordProvider: ({ children }: { children: React.ReactNode }) => children,
+  useLinkedRecordContext: () => ({
+    currentRecord: null,
+    setCurrentRecord: vi.fn(),
+    clearRecord: vi.fn(),
+  }),
 }));
 
 function createWrapper(route = '/') {
