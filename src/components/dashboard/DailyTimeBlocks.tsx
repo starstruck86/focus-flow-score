@@ -158,7 +158,7 @@ export function DailyTimeBlocks() {
   const generateMutation = useMutation({
     mutationFn: async (opts: { confirmedScreenshotEvents?: CalendarScreenshotEvent[] } | void) => {
       const screenshotEvents = opts && 'confirmedScreenshotEvents' in opts ? opts.confirmedScreenshotEvents : undefined;
-      const { data, error } = await trackedInvoke<any>('generate-time-blocks', {
+      const { data, error } = await trackedInvoke<DailyPlan>('generate-time-blocks', {
         body: { date: todayStr, confirmedScreenshotEvents: screenshotEvents },
       });
       if (error) throw error;
