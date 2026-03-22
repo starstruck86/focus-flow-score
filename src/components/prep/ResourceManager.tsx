@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -38,7 +39,6 @@ import { useResourceDuplicates } from '@/hooks/useResourceDuplicates';
 import { useConsolidateFolders } from '@/hooks/useConsolidateFolders';
 import { ResourceIntelligenceDashboard } from './ResourceIntelligenceDashboard';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
 type PendingItem = {
@@ -321,7 +321,7 @@ export function ResourceManager() {
     if (!discoverQuery.trim()) return;
     setDiscoverLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('discover-resources', {
+      const { data, error } = await trackedInvoke('discover-resources', {
         body: { type: 'resource-search', query: discoverQuery.trim() },
       });
       if (error) throw error;
@@ -365,7 +365,7 @@ export function ResourceManager() {
     setBattlecardLoading(true);
     setBattlecardProgress('Mapping website...');
     try {
-      const { data, error } = await supabase.functions.invoke('discover-resources', {
+      const { data, error } = await trackedInvoke('discover-resources', {
         body: {
           type: 'competitor-intel',
           companyName: competitorName.trim(),
@@ -539,7 +539,7 @@ export function ResourceManager() {
           onClick={async () => {
             setBulkEnriching(true);
             try {
-              const { data, error } = await supabase.functions.invoke('enrich-resource-content', {
+              const { data, error } = await trackedInvoke('enrich-resource-content', {
                 body: { batch: true, limit: 50 },
               });
               if (error) throw error;
@@ -850,7 +850,7 @@ export function ResourceManager() {
                           const isReenrich = resAny.content_status === 'enriched';
                           toast.info(isReenrich ? 'Re-enriching content...' : 'Enriching content...');
                           try {
-                            const { data } = await supabase.functions.invoke('enrich-resource-content', {
+                            const { data } = await trackedInvoke('enrich-resource-content', {
                               body: { resource_id: resource.id, force: true },
                             });
                             toast.success(`Content ${isReenrich ? 're-' : ''}enriched${data?.chars ? ` (${(data.chars / 1000).toFixed(1)}K chars)` : ''}`);
@@ -1111,7 +1111,7 @@ export function ResourceManager() {
             onClick={async () => {
               setBulkReenriching(true);
               try {
-                const { data, error } = await supabase.functions.invoke('enrich-resource-content', {
+                const { data, error } = await trackedInvoke('enrich-resource-content', {
                   body: { resource_ids: Array.from(selectedResourceIds), force: true },
                 });
                 if (error) throw error;

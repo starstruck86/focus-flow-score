@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -35,7 +36,7 @@ async function classifyResource(payload: {
   existingTitle?: string;
   existingTags?: string[];
 }): Promise<ClassificationResult> {
-  const { data, error } = await supabase.functions.invoke('classify-resource', {
+  const { data, error } = await trackedInvoke('classify-resource', {
     body: payload,
   });
   if (error) throw error;
@@ -242,7 +243,7 @@ export function useAddUrlResource() {
 
       // Fire-and-forget background deep enrich if still placeholder
       if (contentStatus === 'placeholder') {
-        supabase.functions.invoke('enrich-resource-content', {
+        trackedInvoke('enrich-resource-content', {
           body: { resource_id: resource.id },
         }).catch(() => {});
       }

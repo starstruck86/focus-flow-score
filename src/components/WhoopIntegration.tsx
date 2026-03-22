@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useSearchParams } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -85,7 +85,7 @@ export function WhoopIntegration() {
   async function handleConnect() {
     setConnecting(true);
     try {
-      const response = await supabase.functions.invoke('whoop-auth', {
+      const response = await trackedInvoke('whoop-auth', {
         body: { redirectUri: window.location.origin },
       });
       if (response.error) throw new Error(response.error.message);
@@ -100,7 +100,7 @@ export function WhoopIntegration() {
   async function syncData() {
     setSyncing(true);
     try {
-      const response = await supabase.functions.invoke('whoop-sync', {
+      const response = await trackedInvoke('whoop-sync', {
         body: { action: 'sync' },
       });
       if (response.error) throw new Error(response.error.message);
@@ -129,7 +129,7 @@ export function WhoopIntegration() {
   async function handleDisconnect() {
     setDisconnecting(true);
     try {
-      const response = await supabase.functions.invoke('whoop-sync', {
+      const response = await trackedInvoke('whoop-sync', {
         body: { action: 'disconnect' },
       });
       if (response.error) throw new Error(response.error.message);

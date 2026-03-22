@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -162,7 +163,7 @@ export function ScreenshotEnrichModal({ open, onOpenChange, account: preselected
       toast.info(`Analyzing ${uploadedUrls.length} screenshot(s)...`);
 
       // Call edge function to parse with AI vision
-      const { data: parseResult, error: parseError } = await supabase.functions.invoke('parse-screenshot', {
+      const { data: parseResult, error: parseError } = await trackedInvoke('parse-screenshot', {
         body: {
           imageUrls: uploadedUrls,
           accountId: account.id,

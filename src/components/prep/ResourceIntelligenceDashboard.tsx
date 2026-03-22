@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { Brain, Search, AlertTriangle, CheckCircle, Loader2, Zap, BookOpen, BarChart3, Clock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -131,7 +132,7 @@ export function ResourceIntelligenceDashboard() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) return;
 
-      const resp = await supabase.functions.invoke('detect-knowledge-gaps', {
+      const resp = await trackedInvoke('detect-knowledge-gaps', {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
@@ -175,7 +176,7 @@ export function ResourceIntelligenceDashboard() {
       let success = 0;
       for (const resource of unoperationalized.slice(0, 10)) {
         try {
-          const { error } = await supabase.functions.invoke('operationalize-resource', {
+          const { error } = await trackedInvoke('operationalize-resource', {
             body: { resourceId: resource.id },
           });
           if (!error) success++;
@@ -214,7 +215,7 @@ export function ResourceIntelligenceDashboard() {
       }
 
       const ids = shallowResources.map(r => r.id);
-      const { data, error } = await supabase.functions.invoke('enrich-resource-content', {
+      const { data, error } = await trackedInvoke('enrich-resource-content', {
         body: { resource_ids: ids, force: true },
       });
       if (error) throw error;

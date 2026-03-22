@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useEffect, useRef } from 'react';
 
 interface CalendarEvent {
@@ -44,7 +44,7 @@ export function useSyncCalendar() {
   
   return useMutation({
     mutationFn: async () => {
-      const response = await supabase.functions.invoke('sync-calendar');
+      const response = await trackedInvoke('sync-calendar');
       if (response.error) throw response.error;
       return response.data;
     },

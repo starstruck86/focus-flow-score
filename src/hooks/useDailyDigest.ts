@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
@@ -90,7 +90,7 @@ export function useDailyDigest(date?: string) {
 
   const triggerDigest = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke('daily-digest', {
+      const { data, error } = await trackedInvoke('daily-digest', {
         body: { userId: user?.id },
       });
       if (error) throw error;

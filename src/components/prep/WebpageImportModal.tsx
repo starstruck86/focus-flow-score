@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,7 +8,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Globe, ExternalLink } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { useClassifyResource, useAddUrlResource } from '@/hooks/useResourceUpload';
 import { toast } from 'sonner';
 
@@ -34,7 +34,7 @@ export function WebpageImportModal({ open, onOpenChange }: WebpageImportModalPro
     setFetching(true);
     setLinks([]);
     try {
-      const { data, error } = await supabase.functions.invoke('import-webpage-links', {
+      const { data, error } = await trackedInvoke('import-webpage-links', {
         body: { url: url.trim() },
       });
       if (error) throw error;

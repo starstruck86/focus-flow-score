@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { ResourceJobStatus as ResourceJobStatusComponent } from '@/components/ResourceJobStatus';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,7 +54,7 @@ function DigestViewer({ resourceId }: { resourceId: string }) {
   const handleReOperationalize = async () => {
     setReOperationalizing(true);
     try {
-      const { error } = await supabase.functions.invoke('operationalize-resource', {
+      const { error } = await trackedInvoke('operationalize-resource', {
         body: { resource_id: resourceId },
       });
       if (error) throw error;

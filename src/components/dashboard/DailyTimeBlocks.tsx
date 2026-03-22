@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStore } from '@/store/useStore';
 import { Card } from '@/components/ui/card';
@@ -157,7 +157,7 @@ export function DailyTimeBlocks() {
   const generateMutation = useMutation({
     mutationFn: async (opts: { confirmedScreenshotEvents?: any[] } | void) => {
       const screenshotEvents = opts && 'confirmedScreenshotEvents' in opts ? opts.confirmedScreenshotEvents : undefined;
-      const { data, error } = await supabase.functions.invoke('generate-time-blocks', {
+      const { data, error } = await trackedInvoke('generate-time-blocks', {
         body: { date: todayStr, confirmedScreenshotEvents: screenshotEvents },
       });
       if (error) throw error;

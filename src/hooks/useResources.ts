@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -387,7 +388,7 @@ export function useOperationalizeResource() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (resourceId: string) => {
-      const { data, error } = await supabase.functions.invoke('operationalize-resource', {
+      const { data, error } = await trackedInvoke('operationalize-resource', {
         body: { resource_id: resourceId },
       });
       if (error) throw error;
@@ -423,7 +424,7 @@ export function useResourceSuggestions(enabled = false) {
   return useQuery({
     queryKey: ['resource-suggestions', user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('suggest-resource-uses');
+      const { data, error } = await trackedInvoke('suggest-resource-uses');
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       return (data?.suggestions || []) as ResourceSuggestion[];

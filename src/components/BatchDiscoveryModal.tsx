@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -112,7 +113,7 @@ export function BatchDiscoveryModal({ children }: { children: React.ReactNode })
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-          const { data, error } = await supabase.functions.invoke('discover-contacts', {
+          const { data, error } = await trackedInvoke('discover-contacts', {
             body: {
               accountId,
               accountName: account?.name,

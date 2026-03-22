@@ -1,5 +1,6 @@
 // ICP Account Sourcing — AI-powered prospect discovery with feedback loop, auto-enrich on promote, "more like this"
 import { useState } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -45,7 +46,7 @@ export function IcpAccountSourcing() {
       if (opts && opts.moreLikeCompany) {
         body.feedback = `Find more companies similar to "${opts.moreLikeCompany}". ${feedback || ''}`.trim();
       }
-      const { data, error } = await supabase.functions.invoke('source-icp-accounts', { body });
+      const { data, error } = await trackedInvoke('source-icp-accounts', { body });
       if (error) throw new Error(error.message);
       if (!data?.success) throw new Error(data?.error || 'Sourcing failed');
       return data;
@@ -112,7 +113,7 @@ export function IcpAccountSourcing() {
       } as any).catch(() => {});
 
       // 5. Auto-discover more contacts in background
-      supabase.functions.invoke('discover-contacts', {
+      trackedInvoke('discover-contacts', {
         body: {
           accountId: newAccount.id,
           accountName: account.company_name,

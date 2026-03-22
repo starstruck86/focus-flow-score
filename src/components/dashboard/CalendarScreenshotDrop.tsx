@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -53,7 +53,7 @@ export function CalendarScreenshotDrop({ date, onEventsConfirmed }: CalendarScre
         reader.readAsDataURL(file);
       });
 
-      const { data, error } = await supabase.functions.invoke('parse-calendar-screenshot', {
+      const { data, error } = await trackedInvoke('parse-calendar-screenshot', {
         body: { imageBase64: base64, date },
       });
 

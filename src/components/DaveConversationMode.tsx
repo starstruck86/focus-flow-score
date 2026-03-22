@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import type { Json } from '@/integrations/supabase/types';
 import { useConversation } from '@elevenlabs/react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -114,7 +115,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
 
   useEffect(() => {
     if (!showDiagnostics || healthCheck) return;
-    supabase.functions.invoke('dave-health-check').then(({ data }) => {
+    trackedInvoke('dave-health-check').then(({ data }) => {
       if (data) {
         setHealthCheck({
           apiKey: data.apiKeyValid,
