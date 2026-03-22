@@ -252,7 +252,7 @@ export function DailyTimeBlocks() {
     });
 
     await supabase
-      .from('daily_time_blocks' as any)
+      .from('daily_time_blocks' as 'daily_time_blocks')
       .update({ block_feedback: updated })
       .eq('id', plan.id);
   }, [plan, todayStr, queryClient]);
