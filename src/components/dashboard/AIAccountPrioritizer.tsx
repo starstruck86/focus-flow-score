@@ -42,10 +42,11 @@ export function AIAccountPrioritizer() {
   const fetchPriorities = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('prioritize-accounts');
-      if (error) throw error;
-      if (data?.error) {
-        toast.error(data.error);
+      const { data, error } = await trackedInvoke<PrioritizeResult>('prioritize-accounts', {
+        componentName: 'AIAccountPrioritizer',
+      });
+      if (error) {
+        toast.error(error.message);
         return;
       }
       setResult(data);

@@ -148,11 +148,53 @@ function friendlyMessage(category: ErrorCategory, raw: string): string {
 const MAX_STORED = 100;
 const _errorStore: AppError[] = [];
 const _listeners: Set<() => void> = new Set();
+let _flushTimer: ReturnType<typeof setTimeout> | null = null;
+const _pendingFlush: AppError[] = [];
 
 export function recordError(err: AppError): void {
   _errorStore.push(err);
   if (_errorStore.length > MAX_STORED) _errorStore.shift();
   _listeners.forEach(fn => fn());
+
+  // Queue for backend persistence (batched, fire-and-forget)
+  _pendingFlush.push(err);
+  if (!_flushTimer) {
+    _flushTimer = setTimeout(() => flushErrors(), 5_000);
+  }
+}
+
+/** Flush pending errors to the backend error_logs table */
+async function flushErrors() {
+  _flushTimer = null;
+  if (_pendingFlush.length === 0) return;
+
+  const batch = _pendingFlush.splice(0, _pendingFlush.length);
+
+  try {
+    // Dynamic import to avoid circular dependency
+    const { supabase } = await import('@/integrations/supabase/client');
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return; // Can't persist without auth
+
+    const rows = batch.map(e => ({
+      user_id: user.id,
+      trace_id: e.traceId,
+      category: e.category,
+      message: e.message,
+      raw_message: e.rawMessage,
+      code: e.code != null ? String(e.code) : null,
+      source: e.source,
+      function_name: e.functionName,
+      component_name: e.componentName,
+      route: e.route,
+      retryable: e.retryable,
+      metadata: e.metadata,
+    }));
+
+    await supabase.from('error_logs').insert(rows);
+  } catch {
+    // Silently fail — we don't want error logging to cause more errors
+  }
 }
 
 export function getRecentErrors(): ReadonlyArray<AppError> {
