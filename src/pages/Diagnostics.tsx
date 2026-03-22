@@ -13,7 +13,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Trash2, RefreshCw, Copy, ChevronDown, ChevronUp, Activity, Shield, Wifi, AlertTriangle, Database } from 'lucide-react';
+import { Trash2, RefreshCw, Copy, ChevronDown, ChevronUp, Activity, Shield, Wifi, AlertTriangle, Database, Layers } from 'lucide-react';
+import { useAllActiveJobs, useRetryJob } from '@/hooks/useResourceJobs';
+import { PIPELINE_STEPS } from '@/lib/resourcePipeline';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
