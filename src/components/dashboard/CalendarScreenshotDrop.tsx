@@ -53,7 +53,7 @@ export function CalendarScreenshotDrop({ date, onEventsConfirmed }: CalendarScre
         reader.readAsDataURL(file);
       });
 
-      const { data, error } = await trackedInvoke<any>('parse-calendar-screenshot', {
+      const { data, error } = await trackedInvoke<{ events?: Partial<ExtractedEvent>[]; confidence?: string; date_detected?: string }>('parse-calendar-screenshot', {
         body: { imageBase64: base64, date },
       });
 
