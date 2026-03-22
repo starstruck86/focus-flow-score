@@ -96,35 +96,28 @@ export function useVoiceMode() {
     });
   }, []);
 
-  /** Transcribe with automatic retry on failure */
-  const transcribeWithRetry = async (audioBlob: Blob, attempt = 0): Promise<string> => {
-    try {
-      const formData = new FormData();
-      formData.append('audio', audioBlob, 'recording.webm');
+  /** Transcribe audio — retry is handled by authenticatedFetch reliability layer */
+  const transcribeWithRetry = async (audioBlob: Blob): Promise<string> => {
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'recording.webm');
 
-      const resp = await authenticatedFetch({
-        functionName: 'elevenlabs-stt',
-        body: formData,
-      });
+    const resp = await authenticatedFetch({
+      functionName: 'elevenlabs-stt',
+      body: formData,
+      retry: { maxAttempts: 3, baseDelayMs: 500 },
+      timeoutMs: 30_000,
+      componentName: 'VoiceMode-STT',
+    });
 
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: 'Transcription failed' }));
-        throw new Error(err.error || `STT error ${resp.status}`);
-      }
-
-      const data = await resp.json();
-      const text = data.text?.trim();
-      if (!text) throw new Error('No speech detected');
-      retryCountRef.current = 0;
-      return text;
-    } catch (err: any) {
-      if (attempt < MAX_RETRIES && !err.message?.includes('No speech detected')) {
-        console.warn(`STT retry ${attempt + 1}/${MAX_RETRIES}:`, err.message);
-        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
-        return transcribeWithRetry(audioBlob, attempt + 1);
-      }
-      throw err;
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: 'Transcription failed' }));
+      throw new Error(err.error || `STT error ${resp.status}`);
     }
+
+    const data = await resp.json();
+    const text = data.text?.trim();
+    if (!text) throw new Error('No speech detected');
+    return text;
   };
 
   const cancelRecording = useCallback(() => {
