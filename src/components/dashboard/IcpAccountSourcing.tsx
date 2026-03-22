@@ -43,7 +43,7 @@ export function IcpAccountSourcing() {
   const sourceMutation = useMutation({
     mutationFn: async (opts: { moreLikeCompany?: string } | undefined) => {
       setIsSourcing(true);
-      const body: any = { feedback: feedback || null, previousBatchId: currentBatchId || null };
+      const body: { feedback: string | null; previousBatchId: string | null } = { feedback: feedback || null, previousBatchId: currentBatchId || null };
       if (opts && opts.moreLikeCompany) {
         body.feedback = `Find more companies similar to "${opts.moreLikeCompany}". ${feedback || ''}`.trim();
       }
