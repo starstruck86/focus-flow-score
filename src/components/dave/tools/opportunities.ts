@@ -3,6 +3,8 @@ import { toast } from 'sonner';
 import { emitDataChanged } from '@/lib/daveEvents';
 import { OPP_FIELDS, MEDDICC_FIELDS } from '../toolTypes';
 import type { ToolContext, ToolMap } from '../toolTypes';
+import type { MethodologyRow, MeddiccFieldKey, TaskInsert } from '@/types/supabase-helpers';
+import { isMeddiccConfirmed } from '@/types/supabase-helpers';
 
 export function createOpportunityTools(ctx: ToolContext): ToolMap {
   return {
@@ -132,7 +134,7 @@ export function createOpportunityTools(ctx: ToolContext): ToolMap {
 
       if (!opps?.length) return `Opportunity "${params.opportunityName}" not found`;
 
-      const updates: Record<string, any> = {};
+      const updates: Record<string, boolean | string> = {};
       if (params.confirmed !== undefined) updates[`${fieldKey}_confirmed`] = params.confirmed;
       if (params.notes) updates[`${fieldKey}_notes`] = params.notes;
 
@@ -172,15 +174,15 @@ export function createOpportunityTools(ctx: ToolContext): ToolMap {
         .eq('user_id', userId)
         .in('opportunity_id', oppIds);
 
-      const methMap = new Map((methodologies || []).map((m: any) => [m.opportunity_id, m]));
-      const fields = ['metrics', 'economic_buyer', 'decision_criteria', 'decision_process', 'identify_pain', 'champion', 'competition'];
+      const methMap = new Map((methodologies || []).map(m => [m.opportunity_id, m]));
+      const fields: MeddiccFieldKey[] = ['metrics', 'economic_buyer', 'decision_criteria', 'decision_process', 'identify_pain', 'champion', 'competition'];
       const fieldLabels: Record<string, string> = { metrics: 'Metrics', economic_buyer: 'Economic Buyer', decision_criteria: 'Decision Criteria', decision_process: 'Decision Process', identify_pain: 'Identify Pain', champion: 'Champion', competition: 'Competition' };
 
       const gaps: { opp: string; arr: number; closeDate: string; missing: string[]; urgency: number }[] = [];
 
       for (const opp of opps) {
-        const meth = methMap.get(opp.id) as any;
-        const missing = fields.filter(f => !meth || !meth[`${f}_confirmed`]).map(f => fieldLabels[f]);
+        const meth = methMap.get(opp.id);
+        const missing = fields.filter(f => !meth || !isMeddiccConfirmed(meth, f)).map(f => fieldLabels[f]);
         if (missing.length === 0) continue;
 
         const daysToClose = opp.close_date ? Math.max(1, Math.ceil((new Date(opp.close_date).getTime() - Date.now()) / 86400000)) : 90;
@@ -210,17 +212,16 @@ export function createOpportunityTools(ctx: ToolContext): ToolMap {
         .limit(1);
 
       if (!opps?.length) return `No opportunity matching "${params.opportunityName}"`;
-      const opp = opps[0] as any;
+      const opp = opps[0];
 
       const { data: meth } = await supabase
-        .from('opportunity_methodology' as any)
+        .from('opportunity_methodology')
         .select('*')
         .eq('opportunity_id', opp.id)
         .maybeSingle();
 
       if (!meth) return `No methodology data for "${opp.name}" — update MEDDICC first.`;
 
-      const m = meth as any;
       const MEDDICC_TASK_MAP: Record<string, string> = {
         metrics: 'Confirm Metrics: Ask what success metrics they\'ll measure — tie to their KPIs',
         economic_buyer: 'Identify Economic Buyer: Ask who signs off on budget and what their approval process looks like',
@@ -231,8 +232,10 @@ export function createOpportunityTools(ctx: ToolContext): ToolMap {
         competition: 'Assess Competition: Ask who else they\'re evaluating and what criteria matter most',
       };
 
-      const gapEntries = Object.entries(MEDDICC_TASK_MAP)
-        .filter(([field]) => !m[`${field}_confirmed`]);
+      const meddiccFields: MeddiccFieldKey[] = ['metrics', 'economic_buyer', 'decision_criteria', 'decision_process', 'identify_pain', 'champion', 'competition'];
+      const gapEntries = meddiccFields
+        .filter(field => !isMeddiccConfirmed(meth, field))
+        .map(field => [field, MEDDICC_TASK_MAP[field]] as const);
 
       if (!gapEntries.length) return `✅ All MEDDICC elements confirmed for "${opp.name}" — no tasks needed!`;
 
@@ -247,18 +250,17 @@ export function createOpportunityTools(ctx: ToolContext): ToolMap {
         const dueDate = new Date(now);
         dueDate.setDate(dueDate.getDate() + Math.min(interval * (i + 1), daysToClose));
 
-        await supabase
-          .from('tasks')
-          .insert({
-            user_id: userId,
-            title: `[${opp.name}] ${taskTitle}`,
-            priority: i < 2 ? 'P1' : 'P2',
-            status: 'todo',
-            due_date: dueDate.toISOString().split('T')[0],
-            linked_account_id: opp.account_id,
-            source: 'dave-methodology',
-          } as any);
+        const taskPayload: TaskInsert = {
+          user_id: userId,
+          title: `[${opp.name}] ${taskTitle}`,
+          priority: i < 2 ? 'P1' : 'P2',
+          status: 'todo',
+          due_date: dueDate.toISOString().split('T')[0],
+          linked_account_id: opp.account_id,
+          category: 'dave-methodology',
+        };
 
+        await supabase.from('tasks').insert(taskPayload);
         created.push(`• ${taskTitle} (due ${dueDate.toLocaleDateString()})`);
       }
 
@@ -286,8 +288,9 @@ export function createOpportunityTools(ctx: ToolContext): ToolMap {
       if (!opps?.length) return params.opportunityName ? `No active deal matching "${params.opportunityName}"` : 'No active deals found';
 
       const risks: { name: string; arr: number; score: number; factors: string[] }[] = [];
+      const meddiccFields: MeddiccFieldKey[] = ['metrics', 'economic_buyer', 'decision_criteria', 'decision_process', 'identify_pain', 'champion', 'competition'];
 
-      for (const opp of opps as any[]) {
+      for (const opp of opps) {
         const factors: string[] = [];
         let riskScore = 0;
 
@@ -306,15 +309,13 @@ export function createOpportunityTools(ctx: ToolContext): ToolMap {
         }
 
         const { data: meth } = await supabase
-          .from('opportunity_methodology' as any)
+          .from('opportunity_methodology')
           .select('*')
           .eq('opportunity_id', opp.id)
           .maybeSingle();
 
         if (meth) {
-          const m = meth as any;
-          const methGaps = ['metrics', 'economic_buyer', 'decision_criteria', 'decision_process', 'identify_pain', 'champion', 'competition']
-            .filter(f => !m[`${f}_confirmed`]);
+          const methGaps = meddiccFields.filter(f => !isMeddiccConfirmed(meth, f));
           if (methGaps.length >= 4) { riskScore += 30; factors.push(`${methGaps.length} MEDDICC gaps: ${methGaps.join(', ')}`); }
           else if (methGaps.length >= 2) { riskScore += 15; factors.push(`${methGaps.length} MEDDICC gaps: ${methGaps.join(', ')}`); }
         } else {

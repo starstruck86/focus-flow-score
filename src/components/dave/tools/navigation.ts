@@ -1,6 +1,8 @@
 import { toast } from 'sonner';
 import type { ToolContext, ToolMap } from '../toolTypes';
 
+type CopilotMode = 'quick' | 'meeting' | 'research' | 'coaching';
+
 export function createNavigationTools(ctx: ToolContext): ToolMap {
   return {
     navigate: (params: { path: string }) => {
@@ -9,7 +11,7 @@ export function createNavigationTools(ctx: ToolContext): ToolMap {
     },
 
     open_copilot: (params: { question: string; mode?: string }) => {
-      ctx.askCopilot(params.question, (params.mode as any) || 'quick');
+      ctx.askCopilot(params.question, (params.mode || 'quick') as CopilotMode);
       return `Opened copilot with: ${params.question}`;
     },
 

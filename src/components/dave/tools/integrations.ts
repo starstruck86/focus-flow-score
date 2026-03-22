@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import type { ToolContext, ToolMap } from '../toolTypes';
+import type { WhoopMetricRow, ResourceDigestRow, GradingCriteria, WhoopSyncResult } from '@/types/supabase-helpers';
 
 export function createIntegrationTools(ctx: ToolContext): ToolMap {
   return {
@@ -67,21 +68,22 @@ export function createIntegrationTools(ctx: ToolContext): ToolMap {
 
       if (!metrics?.length) return 'No WHOOP data available. You may need to connect or sync WHOOP in Settings.';
 
-      const todayMetric = (metrics as any[]).find(m => m.date === today);
-      const latest = (metrics as any[])[0];
+      const todayMetric = metrics.find(m => m.date === today);
+      const latest = metrics[0];
       const m = todayMetric || latest;
       const dateLabel = m.date === today ? 'Today' : m.date;
 
-      const recoveryZone = m.recovery_score >= 67 ? '🟢 Green (go hard)' : m.recovery_score >= 34 ? '🟡 Yellow (moderate)' : '🔴 Red (take it easy)';
+      const recoveryScore = Number(m.recovery_score);
+      const recoveryZone = recoveryScore >= 67 ? '🟢 Green (go hard)' : recoveryScore >= 34 ? '🟡 Yellow (moderate)' : '🔴 Red (take it easy)';
 
       let result = `📊 WHOOP Status (${dateLabel}):\n`;
       result += `Recovery: ${m.recovery_score ?? 'N/A'}% — ${recoveryZone}\n`;
       result += `Sleep: ${m.sleep_score ?? 'N/A'}%\n`;
       result += `Strain: ${m.strain_score ?? 'N/A'}\n`;
 
-      if (m.recovery_score !== null && m.recovery_score < 34) {
+      if (m.recovery_score !== null && recoveryScore < 34) {
         result += '\n⚠️ Low recovery — consider lighter prospecting blocks, more account research, skip the power hour.';
-      } else if (m.recovery_score !== null && m.recovery_score >= 67) {
+      } else if (m.recovery_score !== null && recoveryScore >= 67) {
         result += '\n💪 High recovery — great day for heavy calling, difficult conversations, and power hours.';
       }
 
@@ -93,7 +95,7 @@ export function createIntegrationTools(ctx: ToolContext): ToolMap {
       if (!userId) return 'Not authenticated';
 
       try {
-        const { data: result, error } = await trackedInvoke<any>('whoop-sync', {
+        const { data: result, error } = await trackedInvoke<WhoopSyncResult>('whoop-sync', {
           body: { action: 'sync' },
         });
         if (error) return `WHOOP sync failed: ${error.message}`;
@@ -101,8 +103,8 @@ export function createIntegrationTools(ctx: ToolContext): ToolMap {
 
         toast.success('WHOOP synced', { description: `${result?.synced || 0} days of data updated` });
         return `WHOOP sync complete — ${result?.synced || 0} days of data synced.`;
-      } catch (err: any) {
-        return `WHOOP sync error: ${err.message}`;
+      } catch (err: unknown) {
+        return `WHOOP sync error: ${(err as Error).message}`;
       }
     },
 
@@ -119,7 +121,7 @@ export function createIntegrationTools(ctx: ToolContext): ToolMap {
 
       if (!resources?.length) return `No resource found matching "${params.title}". Try a different title.`;
 
-      const resourceIds = (resources as any[]).map(r => r.id);
+      const resourceIds = resources.map(r => r.id);
 
       const { data: digests } = await supabase
         .from('resource_digests')
@@ -128,28 +130,28 @@ export function createIntegrationTools(ctx: ToolContext): ToolMap {
         .in('resource_id', resourceIds);
 
       if (!digests?.length) {
-        const titles = (resources as any[]).map(r => r.title).join(', ');
+        const titles = resources.map(r => r.title).join(', ');
         return `Found resources (${titles}) but none have been operationalized yet. Use "Operationalize" in the Prep Hub to extract intelligence.`;
       }
 
-      const d = digests[0] as any;
-      const resource = (resources as any[]).find(r => r.id === d.resource_id);
+      const d = digests[0];
+      const resource = resources.find(r => r.id === d.resource_id);
 
       let result = `📚 "${resource?.title || params.title}" — Intelligence Digest\n\n`;
       result += `📝 Summary:\n${d.summary || 'No summary'}\n\n`;
 
       if (d.takeaways?.length) {
-        result += `🎯 Key Takeaways:\n${(d.takeaways as string[]).map((t: string) => `• ${t}`).join('\n')}\n\n`;
+        result += `🎯 Key Takeaways:\n${d.takeaways.map((t: string) => `• ${t}`).join('\n')}\n\n`;
       }
 
       if (d.use_cases?.length) {
-        result += `📋 Use Cases:\n${(d.use_cases as string[]).map((u: string) => `• ${u}`).join('\n')}\n\n`;
+        result += `📋 Use Cases:\n${d.use_cases.map((u: string) => `• ${u}`).join('\n')}\n\n`;
       }
 
       if (d.grading_criteria) {
-        const criteria = d.grading_criteria as any;
+        const criteria = d.grading_criteria as unknown as GradingCriteria;
         if (criteria.categories?.length) {
-          result += `📊 Grading Criteria:\n${criteria.categories.map((c: any) => `• ${c.name}: ${c.description || ''}`).join('\n')}`;
+          result += `📊 Grading Criteria:\n${criteria.categories.map(c => `• ${c.name}: ${c.description || ''}`).join('\n')}`;
         }
       }
 

@@ -52,7 +52,7 @@ export function usePrimaryAction(): PrimaryAction | null {
     try {
       const raw = localStorage.getItem('jarvis-action-memory');
       if (raw) {
-        const records = JSON.parse(raw) as any[];
+        const records = JSON.parse(raw) as Array<{ actionId: string; outcome: string; timestamp: number }>;
         const weekAgo = Date.now() - 7 * 86400000;
         for (const r of records) {
           if (r.outcome === 'ignored' && r.timestamp > weekAgo) {
