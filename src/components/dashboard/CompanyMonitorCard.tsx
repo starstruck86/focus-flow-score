@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 import { useSignalTriggeredTasks } from '@/hooks/useSignalTriggeredTasks';
 import type { DigestItem, OutreachModalState } from '@/types/dashboard';
 
-const CATEGORY_ICONS: Record<string, any> = {
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
   executive_hire: UserPlus,
   job_posting: Briefcase,
   company_news: Newspaper,
