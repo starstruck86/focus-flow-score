@@ -201,7 +201,11 @@ export default function Diagnostics() {
             </TabsTrigger>
             <TabsTrigger value="persisted" className="flex-1 gap-1.5">
               <Database className="h-3.5 w-3.5" />
-              History ({persistedErrors.length})
+              History
+            </TabsTrigger>
+            <TabsTrigger value="jobs" className="flex-1 gap-1.5">
+              <Layers className="h-3.5 w-3.5" />
+              Jobs
             </TabsTrigger>
           </TabsList>
 
