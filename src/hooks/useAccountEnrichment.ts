@@ -109,8 +109,15 @@ export function useAccountEnrichment() {
     setEnrichingIds((prev) => new Set(prev).add(account.id));
 
     try {
+      const requestPayload: EnrichAccountRequest = {
+        url: account.website || '',
+        accountName: account.name,
+        accountId: account.id,
+        industry: account.industry || '',
+      };
+
       const { data, error } = await trackedInvoke<EnrichmentResult>('enrich-account', {
-        body: { url: account.website || '', accountName: account.name, accountId: account.id, industry: account.industry || '' },
+        body: requestPayload as unknown as Record<string, unknown>,
         componentName: 'useAccountEnrichment',
       });
 
