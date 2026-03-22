@@ -47,7 +47,7 @@ function ActionItemCard({ item, onAddTask, taskAdded, onDismiss }: {
 
   const handleClick = () => {
     setCurrentRecord({ 
-      type: item.type as any, 
+      type: item.type as 'account' | 'opportunity' | 'renewal', 
       id: item.id,
       accountId: item.accountId,
     });
