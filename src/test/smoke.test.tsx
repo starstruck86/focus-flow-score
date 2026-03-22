@@ -1,5 +1,5 @@
 /**
- * Smoke tests — verify critical flows render without crashing.
+ * Smoke + integration tests — verify critical flows render and behave correctly.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -8,6 +8,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import React from 'react';
+
+// ─── Mocks ─────────────────────────────────────────────
 
 // Mock Supabase client
 vi.mock('@/integrations/supabase/client', () => ({
@@ -61,7 +64,24 @@ vi.mock('@/integrations/lovable', () => ({
 // Mock trackedInvoke
 vi.mock('@/lib/trackedInvoke', () => ({
   trackedInvoke: vi.fn().mockResolvedValue({ data: null, error: null, traceId: 'test-trace' }),
-  trackedStreamFetch: vi.fn().mockResolvedValue({ response: null, error: { message: 'mock' }, traceId: 'test-trace' }),
+}));
+
+// Mock streamingFetch
+vi.mock('@/lib/streamingFetch', () => ({
+  streamingFetch: vi.fn().mockImplementation(async (_opts: any, callbacks: any) => {
+    callbacks.onDone();
+    return { traceId: 'test-stream-trace' };
+  }),
+  streamToString: vi.fn().mockResolvedValue({ text: 'mock content', traceId: 'test-stream-trace' }),
+}));
+
+// Mock authenticatedFetch
+vi.mock('@/lib/authenticatedFetch', () => ({
+  authenticatedFetch: vi.fn().mockResolvedValue({
+    ok: true,
+    json: () => Promise.resolve({}),
+    text: () => Promise.resolve(''),
+  }),
 }));
 
 // Mock CopilotContext
@@ -86,6 +106,9 @@ vi.mock('@/contexts/CopilotContext', () => ({
 vi.mock('@/lib/territoryCopilot', () => ({
   streamCopilot: vi.fn(),
   SUGGESTED_QUESTIONS: [],
+  PAGE_SUGGESTED_QUESTIONS: {},
+  PAGE_PLACEHOLDERS: {},
+  MODE_CONFIG: {},
 }));
 
 // Mock LinkedRecordContext
@@ -216,6 +239,13 @@ describe('Error normalization', () => {
     expect(result.retryable).toBe(true);
   });
 
+  it('classifies DB write errors', async () => {
+    const { normalizeError } = await import('@/lib/appError');
+    const result = normalizeError({ error: new Error('duplicate key violates unique constraint'), source: 'frontend' });
+    expect(result.category).toBe('DB_WRITE_FAILED');
+    expect(result.retryable).toBe(false);
+  });
+
   it('generates unique trace IDs', async () => {
     const { generateTraceId } = await import('@/lib/appError');
     const ids = new Set(Array.from({ length: 100 }, () => generateTraceId()));
@@ -231,11 +261,32 @@ describe('authenticatedFetch helper', () => {
   });
 });
 
+// ─── streamingFetch ────────────────────────────────────
+describe('streamingFetch helper', () => {
+  it('exports streamingFetch and streamToString', async () => {
+    const mod = await import('@/lib/streamingFetch');
+    expect(typeof mod.streamingFetch).toBe('function');
+    expect(typeof mod.streamToString).toBe('function');
+  });
+
+  it('streamToString returns text and traceId', async () => {
+    const { streamToString } = await import('@/lib/streamingFetch');
+    const result = await streamToString({ functionName: 'test' });
+    expect(result).toHaveProperty('text');
+    expect(result).toHaveProperty('traceId');
+  });
+
+  it('streamingFetch calls onDone', async () => {
+    const { streamingFetch } = await import('@/lib/streamingFetch');
+    const onDone = vi.fn();
+    await streamingFetch({ functionName: 'test' }, { onDelta: vi.fn(), onDone, onError: vi.fn() });
+    expect(onDone).toHaveBeenCalled();
+  });
+});
+
 // ─── trackedInvoke ─────────────────────────────────────
 describe('trackedInvoke helper', () => {
   it('returns data, error, traceId shape', async () => {
-    vi.resetModules();
-    // Use the mock
     const { trackedInvoke } = await import('@/lib/trackedInvoke');
     const result = await trackedInvoke('test-fn', { body: { foo: 'bar' } });
     expect(result).toHaveProperty('traceId');
@@ -257,27 +308,112 @@ describe('RouteErrorBoundary', () => {
   });
 });
 
-// ─── Settings page ─────────────────────────────────────
-describe('Settings page', () => {
-  it('module exports default component', async () => {
+// ─── Page module exports ───────────────────────────────
+describe('Page modules export default components', () => {
+  it('Settings', async () => {
     const mod = await import('@/pages/Settings');
     expect(typeof mod.default).toBe('function');
   });
-});
 
-// ─── Diagnostics page ──────────────────────────────────
-describe('Diagnostics page', () => {
-  it('module exports default component', async () => {
+  it('Diagnostics', async () => {
     const mod = await import('@/pages/Diagnostics');
+    expect(typeof mod.default).toBe('function');
+  });
+
+  it('Dashboard', async () => {
+    const mod = await import('@/pages/Dashboard');
+    expect(typeof mod.default).toBe('function');
+  });
+
+  it('Renewals', async () => {
+    const mod = await import('@/pages/Renewals');
+    expect(typeof mod.default).toBe('function');
+  });
+
+  it('Coach', async () => {
+    const mod = await import('@/pages/Coach');
+    expect(typeof mod.default).toBe('function');
+  });
+
+  it('Trends', async () => {
+    const mod = await import('@/pages/Trends');
+    expect(typeof mod.default).toBe('function');
+  });
+
+  it('Tasks', async () => {
+    const mod = await import('@/pages/Tasks');
+    expect(typeof mod.default).toBe('function');
+  });
+
+  it('PrepHub', async () => {
+    const mod = await import('@/pages/PrepHub');
+    expect(typeof mod.default).toBe('function');
+  });
+
+  it('Quota', async () => {
+    const mod = await import('@/pages/Quota');
     expect(typeof mod.default).toBe('function');
   });
 });
 
 // ─── Import Wizard ─────────────────────────────────────
 describe('Import Wizard', () => {
-  it('module exports ImportWizard component', async () => {
+  it('exports ImportWizard component', async () => {
     const mod = await import('@/components/import/ImportWizard');
     expect(typeof mod.ImportWizard).toBe('function');
+  });
+
+  it('exports ImportModal component', async () => {
+    const mod = await import('@/components/import/ImportModal');
+    expect(typeof mod.ImportModal).toBe('function');
+  });
+});
+
+// ─── Streaming mock integration ────────────────────────
+describe('Streaming mock integration', () => {
+  it('simulates SSE delta events', async () => {
+    const { streamingFetch } = await import('@/lib/streamingFetch');
+    const mockStreamingFetch = vi.mocked(streamingFetch);
+
+    // Override to simulate delta events
+    mockStreamingFetch.mockImplementationOnce(async (_opts, callbacks) => {
+      callbacks.onDelta('Hello ');
+      callbacks.onDelta('World');
+      callbacks.onDone();
+      return { traceId: 'sim-trace' };
+    });
+
+    let accumulated = '';
+    await streamingFetch(
+      { functionName: 'test' },
+      {
+        onDelta: (t) => { accumulated += t; },
+        onDone: () => {},
+        onError: vi.fn(),
+      },
+    );
+    expect(accumulated).toBe('Hello World');
+  });
+
+  it('simulates streaming error', async () => {
+    const { streamingFetch } = await import('@/lib/streamingFetch');
+    const mockStreamingFetch = vi.mocked(streamingFetch);
+
+    mockStreamingFetch.mockImplementationOnce(async (_opts, callbacks) => {
+      callbacks.onError('Connection lost');
+      return { traceId: 'err-trace' };
+    });
+
+    let errorMsg = '';
+    await streamingFetch(
+      { functionName: 'test' },
+      {
+        onDelta: vi.fn(),
+        onDone: vi.fn(),
+        onError: (msg) => { errorMsg = msg; },
+      },
+    );
+    expect(errorMsg).toBe('Connection lost');
   });
 });
 
@@ -294,12 +430,32 @@ describe('Invoke migration integrity', () => {
       'hooks/useCoachingEngine.ts',
       'hooks/useCalendarEvents.ts',
       'components/prep/ResourceManager.tsx',
+      'hooks/useMockCalls.ts',
+      'lib/territoryCopilot.ts',
     ];
 
     for (const file of checkFiles) {
       const content = fs.readFileSync(path.join(srcDir, file), 'utf8');
       const directCalls = (content.match(/supabase\.functions\.invoke/g) || []).length;
       expect(directCalls).toBe(0);
+    }
+  });
+
+  it('no raw VITE_SUPABASE_URL fetch in streaming files', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const srcDir = path.resolve(__dirname, '..');
+
+    const streamingFiles = [
+      'lib/territoryCopilot.ts',
+      'hooks/useMockCalls.ts',
+      'components/prep/AIGenerateDialog.tsx',
+    ];
+
+    for (const file of streamingFiles) {
+      const content = fs.readFileSync(path.join(srcDir, file), 'utf8');
+      const rawFetches = (content.match(/VITE_SUPABASE_URL.*functions/g) || []).length;
+      expect(rawFetches).toBe(0);
     }
   });
 });
