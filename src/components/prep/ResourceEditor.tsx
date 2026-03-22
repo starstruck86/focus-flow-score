@@ -25,7 +25,6 @@ import { SmartSuggestionsPanel } from './SmartSuggestionsPanel';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { ResourceJobStatus as ResourceJobStatusComponent } from '@/components/ResourceJobStatus';
 
 // ─── DIGEST VIEWER ────────────────────────────────────────────
 function DigestViewer({ resourceId }: { resourceId: string }) {
