@@ -3,11 +3,13 @@ import { useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sparkles, TrendingUp, UserPlus, Newspaper, Cpu, ExternalLink } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { TriggerEvent, TimelineEntry } from '@/types/dashboard';
 
 interface EnrichmentTimelineProps {
   enrichmentEvidence?: Record<string, string> | null;
-  triggerEvents?: any[] | null;
+  triggerEvents?: TriggerEvent[] | null;
   lastEnrichedAt?: string | null;
   enrichmentSourceSummary?: string | null;
 }
