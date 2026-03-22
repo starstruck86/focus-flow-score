@@ -2798,6 +2798,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
     'log_touch', 'move_deal', 'debrief', 'add_note', 'update_daily_metrics',
     'add_contact', 'create_opportunity', 'create_account', 'update_renewal',
     'complete_task', 'set_task_reminder', 'save_commitment',
+    'complete_action', 'defer_action',
   ];
 
   const today = new Date().toISOString().split('T')[0];
