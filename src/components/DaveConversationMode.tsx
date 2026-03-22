@@ -445,11 +445,12 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
   return (
     <AnimatePresence>
       <motion.div
+        data-testid="dave-panel"
         initial={{ opacity: 0, y: 20, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 20, scale: 0.95 }}
-        className="fixed bottom-28 right-4 z-50 w-80 rounded-2xl border border-border/60 bg-card/95 backdrop-blur-xl shadow-2xl flex flex-col overflow-hidden"
-        style={{ maxHeight: '420px' }}
+        className="fixed bottom-28 right-4 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-border/60 bg-card/95 backdrop-blur-xl shadow-2xl flex flex-col overflow-hidden"
+        style={{ maxHeight: 'min(420px, calc(100vh - 10rem))' }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-border/40">
