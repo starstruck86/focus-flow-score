@@ -141,7 +141,7 @@ export function CompanyMonitorCard({ motionFilter }: CompanyMonitorCardProps = {
   });
 
   // Generate outreach draft from a signal
-  const generateOutreach = async (item: any) => {
+  const generateOutreach = async (item: DigestItem) => {
     setOutreachModal({ open: true, item, draft: '', loading: true });
     try {
       const { data, error } = await trackedInvoke<any>('search-context', {
