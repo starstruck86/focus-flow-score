@@ -242,21 +242,21 @@ function storeContactToDb(c: Contact, userId: string): ContactInsert {
 function dbTaskToStore(db: TaskRow): Task {
   return {
     id: db.id, title: db.title,
-    workstream: db.workstream ?? 'pg',
-    status: db.status ?? 'next',
-    priority: db.priority ?? 'P1',
+    workstream: (db.workstream ?? 'pg') as Task['workstream'],
+    status: (db.status ?? 'next') as Task['status'],
+    priority: (db.priority ?? 'P1') as Task['priority'],
     dueDate: db.due_date ?? undefined,
     linkedAccountId: db.linked_account_id ?? undefined,
     linkedOpportunityId: db.linked_opportunity_id ?? undefined,
     notes: db.notes ?? undefined,
     completedAt: db.completed_at ?? undefined,
-    motion: db.motion ?? undefined,
-    linkedRecordType: db.linked_record_type ?? undefined,
+    motion: (db.motion ?? undefined) as Task['motion'],
+    linkedRecordType: (db.linked_record_type ?? undefined) as Task['linkedRecordType'],
     linkedRecordId: db.linked_record_id ?? undefined,
     linkedContactId: db.linked_contact_id ?? undefined,
-    category: db.category ?? undefined,
+    category: (db.category ?? undefined) as Task['category'],
     estimatedMinutes: db.estimated_minutes ?? undefined,
-    subtasks: (db.subtasks as Json[]) ?? [],
+    subtasks: db.subtasks as Task['subtasks'] ?? [],
     createdAt: db.created_at, updatedAt: db.updated_at,
   };
 }
