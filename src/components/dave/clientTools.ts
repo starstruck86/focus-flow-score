@@ -2118,11 +2118,13 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       const fullPrompt = `${params.customInstructions || `Generate a professional ${params.contentType}`}\n\nContext:\n${contextParts.join('\n')}`;
 
       try {
+        const { data: { session: authSession } } = await supabase.auth.getSession();
         const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/build-resource`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${authSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
           body: JSON.stringify({
             type: 'generate',
