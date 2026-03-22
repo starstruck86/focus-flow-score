@@ -144,7 +144,7 @@ export function CompanyMonitorCard({ motionFilter }: CompanyMonitorCardProps = {
   const generateOutreach = async (item: DigestItem) => {
     setOutreachModal({ open: true, item, draft: '', loading: true });
     try {
-      const { data, error } = await trackedInvoke<any>('search-context', {
+      const { data, error } = await trackedInvoke<{ answer?: string }>('search-context', {
         body: {
           query: `Generate a short, personalized cold outreach email (3-4 sentences max) for a sales rep selling lifecycle marketing / CRM software. Reference this specific signal about the company "${item.account_name}": "${item.headline}". ${item.summary || ''}. The tone should be consultative, not salesy. Include a specific call-to-action. Do NOT use generic templates.`,
           mode: 'quick',
