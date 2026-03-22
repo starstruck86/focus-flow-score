@@ -8,6 +8,7 @@ import { useWeeklyBattlePlan, useGenerateBattlePlan, useCompleteBattleMove } fro
 import { Swords, Sparkles, RefreshCw, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import type { BattlePlanMove } from '@/types/dashboard';
 
 const categoryColors: Record<string, string> = {
   deal_progression: 'bg-primary/10 text-primary',

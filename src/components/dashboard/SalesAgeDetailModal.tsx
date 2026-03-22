@@ -5,6 +5,7 @@ import { Activity, TrendingUp, TrendingDown, Minus, Target, Zap, BarChart3 } fro
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import type { SalesAgeResult, ActionRecommendation } from '@/lib/salesAgeCalculations';
+import type { SalesAgeSnapshot } from '@/types/dashboard';
 
 interface SalesAgeDetailModalProps {
   open: boolean;

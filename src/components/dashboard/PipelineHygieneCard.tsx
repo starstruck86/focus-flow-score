@@ -8,6 +8,7 @@ import { usePipelineHygiene, useRunHygieneScan } from '@/hooks/useCoachingEngine
 import { ShieldAlert, RefreshCw, AlertTriangle, Info, CheckCircle2, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
+import type { PipelineHygieneIssue, PipelineHygieneSummary } from '@/types/dashboard';
 
 function formatCurrency(n: number) {
   if (n < 0) return `-${formatCurrency(Math.abs(n))}`;
