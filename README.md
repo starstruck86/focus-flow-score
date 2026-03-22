@@ -20,6 +20,8 @@ If you want to work locally using your own IDE, you can clone this repo and push
 
 The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
 
+> **Package manager:** This project uses **npm** exclusively. Do not use bun, yarn, or pnpm.
+
 Follow these steps:
 
 ```sh
@@ -30,10 +32,15 @@ git clone <YOUR_GIT_URL>
 cd <YOUR_PROJECT_NAME>
 
 # Step 3: Install the necessary dependencies.
-npm i
+npm install
 
 # Step 4: Start the development server with auto-reloading and an instant preview.
 npm run dev
+
+# Other useful commands:
+# npm run build        — production build
+# npm run typecheck    — TypeScript check
+# npm run test         — run tests
 ```
 
 **Edit a file directly in GitHub**
