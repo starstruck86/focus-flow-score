@@ -367,6 +367,11 @@ describe('Import Wizard', () => {
     const mod = await import('@/components/import/ImportModal');
     expect(typeof mod.ImportModal).toBe('function');
   });
+
+  it('exports ClaudeImportModal component', async () => {
+    const mod = await import('@/components/import/ClaudeImportModal');
+    expect(typeof mod.ClaudeImportModal).toBe('function');
+  });
 });
 
 // ─── Streaming mock integration ────────────────────────
