@@ -34,8 +34,6 @@ export function useVoiceMode() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const playbackAbortRef = useRef(false);
-  const retryCountRef = useRef(0);
-  const MAX_RETRIES = 2;
 
   const startRecording = useCallback(async (): Promise<void> => {
     try {
