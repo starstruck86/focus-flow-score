@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { emitDataChanged } from '@/lib/daveEvents';
 import { parseDueDate, parseTime } from '../toolTypes';
 import type { ToolContext, ToolMap } from '../toolTypes';
+import type { TaskInsert } from '@/types/supabase-helpers';
 
 export function createTaskTools(ctx: ToolContext): ToolMap {
   return {
@@ -113,7 +114,7 @@ export function createTaskTools(ctx: ToolContext): ToolMap {
       const { data: tasks } = await query;
       if (!tasks?.length) return filter === 'today' ? 'No tasks due today.' : 'No matching tasks found.';
 
-      const accountIds = [...new Set(tasks.map(t => t.linked_account_id).filter(Boolean))];
+      const accountIds = [...new Set(tasks.map(t => t.linked_account_id).filter(Boolean))] as string[];
       let accountMap: Record<string, string> = {};
       if (accountIds.length) {
         const { data: accts } = await supabase.from('accounts').select('id, name').in('id', accountIds);
@@ -163,7 +164,7 @@ export function createTaskTools(ctx: ToolContext): ToolMap {
 
       const { error } = await supabase
         .from('tasks')
-        .update({ reminder_at: reminderAtDate.toISOString(), updated_at: new Date().toISOString() } as any)
+        .update({ reminder_at: reminderAtDate.toISOString(), updated_at: new Date().toISOString() })
         .eq('id', tasks[0].id);
 
       if (error) return `Failed to set reminder: ${error.message}`;
@@ -222,7 +223,7 @@ export function createTaskTools(ctx: ToolContext): ToolMap {
           .limit(1);
         if (accounts?.length) {
           accountId = accounts[0].id;
-          const existing = (accounts[0] as any).notes || '';
+          const existing = accounts[0].notes || '';
           await supabase
             .from('accounts')
             .update({ notes: `${existing}\n\n🤝 Commitment (${new Date().toLocaleDateString()}): ${params.commitment}`.trim() })
@@ -231,17 +232,16 @@ export function createTaskTools(ctx: ToolContext): ToolMap {
       }
 
       const dueDate = params.dueDate ? parseDueDate(params.dueDate) : new Date().toISOString().split('T')[0];
-      const { error } = await supabase
-        .from('tasks')
-        .insert({
-          user_id: userId,
-          title: `🤝 ${params.commitment}`,
-          priority: 'P2',
-          status: 'todo',
-          due_date: dueDate,
-          linked_account_id: accountId,
-          source: 'dave-commitment',
-        } as any);
+      const taskPayload: TaskInsert = {
+        user_id: userId,
+        title: `🤝 ${params.commitment}`,
+        priority: 'P2',
+        status: 'todo',
+        due_date: dueDate,
+        linked_account_id: accountId,
+        category: 'dave-commitment',
+      };
+      const { error } = await supabase.from('tasks').insert(taskPayload);
 
       if (error) return `Failed to save commitment: ${error.message}`;
       emitDataChanged('tasks');

@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { emitMetricsUpdated } from '@/lib/daveEvents';
 import { METRIC_MAP } from '../toolTypes';
 import type { ToolContext, ToolMap } from '../toolTypes';
+import type { DailyJournalRow } from '@/types/supabase-helpers';
 
 export function createJournalTools(ctx: ToolContext): ToolMap {
   return {
@@ -27,7 +28,8 @@ export function createJournalTools(ctx: ToolContext): ToolMap {
       let newValue = params.value;
 
       if (existing?.length) {
-        oldValue = (existing[0] as any)[dbField] || 0;
+        const row = existing[0];
+        oldValue = (row[dbField as keyof DailyJournalRow] as number) || 0;
         newValue = mode === 'add' ? oldValue + params.value : params.value;
         const { error } = await supabase
           .from('daily_journal_entries')
@@ -69,7 +71,7 @@ export function createJournalTools(ctx: ToolContext): ToolMap {
       if (!userId) return 'Not authenticated';
 
       const today = new Date().toISOString().split('T')[0];
-      const updates: Record<string, any> = { updated_at: new Date().toISOString() };
+      const updates: Record<string, string> = { updated_at: new Date().toISOString() };
       if (params.whatWorked) updates.what_worked_today = params.whatWorked;
       if (params.blocker) updates.biggest_blocker = params.blocker;
       if (params.tomorrowPriority) updates.tomorrow_priority = params.tomorrowPriority;
@@ -132,20 +134,20 @@ export function createJournalTools(ctx: ToolContext): ToolMap {
         .eq('date', today)
         .limit(1);
 
-      const entry = data?.[0] as any;
+      const entry = data?.[0] ?? null;
       const missing: string[] = [];
       const completed: string[] = [];
 
       const metrics = [
-        { field: 'dials', label: 'Dials', default: 0 },
-        { field: 'conversations', label: 'Connects/Conversations', default: 0 },
-        { field: 'manual_emails', label: 'Manual Emails', default: 0 },
-        { field: 'meetings_set', label: 'Meetings Set', default: 0 },
-        { field: 'customer_meetings_held', label: 'Customer Meetings Held', default: 0 },
-        { field: 'opportunities_created', label: 'Opportunities Created', default: 0 },
-        { field: 'prospects_added', label: 'Prospects Added', default: 0 },
-        { field: 'accounts_researched', label: 'Accounts Researched', default: 0 },
-        { field: 'contacts_prepped', label: 'Contacts Prepped', default: 0 },
+        { field: 'dials' as const, label: 'Dials', default: 0 },
+        { field: 'conversations' as const, label: 'Connects/Conversations', default: 0 },
+        { field: 'manual_emails' as const, label: 'Manual Emails', default: 0 },
+        { field: 'meetings_set' as const, label: 'Meetings Set', default: 0 },
+        { field: 'customer_meetings_held' as const, label: 'Customer Meetings Held', default: 0 },
+        { field: 'opportunities_created' as const, label: 'Opportunities Created', default: 0 },
+        { field: 'prospects_added' as const, label: 'Prospects Added', default: 0 },
+        { field: 'accounts_researched' as const, label: 'Accounts Researched', default: 0 },
+        { field: 'contacts_prepped' as const, label: 'Contacts Prepped', default: 0 },
       ];
 
       for (const m of metrics) {
@@ -155,10 +157,10 @@ export function createJournalTools(ctx: ToolContext): ToolMap {
       }
 
       const qualFields = [
-        { field: 'what_worked_today', label: 'What worked today' },
-        { field: 'biggest_blocker', label: 'Biggest blocker' },
-        { field: 'tomorrow_priority', label: 'Tomorrow\'s top priority' },
-        { field: 'daily_reflection', label: 'Daily reflection' },
+        { field: 'what_worked_today' as const, label: 'What worked today' },
+        { field: 'biggest_blocker' as const, label: 'Biggest blocker' },
+        { field: 'tomorrow_priority' as const, label: 'Tomorrow\'s top priority' },
+        { field: 'daily_reflection' as const, label: 'Daily reflection' },
       ];
       for (const q of qualFields) {
         if (!entry?.[q.field]) missing.push(`💬 ${q.label}`);
@@ -166,9 +168,9 @@ export function createJournalTools(ctx: ToolContext): ToolMap {
       }
 
       const wellnessFields = [
-        { field: 'energy', label: 'Energy level (1-5)' },
-        { field: 'focus_quality', label: 'Focus quality (1-5)' },
-        { field: 'stress', label: 'Stress level (1-5)' },
+        { field: 'energy' as const, label: 'Energy level (1-5)' },
+        { field: 'focus_quality' as const, label: 'Focus quality (1-5)' },
+        { field: 'stress' as const, label: 'Stress level (1-5)' },
       ];
       for (const w of wellnessFields) {
         if (!entry?.[w.field]) missing.push(`🧠 ${w.label}`);
@@ -211,7 +213,7 @@ export function createJournalTools(ctx: ToolContext): ToolMap {
       const fieldDef = JOURNAL_FIELDS[params.field.toLowerCase().replace(/\s+/g, '_')];
       if (!fieldDef) return `Unknown journal field "${params.field}". Valid: ${Object.keys(JOURNAL_FIELDS).filter(k => !k.includes('_') || k === params.field).join(', ')}`;
 
-      let dbValue: any;
+      let dbValue: string | number | boolean;
       if (fieldDef.type === 'number') {
         dbValue = parseInt(params.value) || 0;
         if (['energy', 'focus_quality', 'stress', 'clarity'].includes(fieldDef.column)) {

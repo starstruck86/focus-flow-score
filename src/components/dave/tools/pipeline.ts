@@ -2,6 +2,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import type { ToolContext, ToolMap } from '../toolTypes';
+import type {
+  HygieneScanSummary,
+  BattlePlanMove,
+  PipelineHygieneResult,
+  PrioritizeAccountsResult,
+  WeeklyBattlePlanResult,
+  WeeklyPatternsResult,
+} from '@/types/supabase-helpers';
 
 export function createPipelineTools(ctx: ToolContext): ToolMap {
   return {
@@ -93,19 +101,19 @@ export function createPipelineTools(ctx: ToolContext): ToolMap {
       const matched = params.dealNames.map(name => {
         const lower = name.toLowerCase();
         return allOpps.find(o => o.name.toLowerCase().includes(lower));
-      }).filter(Boolean);
+      }).filter((o): o is NonNullable<typeof o> => !!o);
 
       if (!matched.length) return `Could not find any of those deals in your pipeline.`;
 
-      const scenarioArr = matched.reduce((sum, o: any) => sum + (o.arr || 0), 0);
-      const newLogoArr = matched.filter((o: any) => o.deal_type === 'new-logo').reduce((sum, o: any) => sum + (o.arr || 0), 0);
+      const scenarioArr = matched.reduce((sum, o) => sum + (o.arr || 0), 0);
+      const newLogoArr = matched.filter(o => o.deal_type === 'new-logo').reduce((sum, o) => sum + (o.arr || 0), 0);
       const renewalArr = scenarioArr - newLogoArr;
 
-      let summary = `If you close ${matched.map((o: any) => o.name).join(' and ')}, that's $${Math.round(scenarioArr / 1000)}k total ARR.`;
+      let summary = `If you close ${matched.map(o => o.name).join(' and ')}, that's $${Math.round(scenarioArr / 1000)}k total ARR.`;
 
       if (quota) {
-        const closedNewArr = closedWon.filter((o: any) => o.deal_type === 'new-logo').reduce((s: number, o: any) => s + (o.arr || 0), 0);
-        const closedRenewalArr = closedWon.filter((o: any) => o.deal_type !== 'new-logo').reduce((s: number, o: any) => s + (o.arr || 0), 0);
+        const closedNewArr = closedWon.filter(o => o.deal_type === 'new-logo').reduce((s, o) => s + (o.arr || 0), 0);
+        const closedRenewalArr = closedWon.filter(o => o.deal_type !== 'new-logo').reduce((s, o) => s + (o.arr || 0), 0);
         const newTotal = closedNewArr + newLogoArr;
         const renewalTotal = closedRenewalArr + renewalArr;
         const newPct = quota.new_arr_quota ? Math.round((newTotal / quota.new_arr_quota) * 100) : 0;
@@ -135,12 +143,12 @@ export function createPipelineTools(ctx: ToolContext): ToolMap {
 
       if (recent?.length && recent[0].scan_date === today) {
         const scan = recent[0];
-        const summary = scan.summary as any;
-        return `Pipeline hygiene (today's scan): Health ${scan.health_score}/100, ${scan.total_issues} issues (${scan.critical_issues} critical). ${summary?.top_issues ? `Top issues: ${(summary.top_issues as string[]).join(', ')}` : ''}`;
+        const summary = scan.summary as unknown as HygieneScanSummary | null;
+        return `Pipeline hygiene (today's scan): Health ${scan.health_score}/100, ${scan.total_issues} issues (${scan.critical_issues} critical). ${summary?.top_issues ? `Top issues: ${summary.top_issues.join(', ')}` : ''}`;
       }
 
       toast.info('Running pipeline hygiene scan...', { duration: 3000 });
-      const { data, error } = await trackedInvoke<any>('pipeline-hygiene', { body: {} });
+      const { data, error } = await trackedInvoke<PipelineHygieneResult>('pipeline-hygiene', { body: {} });
 
       if (error) return `Pipeline hygiene scan failed: ${error.message}`;
       return `Pipeline hygiene: Health ${data?.health_score || '—'}/100, ${data?.total_issues || 0} issues found (${data?.critical_issues || 0} critical). ${data?.summary?.top_issues ? `Top: ${data.summary.top_issues.join(', ')}` : 'Check dashboard for details.'}`;
@@ -166,16 +174,16 @@ export function createPipelineTools(ctx: ToolContext): ToolMap {
 
       if (plans?.length) {
         const plan = plans[0];
-        const moves = (plan.moves as any[]) || [];
-        const completed = (plan.moves_completed as any[]) || [];
+        const moves = (plan.moves as unknown as BattlePlanMove[]) || [];
+        const completed = (plan.moves_completed as unknown as BattlePlanMove[]) || [];
         return `This week's battle plan (${moves.length} moves, ${completed.length} completed):\n` +
           `Quota gap: $${Math.round((plan.quota_gap as number || 0) / 1000)}k | ${plan.days_remaining || '—'} selling days left\n` +
           `Strategy: ${plan.strategy_summary || 'Not set'}\n` +
-          `Top moves:\n${moves.slice(0, 5).map((m: any, i: number) => `${i + 1}. ${m.action || m.description || JSON.stringify(m)}`).join('\n')}`;
+          `Top moves:\n${moves.slice(0, 5).map((m, i) => `${i + 1}. ${m.action || m.description || JSON.stringify(m)}`).join('\n')}`;
       }
 
       toast.info('Generating battle plan...', { duration: 3000 });
-      const { data, error } = await trackedInvoke<any>('weekly-battle-plan', { body: {} });
+      const { data, error } = await trackedInvoke<WeeklyBattlePlanResult>('weekly-battle-plan', { body: {} });
 
       if (error) return `Failed to generate battle plan: ${error.message}`;
       return data?.strategy_summary || 'Battle plan generated. Check your dashboard for the full plan.';
@@ -186,7 +194,7 @@ export function createPipelineTools(ctx: ToolContext): ToolMap {
       if (!userId) return 'Not authenticated';
 
       toast.info('Running weekly review...', { duration: 3000 });
-      const { data, error } = await trackedInvoke<any>('weekly-patterns', { body: {} });
+      const { data, error } = await trackedInvoke<WeeklyPatternsResult>('weekly-patterns', { body: {} });
 
       if (error) return `Failed to run weekly review: ${error.message}`;
       return data?.summary || data?.patterns_summary || 'Weekly review complete. Check the dashboard for details.';
@@ -197,7 +205,7 @@ export function createPipelineTools(ctx: ToolContext): ToolMap {
       if (!userId) return 'Not authenticated';
 
       toast.info('AI prioritizing accounts...', { duration: 3000 });
-      const { data, error } = await trackedInvoke<any>('prioritize-accounts', { body: {} });
+      const { data, error } = await trackedInvoke<PrioritizeAccountsResult>('prioritize-accounts', { body: {} });
 
       if (error) return `Failed to prioritize: ${error.message}`;
 
@@ -205,7 +213,7 @@ export function createPipelineTools(ctx: ToolContext): ToolMap {
       if (!ranked.length) return 'No accounts to prioritize. Add accounts first.';
 
       return `Top priority accounts:\n` +
-        ranked.slice(0, 8).map((a: any, i: number) =>
+        ranked.slice(0, 8).map((a, i) =>
           `${i + 1}. ${a.name || a.account_name} — ${a.reason || a.rationale || 'Priority account'}`
         ).join('\n');
     },
