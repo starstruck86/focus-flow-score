@@ -87,7 +87,7 @@ export function CompanyMonitorCard({ motionFilter }: CompanyMonitorCardProps = {
   const scanNow = useMutation({
     mutationFn: async () => {
       setIsScanning(true);
-      const { data, error } = await trackedInvoke('daily-digest', {
+      const { data, error } = await trackedInvoke<{ itemsCreated: number; accountsUpdated: number }>('daily-digest', {
         body: { userId: user!.id },
         componentName: 'CompanyMonitorCard',
       });
