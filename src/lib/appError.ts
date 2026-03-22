@@ -87,7 +87,7 @@ function classifyError(
   const lower = msg.toLowerCase();
 
   // Auth
-  if (lower.includes('not authenticated') || lower.includes('jwt') || lower.includes('refresh_token'))
+  if (lower.includes('not authenticated') || lower.includes('no active session') || lower.includes('jwt') || lower.includes('refresh_token') || lower.includes('sign in'))
     return { category: 'AUTH_ERROR', retryable: false, code: 401 };
 
   // Rate limit
