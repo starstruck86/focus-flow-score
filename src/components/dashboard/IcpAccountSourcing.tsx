@@ -63,7 +63,7 @@ export function IcpAccountSourcing() {
 
   // Promote to CRM + auto-enrich + auto-discover contacts
   const promoteAndEnrich = useMutation({
-    mutationFn: async (account: any) => {
+    mutationFn: async (account: IcpSourcedAccount) => {
       if (!user) throw new Error('Not authenticated');
       setPromotingIds((prev: Set<string>) => new Set(prev).add(account.id));
 
