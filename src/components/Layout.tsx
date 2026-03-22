@@ -11,6 +11,7 @@ import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { SaveIndicator } from '@/components/SaveIndicator';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { useReviewMode } from '@/contexts/ReviewModeContext';
 import { Button } from '@/components/ui/button';
 import { GlobalFAB } from '@/components/fab';
 import { GlobalSearch } from '@/components/GlobalSearch';
