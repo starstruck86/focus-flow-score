@@ -30,15 +30,19 @@ export interface OutreachModalState {
 
 // ===== Pipeline Hygiene =====
 export interface PipelineHygieneIssue {
-  record_type: 'opportunity' | 'renewal' | 'account';
+  record_type: string;
   record_id: string;
   record_name: string;
-  severity: 'critical' | 'warning' | 'info';
+  severity: string;
   issue_type: string;
   description: string;
+  message?: string;
+  suggested_action?: string;
+  arr_at_risk?: number;
 }
 
 export interface PipelineHygieneSummary {
+  total_arr_at_risk?: number;
   totalDeals?: number;
   avgDaysInStage?: number;
   staleCount?: number;
@@ -48,13 +52,20 @@ export interface PipelineHygieneSummary {
 
 // ===== Weekly Battle Plan =====
 export interface BattlePlanMove {
-  action: string;
+  rank?: number;
+  title?: string;
+  action?: string;
+  description?: string;
   account_name?: string;
   deal_name?: string;
   arr?: number;
-  reason: string;
+  estimated_arr_impact?: number;
+  reason?: string;
+  why?: string;
   type?: string;
+  category?: string;
   urgency?: string;
+  target_day?: string;
 }
 
 // ===== ICP Sourced Account =====
@@ -75,7 +86,7 @@ export interface IcpSourcedAccount {
   fit_score: number | null;
   trigger_signal: string | null;
   news_snippet: string | null;
-  suggested_contacts: IcpSuggestedContact[] | null;
+  suggested_contacts: unknown;
   linkedin_url: string | null;
   hq_location: string | null;
   signal_date: string | null;
