@@ -5,6 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Lightbulb, Loader2, RefreshCw, ChevronRight, X, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { authenticatedFetch } from '@/lib/authenticatedFetch';
 
 interface Suggestion {
   title: string;
@@ -38,13 +39,9 @@ export function SmartSuggestionsPanel({ content, documentType, onApply, onClose 
     if (!content.trim()) { toast.error('Add content first'); return; }
     setLoading(true);
     try {
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/build-resource`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({ type: 'suggest', content, documentType }),
+      const resp = await authenticatedFetch({
+        functionName: 'build-resource',
+        body: { type: 'suggest', content, documentType },
       });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));

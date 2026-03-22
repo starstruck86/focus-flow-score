@@ -1,8 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
-
-const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts-stream`;
-const STT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-stt`;
+import { authenticatedFetch } from '@/lib/authenticatedFetch';
 
 // ElevenLabs TTS has a 5000 char limit per request
 const TTS_CHUNK_LIMIT = 4500;
@@ -104,12 +102,8 @@ export function useVoiceMode() {
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
 
-      const resp = await fetch(STT_URL, {
-        method: 'POST',
-        headers: {
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
+      const resp = await authenticatedFetch({
+        functionName: 'elevenlabs-stt',
         body: formData,
       });
 
@@ -145,14 +139,9 @@ export function useVoiceMode() {
 
   /** Fetch a single TTS chunk and return an Audio element */
   const fetchTTSChunk = async (text: string, voiceId?: string): Promise<HTMLAudioElement> => {
-    const resp = await fetch(TTS_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-      },
-      body: JSON.stringify({ text, voiceId }),
+    const resp = await authenticatedFetch({
+      functionName: 'elevenlabs-tts-stream',
+      body: { text, voiceId },
     });
 
     if (!resp.ok) {
