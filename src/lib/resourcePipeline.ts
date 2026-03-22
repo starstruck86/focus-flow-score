@@ -317,7 +317,7 @@ async function stepTranscriptChunking(job: ResourceJob, resource: Record<string,
   
   // Store chunk count in job metadata
   await supabase.from('resource_jobs').update({
-    metadata: { ...(job.metadata || {}), chunk_count: chunks.length, total_chars: content.length },
+    metadata: { ...(job.metadata || {}), chunk_count: chunks.length, total_chars: content.length } as any,
   }).eq('id', job.id);
 }
 
