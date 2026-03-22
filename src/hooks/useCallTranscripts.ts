@@ -1,75 +1,29 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  getTranscripts,
+  getTranscriptsForAccount,
+  getRecentTranscriptsForPrep,
+  insertTranscript,
+  updateTranscript as updateTranscriptQuery,
+  deleteTranscript as deleteTranscriptQuery,
+  type TranscriptRow,
+  type TranscriptFilters,
+} from '@/data/call-transcripts';
 
-export interface CallTranscript {
-  id: string;
-  user_id: string;
-  opportunity_id: string | null;
-  renewal_id: string | null;
-  account_id: string | null;
-  title: string;
-  content: string;
-  summary: string | null;
-  call_date: string;
-  call_type: string | null;
-  participants: string | null;
-  tags: string[] | null;
-  notes: string | null;
-  file_url: string | null;
-  duration_minutes: number | null;
-  created_at: string;
-  updated_at: string;
-}
+export type CallTranscript = TranscriptRow;
 
-export function useCallTranscripts(filters?: {
-  accountId?: string;
-  opportunityId?: string;
-  renewalId?: string;
-  search?: string;
-}) {
+export function useCallTranscripts(filters?: TranscriptFilters) {
   return useQuery({
     queryKey: ['call-transcripts', filters],
-    queryFn: async () => {
-      let query = supabase
-        .from('call_transcripts')
-        .select('*')
-        .order('call_date', { ascending: false });
-
-      if (filters?.accountId) {
-        query = query.eq('account_id', filters.accountId);
-      }
-      if (filters?.opportunityId) {
-        query = query.eq('opportunity_id', filters.opportunityId);
-      }
-      if (filters?.renewalId) {
-        query = query.eq('renewal_id', filters.renewalId);
-      }
-      if (filters?.search) {
-        query = query.textSearch('content', filters.search);
-      }
-
-      const { data, error } = await query.limit(100);
-      if (error) throw error;
-      return data || [];
-    },
+    queryFn: () => getTranscripts(filters),
   });
 }
 
 export function useTranscriptsForAccount(accountId: string | undefined) {
   return useQuery({
     queryKey: ['call-transcripts', 'account', accountId],
-    queryFn: async () => {
-      if (!accountId) return [];
-      const { data, error } = await supabase
-        .from('call_transcripts')
-        .select('*')
-        .eq('account_id', accountId)
-        .order('call_date', { ascending: false })
-        .limit(20);
-      if (error) throw error;
-      return data || [];
-    },
+    queryFn: () => getTranscriptsForAccount(accountId!),
     enabled: !!accountId,
   });
 }
@@ -77,17 +31,7 @@ export function useTranscriptsForAccount(accountId: string | undefined) {
 export function useRecentTranscriptsForMeetingPrep(accountId: string | undefined) {
   return useQuery({
     queryKey: ['call-transcripts', 'prep', accountId],
-    queryFn: async () => {
-      if (!accountId) return [];
-      const { data, error } = await supabase
-        .from('call_transcripts')
-        .select('id, title, call_date, call_type, summary, participants, notes')
-        .eq('account_id', accountId)
-        .order('call_date', { ascending: false })
-        .limit(3);
-      if (error) throw error;
-      return data || [];
-    },
+    queryFn: () => getRecentTranscriptsForPrep(accountId!),
     enabled: !!accountId,
   });
 }
@@ -112,16 +56,7 @@ export function useSaveTranscript() {
       duration_minutes?: number;
     }) => {
       if (!user) throw new Error('Not authenticated');
-      const { data, error } = await supabase
-        .from('call_transcripts')
-        .insert({
-          ...transcript,
-          user_id: user.id,
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+      return insertTranscript({ ...transcript, user_id: user.id });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['call-transcripts'] });
@@ -133,15 +68,8 @@ export function useUpdateTranscript() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, updates }: { id: string; updates: Partial<Omit<CallTranscript, 'id' | 'user_id' | 'created_at' | 'updated_at'>> }) => {
-      const { data, error } = await supabase
-        .from('call_transcripts')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<Omit<TranscriptRow, 'id' | 'user_id' | 'created_at' | 'updated_at'>> }) => {
+      return updateTranscriptQuery(id, updates);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['call-transcripts'] });
@@ -153,13 +81,7 @@ export function useDeleteTranscript() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('call_transcripts')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
-    },
+    mutationFn: deleteTranscriptQuery,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['call-transcripts'] });
     },
