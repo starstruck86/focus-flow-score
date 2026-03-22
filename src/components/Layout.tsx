@@ -1,18 +1,10 @@
-import { NavLink as RouterNavLink, useLocation, useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { 
-  LayoutDashboard, 
-  Users, 
-  RefreshCw, 
-  CheckSquare, 
-  TrendingUp,
-  DollarSign,
-  Settings,
   Compass,
   LogOut,
-  FileText,
   Mic,
 } from 'lucide-react';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
@@ -35,6 +27,9 @@ import { useDaveContext, DaveSessionError, type DaveSessionData } from '@/hooks/
 import { useVoiceReminders } from '@/hooks/useVoiceReminders';
 import { useWakeWord } from '@/hooks/useWakeWord';
 import { motion, AnimatePresence } from 'framer-motion';
+import { BottomNav, useActiveTabColor, COLOR_VAR } from '@/components/layout/BottomNav';
+
+
 
 const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
   '/': { page: 'dashboard', description: 'Today / Dashboard — daily plan, agenda, and key metrics' },
@@ -47,114 +42,6 @@ const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
   '/quota': { page: 'quota', description: 'Quota — quota attainment, commission, and pipeline math' },
   '/settings': { page: 'settings', description: 'Settings — app configuration and preferences' },
 };
-
-type NavColor = 'today' | 'tasks' | 'outreach' | 'renewals' | 'prep' | 'coach' | 'trends' | 'quota' | 'settings';
-
-interface NavItemDef {
-  to: string;
-  label: string;
-  icon: React.ElementType;
-  color: NavColor;
-}
-
-const navRow1: NavItemDef[] = [
-  { to: '/', label: 'Today', icon: LayoutDashboard, color: 'today' },
-  { to: '/tasks', label: 'Tasks', icon: CheckSquare, color: 'tasks' },
-  { to: '/outreach', label: 'New Logo', icon: Users, color: 'outreach' },
-  { to: '/renewals', label: 'Renewals', icon: RefreshCw, color: 'renewals' },
-];
-
-const navRow2: NavItemDef[] = [
-  { to: '/prep', label: 'Prep Hub', icon: FileText, color: 'prep' },
-  { to: '/coach', label: 'Coach', icon: Compass, color: 'coach' },
-  { to: '/trends', label: 'Trends', icon: TrendingUp, color: 'trends' },
-  { to: '/quota', label: 'Quota', icon: DollarSign, color: 'quota' },
-  { to: '/settings', label: 'Settings', icon: Settings, color: 'settings' },
-];
-
-const ALL_NAV = [...navRow1, ...navRow2];
-
-const COLOR_VAR: Record<NavColor, string> = {
-  today: 'var(--nav-today)',
-  tasks: 'var(--nav-tasks)',
-  outreach: 'var(--nav-outreach)',
-  renewals: 'var(--nav-renewals)',
-  prep: 'var(--nav-prep)',
-  coach: 'var(--nav-coach)',
-  trends: 'var(--nav-trends)',
-  quota: 'var(--nav-quota)',
-  settings: 'var(--nav-settings)',
-};
-
-function NavItem({ item }: { item: NavItemDef }) {
-  const location = useLocation();
-  const isActive = item.to === '/'
-    ? location.pathname === '/'
-    : location.pathname.startsWith(item.to);
-
-  const colorStyle = isActive ? { color: `hsl(${COLOR_VAR[item.color]})` } : undefined;
-  const glowColor = `hsl(${COLOR_VAR[item.color]} / 0.5)`;
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <RouterNavLink
-          to={item.to}
-          className={cn(
-            'relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full text-[11px] font-medium transition-all duration-200 rounded-lg',
-            isActive
-              ? 'font-semibold'
-              : 'text-muted-foreground hover:text-foreground'
-          )}
-          style={colorStyle}
-        >
-          {isActive && (
-            <span
-              className="absolute -top-px left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full"
-              style={{
-                backgroundColor: `hsl(${COLOR_VAR[item.color]})`,
-                boxShadow: `0 0 8px ${glowColor}`,
-              }}
-            />
-          )}
-          <item.icon
-            className={cn("h-5 w-5 transition-transform duration-200", isActive && "scale-110")}
-            style={isActive ? { color: `hsl(${COLOR_VAR[item.color]})` } : undefined}
-          />
-          <span className={cn("truncate transition-opacity", isActive ? "opacity-100" : "opacity-70")}>{item.label}</span>
-        </RouterNavLink>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="text-xs">{item.label}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-function useActiveTabColor(): NavColor {
-  const location = useLocation();
-  const match = ALL_NAV.find(item =>
-    item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to)
-  );
-  return match?.color || 'today';
-}
-
-function BottomNav() {
-  return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/60 pb-[env(safe-area-inset-bottom)]"
-      style={{ background: 'linear-gradient(to top, hsl(var(--card)), hsl(var(--card) / 0.97))' }}
-    >
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
-      <div className="max-w-3xl mx-auto px-1 pb-1">
-        <div className="flex items-center justify-around h-12">
-          {navRow1.map(item => <NavItem key={item.to} item={item} />)}
-        </div>
-        <div className="h-px bg-border/30 mx-4" />
-        <div className="flex items-center justify-around h-12">
-          {navRow2.map(item => <NavItem key={item.to} item={item} />)}
-        </div>
-      </div>
-    </nav>
-  );
-}
 
 /** Tap-to-talk prompt for ?dave=1 URL opens (Siri Shortcuts) */
 function DaveTapPrompt({ onTap }: { onTap: () => void }) {
@@ -340,8 +227,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }, [getDaveSession, invalidateDaveCache]);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col w-full pt-[env(safe-area-inset-top)]">
+    <div data-testid="app-layout" className="min-h-screen bg-background flex flex-col w-full pt-[env(safe-area-inset-top)]">
       <header
+        data-testid="app-header"
         className="flex items-center gap-2 px-3 py-2 border-b sticky top-0 z-40 bg-background/95 backdrop-blur-md"
         style={headerAccentStyle}
       >
@@ -355,7 +243,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
         <GlobalSearch className="flex-1 min-w-0" />
         <div className="flex items-center gap-1 shrink-0">
-          <VoiceCommandButton onOpenDave={handleOpenDave} disabled={isFetchingDaveSession} />
+          <VoiceCommandButton data-testid="dave-voice-btn" onOpenDave={handleOpenDave} disabled={isFetchingDaveSession} />
           <TerritoryCopilot />
           <Tooltip>
             <TooltipTrigger asChild>
@@ -379,7 +267,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </div>
 
       <Breadcrumbs />
-      <main className="flex-1 overflow-auto pb-[calc(8rem+env(safe-area-inset-bottom))]">
+      <main data-testid="main-content" className="flex-1 overflow-x-hidden overflow-y-auto pb-[calc(8rem+env(safe-area-inset-bottom))]">
         {children}
       </main>
 

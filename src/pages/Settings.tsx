@@ -333,7 +333,7 @@ function DataImportSection() {
               <p className="text-sm text-muted-foreground">Import accounts, opportunities, renewals from CSV</p>
             </div>
           </div>
-          <Button onClick={() => setShowImportWizard(true)}>
+          <Button onClick={() => setShowImportWizard(true)} data-testid="import-csv-btn">
             <FileSpreadsheet className="h-4 w-4 mr-2" />
             Import CSV
           </Button>
@@ -686,7 +686,7 @@ export default function Settings() {
 
   return (
     <Layout>
-      <div className="p-6 lg:p-8 max-w-3xl">
+      <div data-testid="settings-page" className="p-6 lg:p-8 max-w-3xl">
         <div className="mb-8">
           <h1 className="font-display text-2xl font-bold">Settings</h1>
           <p className="text-sm text-muted-foreground">Customize your experience</p>
