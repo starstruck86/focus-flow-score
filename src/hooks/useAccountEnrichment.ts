@@ -6,31 +6,48 @@ import { toast } from 'sonner';
 import { autoInferHierarchy } from '@/lib/orgChartInference';
 import type { Account } from '@/types';
 
+/** Payload sent to the enrich-account edge function */
+export interface EnrichAccountRequest {
+  url: string;
+  accountName: string;
+  accountId: string;
+  industry: string;
+}
+
+/** Signals returned by the enrich-account edge function */
+export interface EnrichmentSignals {
+  direct_ecommerce: boolean;
+  email_sms_capture: boolean;
+  loyalty_membership: boolean;
+  category_complexity: boolean;
+  mobile_app: boolean;
+  marketing_platform_detected: string | null;
+  crm_lifecycle_team_size: number;
+}
+
+/** Scores returned by the enrich-account edge function */
+export interface EnrichmentScores {
+  icp_fit_score: number;
+  timing_score: number;
+  priority_score: number;
+  lifecycle_tier: string;
+  high_probability_buyer: boolean;
+  triggered_account: boolean;
+  confidence_score: number;
+}
+
+/** Full response contract from the enrich-account edge function */
 export interface EnrichmentResult {
   success: boolean;
   error?: string;
   discoveredUrl?: string;
-  signals?: {
-    direct_ecommerce: boolean;
-    email_sms_capture: boolean;
-    loyalty_membership: boolean;
-    category_complexity: boolean;
-    mobile_app: boolean;
-    marketing_platform_detected: string | null;
-    crm_lifecycle_team_size: number;
-  };
+  signals?: EnrichmentSignals;
   confidence?: Record<string, 'high' | 'medium' | 'low'>;
   evidence?: Record<string, string>;
-  scores?: {
-    icp_fit_score: number;
-    timing_score: number;
-    priority_score: number;
-    lifecycle_tier: string;
-    high_probability_buyer: boolean;
-    triggered_account: boolean;
-    confidence_score: number;
-  };
+  scores?: EnrichmentScores;
   summary?: string;
+  marTech?: string;
+  ecommerce?: string;
 }
 
 const STALE_DAYS = 90;
@@ -92,8 +109,15 @@ export function useAccountEnrichment() {
     setEnrichingIds((prev) => new Set(prev).add(account.id));
 
     try {
+      const requestPayload: EnrichAccountRequest = {
+        url: account.website || '',
+        accountName: account.name,
+        accountId: account.id,
+        industry: account.industry || '',
+      };
+
       const { data, error } = await trackedInvoke<EnrichmentResult>('enrich-account', {
-        body: { url: account.website || '', accountName: account.name, accountId: account.id, industry: account.industry || '' },
+        body: requestPayload as unknown as Record<string, unknown>,
         componentName: 'useAccountEnrichment',
       });
 
@@ -125,10 +149,10 @@ export function useAccountEnrichment() {
         triggeredAccount: result.scores!.triggered_account,
         confidenceScore: result.scores!.confidence_score,
         lastEnrichedAt: new Date().toISOString(),
-        enrichmentSourceSummary: (data as any).summary || result.summary,
+        enrichmentSourceSummary: result.summary,
         enrichmentEvidence: result.evidence,
-        marTech: (data as any).marTech || account.marTech,
-        ecommerce: (data as any).ecommerce || account.ecommerce,
+        marTech: result.marTech || account.marTech,
+        ecommerce: result.ecommerce || account.ecommerce,
       };
 
       updateAccount(account.id, updates);
