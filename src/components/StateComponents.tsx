@@ -104,7 +104,7 @@ export function ErrorState({
         <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
         <span className="text-muted-foreground flex-1 min-w-0 truncate">{message}</span>
         {retryable && onRetry && (
-          <Button variant="ghost" size="sm" onClick={onRetry} className="shrink-0 h-7">
+          <Button data-testid="error-retry-btn" variant="ghost" size="sm" onClick={onRetry} className="shrink-0 h-7">
             <RefreshCw className="h-3 w-3 mr-1" />
             Retry
           </Button>
