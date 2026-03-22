@@ -94,6 +94,7 @@ const App = () => (
             </DataSyncProvider>
             </CopilotProvider>
           </LinkedRecordProvider>
+          </ReviewModeProvider>
         </AuthProvider>
       </TooltipProvider>
     </ThemeProvider>

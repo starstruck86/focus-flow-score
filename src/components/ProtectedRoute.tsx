@@ -1,18 +1,17 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { REVIEW_MODE } from '@/contexts/ReviewModeContext';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  // TEMPORARY: bypass auth for testing — remove this line to re-enable auth
-  const BYPASS_AUTH = true;
-
   const { session, user, loading } = useAuth();
   const location = useLocation();
 
-  if (BYPASS_AUTH) {
+  // Public review mode — bypass auth entirely
+  if (REVIEW_MODE) {
     return <>{children}</>;
   }
 
