@@ -54,6 +54,25 @@ export interface EnrichmentResult {
 
 const STALE_DAYS = 90;
 
+const enrichmentLogger = createLogger('AccountEnrichment');
+
+/** Validation rules for enrichment responses */
+const enrichmentValidationRules: ValidationRule<EnrichmentResult>[] = [
+  successFlag<EnrichmentResult>(),
+  requiredField<EnrichmentResult>('signals', 'Enrichment signals must be present'),
+  requiredField<EnrichmentResult>('scores', 'Enrichment scores must be present'),
+  {
+    check: 'ICP fit score is within valid range (0-100)',
+    validate: (d) => d.scores != null && d.scores.icp_fit_score >= 0 && d.scores.icp_fit_score <= 100,
+    severity: 'warn',
+  },
+  {
+    check: 'Lifecycle tier is a non-empty string',
+    validate: (d) => d.scores != null && typeof d.scores.lifecycle_tier === 'string' && d.scores.lifecycle_tier.length > 0,
+    severity: 'warn',
+  },
+];
+
 export function isEnrichmentStale(account: Account): boolean {
   if (!account.lastEnrichedAt) return false; // never enriched = not "stale", just unenriched
   const daysSince = Math.floor((Date.now() - new Date(account.lastEnrichedAt).getTime()) / 86400000);
