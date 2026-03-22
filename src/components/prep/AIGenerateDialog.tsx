@@ -9,7 +9,7 @@ import { Sparkles, Loader2, Search, Check } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useAllResources } from '@/hooks/useResources';
 import { toast } from 'sonner';
-import { authenticatedFetch } from '@/lib/authenticatedFetch';
+import { streamToString } from '@/lib/streamingFetch';
 
 interface AIGenerateDialogProps {
   open: boolean;
