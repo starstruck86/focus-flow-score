@@ -91,8 +91,9 @@ export function useAccountEnrichment() {
     setEnrichingIds((prev) => new Set(prev).add(account.id));
 
     try {
-      const { data, error } = await supabase.functions.invoke('enrich-account', {
+      const { data, error } = await trackedInvoke<EnrichmentResult>('enrich-account', {
         body: { url: account.website || '', accountName: account.name, accountId: account.id, industry: account.industry || '' },
+        componentName: 'useAccountEnrichment',
       });
 
       // If website was auto-discovered, update the account
