@@ -150,7 +150,7 @@ export function useDaveContext() {
       const data = await request;
       setCachedSession(data);
       fetchedAtRef.current = Date.now();
-      logger.info('Session fetched on-demand', { contextLength: data.context?.length }, traceId);
+      logger.info('Session fetched on-demand', { contextLength: data.context?.length });
       return data;
     } finally {
       inFlightRef.current = null;
