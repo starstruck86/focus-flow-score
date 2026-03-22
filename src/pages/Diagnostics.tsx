@@ -4,7 +4,7 @@
  * Also shows current environment info and connection status.
  */
 
-import { useState, useEffect, useSyncExternalStore } from 'react';
+import { useState, useEffect, useSyncExternalStore, useMemo } from 'react';
 import { Layout } from '@/components/Layout';
 import { getRecentErrors, subscribeErrors, clearErrors, type AppError } from '@/lib/appError';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,7 +13,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Trash2, RefreshCw, Copy, ChevronDown, ChevronUp, Activity, Shield, Wifi, AlertTriangle, Database, Layers } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Trash2, RefreshCw, Copy, ChevronDown, ChevronUp, Activity, Shield, Wifi, AlertTriangle, Database, Layers, Search, FileText, X } from 'lucide-react';
 import { useAllActiveJobs, useRetryJob } from '@/hooks/useResourceJobs';
 import { PIPELINE_STEPS } from '@/lib/resourcePipeline';
 import { cn } from '@/lib/utils';
@@ -40,13 +42,89 @@ const CATEGORY_COLORS: Record<string, string> = {
   UNKNOWN: 'bg-muted text-muted-foreground border-border',
 };
 
-function ErrorRow({ err, index }: { err: AppError; index: number }) {
-  const [expanded, setExpanded] = useState(false);
+function formatDebugReport(err: AppError): string {
+  return [
+    `=== Debug Report ===`,
+    `Trace ID: ${err.traceId}`,
+    `Category: ${err.category}`,
+    `Source: ${err.source}`,
+    `Message: ${err.message}`,
+    err.rawMessage ? `Raw: ${err.rawMessage}` : null,
+    err.code ? `Code: ${err.code}` : null,
+    err.functionName ? `Function: ${err.functionName}` : null,
+    err.componentName ? `Component: ${err.componentName}` : null,
+    err.route ? `Route: ${err.route}` : null,
+    `Retryable: ${err.retryable}`,
+    `Time: ${new Date(err.timestamp).toISOString()}`,
+    Object.keys(err.metadata || {}).length > 0 ? `Metadata: ${JSON.stringify(err.metadata, null, 2)}` : null,
+  ].filter(Boolean).join('\n');
+}
+
+function ErrorDetailView({ err, onClose }: { err: AppError; onClose: () => void }) {
+  return (
+    <Card data-testid="diag-error-detail">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Error Detail
+          </CardTitle>
+          <div className="flex gap-1">
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
+              navigator.clipboard.writeText(formatDebugReport(err));
+              toast.success('Debug report copied');
+            }}>
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div><span className="text-muted-foreground">Trace ID:</span> <span className="font-mono">{err.traceId}</span></div>
+          <div><span className="text-muted-foreground">Category:</span> <Badge variant="outline" className={cn('text-[10px] ml-1', CATEGORY_COLORS[err.category])}>{err.category}</Badge></div>
+          <div><span className="text-muted-foreground">Source:</span> {err.source}</div>
+          <div><span className="text-muted-foreground">Retryable:</span> {err.retryable ? '✅ Yes' : '❌ No'}</div>
+          {err.functionName && <div><span className="text-muted-foreground">Function:</span> {err.functionName}</div>}
+          {err.componentName && <div><span className="text-muted-foreground">Component:</span> {err.componentName}</div>}
+          {err.route && <div><span className="text-muted-foreground">Route:</span> {err.route}</div>}
+          {err.code && <div><span className="text-muted-foreground">Code:</span> {String(err.code)}</div>}
+          <div className="col-span-2"><span className="text-muted-foreground">Time:</span> {new Date(err.timestamp).toLocaleString()}</div>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground mb-1">Message</p>
+          <p className="text-sm bg-muted/50 rounded p-2">{err.message}</p>
+        </div>
+        {err.rawMessage && err.rawMessage !== err.message && (
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Raw message</p>
+            <pre className="text-[10px] font-mono bg-muted/50 rounded p-2 overflow-auto max-h-24">{err.rawMessage}</pre>
+          </div>
+        )}
+        {Object.keys(err.metadata || {}).length > 0 && (
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Metadata</p>
+            <pre className="text-[10px] font-mono bg-muted/50 rounded p-2 overflow-auto max-h-40">{JSON.stringify(err.metadata, null, 2)}</pre>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ErrorRow({ err, onSelect }: { err: AppError; onSelect: () => void }) {
   const age = Date.now() - err.timestamp;
   const ageStr = age < 60_000 ? `${Math.round(age / 1000)}s ago` : age < 3_600_000 ? `${Math.round(age / 60_000)}m ago` : `${Math.round(age / 3_600_000)}h ago`;
 
   return (
-    <div className={cn('border rounded-lg p-3 space-y-1.5', age < 30_000 ? 'border-destructive/40 bg-destructive/5' : 'border-border bg-card')}>
+    <button
+      className={cn('border rounded-lg p-3 space-y-1.5 w-full text-left transition-colors hover:border-primary/40', age < 30_000 ? 'border-destructive/40 bg-destructive/5' : 'border-border bg-card')}
+      onClick={onSelect}
+      data-testid="diag-error-row"
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -56,32 +134,14 @@ function ErrorRow({ err, index }: { err: AppError; index: number }) {
             {err.retryable && <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-400 border-emerald-500/30">retryable</Badge>}
             <span className="text-[10px] text-muted-foreground">{ageStr}</span>
           </div>
-          <p className="text-sm text-foreground mt-1 break-words">{err.message}</p>
+          <p className="text-sm text-foreground mt-1 break-words line-clamp-2">{err.message}</p>
           <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground font-mono">
             <span>trace: {err.traceId}</span>
             {err.functionName && <span>fn: {err.functionName}</span>}
-            {err.componentName && <span>comp: {err.componentName}</span>}
-            {err.route && <span>route: {err.route}</span>}
           </div>
         </div>
-        <div className="flex gap-1 shrink-0">
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => {
-            navigator.clipboard.writeText(JSON.stringify(err, null, 2));
-            toast.success('Error copied to clipboard');
-          }}>
-            <Copy className="h-3 w-3" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setExpanded(!expanded)}>
-            {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          </Button>
-        </div>
       </div>
-      {expanded && (
-        <pre className="text-[10px] text-muted-foreground bg-muted/50 rounded p-2 overflow-auto max-h-40 font-mono">
-{JSON.stringify({ rawMessage: err.rawMessage, code: err.code, source: err.source, metadata: err.metadata }, null, 2)}
-        </pre>
-      )}
-    </div>
+    </button>
   );
 }
 
@@ -90,10 +150,10 @@ function JobsPanel() {
   const retryJob = useRetryJob();
 
   if (isLoading) return <div className="text-center py-8 text-muted-foreground text-sm">Loading jobs…</div>;
-  if (!jobs || jobs.length === 0) return <div className="text-center py-12 text-muted-foreground text-sm">No active or recent resource jobs.</div>;
+  if (!jobs || jobs.length === 0) return <div className="text-center py-12 text-muted-foreground text-sm" data-testid="diag-jobs-empty">No active or recent resource jobs.</div>;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" data-testid="diag-jobs-list">
       {jobs.map((job: any) => {
         const steps = (job.resource_job_steps || []).sort((a: any, b: any) => a.sequence - b.sequence);
         const completedCount = steps.filter((s: any) => s.status === 'completed').length;
@@ -101,14 +161,23 @@ function JobsPanel() {
         const statusColor = job.status === 'completed' ? 'text-emerald-500' : job.status === 'failed' ? 'text-destructive' : job.status === 'running' ? 'text-primary' : 'text-amber-500';
 
         return (
-          <Card key={job.id}>
+          <Card key={job.id} data-testid="diag-job-card">
             <CardContent className="p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className={cn('text-[10px]', statusColor)}>{job.status}</Badge>
                   <span className="text-xs text-muted-foreground font-mono">trace: {job.trace_id}</span>
                 </div>
-                <span className="text-[10px] text-muted-foreground">{completedCount}/{steps.length} steps</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground">{completedCount}/{steps.length} steps</span>
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => {
+                    const report = `Job: ${job.id}\nTrace: ${job.trace_id}\nStatus: ${job.status}\nSteps:\n${steps.map((s: any) => `  ${s.step_name}: ${s.status}${s.error_message ? ` (${s.error_message})` : ''}`).join('\n')}`;
+                    navigator.clipboard.writeText(report);
+                    toast.success('Job report copied');
+                  }}>
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
               </div>
 
               {/* Step progress */}
@@ -128,10 +197,28 @@ function JobsPanel() {
                 ))}
               </div>
 
+              {/* Step detail list */}
+              <div className="space-y-0.5">
+                {steps.map((s: any) => (
+                  <div key={s.id} className="flex items-center gap-2 text-[10px] font-mono">
+                    <span className={cn(
+                      'w-2 h-2 rounded-full shrink-0',
+                      s.status === 'completed' ? 'bg-emerald-500' :
+                      s.status === 'failed' ? 'bg-destructive' :
+                      s.status === 'running' ? 'bg-primary' : 'bg-muted'
+                    )} />
+                    <span className="text-muted-foreground w-24 truncate">{PIPELINE_STEPS.find(p => p.name === s.step_name)?.label || s.step_name}</span>
+                    <span className={s.status === 'failed' ? 'text-destructive' : 'text-muted-foreground'}>{s.status}</span>
+                    {s.payload_size && <span className="text-muted-foreground">({Math.round(s.payload_size / 1024)}KB)</span>}
+                    {s.retry_count > 0 && <span className="text-amber-400">retry:{s.retry_count}</span>}
+                  </div>
+                ))}
+              </div>
+
               {failedStep && (
-                <div className="text-xs text-destructive">
-                  Failed: {PIPELINE_STEPS.find(p => p.name === failedStep.step_name)?.label || failedStep.step_name}
-                  {failedStep.error_category && <span className="ml-1 opacity-70">({failedStep.error_category})</span>}
+                <div className="text-xs text-destructive bg-destructive/5 rounded p-2">
+                  <span className="font-medium">Failed: {PIPELINE_STEPS.find(p => p.name === failedStep.step_name)?.label || failedStep.step_name}</span>
+                  {failedStep.error_category && <Badge variant="outline" className="ml-1.5 text-[9px]">{failedStep.error_category}</Badge>}
                   {failedStep.error_message && <p className="text-[10px] mt-0.5 font-mono break-words">{failedStep.error_message}</p>}
                 </div>
               )}
@@ -141,11 +228,12 @@ function JobsPanel() {
                   variant="outline"
                   size="sm"
                   className="h-7 text-xs w-full gap-1.5"
+                  data-testid="diag-job-retry-btn"
                   onClick={() => retryJob.mutate({ jobId: job.id, resourceId: job.resource_id })}
                   disabled={retryJob.isPending}
                 >
                   <RefreshCw className={cn('h-3 w-3', retryJob.isPending && 'animate-spin')} />
-                  Retry
+                  Retry from failed step
                 </Button>
               )}
             </CardContent>
@@ -159,11 +247,17 @@ function JobsPanel() {
 export default function Diagnostics() {
   const errors = useErrorStore();
   const { user, session } = useAuth();
-  const [filter, setFilter] = useState<string>('all');
+  const [selectedError, setSelectedError] = useState<AppError | null>(null);
   const [, setTick] = useState(0);
   const [persistedErrors, setPersistedErrors] = useState<AppError[]>([]);
   const [loadingPersisted, setLoadingPersisted] = useState(false);
   const [tab, setTab] = useState<string>('session');
+
+  // Filters
+  const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [filterFunction, setFilterFunction] = useState<string>('all');
+  const [filterRetryable, setFilterRetryable] = useState<string>('all');
+  const [searchText, setSearchText] = useState('');
 
   // Refresh timestamps every 10s
   useEffect(() => {
@@ -180,7 +274,7 @@ export default function Diagnostics() {
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
-        .limit(100);
+        .limit(200);
 
       if (data) {
         setPersistedErrors(data.map((row: any) => ({
@@ -212,15 +306,30 @@ export default function Diagnostics() {
   }, [tab]);
 
   const activeErrors = tab === 'session' ? errors : persistedErrors;
-  const categories = ['all', ...new Set(Array.from(activeErrors).map(e => e.category))];
-  const filtered = filter === 'all' ? Array.from(activeErrors) : Array.from(activeErrors).filter(e => e.category === filter);
-  const sorted = [...filtered].reverse();
+
+  // Derived filter options
+  const categories = useMemo(() => ['all', ...new Set(Array.from(activeErrors).map(e => e.category))], [activeErrors]);
+  const functions = useMemo(() => ['all', ...new Set(Array.from(activeErrors).map(e => e.functionName).filter(Boolean) as string[])], [activeErrors]);
+
+  // Apply filters
+  const filtered = useMemo(() => {
+    let list = Array.from(activeErrors);
+    if (filterCategory !== 'all') list = list.filter(e => e.category === filterCategory);
+    if (filterFunction !== 'all') list = list.filter(e => e.functionName === filterFunction);
+    if (filterRetryable === 'retryable') list = list.filter(e => e.retryable);
+    if (filterRetryable === 'non-retryable') list = list.filter(e => !e.retryable);
+    if (searchText.trim()) {
+      const q = searchText.toLowerCase();
+      list = list.filter(e => e.message.toLowerCase().includes(q) || e.traceId.toLowerCase().includes(q) || (e.functionName?.toLowerCase().includes(q)));
+    }
+    return [...list].reverse();
+  }, [activeErrors, filterCategory, filterFunction, filterRetryable, searchText]);
 
   const online = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto p-4 space-y-4 pb-24">
+      <div className="max-w-4xl mx-auto p-4 space-y-4 pb-24" data-testid="diagnostics-page">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Activity className="h-5 w-5 text-primary" />
@@ -263,8 +372,8 @@ export default function Diagnostics() {
           </CardContent>
         </Card>
 
-        {/* Tabs: Session vs Persisted */}
-        <Tabs value={tab} onValueChange={setTab}>
+        {/* Tabs */}
+        <Tabs value={tab} onValueChange={(v) => { setTab(v); setSelectedError(null); }}>
           <TabsList className="w-full">
             <TabsTrigger value="session" className="flex-1 gap-1.5">
               <Activity className="h-3.5 w-3.5" />
@@ -274,62 +383,20 @@ export default function Diagnostics() {
               <Database className="h-3.5 w-3.5" />
               History
             </TabsTrigger>
-            <TabsTrigger value="jobs" className="flex-1 gap-1.5">
+            <TabsTrigger value="jobs" className="flex-1 gap-1.5" data-testid="diag-jobs-tab">
               <Layers className="h-3.5 w-3.5" />
               Jobs
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value={tab} className="mt-3 space-y-3">
-            {/* Summary */}
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <span>{sorted.length} error{sorted.length !== 1 ? 's' : ''}</span>
-              {sorted.filter(e => e.retryable).length > 0 && (
-                <span className="text-primary">{sorted.filter(e => e.retryable).length} retryable</span>
-              )}
-              {sorted.filter(e => e.category === 'AUTH_ERROR').length > 0 && (
-                <span className="text-destructive flex items-center gap-1">
-                  <AlertTriangle className="h-3 w-3" />
-                  {sorted.filter(e => e.category === 'AUTH_ERROR').length} auth
-                </span>
-              )}
-            </div>
-
-            {/* Category filter */}
-            {categories.length > 1 && (
-              <div className="flex gap-1.5 flex-wrap">
-                {categories.map(cat => (
-                  <Button
-                    key={cat}
-                    variant={filter === cat ? 'default' : 'outline'}
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => setFilter(cat)}
-                  >
-                    {cat === 'all' ? 'All' : cat}
-                  </Button>
-                ))}
-              </div>
-            )}
-
-            {/* Error list */}
-            <div className="space-y-2">
-              {loadingPersisted && tab === 'persisted' && (
-                <div className="text-center py-8 text-muted-foreground text-sm">Loading persisted errors…</div>
-              )}
-              {sorted.length === 0 && !loadingPersisted && (
-                <div className="text-center py-12 text-muted-foreground text-sm">
-                  {tab === 'session'
-                    ? 'No errors this session. Errors from API calls, component crashes, and edge functions will appear here.'
-                    : 'No persisted errors found.'}
-                </div>
-              )}
-              {sorted.map((err, i) => (
-                <ErrorRow key={`${err.traceId}-${i}`} err={err} index={i} />
-              ))}
-            </div>
+          <TabsContent value="session" className="mt-3 space-y-3">
+            {renderErrorsPanel()}
           </TabsContent>
-
+          <TabsContent value="persisted" className="mt-3 space-y-3">
+            {loadingPersisted ? (
+              <div className="text-center py-8 text-muted-foreground text-sm">Loading persisted errors…</div>
+            ) : renderErrorsPanel()}
+          </TabsContent>
           <TabsContent value="jobs" className="mt-3 space-y-3">
             <JobsPanel />
           </TabsContent>
@@ -337,4 +404,83 @@ export default function Diagnostics() {
       </div>
     </Layout>
   );
+
+  function renderErrorsPanel() {
+    return (
+      <>
+        {/* Detail view */}
+        {selectedError && <ErrorDetailView err={selectedError} onClose={() => setSelectedError(null)} />}
+
+        {/* Filters row */}
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="relative flex-1 min-w-[140px]">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              value={searchText}
+              onChange={e => setSearchText(e.target.value)}
+              placeholder="Search errors or trace IDs..."
+              className="h-8 text-xs pl-8"
+              data-testid="diag-search"
+            />
+          </div>
+          <Select value={filterCategory} onValueChange={setFilterCategory}>
+            <SelectTrigger className="h-8 text-xs w-auto min-w-[120px]" data-testid="diag-filter-category">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              {categories.map(c => <SelectItem key={c} value={c}>{c === 'all' ? 'All Categories' : c}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {functions.length > 2 && (
+            <Select value={filterFunction} onValueChange={setFilterFunction}>
+              <SelectTrigger className="h-8 text-xs w-auto min-w-[120px]" data-testid="diag-filter-function">
+                <SelectValue placeholder="Function" />
+              </SelectTrigger>
+              <SelectContent>
+                {functions.map(f => <SelectItem key={f} value={f}>{f === 'all' ? 'All Functions' : f}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          <Select value={filterRetryable} onValueChange={setFilterRetryable}>
+            <SelectTrigger className="h-8 text-xs w-auto min-w-[100px]" data-testid="diag-filter-retryable">
+              <SelectValue placeholder="Retryable" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="retryable">Retryable</SelectItem>
+              <SelectItem value="non-retryable">Non-retryable</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Summary */}
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <span>{filtered.length} error{filtered.length !== 1 ? 's' : ''}</span>
+          {filtered.filter(e => e.retryable).length > 0 && (
+            <span className="text-primary">{filtered.filter(e => e.retryable).length} retryable</span>
+          )}
+          {filtered.filter(e => e.category === 'AUTH_ERROR').length > 0 && (
+            <span className="text-destructive flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3" />
+              {filtered.filter(e => e.category === 'AUTH_ERROR').length} auth
+            </span>
+          )}
+        </div>
+
+        {/* Error list */}
+        <div className="space-y-2" data-testid="diag-error-list">
+          {filtered.length === 0 && (
+            <div className="text-center py-12 text-muted-foreground text-sm">
+              {tab === 'session'
+                ? 'No errors this session. Errors from API calls, component crashes, and edge functions will appear here.'
+                : 'No persisted errors found.'}
+            </div>
+          )}
+          {filtered.map((err, i) => (
+            <ErrorRow key={`${err.traceId}-${i}`} err={err} onSelect={() => setSelectedError(err)} />
+          ))}
+        </div>
+      </>
+    );
+  }
 }

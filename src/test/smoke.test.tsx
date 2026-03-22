@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
@@ -23,11 +23,17 @@ vi.mock('@/integrations/supabase/client', () => ({
       insert: vi.fn().mockReturnThis(),
       update: vi.fn().mockReturnThis(),
       delete: vi.fn().mockReturnThis(),
+      upsert: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
+      neq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
+      not: vi.fn().mockReturnThis(),
+      ilike: vi.fn().mockReturnThis(),
       single: vi.fn().mockResolvedValue({ data: null }),
       order: vi.fn().mockReturnThis(),
       limit: vi.fn().mockReturnThis(),
       maybeSingle: vi.fn().mockResolvedValue({ data: null }),
+      then: vi.fn().mockResolvedValue({ data: [], error: null }),
     })),
     functions: {
       invoke: vi.fn().mockResolvedValue({ data: null, error: null }),
@@ -67,8 +73,6 @@ function createWrapper(route = '/') {
 
 describe('Auth page', () => {
   it('renders auth page container', async () => {
-    // Auth redirects to / when session exists, and shows login when not.
-    // Since our mock returns null session, it should show the sign-in UI.
     const Auth = (await import('@/pages/Auth')).default;
     const { AuthProvider } = await import('@/contexts/AuthContext');
     const Wrapper = createWrapper('/auth');
@@ -79,9 +83,6 @@ describe('Auth page', () => {
         </AuthProvider>
       </Wrapper>
     );
-    // Auth page shows loading spinner first (session check), which has our test id
-    const page = container.querySelector('[data-testid="auth-page"]');
-    // If not rendered yet (loading state), that's also valid — no crash
     expect(container.innerHTML.length).toBeGreaterThan(0);
   });
 });
@@ -143,5 +144,62 @@ describe('useMutationGuard', () => {
     });
 
     expect(callCount).toBe(1);
+  });
+});
+
+describe('Error normalization', () => {
+  it('classifies auth errors', async () => {
+    const { normalizeError } = await import('@/lib/appError');
+    const result = normalizeError({
+      error: new Error('No active session'),
+      source: 'frontend',
+      functionName: 'test-fn',
+    });
+    expect(result.category).toBe('AUTH_ERROR');
+    expect(result.retryable).toBe(false);
+  });
+
+  it('classifies network errors', async () => {
+    const { normalizeError } = await import('@/lib/appError');
+    const err = new TypeError('Failed to fetch');
+    const result = normalizeError({ error: err, source: 'frontend' });
+    expect(result.category).toBe('NETWORK_ERROR');
+    expect(result.retryable).toBe(true);
+  });
+
+  it('classifies timeout errors', async () => {
+    const { normalizeError } = await import('@/lib/appError');
+    const result = normalizeError({
+      error: new Error('my-function timed out after 30000ms'),
+      source: 'function',
+      functionName: 'my-function',
+    });
+    expect(result.category).toBe('FUNCTION_TIMEOUT');
+    expect(result.retryable).toBe(true);
+  });
+
+  it('generates unique trace IDs', async () => {
+    const { generateTraceId } = await import('@/lib/appError');
+    const ids = new Set(Array.from({ length: 100 }, () => generateTraceId()));
+    expect(ids.size).toBe(100);
+  });
+});
+
+describe('authenticatedFetch helper', () => {
+  it('exports authenticatedFetch function', async () => {
+    const mod = await import('@/lib/authenticatedFetch');
+    expect(typeof mod.authenticatedFetch).toBe('function');
+  });
+});
+
+describe('RouteErrorBoundary', () => {
+  it('renders children normally', async () => {
+    const { RouteErrorBoundary } = await import('@/components/RouteErrorBoundary');
+    const { container } = render(
+      <RouteErrorBoundary routeName="Test">
+        <div data-testid="child">OK</div>
+      </RouteErrorBoundary>
+    );
+    expect(container.querySelector('[data-testid="child"]')).toBeTruthy();
   });
 });
