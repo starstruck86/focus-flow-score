@@ -184,7 +184,7 @@ export function DailyTimeBlocks() {
     mutationFn: async () => {
       if (!plan) return;
       const { error: fbError } = await supabase
-        .from('ai_feedback' as any)
+        .from('ai_feedback' as 'ai_feedback')
         .insert({
           user_id: user!.id,
           feature: 'time_blocks',
