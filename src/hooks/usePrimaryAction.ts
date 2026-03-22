@@ -1,10 +1,10 @@
 // Primary Action Engine — selects the SINGLE highest-ROI action
 // Uses existing store data. ONE action only. No lists.
 // Extended with: cost-of-delay, momentum awareness, pipeline creation, kill switch.
+// Updated: reflects Target Account → Contact → Outreach → Meeting → Opportunity flow.
 
 import { useMemo } from 'react';
 import { useStore } from '@/store/useStore';
-import { useStaleItems } from '@/hooks/useStaleItems';
 import { useMomentumEngine } from '@/hooks/useMomentumEngine';
 import {
   oppNoNextStepDelay,
@@ -12,25 +12,25 @@ import {
   renewalRiskDelay,
   taskOverdueDelay,
   pipelineGapDelay,
+  outreachGapDelay,
 } from '@/hooks/useCostOfDelay';
 
 export interface PrimaryAction {
-  id: string;             // unique key for memory tracking
-  action: string;         // what to do
-  why: string;            // why it matters
-  nextStep: string;       // immediate next step
+  id: string;
+  action: string;
+  why: string;
+  nextStep: string;
   entityType: 'opportunity' | 'task' | 'renewal' | 'account' | 'system';
   entityId?: string;
   entityName?: string;
-  score: number;          // internal ranking score
-  delayConsequence?: string; // what happens if delayed
+  score: number;
+  delayConsequence?: string;
   escalation?: 'critical' | 'high' | 'moderate' | 'low';
 }
 
 // Kill switch: detect low-value work that should be deprioritized
-function isLowValueTarget(item: { arr?: number; lastTouchDate?: string; status?: string; stage?: string }): boolean {
+function isLowValueTarget(item: { arr?: number; lastTouchDate?: string }): boolean {
   const arrK = (item.arr || 0) / 1000;
-  // Very low value + stale = kill candidate
   if (arrK < 10 && item.lastTouchDate) {
     const daysSince = Math.ceil((Date.now() - new Date(item.lastTouchDate).getTime()) / 86400000);
     if (daysSince > 30) return true;
@@ -64,7 +64,7 @@ export function usePrimaryAction(): PrimaryAction | null {
 
     function applyMemoryAdjustment(score: number, actionId: string): number {
       const ignores = ignoreMap[actionId] || 0;
-      if (ignores >= 4) return score * 0.3;  // heavily suppress
+      if (ignores >= 4) return score * 0.3;
       if (ignores >= 3) return score * 0.5;
       if (ignores >= 2) return score * 0.7;
       if (ignores >= 1) return score * 0.9;
@@ -98,7 +98,7 @@ export function usePrimaryAction(): PrimaryAction | null {
     // ═══ 2. Active deals with no next step ═══
     const activeOpps = opportunities.filter(o => o.status === 'active');
     for (const opp of activeOpps) {
-      if (isLowValueTarget(opp)) continue; // Kill switch
+      if (isLowValueTarget(opp)) continue;
 
       if (!opp.nextStep && !opp.nextStepDate) {
         const arrK = (opp.arr || 0) / 1000;
@@ -188,31 +188,101 @@ export function usePrimaryAction(): PrimaryAction | null {
       });
     }
 
-    // ═══ 5. PIPELINE CREATION ENGINE ═══
-    // If momentum shows pipeline is dry or new logo gap, inject a pipeline creation action
-    if (momentum.pipelineCreationLabel === 'dry' || momentum.newLogoGap) {
-      // Calculate days since last new-logo activity
-      const newLogoAccounts = accounts.filter(a => a.motion === 'new-logo');
-      let daysSinceNewActivity = 14; // default high
-      for (const a of newLogoAccounts) {
+    // ═══ 5. TARGET ACCOUNT PIPELINE ENGINE ═══
+    // Full funnel: Target Accounts → Contacts → Outreach → Meetings → Opportunities
+
+    const targetAccounts = accounts.filter(a => a.motion === 'new-logo');
+
+    // 5a. Pipeline dry — need to select target accounts
+    if (momentum.pipelineCreationLabel === 'dry' || momentum.targetAccountGap) {
+      let daysSinceTargetActivity = 14;
+      for (const a of targetAccounts) {
         if (a.lastTouchDate) {
           const d = Math.ceil((now.getTime() - new Date(a.lastTouchDate).getTime()) / 86400000);
-          if (d < daysSinceNewActivity) daysSinceNewActivity = d;
+          if (d < daysSinceTargetActivity) daysSinceTargetActivity = d;
         }
       }
-      const delay = pipelineGapDelay(daysSinceNewActivity);
-      const actionId = 'system-pipeline-creation';
+      const delay = pipelineGapDelay(daysSinceTargetActivity);
+      const actionId = 'system-select-target-accounts';
       const baseScore = 130 * delay.decayMultiplier;
       candidates.push({
         id: actionId,
-        action: 'Start prospecting — identify 3 new accounts',
-        why: `Pipeline creation ${momentum.pipelineCreationLabel} — ${daysSinceNewActivity}d since new logo activity`,
-        nextStep: 'Review your target accounts or ask Dave to suggest accounts to prospect.',
+        action: 'Select 3–5 target accounts for outreach',
+        why: `Pipeline creation ${momentum.pipelineCreationLabel} — ${daysSinceTargetActivity}d since target account activity`,
+        nextStep: 'Review your territory and pick accounts to work this week.',
         entityType: 'system',
         score: applyMemoryAdjustment(baseScore, actionId),
         delayConsequence: delay.delayConsequence,
         escalation: delay.escalationLevel,
       });
+    }
+
+    // 5b. Target accounts exist but need contacts added
+    const accountsNeedingContacts = targetAccounts.filter(a =>
+      (a.accountStatus === 'researching' || a.accountStatus === 'prepped') &&
+      (!a.contactStatus || a.contactStatus === 'not-started') &&
+      a.outreachStatus === 'not-started'
+    );
+    if (accountsNeedingContacts.length > 0) {
+      const topAccount = accountsNeedingContacts[0];
+      const actionId = `account-add-contacts-${topAccount.id}`;
+      candidates.push({
+        id: actionId,
+        action: `Add contacts to "${topAccount.name}"`,
+        why: `Target account prepped but no contacts identified`,
+        nextStep: 'Find 3–5 key contacts and add them to the account.',
+        entityType: 'account',
+        entityId: topAccount.id,
+        entityName: topAccount.name,
+        score: applyMemoryAdjustment(85, actionId),
+        escalation: 'moderate',
+      });
+    }
+
+    // 5c. Contacts exist but outreach not started
+    const accountsNeedingOutreach = targetAccounts.filter(a =>
+      (a.contactStatus === 'ready' || a.contactStatus === 'in-progress') &&
+      (a.outreachStatus === 'not-started')
+    );
+    if (accountsNeedingOutreach.length > 0) {
+      const delay = outreachGapDelay(accountsNeedingOutreach.length);
+      const topAccount = accountsNeedingOutreach[0];
+      const actionId = `account-start-outreach-${topAccount.id}`;
+      candidates.push({
+        id: actionId,
+        action: `Start outreach for "${topAccount.name}"`,
+        why: `Contacts ready — outreach not started`,
+        nextStep: 'Generate outreach and add contacts to cadence.',
+        entityType: 'account',
+        entityId: topAccount.id,
+        entityName: topAccount.name,
+        score: applyMemoryAdjustment(95 * delay.decayMultiplier, actionId),
+        delayConsequence: delay.delayConsequence,
+        escalation: delay.escalationLevel,
+      });
+    }
+
+    // 5d. Outreach in progress but no meetings — push for meeting
+    const accountsNeedingMeetings = targetAccounts.filter(a =>
+      a.outreachStatus && ['in-progress', 'working', 'nurture'].includes(a.outreachStatus) &&
+      a.lastTouchDate
+    );
+    for (const a of accountsNeedingMeetings) {
+      const daysSince = Math.ceil((now.getTime() - new Date(a.lastTouchDate!).getTime()) / 86400000);
+      if (daysSince >= 5) {
+        const actionId = `account-push-meeting-${a.id}`;
+        candidates.push({
+          id: actionId,
+          action: `Push for meeting with "${a.name}"`,
+          why: `Outreach active, ${daysSince}d since last touch — no meeting set`,
+          nextStep: 'Follow up or try a different channel to book a meeting.',
+          entityType: 'account',
+          entityId: a.id,
+          entityName: a.name,
+          score: applyMemoryAdjustment(70, actionId),
+          escalation: 'low',
+        });
+      }
     }
 
     if (candidates.length === 0) return null;

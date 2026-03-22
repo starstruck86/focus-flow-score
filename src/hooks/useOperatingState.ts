@@ -1,6 +1,6 @@
 // Operating State Engine — thin layer computing ONE concise state sentence
 // Uses existing store data only. No parallel systems.
-// Extended with: momentum signals, pipeline creation awareness.
+// Extended with: momentum signals, target account pipeline awareness.
 
 import { useMemo } from 'react';
 import { useStore } from '@/store/useStore';
@@ -10,7 +10,7 @@ import { useMomentumEngine } from '@/hooks/useMomentumEngine';
 export interface OperatingState {
   sentence: string;
   band: 'executing' | 'on-pace' | 'drifting' | 'reactive';
-  momentumNote?: string; // optional momentum context
+  momentumNote?: string;
 }
 
 export function useOperatingState(): OperatingState {
@@ -58,10 +58,10 @@ export function useOperatingState(): OperatingState {
     let momentumNote: string | undefined;
 
     // Build momentum context string
-    if (momentum.newLogoGap) {
-      momentumNote = 'new logo cadence broken';
+    if (momentum.targetAccountGap) {
+      momentumNote = 'target account cadence broken';
     } else if (momentum.pipelineCreationLabel === 'dry') {
-      momentumNote = 'pipeline creation stalled';
+      momentumNote = 'pipeline creation stalled — no target accounts worked';
     } else if (momentum.dealMomentumLabel === 'stalled') {
       momentumNote = 'deal momentum stalled';
     }
