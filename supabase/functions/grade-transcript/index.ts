@@ -674,8 +674,8 @@ ${customScorecardContext}`;
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    console.error("grade-transcript error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
+    console.error(`[grade-transcript] [${traceId}] error:`, e instanceof Error ? e.message : e);
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error", traceId }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
