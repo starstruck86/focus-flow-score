@@ -60,8 +60,11 @@ export function useDaveContext() {
       );
     }
 
+    const traceId = generateTraceId();
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) {
+      const err = normalizeError({ error: new Error('Not authenticated'), source: 'frontend', functionName: 'dave-conversation-token', traceId });
+      recordError(err);
       throw new DaveSessionError('Not authenticated. Please sign in first.', 'auth_failed');
     }
 
