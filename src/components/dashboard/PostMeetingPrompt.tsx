@@ -223,7 +223,7 @@ const PostMeetingCard = React.forwardRef<HTMLDivElement, {
       if (autoExtract) {
         setExtracting(true);
         try {
-          const { data, error } = await trackedInvoke<any>('extract-tasks', {
+          const { data, error } = await trackedInvoke<{ tasks: ExtractedTask[] }>('extract-tasks', {
             body: {
               transcript_content: transcript.trim(),
               transcript_title: title,
