@@ -230,12 +230,11 @@ export function ContentBuilder() {
       if (selectedResources.length) body.resourceIds = selectedResources;
 
       // Use raw fetch for SSE streaming instead of supabase.functions.invoke
-      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/build-resource`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/build-resource`,
         {
           method: 'POST',
           headers: {

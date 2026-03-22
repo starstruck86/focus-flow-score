@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -239,7 +240,7 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
 
       toast.info(`Analyzing ${uploadedUrls.length} screenshot(s)...`);
 
-      const { data, error } = await supabase.functions.invoke('parse-account-screenshot', {
+      const { data, error } = await trackedInvoke<any>('parse-account-screenshot', {
         body: { imageUrls: uploadedUrls, context: importContext },
       });
 

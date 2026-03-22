@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +7,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Loader2, Podcast, ExternalLink } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { useClassifyResource, useAddUrlResource } from '@/hooks/useResourceUpload';
 import { toast } from 'sonner';
 
@@ -33,7 +33,7 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
     setFetching(true);
     setEpisodes([]);
     try {
-      const { data, error } = await supabase.functions.invoke('import-podcast', {
+      const { data, error } = await trackedInvoke<any>('import-podcast', {
         body: { url: url.trim() },
       });
       if (error) throw error;

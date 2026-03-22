@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Layout } from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -118,7 +119,7 @@ function ScoreQADialog({ open, onClose, gradeData, transcriptExcerpt, category }
     setLoading(true);
     setAnswer('');
     try {
-      const { data, error } = await supabase.functions.invoke('explain-score', {
+      const { data, error } = await trackedInvoke<any>('explain-score', {
         body: { gradeData, transcriptExcerpt: transcriptExcerpt?.slice(0, 4000), question, category },
       });
       if (error) throw error;

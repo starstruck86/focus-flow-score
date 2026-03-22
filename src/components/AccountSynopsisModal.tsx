@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
@@ -8,7 +9,6 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Sparkles, RefreshCw, Check, AlertTriangle, UserPlus, StickyNote } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -62,7 +62,7 @@ export function AccountSynopsisModal({ open, onOpenChange, account }: AccountSyn
     setIsParsing(true);
     setParsed(null);
     try {
-      const { data, error } = await supabase.functions.invoke('parse-account-synopsis', {
+      const { data, error } = await trackedInvoke<any>('parse-account-synopsis', {
         body: {
           text: text.trim(),
           accountContext: {

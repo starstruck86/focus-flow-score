@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
@@ -8,7 +9,6 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Sparkles, RefreshCw, Check, AlertTriangle } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -53,7 +53,7 @@ export function ClaudeSynopsisModal({ open, onOpenChange, opportunity }: ClaudeS
     setIsParsing(true);
     setParsed(null);
     try {
-      const { data, error } = await supabase.functions.invoke('parse-opp-synopsis', {
+      const { data, error } = await trackedInvoke<any>('parse-opp-synopsis', {
         body: {
           text: text.trim(),
           opportunityContext: {

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useStore } from '@/store/useStore';
 import { ConversionBenchmarksSettings } from '@/components/settings/ConversionBenchmarksSettings';
 import { NotificationSettings } from '@/components/NotificationSettings';
@@ -91,7 +92,7 @@ function DaveHealthSection() {
   const runCheck = async () => {
     setLoading(true);
     try {
-      const { data } = await supabase.functions.invoke('dave-health-check');
+      const { data } = await trackedInvoke<any>('dave-health-check');
       if (data) {
         setHealth({
           apiKey: data.apiKeyValid,
@@ -149,7 +150,7 @@ function DaveHealthSection() {
       let overridesOk: boolean | null = null;
       let overridesDetail = 'Not checked';
       try {
-        const { data: hcData } = await supabase.functions.invoke('dave-health-check');
+        const { data: hcData } = await trackedInvoke<any>('dave-health-check');
         if (hcData) {
           overridesOk = hcData.overridesEnabled;
           overridesDetail = overridesOk === true ? 'Prompt + FirstMessage overrides enabled'
@@ -201,7 +202,7 @@ function DaveHealthSection() {
           <Button variant="outline" size="sm" onClick={async () => {
             setRegistering(true);
             try {
-              const { data, error } = await supabase.functions.invoke('register-dave-tools');
+              const { data, error } = await trackedInvoke<any>('register-dave-tools');
               if (error) throw error;
               const failed = data?.failedTools?.length ?? 0;
               const total = 67;

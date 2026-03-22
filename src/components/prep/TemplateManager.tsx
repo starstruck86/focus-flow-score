@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -19,7 +20,6 @@ import {
   useTemplateSuggestions, useDismissSuggestion, useConfirmSuggestion,
   type Resource, type TemplateSuggestion,
 } from '@/hooks/useResources';
-import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ResourceEditor } from './ResourceEditor';
@@ -104,7 +104,7 @@ export function TemplateManager() {
   const handleRefreshSuggestions = async () => {
     setRefreshing(true);
     try {
-      const { error } = await supabase.functions.invoke('suggest-templates');
+      const { error } = await trackedInvoke<any>('suggest-templates');
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ['template-suggestions'] });
       toast.success('Suggestions refreshed');

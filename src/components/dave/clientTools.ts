@@ -1,4 +1,5 @@
 import { NavigateFunction } from 'react-router-dom';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { emitMetricsUpdated, emitDataChanged } from '@/lib/daveEvents';
@@ -1041,7 +1042,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
 
       toast.info(`Enriching ${accts[0].name}...`, { duration: 3000 });
 
-      const { data, error } = await supabase.functions.invoke('enrich-account', {
+      const { data, error } = await trackedInvoke<any>('enrich-account', {
         body: {
           url: accts[0].website || '',
           accountName: accts[0].name,
@@ -1117,7 +1118,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
 
       // Trigger generation via edge function
       toast.info('Generating battle plan...', { duration: 3000 });
-      const { data, error } = await supabase.functions.invoke('weekly-battle-plan', {
+      const { data, error } = await trackedInvoke<any>('weekly-battle-plan', {
         body: {},
       });
 
@@ -1132,7 +1133,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       if (!userId) return 'Not authenticated';
 
       toast.info('Running weekly review...', { duration: 3000 });
-      const { data, error } = await supabase.functions.invoke('weekly-patterns', {
+      const { data, error } = await trackedInvoke<any>('weekly-patterns', {
         body: {},
       });
 
@@ -1180,7 +1181,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       if (!userId) return 'Not authenticated';
 
       toast.info('AI prioritizing accounts...', { duration: 3000 });
-      const { data, error } = await supabase.functions.invoke('prioritize-accounts', {
+      const { data, error } = await trackedInvoke<any>('prioritize-accounts', {
         body: {},
       });
 
@@ -1545,7 +1546,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
 
       // Trigger new scan
       toast.info('Running pipeline hygiene scan...', { duration: 3000 });
-      const { data, error } = await supabase.functions.invoke('pipeline-hygiene', {
+      const { data, error } = await trackedInvoke<any>('pipeline-hygiene', {
         body: {},
       });
 
@@ -2117,11 +2118,13 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       const fullPrompt = `${params.customInstructions || `Generate a professional ${params.contentType}`}\n\nContext:\n${contextParts.join('\n')}`;
 
       try {
+        const { data: { session: authSession } } = await supabase.auth.getSession();
         const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/build-resource`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${authSession?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
           body: JSON.stringify({
             type: 'generate',

@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,6 @@ import {
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useVoiceMode } from '@/hooks/useVoiceMode';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 
@@ -141,7 +141,7 @@ export function ObjectionDrillReps() {
     setIsGrading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('grade-objection-drill', {
+      const { data, error } = await trackedInvoke<any>('grade-objection-drill', {
         body: {
           objection: currentObjection.objection,
           category: currentObjection.category,

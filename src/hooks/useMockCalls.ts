@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -77,7 +78,7 @@ export function useGradeMockCall() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (sessionId: string) => {
-      const { data, error } = await supabase.functions.invoke('grade-mock-call', {
+      const { data, error } = await trackedInvoke<any>('grade-mock-call', {
         body: { session_id: sessionId },
       });
       if (error) throw error;

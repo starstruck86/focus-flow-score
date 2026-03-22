@@ -279,7 +279,7 @@ async function stepTranscriptAcquisition(job: ResourceJob, resource: Record<stri
     return;
   }
   // Invoke enrichment to get deep content
-  const result = await trackedInvoke('enrich-resource-content', {
+  const result = await trackedInvoke<any>('enrich-resource-content', {
     body: { resource_id: job.resource_id },
     traceId: job.trace_id,
     componentName: 'ResourcePipeline',
@@ -406,7 +406,7 @@ async function stepActionExtraction(job: ResourceJob, jobId: string) {
 
 async function stepArtifactCreation(job: ResourceJob, resource: Record<string, unknown>) {
   // Invoke operationalize to create digest
-  const result = await trackedInvoke('operationalize-resource', {
+  const result = await trackedInvoke<any>('operationalize-resource', {
     body: { resource_id: job.resource_id },
     traceId: job.trace_id,
     componentName: 'ResourcePipeline',

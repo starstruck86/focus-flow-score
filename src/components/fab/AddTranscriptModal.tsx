@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -20,7 +21,6 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useStore } from '@/store/useStore';
 import { useSaveTranscript } from '@/hooks/useCallTranscripts';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { FileText, Target, Check, ChevronsUpDown, Copy, RefreshCw, Sparkles, Loader2 } from 'lucide-react';
@@ -143,7 +143,7 @@ export function AddTranscriptModal({
   const extractTasksFromTranscript = async (transcriptTitle: string) => {
     setExtracting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('extract-tasks', {
+      const { data, error } = await trackedInvoke<any>('extract-tasks', {
         body: {
           transcript_content: transcript.trim(),
           transcript_title: transcriptTitle,

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
@@ -10,7 +11,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useStore } from '@/store/useStore';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Brain, AlertTriangle, Check, Loader2, ArrowRight } from 'lucide-react';
@@ -51,7 +51,7 @@ export function ClaudeImportModal({ open, onClose }: ClaudeImportModalProps) {
     setStep('parsing');
 
     try {
-      const { data, error } = await supabase.functions.invoke('parse-claude-import', {
+      const { data, error } = await trackedInvoke<any>('parse-claude-import', {
         body: {
           text: rawText,
           existingAccounts: accounts.map(a => ({ id: a.id, name: a.name, website: a.website, salesforceId: a.salesforceId })),

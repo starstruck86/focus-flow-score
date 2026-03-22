@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { CheckCircle2, Circle, ChevronDown, ChevronRight, Target, Brain, Crosshair, Plus, X, Sparkles, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -7,7 +8,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { useOpportunityMethodology, type CallGoal } from '@/hooks/useOpportunityMethodology';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 interface Props {
@@ -235,7 +235,7 @@ export function MethodologyTracker({ opportunityId, opportunityName, stage }: Pr
               onClick={async () => {
                 setGenerating(true);
                 try {
-                  const { data: result, error } = await supabase.functions.invoke('generate-call-goals', {
+                  const { data: result, error } = await trackedInvoke<any>('generate-call-goals', {
                     body: { opportunity_id: opportunityId },
                   });
                   if (error) throw error;

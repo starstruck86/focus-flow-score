@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -208,7 +209,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
         division: division.trim() || null,
       };
 
-      const { data, error } = await supabase.functions.invoke('discover-contacts', {
+      const { data, error } = await trackedInvoke<any>('discover-contacts', {
         body: payload,
       });
 
@@ -275,7 +276,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
       const selected = contacts.filter(c => selectedContactIds.has(c.id));
       const contactSummary = selected.map(c => `${c.name} - ${c.title || 'Unknown title'}`).join('\n');
 
-      const { data, error } = await supabase.functions.invoke('discover-contacts', {
+      const { data, error } = await trackedInvoke<any>('discover-contacts', {
         body: {
           accountId,
           accountName,
@@ -386,7 +387,7 @@ export function StakeholderMap({ accountId, accountName, website, industry, oppo
 
       toast.info(`Extracting contacts from ${uploadedUrls.length} screenshot(s)...`);
 
-      const { data, error } = await supabase.functions.invoke('parse-account-screenshot', {
+      const { data, error } = await trackedInvoke<any>('parse-account-screenshot', {
         body: {
           imageUrls: uploadedUrls,
           context: `This is a CONTACTS screenshot for "${accountName}". Extract each PERSON as a contact under one account. Focus on person names, job titles, departments, emails, LinkedIn URLs.`,

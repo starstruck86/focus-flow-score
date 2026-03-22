@@ -1,11 +1,11 @@
 // Post-Meeting Prompt — surfaces after a calendar meeting ends to prompt next-step logging + transcript upload
 import React, { useState, useMemo, useRef } from 'react';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, Clock, Building2, X, ExternalLink, ChevronRight, FileText, Upload, Sparkles, Loader2, ChevronDown } from 'lucide-react';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { useStore } from '@/store/useStore';
 import { useSaveTranscript } from '@/hooks/useCallTranscripts';
-import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO, differenceInMinutes, isValid } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { cn } from '@/lib/utils';
@@ -223,7 +223,7 @@ const PostMeetingCard = React.forwardRef<HTMLDivElement, {
       if (autoExtract) {
         setExtracting(true);
         try {
-          const { data, error } = await supabase.functions.invoke('extract-tasks', {
+          const { data, error } = await trackedInvoke<any>('extract-tasks', {
             body: {
               transcript_content: transcript.trim(),
               transcript_title: title,
