@@ -71,19 +71,14 @@ export function useDaveContext() {
 
     const tzOffsetHours = new Date().getTimezoneOffset() / -60;
 
-    const resp = await fetch(TOKEN_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-trace-id': traceId,
-        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({
+    const resp = await authenticatedFetch({
+      functionName: 'dave-conversation-token',
+      body: {
         tzOffsetHours,
         currentPage: locationRef.current,
         conversationHistory: conversationHistory || '',
-      }),
+      },
+      traceId,
     });
 
     if (!resp.ok) {
