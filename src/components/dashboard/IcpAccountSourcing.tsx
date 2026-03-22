@@ -111,7 +111,7 @@ export function IcpAccountSourcing() {
         name: newAccount.name,
         website: newAccount.website,
         industry: newAccount.industry,
-      } as any).catch(() => {});
+      }).catch(() => {});
 
       // 5. Auto-discover more contacts in background
       trackedInvoke<any>('discover-contacts', {
