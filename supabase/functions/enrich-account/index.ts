@@ -549,6 +549,8 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const traceId = req.headers.get('x-trace-id') || 'no-trace';
+
   try {
     const { url, accountName, accountId, industry } = await req.json();
 
