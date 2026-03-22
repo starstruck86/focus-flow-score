@@ -1,7 +1,10 @@
 import { useCallback, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { generateTraceId, normalizeError, recordError } from '@/lib/appError';
+import { createLogger } from '@/lib/logger';
 
+const logger = createLogger('DaveContext');
 const TOKEN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/dave-conversation-token`;
 const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
 const CONCURRENCY_COOLDOWN_MS = 30_000; // 30s cooldown after concurrency limit
@@ -57,8 +60,11 @@ export function useDaveContext() {
       );
     }
 
+    const traceId = generateTraceId();
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) {
+      const err = normalizeError({ error: new Error('Not authenticated'), source: 'frontend', functionName: 'dave-conversation-token', traceId });
+      recordError(err);
       throw new DaveSessionError('Not authenticated. Please sign in first.', 'auth_failed');
     }
 
@@ -68,6 +74,7 @@ export function useDaveContext() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-trace-id': traceId,
         apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         Authorization: `Bearer ${session.access_token}`,
       },
@@ -143,7 +150,7 @@ export function useDaveContext() {
       const data = await request;
       setCachedSession(data);
       fetchedAtRef.current = Date.now();
-      console.log('[Dave] Session fetched on-demand (context:', data.context?.length, 'chars)');
+      logger.info('Session fetched on-demand', { contextLength: data.context?.length });
       return data;
     } finally {
       inFlightRef.current = null;
