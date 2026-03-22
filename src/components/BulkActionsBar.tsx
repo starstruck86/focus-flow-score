@@ -51,6 +51,7 @@ export function BulkActionsBar({ selectedCount, onClear, actions, selectedIds }:
             <Select
               key={action.id}
               onValueChange={(value) => {
+                if (blocked) { toast.info('Bulk actions disabled in Public Review Mode'); return; }
                 action.onExecute(Array.from(selectedIds), value);
                 toast.success(`Updated ${selectedCount} records`);
               }}
@@ -74,6 +75,7 @@ export function BulkActionsBar({ selectedCount, onClear, actions, selectedIds }:
             size="sm"
             className="h-8 text-xs gap-1.5"
             onClick={() => {
+              if (blocked) { toast.info('Bulk actions disabled in Public Review Mode'); return; }
               action.onExecute(Array.from(selectedIds));
               toast.success(`${action.label} applied to ${selectedCount} records`);
             }}
