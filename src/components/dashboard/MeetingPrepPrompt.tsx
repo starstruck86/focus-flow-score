@@ -143,7 +143,7 @@ export function MeetingPrepPrompt() {
       motion: 'new-logo',
       linkedRecordType: 'account',
       linkedRecordId: meeting.accountId,
-    } as any);
+    });
     toast.success(`Prep task created for ${meeting.accountName}`);
   };
 

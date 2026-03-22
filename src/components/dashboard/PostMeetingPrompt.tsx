@@ -233,20 +233,20 @@ const PostMeetingCard = React.forwardRef<HTMLDivElement, {
           });
           if (!error && data?.tasks?.length > 0) {
             const { addTask } = useStore.getState();
-            data.tasks.forEach((t: any) => {
+            data.tasks.forEach((t: { title: string; priority?: string; due_date?: string; notes?: string; category?: string }) => {
               addTask({
                 title: t.title,
-                priority: t.priority || 'P2',
+                priority: (t.priority as 'P0' | 'P1' | 'P2' | 'P3') || 'P2',
                 status: 'next' as const,
                 dueDate: t.due_date,
                 notes: t.notes ? `[From transcript] ${t.notes}` : '[Auto-extracted from call transcript]',
-                category: t.category || 'call',
+                category: (t.category as 'call' | 'manual-email' | 'research' | 'admin') || 'call',
                 motion: 'new-logo' as const,
                 workstream: 'pg' as const,
                 linkedRecordType: item.primaryOppId ? 'opportunity' as const : 'account' as const,
                 linkedRecordId: item.primaryOppId || item.accountId,
                 linkedAccountId: item.accountId,
-              } as any);
+              });
             });
             toast.success(`${data.tasks.length} action items extracted as tasks`);
           }
@@ -257,7 +257,7 @@ const PostMeetingCard = React.forwardRef<HTMLDivElement, {
         }
       }
     } catch (err: unknown) {
-      toast.error('Failed to save transcript', { description: err.message });
+      toast.error('Failed to save transcript', { description: err instanceof Error ? err.message : 'Unknown error' });
     } finally {
       setSaving(false);
     }
