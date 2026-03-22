@@ -33,6 +33,8 @@ export function BulkActionsBar({ selectedCount, onClear, actions, selectedIds }:
 
   if (selectedCount === 0) return null;
 
+  const blocked = REVIEW_MODE;
+
   return (
     <div className="sticky top-0 z-30 bg-primary/10 border border-primary/30 rounded-lg px-4 py-2.5 flex items-center gap-3 flex-wrap animate-in slide-in-from-top-2">
       <span className="text-sm font-medium text-primary">
