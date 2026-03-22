@@ -1,5 +1,6 @@
 // Hooks for AI Coaching Engine: Conversion Math, Pipeline Hygiene, Battle Plans
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
