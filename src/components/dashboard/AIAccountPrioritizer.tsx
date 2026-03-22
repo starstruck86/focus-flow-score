@@ -51,8 +51,8 @@ export function AIAccountPrioritizer() {
       }
       setResult(data);
       setHasLoaded(true);
-    } catch (err: any) {
-      toast.error('Failed to get AI recommendations', { description: err.message });
+    } catch (err: unknown) {
+      toast.error('Failed to get AI recommendations', { description: err instanceof Error ? err.message : 'Unknown error' });
     } finally {
       setLoading(false);
     }

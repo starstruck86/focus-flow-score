@@ -5,13 +5,14 @@ import { Activity, TrendingUp, TrendingDown, Minus, Target, Zap, BarChart3 } fro
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import type { SalesAgeResult, ActionRecommendation } from '@/lib/salesAgeCalculations';
+import type { SalesAgeSnapshot } from '@/types/dashboard';
 
 interface SalesAgeDetailModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   salesAge: SalesAgeResult | undefined;
   recommendations: ActionRecommendation[];
-  snapshotHistory: any[];
+  snapshotHistory: SalesAgeSnapshot[];
 }
 
 function DriverRow({ driver }: { driver: SalesAgeResult['qpi']['drivers'][0] }) {

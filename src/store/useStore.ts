@@ -7,7 +7,8 @@ import type {
   AccountStatus,
   Contact, 
   Renewal, 
-  Task, 
+  Task,
+  TaskStatus,
   FocusBlock,
   TimerState,
   TimeRange,
@@ -628,7 +629,7 @@ export const useStore = create<QuotaCompassStore>()(
             t.id === id
               ? { 
                   ...t, 
-                  status: (t.status === 'done' ? 'next' : 'done') as any,
+                  status: (t.status === 'done' ? 'next' : 'done') as TaskStatus,
                   completedAt: t.status !== 'done' ? new Date().toISOString() : undefined,
                   updatedAt: new Date().toISOString(),
                 }

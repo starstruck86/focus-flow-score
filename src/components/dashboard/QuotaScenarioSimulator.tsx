@@ -98,7 +98,7 @@ export function QuotaScenarioSimulator() {
     setScenarioDeals(prev => prev.filter(d => d.id !== id));
   };
 
-  const updateDeal = (id: string, field: string, value: any) => {
+  const updateDeal = (id: string, field: string, value: string | number | boolean) => {
     setScenarioDeals(prev => prev.map(d => d.id === id ? { ...d, [field]: value } : d));
   };
 

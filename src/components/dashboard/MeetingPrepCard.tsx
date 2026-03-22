@@ -107,7 +107,7 @@ export function MeetingPrepCard() {
       motion: 'new-logo',
       linkedRecordType: 'account',
       linkedRecordId: item.accountId,
-    } as any);
+    });
     toast.success(`Prep task created for ${item.accountName}`);
   };
 

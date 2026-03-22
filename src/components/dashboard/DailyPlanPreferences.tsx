@@ -57,7 +57,7 @@ export function DailyPlanPreferences({ onClose }: { onClose: () => void }) {
     queryKey: ['daily-plan-preferences'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('daily_plan_preferences' as any)
+        .from('daily_plan_preferences' as 'daily_plan_preferences')
         .select('*')
         .maybeSingle();
       if (error) throw error;
@@ -95,7 +95,7 @@ export function DailyPlanPreferences({ onClose }: { onClose: () => void }) {
       };
 
       const { error } = await supabase
-        .from('daily_plan_preferences' as any)
+        .from('daily_plan_preferences' as 'daily_plan_preferences')
         .upsert(payload, { onConflict: 'user_id' });
       if (error) throw error;
     },

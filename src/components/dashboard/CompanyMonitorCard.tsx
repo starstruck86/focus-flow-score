@@ -12,10 +12,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Radar, RefreshCw, ExternalLink, Eye, Briefcase, UserPlus, Newspaper, Cpu, Podcast, Target, Zap, Mail, Copy, CheckCircle2 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSignalTriggeredTasks } from '@/hooks/useSignalTriggeredTasks';
+import type { DigestItem, OutreachModalState } from '@/types/dashboard';
 
-const CATEGORY_ICONS: Record<string, any> = {
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
   executive_hire: UserPlus,
   job_posting: Briefcase,
   company_news: Newspaper,
@@ -45,7 +47,7 @@ export function CompanyMonitorCard({ motionFilter }: CompanyMonitorCardProps = {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [isScanning, setIsScanning] = useState(false);
-  const [outreachModal, setOutreachModal] = useState<{ open: boolean; item: any | null; draft: string; loading: boolean }>({ open: false, item: null, draft: '', loading: false });
+  const [outreachModal, setOutreachModal] = useState<OutreachModalState>({ open: false, item: null, draft: '', loading: false });
   const { createTasksFromSignals } = useSignalTriggeredTasks();
 
   const { data: digestItems, isLoading } = useQuery({
@@ -113,7 +115,7 @@ export function CompanyMonitorCard({ motionFilter }: CompanyMonitorCardProps = {
 
         if (newItems?.length) {
           // Group by account
-          const byAccount = new Map<string, any[]>();
+          const byAccount = new Map<string, { type: string; headline: string; source: string; date: string }[]>();
           for (const item of newItems) {
             if (!item.account_id) continue;
             const list = byAccount.get(item.account_id) || [];
@@ -139,10 +141,10 @@ export function CompanyMonitorCard({ motionFilter }: CompanyMonitorCardProps = {
   });
 
   // Generate outreach draft from a signal
-  const generateOutreach = async (item: any) => {
+  const generateOutreach = async (item: DigestItem) => {
     setOutreachModal({ open: true, item, draft: '', loading: true });
     try {
-      const { data, error } = await trackedInvoke<any>('search-context', {
+      const { data, error } = await trackedInvoke<{ answer?: string }>('search-context', {
         body: {
           query: `Generate a short, personalized cold outreach email (3-4 sentences max) for a sales rep selling lifecycle marketing / CRM software. Reference this specific signal about the company "${item.account_name}": "${item.headline}". ${item.summary || ''}. The tone should be consultative, not salesy. Include a specific call-to-action. Do NOT use generic templates.`,
           mode: 'quick',
@@ -160,8 +162,8 @@ export function CompanyMonitorCard({ motionFilter }: CompanyMonitorCardProps = {
     toast.success('Copied to clipboard');
   };
 
-  const unread = (digestItems || []).filter((d: any) => !d.is_read);
-  const actionable = (digestItems || []).filter((d: any) => d.is_actionable);
+  const unread = (digestItems || []).filter(d => !d.is_read);
+  const actionable = (digestItems || []).filter(d => d.is_actionable);
 
   return (
     <>
@@ -198,7 +200,7 @@ export function CompanyMonitorCard({ motionFilter }: CompanyMonitorCardProps = {
           ) : (
             <ScrollArea className="max-h-[400px]">
               <div className="space-y-2">
-                {(digestItems || []).map((item: any) => {
+                {(digestItems || []).map((item) => {
                   const Icon = CATEGORY_ICONS[item.category] || Newspaper;
                   const colorClass = CATEGORY_COLORS[item.category] || 'bg-muted text-muted-foreground';
                   return (

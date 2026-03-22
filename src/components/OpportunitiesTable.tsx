@@ -60,7 +60,7 @@ import { toast } from 'sonner';
 import { useDuplicateDetection } from '@/hooks/useDuplicateDetection';
 import { DuplicateDetector } from '@/components/DuplicateDetector';
 import { AlertTriangle, Merge } from 'lucide-react';
-import type { Opportunity, OpportunityStatus, OpportunityStage, ChurnRisk, DealType } from '@/types';
+import type { Opportunity, OpportunityStatus, OpportunityStage, OpportunityActivity, ChurnRisk, DealType, PaymentTerms } from '@/types';
 import { format, parseISO, isToday, isPast, isThisQuarter, getQuarter, getYear } from 'date-fns';
 import { 
   useDbOpportunities, 
@@ -166,11 +166,11 @@ function dbToUiOpportunity(db: DbOpportunity): Opportunity {
     nextStepDate: db.next_step_date ?? undefined,
     lastTouchDate: db.last_touch_date ?? undefined,
     notes: db.notes ?? undefined,
-    activityLog: (db.activity_log as any[]) || [],
+    activityLog: (db.activity_log as OpportunityActivity[]) || [],
     createdAt: db.created_at,
     updatedAt: db.updated_at,
     dealType: (db.deal_type as DealType) ?? undefined,
-    paymentTerms: db.payment_terms as any,
+    paymentTerms: (db.payment_terms as PaymentTerms) ?? undefined,
     termMonths: db.term_months ?? undefined,
     priorContractArr: db.prior_contract_arr ?? undefined,
     renewalArr: db.renewal_arr ?? undefined,

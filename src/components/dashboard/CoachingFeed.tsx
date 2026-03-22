@@ -71,7 +71,7 @@ export function CoachingFeed() {
 
     // Pipeline hygiene critical issues
     if (hygiene && typeof hygiene === 'object' && 'critical_issues' in hygiene) {
-      const h = hygiene as any;
+      const h = hygiene as { critical_issues: number; health_score: number };
       if (h.critical_issues > 0) {
         items.push({
           id: 'hygiene-critical',

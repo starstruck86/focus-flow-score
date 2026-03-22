@@ -8,6 +8,7 @@ import { usePipelineHygiene, useRunHygieneScan } from '@/hooks/useCoachingEngine
 import { ShieldAlert, RefreshCw, AlertTriangle, Info, CheckCircle2, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
+import type { PipelineHygieneIssue, PipelineHygieneSummary } from '@/types/dashboard';
 
 function formatCurrency(n: number) {
   if (n < 0) return `-${formatCurrency(Math.abs(n))}`;
@@ -34,14 +35,14 @@ export function PipelineHygieneCard() {
     );
   }
 
-  const issues = (data?.issues as any[]) || [];
+  const issues = (data?.issues as PipelineHygieneIssue[]) || [];
   const healthScore = data?.health_score ?? 100;
-  const summary = (data?.summary as any) || {};
+  const summary = (data?.summary as PipelineHygieneSummary) || {};
   const criticalIssues = issues.filter(i => i.severity === 'critical');
   const warningIssues = issues.filter(i => i.severity === 'warning');
 
   // Navigate to the appropriate page when clicking an issue
-  const handleIssueClick = (issue: any) => {
+  const handleIssueClick = (issue: PipelineHygieneIssue) => {
     if (issue.record_type === 'opportunity') {
       navigate('/quota');
     } else if (issue.record_type === 'renewal') {

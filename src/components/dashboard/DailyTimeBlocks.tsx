@@ -32,6 +32,8 @@ import { CalendarScreenshotDrop } from './CalendarScreenshotDrop';
 import { DailyPlanPreferences } from './DailyPlanPreferences';
 import { RustBusterQuickLinks } from './RustBusterQuickLinks';
 import { isRustBusterBlock } from '@/lib/rustBusterLinks';
+import type { CalendarScreenshotEvent } from '@/types/dashboard';
+import type { Json } from '@/integrations/supabase/types';
 
 interface TimeBlock {
   start_time: string;
@@ -135,7 +137,7 @@ export function DailyTimeBlocks() {
     queryKey: ['daily-time-blocks', todayStr],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('daily_time_blocks' as any)
+        .from('daily_time_blocks' as 'daily_time_blocks')
         .select('*')
         .eq('plan_date', todayStr)
         .maybeSingle();
@@ -156,9 +158,9 @@ export function DailyTimeBlocks() {
   }, [plan?.blocks]);
 
   const generateMutation = useMutation({
-    mutationFn: async (opts: { confirmedScreenshotEvents?: any[] } | void) => {
+    mutationFn: async (opts: { confirmedScreenshotEvents?: CalendarScreenshotEvent[] } | void) => {
       const screenshotEvents = opts && 'confirmedScreenshotEvents' in opts ? opts.confirmedScreenshotEvents : undefined;
-      const { data, error } = await trackedInvoke<any>('generate-time-blocks', {
+      const { data, error } = await trackedInvoke<DailyPlan>('generate-time-blocks', {
         body: { date: todayStr, confirmedScreenshotEvents: screenshotEvents },
       });
       if (error) throw error;
@@ -174,7 +176,7 @@ export function DailyTimeBlocks() {
   });
 
   // Handle confirmed screenshot events — rebuild plan with them
-  const handleScreenshotEventsConfirmed = useCallback((events: any[]) => {
+  const handleScreenshotEventsConfirmed = useCallback((events: CalendarScreenshotEvent[]) => {
     generateMutation.mutate({ confirmedScreenshotEvents: events });
     setDismissedBlocks(new Set());
     setBlockOppLinks(new Map());
@@ -184,7 +186,7 @@ export function DailyTimeBlocks() {
     mutationFn: async () => {
       if (!plan) return;
       const { error: fbError } = await supabase
-        .from('ai_feedback' as any)
+        .from('ai_feedback' as 'ai_feedback')
         .insert({
           user_id: user!.id,
           feature: 'time_blocks',
@@ -195,7 +197,7 @@ export function DailyTimeBlocks() {
         });
       if (fbError) throw fbError;
       const { error } = await supabase
-        .from('daily_time_blocks' as any)
+        .from('daily_time_blocks' as 'daily_time_blocks')
         .update({
           feedback_rating: feedbackRating,
           feedback_text: feedbackText,
@@ -229,7 +231,7 @@ export function DailyTimeBlocks() {
     });
 
     await supabase
-      .from('daily_time_blocks' as any)
+      .from('daily_time_blocks' as 'daily_time_blocks')
       .update({ completed_goals: updated })
       .eq('id', plan.id);
   }, [plan, todayStr, queryClient]);
@@ -252,7 +254,7 @@ export function DailyTimeBlocks() {
     });
 
     await supabase
-      .from('daily_time_blocks' as any)
+      .from('daily_time_blocks' as 'daily_time_blocks')
       .update({ block_feedback: updated })
       .eq('id', plan.id);
   }, [plan, todayStr, queryClient]);
@@ -278,8 +280,8 @@ export function DailyTimeBlocks() {
     
     queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks });
     await supabase
-      .from('daily_time_blocks' as any)
-      .update({ blocks })
+      .from('daily_time_blocks' as 'daily_time_blocks')
+      .update({ blocks: blocks as unknown as Json })
       .eq('id', plan.id);
     setEditingBlock(null);
     toast.success('Block updated');
@@ -326,8 +328,8 @@ export function DailyTimeBlocks() {
 
     queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks });
     await supabase
-      .from('daily_time_blocks' as any)
-      .update({ blocks })
+      .from('daily_time_blocks' as 'daily_time_blocks')
+      .update({ blocks: blocks as unknown as Json })
       .eq('id', plan.id);
     toast.success('Block moved');
   }, [plan, todayStr, queryClient]);
@@ -348,8 +350,8 @@ export function DailyTimeBlocks() {
     queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks });
 
     await supabase
-      .from('daily_time_blocks' as any)
-      .update({ blocks })
+      .from('daily_time_blocks' as 'daily_time_blocks')
+      .update({ blocks: blocks as unknown as Json })
       .eq('id', plan.id);
   }, [plan, todayStr, queryClient]);
 
@@ -362,8 +364,8 @@ export function DailyTimeBlocks() {
     queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks });
 
     await supabase
-      .from('daily_time_blocks' as any)
-      .update({ blocks })
+      .from('daily_time_blocks' as 'daily_time_blocks')
+      .update({ blocks: blocks as unknown as Json })
       .eq('id', plan.id);
   }, [plan, todayStr, queryClient]);
 
@@ -653,8 +655,8 @@ export function DailyTimeBlocks() {
                     });
                     queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks: fixedBlocks });
                     supabase
-                      .from('daily_time_blocks' as any)
-                      .update({ blocks: fixedBlocks })
+                      .from('daily_time_blocks' as 'daily_time_blocks')
+                      .update({ blocks: fixedBlocks as unknown as Json })
                       .eq('id', plan.id)
                       .then();
                     toast.success('Block reordered');

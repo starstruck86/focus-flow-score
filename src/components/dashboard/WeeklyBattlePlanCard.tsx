@@ -8,6 +8,7 @@ import { useWeeklyBattlePlan, useGenerateBattlePlan, useCompleteBattleMove } fro
 import { Swords, Sparkles, RefreshCw, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import type { BattlePlanMove } from '@/types/dashboard';
 
 const categoryColors: Record<string, string> = {
   deal_progression: 'bg-primary/10 text-primary',
@@ -50,7 +51,7 @@ export function WeeklyBattlePlanCard() {
     );
   }
 
-  const moves = (plan?.moves as any[]) || [];
+  const moves = ((plan?.moves as unknown as BattlePlanMove[]) || []);
   const completed = (plan?.moves_completed as number[]) || [];
   const completedCount = completed.length;
 
@@ -123,7 +124,7 @@ export function WeeklyBattlePlanCard() {
           </div>
         ) : (
           <div className="space-y-2">
-            {moves.map((move: any, idx: number) => {
+            {moves.map((move, idx: number) => {
               const isDone = completed.includes(idx);
               return (
                 <div

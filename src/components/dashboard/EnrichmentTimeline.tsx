@@ -3,18 +3,20 @@ import { useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sparkles, TrendingUp, UserPlus, Newspaper, Cpu, ExternalLink } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { TriggerEvent, TimelineEntry } from '@/types/dashboard';
 
 interface EnrichmentTimelineProps {
   enrichmentEvidence?: Record<string, string> | null;
-  triggerEvents?: any[] | null;
+  triggerEvents?: TriggerEvent[] | null;
   lastEnrichedAt?: string | null;
   enrichmentSourceSummary?: string | null;
 }
 
 export function EnrichmentTimeline({ enrichmentEvidence, triggerEvents, lastEnrichedAt, enrichmentSourceSummary }: EnrichmentTimelineProps) {
   const timeline = useMemo(() => {
-    const events: { date: string; type: string; title: string; detail: string; icon: any; color: string }[] = [];
+    const events: TimelineEntry[] = [];
 
     // Add enrichment event
     if (lastEnrichedAt) {
@@ -31,7 +33,7 @@ export function EnrichmentTimeline({ enrichmentEvidence, triggerEvents, lastEnri
     // Add trigger events
     if (triggerEvents && Array.isArray(triggerEvents)) {
       for (const event of triggerEvents) {
-        const typeMap: Record<string, { icon: any; color: string }> = {
+        const typeMap: Record<string, { icon: LucideIcon; color: string }> = {
           executive_hire: { icon: UserPlus, color: 'text-amber-500' },
           job_posting: { icon: TrendingUp, color: 'text-blue-500' },
           company_news: { icon: Newspaper, color: 'text-emerald-500' },

@@ -8,12 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
 
-interface ChecklistItem {
-  id: string;
-  label: string;
-  check: (account: any, contacts: any[], opps: any[]) => boolean;
-  tip: string;
-}
+import type { ResearchChecklistItem, ResearchChecklistAccount, ResearchChecklistContact, ResearchChecklistOpp } from '@/types/dashboard';
+
+type ChecklistItem = ResearchChecklistItem;
 
 const RESEARCH_CHECKLIST: ChecklistItem[] = [
   {
