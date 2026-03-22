@@ -2790,6 +2790,202 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       const actionResult = await allTools.primary_action();
       return `${stateResult}\n\n${actionResult}`;
     },
+
+    momentum_check: async () => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const now = new Date();
+      const sevenStr = new Date(now.getTime() - 7 * 86400000).toISOString().split('T')[0];
+      const fourteenStr = new Date(now.getTime() - 14 * 86400000).toISOString().split('T')[0];
+
+      const [oppsRes, accountsRes] = await Promise.all([
+        supabase.from('opportunities').select('id, name, arr, last_touch_date, created_at, deal_type, status')
+          .eq('user_id', userId).eq('status', 'active'),
+        supabase.from('accounts').select('id, name, motion, last_touch_date, created_at')
+          .eq('user_id', userId).not('account_status', 'in', '("inactive","disqualified")'),
+      ]);
+
+      const opps = (oppsRes.data || []) as any[];
+      const accounts = (accountsRes.data || []) as any[];
+
+      const movingDeals = opps.filter((o: any) => o.last_touch_date && o.last_touch_date >= sevenStr).length;
+      const stalledDeals = opps.filter((o: any) => !o.last_touch_date || o.last_touch_date < sevenStr).length;
+      const newOpps14d = opps.filter((o: any) => o.created_at && o.created_at >= fourteenStr).length;
+      const newAccounts14d = accounts.filter((a: any) => a.created_at && a.created_at >= fourteenStr).length;
+      const newLogoAccounts = accounts.filter((a: any) => a.motion === 'new-logo');
+      const recentNewLogoTouch = newLogoAccounts.some((a: any) => a.last_touch_date && a.last_touch_date >= sevenStr);
+
+      let summary = `📊 Momentum Check:\n`;
+      summary += `Deal momentum: ${movingDeals} moving, ${stalledDeals} stalled of ${opps.length} active.\n`;
+      summary += `Pipeline creation (14d): ${newOpps14d} new opps, ${newAccounts14d} new accounts.\n`;
+      summary += `New logo activity: ${recentNewLogoTouch ? 'Active' : '⚠️ Gap detected — no new logo touches in 7+ days'}.\n`;
+
+      if (stalledDeals > movingDeals) summary += `\n⚠️ More deals stalled than moving — focus on re-engagement.`;
+      if (newOpps14d === 0 && newAccounts14d < 2) summary += `\n⚠️ Pipeline creation is dry — need to prospect.`;
+
+      return summary;
+    },
+
+    pipeline_creation_suggest: async () => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      // Find accounts that are good prospecting targets
+      const { data: accounts } = await supabase
+        .from('accounts')
+        .select('id, name, tier, icp_fit_score, timing_score, priority_score, account_status, motion, outreach_status, last_touch_date, triggered_account, high_probability_buyer')
+        .eq('user_id', userId)
+        .eq('motion', 'new-logo')
+        .not('account_status', 'in', '("disqualified","inactive")')
+        .not('outreach_status', 'in', '("meeting-set","opp-open","closed-won")')
+        .order('priority_score', { ascending: false })
+        .limit(20);
+
+      if (!accounts?.length) return 'No prospecting accounts found. Add some new-logo accounts first.';
+
+      // Score and rank: prefer high ICP fit, triggered, untouched
+      const scored = accounts.map((a: any) => {
+        let s = (a.icp_fit_score || 0) + (a.timing_score || 0) + (a.priority_score || 0);
+        if (a.triggered_account) s += 30;
+        if (a.high_probability_buyer) s += 20;
+        if (!a.last_touch_date) s += 10; // untouched = needs outreach
+        if (a.outreach_status === 'not-started') s += 15;
+        return { ...a, score: s };
+      }).sort((a: any, b: any) => b.score - a.score);
+
+      const top5 = scored.slice(0, 5);
+      let result = `🎯 Top ${top5.length} accounts to prospect this week:\n\n`;
+      top5.forEach((a: any, i: number) => {
+        result += `${i + 1}. **${a.name}** [${a.tier || '—'}]`;
+        if (a.triggered_account) result += ' 🔥 Triggered';
+        if (a.high_probability_buyer) result += ' ⭐ HPB';
+        result += `\n   ICP: ${a.icp_fit_score || '?'} | Status: ${a.outreach_status || a.account_status || '?'}`;
+        result += `\n   → Action: ${!a.last_touch_date ? 'Start outreach' : 'Re-engage'}\n\n`;
+      });
+
+      result += `Ask me to generate outreach for any of these accounts.`;
+      return result;
+    },
+
+    kill_switch: async () => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const { data: opps } = await supabase
+        .from('opportunities')
+        .select('id, name, arr, last_touch_date, stage, status, created_at')
+        .eq('user_id', userId)
+        .eq('status', 'active');
+
+      if (!opps?.length) return 'No active deals to evaluate.';
+
+      const now = Date.now();
+      const killCandidates = (opps as any[]).filter(o => {
+        const arrK = (o.arr || 0) / 1000;
+        const daysSinceTouch = o.last_touch_date
+          ? Math.ceil((now - new Date(o.last_touch_date).getTime()) / 86400000)
+          : 999;
+        const daysInPipeline = Math.ceil((now - new Date(o.created_at).getTime()) / 86400000);
+
+        // Low value + very stale
+        if (arrK < 15 && daysSinceTouch > 21) return true;
+        // Any value but ancient and untouched
+        if (daysSinceTouch > 45) return true;
+        // Been in pipeline forever with no progress
+        if (daysInPipeline > 120 && daysSinceTouch > 14) return true;
+        return false;
+      });
+
+      if (killCandidates.length === 0) return '✅ No low-value or stale deals to deprioritize. Pipeline looks clean.';
+
+      let result = `⚡ ${killCandidates.length} deal${killCandidates.length > 1 ? 's' : ''} to consider deprioritizing:\n\n`;
+      killCandidates.forEach((o: any) => {
+        const arrK = (o.arr || 0) / 1000;
+        const daysSinceTouch = o.last_touch_date
+          ? Math.ceil((now - new Date(o.last_touch_date).getTime()) / 86400000)
+          : 999;
+        result += `• **${o.name}** — $${arrK.toFixed(0)}k, ${daysSinceTouch}d since touch, stage: ${o.stage || '?'}\n`;
+      });
+      result += `\nSay "close lost" or "deprioritize" for any of these to free up focus.`;
+      return result;
+    },
+
+    behavior_summary: () => {
+      try {
+        const raw = localStorage.getItem('jarvis-action-memory');
+        if (!raw) return 'No action history yet — keep using the system and I\'ll learn your patterns.';
+        const records = JSON.parse(raw) as any[];
+        const monthAgo = Date.now() - 30 * 86400000;
+        const recent = records.filter((r: any) => r.timestamp > monthAgo);
+        if (recent.length < 5) return 'Not enough data yet — need a few more days of usage.';
+
+        const completed = recent.filter((r: any) => r.outcome === 'completed').length;
+        const ignored = recent.filter((r: any) => r.outcome === 'ignored').length;
+        const deferred = recent.filter((r: any) => r.outcome === 'deferred').length;
+        const rate = Math.round((completed / recent.length) * 100);
+
+        const typeStats: Record<string, { c: number; t: number }> = {};
+        for (const r of recent) {
+          const t = r.entityType || 'unknown';
+          if (!typeStats[t]) typeStats[t] = { c: 0, t: 0 };
+          typeStats[t].t++;
+          if (r.outcome === 'completed') typeStats[t].c++;
+        }
+
+        let summary = `📈 Action completion: ${rate}% (${completed} done, ${deferred} deferred, ${ignored} ignored).\n`;
+        for (const [type, stats] of Object.entries(typeStats)) {
+          if (stats.t >= 3) {
+            summary += `${type}: ${Math.round((stats.c / stats.t) * 100)}% completion rate.\n`;
+          }
+        }
+        return summary;
+      } catch { return 'Unable to read behavior data.'; }
+    },
+
+    energy_match: async () => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      // Check WHOOP data for today
+      const today = new Date().toISOString().split('T')[0];
+      const { data: whoop } = await supabase
+        .from('whoop_daily_metrics')
+        .select('recovery_score, sleep_score, strain_score')
+        .eq('user_id', userId)
+        .eq('date', today)
+        .limit(1);
+
+      // Check journal energy
+      const { data: journal } = await supabase
+        .from('daily_journal_entries')
+        .select('energy, focus_quality, stress')
+        .eq('user_id', userId)
+        .eq('date', today)
+        .limit(1);
+
+      const recovery = (whoop as any)?.[0]?.recovery_score;
+      const energy = (journal as any)?.[0]?.energy;
+      const focus = (journal as any)?.[0]?.focus_quality;
+
+      let energyLevel: 'high' | 'medium' | 'low' = 'medium';
+      if (recovery !== undefined) {
+        energyLevel = recovery >= 67 ? 'high' : recovery >= 33 ? 'medium' : 'low';
+      } else if (energy !== undefined) {
+        energyLevel = energy >= 4 ? 'high' : energy >= 2 ? 'medium' : 'low';
+      }
+
+      const recommendations: Record<string, string> = {
+        high: '🟢 High energy — tackle strategy, prep, and complex deals. Best time for discovery calls and negotiations.',
+        medium: '🟡 Moderate energy — good for follow-ups, CRM updates, and routine outreach. Save heavy thinking for later.',
+        low: '🔴 Low energy — focus on admin, email clean-up, and light tasks. Avoid critical calls or negotiations.',
+      };
+
+      let result = recommendations[energyLevel];
+      if (recovery !== undefined) result += `\nWHOOP recovery: ${recovery}%`;
+      if (energy !== undefined) result += ` | Self-rated energy: ${energy}/5`;
+      return result;
+    },
   };
 
   // ── Wrap all DB-writing tools with toast + activity log ────────
