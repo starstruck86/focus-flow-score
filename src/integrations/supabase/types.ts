@@ -1865,6 +1865,66 @@ export type Database = {
           },
         ]
       }
+      resource_chunks: {
+        Row: {
+          actions: Json | null
+          chunk_index: number
+          content: string
+          created_at: string
+          id: string
+          job_id: string | null
+          resource_id: string
+          status: string
+          summary: string | null
+          token_count: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          actions?: Json | null
+          chunk_index?: number
+          content: string
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          resource_id: string
+          status?: string
+          summary?: string | null
+          token_count?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          actions?: Json | null
+          chunk_index?: number
+          content?: string
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          resource_id?: string
+          status?: string
+          summary?: string | null
+          token_count?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resource_chunks_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "resource_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resource_chunks_resource_id_fkey"
+            columns: ["resource_id"]
+            isOneToOne: false
+            referencedRelation: "resources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       resource_digests: {
         Row: {
           content_hash: string
@@ -1949,6 +2009,124 @@ export type Database = {
             columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "resource_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      resource_job_steps: {
+        Row: {
+          created_at: string
+          ended_at: string | null
+          error_category: string | null
+          error_message: string | null
+          id: string
+          job_id: string
+          metadata: Json | null
+          payload_size: number | null
+          retry_count: number
+          sequence: number
+          started_at: string | null
+          status: string
+          step_name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          ended_at?: string | null
+          error_category?: string | null
+          error_message?: string | null
+          id?: string
+          job_id: string
+          metadata?: Json | null
+          payload_size?: number | null
+          retry_count?: number
+          sequence?: number
+          started_at?: string | null
+          status?: string
+          step_name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          ended_at?: string | null
+          error_category?: string | null
+          error_message?: string | null
+          id?: string
+          job_id?: string
+          metadata?: Json | null
+          payload_size?: number | null
+          retry_count?: number
+          sequence?: number
+          started_at?: string | null
+          status?: string
+          step_name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resource_job_steps_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "resource_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      resource_jobs: {
+        Row: {
+          created_at: string
+          ended_at: string | null
+          error_category: string | null
+          error_message: string | null
+          id: string
+          job_type: string
+          metadata: Json | null
+          resource_id: string
+          retry_count: number
+          started_at: string | null
+          status: string
+          trace_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          ended_at?: string | null
+          error_category?: string | null
+          error_message?: string | null
+          id?: string
+          job_type?: string
+          metadata?: Json | null
+          resource_id: string
+          retry_count?: number
+          started_at?: string | null
+          status?: string
+          trace_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          ended_at?: string | null
+          error_category?: string | null
+          error_message?: string | null
+          id?: string
+          job_type?: string
+          metadata?: Json | null
+          resource_id?: string
+          retry_count?: number
+          started_at?: string | null
+          status?: string
+          trace_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resource_jobs_resource_id_fkey"
+            columns: ["resource_id"]
+            isOneToOne: false
+            referencedRelation: "resources"
             referencedColumns: ["id"]
           },
         ]
