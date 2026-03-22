@@ -162,8 +162,8 @@ export function CompanyMonitorCard({ motionFilter }: CompanyMonitorCardProps = {
     toast.success('Copied to clipboard');
   };
 
-  const unread = (digestItems || []).filter((d: any) => !d.is_read);
-  const actionable = (digestItems || []).filter((d: any) => d.is_actionable);
+  const unread = (digestItems || []).filter(d => !d.is_read);
+  const actionable = (digestItems || []).filter(d => d.is_actionable);
 
   return (
     <>
