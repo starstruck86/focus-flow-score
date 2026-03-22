@@ -156,7 +156,7 @@ function JobsPanel() {
   );
 }
 
-
+export default function Diagnostics() {
   const errors = useErrorStore();
   const { user, session } = useAuth();
   const [filter, setFilter] = useState<string>('all');
