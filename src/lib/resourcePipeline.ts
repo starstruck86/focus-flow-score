@@ -119,7 +119,7 @@ async function markStepCompleted(stepId: string, metadata?: Record<string, unkno
   await supabase.from('resource_job_steps').update({
     status: 'completed',
     ended_at: new Date().toISOString(),
-    metadata: metadata || {},
+    metadata: (metadata || {}) as any,
     payload_size: payloadSize || null,
   }).eq('id', stepId);
 }
