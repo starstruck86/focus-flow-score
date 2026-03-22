@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { REVIEW_MODE } from '@/contexts/ReviewModeContext';
 
 interface BulkAction {
   id: string;
@@ -32,6 +33,8 @@ export function BulkActionsBar({ selectedCount, onClear, actions, selectedIds }:
 
   if (selectedCount === 0) return null;
 
+  const blocked = REVIEW_MODE;
+
   return (
     <div className="sticky top-0 z-30 bg-primary/10 border border-primary/30 rounded-lg px-4 py-2.5 flex items-center gap-3 flex-wrap animate-in slide-in-from-top-2">
       <span className="text-sm font-medium text-primary">
@@ -48,6 +51,7 @@ export function BulkActionsBar({ selectedCount, onClear, actions, selectedIds }:
             <Select
               key={action.id}
               onValueChange={(value) => {
+                if (blocked) { toast.info('Bulk actions disabled in Public Review Mode'); return; }
                 action.onExecute(Array.from(selectedIds), value);
                 toast.success(`Updated ${selectedCount} records`);
               }}
@@ -71,6 +75,7 @@ export function BulkActionsBar({ selectedCount, onClear, actions, selectedIds }:
             size="sm"
             className="h-8 text-xs gap-1.5"
             onClick={() => {
+              if (blocked) { toast.info('Bulk actions disabled in Public Review Mode'); return; }
               action.onExecute(Array.from(selectedIds));
               toast.success(`${action.label} applied to ${selectedCount} records`);
             }}

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ReviewModeProvider } from "@/contexts/ReviewModeContext";
 import { LinkedRecordProvider } from "@/contexts/LinkedRecordContext";
 import { CopilotProvider } from "@/contexts/CopilotContext";
 import { DataSyncProvider } from "@/components/DataSyncProvider";
@@ -11,6 +12,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import { JournalPromptManager } from "@/components/journal";
 import { OfflineBanner } from "@/components/OfflineBanner";
+import { ReviewModeBanner } from "@/components/ReviewModeBanner";
 import Dashboard from "./pages/Dashboard";
 import WeeklyOutreach from "./pages/WeeklyOutreach";
 import Renewals from "./pages/Renewals";
@@ -57,10 +59,12 @@ const App = () => (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
       <TooltipProvider>
         <AuthProvider>
+          <ReviewModeProvider>
           <LinkedRecordProvider>
             <CopilotProvider>
             <DataSyncProvider>
               <Sonner />
+              <ReviewModeBanner />
               <OfflineBanner />
               <BrowserRouter>
                 <Routes>
@@ -90,6 +94,7 @@ const App = () => (
             </DataSyncProvider>
             </CopilotProvider>
           </LinkedRecordProvider>
+          </ReviewModeProvider>
         </AuthProvider>
       </TooltipProvider>
     </ThemeProvider>

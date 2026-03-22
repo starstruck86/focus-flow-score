@@ -11,6 +11,7 @@ import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { SaveIndicator } from '@/components/SaveIndicator';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { useReviewMode } from '@/contexts/ReviewModeContext';
 import { Button } from '@/components/ui/button';
 import { GlobalFAB } from '@/components/fab';
 import { GlobalSearch } from '@/components/GlobalSearch';
@@ -70,6 +71,7 @@ const DAVE_CHANNEL_NAME = 'dave-session';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
+  const { isReviewMode, guardDestructive } = useReviewMode();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { setPageContext } = useCopilot();
@@ -245,14 +247,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-1 shrink-0">
           <VoiceCommandButton data-testid="dave-voice-btn" onOpenDave={handleOpenDave} disabled={isFetchingDaveSession} />
           <TerritoryCopilot />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={signOut}>
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Sign Out</TooltipContent>
-          </Tooltip>
+          {!isReviewMode && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={signOut}>
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Sign Out</TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </header>
 
