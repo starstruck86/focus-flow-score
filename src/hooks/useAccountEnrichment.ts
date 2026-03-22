@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import { autoInferHierarchy } from '@/lib/orgChartInference';
