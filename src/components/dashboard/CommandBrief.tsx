@@ -1,8 +1,9 @@
 // Command Brief — the Jarvis layer UI surface
 // ONE state sentence + ONE primary action. No noise.
+// Extended with: delay consequence display, escalation indicators.
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, ChevronRight, Check, X, ArrowRight } from 'lucide-react';
+import { Zap, Check, X, ArrowRight, AlertTriangle } from 'lucide-react';
 import { useOperatingState } from '@/hooks/useOperatingState';
 import { usePrimaryAction } from '@/hooks/usePrimaryAction';
 import { useActionMemory } from '@/hooks/useActionMemory';
@@ -23,6 +24,13 @@ const BAND_DOT: Record<string, string> = {
   'on-pace': 'bg-primary',
   drifting: 'bg-status-yellow',
   reactive: 'bg-destructive',
+};
+
+const ESCALATION_STYLES: Record<string, string> = {
+  critical: 'text-destructive',
+  high: 'text-status-yellow',
+  moderate: 'text-muted-foreground',
+  low: 'text-muted-foreground',
 };
 
 export function CommandBrief() {
@@ -48,6 +56,8 @@ export function CommandBrief() {
       setTimeout(() => setDismissed(false), 3000);
     }
   };
+
+  const showEscalation = primaryAction?.escalation === 'critical' || primaryAction?.escalation === 'high';
 
   return (
     <motion.div
@@ -75,7 +85,11 @@ export function CommandBrief() {
             className="bg-card/80 rounded-lg border border-border/50 p-3 space-y-2"
           >
             <div className="flex items-start gap-2">
-              <Zap className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+              {showEscalation ? (
+                <AlertTriangle className={cn('h-4 w-4 mt-0.5 shrink-0', ESCALATION_STYLES[primaryAction.escalation!])} />
+              ) : (
+                <Zap className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+              )}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-foreground leading-tight">
                   {primaryAction.action}
@@ -90,6 +104,13 @@ export function CommandBrief() {
               <ArrowRight className="h-3 w-3" />
               <span>{primaryAction.nextStep}</span>
             </div>
+
+            {/* Delay consequence — only shown for high/critical escalation */}
+            {primaryAction.delayConsequence && showEscalation && (
+              <p className={cn('text-xs italic', ESCALATION_STYLES[primaryAction.escalation!])}>
+                ⚠ {primaryAction.delayConsequence}
+              </p>
+            )}
 
             <div className="flex gap-2 pt-1">
               <Button
