@@ -399,7 +399,7 @@ async function stepActionExtraction(job: ResourceJob, jobId: string) {
       metadata: {
         ...(job.metadata || {}),
         extracted_actions: (result.data as any).tasks,
-      },
+      } as any,
     }).eq('id', job.id);
   }
 }
