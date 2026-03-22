@@ -62,11 +62,11 @@ export async function trendQuery(ctx: ToolContext, params: { metric: string; per
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - daysBack);
 
-  const { data: entries } = await supabase.from('daily_journal_entries').select(`date, ${dbField}`).eq('user_id', userId).gte('date', startDate.toISOString().split('T')[0]).order('date');
+  const { data: entries } = await supabase.from('daily_journal_entries').select('*').eq('user_id', userId).gte('date', startDate.toISOString().split('T')[0]).order('date');
 
   if (!entries?.length) return `No data for ${params.metric} in the last ${daysBack} days.`;
 
-  const values = entries.map(e => (e as Record<string, number>)[dbField] || 0);
+  const values = entries.map(e => (e as unknown as Record<string, number>)[dbField] || 0);
   const total = values.reduce((s: number, v: number) => s + v, 0);
   const avg = Math.round((total / values.length) * 10) / 10;
   const latest = values[values.length - 1];
