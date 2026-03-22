@@ -1,11 +1,9 @@
 /**
  * Smoke tests — verify critical flows render without crashing.
- * These are fast, shallow tests that ensure the app boots and key routes
- * produce expected DOM elements.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
@@ -42,7 +40,6 @@ vi.mock('@/integrations/supabase/client', () => ({
   },
 }));
 
-// Mock lovable integration
 vi.mock('@/integrations/lovable', () => ({
   lovable: {
     auth: {
@@ -71,9 +68,9 @@ function createWrapper(route = '/') {
 describe('Auth page', () => {
   it('renders sign-in button', async () => {
     const Auth = (await import('@/pages/Auth')).default;
-    render(<Auth />, { wrapper: createWrapper('/auth') });
-    expect(screen.getByTestId('auth-page')).toBeInTheDocument();
-    expect(screen.getByTestId('google-sign-in')).toBeInTheDocument();
+    const { container } = render(<Auth />, { wrapper: createWrapper('/auth') });
+    expect(container.querySelector('[data-testid="auth-page"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="google-sign-in"]')).toBeTruthy();
   });
 });
 
@@ -82,7 +79,7 @@ describe('ProtectedRoute', () => {
     const { ProtectedRoute } = await import('@/components/ProtectedRoute');
     const { AuthProvider } = await import('@/contexts/AuthContext');
     const Wrapper = createWrapper('/');
-    render(
+    const { container } = render(
       <Wrapper>
         <AuthProvider>
           <ProtectedRoute>
@@ -91,30 +88,29 @@ describe('ProtectedRoute', () => {
         </AuthProvider>
       </Wrapper>
     );
-    // Since no session, should NOT render protected content
-    expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-testid="protected-content"]')).toBeFalsy();
   });
 });
 
 describe('StateComponents', () => {
   it('renders LoadingState', async () => {
     const { LoadingState } = await import('@/components/StateComponents');
-    render(<LoadingState message="Loading data..." />);
-    expect(screen.getByText('Loading data...')).toBeInTheDocument();
+    const { container } = render(<LoadingState message="Loading data..." />);
+    expect(container.textContent).toContain('Loading data...');
   });
 
   it('renders EmptyState', async () => {
     const { EmptyState } = await import('@/components/StateComponents');
-    render(<EmptyState title="No items" description="Add something" />);
-    expect(screen.getByText('No items')).toBeInTheDocument();
+    const { container } = render(<EmptyState title="No items" description="Add something" />);
+    expect(container.textContent).toContain('No items');
   });
 
   it('renders ErrorState with retry', async () => {
     const { ErrorState } = await import('@/components/StateComponents');
     const onRetry = vi.fn();
-    render(<ErrorState error="Something broke" onRetry={onRetry} />);
-    expect(screen.getByText('Something broke')).toBeInTheDocument();
-    expect(screen.getByTestId('error-retry-btn')).toBeInTheDocument();
+    const { container } = render(<ErrorState error="Something broke" onRetry={onRetry} />);
+    expect(container.textContent).toContain('Something broke');
+    expect(container.querySelector('[data-testid="error-retry-btn"]')).toBeTruthy();
   });
 });
 
@@ -128,10 +124,9 @@ describe('useMutationGuard', () => {
     let callCount = 0;
     const slowFn = () => new Promise<void>(r => { callCount++; setTimeout(r, 100); });
 
-    // Fire two concurrent calls
     await act(async () => {
       const p1 = result.current.guard(slowFn);
-      const p2 = result.current.guard(slowFn); // should be blocked
+      const p2 = result.current.guard(slowFn);
       await Promise.all([p1, p2]);
     });
 

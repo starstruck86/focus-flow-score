@@ -262,7 +262,7 @@ export default function Dashboard() {
 
   return (
     <Layout>
-      <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto space-y-4">
+      <div data-testid="dashboard-page" className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto space-y-4">
         {/* === THE WHITEBOARD === */}
         <div className="space-y-2">
           <div className="flex items-start justify-between">

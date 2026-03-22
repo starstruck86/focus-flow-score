@@ -48,6 +48,7 @@ export default function Auth() {
         </CardHeader>
         <CardContent className="space-y-4">
           <Button
+            data-testid="google-sign-in"
             variant="outline"
             className="w-full h-12 gap-3"
             onClick={handleGoogleSignIn}

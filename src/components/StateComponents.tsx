@@ -124,7 +124,7 @@ export function ErrorState({
         {traceId && <p className="text-[10px] text-muted-foreground/60 mt-1 font-mono">Trace: {traceId}</p>}
       </div>
       {retryable && onRetry && (
-        <Button variant="outline" size="sm" onClick={onRetry}>
+        <Button data-testid="error-retry-btn" variant="outline" size="sm" onClick={onRetry}>
           <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
           Try Again
         </Button>
