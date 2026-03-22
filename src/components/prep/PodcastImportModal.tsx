@@ -33,7 +33,7 @@ export function PodcastImportModal({ open, onOpenChange }: PodcastImportModalPro
     setFetching(true);
     setEpisodes([]);
     try {
-      const { data, error } = await trackedInvoke('import-podcast', {
+      const { data, error } = await trackedInvoke<any>('import-podcast', {
         body: { url: url.trim() },
       });
       if (error) throw error;

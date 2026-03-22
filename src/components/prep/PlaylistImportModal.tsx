@@ -33,7 +33,7 @@ export function PlaylistImportModal({ open, onOpenChange }: PlaylistImportModalP
     setFetching(true);
     setVideos([]);
     try {
-      const { data, error } = await trackedInvoke('import-youtube-playlist', {
+      const { data, error } = await trackedInvoke<any>('import-youtube-playlist', {
         body: { url: url.trim() },
       });
       if (error) throw error;

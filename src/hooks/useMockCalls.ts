@@ -78,7 +78,7 @@ export function useGradeMockCall() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (sessionId: string) => {
-      const { data, error } = await trackedInvoke('grade-mock-call', {
+      const { data, error } = await trackedInvoke<any>('grade-mock-call', {
         body: { session_id: sessionId },
       });
       if (error) throw error;

@@ -124,7 +124,7 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
     if (!user) return;
     setIsGenerating(true);
     try {
-      const { data, error } = await trackedInvoke('discover-contacts', {
+      const { data, error } = await trackedInvoke<any>('discover-contacts', {
         body: {
           accountId, accountName, website, industry,
           discoveryMode: 'executive', maxContacts: 8,
@@ -181,7 +181,7 @@ export function OrgChartView({ accountId, accountName, website, industry }: OrgC
       if (uploadedUrls.length === 0) { toast.error('Failed to upload screenshot'); return; }
       toast.info(`Extracting contacts from ${uploadedUrls.length} screenshot(s)...`);
 
-      const { data, error } = await trackedInvoke('parse-account-screenshot', {
+      const { data, error } = await trackedInvoke<any>('parse-account-screenshot', {
         body: {
           imageUrls: uploadedUrls,
           context: `This is a CONTACTS screenshot for "${accountName}". Extract each PERSON as a contact. Focus on: names, titles, departments, emails, LinkedIn URLs.`,

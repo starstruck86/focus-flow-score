@@ -54,7 +54,7 @@ function DigestViewer({ resourceId }: { resourceId: string }) {
   const handleReOperationalize = async () => {
     setReOperationalizing(true);
     try {
-      const { error } = await trackedInvoke('operationalize-resource', {
+      const { error } = await trackedInvoke<any>('operationalize-resource', {
         body: { resource_id: resourceId },
       });
       if (error) throw error;

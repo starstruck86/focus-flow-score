@@ -57,7 +57,7 @@ export function useConversionMath() {
   return useQuery({
     queryKey: ['conversion-math', user?.id],
     queryFn: async () => {
-      const { data, error } = await trackedInvoke('conversion-math');
+      const { data, error } = await trackedInvoke<any>('conversion-math');
       if (error) throw error;
       return data as {
         quota: { newArrQuota: number; renewalArrQuota: number; newArrClosed: number; renewalArrClosed: number; newArrGap: number; renewalArrGap: number; totalGap: number; newArrAttainment: number; renewalArrAttainment: number };
@@ -100,7 +100,7 @@ export function usePipelineHygiene() {
         .maybeSingle();
       if (cached) return cached;
       // Run fresh scan
-      const { data, error } = await trackedInvoke('pipeline-hygiene');
+      const { data, error } = await trackedInvoke<any>('pipeline-hygiene');
       if (error) throw error;
       return data;
     },
@@ -113,7 +113,7 @@ export function useRunHygieneScan() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      const { data, error } = await trackedInvoke('pipeline-hygiene');
+      const { data, error } = await trackedInvoke<any>('pipeline-hygiene');
       if (error) throw error;
       return data;
     },
@@ -157,7 +157,7 @@ export function useGenerateBattlePlan() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      const { data, error } = await trackedInvoke('weekly-battle-plan');
+      const { data, error } = await trackedInvoke<any>('weekly-battle-plan');
       if (error) throw error;
       return data;
     },

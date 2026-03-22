@@ -537,7 +537,7 @@ function useJournalNudge() {
   return useQuery({
     queryKey: ['journal-nudge'],
     queryFn: async () => {
-      const { data, error } = await trackedInvoke('journal-nudge');
+      const { data, error } = await trackedInvoke<any>('journal-nudge');
       if (error) throw error;
       return data as {
         nudge: string;
@@ -557,7 +557,7 @@ function useWeeklyInsights() {
   return useQuery({
     queryKey: ['weekly-patterns'],
     queryFn: async () => {
-      const { data, error } = await trackedInvoke('weekly-patterns');
+      const { data, error } = await trackedInvoke<any>('weekly-patterns');
       if (error) throw error;
       return data as { insights: string[] } | null;
     },
@@ -1542,7 +1542,7 @@ export function DailyScorecardModal({
 
       let sentimentPromise: Promise<{ sentiment_score: number | null; sentiment_label: string | null }> | null = null;
       if (data.dailyReflection.trim().length >= 5) {
-        sentimentPromise = trackedInvoke('analyze-sentiment', {
+        sentimentPromise = trackedInvoke<any>('analyze-sentiment', {
           body: { reflection: data.dailyReflection },
         }).then(({ data: d }) => d).catch(() => ({ sentiment_score: null, sentiment_label: null }));
       }

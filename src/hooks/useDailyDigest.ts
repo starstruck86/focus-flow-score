@@ -90,7 +90,7 @@ export function useDailyDigest(date?: string) {
 
   const triggerDigest = useMutation({
     mutationFn: async () => {
-      const { data, error } = await trackedInvoke('daily-digest', {
+      const { data, error } = await trackedInvoke<any>('daily-digest', {
         body: { userId: user?.id },
       });
       if (error) throw error;

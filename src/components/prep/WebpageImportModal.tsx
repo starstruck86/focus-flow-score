@@ -34,7 +34,7 @@ export function WebpageImportModal({ open, onOpenChange }: WebpageImportModalPro
     setFetching(true);
     setLinks([]);
     try {
-      const { data, error } = await trackedInvoke('import-webpage-links', {
+      const { data, error } = await trackedInvoke<any>('import-webpage-links', {
         body: { url: url.trim() },
       });
       if (error) throw error;

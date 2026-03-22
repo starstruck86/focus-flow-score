@@ -4,7 +4,7 @@
  * 
  * Usage:
  *   import { trackedInvoke } from '@/lib/trackedInvoke';
- *   const { data, error, traceId } = await trackedInvoke('my-function', { body: { ... } });
+ *   const { data, error, traceId } = await trackedInvoke<any>('my-function', { body: { ... } });
  */
 
 import { supabase } from '@/integrations/supabase/client';

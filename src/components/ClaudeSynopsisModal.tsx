@@ -53,7 +53,7 @@ export function ClaudeSynopsisModal({ open, onOpenChange, opportunity }: ClaudeS
     setIsParsing(true);
     setParsed(null);
     try {
-      const { data, error } = await trackedInvoke('parse-opp-synopsis', {
+      const { data, error } = await trackedInvoke<any>('parse-opp-synopsis', {
         body: {
           text: text.trim(),
           opportunityContext: {

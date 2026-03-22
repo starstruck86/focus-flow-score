@@ -141,7 +141,7 @@ export function ObjectionDrillReps() {
     setIsGrading(true);
 
     try {
-      const { data, error } = await trackedInvoke('grade-objection-drill', {
+      const { data, error } = await trackedInvoke<any>('grade-objection-drill', {
         body: {
           objection: currentObjection.objection,
           category: currentObjection.category,

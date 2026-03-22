@@ -44,7 +44,7 @@ export function useSyncCalendar() {
   
   return useMutation({
     mutationFn: async () => {
-      const response = await trackedInvoke('sync-calendar');
+      const response = await trackedInvoke<any>('sync-calendar');
       if (response.error) throw response.error;
       return response.data;
     },

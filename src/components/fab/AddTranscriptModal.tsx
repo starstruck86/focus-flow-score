@@ -143,7 +143,7 @@ export function AddTranscriptModal({
   const extractTasksFromTranscript = async (transcriptTitle: string) => {
     setExtracting(true);
     try {
-      const { data, error } = await trackedInvoke('extract-tasks', {
+      const { data, error } = await trackedInvoke<any>('extract-tasks', {
         body: {
           transcript_content: transcript.trim(),
           transcript_title: transcriptTitle,

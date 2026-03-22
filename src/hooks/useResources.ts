@@ -388,7 +388,7 @@ export function useOperationalizeResource() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (resourceId: string) => {
-      const { data, error } = await trackedInvoke('operationalize-resource', {
+      const { data, error } = await trackedInvoke<any>('operationalize-resource', {
         body: { resource_id: resourceId },
       });
       if (error) throw error;
@@ -424,7 +424,7 @@ export function useResourceSuggestions(enabled = false) {
   return useQuery({
     queryKey: ['resource-suggestions', user?.id],
     queryFn: async () => {
-      const { data, error } = await trackedInvoke('suggest-resource-uses');
+      const { data, error } = await trackedInvoke<any>('suggest-resource-uses');
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       return (data?.suggestions || []) as ResourceSuggestion[];

@@ -163,7 +163,7 @@ export function ScreenshotEnrichModal({ open, onOpenChange, account: preselected
       toast.info(`Analyzing ${uploadedUrls.length} screenshot(s)...`);
 
       // Call edge function to parse with AI vision
-      const { data: parseResult, error: parseError } = await trackedInvoke('parse-screenshot', {
+      const { data: parseResult, error: parseError } = await trackedInvoke<any>('parse-screenshot', {
         body: {
           imageUrls: uploadedUrls,
           accountId: account.id,

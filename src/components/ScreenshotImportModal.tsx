@@ -240,7 +240,7 @@ export function ScreenshotImportModal({ open, onOpenChange }: ScreenshotImportMo
 
       toast.info(`Analyzing ${uploadedUrls.length} screenshot(s)...`);
 
-      const { data, error } = await trackedInvoke('parse-account-screenshot', {
+      const { data, error } = await trackedInvoke<any>('parse-account-screenshot', {
         body: { imageUrls: uploadedUrls, context: importContext },
       });
 

@@ -51,7 +51,7 @@ export function ClaudeImportModal({ open, onClose }: ClaudeImportModalProps) {
     setStep('parsing');
 
     try {
-      const { data, error } = await trackedInvoke('parse-claude-import', {
+      const { data, error } = await trackedInvoke<any>('parse-claude-import', {
         body: {
           text: rawText,
           existingAccounts: accounts.map(a => ({ id: a.id, name: a.name, website: a.website, salesforceId: a.salesforceId })),

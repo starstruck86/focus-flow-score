@@ -235,7 +235,7 @@ export function MethodologyTracker({ opportunityId, opportunityName, stage }: Pr
               onClick={async () => {
                 setGenerating(true);
                 try {
-                  const { data: result, error } = await trackedInvoke('generate-call-goals', {
+                  const { data: result, error } = await trackedInvoke<any>('generate-call-goals', {
                     body: { opportunity_id: opportunityId },
                   });
                   if (error) throw error;

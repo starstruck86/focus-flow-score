@@ -104,7 +104,7 @@ export function TemplateManager() {
   const handleRefreshSuggestions = async () => {
     setRefreshing(true);
     try {
-      const { error } = await trackedInvoke('suggest-templates');
+      const { error } = await trackedInvoke<any>('suggest-templates');
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ['template-suggestions'] });
       toast.success('Suggestions refreshed');

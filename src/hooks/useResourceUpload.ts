@@ -36,7 +36,7 @@ async function classifyResource(payload: {
   existingTitle?: string;
   existingTags?: string[];
 }): Promise<ClassificationResult> {
-  const { data, error } = await trackedInvoke('classify-resource', {
+  const { data, error } = await trackedInvoke<any>('classify-resource', {
     body: payload,
   });
   if (error) throw error;
@@ -243,7 +243,7 @@ export function useAddUrlResource() {
 
       // Fire-and-forget background deep enrich if still placeholder
       if (contentStatus === 'placeholder') {
-        trackedInvoke('enrich-resource-content', {
+        trackedInvoke<any>('enrich-resource-content', {
           body: { resource_id: resource.id },
         }).catch(() => {});
       }

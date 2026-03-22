@@ -132,7 +132,7 @@ export function ResourceIntelligenceDashboard() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) return;
 
-      const resp = await trackedInvoke('detect-knowledge-gaps', {
+      const resp = await trackedInvoke<any>('detect-knowledge-gaps', {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
@@ -176,7 +176,7 @@ export function ResourceIntelligenceDashboard() {
       let success = 0;
       for (const resource of unoperationalized.slice(0, 10)) {
         try {
-          const { error } = await trackedInvoke('operationalize-resource', {
+          const { error } = await trackedInvoke<any>('operationalize-resource', {
             body: { resourceId: resource.id },
           });
           if (!error) success++;
@@ -215,7 +215,7 @@ export function ResourceIntelligenceDashboard() {
       }
 
       const ids = shallowResources.map(r => r.id);
-      const { data, error } = await trackedInvoke('enrich-resource-content', {
+      const { data, error } = await trackedInvoke<any>('enrich-resource-content', {
         body: { resource_ids: ids, force: true },
       });
       if (error) throw error;

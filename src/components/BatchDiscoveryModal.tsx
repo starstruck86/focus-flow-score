@@ -113,7 +113,7 @@ export function BatchDiscoveryModal({ children }: { children: React.ReactNode })
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-          const { data, error } = await trackedInvoke('discover-contacts', {
+          const { data, error } = await trackedInvoke<any>('discover-contacts', {
             body: {
               accountId,
               accountName: account?.name,

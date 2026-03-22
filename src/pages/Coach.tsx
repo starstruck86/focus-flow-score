@@ -119,7 +119,7 @@ function ScoreQADialog({ open, onClose, gradeData, transcriptExcerpt, category }
     setLoading(true);
     setAnswer('');
     try {
-      const { data, error } = await trackedInvoke('explain-score', {
+      const { data, error } = await trackedInvoke<any>('explain-score', {
         body: { gradeData, transcriptExcerpt: transcriptExcerpt?.slice(0, 4000), question, category },
       });
       if (error) throw error;

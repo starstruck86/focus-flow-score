@@ -85,7 +85,7 @@ export function WhoopIntegration() {
   async function handleConnect() {
     setConnecting(true);
     try {
-      const response = await trackedInvoke('whoop-auth', {
+      const response = await trackedInvoke<any>('whoop-auth', {
         body: { redirectUri: window.location.origin },
       });
       if (response.error) throw new Error(response.error.message);
@@ -100,7 +100,7 @@ export function WhoopIntegration() {
   async function syncData() {
     setSyncing(true);
     try {
-      const response = await trackedInvoke('whoop-sync', {
+      const response = await trackedInvoke<any>('whoop-sync', {
         body: { action: 'sync' },
       });
       if (response.error) throw new Error(response.error.message);
@@ -129,7 +129,7 @@ export function WhoopIntegration() {
   async function handleDisconnect() {
     setDisconnecting(true);
     try {
-      const response = await trackedInvoke('whoop-sync', {
+      const response = await trackedInvoke<any>('whoop-sync', {
         body: { action: 'disconnect' },
       });
       if (response.error) throw new Error(response.error.message);

@@ -115,7 +115,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
 
   useEffect(() => {
     if (!showDiagnostics || healthCheck) return;
-    trackedInvoke('dave-health-check').then(({ data }) => {
+    trackedInvoke<any>('dave-health-check').then(({ data }) => {
       if (data) {
         setHealthCheck({
           apiKey: data.apiKeyValid,

@@ -62,7 +62,7 @@ export function AccountSynopsisModal({ open, onOpenChange, account }: AccountSyn
     setIsParsing(true);
     setParsed(null);
     try {
-      const { data, error } = await trackedInvoke('parse-account-synopsis', {
+      const { data, error } = await trackedInvoke<any>('parse-account-synopsis', {
         body: {
           text: text.trim(),
           accountContext: {
