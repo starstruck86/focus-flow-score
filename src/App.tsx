@@ -59,10 +59,12 @@ const App = () => (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
       <TooltipProvider>
         <AuthProvider>
+          <ReviewModeProvider>
           <LinkedRecordProvider>
             <CopilotProvider>
             <DataSyncProvider>
               <Sonner />
+              <ReviewModeBanner />
               <OfflineBanner />
               <BrowserRouter>
                 <Routes>
