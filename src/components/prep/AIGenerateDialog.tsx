@@ -86,13 +86,9 @@ export function AIGenerateDialog({ open, onOpenChange, onGenerated, accountConte
             accountContext,
           };
 
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/build-resource`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify(body),
+      const resp = await authenticatedFetch({
+        functionName: 'build-resource',
+        body,
       });
 
       if (!resp.ok) {

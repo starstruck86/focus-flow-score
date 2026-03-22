@@ -139,14 +139,9 @@ export function useVoiceMode() {
 
   /** Fetch a single TTS chunk and return an Audio element */
   const fetchTTSChunk = async (text: string, voiceId?: string): Promise<HTMLAudioElement> => {
-    const resp = await fetch(TTS_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-      },
-      body: JSON.stringify({ text, voiceId }),
+    const resp = await authenticatedFetch({
+      functionName: 'elevenlabs-tts-stream',
+      body: { text, voiceId },
     });
 
     if (!resp.ok) {
