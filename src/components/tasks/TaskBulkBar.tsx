@@ -30,7 +30,7 @@ export function TaskBulkBar({ selectedIds, onClear }: TaskBulkBarProps) {
       <div className="flex items-center gap-2 bg-card border border-border shadow-lg rounded-full px-4 py-2">
         <span className="text-xs font-semibold text-primary">{count} selected</span>
         <div className="flex items-center gap-1 ml-auto">
-          <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => bulkUpdate({ status: 'done' as TaskStatus, completedAt: new Date().toISOString() })}>
+          <Button size="sm" variant="outline" className="h-7 text-[11px]" disabled={false} onClick={() => bulkUpdate({ status: 'done' as TaskStatus, completedAt: new Date().toISOString() })} data-testid="bulk-done-btn">
             ✓ Done
           </Button>
           <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => bulkUpdate({ priority: 'P0' as Priority })}>
