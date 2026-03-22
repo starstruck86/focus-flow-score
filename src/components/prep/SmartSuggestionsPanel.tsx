@@ -5,6 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Lightbulb, Loader2, RefreshCw, ChevronRight, X, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { authenticatedFetch } from '@/lib/authenticatedFetch';
 
 interface Suggestion {
   title: string;
