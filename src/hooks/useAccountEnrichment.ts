@@ -9,6 +9,7 @@ import type { Account } from '@/types';
 export interface EnrichmentResult {
   success: boolean;
   error?: string;
+  discoveredUrl?: string;
   signals?: {
     direct_ecommerce: boolean;
     email_sms_capture: boolean;
