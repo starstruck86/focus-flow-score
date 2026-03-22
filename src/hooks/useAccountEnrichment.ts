@@ -4,6 +4,8 @@ import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import { autoInferHierarchy } from '@/lib/orgChartInference';
+import { validateResponse, requiredField, successFlag, type ValidationRule } from '@/lib/reliability';
+import { createLogger } from '@/lib/logger';
 import type { Account } from '@/types';
 
 /** Payload sent to the enrich-account edge function */
@@ -51,6 +53,25 @@ export interface EnrichmentResult {
 }
 
 const STALE_DAYS = 90;
+
+const enrichmentLogger = createLogger('AccountEnrichment');
+
+/** Validation rules for enrichment responses */
+const enrichmentValidationRules: ValidationRule<EnrichmentResult>[] = [
+  successFlag<EnrichmentResult>(),
+  requiredField<EnrichmentResult>('signals', 'Enrichment signals must be present'),
+  requiredField<EnrichmentResult>('scores', 'Enrichment scores must be present'),
+  {
+    check: 'ICP fit score is within valid range (0-100)',
+    validate: (d) => d.scores != null && d.scores.icp_fit_score >= 0 && d.scores.icp_fit_score <= 100,
+    severity: 'warn',
+  },
+  {
+    check: 'Lifecycle tier is a non-empty string',
+    validate: (d) => d.scores != null && typeof d.scores.lifecycle_tier === 'string' && d.scores.lifecycle_tier.length > 0,
+    severity: 'warn',
+  },
+];
 
 export function isEnrichmentStale(account: Account): boolean {
   if (!account.lastEnrichedAt) return false; // never enriched = not "stale", just unenriched
@@ -116,10 +137,16 @@ export function useAccountEnrichment() {
         industry: account.industry || '',
       };
 
-      const { data, error } = await trackedInvoke<EnrichmentResult>('enrich-account', {
+      const { data, error, attempts } = await trackedInvoke<EnrichmentResult>('enrich-account', {
         body: requestPayload as unknown as Record<string, unknown>,
         componentName: 'useAccountEnrichment',
+        retry: { maxAttempts: 2, baseDelayMs: 2_000 },
+        timeoutMs: 90_000, // Enrichment can be slow (web scraping)
       });
+
+      if (attempts > 1) {
+        enrichmentLogger.info(`Enrichment for ${account.name} succeeded after ${attempts} attempts`);
+      }
 
       // If website was auto-discovered, update the account
       if (data?.discoveredUrl && !account.website) {
@@ -130,7 +157,23 @@ export function useAccountEnrichment() {
       if (error) throw new Error(error.message);
       if (!data?.success) throw new Error(data?.error || 'Enrichment failed');
 
-      const result = data as EnrichmentResult;
+      // Validate response completeness
+      const validation = validateResponse(data, enrichmentValidationRules);
+      if (!validation.valid) {
+        enrichmentLogger.warn(`Enrichment response incomplete for ${account.name}`, {
+          errors: validation.errors,
+          completeness: validation.completeness,
+        });
+        throw new Error(`Enrichment returned incomplete data: ${validation.errors[0]}`);
+      }
+      if (validation.warnings.length > 0) {
+        enrichmentLogger.warn(`Enrichment warnings for ${account.name}`, {
+          warnings: validation.warnings,
+          completeness: validation.completeness,
+        });
+      }
+
+      const result = data;
 
       // Apply to local state (DB is updated by edge function directly)
       const updates: Partial<Account> = {
