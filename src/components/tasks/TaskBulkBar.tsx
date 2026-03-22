@@ -45,7 +45,7 @@ export function TaskBulkBar({ selectedIds, onClear }: TaskBulkBarProps) {
           <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => bulkUpdate({ workstream: 'renewals' })}>
             RN
           </Button>
-          <Button size="sm" variant="destructive" className="h-7 text-[11px]" onClick={bulkDelete}>
+          <Button size="sm" variant="destructive" className="h-7 text-[11px]" onClick={bulkDelete} data-testid="bulk-delete-btn">
             Delete
           </Button>
           <Button size="sm" variant="ghost" className="h-7 text-[11px]" onClick={onClear}>

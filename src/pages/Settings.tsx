@@ -333,7 +333,7 @@ function DataImportSection() {
               <p className="text-sm text-muted-foreground">Import accounts, opportunities, renewals from CSV</p>
             </div>
           </div>
-          <Button onClick={() => setShowImportWizard(true)}>
+          <Button onClick={() => setShowImportWizard(true)} data-testid="import-csv-btn">
             <FileSpreadsheet className="h-4 w-4 mr-2" />
             Import CSV
           </Button>
