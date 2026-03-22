@@ -351,7 +351,7 @@ export function DailyTimeBlocks() {
 
     await supabase
       .from('daily_time_blocks' as 'daily_time_blocks')
-      .update({ blocks })
+      .update({ blocks: blocks as unknown as Json })
       .eq('id', plan.id);
   }, [plan, todayStr, queryClient]);
 
