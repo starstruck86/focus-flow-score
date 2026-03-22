@@ -42,6 +42,7 @@ export function SmartSuggestionsPanel({ content, documentType, onApply, onClose 
       const resp = await authenticatedFetch({
         functionName: 'build-resource',
         body: { type: 'suggest', content, documentType },
+        componentName: 'SmartSuggestionsPanel',
       });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
