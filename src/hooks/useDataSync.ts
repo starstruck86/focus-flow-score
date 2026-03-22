@@ -179,7 +179,7 @@ function dbRenewalToStore(db: RenewalRow): Renewal {
     currentAgreementLink: db.current_agreement_link ?? undefined,
     autoRenew: db.auto_renew ?? false, product: db.product ?? undefined,
     csNotes: db.cs_notes ?? undefined, nextStep: db.next_step ?? undefined,
-    healthStatus: db.health_status ?? 'green',
+    healthStatus: (db.health_status ?? 'green') as Renewal['healthStatus'],
     churnRisk: (db.churn_risk as ChurnRisk) ?? 'low',
     linkedOpportunityId: db.linked_opportunity_id ?? undefined,
     riskReason: db.risk_reason ?? undefined,
