@@ -367,6 +367,11 @@ describe('Import Wizard', () => {
     const mod = await import('@/components/import/ImportModal');
     expect(typeof mod.ImportModal).toBe('function');
   });
+
+  it('exports ClaudeImportModal component', async () => {
+    const mod = await import('@/components/import/ClaudeImportModal');
+    expect(typeof mod.ClaudeImportModal).toBe('function');
+  });
 });
 
 // ─── Streaming mock integration ────────────────────────
@@ -456,6 +461,40 @@ describe('Invoke migration integrity', () => {
       const content = fs.readFileSync(path.join(srcDir, file), 'utf8');
       const rawFetches = (content.match(/VITE_SUPABASE_URL.*functions/g) || []).length;
       expect(rawFetches).toBe(0);
+    }
+  });
+
+  it('no legacy apiClient.ts exists', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const apiClientPath = path.resolve(__dirname, '..', 'lib', 'apiClient.ts');
+    expect(fs.existsSync(apiClientPath)).toBe(false);
+  });
+});
+
+// ─── Data-testid coverage ─────────────────────────────
+describe('Page test ID coverage', () => {
+  it('all key pages have data-testid in source', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const pagesDir = path.resolve(__dirname, '..', 'pages');
+
+    const expected: Record<string, string> = {
+      'Dashboard.tsx': 'dashboard-page',
+      'Settings.tsx': 'settings-page',
+      'Diagnostics.tsx': 'diagnostics-page',
+      'Auth.tsx': 'auth-page',
+      'Renewals.tsx': 'renewals-page',
+      'Quota.tsx': 'quota-page',
+      'Trends.tsx': 'trends-page',
+      'Coach.tsx': 'coach-page',
+      'Tasks.tsx': 'tasks-page',
+      'PrepHub.tsx': 'prephub-page',
+    };
+
+    for (const [file, testId] of Object.entries(expected)) {
+      const content = fs.readFileSync(path.join(pagesDir, file), 'utf8');
+      expect(content).toContain(`data-testid="${testId}"`);
     }
   });
 });

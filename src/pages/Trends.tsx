@@ -61,7 +61,7 @@ export default function Trends() {
 
   return (
     <Layout>
-      <div className="p-4 lg:p-6 space-y-6 max-w-7xl mx-auto">
+      <div data-testid="trends-page" className="p-4 lg:p-6 space-y-6 max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
