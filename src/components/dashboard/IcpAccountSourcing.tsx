@@ -242,7 +242,7 @@ export function IcpAccountSourcing() {
                                 </div>
                               ))}
                             </div>
-                          )}
+                          ) : null}
                         </div>
                         {account.status === 'new' && (
                           <div className="flex flex-col gap-1">
