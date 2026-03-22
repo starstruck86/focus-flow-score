@@ -123,7 +123,7 @@ export function WeeklyBattlePlanCard() {
           </div>
         ) : (
           <div className="space-y-2">
-            {moves.map((move: any, idx: number) => {
+            {moves.map((move, idx: number) => {
               const isDone = completed.includes(idx);
               return (
                 <div

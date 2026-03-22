@@ -59,9 +59,15 @@ export function CalendarScreenshotDrop({ date, onEventsConfirmed }: CalendarScre
 
       if (error) throw error;
 
-      const events = (data.events || []).map((e: any) => ({
-        ...e,
-        confirmed: true, // all confirmed by default
+      const events: ExtractedEvent[] = (data.events || []).map((e) => ({
+        title: e.title || '',
+        start_time: e.start_time || '',
+        end_time: e.end_time || '',
+        category: e.category || 'work_meeting',
+        is_personal_block: e.is_personal_block || false,
+        family_member: e.family_member,
+        notes: e.notes,
+        confirmed: true,
       }));
 
       setExtractedEvents(events);

@@ -33,7 +33,7 @@ export function EnrichmentTimeline({ enrichmentEvidence, triggerEvents, lastEnri
     // Add trigger events
     if (triggerEvents && Array.isArray(triggerEvents)) {
       for (const event of triggerEvents) {
-        const typeMap: Record<string, { icon: any; color: string }> = {
+        const typeMap: Record<string, { icon: LucideIcon; color: string }> = {
           executive_hire: { icon: UserPlus, color: 'text-amber-500' },
           job_posting: { icon: TrendingUp, color: 'text-blue-500' },
           company_news: { icon: Newspaper, color: 'text-emerald-500' },

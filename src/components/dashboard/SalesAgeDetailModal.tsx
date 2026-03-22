@@ -11,7 +11,7 @@ interface SalesAgeDetailModalProps {
   onOpenChange: (open: boolean) => void;
   salesAge: SalesAgeResult | undefined;
   recommendations: ActionRecommendation[];
-  snapshotHistory: any[];
+  snapshotHistory: SalesAgeSnapshot[];
 }
 
 function DriverRow({ driver }: { driver: SalesAgeResult['qpi']['drivers'][0] }) {

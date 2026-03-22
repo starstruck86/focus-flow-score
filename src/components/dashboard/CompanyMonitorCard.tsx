@@ -200,7 +200,7 @@ export function CompanyMonitorCard({ motionFilter }: CompanyMonitorCardProps = {
           ) : (
             <ScrollArea className="max-h-[400px]">
               <div className="space-y-2">
-                {(digestItems || []).map((item: any) => {
+                {(digestItems || []).map((item) => {
                   const Icon = CATEGORY_ICONS[item.category] || Newspaper;
                   const colorClass = CATEGORY_COLORS[item.category] || 'bg-muted text-muted-foreground';
                   return (

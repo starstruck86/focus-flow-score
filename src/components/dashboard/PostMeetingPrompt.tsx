@@ -256,7 +256,7 @@ const PostMeetingCard = React.forwardRef<HTMLDivElement, {
           setExtracting(false);
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error('Failed to save transcript', { description: err.message });
     } finally {
       setSaving(false);

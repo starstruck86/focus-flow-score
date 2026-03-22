@@ -321,7 +321,7 @@ function MeetingCard({ meeting, isExpanded, onToggle, onDismiss, onAddPrep }: {
             {accountResources && accountResources.length > 0 && (
               <div className="space-y-1">
                 <p className="text-[11px] font-semibold text-muted-foreground">📎 Templates & Resources</p>
-                {accountResources.map((r: any) => (
+                {accountResources.map((r) => (
                   <a
                     key={r.id}
                     href={r.url}

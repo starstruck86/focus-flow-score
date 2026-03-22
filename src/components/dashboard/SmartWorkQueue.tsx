@@ -211,9 +211,9 @@ export function SmartWorkQueue() {
       linkedOpportunityId: item.type === 'opportunity' ? item.id : undefined,
       notes: item.reason,
       motion: workstream === 'renewals' ? 'renewal' : 'new-logo',
-      linkedRecordType: item.type as any,
+      linkedRecordType: item.type as 'account' | 'opportunity' | 'renewal',
       linkedRecordId: item.id,
-    } as any);
+    });
 
     setAddedTasks(prev => new Set(prev).add(item.id));
     toast.success('Task added', { description: `${item.action}: ${item.name}` });

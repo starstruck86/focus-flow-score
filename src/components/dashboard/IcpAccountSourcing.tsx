@@ -225,12 +225,12 @@ export function IcpAccountSourcing() {
                               <span className="text-[11px] text-primary">{account.trigger_signal}</span>
                             </div>
                           )}
-                          {(account.suggested_contacts as any[])?.length > 0 && (
+                          {(account.suggested_contacts as IcpSuggestedContact[] | null)?.length ? (
                             <div className="mt-2 space-y-1">
                               <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                                 <Users className="h-2.5 w-2.5" /> Key contacts:
                               </div>
-                              {(account.suggested_contacts as any[]).slice(0, 3).map((c: any, i: number) => (
+                              {(account.suggested_contacts as IcpSuggestedContact[]).slice(0, 3).map((c, i: number) => (
                                 <div key={i} className="flex items-center gap-1.5 text-[11px]">
                                   <span className="font-medium">{c.name}</span>
                                   <span className="text-muted-foreground">— {c.title}</span>

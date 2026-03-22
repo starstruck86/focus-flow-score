@@ -34,14 +34,14 @@ export function PipelineHygieneCard() {
     );
   }
 
-  const issues = (data?.issues as any[]) || [];
+  const issues = (data?.issues as PipelineHygieneIssue[]) || [];
   const healthScore = data?.health_score ?? 100;
-  const summary = (data?.summary as any) || {};
+  const summary = (data?.summary as PipelineHygieneSummary) || {};
   const criticalIssues = issues.filter(i => i.severity === 'critical');
   const warningIssues = issues.filter(i => i.severity === 'warning');
 
   // Navigate to the appropriate page when clicking an issue
-  const handleIssueClick = (issue: any) => {
+  const handleIssueClick = (issue: PipelineHygieneIssue) => {
     if (issue.record_type === 'opportunity') {
       navigate('/quota');
     } else if (issue.record_type === 'renewal') {
