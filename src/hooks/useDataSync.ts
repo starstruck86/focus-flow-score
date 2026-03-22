@@ -138,7 +138,7 @@ function dbOpportunityToStore(db: OpportunityRow): Opportunity {
     churnRisk: (db.churn_risk ?? undefined) as Opportunity['churnRisk'], closeDate: db.close_date ?? undefined,
     nextStep: db.next_step ?? undefined, nextStepDate: db.next_step_date ?? undefined,
     lastTouchDate: db.last_touch_date ?? undefined, notes: db.notes ?? undefined,
-    activityLog: db.activity_log as Opportunity['activityLog'] ?? [], createdAt: db.created_at,
+    activityLog: (db.activity_log ?? []) as unknown as Opportunity['activityLog'], createdAt: db.created_at,
     updatedAt: db.updated_at, dealType: (db.deal_type ?? undefined) as Opportunity['dealType'],
     paymentTerms: (db.payment_terms ?? undefined) as Opportunity['paymentTerms'], termMonths: db.term_months ?? undefined,
     priorContractArr: db.prior_contract_arr ?? undefined,
