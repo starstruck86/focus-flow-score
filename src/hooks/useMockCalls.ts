@@ -27,7 +27,7 @@ export interface MockCallSession {
   ended_at: string | null;
 }
 
-const MOCK_CALL_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mock-call`;
+// URL no longer needed — streamingFetch builds it from functionName
 
 export function useMockCallSessions() {
   const { user } = useAuth();
