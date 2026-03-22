@@ -1,4 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
+import { normalizeError, recordError } from '@/lib/appError';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
 
