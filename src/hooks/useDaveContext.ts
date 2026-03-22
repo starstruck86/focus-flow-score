@@ -74,6 +74,7 @@ export function useDaveContext() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-trace-id': traceId,
         apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         Authorization: `Bearer ${session.access_token}`,
       },
