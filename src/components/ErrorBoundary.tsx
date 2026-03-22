@@ -1,5 +1,6 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { useStore } from '@/store/useStore';
+import { normalizeError, recordError } from '@/lib/appError';
 
 interface Props {
   children: ReactNode;
