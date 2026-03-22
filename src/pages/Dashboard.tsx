@@ -108,18 +108,19 @@ function ActivityPulse({ entry }: { entry: any }) {
 
 // --- DEFAULT WIDGET DEFINITIONS ---
 const DASHBOARD_WIDGETS: WidgetConfig[] = [
-  { id: 'daily-time-blocks', label: 'Daily Game Plan', visible: true, order: 0 },
-  { id: 'post-meeting', label: 'Post-Meeting Log', visible: true, order: 1 },
-  { id: 'meeting-prep', label: 'Upcoming Client Meetings', visible: true, order: 2 },
-  { id: 'research-checklist', label: 'Research Checklist', visible: true, order: 3 },
-  { id: 'coaching-feed', label: 'AI Coach', visible: true, order: 4 },
-  { id: 'deal-risk-alerts', label: 'Deal Risk Alerts', visible: true, order: 5 },
-  { id: 'progress-tabs', label: 'Today / Week-to-Date', visible: true, order: 6 },
-  { id: 'smart-work-queue', label: 'Daily Action Plan', visible: true, order: 7 },
-  { id: 'pclub-math', label: 'P-Club Math', visible: true, order: 8 },
-  { id: 'weekly-battle-plan', label: 'Weekly Battle Plan', visible: true, order: 9 },
-  { id: 'journal', label: 'Daily Scorecard', visible: true, order: 10 },
-  { id: 'commission-pacing', label: 'Commission Pacing', visible: true, order: 11 },
+  { id: 'command-brief', label: 'Command Brief', visible: true, order: 0 },
+  { id: 'daily-time-blocks', label: 'Daily Game Plan', visible: true, order: 1 },
+  { id: 'post-meeting', label: 'Post-Meeting Log', visible: true, order: 2 },
+  { id: 'meeting-prep', label: 'Upcoming Client Meetings', visible: true, order: 3 },
+  { id: 'research-checklist', label: 'Research Checklist', visible: true, order: 4 },
+  { id: 'coaching-feed', label: 'AI Coach', visible: true, order: 5 },
+  { id: 'deal-risk-alerts', label: 'Deal Risk Alerts', visible: true, order: 6 },
+  { id: 'progress-tabs', label: 'Today / Week-to-Date', visible: true, order: 7 },
+  { id: 'smart-work-queue', label: 'Daily Action Plan', visible: true, order: 8 },
+  { id: 'pclub-math', label: 'P-Club Math', visible: true, order: 9 },
+  { id: 'weekly-battle-plan', label: 'Weekly Battle Plan', visible: true, order: 10 },
+  { id: 'journal', label: 'Daily Scorecard', visible: true, order: 11 },
+  { id: 'commission-pacing', label: 'Commission Pacing', visible: true, order: 12 },
 ];
 
 
