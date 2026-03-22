@@ -1332,7 +1332,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           />
         </div>
         <Select value={savedView} onValueChange={(v) => setSavedView(v as SavedView)}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-48" data-testid="opp-filter-view">
             <Filter className="h-4 w-4 mr-2" />
             <SelectValue placeholder="All Opportunities" />
           </SelectTrigger>

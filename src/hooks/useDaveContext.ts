@@ -1,11 +1,12 @@
 import { useCallback, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { generateTraceId, normalizeError, recordError } from '@/lib/appError';
 import { createLogger } from '@/lib/logger';
 
 const logger = createLogger('DaveContext');
-const TOKEN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/dave-conversation-token`;
+// URL no longer needed — authenticatedFetch builds it from functionName
 const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
 const CONCURRENCY_COOLDOWN_MS = 30_000; // 30s cooldown after concurrency limit
 
@@ -70,19 +71,14 @@ export function useDaveContext() {
 
     const tzOffsetHours = new Date().getTimezoneOffset() / -60;
 
-    const resp = await fetch(TOKEN_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-trace-id': traceId,
-        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({
+    const resp = await authenticatedFetch({
+      functionName: 'dave-conversation-token',
+      body: {
         tzOffsetHours,
         currentPage: locationRef.current,
         conversationHistory: conversationHistory || '',
-      }),
+      },
+      traceId,
     });
 
     if (!resp.ok) {

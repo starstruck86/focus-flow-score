@@ -118,15 +118,10 @@ function DaveHealthSection() {
         return;
       }
 
-      const TOKEN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/dave-conversation-token`;
-      const resp = await fetch(TOKEN_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ tzOffsetHours: new Date().getTimezoneOffset() / -60, currentPage: '/', conversationHistory: '' }),
+      const { authenticatedFetch } = await import('@/lib/authenticatedFetch');
+      const resp = await authenticatedFetch({
+        functionName: 'dave-conversation-token',
+        body: { tzOffsetHours: new Date().getTimezoneOffset() / -60, currentPage: '/', conversationHistory: '' },
       });
 
       if (!resp.ok) {

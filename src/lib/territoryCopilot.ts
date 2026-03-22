@@ -1,15 +1,8 @@
 // Territory Copilot v4 - streaming chat client with auth, modes, frameworks, and write-back actions
-import { supabase } from '@/integrations/supabase/client';
+import { streamingFetch } from '@/lib/streamingFetch';
 
 export type CopilotMsg = { role: "user" | "assistant"; content: string };
 export type CopilotMode = "quick" | "deep" | "meeting" | "deal-strategy" | "recap-email" | "resource-qa";
-
-const COPILOT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/territory-copilot`;
-
-async function getAuthToken(): Promise<string | null> {
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token || null;
-}
 
 export async function streamCopilot({
   messages,
@@ -32,99 +25,28 @@ export async function streamCopilot({
   onAccountUpdated?: () => void;
   signal?: AbortSignal;
 }) {
-  try {
-    const token = await getAuthToken();
-    if (!token) {
-      onError("Not authenticated. Please sign in first.");
-      return;
-    }
+  let detectedUpdate = false;
 
-    const resp = await fetch(COPILOT_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      },
-      body: JSON.stringify({ messages, mode, accountId, pageContext }),
+  await streamingFetch(
+    {
+      functionName: 'territory-copilot',
+      body: { messages, mode, accountId, pageContext },
       signal,
-    });
-
-    if (!resp.ok) {
-      const data = await resp.json().catch(() => ({ error: "Request failed" }));
-      onError(data.error || `Error ${resp.status}`);
-      return;
-    }
-
-    if (!resp.body) {
-      onError("No response body");
-      return;
-    }
-
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let detectedUpdate = false;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      let newlineIdx: number;
-      while ((newlineIdx = buffer.indexOf("\n")) !== -1) {
-        let line = buffer.slice(0, newlineIdx);
-        buffer = buffer.slice(newlineIdx + 1);
-
-        if (line.endsWith("\r")) line = line.slice(0, -1);
-        if (line.startsWith(":") || line.trim() === "") continue;
-        if (!line.startsWith("data: ")) continue;
-
-        const jsonStr = line.slice(6).trim();
-        if (jsonStr === "[DONE]") {
-          if (detectedUpdate && onAccountUpdated) onAccountUpdated();
-          onDone();
-          return;
+    },
+    {
+      onDelta: (content) => {
+        onDelta(content);
+        if (content.includes("🔄 **Data Updates Applied**") || content.includes("✅ Updated")) {
+          detectedUpdate = true;
         }
-
-        try {
-          const parsed = JSON.parse(jsonStr);
-          const content = parsed.choices?.[0]?.delta?.content;
-          if (content) {
-            onDelta(content);
-            if (content.includes("🔄 **Data Updates Applied**") || content.includes("✅ Updated")) {
-              detectedUpdate = true;
-            }
-          }
-        } catch {
-          buffer = line + "\n" + buffer;
-          break;
-        }
-      }
-    }
-
-    // Flush
-    if (buffer.trim()) {
-      for (let raw of buffer.split("\n")) {
-        if (!raw) continue;
-        if (raw.endsWith("\r")) raw = raw.slice(0, -1);
-        if (!raw.startsWith("data: ")) continue;
-        const jsonStr = raw.slice(6).trim();
-        if (jsonStr === "[DONE]") continue;
-        try {
-          const parsed = JSON.parse(jsonStr);
-          const content = parsed.choices?.[0]?.delta?.content;
-          if (content) onDelta(content);
-        } catch { /* ignore */ }
-      }
-    }
-
-    if (detectedUpdate && onAccountUpdated) onAccountUpdated();
-    onDone();
-  } catch (e: any) {
-    if (e.name === "AbortError") return;
-    onError(e.message || "Connection failed");
-  }
+      },
+      onDone: () => {
+        if (detectedUpdate && onAccountUpdated) onAccountUpdated();
+        onDone();
+      },
+      onError: (msg) => onError(msg),
+    },
+  );
 }
 
 export const SUGGESTED_QUESTIONS: { text: string; mode: CopilotMode }[] = [
