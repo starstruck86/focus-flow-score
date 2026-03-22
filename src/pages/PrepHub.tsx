@@ -49,7 +49,7 @@ export default function PrepHub() {
 
   return (
     <Layout>
-      <div className="p-4 space-y-4 max-w-4xl mx-auto">
+      <div data-testid="prephub-page" className="p-4 space-y-4 max-w-4xl mx-auto">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-foreground">Prep Hub</h1>

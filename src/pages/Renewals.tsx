@@ -934,7 +934,7 @@ export default function Renewals() {
 
   return (
     <Layout>
-      <div className="p-4 sm:p-6 lg:p-8">
+      <div data-testid="renewals-page" className="p-4 sm:p-6 lg:p-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div>

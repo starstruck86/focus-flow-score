@@ -100,7 +100,7 @@ export default function Tasks() {
 
   return (
     <Layout>
-      <div className="p-4 lg:p-6 max-w-4xl mx-auto">
+      <div data-testid="tasks-page" className="p-4 lg:p-6 max-w-4xl mx-auto">
         <MomentumHeader workstreamFilter={filterWorkstream} />
 
         {/* Title row */}
