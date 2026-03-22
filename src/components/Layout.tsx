@@ -71,6 +71,7 @@ const DAVE_CHANNEL_NAME = 'dave-session';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
+  const { isReviewMode, guardDestructive } = useReviewMode();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { setPageContext } = useCopilot();
