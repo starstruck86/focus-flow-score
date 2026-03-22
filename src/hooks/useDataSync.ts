@@ -216,8 +216,8 @@ function dbContactToStore(db: ContactRow): Contact {
     email: db.email ?? undefined, linkedInUrl: db.linkedin_url ?? undefined,
     salesforceLink: db.salesforce_link ?? undefined,
     salesforceId: db.salesforce_id ?? undefined,
-    status: db.status ?? 'target', lastTouchDate: db.last_touch_date ?? undefined,
-    preferredChannel: db.preferred_channel ?? undefined,
+    status: (db.status ?? 'target') as Contact['status'], lastTouchDate: db.last_touch_date ?? undefined,
+    preferredChannel: (db.preferred_channel ?? undefined) as Contact['preferredChannel'],
     notes: db.notes ?? undefined,
     createdAt: db.created_at, updatedAt: db.updated_at,
   };
