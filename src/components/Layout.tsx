@@ -261,7 +261,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
         <GlobalSearch className="flex-1 min-w-0" />
         <div className="flex items-center gap-1 shrink-0">
-          <VoiceCommandButton onOpenDave={handleOpenDave} disabled={isFetchingDaveSession} />
+          <VoiceCommandButton data-testid="dave-voice-btn" onOpenDave={handleOpenDave} disabled={isFetchingDaveSession} />
           <TerritoryCopilot />
           <Tooltip>
             <TooltipTrigger asChild>
