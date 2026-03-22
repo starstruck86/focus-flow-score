@@ -5,12 +5,12 @@ export async function readResource(ctx: ToolContext, params: { title: string }):
   const userId = await ctx.getUserId();
   if (!userId) return 'Not authenticated';
 
-  const { data: resources } = await supabase.from('resources').select('id, title, content, type').eq('user_id', userId).ilike('title', `%${params.title}%`).limit(1);
+  const { data: resources } = await supabase.from('resources').select('id, title, content, resource_type').eq('user_id', userId).ilike('title', `%${params.title}%`).limit(1);
   if (!resources?.length) return `Resource matching "${params.title}" not found`;
 
-  const r = resources[0] as { title: string; content: string | null; type: string | null };
+  const r = resources[0];
   const content = (r.content || '').substring(0, 3000);
-  return `📚 "${r.title}" (${r.type || 'document'}):\n\n${content}${(r.content || '').length > 3000 ? '\n\n... [truncated]' : ''}`;
+  return `📚 "${r.title}" (${r.resource_type || 'document'}):\n\n${content}${(r.content || '').length > 3000 ? '\n\n... [truncated]' : ''}`;
 }
 
 export async function searchResources(ctx: ToolContext, params: { query: string }): Promise<string> {
