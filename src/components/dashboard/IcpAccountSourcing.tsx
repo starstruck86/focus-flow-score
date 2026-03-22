@@ -192,7 +192,7 @@ export function IcpAccountSourcing() {
           <>
             <ScrollArea className="max-h-[400px]">
               <div className="space-y-2">
-                {latestBatch!.map((account: any) => {
+                {latestBatch!.map((account) => {
                   const isPromoting = promotingIds.has(account.id);
                   return (
                     <div
