@@ -348,7 +348,7 @@ export function DailyTimeBlocks() {
     queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks });
 
     await supabase
-      .from('daily_time_blocks' as any)
+      .from('daily_time_blocks' as 'daily_time_blocks')
       .update({ blocks })
       .eq('id', plan.id);
   }, [plan, todayStr, queryClient]);
