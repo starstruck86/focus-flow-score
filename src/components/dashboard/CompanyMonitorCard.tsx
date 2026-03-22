@@ -86,8 +86,9 @@ export function CompanyMonitorCard({ motionFilter }: CompanyMonitorCardProps = {
   const scanNow = useMutation({
     mutationFn: async () => {
       setIsScanning(true);
-      const { data, error } = await supabase.functions.invoke('daily-digest', {
+      const { data, error } = await trackedInvoke('daily-digest', {
         body: { userId: user!.id },
+        componentName: 'CompanyMonitorCard',
       });
       if (error) throw new Error(error.message);
       return data;
