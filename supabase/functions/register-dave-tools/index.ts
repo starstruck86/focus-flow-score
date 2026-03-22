@@ -157,6 +157,15 @@ const DAVE_TOOLS: ToolDef[] = [
   { name: "get_whoop_status", description: "Get the user's WHOOP biometric data — recovery, sleep, and strain scores with coaching context", parameters: {} },
   { name: "sync_whoop", description: "Trigger a manual WHOOP data sync to fetch the latest biometric data", parameters: {} },
   { name: "read_resource_digest", description: "Read the operationalized intelligence digest of a resource — takeaways, use cases, grading criteria. Use when the user asks about a framework, playbook, or training material's key points.", parameters: { title: str("The resource title or partial match to find") }, required: ["title"] },
+
+  // ═══════════════════════════════════════════════════════════════
+  // JARVIS LAYER — Execution Loop Tools
+  // ═══════════════════════════════════════════════════════════════
+  { name: "operating_state", description: "Get the current operating state — ONE sentence describing overall system health. Use this to open conversations or set context.", parameters: {} },
+  { name: "primary_action", description: "Get the single highest-ROI action right now. Returns exactly ONE action with why it matters and the next step. Use this for the SELECT step of the execution loop.", parameters: {} },
+  { name: "complete_action", description: "Mark the current primary action as completed and advance to the next one. Use after the user confirms they finished the action.", parameters: { actionId: str("The action ID that was completed") }, required: ["actionId"] },
+  { name: "defer_action", description: "Defer the current primary action — it will be deprioritized and the next action surfaces. Use when the user says 'not now' or 'skip'.", parameters: { actionId: str("The action ID to defer"), reason: str("Optional reason for deferring") }, required: ["actionId"] },
+  { name: "execution_brief", description: "Get a complete execution brief combining operating state + primary action + context. This is the main entry point for the Jarvis execution loop. Dave should use this at the start of conversations.", parameters: {} },
 ];
 
 serve(async (req) => {

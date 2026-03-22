@@ -1,0 +1,138 @@
+// Command Brief — the Jarvis layer UI surface
+// ONE state sentence + ONE primary action. No noise.
+
+import { motion, AnimatePresence } from 'framer-motion';
+import { Zap, ChevronRight, Check, X, ArrowRight } from 'lucide-react';
+import { useOperatingState } from '@/hooks/useOperatingState';
+import { usePrimaryAction } from '@/hooks/usePrimaryAction';
+import { useActionMemory } from '@/hooks/useActionMemory';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
+import { useState } from 'react';
+
+const BAND_STYLES: Record<string, string> = {
+  executing: 'border-status-green/30 bg-status-green/5',
+  'on-pace': 'border-primary/20 bg-primary/5',
+  drifting: 'border-status-yellow/30 bg-status-yellow/5',
+  reactive: 'border-destructive/30 bg-destructive/5',
+};
+
+const BAND_DOT: Record<string, string> = {
+  executing: 'bg-status-green',
+  'on-pace': 'bg-primary',
+  drifting: 'bg-status-yellow',
+  reactive: 'bg-destructive',
+};
+
+export function CommandBrief() {
+  const { sentence, band } = useOperatingState();
+  const primaryAction = usePrimaryAction();
+  const { recordAction } = useActionMemory();
+  const [dismissed, setDismissed] = useState(false);
+
+  const handleComplete = () => {
+    if (primaryAction) {
+      recordAction(primaryAction.id, 'completed', primaryAction.entityType, primaryAction.entityId);
+      toast.success('Action completed', { description: primaryAction.action });
+      setDismissed(true);
+      setTimeout(() => setDismissed(false), 3000);
+    }
+  };
+
+  const handleDefer = () => {
+    if (primaryAction) {
+      recordAction(primaryAction.id, 'deferred', primaryAction.entityType, primaryAction.entityId);
+      toast('Deferred — will resurface later');
+      setDismissed(true);
+      setTimeout(() => setDismissed(false), 3000);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={cn(
+        'rounded-xl border p-4 space-y-3',
+        BAND_STYLES[band] || BAND_STYLES['on-pace']
+      )}
+    >
+      {/* Operating State — one line */}
+      <div className="flex items-center gap-2">
+        <div className={cn('w-2 h-2 rounded-full shrink-0 animate-pulse', BAND_DOT[band])} />
+        <span className="text-sm font-medium text-foreground">{sentence}</span>
+      </div>
+
+      {/* Primary Action — one action only */}
+      <AnimatePresence mode="wait">
+        {primaryAction && !dismissed ? (
+          <motion.div
+            key={primaryAction.id}
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 8 }}
+            className="bg-card/80 rounded-lg border border-border/50 p-3 space-y-2"
+          >
+            <div className="flex items-start gap-2">
+              <Zap className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-foreground leading-tight">
+                  {primaryAction.action}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {primaryAction.why}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <ArrowRight className="h-3 w-3" />
+              <span>{primaryAction.nextStep}</span>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button
+                size="sm"
+                variant="default"
+                className="h-7 text-xs gap-1"
+                onClick={handleComplete}
+              >
+                <Check className="h-3 w-3" />
+                Done
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs gap-1 text-muted-foreground"
+                onClick={handleDefer}
+              >
+                <X className="h-3 w-3" />
+                Not now
+              </Button>
+            </div>
+          </motion.div>
+        ) : dismissed ? (
+          <motion.div
+            key="dismissed"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="text-xs text-muted-foreground text-center py-2"
+          >
+            ✓ Moving to next...
+          </motion.div>
+        ) : (
+          <motion.div
+            key="clear"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-xs text-muted-foreground text-center py-2"
+          >
+            ✅ No urgent actions — execute at will.
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}

@@ -2610,6 +2610,186 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
 
       return result;
     },
+
+    // ═══════════════════════════════════════════════════════════════
+    // JARVIS LAYER — Execution Loop Tools
+    // ═══════════════════════════════════════════════════════════════
+
+    operating_state: async () => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+      const fourteenDaysAgo = new Date(now.getTime() - 14 * 86400000).toISOString().split('T')[0];
+
+      const [tasksRes, oppsRes, renewalsRes] = await Promise.all([
+        supabase.from('tasks').select('id, status, due_date, priority')
+          .eq('user_id', userId).not('status', 'in', '("done","dropped")'),
+        supabase.from('opportunities').select('id, status, next_step, next_step_date, last_touch_date, arr')
+          .eq('user_id', userId).eq('status', 'active'),
+        supabase.from('renewals').select('id, churn_risk, renewal_due, next_step, arr')
+          .eq('user_id', userId),
+      ]);
+
+      const tasks = (tasksRes.data || []) as any[];
+      const opps = (oppsRes.data || []) as any[];
+      const renewals = (renewalsRes.data || []) as any[];
+
+      const overdue = tasks.filter(t => t.due_date && t.due_date < todayStr).length;
+      const noNextStep = opps.filter(o => !o.next_step && !o.next_step_date).length;
+      const staleDeals = opps.filter(o => o.last_touch_date && o.last_touch_date < fourteenDaysAgo).length;
+      const atRisk = renewals.filter(r => {
+        const days = Math.ceil((new Date(r.renewal_due).getTime() - now.getTime()) / 86400000);
+        return days <= 30 && (r.churn_risk === 'high' || r.churn_risk === 'certain');
+      }).length;
+
+      let score = 0;
+      if (opps.length > 0) score += 2;
+      if (overdue === 0) score += 2;
+      if (noNextStep === 0) score += 2;
+      if (staleDeals === 0) score += 1;
+      if (atRisk === 0) score += 1;
+      if (overdue >= 5) score -= 3;
+      if (noNextStep >= 3) score -= 2;
+      if (staleDeals >= 3) score -= 2;
+
+      if (score >= 7) return `🟢 On pace — ${opps.length} active deals, no open loops.`;
+      if (score >= 4) {
+        const issue = noNextStep > 0 ? `${noNextStep} deals missing next steps` : `${overdue} overdue tasks`;
+        return `🟡 Slight drift — ${issue}.`;
+      }
+      if (score >= 1) {
+        const issues = [];
+        if (overdue > 0) issues.push(`${overdue} overdue`);
+        if (staleDeals > 0) issues.push(`${staleDeals} stale deals`);
+        return `🟠 Drifting — ${issues.join(', ')}.`;
+      }
+      return `🔴 Reactive — follow-ups lagging, territory going cold.`;
+    },
+
+    primary_action: async () => {
+      const userId = await getUserId();
+      if (!userId) return 'Not authenticated';
+
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+
+      const [tasksRes, oppsRes, renewalsRes, calendarRes] = await Promise.all([
+        supabase.from('tasks').select('id, title, due_date, priority, linked_account_id')
+          .eq('user_id', userId).not('status', 'in', '("done","dropped")')
+          .lte('due_date', todayStr).order('priority').limit(10),
+        supabase.from('opportunities').select('id, name, arr, next_step, next_step_date, last_touch_date, status')
+          .eq('user_id', userId).eq('status', 'active').order('arr', { ascending: false }).limit(20),
+        supabase.from('renewals').select('id, account_name, arr, renewal_due, churn_risk, next_step')
+          .eq('user_id', userId).limit(20),
+        supabase.from('calendar_events').select('id, title, start_time')
+          .eq('user_id', userId)
+          .gte('start_time', now.toISOString())
+          .lte('start_time', new Date(now.getTime() + 2 * 3600000).toISOString())
+          .order('start_time').limit(3),
+      ]);
+
+      interface Candidate { id: string; action: string; why: string; nextStep: string; score: number }
+      const candidates: Candidate[] = [];
+
+      // Upcoming meeting prep
+      for (const e of (calendarRes.data || []) as any[]) {
+        const mins = Math.max(0, (new Date(e.start_time).getTime() - now.getTime()) / 60000);
+        candidates.push({
+          id: `meeting-${e.id}`,
+          action: `Prep for "${e.title}" (${Math.round(mins)} min away)`,
+          why: 'Upcoming meeting needs preparation',
+          nextStep: 'Review account context and set your call goals.',
+          score: mins < 30 ? 250 : 150,
+        });
+      }
+
+      // At-risk renewals
+      for (const r of (renewalsRes.data || []) as any[]) {
+        const days = Math.ceil((new Date(r.renewal_due).getTime() - now.getTime()) / 86400000);
+        if (days <= 30 && (r.churn_risk === 'high' || r.churn_risk === 'certain')) {
+          candidates.push({
+            id: `renewal-${r.id}`,
+            action: `Address renewal risk: ${r.account_name}`,
+            why: `$${((r.arr || 0) / 1000).toFixed(0)}k renewal in ${days} days, ${r.churn_risk} risk`,
+            nextStep: r.next_step || 'Schedule a risk mitigation call.',
+            score: 200 + (r.arr || 0) / 1000,
+          });
+        }
+      }
+
+      // Overdue tasks
+      for (const t of (tasksRes.data || []) as any[]) {
+        const pw = t.priority === 'P0' ? 5 : t.priority === 'P1' ? 4 : t.priority === 'P2' ? 2 : 1;
+        candidates.push({
+          id: `task-${t.id}`,
+          action: t.title,
+          why: `${t.priority} task overdue`,
+          nextStep: 'Complete or reschedule now.',
+          score: 60 * pw,
+        });
+      }
+
+      // Deals missing next step
+      for (const o of (oppsRes.data || []) as any[]) {
+        if (!o.next_step && !o.next_step_date) {
+          candidates.push({
+            id: `opp-ns-${o.id}`,
+            action: `Set next step on "${o.name}"`,
+            why: `$${((o.arr || 0) / 1000).toFixed(0)}k deal with no defined next step`,
+            nextStep: 'Define what advances this deal.',
+            score: 100 + (o.arr || 0) / 2000,
+          });
+        }
+      }
+
+      // Apply action memory adjustments
+      const memoryRaw = localStorage.getItem('jarvis-action-memory');
+      if (memoryRaw) {
+        try {
+          const records = JSON.parse(memoryRaw) as any[];
+          const weekAgo = Date.now() - 7 * 86400000;
+          for (const c of candidates) {
+            const ignores = records.filter((r: any) => r.actionId === c.id && r.outcome === 'ignored' && r.timestamp > weekAgo).length;
+            if (ignores >= 3) c.score *= 0.5;
+            else if (ignores >= 1) c.score *= 0.8;
+          }
+        } catch {}
+      }
+
+      candidates.sort((a, b) => b.score - a.score);
+      if (candidates.length === 0) return '✅ No urgent actions — you\'re clear to execute at will.';
+
+      const top = candidates[0];
+      return `🎯 ${top.action}\n\nWhy: ${top.why}\nNext step: ${top.nextStep}\n\n[action_id: ${top.id}]`;
+    },
+
+    complete_action: async (params: { actionId: string }) => {
+      try {
+        const records = JSON.parse(localStorage.getItem('jarvis-action-memory') || '[]');
+        records.push({ actionId: params.actionId, outcome: 'completed', timestamp: Date.now() });
+        localStorage.setItem('jarvis-action-memory', JSON.stringify(records.slice(-100)));
+      } catch {}
+      toast.success('Action completed — advancing to next.');
+      return 'Action marked complete. Ask me for the next primary action.';
+    },
+
+    defer_action: async (params: { actionId: string; reason?: string }) => {
+      try {
+        const records = JSON.parse(localStorage.getItem('jarvis-action-memory') || '[]');
+        records.push({ actionId: params.actionId, outcome: 'ignored', timestamp: Date.now() });
+        localStorage.setItem('jarvis-action-memory', JSON.stringify(records.slice(-100)));
+      } catch {}
+      return 'Deferred — this will be deprioritized. Ask for the next primary action.';
+    },
+
+    execution_brief: async () => {
+      // Compose operating_state + primary_action in one call
+      const stateResult = await allTools.operating_state();
+      const actionResult = await allTools.primary_action();
+      return `${stateResult}\n\n${actionResult}`;
+    },
   };
 
   // ── Wrap all DB-writing tools with toast + activity log ────────
@@ -2618,6 +2798,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
     'log_touch', 'move_deal', 'debrief', 'add_note', 'update_daily_metrics',
     'add_contact', 'create_opportunity', 'create_account', 'update_renewal',
     'complete_task', 'set_task_reminder', 'save_commitment',
+    'complete_action', 'defer_action',
   ];
 
   const today = new Date().toISOString().split('T')[0];
