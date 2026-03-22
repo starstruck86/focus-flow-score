@@ -86,43 +86,12 @@ export function AIGenerateDialog({ open, onOpenChange, onGenerated, accountConte
             accountContext,
           };
 
-      const resp = await authenticatedFetch({
+      const { text: result, error } = await streamToString({
         functionName: 'build-resource',
         body,
       });
 
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.error || `Error ${resp.status}`);
-      }
-
-      // Stream response
-      const reader = resp.body?.getReader();
-      if (!reader) throw new Error('No stream');
-      const decoder = new TextDecoder();
-      let result = '';
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        let newlineIdx;
-        while ((newlineIdx = buffer.indexOf('\n')) !== -1) {
-          let line = buffer.slice(0, newlineIdx);
-          buffer = buffer.slice(newlineIdx + 1);
-          if (line.endsWith('\r')) line = line.slice(0, -1);
-          if (!line.startsWith('data: ')) continue;
-          const json = line.slice(6).trim();
-          if (json === '[DONE]') break;
-          try {
-            const parsed = JSON.parse(json);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) result += content;
-          } catch { /* partial */ }
-        }
-      }
+      if (error) throw new Error(error);
 
       onGenerated(result);
       onOpenChange(false);

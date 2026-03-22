@@ -229,65 +229,23 @@ export function ContentBuilder() {
       if (templateContent) body.templateContent = templateContent;
       if (selectedResources.length) body.resourceIds = selectedResources;
 
-      // Use raw fetch for SSE streaming instead of supabase.functions.invoke
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/build-resource`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          },
-          body: JSON.stringify(body),
-        }
-      );
-
-      if (!response.ok) {
-        const errText = await response.text();
-        try {
-          const errJson = JSON.parse(errText);
-          throw new Error(errJson.error || `Error ${response.status}`);
-        } catch {
-          throw new Error(errText || `Error ${response.status}`);
-        }
-      }
-
-      // Parse SSE stream
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('No response body');
-      const decoder = new TextDecoder();
-      let buffer = '';
+      const { streamingFetch } = await import('@/lib/streamingFetch');
       let accumulated = '';
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6).trim();
-            if (data === '[DONE]') continue;
-            try {
-              const parsed = JSON.parse(data);
-              const token = parsed.choices?.[0]?.delta?.content;
-              if (token) {
-                accumulated += token;
-                setGeneratedContent(accumulated);
-              }
-            } catch {
-              // Skip malformed lines
-            }
-          }
-        }
-      }
+      const { traceId } = await streamingFetch(
+        {
+          functionName: 'build-resource',
+          body,
+        },
+        {
+          onDelta: (chunk) => {
+            accumulated += chunk;
+            setGeneratedContent(accumulated);
+          },
+          onDone: () => {},
+          onError: (msg) => { throw new Error(msg); },
+        },
+      );
 
       if (!accumulated) {
         setGeneratedContent('No content generated. Try adjusting your context or instructions.');
