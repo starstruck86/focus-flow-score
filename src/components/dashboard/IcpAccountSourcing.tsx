@@ -87,9 +87,9 @@ export function IcpAccountSourcing() {
       }).eq('id', account.id);
 
       // 3. Auto-add suggested contacts
-      const contacts = (account.suggested_contacts as any[]) || [];
+      const contacts: IcpSuggestedContact[] = (account.suggested_contacts as IcpSuggestedContact[]) || [];
       if (contacts.length > 0) {
-        const contactRows = contacts.map((c: any) => ({
+        const contactRows = contacts.map((c) => ({
           user_id: user.id,
           account_id: newAccount.id,
           name: c.name,
