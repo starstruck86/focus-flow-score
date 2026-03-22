@@ -28,26 +28,8 @@ import { useVoiceReminders } from '@/hooks/useVoiceReminders';
 import { useWakeWord } from '@/hooks/useWakeWord';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BottomNav, useActiveTabColor, COLOR_VAR } from '@/components/layout/BottomNav';
-import { Breadcrumbs } from '@/components/Breadcrumbs';
-import { SaveIndicator } from '@/components/SaveIndicator';
-import { cn } from '@/lib/utils';
-import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
-import { GlobalFAB } from '@/components/fab';
-import { GlobalSearch } from '@/components/GlobalSearch';
-import { TerritoryCopilot } from '@/components/TerritoryCopilot';
-import { VoiceCommandButton } from '@/components/VoiceCommandButton';
-import { DaveConversationMode } from '@/components/DaveConversationMode';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { BackToToday } from '@/components/BackToToday';
-import { useCopilot, type PageContext } from '@/contexts/CopilotContext';
-import { DayTimeline } from '@/components/tasks/DayTimeline';
-import { ActivityRings } from '@/components/ActivityRings';
-import { GlobalWeekStrip } from '@/components/GlobalWeekStrip';
-import { useDaveContext, DaveSessionError, type DaveSessionData } from '@/hooks/useDaveContext';
-import { useVoiceReminders } from '@/hooks/useVoiceReminders';
-import { useWakeWord } from '@/hooks/useWakeWord';
-import { motion, AnimatePresence } from 'framer-motion';
+
+
 
 const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
   '/': { page: 'dashboard', description: 'Today / Dashboard — daily plan, agenda, and key metrics' },
