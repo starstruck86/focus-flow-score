@@ -171,6 +171,8 @@ export default function Dashboard() {
   // Widget renderer
   const renderWidget = (widgetId: string) => {
     switch (widgetId) {
+      case 'command-brief':
+        return <CommandBrief />;
       case 'daily-time-blocks':
         return <DailyTimeBlocks />;
       case 'post-meeting':
