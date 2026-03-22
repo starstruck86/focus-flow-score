@@ -195,7 +195,7 @@ export function DailyTimeBlocks() {
         });
       if (fbError) throw fbError;
       const { error } = await supabase
-        .from('daily_time_blocks' as any)
+        .from('daily_time_blocks' as 'daily_time_blocks')
         .update({
           feedback_rating: feedbackRating,
           feedback_text: feedbackText,
