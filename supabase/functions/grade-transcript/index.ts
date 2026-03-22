@@ -9,6 +9,8 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  const traceId = req.headers.get("x-trace-id") || "no-trace";
+
   try {
     const authHeader = req.headers.get("Authorization");
     const supabase = createClient(
