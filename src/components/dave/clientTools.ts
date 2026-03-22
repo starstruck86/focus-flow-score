@@ -2546,27 +2546,15 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
       if (!userId) return 'Not authenticated';
 
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.access_token) return 'Not authenticated';
+        const { trackedInvoke } = await import('@/lib/trackedInvoke');
+        const { data: result, error } = await trackedInvoke<any>('whoop-sync', {
+          body: { action: 'sync' },
+        });
+        if (error) return `WHOOP sync failed: ${error.message}`;
+        if (result?.error) return `WHOOP sync failed: ${result.error}`;
 
-        const resp = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whoop-sync`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-              Authorization: `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({ action: 'sync' }),
-          },
-        );
-
-        const result = await resp.json();
-        if (result.error) return `WHOOP sync failed: ${result.error}`;
-
-        toast.success('WHOOP synced', { description: `${result.synced || 0} days of data updated` });
-        return `WHOOP sync complete — ${result.synced || 0} days of data synced.`;
+        toast.success('WHOOP synced', { description: `${result?.synced || 0} days of data updated` });
+        return `WHOOP sync complete — ${result?.synced || 0} days of data synced.`;
       } catch (err: any) {
         return `WHOOP sync error: ${err.message}`;
       }
