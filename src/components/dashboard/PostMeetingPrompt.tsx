@@ -1,6 +1,7 @@
 // Post-Meeting Prompt — surfaces after a calendar meeting ends to prompt next-step logging + transcript upload
 import React, { useState, useMemo, useRef } from 'react';
 import { trackedInvoke } from '@/lib/trackedInvoke';
+import type { ExtractedTask } from '@/types/dashboard';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, Clock, Building2, X, ExternalLink, ChevronRight, FileText, Upload, Sparkles, Loader2, ChevronDown } from 'lucide-react';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
