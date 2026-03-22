@@ -258,6 +258,10 @@ export default function Diagnostics() {
               ))}
             </div>
           </TabsContent>
+
+          <TabsContent value="jobs" className="mt-3 space-y-3">
+            <JobsPanel />
+          </TabsContent>
         </Tabs>
       </div>
     </Layout>
