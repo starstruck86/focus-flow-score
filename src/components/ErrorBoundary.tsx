@@ -22,6 +22,14 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    const appError = normalizeError({
+      error,
+      source: 'frontend',
+      componentName: 'ErrorBoundary',
+      route: window.location.pathname,
+      metadata: { componentStack: errorInfo.componentStack?.slice(0, 1000) },
+    });
+    recordError(appError);
     console.error('App crash:', error, errorInfo);
   }
 

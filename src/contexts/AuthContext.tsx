@@ -59,7 +59,8 @@ async function initializeUserData(userId: string) {
       });
     }
   } catch (error) {
-    console.error('Failed to initialize user data:', error);
+    // Silently log — user data init is non-critical
+    console.warn('Failed to initialize user data:', error);
   }
 }
 
