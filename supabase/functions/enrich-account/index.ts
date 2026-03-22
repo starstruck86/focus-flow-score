@@ -549,6 +549,8 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const traceId = req.headers.get('x-trace-id') || 'no-trace';
+
   try {
     const { url, accountName, accountId, industry } = await req.json();
 
@@ -792,10 +794,10 @@ Deno.serve(async (req) => {
       caseStudies: caseStudies || null,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error) {
-    console.error('Enrichment error:', error);
+    console.error(`[enrich-account] [${traceId}] error:`, error instanceof Error ? error.message : error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return new Response(
-      JSON.stringify({ success: false, error: `Enrichment failed: ${errorMessage}` }),
+      JSON.stringify({ success: false, error: `Enrichment failed: ${errorMessage}`, traceId }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

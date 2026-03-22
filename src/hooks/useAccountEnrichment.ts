@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import { autoInferHierarchy } from '@/lib/orgChartInference';
@@ -8,6 +9,7 @@ import type { Account } from '@/types';
 export interface EnrichmentResult {
   success: boolean;
   error?: string;
+  discoveredUrl?: string;
   signals?: {
     direct_ecommerce: boolean;
     email_sms_capture: boolean;
@@ -90,8 +92,9 @@ export function useAccountEnrichment() {
     setEnrichingIds((prev) => new Set(prev).add(account.id));
 
     try {
-      const { data, error } = await supabase.functions.invoke('enrich-account', {
+      const { data, error } = await trackedInvoke<EnrichmentResult>('enrich-account', {
         body: { url: account.website || '', accountName: account.name, accountId: account.id, industry: account.industry || '' },
+        componentName: 'useAccountEnrichment',
       });
 
       // If website was auto-discovered, update the account

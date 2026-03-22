@@ -1074,6 +1074,57 @@ export type Database = {
         }
         Relationships: []
       }
+      error_logs: {
+        Row: {
+          category: string
+          code: string | null
+          component_name: string | null
+          created_at: string
+          function_name: string | null
+          id: string
+          message: string
+          metadata: Json | null
+          raw_message: string | null
+          retryable: boolean | null
+          route: string | null
+          source: string
+          trace_id: string
+          user_id: string | null
+        }
+        Insert: {
+          category: string
+          code?: string | null
+          component_name?: string | null
+          created_at?: string
+          function_name?: string | null
+          id?: string
+          message: string
+          metadata?: Json | null
+          raw_message?: string | null
+          retryable?: boolean | null
+          route?: string | null
+          source?: string
+          trace_id: string
+          user_id?: string | null
+        }
+        Update: {
+          category?: string
+          code?: string | null
+          component_name?: string | null
+          created_at?: string
+          function_name?: string | null
+          id?: string
+          message?: string
+          metadata?: Json | null
+          raw_message?: string | null
+          retryable?: boolean | null
+          route?: string | null
+          source?: string
+          trace_id?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       holidays: {
         Row: {
           created_at: string

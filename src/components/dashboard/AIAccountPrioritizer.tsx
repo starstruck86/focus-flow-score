@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { supabase } from '@/integrations/supabase/client';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -42,10 +42,11 @@ export function AIAccountPrioritizer() {
   const fetchPriorities = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('prioritize-accounts');
-      if (error) throw error;
-      if (data?.error) {
-        toast.error(data.error);
+      const { data, error } = await trackedInvoke<PrioritizeResult>('prioritize-accounts', {
+        componentName: 'AIAccountPrioritizer',
+      });
+      if (error) {
+        toast.error(error.message);
         return;
       }
       setResult(data);

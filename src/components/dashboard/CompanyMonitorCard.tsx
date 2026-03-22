@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -86,8 +87,9 @@ export function CompanyMonitorCard({ motionFilter }: CompanyMonitorCardProps = {
   const scanNow = useMutation({
     mutationFn: async () => {
       setIsScanning(true);
-      const { data, error } = await supabase.functions.invoke('daily-digest', {
+      const { data, error } = await trackedInvoke<{ itemsCreated: number; accountsUpdated: number }>('daily-digest', {
         body: { userId: user!.id },
+        componentName: 'CompanyMonitorCard',
       });
       if (error) throw new Error(error.message);
       return data;

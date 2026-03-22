@@ -8,10 +8,12 @@ import { useState, useEffect, useSyncExternalStore } from 'react';
 import { Layout } from '@/components/Layout';
 import { getRecentErrors, subscribeErrors, clearErrors, type AppError } from '@/lib/appError';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Trash2, RefreshCw, Copy, ChevronDown, ChevronUp, Activity, Shield, Wifi, AlertTriangle } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Trash2, RefreshCw, Copy, ChevronDown, ChevronUp, Activity, Shield, Wifi, AlertTriangle, Database } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -86,6 +88,9 @@ export default function Diagnostics() {
   const { user, session } = useAuth();
   const [filter, setFilter] = useState<string>('all');
   const [, setTick] = useState(0);
+  const [persistedErrors, setPersistedErrors] = useState<AppError[]>([]);
+  const [loadingPersisted, setLoadingPersisted] = useState(false);
+  const [tab, setTab] = useState<string>('session');
 
   // Refresh timestamps every 10s
   useEffect(() => {
@@ -93,9 +98,50 @@ export default function Diagnostics() {
     return () => clearInterval(iv);
   }, []);
 
-  const categories = ['all', ...new Set(errors.map(e => e.category))];
-  const filtered = filter === 'all' ? errors : errors.filter(e => e.category === filter);
-  const sorted = [...filtered].reverse(); // newest first
+  const loadPersistedErrors = async () => {
+    if (!user) return;
+    setLoadingPersisted(true);
+    try {
+      const { data } = await supabase
+        .from('error_logs')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (data) {
+        setPersistedErrors(data.map((row: any) => ({
+          category: row.category,
+          message: row.message,
+          rawMessage: row.raw_message || '',
+          code: row.code,
+          source: row.source || 'frontend',
+          functionName: row.function_name,
+          componentName: row.component_name,
+          route: row.route,
+          traceId: row.trace_id,
+          timestamp: new Date(row.created_at).getTime(),
+          retryable: row.retryable || false,
+          metadata: row.metadata || {},
+        })));
+      }
+    } catch {
+      toast.error('Failed to load persisted errors');
+    } finally {
+      setLoadingPersisted(false);
+    }
+  };
+
+  useEffect(() => {
+    if (tab === 'persisted' && persistedErrors.length === 0) {
+      loadPersistedErrors();
+    }
+  }, [tab]);
+
+  const activeErrors = tab === 'session' ? errors : persistedErrors;
+  const categories = ['all', ...new Set(Array.from(activeErrors).map(e => e.category))];
+  const filtered = filter === 'all' ? Array.from(activeErrors) : Array.from(activeErrors).filter(e => e.category === filter);
+  const sorted = [...filtered].reverse();
 
   const online = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
@@ -107,10 +153,20 @@ export default function Diagnostics() {
             <Activity className="h-5 w-5 text-primary" />
             <h1 className="text-xl font-bold text-foreground">Ops Diagnostics</h1>
           </div>
-          <Button variant="outline" size="sm" onClick={() => { clearErrors(); toast.success('Error log cleared'); }}>
-            <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-            Clear
-          </Button>
+          <div className="flex gap-2">
+            {tab === 'persisted' && (
+              <Button variant="outline" size="sm" onClick={loadPersistedErrors} disabled={loadingPersisted}>
+                <RefreshCw className={cn('h-3.5 w-3.5 mr-1.5', loadingPersisted && 'animate-spin')} />
+                Refresh
+              </Button>
+            )}
+            {tab === 'session' && (
+              <Button variant="outline" size="sm" onClick={() => { clearErrors(); toast.success('Session errors cleared'); }}>
+                <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                Clear
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Environment card */}
@@ -134,48 +190,69 @@ export default function Diagnostics() {
           </CardContent>
         </Card>
 
-        {/* Summary */}
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          <span>{errors.length} total error{errors.length !== 1 ? 's' : ''}</span>
-          {errors.filter(e => e.retryable).length > 0 && (
-            <span className="text-emerald-400">{errors.filter(e => e.retryable).length} retryable</span>
-          )}
-          {errors.filter(e => e.category === 'AUTH_ERROR').length > 0 && (
-            <span className="text-red-400 flex items-center gap-1">
-              <AlertTriangle className="h-3 w-3" />
-              {errors.filter(e => e.category === 'AUTH_ERROR').length} auth errors
-            </span>
-          )}
-        </div>
+        {/* Tabs: Session vs Persisted */}
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList className="w-full">
+            <TabsTrigger value="session" className="flex-1 gap-1.5">
+              <Activity className="h-3.5 w-3.5" />
+              Session ({errors.length})
+            </TabsTrigger>
+            <TabsTrigger value="persisted" className="flex-1 gap-1.5">
+              <Database className="h-3.5 w-3.5" />
+              History ({persistedErrors.length})
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Category filter */}
-        {categories.length > 1 && (
-          <div className="flex gap-1.5 flex-wrap">
-            {categories.map(cat => (
-              <Button
-                key={cat}
-                variant={filter === cat ? 'default' : 'outline'}
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => setFilter(cat)}
-              >
-                {cat === 'all' ? 'All' : cat}
-              </Button>
-            ))}
-          </div>
-        )}
-
-        {/* Error list */}
-        <div className="space-y-2">
-          {sorted.length === 0 && (
-            <div className="text-center py-12 text-muted-foreground text-sm">
-              No errors recorded. Errors from API calls, component crashes, and edge functions will appear here.
+          <TabsContent value={tab} className="mt-3 space-y-3">
+            {/* Summary */}
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <span>{sorted.length} error{sorted.length !== 1 ? 's' : ''}</span>
+              {sorted.filter(e => e.retryable).length > 0 && (
+                <span className="text-primary">{sorted.filter(e => e.retryable).length} retryable</span>
+              )}
+              {sorted.filter(e => e.category === 'AUTH_ERROR').length > 0 && (
+                <span className="text-destructive flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  {sorted.filter(e => e.category === 'AUTH_ERROR').length} auth
+                </span>
+              )}
             </div>
-          )}
-          {sorted.map((err, i) => (
-            <ErrorRow key={`${err.traceId}-${i}`} err={err} index={i} />
-          ))}
-        </div>
+
+            {/* Category filter */}
+            {categories.length > 1 && (
+              <div className="flex gap-1.5 flex-wrap">
+                {categories.map(cat => (
+                  <Button
+                    key={cat}
+                    variant={filter === cat ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => setFilter(cat)}
+                  >
+                    {cat === 'all' ? 'All' : cat}
+                  </Button>
+                ))}
+              </div>
+            )}
+
+            {/* Error list */}
+            <div className="space-y-2">
+              {loadingPersisted && tab === 'persisted' && (
+                <div className="text-center py-8 text-muted-foreground text-sm">Loading persisted errors…</div>
+              )}
+              {sorted.length === 0 && !loadingPersisted && (
+                <div className="text-center py-12 text-muted-foreground text-sm">
+                  {tab === 'session'
+                    ? 'No errors this session. Errors from API calls, component crashes, and edge functions will appear here.'
+                    : 'No persisted errors found.'}
+                </div>
+              )}
+              {sorted.map((err, i) => (
+                <ErrorRow key={`${err.traceId}-${i}`} err={err} index={i} />
+              ))}
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </Layout>
   );

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
@@ -157,12 +158,12 @@ export function useGradeTranscript() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (transcriptId: string) => {
-      const { data, error } = await supabase.functions.invoke('grade-transcript', {
+      const { data, error } = await trackedInvoke<TranscriptGrade>('grade-transcript', {
         body: { transcript_id: transcriptId },
+        componentName: 'useGradeTranscript',
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      return data as TranscriptGrade;
+      if (error) throw new Error(error.message);
+      return data!;
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['transcript-grade', data.transcript_id] });

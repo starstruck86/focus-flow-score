@@ -9,6 +9,8 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  const traceId = req.headers.get("x-trace-id") || "no-trace";
+
   try {
     const authHeader = req.headers.get("Authorization");
     const supabase = createClient(
@@ -672,8 +674,8 @@ ${customScorecardContext}`;
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    console.error("grade-transcript error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
+    console.error(`[grade-transcript] [${traceId}] error:`, e instanceof Error ? e.message : e);
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error", traceId }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
