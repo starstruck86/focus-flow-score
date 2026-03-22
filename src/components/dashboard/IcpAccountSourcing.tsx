@@ -133,7 +133,7 @@ export function IcpAccountSourcing() {
       });
     },
     onError: (err: Error) => toast.error('Promote failed', { description: err.message }),
-    onSettled: (_: any, __: any, account: any) => {
+    onSettled: (_data: unknown, _error: Error | null, account: IcpSourcedAccount | undefined) => {
       if (account?.id) {
         setPromotingIds((prev: Set<string>) => {
           const next = new Set(prev);
