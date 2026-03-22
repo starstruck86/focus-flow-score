@@ -12,8 +12,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Radar, RefreshCw, ExternalLink, Eye, Briefcase, UserPlus, Newspaper, Cpu, Podcast, Target, Zap, Mail, Copy, CheckCircle2 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSignalTriggeredTasks } from '@/hooks/useSignalTriggeredTasks';
+import type { DigestItem, OutreachModalState } from '@/types/dashboard';
 
 const CATEGORY_ICONS: Record<string, any> = {
   executive_hire: UserPlus,
