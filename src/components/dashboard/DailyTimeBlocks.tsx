@@ -174,7 +174,7 @@ export function DailyTimeBlocks() {
   });
 
   // Handle confirmed screenshot events — rebuild plan with them
-  const handleScreenshotEventsConfirmed = useCallback((events: any[]) => {
+  const handleScreenshotEventsConfirmed = useCallback((events: CalendarScreenshotEvent[]) => {
     generateMutation.mutate({ confirmedScreenshotEvents: events });
     setDismissedBlocks(new Set());
     setBlockOppLinks(new Map());
