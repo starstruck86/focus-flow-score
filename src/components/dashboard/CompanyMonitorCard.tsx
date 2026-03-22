@@ -115,7 +115,7 @@ export function CompanyMonitorCard({ motionFilter }: CompanyMonitorCardProps = {
 
         if (newItems?.length) {
           // Group by account
-          const byAccount = new Map<string, any[]>();
+          const byAccount = new Map<string, { type: string; headline: string; source: string; date: string }[]>();
           for (const item of newItems) {
             if (!item.account_id) continue;
             const list = byAccount.get(item.account_id) || [];
