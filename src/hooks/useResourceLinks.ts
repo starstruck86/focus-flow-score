@@ -12,7 +12,7 @@ export interface ResourceLink {
   renewal_id: string | null;
   url: string;
   label: string;
-  category: ResourceCategory;
+  category: string;
   notes: string | null;
   created_at: string;
   updated_at: string;
