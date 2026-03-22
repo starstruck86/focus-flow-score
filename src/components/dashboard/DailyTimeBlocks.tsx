@@ -329,7 +329,7 @@ export function DailyTimeBlocks() {
     queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks });
     await supabase
       .from('daily_time_blocks' as 'daily_time_blocks')
-      .update({ blocks })
+      .update({ blocks: blocks as unknown as Json })
       .eq('id', plan.id);
     toast.success('Block moved');
   }, [plan, todayStr, queryClient]);
