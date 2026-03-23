@@ -42,10 +42,15 @@ export async function energyMatch(ctx: ToolContext): Promise<string> {
   const { data: journal } = await supabase.from('daily_journal_entries').select('energy, focus_quality, stress').eq('user_id', userId).eq('date', today).limit(1);
 
   const recovery = (whoop as Array<{ recovery_score: number | null }> | null)?.[0]?.recovery_score;
+  const sleep = (whoop as Array<{ sleep_score: number | null }> | null)?.[0]?.sleep_score;
   const energy = (journal as Array<{ energy: number | null }> | null)?.[0]?.energy;
 
+  // Validate ranges before using
+  const validRecovery = recovery !== null && recovery !== undefined && recovery >= 0 && recovery <= 100 ? recovery : null;
+  const validSleep = sleep !== null && sleep !== undefined && sleep >= 0 && sleep <= 100 ? sleep : null;
+
   let energyLevel: 'high' | 'medium' | 'low' = 'medium';
-  if (recovery !== undefined && recovery !== null) energyLevel = recovery >= 67 ? 'high' : recovery >= 33 ? 'medium' : 'low';
+  if (validRecovery !== null) energyLevel = validRecovery >= 67 ? 'high' : validRecovery >= 33 ? 'medium' : 'low';
   else if (energy !== undefined && energy !== null) energyLevel = energy >= 4 ? 'high' : energy >= 2 ? 'medium' : 'low';
 
   const recommendations: Record<string, string> = {
@@ -55,7 +60,8 @@ export async function energyMatch(ctx: ToolContext): Promise<string> {
   };
 
   let result = recommendations[energyLevel];
-  if (recovery !== undefined && recovery !== null) result += `\nWHOOP recovery: ${recovery}%`;
+  if (validRecovery !== null) result += `\nWHOOP recovery: ${validRecovery}%`;
+  if (validSleep !== null) result += ` | Sleep: ${validSleep}%`;
   if (energy !== undefined && energy !== null) result += ` | Self-rated energy: ${energy}/5`;
   return result;
 }
