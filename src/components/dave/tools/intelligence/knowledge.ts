@@ -233,14 +233,21 @@ export async function recommendStrategy(
   const { insights, sourceMap } = await fetchInsightsHybrid(userId, params.topic);
   if (!insights.length) return `No intelligence available for "${params.topic}". Add and operationalise resources first.`;
 
-  // Load personal performance for boost
+  // Load personal performance + pipeline impact for boost
   let personalBoosts = new Map<string, number>();
   let personalSummaries = new Map<string, string>();
+  let pipelineImpacts = new Map<string, StrategyPipelineImpact>();
   try {
-    const perfMap = await getUserPerformanceMap(userId);
+    const [perfMap, aggImpact] = await Promise.all([
+      getUserPerformanceMap(userId),
+      getUserPipelineImpact(userId),
+    ]);
     for (const [id, perf] of perfMap) {
       personalBoosts.set(id, perf.personalBoost);
       personalSummaries.set(id, perf.summary);
+    }
+    for (const s of aggImpact.topStrategies) {
+      pipelineImpacts.set(s.insightId, s);
     }
   } catch { /* graceful degradation */ }
 
@@ -252,6 +259,7 @@ export async function recommendStrategy(
     industry: params.industry,
     personalBoosts,
     personalSummaries,
+    pipelineImpacts,
   };
 
   const dateMap = new Map<string, { date: string | null }>();
