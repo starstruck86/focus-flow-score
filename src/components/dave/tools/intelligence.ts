@@ -4,6 +4,7 @@ import { lookupContact, addContact, stakeholderQuery, contactTimeline } from './
 import { lookupRenewal, updateRenewal } from './intelligence/renewals';
 import { readResource, searchResources, lookupTranscript, trendQuery } from './intelligence/resources';
 import { bulkUpdate } from './intelligence/bulk';
+import { citeInsight, knowledgeTrends, insightReliability } from './intelligence/knowledge';
 
 export function createIntelligenceTools(ctx: ToolContext): ToolMap {
   return {
@@ -20,5 +21,8 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
     read_resource: (params: { title: string }) => readResource(ctx, params),
     search_resources: (params: { query: string }) => searchResources(ctx, params),
     bulk_update: (params: { entity: string; filter_field: string; filter_value: string; update_field: string; update_value: string }) => bulkUpdate(ctx, params),
+    cite_insight: (params: { topic: string }) => citeInsight(ctx, params),
+    knowledge_trends: (params: { category?: string }) => knowledgeTrends(ctx, params),
+    insight_reliability: (params: { claim: string }) => insightReliability(ctx, params),
   };
 }
