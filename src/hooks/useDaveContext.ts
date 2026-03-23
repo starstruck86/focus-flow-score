@@ -170,7 +170,22 @@ export function useDaveContext() {
     return remaining > 0 ? Math.ceil(remaining / 1000) : 0;
   }, []);
 
-  // No pre-fetch on mount, no interval — purely on-demand
+  // Prefetch token on mount so first tap is instant
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!cachedSession && !inFlightRef.current) {
+        fetchSession().then(data => {
+          setCachedSession(data);
+          fetchedAtRef.current = Date.now();
+          logger.info('Session prefetched', { contextLength: data.context?.length });
+        }).catch(() => {
+          // Prefetch failure is non-critical — will fetch on-demand
+        });
+      }
+    }, 3000); // 3s delay to let the app settle first
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return { getSession, invalidateCache, cachedSession, isFetching, getCooldownRemaining };
 }
