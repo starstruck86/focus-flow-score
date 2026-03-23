@@ -50,10 +50,23 @@ const TYPE_PRIORITY: Record<string, number> = {
   break: 10,
 };
 
+// Minimum duration for meaningful work vs light tasks
+const MEANINGFUL_TYPES = new Set(['prospecting', 'pipeline', 'build', 'research']);
+const MIN_MEANINGFUL_MINUTES = 30;
+const MIN_LIGHT_MINUTES = 15;
+
 function blockMinutes(b: RecastBlock): number {
   const [sh, sm] = b.start_time.split(':').map(Number);
   const [eh, em] = b.end_time.split(':').map(Number);
   return (eh * 60 + em) - (sh * 60 + sm);
+}
+
+function isMeaningfulWork(type: string): boolean {
+  return MEANINGFUL_TYPES.has(type);
+}
+
+function minBlockDuration(type: string): number {
+  return isMeaningfulWork(type) ? MIN_MEANINGFUL_MINUTES : MIN_LIGHT_MINUTES;
 }
 
 function toMinutes(time: string): number {
