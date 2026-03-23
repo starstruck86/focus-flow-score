@@ -1,10 +1,10 @@
 // Command Brief — the Jarvis layer UI surface
 // ONE state sentence + ONE primary action. No noise.
-// External execution model: actions happen in Salesforce/Outreach,
-// user confirms here with one tap.
+// Lag-tolerant: actions executed externally, user confirms with
+// done / blocked / skip / snooze — no detailed logging required.
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, Check, SkipForward, ArrowRight, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Zap, Check, SkipForward, ArrowRight, AlertTriangle, ExternalLink, Ban, Clock } from 'lucide-react';
 import { useOperatingState } from '@/hooks/useOperatingState';
 import { usePrimaryAction } from '@/hooks/usePrimaryAction';
 import { useActionMemory } from '@/hooks/useActionMemory';
@@ -46,23 +46,40 @@ export function CommandBrief() {
   const primaryAction = usePrimaryAction();
   const { recordAction } = useActionMemory();
   const [dismissed, setDismissed] = useState(false);
+  const [dismissLabel, setDismissLabel] = useState('');
 
-  const handleComplete = () => {
-    if (primaryAction) {
-      recordAction(primaryAction.id, 'completed', primaryAction.entityType, primaryAction.entityId);
-      toast.success('Confirmed ✓', { description: 'Advancing to next action...' });
-      setDismissed(true);
-      setTimeout(() => setDismissed(false), 2000);
-    }
+  const advance = (label: string) => {
+    setDismissLabel(label);
+    setDismissed(true);
+    setTimeout(() => setDismissed(false), 2000);
+  };
+
+  const handleDone = () => {
+    if (!primaryAction) return;
+    recordAction(primaryAction.id, 'completed', primaryAction.entityType, primaryAction.entityId);
+    toast.success('Confirmed ✓', { description: 'Loading next action...' });
+    advance('✓ Done — loading next...');
+  };
+
+  const handleBlocked = () => {
+    if (!primaryAction) return;
+    recordAction(primaryAction.id, 'deferred', primaryAction.entityType, primaryAction.entityId);
+    toast('Blocked — moving past this');
+    advance('⊘ Blocked — next action...');
   };
 
   const handleSkip = () => {
-    if (primaryAction) {
-      recordAction(primaryAction.id, 'deferred', primaryAction.entityType, primaryAction.entityId);
-      toast('Skipped — next action loading');
-      setDismissed(true);
-      setTimeout(() => setDismissed(false), 2000);
-    }
+    if (!primaryAction) return;
+    recordAction(primaryAction.id, 'deferred', primaryAction.entityType, primaryAction.entityId);
+    toast('Skipped — deprioritized');
+    advance('↷ Skipped — next action...');
+  };
+
+  const handleSnooze = () => {
+    if (!primaryAction) return;
+    recordAction(primaryAction.id, 'ignored', primaryAction.entityType, primaryAction.entityId);
+    toast('Snoozed 30 min — will resurface');
+    advance('⏰ Snoozed — next action...');
   };
 
   const showEscalation = primaryAction?.escalation === 'critical' || primaryAction?.escalation === 'high';
@@ -122,32 +139,26 @@ export function CommandBrief() {
               </div>
             )}
 
-            {/* Delay consequence — only shown for high/critical escalation */}
+            {/* Delay consequence */}
             {primaryAction.delayConsequence && showEscalation && (
               <p className={cn('text-xs italic', ESCALATION_STYLES[primaryAction.escalation!])}>
                 ⚠ {primaryAction.delayConsequence}
               </p>
             )}
 
-            {/* One-tap confirm / skip — external execution model */}
-            <div className="flex gap-2 pt-1">
-              <Button
-                size="sm"
-                variant="default"
-                className="h-7 text-xs gap-1"
-                onClick={handleComplete}
-              >
-                <Check className="h-3 w-3" />
-                Done
+            {/* Lag-tolerant action buttons: done / blocked / skip / snooze */}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              <Button size="sm" variant="default" className="h-7 text-xs gap-1" onClick={handleDone}>
+                <Check className="h-3 w-3" /> Done
               </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 text-xs gap-1 text-muted-foreground"
-                onClick={handleSkip}
-              >
-                <SkipForward className="h-3 w-3" />
-                Skip
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-muted-foreground" onClick={handleBlocked}>
+                <Ban className="h-3 w-3" /> Blocked
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-muted-foreground" onClick={handleSkip}>
+                <SkipForward className="h-3 w-3" /> Skip
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-muted-foreground" onClick={handleSnooze}>
+                <Clock className="h-3 w-3" /> 30m
               </Button>
             </div>
           </motion.div>
@@ -159,7 +170,7 @@ export function CommandBrief() {
             exit={{ opacity: 0 }}
             className="text-xs text-muted-foreground text-center py-2"
           >
-            ✓ Loading next action...
+            {dismissLabel}
           </motion.div>
         ) : (
           <motion.div
