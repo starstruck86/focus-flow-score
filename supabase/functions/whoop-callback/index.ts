@@ -138,7 +138,8 @@ serve(async (req) => {
 function getRedirectBase(stateParam: string | null): string {
   try {
     if (stateParam) {
-      const decoded = JSON.parse(atob(stateParam));
+      const stateObj = JSON.parse(atob(stateParam));
+      const decoded = stateObj.payload ? JSON.parse(stateObj.payload) : stateObj;
       return decoded.redirectUri || '';
     }
   } catch {}
