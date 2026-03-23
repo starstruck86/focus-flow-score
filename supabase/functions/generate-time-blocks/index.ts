@@ -533,117 +533,270 @@ Generate a daily time-blocked schedule. For each block provide:
 
 Also provide an overall "day_strategy" (2-3 sentences: how today fits into the weekly plan, what makes today different from other days this week) and "key_metric_targets" object with TODAY'S ADJUSTED targets (not raw daily averages).`;
 
+    // ── Helper: build a deterministic fallback plan without AI ──
+    function buildFallbackPlan(reason: string) {
+      const blocks: any[] = [];
+      const [wsh, wsm] = workStart.split(':').map(Number);
+      const [weh, wem] = workEnd.split(':').map(Number);
+      const workStartMin = wsh * 60 + wsm;
+      const workEndMin = weh * 60 + wem;
+
+      // Collect locked meetings as immovable anchors
+      const meetingSlots = lockedCalendarBlocks.map((m: any) => ({
+        ...m,
+        startMin: toMinutes(m.start_time),
+        endMin: toMinutes(m.end_time),
+      })).sort((a: any, b: any) => a.startMin - b.startMin);
+
+      // Add all meetings
+      meetingSlots.forEach((m: any) => blocks.push(m));
+
+      // Find gaps between meetings (and before/after)
+      const gaps: { startMin: number; endMin: number }[] = [];
+      let cursor = workStartMin;
+      for (const m of meetingSlots) {
+        if (m.startMin > cursor) gaps.push({ startMin: cursor, endMin: m.startMin });
+        cursor = Math.max(cursor, m.endMin);
+      }
+      if (cursor < workEndMin) gaps.push({ startMin: cursor, endMin: workEndMin });
+
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const minToTime = (m: number) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+
+      let buildPlaced = false;
+      let callPlaced = false;
+
+      for (const gap of gaps) {
+        let gapCursor = gap.startMin;
+        const gapLen = gap.endMin - gap.startMin;
+
+        // Skip tiny gaps
+        if (gapLen < 30) continue;
+
+        // Place build block first if not yet placed
+        if (!buildPlaced && gapLen >= 60) {
+          const dur = 60;
+          const topNames = prospectingAccounts.slice(0, 3).map((a: any) => a.name).join(', ') || 'target accounts';
+          blocks.push({
+            start_time: minToTime(gapCursor),
+            end_time: minToTime(gapCursor + dur),
+            label: 'New Logo Build (3 accounts)',
+            type: 'build',
+            workstream: 'new_logo',
+            goals: [`Select & research 3 accounts (${topNames})`, 'Find contacts & add to cadence'],
+            reasoning: 'Fallback plan — pipeline sourcing block.',
+          });
+          gapCursor += dur;
+          buildPlaced = true;
+        } else if (!buildPlaced && gapLen >= 30) {
+          blocks.push({
+            start_time: minToTime(gapCursor),
+            end_time: minToTime(gapCursor + 30),
+            label: 'New Logo Build (2 accounts)',
+            type: 'build',
+            workstream: 'new_logo',
+            goals: ['Select & research 2 accounts', 'Find contacts & add to cadence'],
+            reasoning: 'Fallback plan — compressed build block.',
+          });
+          gapCursor += 30;
+          buildPlaced = true;
+        }
+
+        const remaining = gap.endMin - gapCursor;
+
+        // Place call block if not yet placed and enough room
+        if (!callPlaced && remaining >= 30) {
+          const callDur = Math.min(60, remaining);
+          const estDials = Math.round(callDur / 2);
+          blocks.push({
+            start_time: minToTime(gapCursor),
+            end_time: minToTime(gapCursor + callDur),
+            label: `Call Blitz (~${estDials} dials)`,
+            type: 'prospecting',
+            workstream: 'new_logo',
+            goals: [`Make ~${estDials} dials`, 'Log conversations'],
+            reasoning: 'Fallback plan — core prospecting block.',
+          });
+          gapCursor += callDur;
+          callPlaced = true;
+        } else if (!callPlaced && remaining >= 30) {
+          blocks.push({
+            start_time: minToTime(gapCursor),
+            end_time: minToTime(gapCursor + 30),
+            label: 'Call Blitz (~15 dials)',
+            type: 'prospecting',
+            workstream: 'new_logo',
+            goals: ['Make ~15 dials', 'Log conversations'],
+            reasoning: 'Fallback plan — minimum call block.',
+          });
+          gapCursor += 30;
+          callPlaced = true;
+        }
+
+        // Fill any large remaining gap with additional prospecting
+        const leftover = gap.endMin - gapCursor;
+        if (leftover >= 30 && callPlaced) {
+          const dur = Math.min(60, leftover);
+          const estDials = Math.round(dur / 2);
+          blocks.push({
+            start_time: minToTime(gapCursor),
+            end_time: minToTime(gapCursor + dur),
+            label: `Prospecting Block (~${estDials} dials)`,
+            type: 'prospecting',
+            workstream: 'new_logo',
+            goals: [`Make ~${estDials} dials`],
+            reasoning: 'Fallback plan — additional prospecting time.',
+          });
+        }
+      }
+
+      // Sort by start time
+      blocks.sort((a: any, b: any) => toMinutes(a.start_time) - toMinutes(b.start_time));
+
+      return {
+        blocks,
+        day_strategy: `Fallback plan generated — ${reason}. Meetings preserved, core prospecting blocks scheduled.`,
+        key_metric_targets: {
+          dials: todayDialTarget || 30,
+          conversations: Math.max(1, todayConvoTarget || 3),
+          accounts_sourced: 3,
+          accounts_researched: 3,
+          contacts_prepped: 3,
+        },
+        is_fallback: true,
+      };
+    }
+
+    // ── AI call with fallback ──
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: "You are a sales productivity coach. Return structured data via the tool call." },
-          { role: "user", content: prompt },
-        ],
-        tools: [{
-          type: "function",
-          function: {
-            name: "create_daily_plan",
-            description: "Create a daily time-blocked plan",
-            parameters: {
-              type: "object",
-              properties: {
-                day_strategy: { type: "string", description: "2-3 sentence overview of the day's approach" },
-                blocks: {
-                  type: "array",
-                  items: {
+    let plan: any;
+    let isFallback = false;
+
+    try {
+      const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: "You are a sales productivity coach. Return structured data via the tool call." },
+            { role: "user", content: prompt },
+          ],
+          tools: [{
+            type: "function",
+            function: {
+              name: "create_daily_plan",
+              description: "Create a daily time-blocked plan",
+              parameters: {
+                type: "object",
+                properties: {
+                  day_strategy: { type: "string", description: "2-3 sentence overview of the day's approach" },
+                  blocks: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        start_time: { type: "string", description: "HH:MM in 24h format" },
+                        end_time: { type: "string", description: "HH:MM in 24h format" },
+                        label: { type: "string" },
+                        type: { type: "string", enum: ["prospecting", "meeting", "research", "admin", "break", "pipeline", "prep", "build"] },
+                        workstream: { type: "string", enum: ["new_logo", "renewal", "general"], description: "Which workstream this block belongs to" },
+                        goals: { type: "array", items: { type: "string" } },
+                        reasoning: { type: "string" },
+                      },
+                      required: ["start_time", "end_time", "label", "type", "workstream", "goals", "reasoning"],
+                      additionalProperties: false,
+                    },
+                  },
+                  key_metric_targets: {
                     type: "object",
                     properties: {
-                      start_time: { type: "string", description: "HH:MM in 24h format" },
-                      end_time: { type: "string", description: "HH:MM in 24h format" },
-                      label: { type: "string" },
-                      type: { type: "string", enum: ["prospecting", "meeting", "research", "admin", "break", "pipeline", "prep", "build"] },
-                      workstream: { type: "string", enum: ["new_logo", "renewal", "general"], description: "Which workstream this block belongs to" },
-                      goals: { type: "array", items: { type: "string" } },
-                      reasoning: { type: "string" },
+                      dials: { type: "number" },
+                      conversations: { type: "number" },
+                      accounts_sourced: { type: "number", description: "New logo accounts sourced and added to cadence (default 3)" },
+                      accounts_researched: { type: "number" },
+                      contacts_prepped: { type: "number" },
                     },
-                    required: ["start_time", "end_time", "label", "type", "workstream", "goals", "reasoning"],
                     additionalProperties: false,
                   },
                 },
-                key_metric_targets: {
-                  type: "object",
-                  properties: {
-                    dials: { type: "number" },
-                    conversations: { type: "number" },
-                    accounts_sourced: { type: "number", description: "New logo accounts sourced and added to cadence (default 3)" },
-                    accounts_researched: { type: "number" },
-                    contacts_prepped: { type: "number" },
-                  },
-                  additionalProperties: false,
-                },
+                required: ["day_strategy", "blocks", "key_metric_targets"],
+                additionalProperties: false,
               },
-              required: ["day_strategy", "blocks", "key_metric_targets"],
-              additionalProperties: false,
             },
-          },
-        }],
-        tool_choice: { type: "function", function: { name: "create_daily_plan" } },
-      }),
-    });
+          }],
+          tool_choice: { type: "function", function: { name: "create_daily_plan" } },
+        }),
+      });
 
-    if (!aiResponse.ok) {
-      const status = aiResponse.status;
-      if (status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded, try again shortly." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      if (!aiResponse.ok) {
+        const status = aiResponse.status;
+        if (status === 429) {
+          return new Response(JSON.stringify({ error: "Rate limit exceeded, try again shortly." }), {
+            status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (status === 402) {
+          return new Response(JSON.stringify({ error: "AI credits exhausted. Add funds in Settings." }), {
+            status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        throw new Error(`AI gateway error: ${status}`);
       }
-      if (status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Add funds in Settings." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+
+      const aiData = await aiResponse.json();
+      const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+      if (!toolCall) throw new Error("No tool call in AI response");
+
+      plan = JSON.parse(toolCall.function.arguments);
+
+      // Validate essential structure
+      if (!Array.isArray(plan.blocks) || plan.blocks.length === 0) {
+        throw new Error("AI returned empty blocks array");
       }
-      throw new Error(`AI gateway error: ${status}`);
+    } catch (aiError) {
+      // AI failed — use deterministic fallback
+      console.error("AI plan generation failed, using fallback:", aiError);
+      plan = buildFallbackPlan(aiError instanceof Error ? aiError.message : "AI unavailable");
+      isFallback = true;
     }
 
-    const aiData = await aiResponse.json();
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall) throw new Error("No tool call in AI response");
-
-    const plan = JSON.parse(toolCall.function.arguments);
-    let mergedBlocks = mergeLockedCalendarBlocks(plan.blocks || [], lockedCalendarBlocks);
+    let mergedBlocks = isFallback
+      ? plan.blocks
+      : mergeLockedCalendarBlocks(plan.blocks || [], lockedCalendarBlocks);
 
     // SAFETY NET: If AI omitted a "build" block and there are prospecting accounts, inject one
-    const hasBuildBlock = mergedBlocks.some((b: any) => b.type === 'build');
-    if (!hasBuildBlock && prospectingAccounts.length > 0) {
-      // Find the first non-meeting gap >= 60 min (or 30 min on heavy days) to insert a build block
-      const buildDuration = todayMeetingMin > 180 ? 30 : 60; // 30 min on heavy meeting days, 60 min default
-      const firstNonMeeting = mergedBlocks.findIndex((b: any) => b.type !== 'meeting');
-      const insertIdx = firstNonMeeting >= 0 ? firstNonMeeting : 0;
-      const buildStart = insertIdx > 0 ? mergedBlocks[insertIdx - 1].end_time : workStart;
-      const [bh, bm] = buildStart.split(':').map(Number);
-      const buildEndMin = bh * 60 + bm + buildDuration;
-      const buildEnd = `${Math.floor(buildEndMin / 60).toString().padStart(2, '0')}:${(buildEndMin % 60).toString().padStart(2, '0')}`;
-      const topNames = prospectingAccounts.slice(0, 3).map((a: any) => a.name).join(', ');
-      mergedBlocks.splice(insertIdx, 0, {
-        start_time: buildStart,
-        end_time: buildEnd,
-        label: `New Logo Build (3 accounts)`,
-        type: 'build',
-        workstream: 'new_logo',
-        goals: [
-          `Select 3 target accounts (${topNames})`,
-          'Research companies & identify contacts',
-          'Find contact info & add to cadence',
-        ],
-        reasoning: `Pipeline sourcing cannot be zero — injected ${buildDuration}-min build block because AI plan omitted it.`,
-      });
-      // Re-sort by start time
-      mergedBlocks.sort((a: any, b: any) => toMinutes(a.start_time) - toMinutes(b.start_time));
+    if (!isFallback) {
+      const hasBuildBlock = mergedBlocks.some((b: any) => b.type === 'build');
+      if (!hasBuildBlock && prospectingAccounts.length > 0) {
+        const buildDuration = todayMeetingMin > 180 ? 30 : 60;
+        const firstNonMeeting = mergedBlocks.findIndex((b: any) => b.type !== 'meeting');
+        const insertIdx = firstNonMeeting >= 0 ? firstNonMeeting : 0;
+        const buildStart = insertIdx > 0 ? mergedBlocks[insertIdx - 1].end_time : workStart;
+        const [bh, bm] = buildStart.split(':').map(Number);
+        const buildEndMin = bh * 60 + bm + buildDuration;
+        const buildEnd = `${Math.floor(buildEndMin / 60).toString().padStart(2, '0')}:${(buildEndMin % 60).toString().padStart(2, '0')}`;
+        const topNames = prospectingAccounts.slice(0, 3).map((a: any) => a.name).join(', ');
+        mergedBlocks.splice(insertIdx, 0, {
+          start_time: buildStart,
+          end_time: buildEnd,
+          label: `New Logo Build (3 accounts)`,
+          type: 'build',
+          workstream: 'new_logo',
+          goals: [
+            `Select 3 target accounts (${topNames})`,
+            'Research companies & identify contacts',
+            'Find contact info & add to cadence',
+          ],
+          reasoning: `Pipeline sourcing cannot be zero — injected ${buildDuration}-min build block because AI plan omitted it.`,
+        });
+        mergedBlocks.sort((a: any, b: any) => toMinutes(a.start_time) - toMinutes(b.start_time));
+      }
     }
 
     // Upsert the plan with all data persisted — reset dismissals on rebuild
@@ -655,7 +808,7 @@ Also provide an overall "day_strategy" (2-3 sentences: how today fits into the w
         blocks: mergedBlocks,
         meeting_load_hours: meetingHours,
         focus_hours_available: focusHoursAvailable,
-        ai_reasoning: plan.day_strategy,
+        ai_reasoning: (isFallback ? '[FALLBACK] ' : '') + (plan.day_strategy || ''),
         key_metric_targets: plan.key_metric_targets || {},
         completed_goals: [],
         block_feedback: [],
@@ -667,7 +820,7 @@ Also provide an overall "day_strategy" (2-3 sentences: how today fits into the w
 
     if (saveError) throw saveError;
 
-    return new Response(JSON.stringify(saved), {
+    return new Response(JSON.stringify({ ...saved, is_fallback: isFallback }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

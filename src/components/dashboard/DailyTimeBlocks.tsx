@@ -201,16 +201,25 @@ export function DailyTimeBlocks() {
   const generateMutation = useMutation({
     mutationFn: async (opts: { confirmedScreenshotEvents?: CalendarScreenshotEvent[] } | void) => {
       const screenshotEvents = opts && 'confirmedScreenshotEvents' in opts ? opts.confirmedScreenshotEvents : undefined;
-      const { data, error } = await trackedInvoke<DailyPlan>('generate-time-blocks', {
+
+      // First attempt
+      const { data, error } = await trackedInvoke<DailyPlan & { is_fallback?: boolean }>('generate-time-blocks', {
         body: { date: todayStr, confirmedScreenshotEvents: screenshotEvents },
+        retry: { maxAttempts: 2, baseDelayMs: 2000 },
+        componentName: 'DailyTimeBlocks',
       });
+
       if (error) throw error;
-      return data as DailyPlan;
+      return data as DailyPlan & { is_fallback?: boolean };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['daily-time-blocks'] });
       setDismissedBlocks(new Set());
-      toast.success('Daily plan generated!');
+      if (data?.is_fallback) {
+        toast.info('Using fallback plan — AI was unavailable. Your meetings and core blocks are preserved.', { duration: 6000 });
+      } else {
+        toast.success('Daily plan generated!');
+      }
     },
     onError: (e) => {
       const msg = e instanceof Error ? e.message : 'Failed to generate plan';
@@ -598,6 +607,12 @@ export function DailyTimeBlocks() {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-semibold">Daily Game Plan</h3>
+                {plan.ai_reasoning?.startsWith('[FALLBACK]') && (
+                  <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-muted-foreground/40 bg-muted/50 text-muted-foreground gap-1">
+                    <Shield className="h-2.5 w-2.5" />
+                    Fallback Plan
+                  </Badge>
+                )}
                 {plan.recast_at && (
                   <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400 gap-1">
                     <RotateCcw className="h-2.5 w-2.5" />
