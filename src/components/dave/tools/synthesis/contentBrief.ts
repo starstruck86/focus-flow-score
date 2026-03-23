@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { formatTimeETLabel } from '@/lib/timeFormat';
 import type { ToolContext } from '../../toolTypes';
 
 export async function generateContent(ctx: ToolContext, params: { contentType: string; accountName?: string; opportunityName?: string; contactName?: string; customInstructions?: string }): Promise<string> {
