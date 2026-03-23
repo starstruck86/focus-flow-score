@@ -498,3 +498,43 @@ describe('Page test ID coverage', () => {
     }
   });
 });
+
+// ─── Edge Function Deploy-Group Version Consistency ────────────
+describe('Edge function deploy groups', () => {
+  const fs = require('fs');
+  const path = require('path');
+
+  const FUNCTION_GROUPS: Record<string, string[]> = {
+    whoop: ['whoop-auth', 'whoop-callback', 'whoop-sync'],
+    dave: ['dave-conversation-token'],
+  };
+
+  function extractGroupVersion(functionDir: string): string | null {
+    const filePath = path.join(__dirname, '..', '..', 'supabase', 'functions', functionDir, 'index.ts');
+    if (!fs.existsSync(filePath)) return null;
+    const content = fs.readFileSync(filePath, 'utf8');
+    const match = content.match(/FUNCTION_GROUP_VERSION\s*=\s*["']([^"']+)["']/);
+    return match ? match[1] : null;
+  }
+
+  for (const [groupName, functions] of Object.entries(FUNCTION_GROUPS)) {
+    it(`${groupName} group functions share the same FUNCTION_GROUP_VERSION`, () => {
+      const versions = functions.map((fn) => ({
+        fn,
+        version: extractGroupVersion(fn),
+      }));
+
+      // All functions must have a version
+      for (const { fn, version } of versions) {
+        expect(version, `${fn} is missing FUNCTION_GROUP_VERSION`).not.toBeNull();
+      }
+
+      // All versions must match
+      const uniqueVersions = new Set(versions.map((v) => v.version));
+      expect(
+        uniqueVersions.size,
+        `Version mismatch in ${groupName} group: ${versions.map((v) => `${v.fn}=${v.version}`).join(', ')}`,
+      ).toBe(1);
+    });
+  }
+});

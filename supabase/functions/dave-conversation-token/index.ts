@@ -1,5 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// ── Deploy-group: dave (dave-conversation-token) ──
+// See supabase/FUNCTION_GROUPS.md for details.
+const FUNCTION_GROUP_VERSION = "dave-v2";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":

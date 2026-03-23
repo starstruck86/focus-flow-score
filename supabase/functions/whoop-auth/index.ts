@@ -1,6 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// ── Deploy-group: whoop (whoop-auth, whoop-callback, whoop-sync) ──
+// These functions share state-signing logic and MUST be deployed together.
+// See supabase/FUNCTION_GROUPS.md for details.
+const FUNCTION_GROUP_VERSION = "whoop-v2";
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
@@ -49,7 +54,7 @@ serve(async (req) => {
     await adminClient.from('whoop_connections').delete().eq('user_id', userId);
 
     // HMAC-sign the state to prevent forgery
-    const statePayload = JSON.stringify({ userId, redirectUri, nonce: crypto.randomUUID() });
+    const statePayload = JSON.stringify({ userId, redirectUri, nonce: crypto.randomUUID(), v: FUNCTION_GROUP_VERSION });
     const hmacKey = await crypto.subtle.importKey(
       'raw', new TextEncoder().encode(WHOOP_CLIENT_SECRET),
       { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
