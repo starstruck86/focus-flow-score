@@ -224,7 +224,7 @@ function buildFocusedResponse(metric: MetricComparison, result: ComparisonResult
   const arrow = metric.trend === 'up' ? '↑' : metric.trend === 'down' ? '↓' : '→';
   const pct = metric.percentChange !== null ? ` (${metric.percentChange > 0 ? '+' : ''}${metric.percentChange}%)` : '';
 
-  sentences.push(`${metric.label}: ${formatVal(metric)} ${arrow}${pct}, comparing ${result.currentLabel} to ${result.previousLabel}.`);
+  sentences.push(`${confidenceQualifier(metric.confidenceLevel)}${metric.label}: ${formatVal(metric)} ${arrow}${pct}, comparing ${result.currentLabel} to ${result.previousLabel}${confidenceNote(metric.confidenceLevel)}.`);
 
   if (metric.metric === 'dials' || metric.metric === 'conversations') {
     const rate = result.metrics.find(m => m.metric === 'dialToConvo');
