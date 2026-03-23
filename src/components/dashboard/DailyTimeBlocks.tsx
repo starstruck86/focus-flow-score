@@ -23,7 +23,7 @@ import {
   ThumbsUp, ThumbsDown, RotateCcw, CheckCircle2,
   ArrowRight, ExternalLink, Pencil, Check, X, GripVertical,
   Rocket, Shield, MoreVertical, EyeOff, Link2, Building2,
-  Settings2,
+  Settings2, Hammer,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
