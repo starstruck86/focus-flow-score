@@ -73,16 +73,33 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: { headers: { Authorization: authHeader! } },
-    });
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // Support service-role calls (from scheduled function) with x-supabase-user-id header
+    const impersonatedUserId = req.headers.get("x-supabase-user-id");
+    const isServiceRole = authHeader?.includes(serviceRoleKey);
+
+    let userId: string;
+
+    if (isServiceRole && impersonatedUserId) {
+      // Scheduled call — use the impersonated user ID and service role client
+      userId = impersonatedUserId;
+    } else {
+      // Normal user call
+      const supabase = createClient(supabaseUrl, supabaseKey, {
+        global: { headers: { Authorization: authHeader! } },
       });
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      userId = user.id;
     }
+
+    // Use service role client for all DB operations (works for both paths)
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     const { date, confirmedScreenshotEvents } = await req.json();
     const targetDate = date || new Date().toISOString().split("T")[0];
