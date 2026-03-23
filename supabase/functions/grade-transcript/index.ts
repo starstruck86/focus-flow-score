@@ -679,7 +679,39 @@ ${customScorecardContext}`;
       } catch (notesErr) {
         console.error("Opportunity notes enrichment failed (non-fatal):", notesErr);
       }
-    }
+      }
+
+      // Auto-fill next step fields if empty on the opportunity
+      try {
+        const extractedStep = grade.extracted_next_step?.trim();
+        const extractedDate = grade.extracted_next_step_date?.trim();
+
+        if (extractedStep || extractedDate) {
+          const { data: opp2 } = await supabase
+            .from("opportunities")
+            .select("next_step, next_step_date")
+            .eq("id", transcript.opportunity_id)
+            .single();
+
+          const updates: Record<string, any> = {};
+          if (extractedStep && !opp2?.next_step) {
+            updates.next_step = extractedStep;
+          }
+          if (extractedDate && !opp2?.next_step_date) {
+            updates.next_step_date = extractedDate;
+          }
+
+          if (Object.keys(updates).length > 0) {
+            await supabase
+              .from("opportunities")
+              .update(updates)
+              .eq("id", transcript.opportunity_id);
+            console.log("Auto-filled next step for opportunity:", transcript.opportunity_id, updates);
+          }
+        }
+      } catch (nextStepErr) {
+        console.error("Next step auto-fill failed (non-fatal):", nextStepErr);
+      }
 
     return new Response(JSON.stringify(saved), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
