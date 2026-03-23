@@ -24,5 +24,6 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
     cite_insight: (params: { topic: string }) => citeInsight(ctx, params),
     knowledge_trends: (params: { category?: string }) => knowledgeTrends(ctx, params),
     insight_reliability: (params: { claim: string }) => insightReliability(ctx, params),
+    recommend_strategy: (params: { topic: string; dealStage?: string; executionState?: string; accountType?: string; industry?: string }) => recommendStrategy(ctx, params),
   };
 }

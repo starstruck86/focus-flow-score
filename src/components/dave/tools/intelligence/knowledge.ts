@@ -162,7 +162,7 @@ async function fetchInsightsHybrid(
   return { insights: allInsights, sourceMap, fromStore: false };
 }
 
-// ── Tool: cite_insight ──────────────────────────────────────────
+// ── Tool: cite_insight (now uses decision engine) ───────────────
 
 export async function citeInsight(ctx: ToolContext, params: { topic: string }): Promise<string> {
   const userId = await ctx.getUserId();
@@ -182,17 +182,60 @@ export async function citeInsight(ctx: ToolContext, params: { topic: string }): 
     return `No knowledge found matching "${params.topic}".`;
   }
 
+  // Use decision engine for prioritised output
+  const dateMap = new Map<string, { date: string | null }>();
+  for (const [k, v] of sourceMap) dateMap.set(k, { date: v.date });
+
+  const decision = decideTopInsights(insights, dateMap, { topic: params.topic });
+  if (decision) {
+    return formatDecision(decision, { topic: params.topic });
+  }
+
+  // Fallback to simple ranking
   const ranked = rankInsights(insights, true).slice(0, 3);
   const parts: string[] = [`**Knowledge Intelligence: "${params.topic}"**\n`];
-
   for (const ins of ranked) {
     const trust = computeTrustScore(ins, sourceMap.get(ins.provenance.source_content_id)?.date || null);
     const sources = [sourceMap.get(ins.provenance.source_content_id)].filter(Boolean);
     parts.push(formatCitation({ insightText: ins.text, maturity: ins.idea_maturity, trustScore: trust, sources, conflicts: ins.conflicts }));
     parts.push('');
   }
-
   return parts.join('\n');
+}
+
+// ── Tool: recommend_strategy ────────────────────────────────────
+
+export async function recommendStrategy(
+  ctx: ToolContext,
+  params: {
+    topic: string;
+    dealStage?: string;
+    executionState?: string;
+    accountType?: string;
+    industry?: string;
+  },
+): Promise<string> {
+  const userId = await ctx.getUserId();
+  if (!userId) return 'Not authenticated';
+
+  const { insights, sourceMap } = await fetchInsightsHybrid(userId, params.topic);
+  if (!insights.length) return `No intelligence available for "${params.topic}". Add and operationalise resources first.`;
+
+  const context: DecisionContext = {
+    topic: params.topic,
+    dealStage: params.dealStage,
+    executionState: params.executionState,
+    accountType: params.accountType,
+    industry: params.industry,
+  };
+
+  const dateMap = new Map<string, { date: string | null }>();
+  for (const [k, v] of sourceMap) dateMap.set(k, { date: v.date });
+
+  const decision = decideTopInsights(insights, dateMap, context);
+  if (!decision) return `Could not rank insights for "${params.topic}".`;
+
+  return formatDecision(decision, context);
 }
 
 // ── Tool: knowledge_trends (hybrid) ─────────────────────────────
