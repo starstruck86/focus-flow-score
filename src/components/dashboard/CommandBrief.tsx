@@ -2,9 +2,11 @@
 // ONE state sentence + ONE primary action. No noise.
 // Live Mode: auto-activates during call/prospecting blocks,
 // compresses to action + who + reason. Expandable on demand.
+//
+// Standalone coaching layer — no external CRM sync assumed.
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, Check, SkipForward, ArrowRight, AlertTriangle, ExternalLink, Ban, Clock, ChevronDown, ChevronUp, Radio } from 'lucide-react';
+import { Zap, Check, SkipForward, ArrowRight, AlertTriangle, Ban, Clock, ChevronDown, ChevronUp, Radio } from 'lucide-react';
 import { useOperatingState } from '@/hooks/useOperatingState';
 import { usePrimaryAction } from '@/hooks/usePrimaryAction';
 import { useActionMemory } from '@/hooks/useActionMemory';
@@ -34,17 +36,10 @@ const ESCALATION_STYLES: Record<string, string> = {
   low: 'text-muted-foreground',
 };
 
-function inferExternalSystem(entityType: string): string | null {
-  if (entityType === 'opportunity' || entityType === 'renewal') return 'Salesforce';
-  if (entityType === 'account') return 'Outreach / Salesloft';
-  return null;
-}
-
 /** Detect if we're in a live-mode-eligible work block based on time of day */
 function useIsLiveBlock(): boolean {
   return useMemo(() => {
     const hour = new Date().getHours();
-    // Morning prospecting (before 10) or call blocks (10-12)
     return hour < 12;
   }, []);
 }
@@ -59,7 +54,6 @@ export function CommandBrief() {
   const [expanded, setExpanded] = useState(false);
   const [liveModeOverride, setLiveModeOverride] = useState<boolean | null>(null);
 
-  // Live mode: auto-on during execution blocks, toggleable
   const liveMode = liveModeOverride ?? isLiveBlock;
 
   const advance = (label: string) => {
@@ -98,7 +92,6 @@ export function CommandBrief() {
   };
 
   const showEscalation = primaryAction?.escalation === 'critical' || primaryAction?.escalation === 'high';
-  const extSystem = primaryAction ? inferExternalSystem(primaryAction.entityType) : null;
 
   return (
     <motion.div
@@ -211,13 +204,6 @@ export function CommandBrief() {
                   <ArrowRight className="h-3 w-3" />
                   <span>{primaryAction.nextStep}</span>
                 </div>
-
-                {extSystem && (
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground/70">
-                    <ExternalLink className="h-3 w-3" />
-                    <span>Execute in {extSystem}</span>
-                  </div>
-                )}
 
                 {primaryAction.delayConsequence && showEscalation && (
                   <p className={cn('text-xs italic', ESCALATION_STYLES[primaryAction.escalation!])}>

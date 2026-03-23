@@ -1,17 +1,14 @@
 /**
- * Execution Tracker — lag-tolerant, external-execution-aware context
- * persistence for the confirm/skip/block/snooze loop.
+ * Execution Tracker — lightweight local action-state tracking
+ * for the confirm/skip/block/snooze loop.
  *
- * Immediate layer: tracks lightweight user signals (done/blocked/skipped/snoozed).
- * Delayed layer: reconciles when CRM/cadence/transcript data arrives later.
- *
- * Future-ready: externalSystem field + reconciliation hooks for
- * Salesforce and Outreach/Salesloft passive sync.
+ * This is a standalone coaching layer. No external CRM sync.
+ * Actions are tracked locally to maintain continuous flow
+ * and learn from the user's execution patterns over time.
  */
 
 import { useState, useCallback, useEffect } from 'react';
 
-export type ExternalSystem = 'salesforce' | 'outreach' | 'salesloft' | 'manual';
 export type ActionOutcome = 'done' | 'blocked' | 'skipped' | 'snoozed';
 
 export interface ExecutionContext {
@@ -23,7 +20,6 @@ export interface ExecutionContext {
   stage: string;
   pendingAction: string;
   script?: string;
-  externalSystem: ExternalSystem;
   startedAt: number;
 }
 
@@ -32,15 +28,10 @@ export interface ExecutionLogEntry {
   accountId: string;
   accountName: string;
   outcome: ActionOutcome;
-  externalSystem: ExternalSystem;
   timestamp: number;
   durationMs?: number;
   snoozeUntil?: number;
   blockReason?: string;
-  /** Set when delayed data (transcript, CRM sync) is reconciled */
-  reconciled?: boolean;
-  reconciledAt?: number;
-  reconciledSource?: string;
 }
 
 const CTX_KEY = 'execution-tracker-context';
@@ -89,7 +80,6 @@ export function useExecutionTracker() {
       accountId: context.accountId,
       accountName: context.accountName,
       outcome,
-      externalSystem: context.externalSystem,
       timestamp: Date.now(),
       durationMs: Date.now() - context.startedAt,
     };
@@ -102,28 +92,6 @@ export function useExecutionTracker() {
     setLog(prev => [...prev, entry]);
     setContext(null);
   }, [context]);
-
-  // ── Delayed learning layer ───────────────────────────────────
-
-  /** Reconcile a past action when delayed data arrives (e.g. transcript sync) */
-  const reconcile = useCallback((actionId: string, source: string) => {
-    setLog(prev => prev.map(entry =>
-      entry.actionId === actionId && !entry.reconciled
-        ? { ...entry, reconciled: true, reconciledAt: Date.now(), reconciledSource: source }
-        : entry
-    ));
-  }, []);
-
-  /** Find unreconciled 'done' actions for a given account (for delayed matching) */
-  const getUnreconciledForAccount = useCallback((accountId: string): ExecutionLogEntry[] => {
-    const dayAgo = Date.now() - 24 * 3600_000;
-    return log.filter(l =>
-      l.accountId === accountId &&
-      l.outcome === 'done' &&
-      !l.reconciled &&
-      l.timestamp > dayAgo
-    );
-  }, [log]);
 
   // ── Snooze management ────────────────────────────────────────
 
@@ -141,7 +109,7 @@ export function useExecutionTracker() {
 
   // ── Analytics ────────────────────────────────────────────────
 
-  /** Completion rate across all outcomes */
+  /** Completion rate across all outcomes (last 7 days) */
   const getCompletionRate = useCallback((): number => {
     const recent = log.filter(l => l.timestamp > Date.now() - 7 * 86400_000);
     if (recent.length < 3) return 0.5;
@@ -156,23 +124,13 @@ export function useExecutionTracker() {
     return completed.reduce((s, l) => s + (l.durationMs || 0), 0) / completed.length;
   }, [log]);
 
-  /** Reconciliation rate — how often delayed data matched */
-  const getReconciliationRate = useCallback((): number => {
-    const doneEntries = log.filter(l => l.outcome === 'done');
-    if (doneEntries.length < 3) return 0;
-    return doneEntries.filter(l => l.reconciled).length / doneEntries.length;
-  }, [log]);
-
   return {
     context,
     setFocus,
     resolve,
-    reconcile,
-    getUnreconciledForAccount,
     getSnoozedActionIds,
     getCompletionRate,
     getAvgCompletionTime,
-    getReconciliationRate,
     hasActiveContext: context !== null,
   };
 }

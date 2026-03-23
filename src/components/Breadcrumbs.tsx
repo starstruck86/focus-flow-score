@@ -11,7 +11,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/trends': 'Trends',
   '/quota': 'Quota & Commission',
   '/settings': 'Settings',
-  '/recurring-tasks': 'Recurring Tasks',
+  '/recurring': 'Recurring Tasks',
 };
 
 export function Breadcrumbs() {
