@@ -50,6 +50,28 @@ function assertSessionContract(session: DaveSessionData): string | null {
   return null;
 }
 
+function classifyDaveStartupError(error: unknown): string {
+  const rawMsg = error instanceof Error ? error.message : String(error ?? 'Unknown error');
+
+  if (/NotAllowedError|Permission denied|microphone|NotFoundError|NotReadableError|TrackStartError|OverconstrainedError/i.test(rawMsg)) {
+    return classifyMicrophoneAccessError(error);
+  }
+
+  if (/token|auth|unauthorized|403|401/i.test(rawMsg)) {
+    return 'Session token expired or invalid. Tap Retry for a fresh session.';
+  }
+
+  if (/network|fetch|connect|socket|WebSocket|webrtc|Failed to fetch|Load failed/i.test(rawMsg)) {
+    return 'Network error connecting to Dave voice service.';
+  }
+
+  if (/aborted|abort/i.test(rawMsg)) {
+    return 'Connection was cancelled. Tap Retry to try again.';
+  }
+
+  return `Voice startup failed: ${rawMsg}`;
+}
+
 export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, minimized = false, onMinimize, preacquiredMicStream }: Props) {
   const navigate = useNavigate();
   const { ask: askCopilot } = useCopilot();
@@ -214,7 +236,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
       errorHistoryRef.current = [...errorHistoryRef.current.slice(-4), msg];
       console.error('[Dave] Full error object:', err);
       releasePreflightStream();
-      const friendlyMessage = classifyMicrophoneAccessError(err);
+      const friendlyMessage = classifyDaveStartupError(err);
       setError(friendlyMessage);
       toast.error('Dave connection error', { description: friendlyMessage });
     },
@@ -312,18 +334,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
       console.error('[Dave] Failed to start:', err);
 
       // Classify the startup error specifically
-      let friendlyMessage: string;
-      if (/NotAllowedError|Permission denied|microphone/i.test(rawMsg)) {
-        friendlyMessage = classifyMicrophoneAccessError(err);
-      } else if (/token|auth|unauthorized|403|401/i.test(rawMsg)) {
-        friendlyMessage = 'Session token expired or invalid. Tap Retry for a fresh session.';
-      } else if (/network|fetch|connect|socket|WebSocket/i.test(rawMsg)) {
-        friendlyMessage = 'Network error connecting to voice service. Check your connection and retry.';
-      } else if (/aborted|abort/i.test(rawMsg)) {
-        friendlyMessage = 'Connection was cancelled. Tap Retry to try again.';
-      } else {
-        friendlyMessage = `Voice startup failed: ${rawMsg}`;
-      }
+      const friendlyMessage = classifyDaveStartupError(err);
 
       setError(friendlyMessage);
       toast.error('Dave startup failed', { description: friendlyMessage, duration: 6000 });
@@ -453,7 +464,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
         exit={{ scale: 0, opacity: 0 }}
         onClick={onMinimize}
         className={cn(
-          'fixed bottom-28 right-4 z-50 w-14 h-14 rounded-full flex items-center justify-center',
+          'fixed bottom-28 left-4 z-50 w-14 h-14 rounded-full flex items-center justify-center',
           'border border-border/50 backdrop-blur-xl',
           isConnected ? 'bg-emerald-500/20' : 'bg-amber-500/20',
           isConnected && 'shadow-[0_0_24px_8px_rgba(16,185,129,0.25)]',

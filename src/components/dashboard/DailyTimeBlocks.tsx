@@ -90,6 +90,23 @@ interface GeneratePlanResponse extends DailyPlan {
   rebuild_diagnostics?: RebuildDiagnostics;
 }
 
+function parseGeneratePlanResponse(rawText: string) {
+  if (!rawText) return { parsed: {} as GeneratePlanResponse | { error?: string }, parseError: null };
+
+  try {
+    return {
+      parsed: JSON.parse(rawText) as GeneratePlanResponse | { error?: string },
+      parseError: null,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Invalid JSON';
+    return {
+      parsed: { error: `Planner returned invalid JSON: ${message}` },
+      parseError: message,
+    };
+  }
+}
+
 const TYPE_CONFIG: Record<string, { icon: typeof Clock; color: string; bg: string }> = {
   prospecting: { icon: Phone, color: 'text-blue-500', bg: 'bg-blue-500/10 border-blue-500/20' },
   meeting: { icon: Users, color: 'text-purple-500', bg: 'bg-purple-500/10 border-purple-500/20' },
@@ -347,11 +364,17 @@ export function DailyTimeBlocks() {
         });
 
         const rawText = await response.text();
-        const parsed = rawText ? JSON.parse(rawText) as GeneratePlanResponse | { error?: string } : {};
+        const { parsed, parseError } = parseGeneratePlanResponse(rawText);
 
         if (!response.ok) {
-          const reason = 'error' in parsed && parsed.error ? parsed.error : `HTTP ${response.status}`;
+          const reason = 'error' in parsed && parsed.error
+            ? parsed.error
+            : rawText?.trim() || `HTTP ${response.status}`;
           return await persistLocalFallback(reason);
+        }
+
+        if (parseError) {
+          return await persistLocalFallback(`Planner response parsing failed: ${parseError}`);
         }
 
         const data = parsed as GeneratePlanResponse;
@@ -842,9 +865,10 @@ export function DailyTimeBlocks() {
             </Button>
             <Button
               variant="ghost" size="sm" className="h-7 text-xs"
-              onClick={() => generateMutation.mutate()}
+              onClick={regenerateWithChanges}
               disabled={generateMutation.isPending}
-              title="Regenerate plan"
+              title="Rebuild plan"
+              data-testid="rebuild-plan-button"
             >
               <RotateCcw className={cn("h-3.5 w-3.5", generateMutation.isPending && "animate-spin")} />
             </Button>
@@ -944,8 +968,7 @@ export function DailyTimeBlocks() {
                 {dismissedBlocks.size > 0 && blockOppLinks.size > 0 && ' · '}
                 {blockOppLinks.size > 0 && `${blockOppLinks.size} linked`}
               </span>
-              <Button size="sm" className="h-6 text-[11px] gap-1" onClick={regenerateWithChanges} disabled={generateMutation.isPending}>
-                data-testid="rebuild-plan-button"
+              <Button size="sm" className="h-6 text-[11px] gap-1" onClick={regenerateWithChanges} disabled={generateMutation.isPending} data-testid="rebuild-plan-button">
                 <RotateCcw className={cn("h-3 w-3", generateMutation.isPending && "animate-spin")} />
                 Rebuild Plan
               </Button>

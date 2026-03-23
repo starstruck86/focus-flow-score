@@ -11,7 +11,7 @@ interface Props {
 
 /**
  * Persistent floating mic button for instant Dave access.
- * Positioned above the bottom nav, right-aligned, thumb-friendly on mobile.
+ * Positioned above the bottom nav on the left side so it doesn't collide with the primary FAB.
  */
 export function DaveMicFAB({ onTap, isLoading, isActive, isSpeaking }: Props) {
   // Hide when Dave conversation is already open
@@ -31,8 +31,8 @@ export function DaveMicFAB({ onTap, isLoading, isActive, isSpeaking }: Props) {
           'fixed z-50 flex items-center justify-center rounded-full shadow-lg transition-colors',
           // 56px = 14 tailwind units, well above 44px min tap target
           'h-14 w-14',
-          // Position: above bottom nav (bottom nav is ~6.5rem with safe area), right side
-          'right-4 bottom-[calc(7.5rem+env(safe-area-inset-bottom))]',
+          // Position: above bottom nav (bottom nav is ~6.5rem with safe area), left side
+          'left-4 bottom-[calc(7.5rem+env(safe-area-inset-bottom))]',
           isLoading
             ? 'bg-muted text-muted-foreground cursor-wait'
             : 'bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80',
