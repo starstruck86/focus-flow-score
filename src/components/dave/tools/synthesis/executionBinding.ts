@@ -202,7 +202,7 @@ export interface ExecutionNextResult {
   externalSystem: string;
 }
 
-export async function executionNext(ctx: ToolContext): Promise<string> {
+export async function executionNext(ctx: ToolContext, opts?: { liveMode?: boolean }): Promise<string> {
   const userId = await ctx.getUserId();
   if (!userId) return 'Not authenticated';
 
@@ -216,6 +216,9 @@ export async function executionNext(ctx: ToolContext): Promise<string> {
   // 2. Detect current work block
   const workBlock = await detectWorkBlock(userId);
 
+  // Auto-engage live mode during execution blocks
+  const liveMode = opts?.liveMode ?? (workBlock === 'prospecting' || workBlock === 'calls');
+
   // 3. Choose stage to fix (from diagnosis or infer from work block)
   const stage: FunnelStage = diagnosis?.stage
     || (workBlock === 'prospecting' ? 'dial_to_connect'
@@ -226,8 +229,8 @@ export async function executionNext(ctx: ToolContext): Promise<string> {
   const account = await findTargetAccount(userId, stage);
   if (!account) {
     return workBlock === 'prospecting'
-      ? 'No target accounts available. Say "suggest next accounts" to start sourcing.'
-      : 'No accounts match the current focus. Add target accounts first.';
+      ? 'No target accounts. Say "suggest next accounts".'
+      : 'No accounts match current focus.';
   }
 
   // 5. Find contact
@@ -248,8 +251,28 @@ export async function executionNext(ctx: ToolContext): Promise<string> {
 
   // 7. Build personalized script
   const script = buildScript(fix, account.name, contact?.name, contact?.title);
+  const actionId = `exec-${stage}-${account.id}`;
 
-  // 8. Format output — external execution model
+  // ── LIVE MODE: 3-5 lines max ──────────────────────────────────
+  if (liveMode) {
+    const who = contact
+      ? `${contact.name}${contact.title ? ` (${contact.title})` : ''} @ ${account.name}`
+      : account.name;
+    const reason = diagnosis
+      ? `${diagnosis.label} at ${Math.round(diagnosis.rate * 100)}%`
+      : 'top priority';
+
+    const lines: string[] = [];
+    lines.push(`🎯 **${fix.action}** → ${who}`);
+    lines.push(`_${reason}_`);
+    if (fix.example || stage === 'connect_to_meeting') {
+      lines.push(`> ${script}`);
+    }
+    lines.push(`[action_id: ${actionId}] [live_mode]`);
+    return lines.join('\n');
+  }
+
+  // ── FULL MODE: detailed output ────────────────────────────────
   const BLOCK_LABELS: Record<WorkBlock, string> = {
     prospecting: 'Prospecting Block',
     calls: 'Call Block',
@@ -260,7 +283,6 @@ export async function executionNext(ctx: ToolContext): Promise<string> {
 
   const extSystem = inferExternalSystem(stage);
   const hint = externalHint(stage, account.name);
-  const actionId = `exec-${stage}-${account.id}`;
 
   const lines: string[] = [];
   lines.push(`🎯 **${fix.action}**`);
