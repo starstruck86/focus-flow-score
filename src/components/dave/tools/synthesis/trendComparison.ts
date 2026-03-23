@@ -9,6 +9,7 @@ import {
   type PeriodType,
   type ComparisonResult,
   type MetricComparison,
+  type ConfidenceLevel,
 } from '@/data/comparison-engine';
 
 // ── NLP helpers (Dave-specific) ─────────────────────────────────
@@ -70,6 +71,24 @@ export async function compareTrends(ctx: ToolContext, params: { question?: strin
   return detail ? buildDetailedTrend(result) : buildSummaryTrend(result);
 }
 
+// ── Confidence-aware language ────────────────────────────────────
+
+function confidenceQualifier(level: ConfidenceLevel): string {
+  switch (level) {
+    case 'high': return '';
+    case 'moderate': return 'It looks like ';
+    case 'low': return 'Early signal — ';
+  }
+}
+
+function confidenceNote(level: ConfidenceLevel): string {
+  switch (level) {
+    case 'high': return '';
+    case 'moderate': return ' (based on a moderate sample — worth watching)';
+    case 'low': return ' (small sample size — monitor before acting)';
+  }
+}
+
 // ── Interpretation & response formatting ────────────────────────
 
 function comparisonModeNote(result: ComparisonResult): string {
@@ -88,7 +107,8 @@ function formatMetricLine(m: MetricComparison): string {
   const arrow = m.trend === 'up' ? '↑' : m.trend === 'down' ? '↓' : '→';
   const pct = m.percentChange !== null && m.trend !== 'flat' ? ` (${m.percentChange > 0 ? '+' : ''}${m.percentChange}%)` : '';
   const val = m.isRate ? `${m.currentValue}% → was ${m.previousValue}%` : `${m.currentValue} → was ${m.previousValue}`;
-  return `  ${arrow} ${m.label}: ${val}${pct}`;
+  const conf = m.confidenceLevel === 'low' ? ' ⚠️' : '';
+  return `  ${arrow} ${m.label}: ${val}${pct}${conf}`;
 }
 
 function interpretComparisons(result: ComparisonResult): string {
@@ -103,13 +123,13 @@ function interpretComparisons(result: ComparisonResult): string {
   if (result.topImprovement) {
     const m = result.topImprovement;
     const pct = m.percentChange !== null ? `${m.percentChange > 0 ? '+' : ''}${m.percentChange}%` : '';
-    sentences.push(`Your biggest improvement is ${m.label} — ${formatVal(m)} ${pct}.`);
+    sentences.push(`${confidenceQualifier(m.confidenceLevel)}your biggest improvement is ${m.label} — ${formatVal(m)} ${pct}${confidenceNote(m.confidenceLevel)}.`);
   }
 
   if (result.topDecline) {
     const m = result.topDecline;
     const pct = m.percentChange !== null ? `${m.percentChange}%` : '';
-    sentences.push(`Biggest drop is ${m.label} — ${formatVal(m)} ${pct}.`);
+    sentences.push(`${confidenceQualifier(m.confidenceLevel)}biggest drop is ${m.label} — ${formatVal(m)} ${pct}${confidenceNote(m.confidenceLevel)}.`);
   }
 
   // Efficiency insight
@@ -151,12 +171,22 @@ function interpretComparisons(result: ComparisonResult): string {
   return sentences.join(' ');
 }
 
+function overallConfidenceNote(level: ConfidenceLevel): string {
+  switch (level) {
+    case 'high': return '';
+    case 'moderate': return ' These trends look directionally right but could shift with more data.';
+    case 'low': return ' Heads up — limited data here, so treat these as early signals rather than conclusions.';
+  }
+}
+
 function buildSummaryTrend(result: ComparisonResult): string {
   const sentences: string[] = [];
   sentences.push(`Here's how ${result.currentLabel} compares to ${result.previousLabel}.`);
   const modeNote = comparisonModeNote(result);
   if (modeNote) sentences.push(modeNote);
   sentences.push(interpretComparisons(result));
+  const confNote = overallConfidenceNote(result.overallConfidence);
+  if (confNote) sentences.push(confNote);
   sentences.push(`Want me to break down every metric, or drill into a specific one?`);
   return sentences.join(' ');
 }
@@ -194,7 +224,7 @@ function buildFocusedResponse(metric: MetricComparison, result: ComparisonResult
   const arrow = metric.trend === 'up' ? '↑' : metric.trend === 'down' ? '↓' : '→';
   const pct = metric.percentChange !== null ? ` (${metric.percentChange > 0 ? '+' : ''}${metric.percentChange}%)` : '';
 
-  sentences.push(`${metric.label}: ${formatVal(metric)} ${arrow}${pct}, comparing ${result.currentLabel} to ${result.previousLabel}.`);
+  sentences.push(`${confidenceQualifier(metric.confidenceLevel)}${metric.label}: ${formatVal(metric)} ${arrow}${pct}, comparing ${result.currentLabel} to ${result.previousLabel}${confidenceNote(metric.confidenceLevel)}.`);
 
   if (metric.metric === 'dials' || metric.metric === 'conversations') {
     const rate = result.metrics.find(m => m.metric === 'dialToConvo');

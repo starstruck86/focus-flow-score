@@ -26,6 +26,8 @@ export interface PeriodPairResult {
   comparisonMode: ComparisonMode;
 }
 
+export type ConfidenceLevel = 'high' | 'moderate' | 'low';
+
 export interface MetricComparison {
   metric: string;
   label: string;
@@ -34,6 +36,7 @@ export interface MetricComparison {
   delta: number;
   percentChange: number | null; // null when previousValue is 0
   trend: 'up' | 'down' | 'flat';
+  confidenceLevel: ConfidenceLevel;
   isRate?: boolean;
   periodType?: PeriodType;
   contextLabel?: string;
@@ -47,6 +50,7 @@ export interface ComparisonResult {
   metrics: MetricComparison[];
   topImprovement: MetricComparison | null;
   topDecline: MetricComparison | null;
+  overallConfidence: ConfidenceLevel;
 }
 
 export interface AggregatedMetrics {
@@ -323,10 +327,29 @@ export function aggregateMetrics(journal: JournalRow[], whoop: WhoopRow[]): Aggr
 
 // ── Comparison builder ──────────────────────────────────────────
 
+// ── Signal confidence ────────────────────────────────────────────
+
+function computeConfidence(
+  currentDays: number, previousDays: number,
+  absPctChange: number | null, isRate: boolean,
+): ConfidenceLevel {
+  const sampleSize = Math.min(currentDays, previousDays);
+  const magnitude = absPctChange !== null ? Math.abs(absPctChange) : 0;
+
+  // Thresholds: rates need bigger swings to be meaningful
+  const meaningfulChange = isRate ? 15 : 10; // percent
+  const strongChange = isRate ? 30 : 25;
+
+  if (sampleSize >= 5 && magnitude >= strongChange) return 'high';
+  if (sampleSize >= 3 && magnitude >= meaningfulChange) return 'moderate';
+  return 'low';
+}
+
 function compareMetric(
   label: string, metric: string,
   a: number | null, b: number | null,
   isRate: boolean, periodType: PeriodType, contextLabel: string,
+  currentDays: number, previousDays: number,
 ): MetricComparison | null {
   if (a === null && b === null) return null;
   const va = a ?? 0;
@@ -334,13 +357,16 @@ function compareMetric(
   const delta = va - vb;
   const percentChange = vb !== 0 ? Math.round((delta / Math.abs(vb)) * 1000) / 10 : (va > 0 ? 100 : null);
   const trend: 'up' | 'down' | 'flat' = Math.abs(delta) < 0.01 ? 'flat' : delta > 0 ? 'up' : 'down';
-  return { metric, label, currentValue: va, previousValue: vb, delta, percentChange, trend, isRate, periodType, contextLabel };
+  const confidenceLevel = trend === 'flat' ? 'low' as ConfidenceLevel : computeConfidence(currentDays, previousDays, percentChange, isRate);
+  return { metric, label, currentValue: va, previousValue: vb, delta, percentChange, trend, confidenceLevel, isRate, periodType, contextLabel };
 }
 
 function buildMetricComparisons(
   current: AggregatedMetrics, previous: AggregatedMetrics,
   periodType: PeriodType, contextLabel: string,
 ): MetricComparison[] {
+  const cDays = current.days;
+  const pDays = previous.days;
   const pairs: [string, string, number | null, number | null, boolean][] = [
     ['Dials', 'dials', current.dials, previous.dials, false],
     ['Conversations', 'conversations', current.conversations, previous.conversations, false],
@@ -359,8 +385,18 @@ function buildMetricComparisons(
   ];
 
   return pairs
-    .map(([label, metric, a, b, isRate]) => compareMetric(label, metric, a, b, isRate, periodType, contextLabel))
+    .map(([label, metric, a, b, isRate]) => compareMetric(label, metric, a, b, isRate, periodType, contextLabel, cDays, pDays))
     .filter((c): c is MetricComparison => c !== null);
+}
+
+function computeOverallConfidence(metrics: MetricComparison[]): ConfidenceLevel {
+  const meaningful = metrics.filter(m => m.trend !== 'flat');
+  if (!meaningful.length) return 'low';
+  const highs = meaningful.filter(m => m.confidenceLevel === 'high').length;
+  const mods = meaningful.filter(m => m.confidenceLevel === 'moderate').length;
+  if (highs >= 2) return 'high';
+  if (highs >= 1 || mods >= 3) return 'moderate';
+  return 'low';
 }
 
 // ── Main public API ─────────────────────────────────────────────
@@ -401,5 +437,6 @@ export async function runComparison(
     metrics,
     topImprovement: improvements[0] || null,
     topDecline: declines[0] || null,
+    overallConfidence: computeOverallConfidence(metrics),
   };
 }
