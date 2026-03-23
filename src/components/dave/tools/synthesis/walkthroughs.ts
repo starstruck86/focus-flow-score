@@ -326,7 +326,6 @@ function buildSummaryOpps(opps: any[], totalArr: number, dealLabel: string, time
   const sentences: string[] = [];
   sentences.push(`You've got ${opps.length} ${dealLabel} ${opps.length === 1 ? 'opportunity' : 'opportunities'}${timeLabel} worth ${dollars(totalArr)} total.`);
 
-  // Group by stage
   const byStage: Record<string, any[]> = {};
   for (const o of opps) {
     const stage = o.stage || 'No Stage';
@@ -343,24 +342,25 @@ function buildSummaryOpps(opps: any[], totalArr: number, dealLabel: string, time
     sentences.push(`Broken down, you have ${joinNatural(stageParts)}.`);
   }
 
-  // Biggest deals
   const top3 = [...opps].sort((a, b) => (b.arr || 0) - (a.arr || 0)).slice(0, 3);
   if (top3.length) {
     const topParts = top3.map(o => `${o.name} at ${dollars(o.arr || 0)}`);
     sentences.push(`Your biggest ${top3.length === 1 ? 'deal is' : 'deals are'} ${joinNatural(topParts)}.`);
   }
 
-  // Risk callout
   const atRisk = opps.filter(o => o.churn_risk === 'high' || (o.close_date && daysFromNow(o.close_date) < 14 && daysFromNow(o.close_date) >= 0));
   if (atRisk.length) {
     sentences.push(`${atRisk.length} ${atRisk.length === 1 ? 'deal needs' : 'deals need'} attention — ${joinNatural(atRisk.slice(0, 3).map(o => o.name))}${atRisk.length > 3 ? ` and ${atRisk.length - 3} more` : ''}.`);
   }
 
-  // Stale
   const stale = opps.filter(o => o.last_touch_date && daysFromNow(o.last_touch_date) < -14);
   if (stale.length) {
     sentences.push(`${stale.length} haven't been touched in over two weeks.`);
   }
+
+  // Decision layer — prioritize and recommend
+  const prioritized = opps.map(o => scoreOppPriority(o));
+  sentences.push(buildActionRecommendation(prioritized));
 
   sentences.push('Want me to go through them one by one?');
   return sentences.join(' ');
