@@ -52,5 +52,8 @@ export function createSynthesisTools(ctx: ToolContext, allTools: Record<string, 
 
     // Trend & comparison
     compare_trends: (params: { question?: string }) => compareTrends(ctx, params),
+
+    // Recast engine
+    recast_today: () => recastToday(ctx),
   };
 }
