@@ -22,6 +22,8 @@ interface Props {
   sessionData: DaveSessionData;
   minimized?: boolean;
   onMinimize?: () => void;
+  /** Mic stream pre-acquired during user gesture (mobile). Enables auto-start without second tap. */
+  preacquiredMicStream?: MediaStream | null;
 }
 
 const DISMISSAL_PHRASES = [

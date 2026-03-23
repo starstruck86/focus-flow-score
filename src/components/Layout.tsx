@@ -345,6 +345,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           sessionData={daveSessionData}
           minimized={daveMinimized}
           onMinimize={handleToggleMinimize}
+          preacquiredMicStream={preacquiredMicStream}
         />
       )}
     </div>
