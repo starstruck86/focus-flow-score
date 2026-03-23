@@ -59,10 +59,13 @@ serve(async (req) => {
 
     const tokenData = await tokenResponse.json();
     console.log('Token response keys:', Object.keys(tokenData));
-    
+
     const access_token = tokenData.access_token;
     const refresh_token = tokenData.refresh_token || null;
     const expires_in = tokenData.expires_in || 3600;
+    const grantedScopes = typeof tokenData.scope === 'string' && tokenData.scope.trim().length > 0
+      ? tokenData.scope
+      : 'read:recovery read:sleep read:workout read:cycles read:profile';
 
     if (!access_token) {
       console.error('No access_token in response:', JSON.stringify(tokenData));
@@ -100,7 +103,7 @@ serve(async (req) => {
         access_token,
         refresh_token,
         token_expires_at: expiresAt,
-        scopes: 'read:recovery read:sleep read:workout read:cycles read:profile',
+        scopes: grantedScopes,
       });
 
     if (insertError) {
@@ -108,7 +111,7 @@ serve(async (req) => {
       return Response.redirect(`${redirectUri}/settings?whoop=error`, 302);
     }
 
-    console.log('WHOOP connection stored successfully for user:', userId);
+    console.log('WHOOP connection stored successfully for user:', userId, 'scopes:', grantedScopes, 'hasRefreshToken:', Boolean(refresh_token));
     return Response.redirect(`${redirectUri}/settings?whoop=success`, 302);
   } catch (error) {
     console.error('whoop-callback error:', error);
