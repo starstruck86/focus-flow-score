@@ -179,11 +179,7 @@ export async function dailyGamePlanSummary(ctx: ToolContext): Promise<string> {
     const done = (b as any).build_steps?.filter((s: any) => s.done).length || 0;
     const total = (b as any).build_steps?.length || 5;
     let buildSentence = `You've got a New Logo Build block at ${spokenTime(b.start_time)} — that's where you source ${targets.accounts_sourced || 3} fresh accounts, research them, find contacts, and add them to cadence.${done > 0 ? ` You've completed ${done} of ${total} steps so far.` : ''}`;
-    // Include auto-selected accounts
-    const selection = loadCachedSelection(todayInAppTz());
-    if (selection && selection.accounts.length > 0) {
-      buildSentence += ` I've auto-selected ${joinNatural(selection.accounts.map(a => a.name))} as today's targets based on ICP fit and freshness.`;
-    }
+    // Queue context is added async in summary — skip here for sync perf
     sentences.push(buildSentence);
   }
 
