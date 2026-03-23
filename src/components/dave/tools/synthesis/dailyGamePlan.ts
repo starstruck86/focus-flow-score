@@ -237,7 +237,7 @@ export async function dailyGamePlanDetailed(ctx: ToolContext): Promise<string> {
     } else {
       blockSentence = `${transition}, ${b.label} from ${spokenTime(b.start_time)} to ${spokenTime(b.end_time)}, ${dur} minutes.`;
     }
-    if (hasCompleted) blockSentence += ' You've already made progress here.';
+    if (hasCompleted) blockSentence += " You've already made progress here.";
     sentences.push(blockSentence);
 
     // Purpose
