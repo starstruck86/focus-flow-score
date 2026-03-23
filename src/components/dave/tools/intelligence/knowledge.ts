@@ -28,6 +28,11 @@ import {
   rowToExtractedInsight,
   rowToTrendSignal,
 } from '@/data/intelligence';
+import {
+  recordStrategyEvent,
+  getUserPerformanceMap,
+  type StrategyPerformance,
+} from '@/data/strategy-outcomes';
 
 // ── Helpers ─────────────────────────────────────────────────────
 
