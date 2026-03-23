@@ -10,3 +10,4 @@ export * from './call-transcripts';
 export * from './resource-links';
 export * from './intelligence';
 export * from './strategy-outcomes';
+export * from './pipeline-impact';

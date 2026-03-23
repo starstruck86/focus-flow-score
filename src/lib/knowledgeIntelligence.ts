@@ -218,6 +218,8 @@ export interface DecisionContext {
   personalBoosts?: Map<string, number>;
   /** Personal performance summaries keyed by insight id */
   personalSummaries?: Map<string, string>;
+  /** Pipeline impact data keyed by insight id */
+  pipelineImpacts?: Map<string, { meetingsGenerated: number; opportunitiesCreated: number; stageProgressions: number; pipelineValueInfluenced: number }>;
 }
 
 const MATURITY_WEIGHT: Record<IdeaMaturity, number> = {
@@ -445,6 +447,17 @@ export function formatDecision(result: DecisionResult, context: DecisionContext)
   // Personal performance note
   if (p.personalNote) {
     lines.push(`_Your track record:_ ${p.personalNote}`);
+  }
+
+  // Pipeline impact for primary
+  const pImpact = context.pipelineImpacts?.get(p.insight.id);
+  if (pImpact && (pImpact.meetingsGenerated + pImpact.opportunitiesCreated + pImpact.stageProgressions > 0)) {
+    const parts: string[] = [];
+    if (pImpact.meetingsGenerated > 0) parts.push(`${pImpact.meetingsGenerated} meeting${pImpact.meetingsGenerated > 1 ? 's' : ''}`);
+    if (pImpact.opportunitiesCreated > 0) parts.push(`${pImpact.opportunitiesCreated} opp${pImpact.opportunitiesCreated > 1 ? 's' : ''}`);
+    if (pImpact.stageProgressions > 0) parts.push(`${pImpact.stageProgressions} stage advance${pImpact.stageProgressions > 1 ? 's' : ''}`);
+    if (pImpact.pipelineValueInfluenced > 0) parts.push(`$${Math.round(pImpact.pipelineValueInfluenced / 1000)}k influenced`);
+    lines.push(`_Pipeline impact:_ ${parts.join(' · ')}`);
   }
 
   // Execution guidance for primary
