@@ -426,33 +426,36 @@ ${prefsContext}
 ${weeklyContext}
 
 CRITICAL RULES:
-1. NO time blocks shorter than ${minBlockMin} minutes.
-2. NEW LOGO IS THE PRIORITY. Use TODAY'S ADJUSTED TARGETS (from weekly context above) — NOT the raw daily averages. Schedule a New Logo Build block + enough Prep→Call Blitz + Email Outreach cycles to hit TODAY'S target.
-3. Use "workstream" field to tag each block as "new_logo" or "renewal" or "general"
-4. Goals must be REALISTIC and ACHIEVABLE. Use these realistic pacing rates:
-   - DIAL RATE: ~15 dials per 30 minutes (1 dial every 2 min including voicemail/notes). A 45-min Call Blitz = ~22 dials. A 60-min blitz = ~30 dials.
-   - BUILD RATE: 3 accounts per 45-60 min build block (selecting + researching + finding contacts + adding to cadence)
-   - PREP RATE: 2-3 accounts per 25-30 min prep block
+1. DEFAULT BLOCK DURATION: All meaningful work blocks (prospecting, build, research, pipeline) should be 60 minutes by default. This is the ideal flow unit.
+2. MINIMUM BLOCK DURATION: Meaningful work blocks MUST be at least 30 minutes. NEVER schedule prospecting, build, research, or pipeline work in blocks shorter than 30 minutes.
+3. SHORT BLOCKS (under 30 min): ONLY allowed for start-of-day prep, end-of-day wrap, or light admin/cleanup. Do NOT assign meaningful work to short windows — leave them empty or use for admin only.
+4. NEW LOGO IS THE PRIORITY. Use TODAY'S ADJUSTED TARGETS (from weekly context above) — NOT the raw daily averages. Schedule a New Logo Build block + enough Prep→Call Blitz + Email Outreach cycles to hit TODAY'S target.
+5. Use "workstream" field to tag each block as "new_logo" or "renewal" or "general"
+6. Goals must be REALISTIC and ACHIEVABLE. Use these realistic pacing rates:
+   - DIAL RATE: ~15 dials per 30 minutes (1 dial every 2 min including voicemail/notes). A 60-min Call Blitz = ~30 dials.
+   - BUILD RATE: 3 accounts per 60 min build block (selecting + researching + finding contacts + adding to cadence)
+   - PREP RATE: 2-3 accounts per 30 min prep block
    - EMAIL RATE: ~8-10 personalized emails per 30 minutes
-   - Do the math: if today's target is ${todayDialTarget} dials, you need ~${Math.ceil(todayDialTarget / 25)} Call Blitz blocks of 45-50 min each
-5. ${preferNewLogoMorning ? 'Account for energy patterns: deep prospecting/new logo work in the morning, renewal tasks in the afternoon' : 'Distribute new logo and renewal work based on meeting gaps'}
-6. Include buffer time around meetings (5-10 min)
-7. If feedback says past suggestions were unrealistic, SIGNIFICANTLY dial back goals
-8. DO NOT schedule an EOD wrap-up or journal block. The user handles reflection during their morning check-in the next day.
-9. DO NOT schedule lunch breaks, mid-morning breaks, or mid-afternoon breaks. Every available minute should be productive.
-10. NAME SPECIFIC ACCOUNTS in Prep, Build, and Call Blitz block goals (from prospecting list only)
-11. PERSONAL/FAMILY blocks are NON-NEGOTIABLE — the user has children (Quinn, Emmett). School drop-offs, pickups, and activities MUST be respected.
-12. If screenshot-confirmed meetings differ from calendar DB, TRUST the screenshot.
-13. CALENDAR MEETINGS ARE FIXED ANCHORS. Do NOT generate your own meeting blocks — they are provided as locked blocks and merged automatically.
-14. DO NOT duplicate a meeting that already exists.
-15. DO NOT schedule ANY blocks before ${workStart} or after ${workEnd}. This is a HARD boundary.
-16. ONLY use accounts from the NEW LOGO PROSPECTING list in Prep→Execute cycles. Current customers are NOT prospecting targets.
-17. CONSOLIDATE all non-prospecting admin work (pipeline opp tasks, renewal tasks, email, CRM updates) into ONE short "Admin & Pipeline Tasks" block (30 min max). New Logo Prep and Call Blitz blocks are NOT admin.
-18. Internal meetings like "Deal Desk" are OPTIONAL — do not treat them as locked anchors. Only external customer/prospect meetings are mandatory.
-19. MINIMUM Call Blitz block is 30 minutes. NO 15-minute call blitzes to targeted/prepped accounts — that's not enough time to build momentum. Exception: a short 15-min "Rust Buster" dial block (type: "prospecting") is OK ONCE at the start of the day to warm up on LOW-PREP targets (old leads, closed-lost re-engagements, prebuilt lists) — NOT targeted prospecting accounts.
-20. EMAIL OUTREACH is part of prospecting, not just calling. Schedule dedicated "Email Blitz" blocks (type: "prospecting", 25-30 min) for personalized outbound emails to prospects. Alternate between Call Blitz and Email Blitz for variety and multi-channel coverage.
-21. On HEAVY MEETING DAYS (${todayMeetingMin > 180 ? 'TODAY IS ONE' : 'not today'}): SKIP the Renewal Review block entirely — those 30 minutes are better spent on prospecting. Catch up on renewals on lighter days.
-22. THINK LIKE A WORLD-CLASS SDR/AE: Cold calling works best with MOMENTUM. Schedule longer, uninterrupted Call Blitz blocks (45-60 min) rather than scattered short ones. But a quick "Rust Buster" warm-up to shake off daily hesitation is a proven tactic.
+   - Do the math: if today's target is ${todayDialTarget} dials, you need ~${Math.ceil(todayDialTarget / 30)} Call Blitz blocks of 60 min each
+7. ${preferNewLogoMorning ? 'Account for energy patterns: deep prospecting/new logo work in the morning, renewal tasks in the afternoon' : 'Distribute new logo and renewal work based on meeting gaps'}
+8. Include buffer time around meetings (5-10 min)
+9. If feedback says past suggestions were unrealistic, SIGNIFICANTLY dial back goals
+10. DO NOT schedule an EOD wrap-up or journal block. The user handles reflection during their morning check-in the next day.
+11. DO NOT schedule lunch breaks, mid-morning breaks, or mid-afternoon breaks. Every available minute should be productive.
+12. NAME SPECIFIC ACCOUNTS in Prep, Build, and Call Blitz block goals (from prospecting list only)
+13. PERSONAL/FAMILY blocks are NON-NEGOTIABLE — the user has children (Quinn, Emmett). School drop-offs, pickups, and activities MUST be respected.
+14. If screenshot-confirmed meetings differ from calendar DB, TRUST the screenshot.
+15. CALENDAR MEETINGS ARE FIXED ANCHORS. Do NOT generate your own meeting blocks — they are provided as locked blocks and merged automatically.
+16. DO NOT duplicate a meeting that already exists.
+17. DO NOT schedule ANY blocks before ${workStart} or after ${workEnd}. This is a HARD boundary.
+18. ONLY use accounts from the NEW LOGO PROSPECTING list in Prep→Execute cycles. Current customers are NOT prospecting targets.
+19. CONSOLIDATE all non-prospecting admin work (pipeline opp tasks, renewal tasks, email, CRM updates) into ONE short "Admin & Pipeline Tasks" block (30 min max). New Logo Prep and Call Blitz blocks are NOT admin.
+20. Internal meetings like "Deal Desk" are OPTIONAL — do not treat them as locked anchors. Only external customer/prospect meetings are mandatory.
+21. MINIMUM Call Blitz block is 30 minutes. Prefer 60 minutes for momentum. NO 15-minute call blitzes to targeted/prepped accounts. Exception: a short 15-min "Rust Buster" dial block (type: "prospecting") is OK ONCE at the start of the day to warm up on LOW-PREP targets — NOT targeted prospecting accounts.
+22. EMAIL OUTREACH is part of prospecting, not just calling. Schedule dedicated "Email Blitz" blocks (type: "prospecting", 30 min) for personalized outbound emails to prospects. Alternate between Call Blitz and Email Blitz for variety and multi-channel coverage.
+23. On HEAVY MEETING DAYS (${todayMeetingMin > 180 ? 'TODAY IS ONE' : 'not today'}): SKIP the Renewal Review block entirely — those 30 minutes are better spent on prospecting. Catch up on renewals on lighter days.
+24. THINK LIKE A WORLD-CLASS SDR/AE: Cold calling works best with MOMENTUM. Schedule longer, uninterrupted Call Blitz blocks (60 min preferred) rather than scattered short ones. But a quick "Rust Buster" warm-up to shake off daily hesitation is a proven tactic.
+25. PRIORITIZE FLOW over filling every minute. If a gap between meetings is under 30 minutes, assign light admin or leave it as buffer — do NOT cram meaningful work into it.
 
 WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL):
 
