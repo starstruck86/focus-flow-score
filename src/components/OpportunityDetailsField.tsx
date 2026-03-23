@@ -118,35 +118,6 @@ export function OpportunityDetailsField({
         </div>
       )}
 
-      {/* Dates */}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-            Next Step Date
-          </label>
-          <EditableDatePicker
-            value={nextStepDate}
-            onChange={(v) => onNextStepDateChange?.(v)}
-            placeholder="+ Add"
-            className={cn(
-              'w-full',
-              nextStepDate && isPast(parseISO(nextStepDate)) && !isToday(parseISO(nextStepDate)) && '[&_button]:border-status-red'
-            )}
-          />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-            Last Touch Date
-          </label>
-          <EditableDatePicker
-            value={lastTouchDate}
-            onChange={(v) => onLastTouchDateChange?.(v)}
-            placeholder="+ Add"
-            className="w-full"
-          />
-        </div>
-      </div>
-
       {/* Notes - display-first */}
       <div>
         <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
