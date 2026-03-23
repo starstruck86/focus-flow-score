@@ -63,6 +63,7 @@ interface DailyPlan {
   feedback_rating?: number;
   feedback_text?: string;
   recast_at?: string | null;
+  dismissed_block_indices?: number[];
 }
 
 const TYPE_CONFIG: Record<string, { icon: typeof Clock; color: string; bg: string }> = {
