@@ -118,10 +118,8 @@ export function buildLocalFallbackPlan(input: {
   if (cursor < dayEnd) gaps.push({ start: cursor, end: dayEnd });
   if (!gaps.length && dayEnd - dayStart >= 60) gaps.push({ start: dayStart, end: dayEnd });
 
-  // Follow strict dependency ordering: 1) Build, 2) Admin/Prep, 3) Outreach
-  let buildPlaced = false;
-  let adminPlaced = false;
-  let prospectingIndex = 1;
+  let prepPlaced = false;
+  let activityIndex = 1;
 
   const pushBlock = (start: number, duration: number, block: Omit<RebuildFallbackBlock, 'start_time' | 'end_time'>) => {
     const end = Math.min(dayEnd, start + duration);
@@ -135,52 +133,55 @@ export function buildLocalFallbackPlan(input: {
 
   for (const gap of gaps) {
     let gapCursor = gap.start;
-    const gapLength = gap.end - gap.start;
-    if (gapLength < 30) continue;
+    let gapRemaining = gap.end - gap.start;
+    if (gapRemaining < 30) continue;
 
-    // Phase 1: Build block (sourcing & research)
-    if (!buildPlaced) {
-      const buildDuration = gapLength >= 60 ? 60 : 30;
-      gapCursor = pushBlock(gapCursor, buildDuration, {
-        label: buildDuration >= 60 ? 'New Logo Build (3 accounts)' : 'New Logo Build (2 accounts)',
-        type: 'build',
-        workstream: 'new_logo',
-        goals: buildDuration >= 60
-          ? ['Select 3 target accounts', 'Research companies & identify contacts', 'Find emails/phone numbers']
-          : ['Select 2 target accounts', 'Find contacts & add to cadence'],
-        reasoning: 'Step 1 — source and research accounts before any outreach.',
-      });
-      buildPlaced = true;
-    }
+    while (gapRemaining > 15) {
+      if (gapRemaining >= 60) {
+        gapCursor = pushBlock(gapCursor, 30, {
+          label: prepPlaced ? 'Quick outreach prep' : 'Prep contacts for outreach',
+          type: 'admin' as any,
+          workstream: 'new_logo',
+          goals: ['Research target accounts', 'Find contacts + source emails/phone numbers', 'Load contacts into cadence'],
+          reasoning: 'Prep time before outreach so execution is actually possible.',
+        });
+        gapRemaining = gap.end - gapCursor;
+        prepPlaced = true;
 
-    // Phase 2: Admin/Prep block (contact sourcing & cadence loading)
-    if (!adminPlaced && gap.end - gapCursor >= 30) {
-      const adminDuration = Math.min(45, gap.end - gapCursor);
-      gapCursor = pushBlock(gapCursor, adminDuration, {
-        label: 'Account Research & Contact Sourcing',
-        type: 'admin' as any,
-        workstream: 'new_logo',
-        goals: ['Source email addresses & phone numbers', 'Load contacts into cadence system', 'Verify contact data quality'],
-        reasoning: 'Step 2 — contacts must be sourced and loaded before outreach begins.',
-      });
-      adminPlaced = true;
-    }
-
-    // Phase 3: Outreach blocks (only after prep is done)
-    while (gap.end - gapCursor >= 30 && (buildPlaced || adminPlaced)) {
-      const prospectingDuration = gap.end - gapCursor >= 60 ? 60 : Math.max(30, gap.end - gapCursor);
-      const estimatedDials = Math.round(prospectingDuration / 2);
-      const label = prospectingIndex === 1
-        ? `Call newly added prospects (~${estimatedDials} dials)`
-        : `Follow up on yesterday's outreach (~${estimatedDials} dials)`;
-      gapCursor = pushBlock(gapCursor, prospectingDuration, {
-        label,
-        type: 'prospecting',
-        workstream: 'new_logo',
-        goals: [`Make ~${estimatedDials} dials to sourced contacts`, 'Log conversations and outcomes'],
-        reasoning: 'Step 3 — outreach to prepped contacts.',
-      });
-      prospectingIndex += 1;
+        const activityDuration = Math.min(60, gapRemaining);
+        if (activityDuration >= 30) {
+          const estimatedTouches = Math.max(8, Math.round(activityDuration / 3));
+          const label = activityIndex === 1 ? 'Work sourced contacts' : 'Continue outreach follow-up';
+          gapCursor = pushBlock(gapCursor, activityDuration, {
+            label,
+            type: 'prospecting',
+            workstream: 'new_logo',
+            goals: [`Make calls / send emails for ~${estimatedTouches} outreach touches`, 'Log responses and next steps'],
+            reasoning: 'Activity block paired with prep so time is used efficiently.',
+          });
+          activityIndex += 1;
+          gapRemaining = gap.end - gapCursor;
+        }
+      } else if (gapRemaining >= 30) {
+        gapCursor = pushBlock(gapCursor, gapRemaining, {
+          label: 'Prep contacts for outreach',
+          type: 'admin' as any,
+          workstream: 'new_logo',
+          goals: ['Research target accounts', 'Find contacts + source emails/phone numbers', 'Load contacts into cadence'],
+          reasoning: 'Use remaining half hour for prep instead of leaving time idle.',
+        });
+        prepPlaced = true;
+        gapRemaining = 0;
+      } else {
+        gapCursor = pushBlock(gapCursor, gapRemaining, {
+          label: 'Quick admin & CRM updates',
+          type: 'admin' as any,
+          workstream: 'general',
+          goals: ['Log activity', 'Update CRM'],
+          reasoning: 'Use short window productively instead of leaving dead time.',
+        });
+        gapRemaining = 0;
+      }
     }
   }
 
