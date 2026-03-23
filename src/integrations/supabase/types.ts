@@ -938,6 +938,7 @@ export type Database = {
           blocks: Json
           completed_goals: Json | null
           created_at: string
+          dismissed_block_indices: Json | null
           feedback_rating: number | null
           feedback_submitted_at: string | null
           feedback_text: string | null
@@ -956,6 +957,7 @@ export type Database = {
           blocks?: Json
           completed_goals?: Json | null
           created_at?: string
+          dismissed_block_indices?: Json | null
           feedback_rating?: number | null
           feedback_submitted_at?: string | null
           feedback_text?: string | null
@@ -974,6 +976,7 @@ export type Database = {
           blocks?: Json
           completed_goals?: Json | null
           created_at?: string
+          dismissed_block_indices?: Json | null
           feedback_rating?: number | null
           feedback_submitted_at?: string | null
           feedback_text?: string | null
