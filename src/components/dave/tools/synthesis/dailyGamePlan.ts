@@ -200,7 +200,7 @@ export async function queryDailyPlan(ctx: ToolContext, params: { question: strin
 
   if (!plan) return `No Daily Game Plan for today. Generate one from the dashboard first.`;
 
-  const blocks = (Array.isArray(plan.blocks) ? plan.blocks : []) as TimeBlock[];
+  const blocks = (Array.isArray(plan.blocks) ? plan.blocks : []) as unknown as TimeBlock[];
   const targets = (plan.key_metric_targets || {}) as Record<string, number>;
   const q = params.question.toLowerCase();
 
