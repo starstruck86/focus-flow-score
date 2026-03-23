@@ -327,10 +327,29 @@ export function aggregateMetrics(journal: JournalRow[], whoop: WhoopRow[]): Aggr
 
 // ── Comparison builder ──────────────────────────────────────────
 
+// ── Signal confidence ────────────────────────────────────────────
+
+function computeConfidence(
+  currentDays: number, previousDays: number,
+  absPctChange: number | null, isRate: boolean,
+): ConfidenceLevel {
+  const sampleSize = Math.min(currentDays, previousDays);
+  const magnitude = absPctChange !== null ? Math.abs(absPctChange) : 0;
+
+  // Thresholds: rates need bigger swings to be meaningful
+  const meaningfulChange = isRate ? 15 : 10; // percent
+  const strongChange = isRate ? 30 : 25;
+
+  if (sampleSize >= 5 && magnitude >= strongChange) return 'high';
+  if (sampleSize >= 3 && magnitude >= meaningfulChange) return 'moderate';
+  return 'low';
+}
+
 function compareMetric(
   label: string, metric: string,
   a: number | null, b: number | null,
   isRate: boolean, periodType: PeriodType, contextLabel: string,
+  currentDays: number, previousDays: number,
 ): MetricComparison | null {
   if (a === null && b === null) return null;
   const va = a ?? 0;
@@ -338,7 +357,8 @@ function compareMetric(
   const delta = va - vb;
   const percentChange = vb !== 0 ? Math.round((delta / Math.abs(vb)) * 1000) / 10 : (va > 0 ? 100 : null);
   const trend: 'up' | 'down' | 'flat' = Math.abs(delta) < 0.01 ? 'flat' : delta > 0 ? 'up' : 'down';
-  return { metric, label, currentValue: va, previousValue: vb, delta, percentChange, trend, isRate, periodType, contextLabel };
+  const confidenceLevel = trend === 'flat' ? 'low' as ConfidenceLevel : computeConfidence(currentDays, previousDays, percentChange, isRate);
+  return { metric, label, currentValue: va, previousValue: vb, delta, percentChange, trend, confidenceLevel, isRate, periodType, contextLabel };
 }
 
 function buildMetricComparisons(
