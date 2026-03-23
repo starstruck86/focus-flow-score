@@ -73,33 +73,24 @@ Deno.serve(async (req: Request) => {
       stats.workDays += 1;
     }
 
-    // Get upcoming renewals for each user
+    // Get upcoming renewals for the authenticated user
     const nextFriday = new Date();
-    nextFriday.setDate(nextFriday.getDate() + 12); // ~2 weeks out
+    nextFriday.setDate(nextFriday.getDate() + 12);
     const nextFridayStr = nextFriday.toISOString().slice(0, 10);
 
     const { data: renewals } = await supabase
       .from("renewals")
-      .select("user_id, account_name, arr, renewal_due, churn_risk")
+      .select("account_name, arr, renewal_due, churn_risk")
+      .eq("user_id", userId)
       .gte("renewal_due", todayStr)
       .lte("renewal_due", nextFridayStr)
       .order("renewal_due", { ascending: true });
 
-    const userRenewals = new Map<string, typeof renewals>();
-    for (const r of renewals || []) {
-      const existing = userRenewals.get(r.user_id) || [];
-      existing.push(r);
-      userRenewals.set(r.user_id, existing);
-    }
+    const avgScore = stats.workDays > 0 ? (stats.avgScore / stats.workDays).toFixed(1) : '0';
 
-    // Generate digest data per user (could be emailed or stored)
-    const digests = [];
-    for (const [userId, stats] of userStats) {
-      const avgScore = stats.workDays > 0 ? (stats.avgScore / stats.workDays).toFixed(1) : '0';
-      const upcomingRenewals = userRenewals.get(userId) || [];
-
-      digests.push({
-        userId,
+    return new Response(
+      JSON.stringify({
+        success: true,
         weekOf: lastMondayStr,
         summary: {
           workDays: stats.workDays,
@@ -110,20 +101,12 @@ Deno.serve(async (req: Request) => {
           avgDailyScore: avgScore,
           goalMetDays: stats.goalMetDays,
         },
-        upcomingRenewals: upcomingRenewals.map(r => ({
+        upcomingRenewals: (renewals || []).map(r => ({
           account: r.account_name,
           arr: r.arr,
           dueDate: r.renewal_due,
           risk: r.churn_risk,
         })),
-      });
-    }
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        digestCount: digests.length,
-        digests,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
