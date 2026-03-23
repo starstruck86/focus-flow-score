@@ -171,12 +171,22 @@ function interpretComparisons(result: ComparisonResult): string {
   return sentences.join(' ');
 }
 
+function overallConfidenceNote(level: ConfidenceLevel): string {
+  switch (level) {
+    case 'high': return '';
+    case 'moderate': return ' These trends look directionally right but could shift with more data.';
+    case 'low': return ' Heads up — limited data here, so treat these as early signals rather than conclusions.';
+  }
+}
+
 function buildSummaryTrend(result: ComparisonResult): string {
   const sentences: string[] = [];
   sentences.push(`Here's how ${result.currentLabel} compares to ${result.previousLabel}.`);
   const modeNote = comparisonModeNote(result);
   if (modeNote) sentences.push(modeNote);
   sentences.push(interpretComparisons(result));
+  const confNote = overallConfidenceNote(result.overallConfidence);
+  if (confNote) sentences.push(confNote);
   sentences.push(`Want me to break down every metric, or drill into a specific one?`);
   return sentences.join(' ');
 }
