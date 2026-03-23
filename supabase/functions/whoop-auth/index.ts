@@ -18,7 +18,7 @@ serve(async (req) => {
     // Authenticate user
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      return new Response(JSON.stringify({ error: 'Unauthorized — no Bearer token' }), {
         status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -29,19 +29,23 @@ serve(async (req) => {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+    const { data: { user }, error: userError } = await userClient.auth.getUser();
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized — invalid session', detail: userError?.message }), {
         status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    const userId = claimsData.claims.sub;
+    const userId = user.id;
 
     const { redirectUri } = await req.json();
     if (!redirectUri) throw new Error('redirectUri is required');
 
     const CALLBACK_URL = `${SUPABASE_URL}/functions/v1/whoop-callback`;
+
+    // Clear any stale connection before starting new OAuth flow
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const adminClient = createClient(SUPABASE_URL, serviceRoleKey);
+    await adminClient.from('whoop_connections').delete().eq('user_id', userId);
 
     // Encode userId + redirectUri in state so the callback knows which user to associate
     const encodedState = btoa(JSON.stringify({ userId, redirectUri, nonce: crypto.randomUUID() }));
@@ -58,9 +62,9 @@ serve(async (req) => {
     return new Response(JSON.stringify({ authUrl: authUrl.toString() }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('whoop-auth error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: error.message || 'Unknown whoop-auth error' }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

@@ -79,8 +79,10 @@ export function useWakeWord({ onWake, enabled }: UseWakeWordOptions) {
       recognition.start();
       recognitionRef.current = recognition;
       console.log('[WakeWord] Listening for wake phrase...');
-    } catch {
-      // Mic in use or permission denied
+    } catch (e: any) {
+      const msg = e?.message || 'Unknown error starting speech recognition';
+      console.error('[WakeWord] Failed to start:', msg);
+      recognitionRef.current = null;
     }
   }, [isSupported]);
 

@@ -155,7 +155,7 @@ export function DailyTimeBlocks() {
   const [editingBlock, setEditingBlock] = useState<number | null>(null);
   const [editLabel, setEditLabel] = useState('');
   const [editGoals, setEditGoals] = useState<string[]>([]);
-  const [dismissedBlocks, setDismissedBlocks] = useState<Set<number>>(new Set());
+  const [dismissedBlocks, setDismissedBlocks] = useState<Set<number>>(() => new Set());
   const [linkOppBlockIdx, setLinkOppBlockIdx] = useState<number | null>(null);
   const [blockOppLinks, setBlockOppLinks] = useState<Map<number, { id: string; name: string }>>(new Map());
   const [showPreferences, setShowPreferences] = useState(false);
