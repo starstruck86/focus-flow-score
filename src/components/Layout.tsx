@@ -5,6 +5,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { 
   Compass,
   LogOut,
+  Mic,
 } from 'lucide-react';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { SaveIndicator } from '@/components/SaveIndicator';
