@@ -88,12 +88,18 @@ export async function recastToday(ctx: ToolContext): Promise<string> {
 
   const result = recastDay(input);
 
+  // ── Persist recast timestamp so UI can show "Recast Active" ──
+  await supabase
+    .from('daily_time_blocks')
+    .update({ recast_at: new Date().toISOString() } as any)
+    .eq('id', planData.id);
+
   // ── Format for voice delivery ──
   const sentences: string[] = [];
 
   // Situation
   const hoursLeft = (result.minutesRemaining / 60).toFixed(1);
-  sentences.push(`OK, here's your recast. You have about ${hoursLeft} hours left in the day.`);
+  sentences.push(`OK — we're adjusting based on what's left in the day. You have about ${hoursLeft} hours remaining.`);
 
   // What changed
   if (result.droppedBlocks.length > 0) {
