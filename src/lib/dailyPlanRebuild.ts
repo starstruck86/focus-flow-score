@@ -118,9 +118,10 @@ export function buildLocalFallbackPlan(input: {
   if (cursor < dayEnd) gaps.push({ start: cursor, end: dayEnd });
   if (!gaps.length && dayEnd - dayStart >= 60) gaps.push({ start: dayStart, end: dayEnd });
 
+  // Follow strict dependency ordering: 1) Build, 2) Admin/Prep, 3) Outreach
   let buildPlaced = false;
-  let callPlaced = false;
-  let extraProspectingIndex = 2;
+  let adminPlaced = false;
+  let prospectingIndex = 1;
 
   const pushBlock = (start: number, duration: number, block: Omit<RebuildFallbackBlock, 'start_time' | 'end_time'>) => {
     const end = Math.min(dayEnd, start + duration);
@@ -137,6 +138,7 @@ export function buildLocalFallbackPlan(input: {
     const gapLength = gap.end - gap.start;
     if (gapLength < 30) continue;
 
+    // Phase 1: Build block (sourcing & research)
     if (!buildPlaced) {
       const buildDuration = gapLength >= 60 ? 60 : 30;
       gapCursor = pushBlock(gapCursor, buildDuration, {
@@ -144,38 +146,41 @@ export function buildLocalFallbackPlan(input: {
         type: 'build',
         workstream: 'new_logo',
         goals: buildDuration >= 60
-          ? ['Select 3 target accounts', 'Research companies', 'Find contacts & add to cadence']
+          ? ['Select 3 target accounts', 'Research companies & identify contacts', 'Find emails/phone numbers']
           : ['Select 2 target accounts', 'Find contacts & add to cadence'],
-        reasoning: 'Local fallback rebuild — keep at least one sourcing block in the day.',
+        reasoning: 'Step 1 — source and research accounts before any outreach.',
       });
       buildPlaced = true;
     }
 
-    const remainingAfterBuild = gap.end - gapCursor;
-    if (!callPlaced && remainingAfterBuild >= 30) {
-      const callDuration = remainingAfterBuild >= 60 ? 60 : 30;
-      const estimatedDials = Math.round(callDuration / 2);
-      gapCursor = pushBlock(gapCursor, callDuration, {
-        label: `Call Blitz (~${estimatedDials} dials)`,
-        type: 'prospecting',
+    // Phase 2: Admin/Prep block (contact sourcing & cadence loading)
+    if (!adminPlaced && gap.end - gapCursor >= 30) {
+      const adminDuration = Math.min(45, gap.end - gapCursor);
+      gapCursor = pushBlock(gapCursor, adminDuration, {
+        label: 'Account Research & Contact Sourcing',
+        type: 'admin' as any,
         workstream: 'new_logo',
-        goals: [`Make ~${estimatedDials} dials`, 'Log conversations'],
-        reasoning: 'Local fallback rebuild — keep a dedicated call block in the plan.',
+        goals: ['Source email addresses & phone numbers', 'Load contacts into cadence system', 'Verify contact data quality'],
+        reasoning: 'Step 2 — contacts must be sourced and loaded before outreach begins.',
       });
-      callPlaced = true;
+      adminPlaced = true;
     }
 
-    while (gap.end - gapCursor >= 30) {
-      const prospectingDuration = gap.end - gapCursor >= 60 ? 60 : 30;
+    // Phase 3: Outreach blocks (only after prep is done)
+    while (gap.end - gapCursor >= 30 && (buildPlaced || adminPlaced)) {
+      const prospectingDuration = gap.end - gapCursor >= 60 ? 60 : Math.max(30, gap.end - gapCursor);
       const estimatedDials = Math.round(prospectingDuration / 2);
+      const label = prospectingIndex === 1
+        ? `Call newly added prospects (~${estimatedDials} dials)`
+        : `Follow up on yesterday's outreach (~${estimatedDials} dials)`;
       gapCursor = pushBlock(gapCursor, prospectingDuration, {
-        label: `Prospecting Block #${extraProspectingIndex} (~${estimatedDials} dials)`,
+        label,
         type: 'prospecting',
         workstream: 'new_logo',
-        goals: [`Make ~${estimatedDials} dials`, 'Send follow-up emails'],
-        reasoning: 'Local fallback rebuild — use remaining free time for prospecting.',
+        goals: [`Make ~${estimatedDials} dials to sourced contacts`, 'Log conversations and outcomes'],
+        reasoning: 'Step 3 — outreach to prepped contacts.',
       });
-      extraProspectingIndex += 1;
+      prospectingIndex += 1;
     }
   }
 
