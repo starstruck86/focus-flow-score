@@ -2,10 +2,10 @@
  * Dave tool: daily_game_plan
  * Reads the STORED Daily Game Plan from daily_time_blocks table.
  * Two modes: summary (fast ~60s) and detailed (block-by-block guided).
- * Single source of truth — same data shown on the dashboard.
+ * Voice-first conversational output — optimized for spoken delivery.
  */
 import { supabase } from '@/integrations/supabase/client';
-import { formatTimeETLabel, todayInAppTz } from '@/lib/timeFormat';
+import { todayInAppTz } from '@/lib/timeFormat';
 import type { ToolContext } from '../../toolTypes';
 
 interface TimeBlock {
@@ -34,11 +34,12 @@ interface DailyPlan {
 
 // ── Shared helpers ──
 
-function formatBlockTime(t: string): string {
+function spokenTime(t: string): string {
   const [h, m] = t.split(':').map(Number);
   const suffix = h >= 12 ? 'PM' : 'AM';
   const hour = h > 12 ? h - 12 : h === 0 ? 12 : h;
-  return `${hour}:${m.toString().padStart(2, '0')} ${suffix} ET`;
+  if (m === 0) return `${hour} ${suffix}`;
+  return `${hour}:${m.toString().padStart(2, '0')} ${suffix}`;
 }
 
 function blockDurationMin(block: TimeBlock): number {
@@ -77,15 +78,22 @@ async function fetchTodayPlan(ctx: ToolContext): Promise<{ plan: DailyPlan | nul
     .eq('plan_date', today)
     .maybeSingle();
 
-  if (error) return { plan: null, error: `Failed to load Daily Game Plan: ${error.message}` };
-  if (!data) return { plan: null, error: `📋 No Daily Game Plan exists for today (${today}). Open the dashboard and generate one, or say "generate my daily plan."` };
+  if (error) return { plan: null, error: `I couldn't pull up your plan right now. ${error.message}` };
+  if (!data) return { plan: null, error: `You don't have a Daily Game Plan for today yet. Head to the dashboard and generate one, or just say "generate my daily plan."` };
 
   const p = data as unknown as DailyPlan;
   p.blocks = Array.isArray(p.blocks) ? p.blocks : [];
   return { plan: p, error: null };
 }
 
-// ── Summary mode (~60 seconds spoken) ──
+function joinNatural(items: string[]): string {
+  if (items.length === 0) return '';
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return items.slice(0, -1).join(', ') + ', and ' + items[items.length - 1];
+}
+
+// ── Summary mode (conversational, ~60 seconds spoken) ──
 
 export async function dailyGamePlanSummary(ctx: ToolContext): Promise<string> {
   const { plan, error } = await fetchTodayPlan(ctx);
@@ -93,61 +101,81 @@ export async function dailyGamePlanSummary(ctx: ToolContext): Promise<string> {
 
   const blocks = plan.blocks as TimeBlock[];
   const targets = (plan.key_metric_targets || {}) as Record<string, number>;
-  const parts: string[] = [];
+  const sentences: string[] = [];
 
-  parts.push(`📋 DAILY GAME PLAN — ${plan.plan_date}`);
-
-  // Strategy
-  if (plan.ai_reasoning) parts.push(`\n💡 Strategy: ${plan.ai_reasoning}`);
-
-  // Structure
+  // Opening with day shape
   const focusHrs = plan.focus_hours_available ?? 0;
   const meetingHrs = plan.meeting_load_hours ?? 0;
-  parts.push(`\n⏱️ ${focusHrs.toFixed(1)}h focus time, ${meetingHrs.toFixed(1)}h meetings`);
+  const meetings = blocks.filter(b => b.type === 'meeting');
+
+  let opener = `Alright, here's your day. You've got about ${focusHrs.toFixed(1)} hours of focus time`;
+  if (meetings.length) {
+    opener += ` and ${meetings.length} meeting${meetings.length !== 1 ? 's' : ''} taking up around ${meetingHrs.toFixed(1)} hours.`;
+  } else {
+    opener += ` with no meetings on the calendar — solid block day.`;
+  }
+  sentences.push(opener);
+
+  // Strategy
+  if (plan.ai_reasoning) {
+    sentences.push(`The game plan today is to ${plan.ai_reasoning.charAt(0).toLowerCase()}${plan.ai_reasoning.slice(1).replace(/\.$/, '')}.`);
+  }
 
   // Targets
   const targetParts: string[] = [];
   if (targets.dials) targetParts.push(`${targets.dials} dials`);
-  if (targets.conversations) targetParts.push(`${targets.conversations} convos`);
+  if (targets.conversations) targetParts.push(`${targets.conversations} conversations`);
   if (targets.accounts_researched) targetParts.push(`${targets.accounts_researched} accounts researched`);
   if (targets.contacts_prepped) targetParts.push(`${targets.contacts_prepped} contacts prepped`);
-  if (targetParts.length) parts.push(`🎯 Targets: ${targetParts.join(', ')}`);
+  if (targetParts.length) {
+    sentences.push(`You're aiming for ${joinNatural(targetParts)} today.`);
+  }
 
-  // Current / next
+  // Meetings
+  if (meetings.length) {
+    if (meetings.length <= 3) {
+      const meetingParts = meetings.map(m => `${m.label} at ${spokenTime(m.start_time)}`);
+      sentences.push(`On the meeting side, you've got ${joinNatural(meetingParts)}.`);
+    } else {
+      const first = meetings[0];
+      sentences.push(`You've got ${meetings.length} meetings today, starting with ${first.label} at ${spokenTime(first.start_time)}.`);
+    }
+  }
+
+  // Rust buster
+  const rust = blocks.filter(b => b.label.toLowerCase().includes('rust'));
+  if (rust.length) {
+    sentences.push(`Your Rust Buster warm-up kicks off at ${spokenTime(rust[0].start_time)}.`);
+  }
+
+  // Current / next awareness
   if (blocks.length) {
     const { current, next } = findCurrentAndNext(blocks);
     if (current) {
-      parts.push(`\n🔴 NOW: ${current.label} (${formatBlockTime(current.start_time)}–${formatBlockTime(current.end_time)})`);
-    }
-    if (next) {
+      sentences.push(`Right now you should be in your ${current.label} block, which runs until ${spokenTime(current.end_time)}.`);
+    } else if (next) {
       const now = getCurrentMinutesET();
       const [nh, nm] = next.start_time.split(':').map(Number);
-      parts.push(`⏭️ NEXT: ${next.label} at ${formatBlockTime(next.start_time)} (in ${(nh * 60 + nm) - now} min)`);
+      const minsUntil = (nh * 60 + nm) - now;
+      sentences.push(`Your next block is ${next.label} starting at ${spokenTime(next.start_time)}, about ${minsUntil} minutes from now.`);
     }
-
-    // Key meetings
-    const meetings = blocks.filter(b => b.type === 'meeting');
-    if (meetings.length) {
-      parts.push(`\n📅 ${meetings.length} meeting${meetings.length !== 1 ? 's' : ''}:`);
-      for (const m of meetings) parts.push(`  • ${formatBlockTime(m.start_time)} — ${m.label}`);
-    }
-
-    // Rust buster
-    const rust = blocks.filter(b => b.label.toLowerCase().includes('rust'));
-    if (rust.length) parts.push(`\n🔥 Rust Buster at ${formatBlockTime(rust[0].start_time)}`);
   }
 
-  // First focus
+  // First focus recommendation
   const first = blocks.find(b => b.type !== 'meeting' && b.type !== 'break');
   if (first) {
-    parts.push(`\n🎯 Start here: ${first.label} at ${formatBlockTime(first.start_time)}`);
-    if (first.goals?.length) parts.push(`   → ${first.goals[0]}`);
+    let closer = `I'd start with ${first.label} at ${spokenTime(first.start_time)}`;
+    if (first.goals?.length) {
+      closer += ` — the goal there is to ${first.goals[0].charAt(0).toLowerCase()}${first.goals[0].slice(1).replace(/\.$/, '')}`;
+    }
+    closer += '. Let me know if you want the full block-by-block walkthrough.';
+    sentences.push(closer);
   }
 
-  return parts.join('\n');
+  return sentences.join(' ');
 }
 
-// ── Detailed step-by-step mode ──
+// ── Detailed step-by-step mode (conversational, chronological) ──
 
 export async function dailyGamePlanDetailed(ctx: ToolContext): Promise<string> {
   const { plan, error } = await fetchTodayPlan(ctx);
@@ -156,17 +184,17 @@ export async function dailyGamePlanDetailed(ctx: ToolContext): Promise<string> {
   const blocks = plan.blocks as TimeBlock[];
   const targets = (plan.key_metric_targets || {}) as Record<string, number>;
   const completedGoals = new Set(plan.completed_goals || []);
-  const parts: string[] = [];
+  const sentences: string[] = [];
 
-  parts.push(`📋 DAILY GAME PLAN — DETAILED WALKTHROUGH — ${plan.plan_date}`);
-
-  // Strategy context
-  if (plan.ai_reasoning) parts.push(`\n💡 Today's strategy: ${plan.ai_reasoning}`);
-
-  // Day shape
+  // Opening
   const focusHrs = plan.focus_hours_available ?? 0;
   const meetingHrs = plan.meeting_load_hours ?? 0;
-  parts.push(`\n⏱️ Day shape: ${focusHrs.toFixed(1)}h focus, ${meetingHrs.toFixed(1)}h meetings, ${blocks.length} blocks total`);
+  sentences.push(`OK let's walk through your whole day. You've got ${blocks.length} blocks lined up — about ${focusHrs.toFixed(1)} hours of focus time and ${meetingHrs.toFixed(1)} hours of meetings.`);
+
+  // Strategy
+  if (plan.ai_reasoning) {
+    sentences.push(`The overall strategy is to ${plan.ai_reasoning.charAt(0).toLowerCase()}${plan.ai_reasoning.slice(1).replace(/\.$/, '')}.`);
+  }
 
   // Targets
   const targetParts: string[] = [];
@@ -174,78 +202,90 @@ export async function dailyGamePlanDetailed(ctx: ToolContext): Promise<string> {
   if (targets.conversations) targetParts.push(`${targets.conversations} conversations`);
   if (targets.accounts_researched) targetParts.push(`${targets.accounts_researched} accounts researched`);
   if (targets.contacts_prepped) targetParts.push(`${targets.contacts_prepped} contacts prepped`);
-  if (targetParts.length) parts.push(`🎯 Daily targets: ${targetParts.join(', ')}`);
-
-  // Current position
-  const { current, next } = findCurrentAndNext(blocks);
-  if (current) {
-    parts.push(`\n🔴 You are currently in: ${current.label} (${formatBlockTime(current.start_time)}–${formatBlockTime(current.end_time)})`);
+  if (targetParts.length) {
+    sentences.push(`By end of day you're targeting ${joinNatural(targetParts)}.`);
   }
 
-  // Block-by-block walkthrough
-  parts.push(`\n${'═'.repeat(40)}`);
-  parts.push(`BLOCK-BY-BLOCK WALKTHROUGH`);
-  parts.push(`${'═'.repeat(40)}`);
+  // Current position
+  const { current } = findCurrentAndNext(blocks);
+
+  // Block-by-block
+  const transitions = [
+    'Starting off',
+    'After that',
+    'Then',
+    'Next',
+    'From there',
+    'Moving on',
+    'Following that',
+    'Then you shift to',
+    'After that block',
+    'Next up',
+  ];
 
   for (let i = 0; i < blocks.length; i++) {
     const b = blocks[i];
     const dur = blockDurationMin(b);
     const isCurrent = b === current;
-    const marker = isCurrent ? '🔴' : '⬜';
+    const transition = i === 0 ? transitions[0] : transitions[Math.min(i, transitions.length - 1)];
     const hasCompleted = b.goals?.some((_, gi) => completedGoals.has(`${i}-${gi}`));
-    const statusTag = hasCompleted ? ' ✅' : '';
 
-    parts.push(`\n${marker} Block ${i + 1}: ${b.label}${statusTag}`);
-    parts.push(`   ⏰ ${formatBlockTime(b.start_time)} → ${formatBlockTime(b.end_time)} (${dur} min)`);
-    parts.push(`   📂 Type: ${b.type}${b.workstream ? ` — ${b.workstream}` : ''}`);
+    // Core block sentence
+    let blockSentence: string;
+    if (isCurrent) {
+      blockSentence = `This is where you are right now — ${b.label}, running from ${spokenTime(b.start_time)} to ${spokenTime(b.end_time)}, so about ${dur} minutes.`;
+    } else {
+      blockSentence = `${transition}, ${b.label} from ${spokenTime(b.start_time)} to ${spokenTime(b.end_time)}, ${dur} minutes.`;
+    }
+    if (hasCompleted) blockSentence += ' You've already made progress here.';
+    sentences.push(blockSentence);
 
     // Purpose
     if (b.reasoning) {
-      parts.push(`   💡 Why: ${b.reasoning}`);
+      sentences.push(`The idea here is ${b.reasoning.charAt(0).toLowerCase()}${b.reasoning.slice(1).replace(/\.$/, '')}.`);
     }
 
-    // Goals = what success looks like
+    // Goals
     if (b.goals?.length) {
-      parts.push(`   ✅ Success looks like:`);
-      for (const g of b.goals) {
-        const goalDone = completedGoals.has(`${i}-${b.goals.indexOf(g)}`);
-        parts.push(`      ${goalDone ? '✓' : '○'} ${g}`);
+      if (b.goals.length === 1) {
+        sentences.push(`You'll know this block was a win if you ${b.goals[0].charAt(0).toLowerCase()}${b.goals[0].slice(1).replace(/\.$/, '')}.`);
+      } else {
+        const goalText = b.goals.map(g => g.charAt(0).toLowerCase() + g.slice(1).replace(/\.$/, ''));
+        sentences.push(`Success here looks like ${joinNatural(goalText)}.`);
       }
     }
 
     // Linked accounts
     if (b.linked_accounts?.length) {
-      parts.push(`   🏢 Accounts: ${b.linked_accounts.map(a => a.name).join(', ')}`);
+      const names = b.linked_accounts.map(a => a.name);
+      sentences.push(`You'll be working with ${joinNatural(names)}.`);
     }
 
-    // Actuals (if tracking has started)
+    // Progress
     if (b.actual_dials || b.actual_emails) {
       const actuals: string[] = [];
       if (b.actual_dials) actuals.push(`${b.actual_dials} dials`);
       if (b.actual_emails) actuals.push(`${b.actual_emails} emails`);
-      parts.push(`   📊 Progress: ${actuals.join(', ')}`);
+      sentences.push(`So far you've logged ${joinNatural(actuals)} in this block.`);
     }
   }
 
-  // Wrap-up
-  parts.push(`\n${'═'.repeat(40)}`);
-
-  // What to do right now
+  // Closing
   if (current) {
-    parts.push(`\n🎯 Focus now: ${current.label}`);
-    if (current.goals?.length) parts.push(`   → ${current.goals[0]}`);
-  } else if (next) {
-    const now = getCurrentMinutesET();
-    const [nh, nm] = next.start_time.split(':').map(Number);
-    parts.push(`\n🎯 Next up: ${next.label} at ${formatBlockTime(next.start_time)} (in ${(nh * 60 + nm) - now} min)`);
-    if (next.goals?.length) parts.push(`   → ${next.goals[0]}`);
+    sentences.push(`So right now, stay locked into ${current.label}.`);
+    if (current.goals?.length) {
+      sentences.push(`Focus on getting ${current.goals[0].charAt(0).toLowerCase()}${current.goals[0].slice(1).replace(/\.$/, '')} done.`);
+    }
   } else {
-    parts.push(`\n✅ All blocks complete or past. Great work today.`);
+    const nextActionBlock = blocks.find(b => b.type !== 'meeting' && b.type !== 'break');
+    if (nextActionBlock) {
+      sentences.push(`First thing to tackle is ${nextActionBlock.label} at ${spokenTime(nextActionBlock.start_time)}.`);
+    }
   }
 
-  parts.push(`\nAsk me about any specific block for more detail.`);
+  sentences.push(`That's the full rundown. Ask me about any specific block if you want to dig in.`);
 
-  return parts.join('\n');
+  return sentences.join(' ');
 }
 
 // ── Legacy alias — defaults to summary ──
@@ -255,74 +295,94 @@ export async function dailyGamePlanWalkthrough(ctx: ToolContext): Promise<string
 }
 
 /**
- * Answer specific questions about the daily plan.
+ * Answer specific questions about the daily plan — conversational style.
  */
 export async function queryDailyPlan(ctx: ToolContext, params: { question: string }): Promise<string> {
   const { plan, error } = await fetchTodayPlan(ctx);
-  if (!plan) return error || 'No Daily Game Plan for today.';
+  if (!plan) return error || 'You don\'t have a plan for today yet.';
 
   const blocks = plan.blocks as TimeBlock[];
   const targets = (plan.key_metric_targets || {}) as Record<string, number>;
   const q = params.question.toLowerCase();
 
-  // Block-specific follow-up: "tell me about block 3" or "block 3"
+  // Block-specific follow-up
   const blockNumMatch = q.match(/block\s*(\d+)/);
   if (blockNumMatch) {
     const idx = parseInt(blockNumMatch[1], 10) - 1;
     if (idx >= 0 && idx < blocks.length) {
       const b = blocks[idx];
       const dur = blockDurationMin(b);
-      const lines = [
-        `Block ${idx + 1}: ${b.label}`,
-        `⏰ ${formatBlockTime(b.start_time)} → ${formatBlockTime(b.end_time)} (${dur} min)`,
-        `Type: ${b.type}${b.workstream ? ` — ${b.workstream}` : ''}`,
-      ];
-      if (b.reasoning) lines.push(`Why: ${b.reasoning}`);
-      if (b.goals?.length) lines.push(`Goals: ${b.goals.join('; ')}`);
-      if (b.linked_accounts?.length) lines.push(`Accounts: ${b.linked_accounts.map(a => a.name).join(', ')}`);
-      return lines.join('\n');
+      let resp = `Block ${idx + 1} is ${b.label}, running from ${spokenTime(b.start_time)} to ${spokenTime(b.end_time)} — that's ${dur} minutes.`;
+      if (b.reasoning) resp += ` The purpose is ${b.reasoning.charAt(0).toLowerCase()}${b.reasoning.slice(1).replace(/\.$/, '')}.`;
+      if (b.goals?.length) resp += ` You want to ${b.goals.map(g => g.charAt(0).toLowerCase() + g.slice(1).replace(/\.$/, '')).join(' and ')}.`;
+      if (b.linked_accounts?.length) resp += ` You'll be focused on ${joinNatural(b.linked_accounts.map(a => a.name))}.`;
+      return resp;
     }
   }
 
-  // Time blocks question
+  // Schedule
   if (q.includes('time block') || q.includes('schedule') || q.includes('blocks')) {
-    return blocks.map(b => `${formatBlockTime(b.start_time)}–${formatBlockTime(b.end_time)}: ${b.label} (${b.type})`).join('\n');
+    const summary = blocks.map(b => `${b.label} from ${spokenTime(b.start_time)} to ${spokenTime(b.end_time)}`);
+    return `Your schedule has ${blocks.length} blocks today. ${joinNatural(summary)}.`;
   }
 
-  // Account research question
+  // Research
   if (q.includes('research') || q.includes('account')) {
     const target = targets.accounts_researched || 0;
     const prepBlocks = blocks.filter(b => b.type === 'prep' || b.type === 'research');
-    return `Today's target: ${target} accounts researched.\n${prepBlocks.length} prep/research blocks:\n${prepBlocks.map(b => `• ${formatBlockTime(b.start_time)} — ${b.label}: ${b.goals?.join('; ') || 'No specific goals'}`).join('\n')}`;
+    let resp = `You're targeting ${target} accounts researched today.`;
+    if (prepBlocks.length) {
+      resp += ` You have ${prepBlocks.length} prep block${prepBlocks.length !== 1 ? 's' : ''} set aside for that`;
+      resp += ` — the first one is at ${spokenTime(prepBlocks[0].start_time)}.`;
+    }
+    return resp;
   }
 
-  // Rust buster question
+  // Rust buster
   if (q.includes('rust') || q.includes('warm up') || q.includes('warmup')) {
     const rust = blocks.filter(b => b.label.toLowerCase().includes('rust'));
-    if (!rust.length) return 'No Rust Buster block in today\'s plan.';
-    return rust.map(b => `🔥 ${formatBlockTime(b.start_time)}–${formatBlockTime(b.end_time)}: ${b.label}\nGoals: ${b.goals?.join('; ') || 'Warm up dials'}`).join('\n');
+    if (!rust.length) return 'There\'s no Rust Buster block in today\'s plan.';
+    const b = rust[0];
+    let resp = `Your Rust Buster is at ${spokenTime(b.start_time)}, running until ${spokenTime(b.end_time)}.`;
+    if (b.goals?.length) resp += ` The goal is to ${b.goals[0].charAt(0).toLowerCase()}${b.goals[0].slice(1).replace(/\.$/, '')}.`;
+    return resp;
   }
 
-  // Prospecting/dials question
+  // Prospecting
   if (q.includes('prospect') || q.includes('dial') || q.includes('call')) {
     const prospBlocks = blocks.filter(b => b.type === 'prospecting');
     const totalMin = prospBlocks.reduce((s, b) => s + blockDurationMin(b), 0);
-    return `Today's dial target: ${targets.dials || '?'}\n${prospBlocks.length} prospecting blocks (${Math.round(totalMin / 60 * 10) / 10}h):\n${prospBlocks.map(b => `• ${formatBlockTime(b.start_time)} — ${b.label}: ${b.goals?.join('; ')}`).join('\n')}`;
+    let resp = `You've got ${prospBlocks.length} prospecting block${prospBlocks.length !== 1 ? 's' : ''} today, about ${Math.round(totalMin / 60 * 10) / 10} hours total.`;
+    if (targets.dials) resp += ` Your dial target is ${targets.dials}.`;
+    return resp;
   }
 
-  // Focus question
+  // Focus / first
   if (q.includes('focus') || q.includes('first') || q.includes('start')) {
     const first = blocks.find(b => b.type !== 'meeting' && b.type !== 'break');
-    if (!first) return 'All blocks are meetings today.';
-    return `🎯 Start with: ${first.label} at ${formatBlockTime(first.start_time)}\n→ ${first.goals?.[0] || first.reasoning}`;
+    if (!first) return 'It\'s all meetings today — no open action blocks.';
+    let resp = `I'd start with ${first.label} at ${spokenTime(first.start_time)}.`;
+    if (first.goals?.length) resp += ` Aim to ${first.goals[0].charAt(0).toLowerCase()}${first.goals[0].slice(1).replace(/\.$/, '')}.`;
+    return resp;
   }
 
-  // Meeting question
+  // Meetings
   if (q.includes('meeting')) {
     const meetings = blocks.filter(b => b.type === 'meeting');
-    return `${meetings.length} meetings today (${plan.meeting_load_hours || 0}h):\n${meetings.map(b => `• ${formatBlockTime(b.start_time)}–${formatBlockTime(b.end_time)}: ${b.label}`).join('\n')}`;
+    if (!meetings.length) return 'No meetings on the calendar today — pure focus day.';
+    const meetingParts = meetings.map(m => `${m.label} at ${spokenTime(m.start_time)}`);
+    return `You have ${meetings.length} meeting${meetings.length !== 1 ? 's' : ''} today. ${joinNatural(meetingParts)}.`;
   }
 
   // Default
-  return `Strategy: ${plan.ai_reasoning || 'No strategy notes'}\nTargets: ${JSON.stringify(targets)}\nFocus hours: ${plan.focus_hours_available || 0}h, Meeting load: ${plan.meeting_load_hours || 0}h`;
+  let resp = plan.ai_reasoning
+    ? `Today's approach is ${plan.ai_reasoning.charAt(0).toLowerCase()}${plan.ai_reasoning.slice(1).replace(/\.$/, '')}.`
+    : 'Here\'s what I know about today.';
+  resp += ` You have ${plan.focus_hours_available || 0} hours of focus time and ${plan.meeting_load_hours || 0} hours of meetings.`;
+  if (Object.keys(targets).length) {
+    const tParts: string[] = [];
+    for (const [k, v] of Object.entries(targets)) tParts.push(`${v} ${k.replace(/_/g, ' ')}`);
+    resp += ` Targets are ${joinNatural(tParts)}.`;
+  }
+  return resp;
 }
