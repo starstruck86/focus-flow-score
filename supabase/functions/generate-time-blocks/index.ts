@@ -616,246 +616,167 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
 
     // ── OUTREACH TYPES that require prep to have been done first ──
     const OUTREACH_TYPES = new Set(['prospecting']);
-    const PREP_TYPES = new Set(['build', 'prep', 'admin']);
+    const READINESS_TYPES = new Set(['admin', 'prep']);
 
-    /**
-     * Validate and enforce task dependencies on any generated plan.
-     * Rules:
-     * 1. No outreach (prospecting/call/email) without preceding prep/build/admin block
-     * 2. All available time is filled (no gaps > 15 min)
-     * 3. Blocks are >= 30 min for deep work, >= 15 min for admin/transitions
-     * 4. Generic labels replaced with workflow-specific labels
-     */
-    function validatePlanDependencies(blocks: any[]) {
-      let sorted = [...blocks].sort((a: any, b: any) => toMinutes(a.start_time) - toMinutes(b.start_time));
-
-      // Step 1: Check if any prep/build/admin exists before first outreach block
-      const firstOutreachIdx = sorted.findIndex((b: any) => OUTREACH_TYPES.has(b.type));
-      const hasPrepBefore = firstOutreachIdx > 0 && sorted.slice(0, firstOutreachIdx).some((b: any) => PREP_TYPES.has(b.type));
-
-      if (firstOutreachIdx >= 0 && !hasPrepBefore) {
-        // No prep before first outreach — insert an admin/prep block before it
-        const outreachBlock = sorted[firstOutreachIdx];
-        const outreachStart = toMinutes(outreachBlock.start_time);
-
-        // Find available slot before the outreach block (at least 30 min)
-        let adminPlaced = false;
-        const meetings = sorted.filter((b: any) => b.type === 'meeting');
-        const gaps: { startMin: number; endMin: number }[] = [];
-        let cursor = workStartMin;
-        for (const m of sorted.filter((b: any) => b.type === 'meeting' || toMinutes(b.start_time) < outreachStart)) {
-          const mStart = toMinutes(m.start_time);
-          const mEnd = toMinutes(m.end_time);
-          if (mStart > cursor) gaps.push({ startMin: cursor, endMin: mStart });
-          cursor = Math.max(cursor, mEnd);
-        }
-        if (outreachStart > cursor) gaps.push({ startMin: cursor, endMin: outreachStart });
-
-        for (const gap of gaps) {
-          const gapLen = gap.endMin - gap.startMin;
-          if (gapLen >= 30) {
-            const adminDur = Math.min(60, gapLen);
-            const topNames = prospectingAccounts.slice(0, 3).map((a: any) => a.name).join(', ') || 'target accounts';
-            sorted.push({
-              start_time: minToTime(gap.startMin),
-              end_time: minToTime(gap.startMin + adminDur),
-              label: `Account Research & Contact Sourcing`,
-              type: 'admin',
-              workstream: 'new_logo',
-              goals: [
-                `Research ${topNames}`,
-                'Find contact emails & phone numbers',
-                'Load contacts into cadence system',
-              ],
-              reasoning: 'Required prep before outreach — contacts must be sourced and loaded before calls/emails.',
-            });
-            adminPlaced = true;
-            break;
-          }
-        }
-
-        // If no gap found before outreach, convert the first outreach to admin
-        if (!adminPlaced) {
-          sorted[firstOutreachIdx] = {
-            ...outreachBlock,
-            label: 'Account Research & Contact Sourcing',
-            type: 'admin',
-            workstream: 'new_logo',
-            goals: [
-              'Research target accounts',
-              'Find contact emails & phone numbers',
-              'Load contacts into cadence system',
-            ],
-            reasoning: 'Replaced outreach with prep — no contacts were ready for outreach.',
-          };
-        }
-        sorted.sort((a: any, b: any) => toMinutes(a.start_time) - toMinutes(b.start_time));
-      }
-
-      // Step 2: Replace generic labels with workflow-specific ones
-      for (const block of sorted) {
-        const label = (block.label || '').toLowerCase();
-        if (label === 'email blitz' || label.includes('email blitz')) {
-          block.label = 'Send emails to newly sourced contacts';
-        }
-        if (label === 'call block' && block.type === 'prospecting') {
-          const dur = toMinutes(block.end_time) - toMinutes(block.start_time);
-          const estDials = Math.round(dur / 2);
-          block.label = `Call newly added prospects (~${estDials} dials)`;
-        }
-      }
-
-      // Step 3: Fill all gaps > 15 minutes
-      sorted = fillTimeGaps(sorted);
-
-      return sorted;
+    function createAdminReadinessBlock(startMin: number, duration: number) {
+      return {
+        start_time: minToTime(startMin),
+        end_time: minToTime(startMin + duration),
+        label: duration >= 45 ? 'Prep contacts for outreach' : 'Quick outreach prep',
+        type: 'admin',
+        workstream: 'new_logo',
+        goals: [
+          'Research target accounts',
+          'Find contacts + source emails/phone numbers',
+          'Load contacts into cadence',
+        ],
+        reasoning: 'Prep is required before any outreach block can happen.',
+      };
     }
 
-    /**
-     * Fill all gaps > 15 min in the schedule with productive blocks.
-     * Follows dependency ordering: if no prep has occurred yet, gap is filled with admin.
-     */
+    function createActivityBlock(startMin: number, duration: number, sequence: number) {
+      const estTouches = Math.max(8, Math.round(duration / 3));
+      return {
+        start_time: minToTime(startMin),
+        end_time: minToTime(startMin + duration),
+        label: sequence === 1 ? 'Work sourced contacts' : 'Continue outreach follow-up',
+        type: 'prospecting',
+        workstream: 'new_logo',
+        goals: [
+          `Make calls / send emails for ~${estTouches} outreach touches`,
+          'Log responses and next steps',
+        ],
+        reasoning: 'Execution block for contacts prepared in the preceding prep block.',
+      };
+    }
+
+    function createShortAdminBlock(startMin: number, endMin: number) {
+      return {
+        start_time: minToTime(startMin),
+        end_time: minToTime(endMin),
+        label: 'Quick admin & CRM updates',
+        type: 'admin',
+        workstream: 'general',
+        goals: ['Log activity', 'Update CRM'],
+        reasoning: 'Use short window productively instead of leaving dead time.',
+      };
+    }
+
     function fillTimeGaps(blocks: any[]) {
       const sorted = [...blocks].sort((a: any, b: any) => toMinutes(a.start_time) - toMinutes(b.start_time));
-      const filled: any[] = [...sorted];
+      const filled: any[] = [];
       let cursor = workStartMin;
-      let prepDone = sorted.some((b: any) => PREP_TYPES.has(b.type));
-      let prospectingBlockCount = sorted.filter((b: any) => b.type === 'prospecting').length;
+      let outreachSequence = 0;
 
       for (const block of sorted) {
         const blockStart = toMinutes(block.start_time);
-        const gap = blockStart - cursor;
+        let gapStart = cursor;
+        let gapRemaining = blockStart - gapStart;
 
-        if (gap >= 30) {
-          // Meaningful gap — fill it
-          if (!prepDone) {
-            // No prep done yet — insert admin/research block
-            const dur = Math.min(60, gap);
-            const topNames = prospectingAccounts.slice(0, 3).map((a: any) => a.name).join(', ') || 'target accounts';
-            filled.push({
-              start_time: minToTime(cursor),
-              end_time: minToTime(cursor + dur),
-              label: 'Account Research & Contact Sourcing',
-              type: 'admin',
-              workstream: 'new_logo',
-              goals: [
-                `Research ${topNames}`,
-                'Source emails & phone numbers',
-                'Load into cadence',
-              ],
-              reasoning: 'Auto-inserted — prep required before outreach can begin.',
-            });
-            cursor += dur;
-            prepDone = true;
+        while (gapRemaining > 15) {
+          if (gapRemaining >= 60) {
+            filled.push(createAdminReadinessBlock(gapStart, 30));
+            gapStart += 30;
+            gapRemaining -= 30;
 
-            // If still gap remaining, fill with prospecting
-            const remaining = blockStart - cursor;
-            if (remaining >= 30) {
-              const callDur = Math.min(60, remaining);
-              const estDials = Math.round(callDur / 2);
-              prospectingBlockCount++;
-              filled.push({
-                start_time: minToTime(cursor),
-                end_time: minToTime(cursor + callDur),
-                label: `Call newly added prospects (~${estDials} dials)`,
-                type: 'prospecting',
-                workstream: 'new_logo',
-                goals: [`Make ~${estDials} dials to sourced contacts`, 'Log conversations'],
-                reasoning: 'Auto-inserted — filling available time with outreach after prep.',
-              });
-              cursor += callDur;
+            const activityDuration = Math.min(60, gapRemaining);
+            if (activityDuration >= 30) {
+              outreachSequence += 1;
+              filled.push(createActivityBlock(gapStart, activityDuration, outreachSequence));
+              gapStart += activityDuration;
+              gapRemaining -= activityDuration;
             }
+          } else if (gapRemaining >= 30) {
+            filled.push(createAdminReadinessBlock(gapStart, gapRemaining));
+            gapStart += gapRemaining;
+            gapRemaining = 0;
           } else {
-            // Prep done — fill with prospecting or follow-up
-            const dur = Math.min(60, gap);
-            const estDials = Math.round(dur / 2);
-            prospectingBlockCount++;
-            const label = prospectingBlockCount <= 1
-              ? `Call newly added prospects (~${estDials} dials)`
-              : `Follow up on yesterday's outreach (~${estDials} dials)`;
-            filled.push({
-              start_time: minToTime(cursor),
-              end_time: minToTime(cursor + dur),
-              label,
-              type: 'prospecting',
-              workstream: 'new_logo',
-              goals: [`Make ~${estDials} dials`, 'Log conversations and next steps'],
-              reasoning: 'Auto-inserted — maximizing productive outreach time.',
-            });
-            cursor += dur;
-
-            // Fill any remaining sub-gap
-            const remaining = blockStart - cursor;
-            if (remaining >= 30) {
-              const emailDur = Math.min(30, remaining);
-              filled.push({
-                start_time: minToTime(cursor),
-                end_time: minToTime(cursor + emailDur),
-                label: 'Send follow-up emails to prospects',
-                type: 'prospecting',
-                workstream: 'new_logo',
-                goals: ['Send ~8-10 personalized follow-up emails', 'Multi-channel coverage'],
-                reasoning: 'Auto-inserted — email follow-up in remaining gap.',
-              });
-              cursor += emailDur;
-            }
+            filled.push(createShortAdminBlock(gapStart, blockStart));
+            gapRemaining = 0;
           }
-        } else if (gap > 15) {
-          // Small gap (16-29 min) — light admin only
-          filled.push({
-            start_time: minToTime(cursor),
-            end_time: minToTime(blockStart),
-            label: 'Quick admin & CRM updates',
-            type: 'admin',
-            workstream: 'general',
-            goals: ['Update CRM notes', 'Log activity'],
-            reasoning: 'Auto-inserted — using short gap for admin.',
-          });
         }
 
+        filled.push(block);
         cursor = Math.max(cursor, toMinutes(block.end_time));
-        if (PREP_TYPES.has(block.type)) prepDone = true;
       }
 
-      // Fill remaining time after last block until workEnd
-      while (cursor < workEndMin - 15) {
-        const remaining = workEndMin - cursor;
-        if (remaining < 30) break;
+      let tailStart = cursor;
+      let tailRemaining = workEndMin - tailStart;
+      while (tailRemaining > 15) {
+        if (tailRemaining >= 60) {
+          filled.push(createAdminReadinessBlock(tailStart, 30));
+          tailStart += 30;
+          tailRemaining -= 30;
 
-        if (!prepDone) {
-          const dur = Math.min(60, remaining);
-          filled.push({
-            start_time: minToTime(cursor),
-            end_time: minToTime(cursor + dur),
-            label: 'Account Research & Contact Sourcing',
-            type: 'admin',
-            workstream: 'new_logo',
-            goals: ['Research target accounts', 'Source contact info', 'Load into cadence'],
-            reasoning: 'Auto-inserted — end-of-day prep for tomorrow.',
-          });
-          cursor += dur;
-          prepDone = true;
+          const activityDuration = Math.min(60, tailRemaining);
+          if (activityDuration >= 30) {
+            outreachSequence += 1;
+            filled.push(createActivityBlock(tailStart, activityDuration, outreachSequence));
+            tailStart += activityDuration;
+            tailRemaining -= activityDuration;
+          }
+        } else if (tailRemaining >= 30) {
+          filled.push(createAdminReadinessBlock(tailStart, tailRemaining));
+          tailStart += tailRemaining;
+          tailRemaining = 0;
         } else {
-          const dur = Math.min(60, remaining);
-          const estDials = Math.round(dur / 2);
-          filled.push({
-            start_time: minToTime(cursor),
-            end_time: minToTime(cursor + dur),
-            label: `Call newly added prospects (~${estDials} dials)`,
-            type: 'prospecting',
-            workstream: 'new_logo',
-            goals: [`Make ~${estDials} dials`, 'Log conversations'],
-            reasoning: 'Auto-inserted — using remaining time for outreach.',
-          });
-          cursor += dur;
+          filled.push(createShortAdminBlock(tailStart, workEndMin));
+          tailRemaining = 0;
         }
       }
 
       return filled.sort((a: any, b: any) => toMinutes(a.start_time) - toMinutes(b.start_time));
     }
 
+    function validatePlanDependencies(blocks: any[]) {
+      const sorted = [...blocks].sort((a: any, b: any) => toMinutes(a.start_time) - toMinutes(b.start_time));
+      const validated: any[] = [];
+      let segmentHasReadiness = false;
+
+      for (const block of sorted) {
+        if (block.type === 'meeting') {
+          validated.push(block);
+          segmentHasReadiness = false;
+          continue;
+        }
+
+        const normalizedLabel = String(block.label || '').toLowerCase();
+        if (normalizedLabel.includes('email blitz')) {
+          block.label = 'Work sourced contacts';
+        }
+        if (normalizedLabel === 'call block' || normalizedLabel.includes('call blitz')) {
+          block.label = 'Work sourced contacts';
+        }
+
+        if (READINESS_TYPES.has(block.type)) {
+          segmentHasReadiness = true;
+          validated.push(block);
+          continue;
+        }
+
+        if (OUTREACH_TYPES.has(block.type) && !segmentHasReadiness) {
+          const startMin = toMinutes(block.start_time);
+          const endMin = toMinutes(block.end_time);
+          const totalDuration = endMin - startMin;
+          const prepDuration = totalDuration >= 60 ? 30 : Math.max(30, Math.floor(totalDuration / 2));
+          const activityDuration = totalDuration - prepDuration;
+
+          validated.push(createAdminReadinessBlock(startMin, prepDuration));
+          if (activityDuration >= 30) {
+            validated.push(createActivityBlock(startMin + prepDuration, activityDuration, 1));
+          }
+          segmentHasReadiness = true;
+          continue;
+        }
+
+        validated.push(block);
+      }
+
+      return fillTimeGaps(validated);
+    }
+
     // ── Helper: build a deterministic fallback plan without AI ──
-    // Follows strict dependency ordering: Build → Admin/Prep → Outreach
+    // Follows strict dependency ordering: prep/readiness before every activity block
     function buildFallbackPlan(reason: string) {
       const blocks: any[] = [];
 
