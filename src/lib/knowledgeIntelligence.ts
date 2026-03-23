@@ -442,6 +442,11 @@ export function formatDecision(result: DecisionResult, context: DecisionContext)
   lines.push(`_Why:_ ${p.reasoning} (score ${Math.round(p.score * 100)}/100)`);
   lines.push(`_Classification:_ ${MATURITY_LABELS[p.insight.idea_maturity]} · Trust ${Math.round(p.breakdown.trust * 100)}% · Recency ${Math.round(p.breakdown.recency * 100)}%`);
 
+  // Personal performance note
+  if (p.personalNote) {
+    lines.push(`_Your track record:_ ${p.personalNote}`);
+  }
+
   // Execution guidance for primary
   const guidance = deriveGuidance(p.insight, context);
   lines.push(`_Expected outcome:_ ${guidance.expected_outcome}`);
