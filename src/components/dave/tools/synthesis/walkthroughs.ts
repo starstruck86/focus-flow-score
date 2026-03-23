@@ -787,8 +787,11 @@ export async function queryPipeline(ctx: ToolContext, params: { question?: strin
     sentences.push(`Split is ${newLogos.length} new logo deals at ${dollars(newLogos.reduce((s, o) => s + (o.arr || 0), 0))} and ${renewalDeals.length} renewal at ${dollars(renewalDeals.reduce((s, o) => s + (o.arr || 0), 0))}.`);
   }
 
+  // Decision layer — pipeline recommendation
+  const prioritized = opps.map(o => scoreOppPriority(o));
+  sentences.push(buildActionRecommendation(prioritized));
+
   sentences.push('Ask me to dig into any segment — new logo, renewals, stalled, or at risk.');
-  return sentences.join(' ');
 }
 
 // ── Dashboard overview walkthrough ──────────────────────────────
