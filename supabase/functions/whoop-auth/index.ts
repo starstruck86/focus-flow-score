@@ -54,7 +54,7 @@ serve(async (req) => {
     await adminClient.from('whoop_connections').delete().eq('user_id', userId);
 
     // HMAC-sign the state to prevent forgery
-    const statePayload = JSON.stringify({ userId, redirectUri, nonce: crypto.randomUUID() });
+    const statePayload = JSON.stringify({ userId, redirectUri, nonce: crypto.randomUUID(), v: FUNCTION_GROUP_VERSION });
     const hmacKey = await crypto.subtle.importKey(
       'raw', new TextEncoder().encode(WHOOP_CLIENT_SECRET),
       { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']

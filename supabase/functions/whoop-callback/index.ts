@@ -29,7 +29,10 @@ serve(async (req) => {
     try {
       const stateObj = JSON.parse(atob(stateParam));
       const { payload, sig } = stateObj;
-      if (!payload || !sig) throw new Error('Missing payload or sig');
+      if (!payload || !sig) {
+        console.error(`[whoop-callback] State drift detected: expected {payload,sig} format (${FUNCTION_GROUP_VERSION}) but got keys: ${Object.keys(stateObj).join(',')}`);
+        throw new Error('Missing payload or sig — likely whoop-auth was not deployed with matching version');
+      }
 
       const WHOOP_CLIENT_SECRET = Deno.env.get('WHOOP_CLIENT_SECRET')!;
       const hmacKey = await crypto.subtle.importKey(
@@ -46,7 +49,13 @@ serve(async (req) => {
       const decoded = JSON.parse(payload);
       userId = decoded.userId || '';
       redirectUri = decoded.redirectUri || '';
-    } catch {
+
+      // Version drift check
+      if (decoded.v && decoded.v !== FUNCTION_GROUP_VERSION) {
+        console.error(`[whoop-callback] VERSION DRIFT: state.v=${decoded.v}, callback=${FUNCTION_GROUP_VERSION}. Functions may be out of sync.`);
+      }
+    } catch (err) {
+      console.error('[whoop-callback] State parsing failed:', err);
       return new Response('Invalid state parameter', { status: 400 });
     }
 
