@@ -465,18 +465,18 @@ export async function queryDailyPlan(ctx: ToolContext, params: { question: strin
 }
 
 /**
- * Dedicated tool: returns today's auto-selected new logo targets.
+ * Dedicated tool: returns today's weekly queue targets.
  */
-export function newLogoTargetsTool(): string {
-  const today = todayInAppTz();
-  const selection = loadCachedSelection(today);
-  if (!selection || selection.accounts.length === 0) {
-    return 'No new logo targets have been selected for today yet. Head to the dashboard to generate your Daily Game Plan, or there may not be enough eligible accounts.';
+export async function newLogoTargetsTool(ctx: ToolContext): Promise<string> {
+  const queue = await fetchTodayQueue(ctx);
+  if (!queue || queue.today.length === 0) {
+    return 'No weekly research queue generated yet. Head to the dashboard and click "Generate Weekly Queue" in your New Logo Build block.';
   }
 
-  const parts = selection.accounts.map(a =>
-    `Number ${a.rank}: ${a.name}. ${a.reason}. Suggested first step: ${a.suggestedFirstStep}.`
+  const accts = queue.today;
+  const lines = accts.map((a, i) =>
+    `${i + 1}. ${a.name} — ${a.state === 'not_started' ? 'Not started' : a.state === 'researched' ? 'Researched ✓' : 'Added to cadence ✓✓'}${a.tier ? ` (Tier ${a.tier})` : ''}`
   );
 
-  return `Today's 3 auto-selected new logo accounts are:\n\n${parts.join('\n\n')}\n\nThese were picked based on ICP fit, tier, buying signals, and freshness rotation. Want me to walk you through the first one?`;
+  return `Today's 3 new logo accounts:\n\n${lines.join('\n')}\n\nWeekly progress: ${queue.weeklyResearched}/${queue.weeklyTotal} researched, ${queue.weeklyAddedToCadence} added to cadence.\n\nWant me to walk you through the first one?`;
 }
