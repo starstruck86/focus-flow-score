@@ -46,12 +46,19 @@ export interface GapItem {
   severity: 'on_track' | 'warning' | 'critical';
 }
 
+export interface BottleneckFix {
+  action: string;       // concise imperative
+  detail: string;       // 1-sentence why/how
+  example?: string;     // example phrasing or execution step
+}
+
 export interface FunnelDiagnosis {
   stage: FunnelStage;
   rate: number;
   benchmark: number;
   label: string;
-  recommendation: string;
+  fixes: BottleneckFix[];            // max 3
+  strategyTopics: string[];          // topics to query from strategy engine
 }
 
 export interface ForecastResult {
@@ -209,12 +216,69 @@ export function detectGaps(rates: PipelineRates, targets: PipelineTargets): GapI
   return gaps;
 }
 
-// ── Funnel diagnosis ────────────────────────────────────────────
+// ── Funnel diagnosis with actionable fixes ──────────────────────
 
-const STAGE_RECOMMENDATIONS: Record<FunnelStage, string> = {
-  dial_to_connect: 'Improve targeting or list quality. You may be dialing but not reaching decision-makers. Try better contact data or timing.',
-  connect_to_meeting: 'Improve your opening pitch or value proposition. Connects are not converting to meetings. Sharpen your hook.',
-  meeting_to_opp: 'Improve discovery or qualification. Meetings are not converting to pipeline. Focus on uncovering pain and building urgency.',
+const STAGE_FIX_PLAYBOOKS: Record<FunnelStage, { fixes: BottleneckFix[]; topics: string[] }> = {
+  dial_to_connect: {
+    fixes: [
+      {
+        action: 'Tighten ICP targeting',
+        detail: 'Prioritize accounts with active trigger signals and high ICP fit scores instead of cold lists.',
+        example: 'Filter accounts by ICP fit > 70 and recent trigger events before building call lists.',
+      },
+      {
+        action: 'Improve contact selection',
+        detail: 'Target direct decision-makers and mobilizers rather than gatekeepers or generic titles.',
+        example: 'Search for VP/Director-level contacts in the buying committee, not generic "info@" addresses.',
+      },
+      {
+        action: 'Optimize call timing',
+        detail: 'Shift dial windows to early morning (8-9am) or late afternoon (4-5pm) when executives are more reachable.',
+        example: 'Block 8:00-9:00am as a dedicated power-dial window before meetings start.',
+      },
+    ],
+    topics: ['prospecting', 'targeting', 'cold calling', 'outreach'],
+  },
+  connect_to_meeting: {
+    fixes: [
+      {
+        action: 'Lead with a pain-based opener',
+        detail: 'Replace feature-focused introductions with a specific business pain relevant to the prospect.',
+        example: '"I noticed [Company] is expanding into [market] — teams in that phase often struggle with [pain]. Is that on your radar?"',
+      },
+      {
+        action: 'Sharpen your value proposition',
+        detail: 'Make the meeting ask about their problem, not your product. Frame 15 minutes of value, not a demo.',
+        example: '"I have 2-3 ideas on how similar teams solved [problem] — worth a 15-min conversation?"',
+      },
+      {
+        action: 'Prepare objection responses',
+        detail: 'Pre-script responses to the top 3 brush-offs: "not interested," "send an email," "we already have a solution."',
+        example: '"Totally fair — most people I talk to say that initially. Quick question: [pivot to pain]?"',
+      },
+    ],
+    topics: ['objection handling', 'opening pitch', 'value proposition', 'messaging'],
+  },
+  meeting_to_opp: {
+    fixes: [
+      {
+        action: 'Deepen discovery with MEDDICC',
+        detail: 'Ensure every meeting uncovers Metrics, Economic Buyer, and Identified Pain before pitching.',
+        example: '"What would solving this problem be worth to the business in the next 12 months?"',
+      },
+      {
+        action: 'Confirm stakeholder alignment',
+        detail: 'Identify all decision-makers early. A meeting with the wrong person will not convert to an opportunity.',
+        example: '"Besides yourself, who else would need to be involved in evaluating a solution like this?"',
+      },
+      {
+        action: 'Establish clear next steps',
+        detail: 'End every meeting with a concrete, calendared next action — never "I will follow up."',
+        example: '"Based on what we discussed, the logical next step is [X]. Can we get that on the calendar for [date]?"',
+      },
+    ],
+    topics: ['discovery', 'qualification', 'MEDDICC', 'stakeholder mapping'],
+  },
 };
 
 export function diagnoseFunnel(conversions: ConversionRates): FunnelDiagnosis | null {
@@ -227,12 +291,15 @@ export function diagnoseFunnel(conversions: ConversionRates): FunnelDiagnosis | 
     meeting_to_opp: conversions.meetingToOpp,
   };
 
+  const playbook = STAGE_FIX_PLAYBOOKS[stage];
+
   return {
     stage,
     rate: rateMap[stage],
     benchmark: BENCHMARKS[stage],
     label: STAGE_LABELS[stage],
-    recommendation: STAGE_RECOMMENDATIONS[stage],
+    fixes: playbook.fixes.slice(0, 3),
+    strategyTopics: playbook.topics,
   };
 }
 
@@ -394,10 +461,17 @@ export function formatForecast(f: ForecastResult): string {
   lines.push(`  Opportunities: **${f.projections.oppsNextMonth}** (target: ${Math.round(f.targets.oppsPerWeek * 4.33)})`);
   lines.push(`  Pipeline value: **$${Math.round(f.projections.pipelineValueNextMonth / 1000)}k** (target: $${Math.round(f.targets.pipelineValuePerMonth / 1000)}k)`);
 
-  // Funnel diagnosis
+  // Funnel diagnosis with actionable fixes
   if (f.funnelDiagnosis) {
-    lines.push(`\n🎯 **Bottleneck: ${f.funnelDiagnosis.label}**`);
-    lines.push(`  ${f.funnelDiagnosis.recommendation}`);
+    const d = f.funnelDiagnosis;
+    lines.push(`\n🎯 **Bottleneck: ${d.label}** (${pct(d.rate)} vs ${pct(d.benchmark)} benchmark)`);
+    lines.push('');
+    for (let i = 0; i < d.fixes.length; i++) {
+      const fix = d.fixes[i];
+      lines.push(`**${i + 1}. ${fix.action}**`);
+      lines.push(`  ${fix.detail}`);
+      if (fix.example) lines.push(`  _Example: ${fix.example}_`);
+    }
   }
 
   // Gaps

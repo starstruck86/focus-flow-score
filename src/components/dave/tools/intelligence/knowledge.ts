@@ -537,8 +537,28 @@ export async function pipelineForecast(ctx: ToolContext): Promise<string> {
   if (!userId) return 'Not authenticated';
 
   try {
+    const { getPipelineForecast, formatForecast: fmtForecast } = await import('@/data/pipeline-forecast');
     const forecast = await getPipelineForecast(userId);
-    return formatForecast(forecast);
+    let output = fmtForecast(forecast);
+
+    // Enrich with strategy engine if bottleneck detected
+    if (forecast.funnelDiagnosis?.strategyTopics?.length) {
+      const topic = forecast.funnelDiagnosis.strategyTopics[0];
+      try {
+        const { insights } = await fetchInsightsHybrid(userId, topic);
+        if (insights.length) {
+          const dateMap = new Map<string, { date: string | null }>();
+          const decision = decideTopInsights(insights, dateMap, { topic });
+          if (decision) {
+            output += '\n\n📚 **From your knowledge base:**';
+            output += `\n  → _"${decision.primary.insight.text.slice(0, 150)}${decision.primary.insight.text.length > 150 ? '...' : ''}"_`;
+            output += `\n  Maturity: ${MATURITY_LABELS[decision.primary.insight.idea_maturity]}`;
+          }
+        }
+      } catch { /* graceful — forecast still works without strategy enrichment */ }
+    }
+
+    return output;
   } catch {
     return 'Unable to compute pipeline forecast at this time.';
   }
