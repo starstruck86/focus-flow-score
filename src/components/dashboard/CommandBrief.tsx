@@ -79,6 +79,7 @@ export function CommandBrief() {
 
   const handleSkip = () => {
     if (!primaryAction) return;
+    // Lightweight skip learning — record entity type for pattern detection
     recordAction(primaryAction.id, 'deferred', primaryAction.entityType, primaryAction.entityId);
     toast('Skipped');
     advance('↷ Skipped — next...');
@@ -90,6 +91,9 @@ export function CommandBrief() {
     toast('Snoozed 30 min');
     advance('⏰ Snoozed — next...');
   };
+
+  const confidenceLabel = primaryAction?.escalation === 'critical' || primaryAction?.escalation === 'high'
+    ? 'high' : primaryAction?.escalation === 'moderate' ? 'moderate' : 'early signal';
 
   const showEscalation = primaryAction?.escalation === 'critical' || primaryAction?.escalation === 'high';
 
