@@ -5,6 +5,7 @@ import { momentumCheck, nextAction, killSwitch } from './synthesis/momentum';
 import { behaviorSummary, energyMatch } from './synthesis/behaviorEnergy';
 import { generateContent, meetingBrief } from './synthesis/contentBrief';
 import { executionNext, confirmExecution, blockExecution, skipExecution, snoozeExecution } from './synthesis/executionBinding';
+import { whoopPerformanceInsights, whoopTodayContext } from './synthesis/whoopInsights';
 
 export function createSynthesisTools(ctx: ToolContext, allTools: Record<string, any>): ToolMap {
   return {
@@ -30,5 +31,7 @@ export function createSynthesisTools(ctx: ToolContext, allTools: Record<string, 
     block_execution: (params: { actionId: string; reason?: string }) => blockExecution(params),
     skip_execution: (params: { actionId: string; reason?: string }) => skipExecution(params),
     snooze_execution: (params: { actionId: string; minutes?: number }) => snoozeExecution(params),
+    whoop_performance_insights: () => whoopPerformanceInsights(ctx),
+    whoop_today_context: () => whoopTodayContext(ctx),
   };
 }
