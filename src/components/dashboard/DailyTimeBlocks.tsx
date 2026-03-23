@@ -32,6 +32,7 @@ import { CalendarScreenshotDrop } from './CalendarScreenshotDrop';
 import { DailyPlanPreferences } from './DailyPlanPreferences';
 import { RustBusterQuickLinks } from './RustBusterQuickLinks';
 import { isRustBusterBlock } from '@/lib/rustBusterLinks';
+import { useNewLogoTargets } from '@/hooks/useNewLogoTargets';
 import type { CalendarScreenshotEvent } from '@/types/dashboard';
 import type { Json } from '@/integrations/supabase/types';
 
@@ -126,6 +127,7 @@ export function DailyTimeBlocks() {
   const { opportunities, accounts } = useStore();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { targets: autoSelectedAccounts } = useNewLogoTargets();
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState(0);
@@ -996,6 +998,40 @@ export function DailyTimeBlocks() {
                           {(block.build_steps || DEFAULT_BUILD_STEPS).filter(s => s.done).length}/{(block.build_steps || DEFAULT_BUILD_STEPS).length}
                         </span>
                       </div>
+
+                      {/* Auto-selected target accounts */}
+                      {autoSelectedAccounts.length > 0 && (
+                        <div className="mb-2 space-y-1">
+                          <div className="flex items-center gap-1 mb-1">
+                            <Target className="h-3 w-3 text-orange-500" />
+                            <span className="text-[10px] font-medium text-orange-600 dark:text-orange-400">Today's 3 New Logo Accounts</span>
+                          </div>
+                          {autoSelectedAccounts.map(acct => (
+                            <div
+                              key={acct.id}
+                              className="flex items-start gap-2 py-1 px-2 rounded bg-orange-500/5 border border-orange-500/10"
+                            >
+                              <Badge variant="outline" className="text-[9px] h-4 px-1 bg-orange-500/10 text-orange-600 border-orange-500/30 shrink-0">
+                                #{acct.rank}
+                              </Badge>
+                              <div className="min-w-0 flex-1">
+                                <button
+                                  className="text-[11px] font-medium text-foreground hover:text-primary truncate block text-left"
+                                  onClick={() => {
+                                    const found = accounts.find(a => a.id === acct.id);
+                                    if (found) navigate(`/account/${acct.id}`);
+                                  }}
+                                >
+                                  {acct.name}
+                                </button>
+                                <p className="text-[10px] text-muted-foreground truncate">{acct.reason}</p>
+                                <p className="text-[10px] text-primary/70 italic">{acct.suggestedFirstStep}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                       <div className="space-y-1">
                         {(block.build_steps || DEFAULT_BUILD_STEPS).map((step, si) => (
                           <label key={si} className="flex items-center gap-2 cursor-pointer group/step">

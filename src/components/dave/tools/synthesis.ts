@@ -6,7 +6,7 @@ import { behaviorSummary, energyMatch } from './synthesis/behaviorEnergy';
 import { generateContent, meetingBrief } from './synthesis/contentBrief';
 import { executionNext, confirmExecution, blockExecution, skipExecution, snoozeExecution } from './synthesis/executionBinding';
 import { whoopPerformanceInsights, whoopTodayContext } from './synthesis/whoopInsights';
-import { dailyGamePlanSummary, dailyGamePlanDetailed, dailyGamePlanWalkthrough, queryDailyPlan } from './synthesis/dailyGamePlan';
+import { dailyGamePlanSummary, dailyGamePlanDetailed, dailyGamePlanWalkthrough, queryDailyPlan, newLogoTargetsTool } from './synthesis/dailyGamePlan';
 import { queryOpportunities, queryRenewals, queryTasks, queryQuota, queryPipeline, queryDashboard } from './synthesis/walkthroughs';
 import { compareTrends } from './synthesis/trendComparison';
 
@@ -39,6 +39,7 @@ export function createSynthesisTools(ctx: ToolContext, allTools: Record<string, 
     daily_game_plan: () => dailyGamePlanSummary(ctx),
     daily_game_plan_detailed: () => dailyGamePlanDetailed(ctx),
     query_daily_plan: (params: { question: string }) => queryDailyPlan(ctx, params),
+    new_logo_targets: () => newLogoTargetsTool(),
 
     // Universal walkthrough tools
     query_opportunities: (params: { question?: string }) => queryOpportunities(ctx, params),
