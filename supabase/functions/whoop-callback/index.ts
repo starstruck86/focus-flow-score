@@ -18,19 +18,31 @@ serve(async (req) => {
       return new Response('Missing code or state parameter', { status: 400 });
     }
 
-    // Decode state to get userId and redirectUri
+    // Decode and verify HMAC-signed state
     let userId = '';
     let redirectUri = '';
     try {
-      const decoded = JSON.parse(atob(stateParam));
+      const stateObj = JSON.parse(atob(stateParam));
+      const { payload, sig } = stateObj;
+      if (!payload || !sig) throw new Error('Missing payload or sig');
+
+      const WHOOP_CLIENT_SECRET = Deno.env.get('WHOOP_CLIENT_SECRET')!;
+      const hmacKey = await crypto.subtle.importKey(
+        'raw', new TextEncoder().encode(WHOOP_CLIENT_SECRET),
+        { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']
+      );
+      const sigBytes = Uint8Array.from(atob(sig), c => c.charCodeAt(0));
+      const valid = await crypto.subtle.verify('HMAC', hmacKey, sigBytes, new TextEncoder().encode(payload));
+      if (!valid) {
+        console.error('WHOOP callback: invalid state signature');
+        return new Response('Invalid state parameter', { status: 400 });
+      }
+
+      const decoded = JSON.parse(payload);
       userId = decoded.userId || '';
       redirectUri = decoded.redirectUri || '';
     } catch {
       return new Response('Invalid state parameter', { status: 400 });
-    }
-
-    if (!userId) {
-      return new Response('Missing userId in state', { status: 400 });
     }
 
     const WHOOP_CLIENT_ID = Deno.env.get('WHOOP_CLIENT_ID')!;
@@ -115,14 +127,19 @@ serve(async (req) => {
     return Response.redirect(`${redirectUri}/settings?whoop=success`, 302);
   } catch (error) {
     console.error('whoop-callback error:', error);
-    return new Response(`Error: ${error.message}`, { status: 500 });
+    const redirectBase = getRedirectBase(null);
+    if (redirectBase) {
+      return Response.redirect(`${redirectBase}/settings?whoop=error`, 302);
+    }
+    return new Response('An unexpected error occurred.', { status: 500 });
   }
 });
 
 function getRedirectBase(stateParam: string | null): string {
   try {
     if (stateParam) {
-      const decoded = JSON.parse(atob(stateParam));
+      const stateObj = JSON.parse(atob(stateParam));
+      const decoded = stateObj.payload ? JSON.parse(stateObj.payload) : stateObj;
       return decoded.redirectUri || '';
     }
   } catch {}

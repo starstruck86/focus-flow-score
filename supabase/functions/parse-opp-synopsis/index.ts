@@ -122,7 +122,7 @@ Extract any field updates found in the text. Only return fields that have clear 
     });
   } catch (error: any) {
     console.error('Error in parse-opp-synopsis:', error);
-    return new Response(JSON.stringify({ error: error.message || 'Unknown error' }), {
+    return new Response(JSON.stringify({ error: 'An unexpected error occurred. Please try again.' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

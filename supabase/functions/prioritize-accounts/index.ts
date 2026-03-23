@@ -187,8 +187,7 @@ Which 5 accounts should I focus on today and why? What specific action should I 
     });
   } catch (error) {
     console.error("prioritize-accounts error:", error);
-    const msg = error instanceof Error ? error.message : "Unknown error";
-    return new Response(JSON.stringify({ error: msg }), {
+    return new Response(JSON.stringify({ error: 'An unexpected error occurred. Please try again.' }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
