@@ -547,6 +547,8 @@ function buildDetailedTrend(result: ComparisonResult): string {
   const sentences: string[] = [];
 
   sentences.push(`Full breakdown, ${periodALabel} vs ${periodBLabel}:`);
+  const modeNote = comparisonModeNote(result);
+  if (modeNote) sentences.push(modeNote);
 
   // Work metrics
   const workMetrics = metrics.filter(m => !['avgRecovery', 'avgSleep', 'avgStrain'].includes(m.metric));
