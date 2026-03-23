@@ -463,7 +463,6 @@ function buildSummaryRenewals(renewals: any[], totalArr: number, timeLabel: stri
   const sentences: string[] = [];
   sentences.push(`You have ${renewals.length} open ${renewals.length === 1 ? 'renewal' : 'renewals'}${timeLabel} worth ${dollars(totalArr)}.`);
 
-  // Group by stage
   const byStage: Record<string, any[]> = {};
   for (const r of renewals) {
     const stage = r.renewal_stage || 'No Stage';
@@ -480,23 +479,24 @@ function buildSummaryRenewals(renewals: any[], totalArr: number, timeLabel: stri
     sentences.push(`By stage, that's ${joinNatural(stageParts)}.`);
   }
 
-  // Risk callout
   const atRisk = renewals.filter(r => r.churn_risk === 'high' || r.health_status === 'red');
   if (atRisk.length) {
     sentences.push(`${atRisk.length} ${atRisk.length === 1 ? 'is' : 'are'} flagged at risk — ${joinNatural(atRisk.slice(0, 3).map(r => r.account_name))}.`);
   }
 
-  // Soonest
   const soonest = renewals.filter(r => r.renewal_due && daysFromNow(r.renewal_due) <= 30 && daysFromNow(r.renewal_due) >= 0);
   if (soonest.length) {
     sentences.push(`${soonest.length} coming due in the next 30 days.`);
   }
 
-  // Biggest
   const top = [...renewals].sort((a, b) => Number(b.arr || 0) - Number(a.arr || 0)).slice(0, 3);
   if (top.length && renewals.length > 3) {
     sentences.push(`Your biggest are ${joinNatural(top.map(r => `${r.account_name} at ${dollars(Number(r.arr || 0))}`))}. `);
   }
+
+  // Decision layer
+  const prioritized = renewals.map(r => scoreRenewalPriority(r));
+  sentences.push(buildActionRecommendation(prioritized));
 
   sentences.push('Want me to go through them one by one?');
   return sentences.join(' ');
