@@ -30,8 +30,9 @@ export interface StrategyPipelineImpact {
   meetingsGenerated: number;
   opportunitiesCreated: number;
   stageProgressions: number;
-  pipelineValueInfluenced: number;  // $
+  pipelineValueInfluenced: number;
   lastImpactDate: string | null;
+  weightedScore: number;
 }
 
 export interface AggregatedPipelineImpact {
@@ -39,8 +40,27 @@ export interface AggregatedPipelineImpact {
   totalOpportunities: number;
   totalProgressions: number;
   totalPipelineValue: number;
+  totalWeightedScore: number;
   topStrategies: StrategyPipelineImpact[];
   byContext: Map<string, StrategyPipelineImpact>;
+}
+
+// ── Outcome quality weights ─────────────────────────────────────
+
+const OUTCOME_QUALITY_WEIGHT: Record<PipelineOutcomeType, number> = {
+  meeting_booked: 0.4,
+  opportunity_created: 0.7,
+  stage_progression: 0.8,
+  deal_value_influenced: 1.0,
+};
+
+// ── Recency decay ───────────────────────────────────────────────
+
+const HALF_LIFE_DAYS = 30;
+
+function recencyMultiplier(eventDateStr: string): number {
+  const ageDays = Math.max(0, (Date.now() - new Date(eventDateStr).getTime()) / 86_400_000);
+  return Math.pow(0.5, ageDays / HALF_LIFE_DAYS);
 }
 
 // ── Outcome-to-pipeline type mapping ────────────────────────────
