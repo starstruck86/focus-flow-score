@@ -122,6 +122,7 @@ const DASHBOARD_WIDGETS: WidgetConfig[] = [
   { id: 'weekly-battle-plan', label: 'Weekly Battle Plan', visible: true, order: 10 },
   { id: 'journal', label: 'Daily Scorecard', visible: true, order: 11 },
   { id: 'commission-pacing', label: 'Commission Pacing', visible: true, order: 12 },
+  { id: 'prospecting-engine', label: 'Prospecting Engine', visible: true, order: 13 },
 ];
 
 
