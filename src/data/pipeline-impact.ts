@@ -121,12 +121,17 @@ export function computePipelineImpact(
         stageProgressions: 0,
         pipelineValueInfluenced: 0,
         lastImpactDate: null,
+        weightedScore: 0,
       });
     }
 
     const impact = map.get(o.insight_id)!;
     const meta = (o.context_metadata || {}) as Record<string, any>;
     const dealValue = meta.deal_value || 0;
+
+    const quality = OUTCOME_QUALITY_WEIGHT[pipelineType] ?? 0.5;
+    const recency = recencyMultiplier(o.created_at);
+    const eventWeight = quality * recency;
 
     switch (pipelineType) {
       case 'meeting_booked':
@@ -144,6 +149,9 @@ export function computePipelineImpact(
         impact.pipelineValueInfluenced += dealValue;
         break;
     }
+
+    const valueFactor = dealValue > 0 ? 1 + Math.log10(1 + dealValue / 10_000) : 1;
+    impact.weightedScore += eventWeight * valueFactor;
 
     if (!impact.lastImpactDate || o.created_at > impact.lastImpactDate) {
       impact.lastImpactDate = o.created_at;
