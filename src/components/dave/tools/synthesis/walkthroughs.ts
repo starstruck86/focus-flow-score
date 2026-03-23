@@ -612,6 +612,10 @@ function buildSummaryTasks(tasks: any[], overdue: any[], dueToday: any[], upcomi
     sentences.push(`Your top priority ${p1s.length === 1 ? 'item is' : 'items are'} ${joinNatural(topNames)}.`);
   }
 
+  // Decision layer
+  const prioritized = tasks.map(t => scoreTaskPriority(t, accountMap));
+  sentences.push(buildActionRecommendation(prioritized));
+
   sentences.push('Say "walk me through them" for the full rundown.');
   return sentences.join(' ');
 }
