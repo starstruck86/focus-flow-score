@@ -88,7 +88,7 @@ export async function meetingBrief(ctx: ToolContext, params: { meetingTitle?: st
   ) as MatchedAccount | undefined;
 
   if (!matchedAccount) {
-    return `📅 Next meeting: "${target.title}" at ${new Date(target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n\nCouldn't match to an account — try "prep meeting for [account name]" for a full brief.`;
+    return `📅 Next meeting: "${target.title}" at ${formatTimeETLabel(target.start_time)}\n\nCouldn't match to an account — try "prep meeting for [account name]" for a full brief.`;
   }
 
   const { data: opps } = await supabase.from('opportunities').select('id, name, stage, arr, close_date, next_step').eq('user_id', userId).eq('account_id', matchedAccount.id).not('status', 'eq', 'closed-won').not('status', 'eq', 'closed-lost').limit(3);
