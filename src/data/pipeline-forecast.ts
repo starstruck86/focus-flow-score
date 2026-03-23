@@ -461,10 +461,17 @@ export function formatForecast(f: ForecastResult): string {
   lines.push(`  Opportunities: **${f.projections.oppsNextMonth}** (target: ${Math.round(f.targets.oppsPerWeek * 4.33)})`);
   lines.push(`  Pipeline value: **$${Math.round(f.projections.pipelineValueNextMonth / 1000)}k** (target: $${Math.round(f.targets.pipelineValuePerMonth / 1000)}k)`);
 
-  // Funnel diagnosis
+  // Funnel diagnosis with actionable fixes
   if (f.funnelDiagnosis) {
-    lines.push(`\n🎯 **Bottleneck: ${f.funnelDiagnosis.label}**`);
-    lines.push(`  ${f.funnelDiagnosis.recommendation}`);
+    const d = f.funnelDiagnosis;
+    lines.push(`\n🎯 **Bottleneck: ${d.label}** (${pct(d.rate)} vs ${pct(d.benchmark)} benchmark)`);
+    lines.push('');
+    for (let i = 0; i < d.fixes.length; i++) {
+      const fix = d.fixes[i];
+      lines.push(`**${i + 1}. ${fix.action}**`);
+      lines.push(`  ${fix.detail}`);
+      if (fix.example) lines.push(`  _Example: ${fix.example}_`);
+    }
   }
 
   // Gaps
