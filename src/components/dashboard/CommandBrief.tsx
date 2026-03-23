@@ -155,6 +155,7 @@ export function CommandBrief() {
                     {primaryAction.entityName && (
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {primaryAction.entityName} · {primaryAction.why}
+                        <span className="ml-1.5 text-[10px] opacity-70">({confidenceLabel})</span>
                       </p>
                     )}
                   </div>
