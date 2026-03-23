@@ -459,7 +459,8 @@ ${customScorecardContext}`;
                 "transcript_moment", "replacement_behavior", "actionable_feedback",
                 "strengths", "missed_opportunities", "suggested_questions",
                 "behavioral_flags", "style_notes", "acumen_notes", "cadence_notes",
-                "call_goals_inferred", "goals_achieved", "deal_progressed", "progression_evidence", "likelihood_impact", "competitors_mentioned"
+                "call_goals_inferred", "goals_achieved", "deal_progressed", "progression_evidence", "likelihood_impact", "competitors_mentioned",
+                "extracted_next_step", "extracted_next_step_date"
               ],
               additionalProperties: false,
             },
