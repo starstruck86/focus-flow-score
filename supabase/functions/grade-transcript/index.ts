@@ -437,6 +437,16 @@ ${customScorecardContext}`;
                   items: { type: "string" },
                   description: "List of competitor names mentioned in the transcript",
                 },
+
+                // Next step extraction
+                extracted_next_step: {
+                  type: "string",
+                  description: "Concise actionable next step extracted from the call (e.g. 'Send pricing proposal by Friday'). Look for phrases like 'next step is...', 'I'll follow up...', 'we'll send...', 'circle back...', 'decision by...'. Return empty string if none found.",
+                },
+                extracted_next_step_date: {
+                  type: "string",
+                  description: "ISO date (YYYY-MM-DD) for when the next step should happen, parsed from expressions like specific dates, weekdays, 'next week', 'end of month'. Return empty string if unclear or not mentioned.",
+                },
               },
               required: [
                 "overall_score", "overall_grade", "summary",
@@ -449,7 +459,8 @@ ${customScorecardContext}`;
                 "transcript_moment", "replacement_behavior", "actionable_feedback",
                 "strengths", "missed_opportunities", "suggested_questions",
                 "behavioral_flags", "style_notes", "acumen_notes", "cadence_notes",
-                "call_goals_inferred", "goals_achieved", "deal_progressed", "progression_evidence", "likelihood_impact", "competitors_mentioned"
+                "call_goals_inferred", "goals_achieved", "deal_progressed", "progression_evidence", "likelihood_impact", "competitors_mentioned",
+                "extracted_next_step", "extracted_next_step_date"
               ],
               additionalProperties: false,
             },
@@ -668,7 +679,39 @@ ${customScorecardContext}`;
       } catch (notesErr) {
         console.error("Opportunity notes enrichment failed (non-fatal):", notesErr);
       }
-    }
+      }
+
+      // Auto-fill next step fields if empty on the opportunity
+      try {
+        const extractedStep = grade.extracted_next_step?.trim();
+        const extractedDate = grade.extracted_next_step_date?.trim();
+
+        if (extractedStep || extractedDate) {
+          const { data: opp2 } = await supabase
+            .from("opportunities")
+            .select("next_step, next_step_date")
+            .eq("id", transcript.opportunity_id)
+            .single();
+
+          const updates: Record<string, any> = {};
+          if (extractedStep && !opp2?.next_step) {
+            updates.next_step = extractedStep;
+          }
+          if (extractedDate && !opp2?.next_step_date) {
+            updates.next_step_date = extractedDate;
+          }
+
+          if (Object.keys(updates).length > 0) {
+            await supabase
+              .from("opportunities")
+              .update(updates)
+              .eq("id", transcript.opportunity_id);
+            console.log("Auto-filled next step for opportunity:", transcript.opportunity_id, updates);
+          }
+        }
+      } catch (nextStepErr) {
+        console.error("Next step auto-fill failed (non-fatal):", nextStepErr);
+      }
 
     return new Response(JSON.stringify(saved), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

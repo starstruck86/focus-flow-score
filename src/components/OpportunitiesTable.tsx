@@ -704,14 +704,14 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
     { value: 'certain', label: '4 - OOB', className: 'bg-purple-600/20 text-purple-400' },
   ];
 
-  // Next Step cell — display-first editable text
+  // Next Step cell — wrapping multi-line display
   const NextStepTextCell = ({ opp }: { opp: Opportunity }) => (
-    <TableCell className="align-top py-3 max-w-[200px]" onClick={(e) => e.stopPropagation()}>
-      <EditableTextCell
+    <TableCell className="align-top py-3 min-w-[160px] max-w-[280px]" onClick={(e) => e.stopPropagation()}>
+      <EditableTextareaCell
         value={opp.nextStep || ''}
         onChange={(v) => updateOpportunity(opp.id, { nextStep: v })}
         emptyText="+ Add"
-        className="truncate"
+        className="whitespace-pre-wrap break-words text-xs leading-relaxed line-clamp-4"
       />
     </TableCell>
   );
