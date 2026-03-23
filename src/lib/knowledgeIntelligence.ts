@@ -218,6 +218,8 @@ export interface DecisionContext {
   personalBoosts?: Map<string, number>;
   /** Personal performance summaries keyed by insight id */
   personalSummaries?: Map<string, string>;
+  /** Pipeline impact data keyed by insight id */
+  pipelineImpacts?: Map<string, { meetingsGenerated: number; opportunitiesCreated: number; stageProgressions: number; pipelineValueInfluenced: number }>;
 }
 
 const MATURITY_WEIGHT: Record<IdeaMaturity, number> = {
