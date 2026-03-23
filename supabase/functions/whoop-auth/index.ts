@@ -44,11 +44,19 @@ serve(async (req) => {
 
     // Clear any stale connection before starting new OAuth flow
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const WHOOP_CLIENT_SECRET = Deno.env.get('WHOOP_CLIENT_SECRET')!;
     const adminClient = createClient(SUPABASE_URL, serviceRoleKey);
     await adminClient.from('whoop_connections').delete().eq('user_id', userId);
 
-    // Encode userId + redirectUri in state so the callback knows which user to associate
-    const encodedState = btoa(JSON.stringify({ userId, redirectUri, nonce: crypto.randomUUID() }));
+    // HMAC-sign the state to prevent forgery
+    const statePayload = JSON.stringify({ userId, redirectUri, nonce: crypto.randomUUID() });
+    const hmacKey = await crypto.subtle.importKey(
+      'raw', new TextEncoder().encode(WHOOP_CLIENT_SECRET),
+      { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+    );
+    const sigBuf = await crypto.subtle.sign('HMAC', hmacKey, new TextEncoder().encode(statePayload));
+    const sig = btoa(String.fromCharCode(...new Uint8Array(sigBuf)));
+    const encodedState = btoa(JSON.stringify({ payload: statePayload, sig }));
 
     const scopes = 'read:recovery read:sleep read:workout read:cycles read:profile offline';
 
