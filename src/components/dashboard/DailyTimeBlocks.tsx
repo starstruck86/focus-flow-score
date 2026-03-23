@@ -126,6 +126,7 @@ export function DailyTimeBlocks() {
   const { opportunities, accounts } = useStore();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { targets: autoSelectedAccounts } = useNewLogoTargets();
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState(0);
