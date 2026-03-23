@@ -60,47 +60,142 @@ function fmt(d: Date): string {
   return d.toISOString().split('T')[0];
 }
 
-function getPeriodPair(type: PeriodType, offset = 0): { current: PeriodBounds; previous: PeriodBounds; currentLabel: string; previousLabel: string } {
+function quarterStart(d: Date): Date {
+  return new Date(d.getFullYear(), Math.floor(d.getMonth() / 3) * 3, 1);
+}
+
+function quarterEnd(d: Date): Date {
+  const qs = quarterStart(d);
+  return new Date(qs.getFullYear(), qs.getMonth() + 3, 0);
+}
+
+interface PeriodPairResult {
+  current: PeriodBounds;
+  previous: PeriodBounds;
+  currentLabel: string;
+  previousLabel: string;
+  comparisonMode: ComparisonMode;
+}
+
+function getPeriodPair(type: PeriodType, offset = 0): PeriodPairResult {
   const now = new Date();
+  const todayStr = today();
 
   switch (type) {
     case 'day': {
-      const cur = addDays(today(), -offset);
+      const cur = addDays(todayStr, -offset);
       const prev = addDays(cur, -1);
       return {
         current: { start: cur, end: cur },
         previous: { start: prev, end: prev },
         currentLabel: offset === 0 ? 'today' : offset === 1 ? 'yesterday' : `${offset}d ago`,
         previousLabel: offset === 0 ? 'yesterday' : offset === 1 ? 'the day before' : `${offset + 1}d ago`,
+        comparisonMode: 'full-period',
       };
     }
     case 'week': {
       const mon = mondayOfWeek(now);
       const curStart = fmt(mon);
       const curEnd = addDays(curStart, 6);
-      const prevStart = addDays(curStart, -7);
-      const prevEnd = addDays(prevStart, 6);
+      const isCurrentWeek = todayStr >= curStart && todayStr <= curEnd;
+
+      if (isCurrentWeek) {
+        // To-date: Mon..today vs same span last week
+        const daysSoFar = Math.floor((now.getTime() - mon.getTime()) / 86400000);
+        const prevStart = addDays(curStart, -7);
+        const prevEnd = addDays(prevStart, daysSoFar);
+        return {
+          current: { start: curStart, end: todayStr },
+          previous: { start: prevStart, end: prevEnd },
+          currentLabel: 'this week to date',
+          previousLabel: 'same point last week',
+          comparisonMode: 'to-date',
+        };
+      }
+      // Full week vs full week (comparing last full week vs prior)
+      const lastMonStart = addDays(curStart, -7);
+      const lastMonEnd = addDays(lastMonStart, 6);
+      const priorStart = addDays(lastMonStart, -7);
+      const priorEnd = addDays(priorStart, 6);
       return {
-        current: { start: curStart, end: curEnd },
-        previous: { start: prevStart, end: prevEnd },
-        currentLabel: 'this week',
-        previousLabel: 'last week',
+        current: { start: lastMonStart, end: lastMonEnd },
+        previous: { start: priorStart, end: priorEnd },
+        currentLabel: 'last full week',
+        previousLabel: 'the week before',
+        comparisonMode: 'full-period',
       };
     }
     case 'month': {
-      const curStart = fmt(new Date(now.getFullYear(), now.getMonth(), 1));
-      const curEnd = fmt(new Date(now.getFullYear(), now.getMonth() + 1, 0));
-      const prevStart = fmt(new Date(now.getFullYear(), now.getMonth() - 1, 1));
-      const prevEnd = fmt(new Date(now.getFullYear(), now.getMonth(), 0));
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      const curMonStart = fmt(monthStart);
+      const curMonEnd = fmt(monthEnd);
+      const isCurrentMonth = todayStr >= curMonStart && todayStr <= curMonEnd;
+
+      if (isCurrentMonth) {
+        // To-date: 1st..today vs 1st..same day last month
+        const dayOfMonth = now.getDate();
+        const prevMonStart = fmt(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+        const prevMonthLastDay = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+        const alignedDay = Math.min(dayOfMonth, prevMonthLastDay);
+        const prevMonEnd = fmt(new Date(now.getFullYear(), now.getMonth() - 1, alignedDay));
+        return {
+          current: { start: curMonStart, end: todayStr },
+          previous: { start: prevMonStart, end: prevMonEnd },
+          currentLabel: 'this month to date',
+          previousLabel: 'same point last month',
+          comparisonMode: 'to-date',
+        };
+      }
+      // Full month vs full month
+      const lastMonS = fmt(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+      const lastMonE = fmt(new Date(now.getFullYear(), now.getMonth(), 0));
+      const priorMonS = fmt(new Date(now.getFullYear(), now.getMonth() - 2, 1));
+      const priorMonE = fmt(new Date(now.getFullYear(), now.getMonth() - 1, 0));
       return {
-        current: { start: curStart, end: curEnd },
-        previous: { start: prevStart, end: prevEnd },
-        currentLabel: 'this month',
-        previousLabel: 'last month',
+        current: { start: lastMonS, end: lastMonE },
+        previous: { start: priorMonS, end: priorMonE },
+        currentLabel: 'last full month',
+        previousLabel: 'the month before',
+        comparisonMode: 'full-period',
+      };
+    }
+    case 'quarter': {
+      const qs = quarterStart(now);
+      const qe = quarterEnd(now);
+      const curQStart = fmt(qs);
+      const curQEnd = fmt(qe);
+      const isCurrentQuarter = todayStr >= curQStart && todayStr <= curQEnd;
+
+      if (isCurrentQuarter) {
+        // To-date: quarter start..today vs same elapsed days last quarter
+        const elapsed = Math.floor((now.getTime() - qs.getTime()) / 86400000);
+        const prevQStart = new Date(qs.getFullYear(), qs.getMonth() - 3, 1);
+        const prevQStartStr = fmt(prevQStart);
+        const prevQEnd = addDays(prevQStartStr, elapsed);
+        return {
+          current: { start: curQStart, end: todayStr },
+          previous: { start: prevQStartStr, end: prevQEnd },
+          currentLabel: 'this quarter to date',
+          previousLabel: 'same point last quarter',
+          comparisonMode: 'to-date',
+        };
+      }
+      // Full quarter vs full quarter
+      const lastQS = new Date(qs.getFullYear(), qs.getMonth() - 3, 1);
+      const lastQE = new Date(qs.getFullYear(), qs.getMonth(), 0);
+      const priorQS = new Date(qs.getFullYear(), qs.getMonth() - 6, 1);
+      const priorQE = new Date(qs.getFullYear(), qs.getMonth() - 3, 0);
+      return {
+        current: { start: fmt(lastQS), end: fmt(lastQE) },
+        previous: { start: fmt(priorQS), end: fmt(priorQE) },
+        currentLabel: 'last full quarter',
+        previousLabel: 'the quarter before',
+        comparisonMode: 'full-period',
       };
     }
     case 'rolling-7': {
-      const curEnd = today();
+      const curEnd = todayStr;
       const curStart = addDays(curEnd, -6);
       const prevEnd = addDays(curStart, -1);
       const prevStart = addDays(prevEnd, -6);
@@ -109,10 +204,11 @@ function getPeriodPair(type: PeriodType, offset = 0): { current: PeriodBounds; p
         previous: { start: prevStart, end: prevEnd },
         currentLabel: 'last 7 days',
         previousLabel: 'prior 7 days',
+        comparisonMode: 'full-period',
       };
     }
     case 'rolling-30': {
-      const curEnd = today();
+      const curEnd = todayStr;
       const curStart = addDays(curEnd, -29);
       const prevEnd = addDays(curStart, -1);
       const prevStart = addDays(prevEnd, -29);
@@ -121,6 +217,7 @@ function getPeriodPair(type: PeriodType, offset = 0): { current: PeriodBounds; p
         previous: { start: prevStart, end: prevEnd },
         currentLabel: 'last 30 days',
         previousLabel: 'prior 30 days',
+        comparisonMode: 'full-period',
       };
     }
   }
