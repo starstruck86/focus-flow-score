@@ -87,6 +87,34 @@ async function fetchTodayPlan(ctx: ToolContext): Promise<{ plan: DailyPlan | nul
   return { plan: p, error: null };
 }
 
+const DAY_KEYS_MAP: Record<number, string> = { 1: 'monday', 2: 'tuesday', 3: 'wednesday', 4: 'thursday', 5: 'friday' };
+
+interface QueueAccount { id: string; name: string; state: string; tier?: string }
+
+async function fetchTodayQueue(ctx: ToolContext): Promise<{ today: QueueAccount[]; weeklyTotal: number; weeklyResearched: number; weeklyAddedToCadence: number } | null> {
+  const userId = await ctx.getUserId();
+  if (!userId) return null;
+  const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+  const { data } = await supabase
+    .from('weekly_research_queue' as any)
+    .select('assignments')
+    .eq('user_id', userId)
+    .eq('week_start', weekStart)
+    .maybeSingle();
+  if (!data) return null;
+  const a = (data as any).assignments as Record<string, QueueAccount[]>;
+  const dayKey = DAY_KEYS_MAP[new Date().getDay()];
+  const today = dayKey ? (a[dayKey] || []) : [];
+  const allAccounts = Object.values(a).flat();
+  return {
+    today,
+    weeklyTotal: allAccounts.length,
+    weeklyResearched: allAccounts.filter(acc => acc.state === 'researched' || acc.state === 'added_to_cadence').length,
+    weeklyAddedToCadence: allAccounts.filter(acc => acc.state === 'added_to_cadence').length,
+  };
+}
+
+
 function joinNatural(items: string[]): string {
   if (items.length === 0) return '';
   if (items.length === 1) return items[0];
