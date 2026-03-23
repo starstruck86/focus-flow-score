@@ -62,6 +62,7 @@ interface DailyPlan {
   block_feedback?: { blockIdx: number; thumbs: 'up' | 'down' }[];
   feedback_rating?: number;
   feedback_text?: string;
+  recast_at?: string | null;
 }
 
 const TYPE_CONFIG: Record<string, { icon: typeof Clock; color: string; bg: string }> = {
@@ -522,7 +523,15 @@ export function DailyTimeBlocks() {
               <Clock className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold">Daily Game Plan</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold">Daily Game Plan</h3>
+                {plan.recast_at && (
+                  <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400 gap-1">
+                    <RotateCcw className="h-2.5 w-2.5" />
+                    Recast Active
+                  </Badge>
+                )}
+              </div>
               <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                 <span>{plan.meeting_load_hours}h meetings</span>
                 <span>·</span>

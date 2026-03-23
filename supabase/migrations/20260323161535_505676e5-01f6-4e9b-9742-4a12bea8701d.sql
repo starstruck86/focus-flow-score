@@ -1,0 +1,1 @@
+ALTER TABLE public.daily_time_blocks ADD COLUMN IF NOT EXISTS recast_at timestamp with time zone DEFAULT NULL;
