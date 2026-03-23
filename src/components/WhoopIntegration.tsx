@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useSearchParams } from 'react-router-dom';
@@ -6,14 +6,24 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, RefreshCw, Link2, Unlink, Activity, Moon, Zap, CheckCircle2, XCircle } from 'lucide-react';
+import { Loader2, RefreshCw, Link2, Unlink, Activity, Moon, Zap, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
+
+// ── Connection state model ─────────────────────────────────────
+type WhoopConnectionState =
+  | 'not_connected'
+  | 'connected_healthy'
+  | 'token_expired'
+  | 'syncing'
+  | 'sync_failed'
+  | 'connected_no_data';
 
 interface WhoopConnection {
   id: string;
   whoop_user_id: string | null;
   updated_at: string;
+  token_expires_at: string;
 }
 
 interface WhoopMetric {
@@ -24,6 +34,57 @@ interface WhoopMetric {
   strain_score: number | null;
 }
 
+function deriveConnectionState(
+  connection: WhoopConnection | null,
+  metrics: WhoopMetric[],
+  syncError: string | null,
+  isSyncing: boolean,
+): WhoopConnectionState {
+  if (!connection) return 'not_connected';
+  if (isSyncing) return 'syncing';
+
+  // Check token expiry client-side (with 5min buffer)
+  const expiresAt = new Date(connection.token_expires_at).getTime();
+  const now = Date.now();
+  if (expiresAt < now + 5 * 60 * 1000) return 'token_expired';
+
+  if (syncError) return 'sync_failed';
+  if (metrics.length === 0) return 'connected_no_data';
+  return 'connected_healthy';
+}
+
+// ── Status badge ───────────────────────────────────────────────
+function StatusBadge({ state }: { state: WhoopConnectionState }) {
+  switch (state) {
+    case 'connected_healthy':
+      return <Badge variant="default" className="gap-1"><CheckCircle2 className="h-3 w-3" /> Healthy</Badge>;
+    case 'token_expired':
+      return <Badge variant="destructive" className="gap-1"><AlertTriangle className="h-3 w-3" /> Token Expired</Badge>;
+    case 'syncing':
+      return <Badge variant="secondary" className="gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Syncing</Badge>;
+    case 'sync_failed':
+      return <Badge variant="destructive" className="gap-1"><XCircle className="h-3 w-3" /> Sync Failed</Badge>;
+    case 'connected_no_data':
+      return <Badge variant="secondary" className="gap-1"><Activity className="h-3 w-3" /> No Data</Badge>;
+    default:
+      return <Badge variant="secondary" className="gap-1"><XCircle className="h-3 w-3" /> Not Connected</Badge>;
+  }
+}
+
+// ── Score color helper ─────────────────────────────────────────
+function scoreColor(score: number | null, type: 'recovery' | 'sleep' | 'strain') {
+  if (score == null) return 'text-muted-foreground';
+  if (type === 'strain') {
+    if (score >= 18) return 'text-destructive';
+    if (score >= 14) return 'text-yellow-500';
+    return 'text-green-500';
+  }
+  if (score >= 67) return 'text-green-500';
+  if (score >= 34) return 'text-yellow-500';
+  return 'text-destructive';
+}
+
+// ── Main component ─────────────────────────────────────────────
 export function WhoopIntegration() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -33,43 +94,28 @@ export function WhoopIntegration() {
   const [connecting, setConnecting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-  const [needsReconnect, setNeedsReconnect] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
-  // Handle OAuth callback result
-  useEffect(() => {
-    const whoopStatus = searchParams.get('whoop');
-    if (whoopStatus === 'success') {
-      toast.success('WHOOP connected successfully!');
-      searchParams.delete('whoop');
-      setSearchParams(searchParams, { replace: true });
-      loadData();
-    } else if (whoopStatus === 'error') {
-      toast.error('Failed to connect WHOOP. Please try again.');
-      searchParams.delete('whoop');
-      setSearchParams(searchParams, { replace: true });
-    }
-  }, []);
+  const connectionState = deriveConnectionState(connection, metrics, syncError, syncing);
 
-  useEffect(() => {
-    if (user) loadData();
-  }, [user]);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
+    if (!user) return;
     setLoading(true);
     try {
       const { data: conn } = await supabase
         .from('whoop_connections')
-        .select('id, whoop_user_id, updated_at')
-        .eq('user_id', user!.id)
+        .select('id, whoop_user_id, updated_at, token_expires_at')
+        .eq('user_id', user.id)
         .maybeSingle();
 
       setConnection(conn);
+      setSyncError(null);
 
       if (conn) {
         const { data: metricsData } = await supabase
           .from('whoop_daily_metrics')
           .select('id, date, recovery_score, sleep_score, strain_score')
-          .eq('user_id', user!.id)
+          .eq('user_id', user.id)
           .order('date', { ascending: false })
           .limit(7);
         setMetrics(metricsData || []);
@@ -81,7 +127,30 @@ export function WhoopIntegration() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [user]);
+
+  // Handle OAuth callback
+  useEffect(() => {
+    const whoopStatus = searchParams.get('whoop');
+    if (whoopStatus === 'success') {
+      toast.success('WHOOP connected successfully!');
+      searchParams.delete('whoop');
+      setSearchParams(searchParams, { replace: true });
+      // Reload to pick up fresh connection + optionally trigger sync
+      loadData().then(() => {
+        // Auto-sync after reconnect
+        syncData();
+      });
+    } else if (whoopStatus === 'error') {
+      toast.error('Failed to connect WHOOP. Please try again.');
+      searchParams.delete('whoop');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user) loadData();
+  }, [user, loadData]);
 
   async function handleConnect() {
     setConnecting(true);
@@ -100,28 +169,28 @@ export function WhoopIntegration() {
 
   async function syncData() {
     setSyncing(true);
+    setSyncError(null);
     try {
       const response = await trackedInvoke<any>('whoop-sync', {
         body: { action: 'sync' },
       });
       if (response.error) throw new Error(response.error.message);
-      if (response.data?.needsReconnect) {
-        setNeedsReconnect(true);
-        toast.error('WHOOP token expired — please reconnect');
+
+      const data = response.data;
+      if (data?.needsReconnect) {
+        // Token truly dead — update connection to reflect expired state
+        setSyncError(data.errorDetail || 'token_expired');
+        toast.error(data.error || 'WHOOP token expired — please reconnect');
+        // Reload connection to get fresh token_expires_at
+        await loadData();
         return;
       }
-      const { synced } = response.data;
-      setNeedsReconnect(false);
-      toast.success(`Synced ${synced} day(s) of WHOOP data`);
+      toast.success(`Synced ${data.synced} day(s) of WHOOP data`);
       await loadData();
     } catch (err: any) {
       console.error('Sync error:', err);
-      if (err.message?.includes('Token refresh failed') || err.message?.includes('reconnect')) {
-        setNeedsReconnect(true);
-        toast.error('WHOOP token expired — please reconnect');
-      } else {
-        toast.error(err.message || 'Failed to sync WHOOP data');
-      }
+      setSyncError(err.message || 'sync_failed');
+      toast.error(err.message || 'Failed to sync WHOOP data');
     } finally {
       setSyncing(false);
     }
@@ -136,6 +205,7 @@ export function WhoopIntegration() {
       if (response.error) throw new Error(response.error.message);
       setConnection(null);
       setMetrics([]);
+      setSyncError(null);
       toast.success('WHOOP disconnected');
     } catch (err: any) {
       console.error('Disconnect error:', err);
@@ -145,19 +215,8 @@ export function WhoopIntegration() {
     }
   }
 
-  function scoreColor(score: number | null, type: 'recovery' | 'sleep' | 'strain') {
-    if (score == null) return 'text-muted-foreground';
-    if (type === 'strain') {
-      if (score >= 18) return 'text-destructive';
-      if (score >= 14) return 'text-yellow-500';
-      return 'text-green-500';
-    }
-    if (score >= 67) return 'text-green-500';
-    if (score >= 34) return 'text-yellow-500';
-    return 'text-destructive';
-  }
-
   const latestMetric = metrics[0];
+  const needsReconnect = connectionState === 'token_expired' || connectionState === 'sync_failed';
 
   if (loading) {
     return (
@@ -173,6 +232,7 @@ export function WhoopIntegration() {
   return (
     <div className="space-y-4">
       <div className="metric-card">
+        {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -180,25 +240,39 @@ export function WhoopIntegration() {
             </div>
             <div>
               <h3 className="font-semibold">WHOOP</h3>
-              <p className="text-sm text-muted-foreground">Recovery, Sleep & Strain tracking</p>
+              <p className="text-sm text-muted-foreground">Recovery, Sleep & Strain</p>
             </div>
           </div>
-          <Badge variant={connection ? 'default' : 'secondary'} className="gap-1">
-            {connection ? (
-              <><CheckCircle2 className="h-3 w-3" /> Connected</>
-            ) : (
-              <><XCircle className="h-3 w-3" /> Not Connected</>
-            )}
-          </Badge>
+          <StatusBadge state={connectionState} />
         </div>
 
-        {!connection ? (
+        {/* Not connected */}
+        {connectionState === 'not_connected' && (
           <Button onClick={handleConnect} disabled={connecting} className="w-full gap-2">
             {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
             Connect WHOOP
           </Button>
-        ) : (
+        )}
+
+        {/* Connected states */}
+        {connectionState !== 'not_connected' && (
           <div className="space-y-4">
+            {/* Token expired / sync failed banner */}
+            {needsReconnect && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+                <p className="text-sm font-medium text-destructive">
+                  {connectionState === 'token_expired'
+                    ? 'Your WHOOP token has expired. Reconnect to resume syncing.'
+                    : `Sync failed: ${syncError || 'Unknown error'}`}
+                </p>
+                <Button onClick={handleConnect} disabled={connecting} size="sm" className="gap-1.5">
+                  {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
+                  Reconnect WHOOP
+                </Button>
+              </div>
+            )}
+
+            {/* Latest scores */}
             {latestMetric && (
               <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-lg border bg-card p-3 text-center">
@@ -225,28 +299,35 @@ export function WhoopIntegration() {
               </div>
             )}
 
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">
-                Last sync: {format(parseISO(connection.updated_at), 'MMM d, h:mm a')}
-              </span>
-              <div className="flex gap-2">
-                {needsReconnect ? (
-                  <Button variant="default" size="sm" onClick={async () => { setNeedsReconnect(false); await handleConnect(); }} className="gap-1.5">
-                    <Link2 className="h-3.5 w-3.5" /> Reconnect
-                  </Button>
-                ) : (
+            {/* Footer actions — only show sync/disconnect when not in error state */}
+            {!needsReconnect && (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">
+                  Last sync: {connection ? format(parseISO(connection.updated_at), 'MMM d, h:mm a') : '—'}
+                </span>
+                <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={syncData} disabled={syncing} className="gap-1.5">
                     {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                    Sync Now
+                    Sync
                   </Button>
-                )}
+                  <Button variant="ghost" size="sm" onClick={handleDisconnect} disabled={disconnecting} className="gap-1.5 text-destructive hover:text-destructive">
+                    {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unlink className="h-3.5 w-3.5" />}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Disconnect available even in error state */}
+            {needsReconnect && (
+              <div className="flex justify-end">
                 <Button variant="ghost" size="sm" onClick={handleDisconnect} disabled={disconnecting} className="gap-1.5 text-destructive hover:text-destructive">
                   {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unlink className="h-3.5 w-3.5" />}
                   Disconnect
                 </Button>
               </div>
-            </div>
+            )}
 
+            {/* History table */}
             {metrics.length > 0 && (
               <div className="rounded-lg border overflow-hidden">
                 <Table>
@@ -280,9 +361,9 @@ export function WhoopIntegration() {
               </div>
             )}
 
-            {metrics.length === 0 && (
+            {metrics.length === 0 && connectionState === 'connected_no_data' && (
               <p className="text-sm text-muted-foreground text-center py-2">
-                No metrics yet. Click "Sync Now" to pull your WHOOP data.
+                No metrics yet. Click "Sync" to pull your WHOOP data.
               </p>
             )}
           </div>

@@ -6,16 +6,22 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+// ── Token refresh ──────────────────────────────────────────────
 async function refreshTokenIfNeeded(supabase: any, connection: any): Promise<string> {
-  const now = new Date();
-  const expiresAt = new Date(connection.token_expires_at);
+  const now = Date.now();
+  const expiresAt = new Date(connection.token_expires_at).getTime();
 
-  if (expiresAt.getTime() - now.getTime() > 5 * 60 * 1000) {
+  if (expiresAt - now > 5 * 60 * 1000) {
     return connection.access_token;
   }
 
   if (!connection.refresh_token) {
-    throw new Error('Token expired and no refresh token available. Please reconnect WHOOP.');
+    // Mark token as expired in DB so UI can detect it
+    await supabase
+      .from('whoop_connections')
+      .update({ token_expires_at: new Date(0).toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', connection.id);
+    throw Object.assign(new Error('Token expired and no refresh token available. Please reconnect WHOOP.'), { errorDetail: 'no_refresh_token' });
   }
 
   console.log('Refreshing WHOOP token for user', connection.user_id);
@@ -32,7 +38,12 @@ async function refreshTokenIfNeeded(supabase: any, connection: any): Promise<str
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Token refresh failed: ${errorText}`);
+    // Mark token as expired in DB
+    await supabase
+      .from('whoop_connections')
+      .update({ token_expires_at: new Date(0).toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', connection.id);
+    throw Object.assign(new Error(`Token refresh failed: ${errorText}`), { errorDetail: 'refresh_failed' });
   }
 
   const tokenData = await response.json();
@@ -51,6 +62,7 @@ async function refreshTokenIfNeeded(supabase: any, connection: any): Promise<str
   return tokenData.access_token;
 }
 
+// ── Fetch & upsert metrics ─────────────────────────────────────
 async function fetchAndUpsertMetrics(supabase: any, connection: any): Promise<number> {
   const accessToken = await refreshTokenIfNeeded(supabase, connection);
   const userId = connection.user_id;
@@ -69,6 +81,17 @@ async function fetchAndUpsertMetrics(supabase: any, connection: any): Promise<nu
       headers: { 'Authorization': `Bearer ${accessToken}` },
     }),
   ]);
+
+  // If any API call returns 401, the token is actually invalid despite refresh succeeding
+  for (const [name, resp] of [['Cycles', cyclesResponse], ['Recovery', recoveryResponse], ['Sleep', sleepResponse]] as const) {
+    if ((resp as Response).status === 401) {
+      await supabase
+        .from('whoop_connections')
+        .update({ token_expires_at: new Date(0).toISOString(), updated_at: new Date().toISOString() })
+        .eq('id', connection.id);
+      throw Object.assign(new Error(`WHOOP API returned 401 on ${name}. Please reconnect.`), { errorDetail: 'api_unauthorized' });
+    }
+  }
 
   const cycles = cyclesResponse.ok ? (await cyclesResponse.json()).records || [] : [];
   const recoveries = recoveryResponse.ok ? (await recoveryResponse.json()).records || [] : [];
@@ -134,6 +157,7 @@ async function fetchAndUpsertMetrics(supabase: any, connection: any): Promise<nu
   return upserts.length;
 }
 
+// ── Main handler ───────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -149,15 +173,12 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-    // ── Cron / sync_all mode: sync every connected user ──
+    // ── Cron / sync_all ──
     if (action === 'sync_all') {
-      console.log('[whoop-sync] Running daily sync_all for all connected users');
-      const { data: connections, error: connErr } = await supabase
-        .from('whoop_connections')
-        .select('*');
-
+      console.log('[whoop-sync] Running daily sync_all');
+      const { data: connections, error: connErr } = await supabase.from('whoop_connections').select('*');
       if (connErr) throw new Error(`Failed to fetch connections: ${connErr.message}`);
-      if (!connections || connections.length === 0) {
+      if (!connections?.length) {
         return new Response(JSON.stringify({ success: true, synced_users: 0 }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -168,8 +189,7 @@ serve(async (req) => {
         try {
           const count = await fetchAndUpsertMetrics(supabase, conn);
           results.push({ user_id: conn.user_id, synced: count });
-          console.log(`[whoop-sync] User ${conn.user_id}: synced ${count} days`);
-        } catch (err) {
+        } catch (err: any) {
           console.error(`[whoop-sync] User ${conn.user_id} failed:`, err.message);
           results.push({ user_id: conn.user_id, synced: 0, error: err.message });
         }
@@ -203,7 +223,7 @@ serve(async (req) => {
     // Disconnect
     if (action === 'disconnect') {
       await supabase.from('whoop_connections').delete().eq('user_id', userId);
-      await supabase.from('whoop_daily_metrics').delete().eq('user_id', userId);
+      // NOTE: We intentionally do NOT delete whoop_daily_metrics to preserve historical data
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -217,25 +237,29 @@ serve(async (req) => {
       .single();
 
     if (!connection) {
-      return new Response(JSON.stringify({ error: 'WHOOP not connected' }), {
+      return new Response(JSON.stringify({ error: 'WHOOP not connected', errorDetail: 'no_connection' }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const synced = await fetchAndUpsertMetrics(supabase, connection);
 
-    return new Response(JSON.stringify({ success: true, synced, dates: [] }), {
+    return new Response(JSON.stringify({ success: true, synced }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('whoop-sync error:', error);
     const msg = error.message || 'Unknown error';
-    if (msg.includes('Token refresh failed') || msg.includes('reconnect')) {
-      return new Response(JSON.stringify({ success: false, needsReconnect: true, error: msg }), {
+    const errorDetail = error.errorDetail || 'unknown';
+    const isTokenIssue = ['no_refresh_token', 'refresh_failed', 'api_unauthorized'].includes(errorDetail) ||
+      msg.includes('Token refresh failed') || msg.includes('reconnect');
+
+    if (isTokenIssue) {
+      return new Response(JSON.stringify({ success: false, needsReconnect: true, error: msg, errorDetail }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    return new Response(JSON.stringify({ error: msg }), {
+    return new Response(JSON.stringify({ error: msg, errorDetail }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
