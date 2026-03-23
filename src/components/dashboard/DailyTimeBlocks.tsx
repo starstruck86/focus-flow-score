@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { trackedInvoke } from '@/lib/trackedInvoke';
+import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -36,7 +36,7 @@ import { useWeeklyResearchQueue, type AccountState } from '@/hooks/useWeeklyRese
 import type { CalendarScreenshotEvent } from '@/types/dashboard';
 import type { Json } from '@/integrations/supabase/types';
 import { generateTraceId } from '@/lib/appError';
-import { getVisiblePlanBlocks, summarizePlanDelta, type RebuildPlanBlock } from '@/lib/dailyPlanRebuild';
+import { buildLocalFallbackPlan, getVisiblePlanBlocks, summarizePlanDelta, type RebuildFallbackBlock, type RebuildPlanBlock } from '@/lib/dailyPlanRebuild';
 
 interface TimeBlock {
   start_time: string;
@@ -251,41 +251,119 @@ export function DailyTimeBlocks() {
         message: source === 'manual_rebuild' ? 'Sending rebuild request…' : 'Generating plan…',
       });
 
-      const { data, error } = await trackedInvoke<GeneratePlanResponse>('generate-time-blocks', {
-        body: {
-          date: todayStr,
-          confirmedScreenshotEvents: screenshotEvents,
-          rebuildContext: {
-            source,
-            dismissed_blocks: source === 'manual_rebuild' ? dismissedMeetingBlocks : [],
-            linked_opportunities: source === 'manual_rebuild' ? linkedOpportunities : [],
-            current_visible_blocks: visibleBlocks,
-          },
+      const requestBody = {
+        date: todayStr,
+        confirmedScreenshotEvents: screenshotEvents,
+        rebuildContext: {
+          source,
+          dismissed_blocks: source === 'manual_rebuild' ? dismissedMeetingBlocks : [],
+          linked_opportunities: source === 'manual_rebuild' ? linkedOpportunities : [],
+          current_visible_blocks: visibleBlocks,
         },
-        retry: { maxAttempts: 2, baseDelayMs: 2000 },
-        componentName: 'DailyTimeBlocks',
-        traceId,
-      });
+      };
 
-      if (error) {
+      const persistLocalFallback = async (reason: string) => {
+        if (!user) throw new Error('Not authenticated');
+
         setRebuildStatus({
           traceId,
-          stage: 'failed',
-          message: `Rebuild failed before apply: ${error.rawMessage}`,
+          stage: 'fallback_building',
+          message: `Backend rebuild transport failed: ${reason}. Applying local fallback…`,
+          usedFallback: true,
         });
-        throw error;
-      }
 
-      if (!data?.blocks?.length) {
-        setRebuildStatus({
+        const fallbackPlan = buildLocalFallbackPlan({
+          allBlocks: (plan?.blocks as RebuildFallbackBlock[] | undefined) || [],
+          currentVisibleBlocks: visibleBlocks as RebuildFallbackBlock[],
+          dismissedMeetingBlocks,
+          reason,
+        });
+
+        const { data: saved, error: saveError } = await supabase
+          .from('daily_time_blocks' as 'daily_time_blocks')
+          .upsert({
+            user_id: user.id,
+            plan_date: todayStr,
+            blocks: fallbackPlan.blocks as unknown as Json,
+            meeting_load_hours: fallbackPlan.meeting_load_hours,
+            focus_hours_available: fallbackPlan.focus_hours_available,
+            ai_reasoning: `[FALLBACK] ${fallbackPlan.day_strategy}`,
+            key_metric_targets: fallbackPlan.key_metric_targets as unknown as Json,
+            completed_goals: [],
+            block_feedback: [],
+            dismissed_block_indices: [],
+            recast_at: null,
+          }, { onConflict: 'user_id,plan_date' })
+          .select()
+          .single();
+
+        if (saveError) {
+          setRebuildStatus({
+            traceId,
+            stage: 'failed',
+            message: `Fallback save failed: ${saveError.message}`,
+            usedFallback: true,
+          });
+          throw new Error(`Fallback save failed: ${saveError.message}`);
+        }
+
+        const changeSummary = summarizePlanDelta(visibleBlocks as RebuildPlanBlock[], fallbackPlan.blocks);
+
+        return {
+          ...(saved as unknown as DailyPlan),
+          is_fallback: true,
+          rebuild_diagnostics: {
+            trace_id: traceId,
+            request_source: source,
+            stages: [
+              { stage: 'button_click', detail: 'Rebuild button handler invoked', at: new Date().toISOString() },
+              { stage: 'request_sent', detail: 'Browser request sent to planner', at: new Date().toISOString() },
+              { stage: 'transport_failed', detail: reason, at: new Date().toISOString() },
+              { stage: 'local_fallback_generated', detail: 'Local fallback plan generated', at: new Date().toISOString() },
+              { stage: 'local_fallback_persisted', detail: 'Local fallback plan persisted', at: new Date().toISOString() },
+            ],
+            used_fallback: true,
+            fallback_reason: reason,
+            failure_stage: 'browser_transport',
+            exact_failure_reason: reason,
+            change_summary: changeSummary,
+            preserved_state: {
+              dismissed_meetings: 'reset_after_apply',
+              recast_state: 'reset_to_null',
+              weekly_queue_progress: 'preserved',
+            },
+          },
+        } as GeneratePlanResponse;
+      };
+
+      try {
+        const response = await authenticatedFetch({
+          functionName: 'generate-time-blocks',
+          body: requestBody,
           traceId,
-          stage: 'failed',
-          message: 'Rebuild returned no plan blocks.',
+          componentName: 'DailyTimeBlocks',
+          retry: false,
+          timeoutMs: 30_000,
         });
-        throw new Error('Rebuild returned no plan blocks');
-      }
 
-      return data;
+        const rawText = await response.text();
+        const parsed = rawText ? JSON.parse(rawText) as GeneratePlanResponse | { error?: string } : {};
+
+        if (!response.ok) {
+          const reason = 'error' in parsed && parsed.error ? parsed.error : `HTTP ${response.status}`;
+          return await persistLocalFallback(reason);
+        }
+
+        const data = parsed as GeneratePlanResponse;
+        if (!data?.blocks?.length) {
+          return await persistLocalFallback('Planner returned no blocks');
+        }
+
+        return data;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown transport failure';
+        return await persistLocalFallback(message);
+      }
     },
     onSuccess: (data, variables) => {
       const previousVisible = getVisiblePlanBlocks(plan?.blocks as TimeBlock[] | undefined, dismissedBlocks) as RebuildPlanBlock[];
