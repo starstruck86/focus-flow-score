@@ -865,6 +865,31 @@ export async function queryDashboard(ctx: ToolContext, params: { question?: stri
     }
   }
 
+  // Decision layer — cross-section recommendation
+  const urgentItems: PrioritizedItem[] = [];
+
+  // Score overdue tasks
+  const overdueTasks = tasks.filter(t => t.due_date && t.due_date < today);
+  for (const t of overdueTasks.slice(0, 5)) {
+    urgentItems.push(scoreTaskPriority(t, {}));
+  }
+
+  // Score at-risk renewals
+  const atRiskRenewals = renewals.filter(r => r.churn_risk === 'high' || r.health_status === 'red');
+  for (const r of atRiskRenewals.slice(0, 5)) {
+    urgentItems.push(scoreRenewalPriority(r));
+  }
+
+  // Score closing-soon opps
+  const closingSoonOpps = opps.filter(o => o.close_date && daysFromNow(o.close_date) <= 30 && daysFromNow(o.close_date) >= 0);
+  for (const o of closingSoonOpps.slice(0, 5)) {
+    urgentItems.push(scoreOppPriority(o));
+  }
+
+  if (urgentItems.length) {
+    sentences.push(buildActionRecommendation(urgentItems));
+  }
+
   sentences.push('Ask me about any specific area to go deeper.');
   return sentences.join(' ');
 }
