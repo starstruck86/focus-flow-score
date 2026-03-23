@@ -65,7 +65,7 @@ serve(async (req) => {
     const expires_in = tokenData.expires_in || 3600;
     const grantedScopes = typeof tokenData.scope === 'string' && tokenData.scope.trim().length > 0
       ? tokenData.scope
-      : 'read:recovery read:sleep read:workout read:cycles read:profile';
+      : 'read:recovery read:sleep read:workout read:cycles read:profile offline';
 
     if (!access_token) {
       console.error('No access_token in response:', JSON.stringify(tokenData));
