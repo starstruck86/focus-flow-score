@@ -431,12 +431,19 @@ export function DailyTimeBlocks() {
     toast.success('Block moved');
   }, [plan, todayStr, queryClient]);
 
-  // Dismiss a block
+  // Dismiss a block — persists to DB
   const dismissBlock = useCallback(async (blockIdx: number) => {
     if (!plan) return;
-    setDismissedBlocks(prev => new Set([...prev, blockIdx]));
+    const newDismissed = new Set([...dismissedBlocks, blockIdx]);
+    setDismissedBlocks(newDismissed);
+    const indices = Array.from(newDismissed);
+    // Persist to DB
+    await supabase
+      .from('daily_time_blocks' as 'daily_time_blocks')
+      .update({ dismissed_block_indices: indices as unknown as Json })
+      .eq('id', plan.id);
     toast.success('Meeting dismissed from plan');
-  }, [plan]);
+  }, [plan, dismissedBlocks]);
 
   // Update actual dials/emails on a prospecting block
   const updateBlockActual = useCallback(async (blockIdx: number, field: 'actual_dials' | 'actual_emails', value: number) => {
