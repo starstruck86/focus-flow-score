@@ -618,6 +618,9 @@ export default function Settings() {
   const [newHolidayName, setNewHolidayName] = useState('');
   const [newPtoDate, setNewPtoDate] = useState<Date>();
   const [newPtoNote, setNewPtoNote] = useState('');
+  const [wakeWordOn, setWakeWordOn] = useState(() =>
+    typeof window !== 'undefined' && localStorage.getItem('wake-word-enabled') === 'true'
+  );
   
   const handleToggleWorkday = (dayValue: number) => {
     if (!config) return;
