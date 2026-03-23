@@ -495,10 +495,12 @@ ${prefsContext}
 ${weeklyContext}
 
 CRITICAL RULES:
+0. TASK DEPENDENCY ORDER (NON-NEGOTIABLE): For new logo work, blocks MUST follow this sequence: Account Research/Build → Contact Sourcing/Admin → Outreach (calls/emails). NEVER schedule a Call Blitz or Email Blitz unless a Build or Admin block has been completed first. If no prep exists, INSERT a 30-60 min Admin block for research, contact sourcing, and cadence loading BEFORE any outreach.
 1. DEFAULT BLOCK DURATION: All meaningful work blocks (prospecting, build, research, pipeline) should be 60 minutes by default. This is the ideal flow unit.
 2. MINIMUM BLOCK DURATION: Meaningful work blocks MUST be at least 30 minutes. NEVER schedule prospecting, build, research, or pipeline work in blocks shorter than 30 minutes.
 3. SHORT BLOCKS (under 30 min): ONLY allowed for start-of-day prep, end-of-day wrap, or light admin/cleanup. Do NOT assign meaningful work to short windows — leave them empty or use for admin only.
 4. NEW LOGO IS THE PRIORITY. Use TODAY'S ADJUSTED TARGETS (from weekly context above) — NOT the raw daily averages. Schedule a New Logo Build block + enough Prep→Call Blitz + Email Outreach cycles to hit TODAY'S target.
+5. FILL ALL AVAILABLE TIME: Every minute between ${workStart} and ${workEnd} must be accounted for. No idle gaps > 15 minutes. Stack meaningful blocks back-to-back. If a gap exists, fill it with the next appropriate workflow step.
 5. Use "workstream" field to tag each block as "new_logo" or "renewal" or "general"
 6. Goals must be REALISTIC and ACHIEVABLE. Use these realistic pacing rates:
    - DIAL RATE: ~15 dials per 30 minutes (1 dial every 2 min including voicemail/notes). A 60-min Call Blitz = ~30 dials.
