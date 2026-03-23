@@ -6,7 +6,7 @@ import { behaviorSummary, energyMatch } from './synthesis/behaviorEnergy';
 import { generateContent, meetingBrief } from './synthesis/contentBrief';
 import { executionNext, confirmExecution, blockExecution, skipExecution, snoozeExecution } from './synthesis/executionBinding';
 import { whoopPerformanceInsights, whoopTodayContext } from './synthesis/whoopInsights';
-import { dailyGamePlanWalkthrough } from './synthesis/dailyGamePlan';
+import { dailyGamePlanWalkthrough, queryDailyPlan } from './synthesis/dailyGamePlan';
 
 export function createSynthesisTools(ctx: ToolContext, allTools: Record<string, any>): ToolMap {
   return {
