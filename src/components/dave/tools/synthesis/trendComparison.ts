@@ -27,7 +27,8 @@ export interface ComparisonResult {
   topDecline: MetricComparison | null;
 }
 
-type PeriodType = 'day' | 'week' | 'month' | 'rolling-7' | 'rolling-30';
+type PeriodType = 'day' | 'week' | 'month' | 'quarter' | 'rolling-7' | 'rolling-30';
+type ComparisonMode = 'to-date' | 'full-period';
 
 interface PeriodBounds {
   start: string; // yyyy-MM-dd
