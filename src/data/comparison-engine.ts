@@ -365,6 +365,8 @@ function buildMetricComparisons(
   current: AggregatedMetrics, previous: AggregatedMetrics,
   periodType: PeriodType, contextLabel: string,
 ): MetricComparison[] {
+  const cDays = current.days;
+  const pDays = previous.days;
   const pairs: [string, string, number | null, number | null, boolean][] = [
     ['Dials', 'dials', current.dials, previous.dials, false],
     ['Conversations', 'conversations', current.conversations, previous.conversations, false],
@@ -383,8 +385,18 @@ function buildMetricComparisons(
   ];
 
   return pairs
-    .map(([label, metric, a, b, isRate]) => compareMetric(label, metric, a, b, isRate, periodType, contextLabel))
+    .map(([label, metric, a, b, isRate]) => compareMetric(label, metric, a, b, isRate, periodType, contextLabel, cDays, pDays))
     .filter((c): c is MetricComparison => c !== null);
+}
+
+function computeOverallConfidence(metrics: MetricComparison[]): ConfidenceLevel {
+  const meaningful = metrics.filter(m => m.trend !== 'flat');
+  if (!meaningful.length) return 'low';
+  const highs = meaningful.filter(m => m.confidenceLevel === 'high').length;
+  const mods = meaningful.filter(m => m.confidenceLevel === 'moderate').length;
+  if (highs >= 2) return 'high';
+  if (highs >= 1 || mods >= 3) return 'moderate';
+  return 'low';
 }
 
 // ── Main public API ─────────────────────────────────────────────
