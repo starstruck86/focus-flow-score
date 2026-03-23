@@ -179,6 +179,15 @@ export function DailyTimeBlocks() {
     enabled: !!user,
   });
 
+  // Load persisted dismissed blocks from plan data
+  useEffect(() => {
+    if (plan?.dismissed_block_indices?.length) {
+      setDismissedBlocks(new Set(plan.dismissed_block_indices));
+    } else {
+      setDismissedBlocks(new Set());
+    }
+  }, [plan?.id]);
+
   // Auto-refresh current block indicator every 60s
   useEffect(() => {
     if (!plan?.blocks) return;
