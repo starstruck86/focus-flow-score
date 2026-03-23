@@ -456,7 +456,23 @@ CRITICAL RULES:
 
 WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL):
 
-**NEW LOGO PROSPECTING — THIS IS THE CORE OF THE DAY:**
+**NEW LOGO BUILD — SOURCING & CADENCE SETUP (FIRST-CLASS BLOCK):**
+- type: "build", workstream: "new_logo"
+- This is the structured work BEFORE you can dial. Without it, your call blitz has no fresh targets.
+- DEFAULT DAILY TARGET: 3 new accounts sourced, researched, contacts found, and added to cadence
+- A "New Logo Build" block (45-60 min) is a REQUIRED part of the daily plan — NOT optional
+- The build block has 5 sequential steps the user tracks:
+  1. Select 3 target accounts (from ICP-fit sourced list or prospecting accounts)
+  2. Research company (website, news, tech stack, pain points)
+  3. Identify contacts (buying committee, champions, influencers)
+  4. Find emails/phone numbers (LinkedIn, ZoomInfo, Apollo, manual research)
+  5. Add to cadence (email + phone sequences ready to execute)
+- Label like: "New Logo Build (3 accounts)"
+- Goals should reference specific accounts from the prospecting list
+- Schedule this BEFORE the main Prep→Call Blitz cycle so newly built accounts feed into today's or tomorrow's calls
+- On HEAVY meeting days: reduce to 1-2 accounts but DO NOT skip entirely — pipeline sourcing cannot be zero
+
+**NEW LOGO PROSPECTING — EXECUTION (CALLS & EMAILS):**
 - This is research + cadence + cold outreach work — high-energy hunter mode
 - WARM-UP: Start the day with a short "Rust Buster" block (15-20 min, type: "prospecting"): quick dials to LOW-PREP targets — old leads, closed-lost re-engagements, prebuilt lists. Purpose: build momentum and shake off hesitation before the main blitz.
 - Then use PREP → EXECUTE paired cycles for TARGETED prospecting:
