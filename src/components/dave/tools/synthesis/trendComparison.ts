@@ -434,6 +434,7 @@ function formatVal(m: MetricComparison): string {
 function detectPeriod(question: string): PeriodType {
   const q = question.toLowerCase();
   if (q.includes('yesterday') || q.includes('day before') || q.includes('today vs')) return 'day';
+  if (q.includes('quarter')) return 'quarter';
   if (q.includes('month over month') || q.includes('this month') || q.includes('last month')) return 'month';
   if (q.includes('rolling 30') || q.includes('30-day') || q.includes('30 day')) return 'rolling-30';
   if (q.includes('rolling 7') || q.includes('7-day') || q.includes('7 day')) return 'rolling-7';
