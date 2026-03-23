@@ -22,6 +22,8 @@ interface Props {
   sessionData: DaveSessionData;
   minimized?: boolean;
   onMinimize?: () => void;
+  /** Mic stream pre-acquired during user gesture (mobile). Enables auto-start without second tap. */
+  preacquiredMicStream?: MediaStream | null;
 }
 
 const DISMISSAL_PHRASES = [
@@ -48,7 +50,7 @@ function assertSessionContract(session: DaveSessionData): string | null {
   return null;
 }
 
-export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, minimized = false, onMinimize }: Props) {
+export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, minimized = false, onMinimize, preacquiredMicStream }: Props) {
   const navigate = useNavigate();
   const { ask: askCopilot } = useCopilot();
   const { addUserMessage, addDaveResponse } = useDaveConversation();
@@ -262,9 +264,14 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
     let timeout: ReturnType<typeof setTimeout> | undefined;
 
     try {
-      // On mobile, request mic permission explicitly to unlock audio context
-      if (isMobile) {
-        logStatus('🎤 Requesting microphone access (mobile)');
+      // If we have a preacquired mic stream (from the user's tap gesture on mobile),
+      // use it — no need to request mic again. Just store it for cleanup.
+      if (isMobile && preacquiredMicStream) {
+        logStatus('🎤 Using preacquired mic stream from tap gesture');
+        preflightStreamRef.current = preacquiredMicStream;
+      } else if (isMobile) {
+        // Fallback: request mic directly (may fail on Safari if gesture expired)
+        logStatus('🎤 Requesting microphone access (mobile, no preacquired stream)');
         releasePreflightStream();
         try {
           preflightStreamRef.current = await requestMicrophoneAccess();
@@ -356,7 +363,9 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
 
   useEffect(() => {
     const isDesktop = navigator.maxTouchPoints === 0;
-    if (isDesktop && !startingRef.current) {
+    const hasMicStream = !!preacquiredMicStream;
+    // Auto-start on desktop (always) or mobile when mic was preacquired during tap gesture
+    if ((isDesktop || hasMicStream) && !startingRef.current) {
       setNeedsTap(false);
       startConversation();
     }
