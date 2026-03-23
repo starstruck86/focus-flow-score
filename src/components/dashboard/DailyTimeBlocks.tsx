@@ -209,10 +209,13 @@ export function DailyTimeBlocks() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['daily-time-blocks'] });
+      setDismissedBlocks(new Set());
       toast.success('Daily plan generated!');
     },
     onError: (e) => {
-      toast.error(e instanceof Error ? e.message : 'Failed to generate plan');
+      const msg = e instanceof Error ? e.message : 'Failed to generate plan';
+      console.error('[DailyTimeBlocks] generate error:', msg);
+      toast.error(`Plan generation failed: ${msg}`);
     },
   });
 
