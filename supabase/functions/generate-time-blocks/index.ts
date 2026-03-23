@@ -600,10 +600,12 @@ Generate a daily time-blocked schedule. For each block provide:
 - label (short title, 3-5 words)
 - type: one of "prospecting", "meeting", "research", "admin", "break", "pipeline", "prep"
 - workstream: "new_logo" or "renewal" or "general"
-- goals: array of 1-3 specific, realistic goals for that block (NAME ACCOUNTS for new logo prospecting blocks only — NOT for renewal blocks)
+- goals: array of 1-3 specific, realistic goals for that block (NAME ACCOUNTS for new logo prospecting blocks only — NOT for renewal blocks). Use specific workflow labels like "Send emails to newly sourced contacts" instead of generic "Email Blitz", and "Call newly added prospects" instead of "Call Block".
 - reasoning: one sentence on why this block matters
 
-Also provide an overall "day_strategy" (2-3 sentences: how today fits into the weekly plan, what makes today different from other days this week) and "key_metric_targets" object with TODAY'S ADJUSTED targets (not raw daily averages).`;
+Also provide an overall "day_strategy" (2-3 sentences: how today fits into the weekly plan, what makes today different from other days this week) and "key_metric_targets" object with TODAY'S ADJUSTED targets (not raw daily averages).
+
+READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do contacts exist? Are they loaded into the system? Is outreach actually possible? If NOT, replace with an Admin block for research and contact sourcing.`;
 
     const [wsh, wsm] = workStart.split(':').map(Number);
     const [weh, wem] = workEnd.split(':').map(Number);
