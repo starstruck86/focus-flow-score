@@ -1,17 +1,10 @@
-import { EditableDatePicker } from '@/components/EditableDatePicker';
 import { EditableTextareaCell, EditableNumberCell } from '@/components/table/EditableCell';
 import { CustomFieldRow } from '@/components/table/CustomFieldCell';
 import { StakeholderMap } from '@/components/StakeholderMap';
 import { useCustomFields } from '@/hooks/useCustomFields';
-import { cn } from '@/lib/utils';
-import { parseISO, isPast, isToday } from 'date-fns';
 
 interface OpportunityDetailsFieldProps {
   opportunityId?: string;
-  nextStepDate?: string;
-  onNextStepDateChange?: (value: string | undefined) => void;
-  lastTouchDate?: string;
-  onLastTouchDateChange?: (value: string | undefined) => void;
   notes?: string;
   onNotesChange?: (value: string) => void;
   isRenewal?: boolean;
@@ -27,14 +20,15 @@ interface OpportunityDetailsFieldProps {
   accountWebsite?: string;
   accountIndustry?: string;
   opportunityContext?: string;
+  // Keep accepting these props for backward compat but don't render them
+  nextStepDate?: string;
+  onNextStepDateChange?: (value: string | undefined) => void;
+  lastTouchDate?: string;
+  onLastTouchDateChange?: (value: string | undefined) => void;
 }
 
 export function OpportunityDetailsField({
   opportunityId,
-  nextStepDate,
-  onNextStepDateChange,
-  lastTouchDate,
-  onLastTouchDateChange,
   notes,
   onNotesChange,
   isRenewal = false,
