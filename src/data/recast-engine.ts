@@ -160,17 +160,19 @@ export function recastDay(input: RecastInput): RecastResult {
       continue;
     }
 
+    const minDur = minBlockDuration(block.type);
+
     if (dur <= availableActionMinutes) {
       keptBlocks.push(block);
       availableActionMinutes -= dur;
-    } else if (availableActionMinutes >= 15) {
-      // Compress block to fit
-      const newDur = availableActionMinutes;
+    } else if (availableActionMinutes >= minDur) {
+      // Compress block to fit, but never below minimum for its type
+      const newDur = Math.max(minDur, availableActionMinutes);
       compressedBlocks.push({ label: block.label, originalMinutes: dur, newMinutes: newDur });
       keptBlocks.push({ ...block, reasoning: `Compressed from ${dur} to ${newDur} min — focus on highest-impact goals` });
-      availableActionMinutes = 0;
+      availableActionMinutes -= newDur;
     } else {
-      droppedBlocks.push({ label: block.label, reason: 'Not enough time to fit even compressed' });
+      droppedBlocks.push({ label: block.label, reason: isMeaningfulWork(block.type) ? `Only ${availableActionMinutes} min left — below ${minDur} min minimum for deep work` : 'Not enough time to fit even compressed' });
     }
   }
 
