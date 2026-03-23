@@ -986,7 +986,36 @@ export function DailyTimeBlocks() {
                     </div>
                   )}
 
-                  {/* Linked opportunity badge */}
+                  {/* New Logo Build step tracker */}
+                  {editingBlock !== i && block.type === 'build' && (
+                    <div className="mt-2 py-2 px-2.5 rounded-md bg-orange-500/5 border border-orange-500/20">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Hammer className="h-3 w-3 text-orange-500" />
+                        <span className="text-[10px] text-muted-foreground font-medium">New Logo Build — 3 accounts</span>
+                        <span className="ml-auto text-[10px] text-muted-foreground">
+                          {(block.build_steps || DEFAULT_BUILD_STEPS).filter(s => s.done).length}/{(block.build_steps || DEFAULT_BUILD_STEPS).length}
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        {(block.build_steps || DEFAULT_BUILD_STEPS).map((step, si) => (
+                          <label key={si} className="flex items-center gap-2 cursor-pointer group/step">
+                            <Checkbox
+                              checked={step.done}
+                              onCheckedChange={() => toggleBuildStep(i, si)}
+                              className="h-3.5 w-3.5"
+                            />
+                            <span className={cn(
+                              "text-[11px] transition-all",
+                              step.done ? "line-through text-muted-foreground/50" : "text-muted-foreground"
+                            )}>
+                              {step.step}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {linkedOpp && (
                     <div className="flex items-center gap-1.5 mt-1.5">
                       <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-accent/50">
