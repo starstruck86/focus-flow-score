@@ -1610,7 +1610,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   {showChurnRisk && <SortableHeader sortKey="churnRisk" currentSort={sortConfig} onSort={handleSort} className="w-[8%]">Churn Risk</SortableHeader>}
                   <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[8%]">Close Date</SortableHeader>
                   <TableHead className="w-[7%] text-xs">Next Step Date</TableHead>
-                  <TableHead className="w-[6%] text-xs">Last Touch</TableHead>
+                  <TableHead className="w-[6%] text-xs">Last Touch Date</TableHead>
                   <SortableHeader sortKey="stage" currentSort={sortConfig} onSort={handleSort} className="w-[8%]">Stage</SortableHeader>
                   <SortableHeader sortKey="priorContractArr" currentSort={sortConfig} onSort={handleSort} className="w-[8%]">Prior Contract</SortableHeader>
                   <SortableHeader sortKey="renewalArr" currentSort={sortConfig} onSort={handleSort} className="w-[8%]">Renewal ARR</SortableHeader>
