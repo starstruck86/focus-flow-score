@@ -472,7 +472,7 @@ export async function compareTrends(ctx: ToolContext, params: { question?: strin
   const periodType = detectPeriod(question);
   const focus = detectMetricFocus(question);
   const detail = wantsDetail(question);
-  const { current, previous, currentLabel, previousLabel } = getPeriodPair(periodType);
+  const { current, previous, currentLabel, previousLabel, comparisonMode } = getPeriodPair(periodType);
 
   // Fetch data for both periods in parallel
   const [curJournal, prevJournal, curWhoop, prevWhoop] = await Promise.all([
@@ -498,6 +498,7 @@ export async function compareTrends(ctx: ToolContext, params: { question?: strin
   const result: ComparisonResult = {
     periodALabel: currentLabel,
     periodBLabel: previousLabel,
+    comparisonMode,
     metrics: comparisons,
     topImprovement: improvements[0] || null,
     topDecline: declines[0] || null,
