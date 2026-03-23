@@ -1573,7 +1573,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   <TableHead className="w-[4%]"></TableHead>
                 </>
               ) : (
-                <>
+              <>
                   <TableHead className="w-8">
                     <Checkbox
                       checked={bulkSelection.isAllSelected(activeFilteredOpps)}
@@ -1581,13 +1581,15 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                     />
                   </TableHead>
                   <TableHead className="w-8"></TableHead>
-                  <SortableHeader sortKey="status" currentSort={sortConfig} onSort={handleSort} className="w-[110px]">Status</SortableHeader>
-                  <SortableHeader sortKey="name" currentSort={sortConfig} onSort={handleSort} className="w-[180px]">Opportunity</SortableHeader>
-                  <SortableHeader sortKey="arr" currentSort={sortConfig} onSort={handleSort} className="w-[90px]">ARR</SortableHeader>
-                  {showChurnRisk && <SortableHeader sortKey="churnRisk" currentSort={sortConfig} onSort={handleSort} className="w-[90px]">Churn Risk</SortableHeader>}
-                  <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[110px]">Close Date</SortableHeader>
-                  <SortableHeader sortKey="stage" currentSort={sortConfig} onSort={handleSort} className="w-[90px]">Stage</SortableHeader>
-                  <SortableHeader sortKey="nextStep" currentSort={sortConfig} onSort={handleSort} className="w-[150px]">Next Step</SortableHeader>
+                  <SortableHeader sortKey="status" currentSort={sortConfig} onSort={handleSort} className="w-[100px]">Status</SortableHeader>
+                  <SortableHeader sortKey="name" currentSort={sortConfig} onSort={handleSort} className="w-[160px]">Opportunity</SortableHeader>
+                  <SortableHeader sortKey="arr" currentSort={sortConfig} onSort={handleSort} className="w-[80px]">ARR</SortableHeader>
+                  {showChurnRisk && <SortableHeader sortKey="churnRisk" currentSort={sortConfig} onSort={handleSort} className="w-[80px]">Churn Risk</SortableHeader>}
+                  <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[100px]">Close Date</SortableHeader>
+                  <TableHead className="w-[90px] text-xs">Next Step Date</TableHead>
+                  <TableHead className="w-[80px] text-xs">Last Touch</TableHead>
+                  <SortableHeader sortKey="stage" currentSort={sortConfig} onSort={handleSort} className="w-[80px]">Stage</SortableHeader>
+                  <SortableHeader sortKey="nextStep" currentSort={sortConfig} onSort={handleSort} className="w-[150px]">Next Step Notes</SortableHeader>
                   {summaryCustomFields.map(field => (
                     <SortableHeader key={field.id} sortKey={`custom:${field.id}`} currentSort={sortConfig} onSort={handleSort}>{field.name}</SortableHeader>
                   ))}
