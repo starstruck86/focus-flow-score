@@ -107,7 +107,8 @@ function formatMetricLine(m: MetricComparison): string {
   const arrow = m.trend === 'up' ? '↑' : m.trend === 'down' ? '↓' : '→';
   const pct = m.percentChange !== null && m.trend !== 'flat' ? ` (${m.percentChange > 0 ? '+' : ''}${m.percentChange}%)` : '';
   const val = m.isRate ? `${m.currentValue}% → was ${m.previousValue}%` : `${m.currentValue} → was ${m.previousValue}`;
-  return `  ${arrow} ${m.label}: ${val}${pct}`;
+  const conf = m.confidenceLevel === 'low' ? ' ⚠️' : '';
+  return `  ${arrow} ${m.label}: ${val}${pct}${conf}`;
 }
 
 function interpretComparisons(result: ComparisonResult): string {
