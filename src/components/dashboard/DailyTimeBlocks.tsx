@@ -104,7 +104,16 @@ const BLOCK_ACTIONS: Record<string, { label: string; route?: string; dispatch?: 
   pipeline: { label: '→ Open Pipeline', route: '/quota' },
   prep: { label: '→ Open Accounts', route: '/outreach' },
   meeting: { label: '→ Meeting Prep', dispatch: 'scroll-meeting-prep' },
+  build: { label: '→ Open Outreach', route: '/outreach' },
 };
+
+const DEFAULT_BUILD_STEPS = [
+  { step: 'Select 3 target accounts', done: false },
+  { step: 'Research companies', done: false },
+  { step: 'Identify contacts', done: false },
+  { step: 'Find emails/phone numbers', done: false },
+  { step: 'Add to cadence', done: false },
+];
 
 const WORKSTREAM_CONFIG: Record<string, { label: string; icon: typeof Rocket; color: string }> = {
   new_logo: { label: 'New Logo', icon: Rocket, color: 'text-blue-500' },
