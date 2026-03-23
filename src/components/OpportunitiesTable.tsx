@@ -1208,20 +1208,16 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           <TableRow className="hover:bg-transparent border-b-2">
             <TableCell colSpan={99} className="pt-0 pb-3">
               <OpportunityDetailsField
-                tabTarget={oppTabTarget}
-                opportunityId={opp.id}
-                nextStepDate={opp.nextStepDate}
-                onNextStepDateChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
-                lastTouchDate={opp.lastTouchDate}
-                onLastTouchDateChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
-                notes={opp.notes}
-                onNotesChange={(v) => updateOpportunity(opp.id, { notes: v })}
-                accountId={opp.accountId}
-                accountName={stakeholderAccountName}
-                accountWebsite={linkedAccount?.website}
-                accountIndustry={linkedAccount?.industry}
-                opportunityContext={`${opp.name} - ${opp.stage} - $${opp.arr || 0} ARR`}
-              />
+                  tabTarget={oppTabTarget}
+                  opportunityId={opp.id}
+                  notes={opp.notes}
+                  onNotesChange={(v) => updateOpportunity(opp.id, { notes: v })}
+                  accountId={opp.accountId}
+                  accountName={stakeholderAccountName}
+                  accountWebsite={linkedAccount?.website}
+                  accountIndustry={linkedAccount?.industry}
+                  opportunityContext={`${opp.name} - ${opp.stage} - $${opp.arr || 0} ARR`}
+                />
             </TableCell>
           </TableRow>
         )}
