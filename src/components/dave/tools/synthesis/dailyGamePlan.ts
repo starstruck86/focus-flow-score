@@ -390,28 +390,27 @@ export async function queryDailyPlan(ctx: ToolContext, params: { question: strin
     return resp;
   }
 
-  // New logo targets / "my 3 accounts" / "which accounts"
-  if (q.includes('new logo') || q.includes('3 account') || q.includes('three account') || q.includes('target account') || q.includes('which account') || q.includes('pick') || q.includes('chose') || q.includes('why')) {
-    const selection = loadCachedSelection(todayInAppTz());
-    if (selection && selection.accounts.length > 0) {
-      const accts = selection.accounts;
-      let resp = `Today's 3 new logo targets are: `;
-      resp += accts.map(a => `Number ${a.rank}, ${a.name}. ${a.reason}. First step: ${a.suggestedFirstStep}`).join('. ');
-      resp += `. These were selected based on ICP fit, recency, tier, and buying signals — with rotation to avoid overworking the same accounts.`;
-      if (q.includes('why') || q.includes('pick') || q.includes('chose')) {
-        resp += ` I rotate accounts daily so you're not hammering the same ones. Each pick weighs ICP fit score, tier, how recently you touched them, and any active trigger events.`;
-      }
+  // New logo targets / "my 3 accounts" / "which accounts" / research progress
+  if (q.includes('new logo') || q.includes('3 account') || q.includes('three account') || q.includes('target account') || q.includes('which account') || q.includes('pick') || q.includes('chose') || q.includes('why') || q.includes('research') || q.includes('cadence') || q.includes('queue')) {
+    const queue = await fetchTodayQueue(ctx);
+    if (queue && queue.today.length > 0) {
+      const accts = queue.today;
+      let resp = `Today's 3 new logo accounts from your weekly queue are: ${joinNatural(accts.map(a => a.name))}.`;
+      const researched = accts.filter(a => a.state === 'researched' || a.state === 'added_to_cadence').length;
+      const cadenced = accts.filter(a => a.state === 'added_to_cadence').length;
+      resp += ` Progress: ${researched} of 3 researched, ${cadenced} added to cadence.`;
+      resp += ` Weekly: ${queue.weeklyResearched} of ${queue.weeklyTotal} researched, ${queue.weeklyAddedToCadence} added to cadence.`;
       if (q.includes('first') || q.includes('walk')) {
-        const first = accts[0];
-        resp += ` Let's start with ${first.name}. ${first.suggestedFirstStep}. Say "enrich ${first.name}" to kick off research, or "discover contacts for ${first.name}" to find decision-makers.`;
+        const next = accts.find(a => a.state === 'not_started') || accts[0];
+        resp += ` Start with ${next.name}. Say "enrich ${next.name}" to research, or "discover contacts for ${next.name}" to find decision-makers.`;
       }
       return resp;
     }
-    // Fall through to build block info if no cached selection
+    return 'No weekly research queue has been generated yet. Head to the dashboard and click "Generate Weekly Queue" in your New Logo Build block.';
   }
 
   // Prospecting / build
-  if (q.includes('build') || q.includes('sourc') || q.includes('cadence')) {
+  if (q.includes('build') || q.includes('sourc')) {
     const buildBlocks = blocks.filter(b => b.type === 'build');
     if (!buildBlocks.length) return 'There\'s no New Logo Build block in today\'s plan. You may want to regenerate it.';
     const b = buildBlocks[0];
@@ -420,10 +419,9 @@ export async function queryDailyPlan(ctx: ToolContext, params: { question: strin
     let resp = `Your New Logo Build block runs from ${spokenTime(b.start_time)} to ${spokenTime(b.end_time)}.`;
     resp += ` The goal is to source ${targets.accounts_sourced || 3} accounts end-to-end: select, research, find contacts, get their info, and add to cadence.`;
     if (done > 0) resp += ` You've completed ${done} of ${steps.length} steps so far.`;
-    // Add auto-selected accounts context
-    const selection = loadCachedSelection(todayInAppTz());
-    if (selection && selection.accounts.length > 0) {
-      resp += ` Today's auto-selected targets are ${joinNatural(selection.accounts.map(a => a.name))}.`;
+    const queue = await fetchTodayQueue(ctx);
+    if (queue && queue.today.length > 0) {
+      resp += ` Today's accounts are ${joinNatural(queue.today.map(a => a.name))}.`;
     }
     return resp;
   }
