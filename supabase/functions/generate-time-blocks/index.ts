@@ -1159,6 +1159,10 @@ Also provide an overall "day_strategy" (2-3 sentences: how today fits into the w
 
     mergedBlocks = ensureCoreBlocks(mergedBlocks);
 
+    // CRITICAL: Validate task dependencies and fill all time gaps
+    mergedBlocks = validatePlanDependencies(mergedBlocks);
+    logStage("dependencies_validated", "task dependencies enforced, gaps filled", { finalBlockCount: mergedBlocks.length });
+
     const previousVisibleBlocks = Array.isArray(rebuildContext?.current_visible_blocks)
       ? rebuildContext.current_visible_blocks.filter((block: any) => !!block?.start_time && !!block?.end_time)
       : [];
