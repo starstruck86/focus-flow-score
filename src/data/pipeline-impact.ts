@@ -30,8 +30,9 @@ export interface StrategyPipelineImpact {
   meetingsGenerated: number;
   opportunitiesCreated: number;
   stageProgressions: number;
-  pipelineValueInfluenced: number;  // $
+  pipelineValueInfluenced: number;
   lastImpactDate: string | null;
+  weightedScore: number;
 }
 
 export interface AggregatedPipelineImpact {
@@ -39,8 +40,27 @@ export interface AggregatedPipelineImpact {
   totalOpportunities: number;
   totalProgressions: number;
   totalPipelineValue: number;
+  totalWeightedScore: number;
   topStrategies: StrategyPipelineImpact[];
   byContext: Map<string, StrategyPipelineImpact>;
+}
+
+// ── Outcome quality weights ─────────────────────────────────────
+
+const OUTCOME_QUALITY_WEIGHT: Record<PipelineOutcomeType, number> = {
+  meeting_booked: 0.4,
+  opportunity_created: 0.7,
+  stage_progression: 0.8,
+  deal_value_influenced: 1.0,
+};
+
+// ── Recency decay ───────────────────────────────────────────────
+
+const HALF_LIFE_DAYS = 30;
+
+function recencyMultiplier(eventDateStr: string): number {
+  const ageDays = Math.max(0, (Date.now() - new Date(eventDateStr).getTime()) / 86_400_000);
+  return Math.pow(0.5, ageDays / HALF_LIFE_DAYS);
 }
 
 // ── Outcome-to-pipeline type mapping ────────────────────────────
@@ -101,12 +121,17 @@ export function computePipelineImpact(
         stageProgressions: 0,
         pipelineValueInfluenced: 0,
         lastImpactDate: null,
+        weightedScore: 0,
       });
     }
 
     const impact = map.get(o.insight_id)!;
     const meta = (o.context_metadata || {}) as Record<string, any>;
     const dealValue = meta.deal_value || 0;
+
+    const quality = OUTCOME_QUALITY_WEIGHT[pipelineType] ?? 0.5;
+    const recency = recencyMultiplier(o.created_at);
+    const eventWeight = quality * recency;
 
     switch (pipelineType) {
       case 'meeting_booked':
@@ -124,6 +149,9 @@ export function computePipelineImpact(
         impact.pipelineValueInfluenced += dealValue;
         break;
     }
+
+    const valueFactor = dealValue > 0 ? 1 + Math.log10(1 + dealValue / 10_000) : 1;
+    impact.weightedScore += eventWeight * valueFactor;
 
     if (!impact.lastImpactDate || o.created_at > impact.lastImpactDate) {
       impact.lastImpactDate = o.created_at;
@@ -154,6 +182,7 @@ export function aggregatePipelineImpact(
   let totalOpportunities = 0;
   let totalProgressions = 0;
   let totalPipelineValue = 0;
+  let totalWeightedScore = 0;
 
   const entries = [...impactMap.values()];
   for (const e of entries) {
@@ -161,11 +190,12 @@ export function aggregatePipelineImpact(
     totalOpportunities += e.opportunitiesCreated;
     totalProgressions += e.stageProgressions;
     totalPipelineValue += e.pipelineValueInfluenced;
+    totalWeightedScore += e.weightedScore;
   }
 
   const topStrategies = entries
-    .sort((a, b) => b.pipelineValueInfluenced - a.pipelineValueInfluenced
-      || (b.meetingsGenerated + b.opportunitiesCreated) - (a.meetingsGenerated + a.opportunitiesCreated))
+    .sort((a, b) => b.weightedScore - a.weightedScore
+      || b.pipelineValueInfluenced - a.pipelineValueInfluenced)
     .slice(0, 10);
 
   return {
@@ -173,8 +203,9 @@ export function aggregatePipelineImpact(
     totalOpportunities,
     totalProgressions,
     totalPipelineValue,
+    totalWeightedScore,
     topStrategies,
-    byContext: new Map(), // populated by caller if needed
+    byContext: new Map(),
   };
 }
 
@@ -213,11 +244,12 @@ export function formatAggregatedImpact(agg: AggregatedPipelineImpact): string {
   lines.push(`Opportunities created: **${agg.totalOpportunities}**`);
   lines.push(`Stage progressions: **${agg.totalProgressions}**`);
   lines.push(`Pipeline influenced: **$${Math.round(agg.totalPipelineValue / 1000)}k**`);
+  lines.push(`Weighted impact score: **${agg.totalWeightedScore.toFixed(1)}**`);
 
   if (agg.topStrategies.length) {
-    lines.push('\n**Top strategies by impact:**');
+    lines.push('\n**Top strategies by weighted impact:**');
     for (const s of agg.topStrategies.slice(0, 5)) {
-      lines.push(`  → \`${s.insightId.slice(0, 12)}…\` — ${formatPipelineImpact(s)}`);
+      lines.push(`  → \`${s.insightId.slice(0, 12)}…\` (score ${s.weightedScore.toFixed(1)}) — ${formatPipelineImpact(s)}`);
     }
   }
 
