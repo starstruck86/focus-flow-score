@@ -600,7 +600,7 @@ Also provide an overall "day_strategy" (2-3 sentences: how today fits into the w
     const { data: saved, error: saveError } = await supabase
       .from("daily_time_blocks")
       .upsert({
-        user_id: user.id,
+        user_id: userId,
         plan_date: targetDate,
         blocks: mergedBlocks,
         meeting_load_hours: meetingHours,
