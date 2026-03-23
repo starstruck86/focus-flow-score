@@ -23,9 +23,9 @@ export function createNavigationTools(ctx: ToolContext): ToolMap {
       return `Preparing meeting brief`;
     },
 
-    daily_briefing: () => {
-      ctx.askCopilot('Walk me through my day — priorities, meetings, risks, and what I should focus on', 'quick');
-      return 'Building daily briefing in copilot';
+    daily_briefing: async () => {
+      const { dailyGamePlanWalkthrough } = await import('./synthesis/dailyGamePlan');
+      return dailyGamePlanWalkthrough(ctx);
     },
 
     start_roleplay: (params: { call_type?: string; difficulty?: number; industry?: string }) => {
