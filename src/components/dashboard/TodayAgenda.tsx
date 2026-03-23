@@ -32,7 +32,7 @@ export function TodayAgenda() {
   const { data: events, isLoading: eventsLoading } = useCalendarEvents();
   const { tasks, accounts } = useStore();
   
-  const now = toZonedTime(new Date(), TIMEZONE);
+  const now = toAppTime(new Date());
   const todayStr = format(now, 'yyyy-MM-dd');
 
   const agenda = useMemo(() => {
