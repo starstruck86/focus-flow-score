@@ -26,6 +26,8 @@ export interface PeriodPairResult {
   comparisonMode: ComparisonMode;
 }
 
+export type ConfidenceLevel = 'high' | 'moderate' | 'low';
+
 export interface MetricComparison {
   metric: string;
   label: string;
@@ -34,6 +36,7 @@ export interface MetricComparison {
   delta: number;
   percentChange: number | null; // null when previousValue is 0
   trend: 'up' | 'down' | 'flat';
+  confidenceLevel: ConfidenceLevel;
   isRate?: boolean;
   periodType?: PeriodType;
   contextLabel?: string;
@@ -47,6 +50,7 @@ export interface ComparisonResult {
   metrics: MetricComparison[];
   topImprovement: MetricComparison | null;
   topDecline: MetricComparison | null;
+  overallConfidence: ConfidenceLevel;
 }
 
 export interface AggregatedMetrics {
