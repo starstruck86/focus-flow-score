@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import type { Json } from '@/integrations/supabase/types';
 import { useConversation } from '@elevenlabs/react';
