@@ -4,7 +4,7 @@ import { primaryAction, completeAction, deferAction } from './synthesis/primaryA
 import { momentumCheck, nextAction, killSwitch } from './synthesis/momentum';
 import { behaviorSummary, energyMatch } from './synthesis/behaviorEnergy';
 import { generateContent, meetingBrief } from './synthesis/contentBrief';
-import { executionNext } from './synthesis/executionBinding';
+import { executionNext, confirmExecution, skipExecution } from './synthesis/executionBinding';
 
 export function createSynthesisTools(ctx: ToolContext, allTools: Record<string, any>): ToolMap {
   return {
@@ -25,5 +25,7 @@ export function createSynthesisTools(ctx: ToolContext, allTools: Record<string, 
     generate_content: (params: { contentType: string; accountName?: string; opportunityName?: string; contactName?: string; customInstructions?: string }) => generateContent(ctx, params),
     meeting_brief: (params: { meetingTitle?: string }) => meetingBrief(ctx, params),
     execution_next: () => executionNext(ctx),
+    confirm_execution: (params: { actionId: string }) => confirmExecution(params),
+    skip_execution: (params: { actionId: string; reason?: string }) => skipExecution(params),
   };
 }
