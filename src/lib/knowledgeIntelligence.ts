@@ -208,12 +208,16 @@ export function bestAvailableDate(content: NormalisedContent): string {
  * Context that shapes which insights matter most right now.
  */
 export interface DecisionContext {
-  accountType?: string;          // e.g. 'new_logo', 'existing', 'renewal'
+  accountType?: string;
   industry?: string;
-  dealStage?: string;            // e.g. 'Discovery', 'Demo', 'Negotiation'
-  executionState?: string;       // e.g. 'prospecting', 'discovery', 'closing'
-  activeSignals?: string[];      // themes/trends currently active
-  topic?: string;                // the query topic for relevance matching
+  dealStage?: string;
+  executionState?: string;
+  activeSignals?: string[];
+  topic?: string;
+  /** Personal performance map keyed by insight id → boost value (-0.15..+0.15) */
+  personalBoosts?: Map<string, number>;
+  /** Personal performance summaries keyed by insight id */
+  personalSummaries?: Map<string, string>;
 }
 
 const MATURITY_WEIGHT: Record<IdeaMaturity, number> = {
