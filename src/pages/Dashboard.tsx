@@ -41,6 +41,7 @@ import {
   WeeklyBattlePlanCard,
   DealRiskAlerts,
   CommandBrief,
+  ProspectingEngine,
 } from '@/components/dashboard';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 import { WidgetCustomizer } from '@/components/dashboard/WidgetCustomizer';
