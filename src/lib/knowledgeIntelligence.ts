@@ -300,12 +300,17 @@ export function scoreInsight(
 
   relevanceScore = Math.min(1, relevanceScore);
 
-  // Composite: weighted sum
-  const score =
+  // 5. Personal performance boost (-0.15..+0.15)
+  const personalBoost = context.personalBoosts?.get(insight.id) ?? 0;
+  const personalSummary = context.personalSummaries?.get(insight.id) ?? null;
+
+  // Composite: weighted sum + personal adjustment
+  const baseScore =
     (maturityScore * 0.25) +
     (trustScore * 0.25) +
     (recencyScore * 0.2) +
     (relevanceScore * 0.3);
+  const score = Math.max(0, Math.min(1, baseScore + personalBoost));
 
   // Build reasoning
   const reasons: string[] = [];
@@ -313,13 +318,16 @@ export function scoreInsight(
   if (trustScore >= 0.6) reasons.push(`backed by ${insight.support_count} sources`);
   if (recencyScore >= 0.7) reasons.push('recent');
   if (relevanceScore >= 0.5) reasons.push(`relevant to ${stageKey || context.topic || 'context'}`);
+  if (personalBoost > 0.03) reasons.push('has worked well for you');
+  if (personalBoost < -0.03) reasons.push('mixed results in your history');
   if (reasons.length === 0) reasons.push('general relevance');
 
   return {
     insight,
     score,
-    breakdown: { maturity: maturityScore, trust: trustScore, recency: recencyScore, relevance: relevanceScore },
+    breakdown: { maturity: maturityScore, trust: trustScore, recency: recencyScore, relevance: relevanceScore, personal: personalBoost },
     reasoning: reasons.join(', '),
+    personalNote: personalSummary,
   };
 }
 
