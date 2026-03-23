@@ -226,12 +226,25 @@ export async function recommendStrategy(
   const { insights, sourceMap } = await fetchInsightsHybrid(userId, params.topic);
   if (!insights.length) return `No intelligence available for "${params.topic}". Add and operationalise resources first.`;
 
+  // Load personal performance for boost
+  let personalBoosts = new Map<string, number>();
+  let personalSummaries = new Map<string, string>();
+  try {
+    const perfMap = await getUserPerformanceMap(userId);
+    for (const [id, perf] of perfMap) {
+      personalBoosts.set(id, perf.personalBoost);
+      personalSummaries.set(id, perf.summary);
+    }
+  } catch { /* graceful degradation */ }
+
   const context: DecisionContext = {
     topic: params.topic,
     dealStage: params.dealStage,
     executionState: params.executionState,
     accountType: params.accountType,
     industry: params.industry,
+    personalBoosts,
+    personalSummaries,
   };
 
   const dateMap = new Map<string, { date: string | null }>();
@@ -240,7 +253,82 @@ export async function recommendStrategy(
   const decision = decideTopInsights(insights, dateMap, context);
   if (!decision) return `Could not rank insights for "${params.topic}".`;
 
+  // Record 'shown' event (fire-and-forget)
+  recordStrategyEvent({
+    user_id: userId,
+    insight_id: decision.primary.insight.id,
+    insight_text: decision.primary.insight.text.slice(0, 200),
+    insight_maturity: decision.primary.insight.idea_maturity,
+    event_type: 'shown',
+    deal_stage: params.dealStage,
+    execution_state: params.executionState,
+    account_type: params.accountType,
+    score_at_recommendation: decision.primary.score,
+  }).catch(() => {});
+
   return formatDecision(decision, context);
+}
+
+// ── Tool: record_strategy_outcome ───────────────────────────────
+
+export async function recordStrategyOutcome(
+  ctx: ToolContext,
+  params: {
+    insightId: string;
+    outcome: string;
+    dealStage?: string;
+    feedback?: string;
+  },
+): Promise<string> {
+  const userId = await ctx.getUserId();
+  if (!userId) return 'Not authenticated';
+
+  await recordStrategyEvent({
+    user_id: userId,
+    insight_id: params.insightId,
+    insight_text: '',
+    insight_maturity: '',
+    event_type: 'outcome_recorded',
+    outcome: params.outcome,
+    deal_stage: params.dealStage,
+    user_feedback: params.feedback,
+  });
+
+  return `✅ Outcome recorded: "${params.outcome}" for insight ${params.insightId.slice(0, 8)}…`;
+}
+
+// ── Tool: strategy_performance ──────────────────────────────────
+
+export async function strategyPerformance(
+  ctx: ToolContext,
+  params: { topic?: string },
+): Promise<string> {
+  const userId = await ctx.getUserId();
+  if (!userId) return 'Not authenticated';
+
+  const perfMap = await getUserPerformanceMap(userId);
+  if (!perfMap.size) return 'No strategy outcome data yet. Use strategies and record results to build your performance profile.';
+
+  const entries = [...perfMap.values()]
+    .filter(p => {
+      if (!params.topic) return true;
+      return p.insightId.toLowerCase().includes(params.topic.toLowerCase());
+    })
+    .sort((a, b) => (b.outcomes.positive + b.outcomes.neutral) - (a.outcomes.positive + a.outcomes.neutral))
+    .slice(0, 8);
+
+  if (!entries.length) return params.topic
+    ? `No performance data for strategies related to "${params.topic}".`
+    : 'No strategy outcomes tracked yet.';
+
+  const lines = ['**Your Strategy Performance:**\n'];
+  for (const e of entries) {
+    const icon = e.successRate >= 0.7 ? '🟢' : e.successRate >= 0.4 ? '🟡' : '🔴';
+    lines.push(`${icon} \`${e.insightId.slice(0, 12)}…\` — ${e.summary}`);
+    lines.push(`   Shown ${e.timesShown}× · Acted ${e.timesActed}× · ${e.outcomes.positive} positive, ${e.outcomes.negative} negative`);
+  }
+
+  return lines.join('\n');
 }
 
 // ── Tool: knowledge_trends (hybrid) ─────────────────────────────
