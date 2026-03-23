@@ -437,6 +437,16 @@ ${customScorecardContext}`;
                   items: { type: "string" },
                   description: "List of competitor names mentioned in the transcript",
                 },
+
+                // Next step extraction
+                extracted_next_step: {
+                  type: "string",
+                  description: "Concise actionable next step extracted from the call (e.g. 'Send pricing proposal by Friday'). Look for phrases like 'next step is...', 'I'll follow up...', 'we'll send...', 'circle back...', 'decision by...'. Return empty string if none found.",
+                },
+                extracted_next_step_date: {
+                  type: "string",
+                  description: "ISO date (YYYY-MM-DD) for when the next step should happen, parsed from expressions like specific dates, weekdays, 'next week', 'end of month'. Return empty string if unclear or not mentioned.",
+                },
               },
               required: [
                 "overall_score", "overall_grade", "summary",
