@@ -39,13 +39,14 @@ interface TimeBlock {
   start_time: string;
   end_time: string;
   label: string;
-  type: 'prospecting' | 'meeting' | 'research' | 'admin' | 'break' | 'pipeline' | 'prep';
+  type: 'prospecting' | 'meeting' | 'research' | 'admin' | 'break' | 'pipeline' | 'prep' | 'build';
   workstream?: 'new_logo' | 'renewal' | 'general';
   goals: string[];
   reasoning: string;
   actual_dials?: number;
   actual_emails?: number;
   linked_accounts?: { id: string; name: string }[];
+  build_steps?: { step: string; done: boolean }[];
 }
 
 interface DailyPlan {
