@@ -283,33 +283,16 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
 
     logStatus(`✅ Contract passed — token: ${sessionData.token.length} chars, context: ${sessionData.context.length} chars, firstMessage: "${sessionData.firstMessage?.substring(0, 50)}"`);
 
-    const isMobile = navigator.maxTouchPoints > 0;
-    let timeout: ReturnType<typeof setTimeout> | undefined;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
 
-    try {
-      // On mobile, use a short warm-up getUserMedia call only to secure permission during a tap.
-      // The ElevenLabs SDK cannot accept an external MediaStream, so we must release this warm-up
-      // stream before `startSession()` to avoid double-acquiring / stale-device failures.
-      if (isMobile && preacquiredMicStream) {
-        logStatus('🎤 Using mic permission from initial tap');
-        preflightStreamRef.current = preacquiredMicStream;
-      } else if (isMobile) {
-        logStatus('🎤 Priming microphone access from tap');
-        releasePreflightStream();
-        try {
-          preflightStreamRef.current = await requestMicrophoneAccess();
-          logStatus('🎤 Microphone permission granted');
-        } catch (micErr: any) {
-          const friendlyMessage = classifyMicrophoneAccessError(micErr);
-          logStatus(`🔴 Mic permission failed: ${friendlyMessage}`);
-          setError(friendlyMessage);
-          setNeedsTap(true);
-          setIsConnecting(false);
-          startingRef.current = false;
-          toast.error('Microphone access required', { description: friendlyMessage, duration: 6000 });
-          return;
+      try {
+        // Accept mic stream pre-acquired during the user's tap gesture (from Layout).
+        // The ElevenLabs SDK cannot accept an external MediaStream, so we must release
+        // this warm-up stream before `startSession()` to avoid double-acquiring / stale-device failures.
+        if (preacquiredMicStream) {
+          logStatus('🎤 Using mic permission from initial tap');
+          preflightStreamRef.current = preacquiredMicStream;
         }
-      }
 
       if (preflightStreamRef.current) {
         logStatus('🎤 Releasing warm-up mic stream before Dave session starts');
