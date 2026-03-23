@@ -179,21 +179,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
     setShowDaveTapPrompt(false);
 
     // CRITICAL: Request mic permission NOW, during the user's tap gesture.
-    // On mobile Safari, getUserMedia must be called within a user gesture context.
-    // If we wait until after the async token fetch, the gesture context expires.
-    const isMobile = navigator.maxTouchPoints > 0;
+    // On mobile Safari AND desktop browsers, getUserMedia must be called within
+    // a user gesture context to reliably get permission. If we wait until after
+    // the async token fetch, the gesture context may expire.
     let micStream: MediaStream | null = null;
-    if (isMobile) {
-      try {
-        const { requestMicrophoneAccess } = await import('@/lib/microphoneAccess');
-        micStream = await requestMicrophoneAccess();
-        console.log('[Dave] Mic permission acquired during tap gesture');
-      } catch (micErr: any) {
-        const { classifyMicrophoneAccessError } = await import('@/lib/microphoneAccess');
-        const friendlyMessage = classifyMicrophoneAccessError(micErr);
-        toast.error('Microphone access required', { description: friendlyMessage, duration: 6000 });
-        return;
-      }
+    try {
+      const { requestMicrophoneAccess } = await import('@/lib/microphoneAccess');
+      micStream = await requestMicrophoneAccess();
+      console.log('[Dave] Mic permission acquired during tap gesture');
+    } catch (micErr: any) {
+      const { classifyMicrophoneAccessError } = await import('@/lib/microphoneAccess');
+      const friendlyMessage = classifyMicrophoneAccessError(micErr);
+      toast.error('Microphone access required', { description: friendlyMessage, duration: 6000 });
+      return;
     }
 
     try {

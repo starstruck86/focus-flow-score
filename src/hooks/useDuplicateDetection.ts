@@ -197,6 +197,19 @@ export function useDuplicateDetection() {
   const mergeOpportunities = async (keepId: string, removeIds: string[]) => {
     if (!user) return;
 
+    // Auto-dismiss this duplicate group so it never resurfaces
+    const keepOpp = opportunities.find(o => o.id === keepId);
+    if (keepOpp) {
+      const key = normalize(keepOpp.name);
+      await dismissGroup(key, 'opportunity');
+    }
+    for (const rid of removeIds) {
+      const removedOpp = opportunities.find(o => o.id === rid);
+      if (removedOpp) {
+        await dismissGroup(normalize(removedOpp.name), 'opportunity');
+      }
+    }
+
     // Gather all records to combine fields
     const allIds = [keepId, ...removeIds];
     const allOpps = allIds.map(id => opportunities.find(o => o.id === id)).filter(Boolean) as typeof opportunities;
