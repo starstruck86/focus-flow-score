@@ -13,13 +13,9 @@ A **standalone sales coaching and decision-support app** for individual contribu
 
 ## Integration status
 
-This app is a **standalone system**. It does **not** currently integrate with:
+This app is a **standalone system**. It does **not** integrate with any external CRM, cadence, or calendar platform.
 
-- Salesforce
-- Salesloft
-- Outreach
-- Outlook / Google Calendar (live sync)
-- Any external CRM or cadence platform
+Fields like `salesforce_id`, `salesforce_link`, `cadence_name`, and `planhat_link` exist as **passive reference fields** for manual data entry or CSV import. They do not imply live sync, API connections, or automated data exchange with any external system.
 
 Activity learning is based on **local actions and manual signals** (done / skipped / blocked / snoozed), not live CRM sync. Data can be imported via CSV.
 
@@ -55,7 +51,9 @@ npm run dev
 
 ## Environment variables
 
-This project uses Lovable Cloud, which auto-populates `.env` with backend credentials. If setting up locally:
+This project uses Lovable Cloud, which auto-populates `.env` with backend credentials. The `.env` file is **not tracked in version control**.
+
+To set up locally:
 
 1. Copy `.env.example` to `.env`:
    ```sh
