@@ -1010,45 +1010,139 @@ export function DailyTimeBlocks() {
                     <div className="mt-2 py-2 px-2.5 rounded-md bg-orange-500/5 border border-orange-500/20">
                       <div className="flex items-center gap-1.5 mb-2">
                         <Hammer className="h-3 w-3 text-orange-500" />
-                        <span className="text-[10px] text-muted-foreground font-medium">New Logo Build — 3 accounts</span>
+                        <span className="text-[10px] text-muted-foreground font-medium">New Logo Build</span>
                         <span className="ml-auto text-[10px] text-muted-foreground">
-                          {(block.build_steps || DEFAULT_BUILD_STEPS).filter(s => s.done).length}/{(block.build_steps || DEFAULT_BUILD_STEPS).length}
+                          {queueDailyProgress}/3 today · {weeklyResearched}/{weeklyTotal} week
                         </span>
                       </div>
 
-                      {/* Auto-selected target accounts */}
-                      {autoSelectedAccounts.length > 0 && (
-                        <div className="mb-2 space-y-1">
+                      {/* Weekly queue: today's 3 accounts */}
+                      {queueEmpty && !queueLoading ? (
+                        <Button
+                          size="sm" variant="outline"
+                          className="w-full h-7 text-[11px] gap-1 border-orange-500/30 text-orange-600 hover:bg-orange-500/10"
+                          onClick={generateQueue}
+                        >
+                          <Zap className="h-3 w-3" />
+                          Generate Weekly Queue (15 accounts)
+                        </Button>
+                      ) : queueTodayAccounts.length > 0 ? (
+                        <div className="space-y-1.5 mb-2">
                           <div className="flex items-center gap-1 mb-1">
                             <Target className="h-3 w-3 text-orange-500" />
                             <span className="text-[10px] font-medium text-orange-600 dark:text-orange-400">Today's 3 New Logo Accounts</span>
                           </div>
-                          {autoSelectedAccounts.map(acct => (
+                          {queueTodayAccounts.map(acct => (
                             <div
                               key={acct.id}
-                              className="flex items-start gap-2 py-1 px-2 rounded bg-orange-500/5 border border-orange-500/10"
+                              className="flex items-center gap-2 py-1.5 px-2 rounded bg-orange-500/5 border border-orange-500/10 group/qacct"
                             >
-                              <Badge variant="outline" className="text-[9px] h-4 px-1 bg-orange-500/10 text-orange-600 border-orange-500/30 shrink-0">
-                                #{acct.rank}
-                              </Badge>
+                              {/* State bubble */}
+                              <button
+                                className={cn(
+                                  "h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
+                                  acct.state === 'not_started' && "border-muted-foreground/30 hover:border-orange-500",
+                                  acct.state === 'researched' && "border-amber-500 bg-amber-500/20",
+                                  acct.state === 'added_to_cadence' && "border-emerald-500 bg-emerald-500/20",
+                                )}
+                                title={
+                                  acct.state === 'not_started' ? 'Mark as researched'
+                                    : acct.state === 'researched' ? 'Mark as added to cadence'
+                                    : 'Added to cadence ✓'
+                                }
+                                onClick={() => {
+                                  if (!queueTodayKey) return;
+                                  if (acct.state === 'not_started') advanceState(queueTodayKey, acct.id, 'researched');
+                                  else if (acct.state === 'researched') advanceState(queueTodayKey, acct.id, 'added_to_cadence');
+                                }}
+                              >
+                                {acct.state === 'researched' && <BookOpen className="h-3 w-3 text-amber-500" />}
+                                {acct.state === 'added_to_cadence' && <Check className="h-3 w-3 text-emerald-500" />}
+                              </button>
+
                               <div className="min-w-0 flex-1">
                                 <button
                                   className="text-[11px] font-medium text-foreground hover:text-primary truncate block text-left"
-                                  onClick={() => {
-                                    const found = accounts.find(a => a.id === acct.id);
-                                    if (found) navigate(`/account/${acct.id}`);
-                                  }}
+                                  onClick={() => navigate(`/account/${acct.id}`)}
                                 >
                                   {acct.name}
                                 </button>
-                                <p className="text-[10px] text-muted-foreground truncate">{acct.reason}</p>
-                                <p className="text-[10px] text-primary/70 italic">{acct.suggestedFirstStep}</p>
+                                <span className={cn(
+                                  "text-[10px]",
+                                  acct.state === 'not_started' && "text-muted-foreground",
+                                  acct.state === 'researched' && "text-amber-600 dark:text-amber-400",
+                                  acct.state === 'added_to_cadence' && "text-emerald-600 dark:text-emerald-400",
+                                )}>
+                                  {acct.state === 'not_started' ? 'Not started' : acct.state === 'researched' ? 'Researched' : 'Added to cadence'}
+                                  {acct.tier ? ` · Tier ${acct.tier}` : ''}
+                                </span>
                               </div>
+
+                              {/* Remove button */}
+                              <button
+                                className="opacity-0 group-hover/qacct:opacity-100 transition-opacity"
+                                onClick={() => queueTodayKey && removeAccount(queueTodayKey, acct.id)}
+                              >
+                                <X className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                              </button>
                             </div>
                           ))}
-                        </div>
-                      )}
 
+                          {/* Add account to today */}
+                          {queueTodayAccounts.length < 3 && queueTodayKey && (
+                            showQueueAdd ? (
+                              <div className="relative">
+                                <Input
+                                  autoFocus
+                                  className="h-6 text-xs"
+                                  placeholder="Search accounts to add..."
+                                  value={queueAddQuery}
+                                  onChange={e => setQueueAddQuery(e.target.value)}
+                                  onKeyDown={e => { if (e.key === 'Escape') { setShowQueueAdd(false); setQueueAddQuery(''); } }}
+                                />
+                                {queueAddQuery.length > 0 && (
+                                  <div className="absolute z-20 top-7 left-0 right-0 bg-popover border border-border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                                    {accounts
+                                      .filter(a => {
+                                        const q = queueAddQuery.toLowerCase();
+                                        if (!a.name.toLowerCase().includes(q)) return false;
+                                        if (a.motion === 'renewal') return false;
+                                        if (a.accountStatus === 'disqualified') return false;
+                                        if (a.outreachStatus === 'closed-won' || a.outreachStatus === 'closed-lost' || a.outreachStatus === 'opp-open') return false;
+                                        // Not already in any day
+                                        const allQueued = queueDayKeys.flatMap(k => queueAssignments[k].map(qa => qa.id));
+                                        return !allQueued.includes(a.id);
+                                      })
+                                      .slice(0, 8)
+                                      .map(a => (
+                                        <button
+                                          key={a.id}
+                                          className="w-full text-left px-3 py-1.5 hover:bg-accent transition-colors text-xs"
+                                          onClick={() => {
+                                            addAccount(queueTodayKey, { id: a.id, name: a.name, tier: a.tier, industry: a.industry });
+                                            setQueueAddQuery('');
+                                            setShowQueueAdd(false);
+                                          }}
+                                        >
+                                          {a.name} <span className="text-muted-foreground">Tier {a.tier}</span>
+                                        </button>
+                                      ))}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setShowQueueAdd(true)}
+                                className="text-[11px] text-primary hover:text-primary/80 font-medium"
+                              >
+                                + Add account
+                              </button>
+                            )
+                          )}
+                        </div>
+                      ) : null}
+
+                      {/* Build steps checklist */}
                       <div className="space-y-1">
                         {(block.build_steps || DEFAULT_BUILD_STEPS).map((step, si) => (
                           <label key={si} className="flex items-center gap-2 cursor-pointer group/step">
