@@ -238,7 +238,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
     setDaveOpen(false);
     setDaveMinimized(false);
     setDaveSessionData(null);
-  }, []);
+    // Release any preacquired mic stream
+    preacquiredMicStream?.getTracks().forEach(t => t.stop());
+    setPreacquiredMicStream(null);
+  }, [preacquiredMicStream]);
 
   const handleToggleMinimize = useCallback(() => {
     setDaveMinimized(prev => !prev);
