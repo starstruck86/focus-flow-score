@@ -208,12 +208,16 @@ export function bestAvailableDate(content: NormalisedContent): string {
  * Context that shapes which insights matter most right now.
  */
 export interface DecisionContext {
-  accountType?: string;          // e.g. 'new_logo', 'existing', 'renewal'
+  accountType?: string;
   industry?: string;
-  dealStage?: string;            // e.g. 'Discovery', 'Demo', 'Negotiation'
-  executionState?: string;       // e.g. 'prospecting', 'discovery', 'closing'
-  activeSignals?: string[];      // themes/trends currently active
-  topic?: string;                // the query topic for relevance matching
+  dealStage?: string;
+  executionState?: string;
+  activeSignals?: string[];
+  topic?: string;
+  /** Personal performance map keyed by insight id → boost value (-0.15..+0.15) */
+  personalBoosts?: Map<string, number>;
+  /** Personal performance summaries keyed by insight id */
+  personalSummaries?: Map<string, string>;
 }
 
 const MATURITY_WEIGHT: Record<IdeaMaturity, number> = {
@@ -241,8 +245,10 @@ export interface ScoredInsight {
     trust: number;
     recency: number;
     relevance: number;
+    personal: number;
   };
   reasoning: string;
+  personalNote: string | null;
 }
 
 /**
@@ -294,12 +300,17 @@ export function scoreInsight(
 
   relevanceScore = Math.min(1, relevanceScore);
 
-  // Composite: weighted sum
-  const score =
+  // 5. Personal performance boost (-0.15..+0.15)
+  const personalBoost = context.personalBoosts?.get(insight.id) ?? 0;
+  const personalSummary = context.personalSummaries?.get(insight.id) ?? null;
+
+  // Composite: weighted sum + personal adjustment
+  const baseScore =
     (maturityScore * 0.25) +
     (trustScore * 0.25) +
     (recencyScore * 0.2) +
     (relevanceScore * 0.3);
+  const score = Math.max(0, Math.min(1, baseScore + personalBoost));
 
   // Build reasoning
   const reasons: string[] = [];
@@ -307,13 +318,16 @@ export function scoreInsight(
   if (trustScore >= 0.6) reasons.push(`backed by ${insight.support_count} sources`);
   if (recencyScore >= 0.7) reasons.push('recent');
   if (relevanceScore >= 0.5) reasons.push(`relevant to ${stageKey || context.topic || 'context'}`);
+  if (personalBoost > 0.03) reasons.push('has worked well for you');
+  if (personalBoost < -0.03) reasons.push('mixed results in your history');
   if (reasons.length === 0) reasons.push('general relevance');
 
   return {
     insight,
     score,
-    breakdown: { maturity: maturityScore, trust: trustScore, recency: recencyScore, relevance: relevanceScore },
+    breakdown: { maturity: maturityScore, trust: trustScore, recency: recencyScore, relevance: relevanceScore, personal: personalBoost },
     reasoning: reasons.join(', '),
+    personalNote: personalSummary,
   };
 }
 
@@ -427,6 +441,11 @@ export function formatDecision(result: DecisionResult, context: DecisionContext)
   lines.push(`**${p.insight.text}**`);
   lines.push(`_Why:_ ${p.reasoning} (score ${Math.round(p.score * 100)}/100)`);
   lines.push(`_Classification:_ ${MATURITY_LABELS[p.insight.idea_maturity]} · Trust ${Math.round(p.breakdown.trust * 100)}% · Recency ${Math.round(p.breakdown.recency * 100)}%`);
+
+  // Personal performance note
+  if (p.personalNote) {
+    lines.push(`_Your track record:_ ${p.personalNote}`);
+  }
 
   // Execution guidance for primary
   const guidance = deriveGuidance(p.insight, context);

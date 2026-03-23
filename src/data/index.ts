@@ -9,3 +9,4 @@ export * from './contacts';
 export * from './call-transcripts';
 export * from './resource-links';
 export * from './intelligence';
+export * from './strategy-outcomes';
