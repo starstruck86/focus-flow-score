@@ -159,6 +159,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
     borderBottomColor: `hsl(${COLOR_VAR[activeColor]} / 0.2)`,
   }), [activeColor]);
 
+  // Mic stream acquired during user gesture, passed to DaveConversationMode
+  const [preacquiredMicStream, setPreacquiredMicStream] = useState<MediaStream | null>(null);
+
   const handleOpenDave = useCallback(async () => {
     if (isFetchingDaveSession) return;
     
@@ -172,12 +175,34 @@ export function Layout({ children }: { children: React.ReactNode }) {
     }
 
     setShowDaveTapPrompt(false);
+
+    // CRITICAL: Request mic permission NOW, during the user's tap gesture.
+    // On mobile Safari, getUserMedia must be called within a user gesture context.
+    // If we wait until after the async token fetch, the gesture context expires.
+    const isMobile = navigator.maxTouchPoints > 0;
+    let micStream: MediaStream | null = null;
+    if (isMobile) {
+      try {
+        const { requestMicrophoneAccess } = await import('@/lib/microphoneAccess');
+        micStream = await requestMicrophoneAccess();
+        console.log('[Dave] Mic permission acquired during tap gesture');
+      } catch (micErr: any) {
+        const { classifyMicrophoneAccessError } = await import('@/lib/microphoneAccess');
+        const friendlyMessage = classifyMicrophoneAccessError(micErr);
+        toast.error('Microphone access required', { description: friendlyMessage, duration: 6000 });
+        return;
+      }
+    }
+
     try {
       const session = await getDaveSession();
+      setPreacquiredMicStream(micStream);
       setDaveSessionData(session);
       setDaveMinimized(false);
       setDaveOpen(true);
     } catch (err: any) {
+      // Release mic if token fetch fails
+      micStream?.getTracks().forEach(t => t.stop());
       console.error('[Dave] Failed to fetch session:', err);
       if (err instanceof DaveSessionError) {
         switch (err.errorType) {
@@ -199,7 +224,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
             toast.error('Dave startup failed', { description: err.message || 'Token fetch returned an error. Check your connection and try again.' });
         }
       } else {
-        // Network errors, timeouts, etc.
         const msg = err instanceof Error ? err.message : String(err);
         const isNetwork = /fetch|network|timeout|timed out|aborted/i.test(msg);
         toast.error(isNetwork ? 'Network error starting Dave' : 'Dave startup failed', {
