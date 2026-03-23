@@ -201,16 +201,25 @@ export function DailyTimeBlocks() {
   const generateMutation = useMutation({
     mutationFn: async (opts: { confirmedScreenshotEvents?: CalendarScreenshotEvent[] } | void) => {
       const screenshotEvents = opts && 'confirmedScreenshotEvents' in opts ? opts.confirmedScreenshotEvents : undefined;
-      const { data, error } = await trackedInvoke<DailyPlan>('generate-time-blocks', {
+
+      // First attempt
+      const { data, error } = await trackedInvoke<DailyPlan & { is_fallback?: boolean }>('generate-time-blocks', {
         body: { date: todayStr, confirmedScreenshotEvents: screenshotEvents },
+        retry: { maxAttempts: 2, baseDelayMs: 2000 },
+        componentName: 'DailyTimeBlocks',
       });
+
       if (error) throw error;
-      return data as DailyPlan;
+      return data as DailyPlan & { is_fallback?: boolean };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['daily-time-blocks'] });
       setDismissedBlocks(new Set());
-      toast.success('Daily plan generated!');
+      if (data?.is_fallback) {
+        toast.info('Using fallback plan — AI was unavailable. Your meetings and core blocks are preserved.', { duration: 6000 });
+      } else {
+        toast.success('Daily plan generated!');
+      }
     },
     onError: (e) => {
       const msg = e instanceof Error ? e.message : 'Failed to generate plan';
