@@ -1,19 +1,13 @@
 import { useState } from 'react';
-import { AlertTriangle, Check, X, Merge, ChevronDown, ChevronRight, Building2, Target, ExternalLink } from 'lucide-react';
+import { AlertTriangle, X, Merge, ChevronDown, ChevronRight, Building2, Target, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { useDuplicateDetection, type DuplicateGroup, type DuplicateItem } from '@/hooks/useDuplicateDetection';
+import { useDuplicateDetection, type DuplicateGroup } from '@/hooks/useDuplicateDetection';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
 function DuplicateGroupCard({ group, onMerge, onDismiss }: {
@@ -84,25 +78,17 @@ function DuplicateGroupCard({ group, onMerge, onDismiss }: {
                 {Object.entries(item.details).map(([key, value]) => {
                   if (!value || key === 'isInDb' || key === 'accountId') return null;
                   if (key === 'arr' && typeof value === 'number') {
-                    return (
-                      <span key={key} className="font-mono">
-                        ${(value / 1000).toFixed(0)}k
-                      </span>
-                    );
+                    return <span key={key} className="font-mono">${(value / 1000).toFixed(0)}k</span>;
                   }
-                  if (typeof value === 'number') return (
-                    <span key={key}>{key}: {value}</span>
-                  );
-                  if (typeof value === 'string' && value.length < 20) return (
-                    <Badge key={key} variant="outline" className="text-[9px]">{value}</Badge>
-                  );
+                  if (typeof value === 'number') return <span key={key}>{key}: {value}</span>;
+                  if (typeof value === 'string' && value.length < 20) return <Badge key={key} variant="outline" className="text-[9px]">{value}</Badge>;
                   return null;
                 })}
               </div>
             </div>
           ))}
           <p className="text-[11px] text-muted-foreground mt-1">
-            Click a row to mark it as the record to <strong>keep</strong>. All linked data (tasks, transcripts, resources, contacts) from removed records will be reassigned to the kept record.
+            Click a row to mark it as the record to <strong>keep</strong>. Notes, dates, and ARR from removed records will be merged into the kept record.
           </p>
         </CardContent>
       )}
@@ -113,7 +99,7 @@ function DuplicateGroupCard({ group, onMerge, onDismiss }: {
             <AlertDialogTitle>Confirm Merge</AlertDialogTitle>
             <AlertDialogDescription>
               Keep <strong>"{keepItem.name}"</strong> and merge {removeItems.length} duplicate(s) into it.
-              All linked data will be preserved and reassigned. This action cannot be undone.
+              Notes will be combined, dates will use the most recent values, and ARR will use the highest value. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -129,28 +115,9 @@ function DuplicateGroupCard({ group, onMerge, onDismiss }: {
 }
 
 export function DuplicateDetector() {
-  const { duplicateAccounts, duplicateOpportunities, totalDuplicates, mergeAccounts, mergeOpportunities } = useDuplicateDetection();
-  const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(
-    () => {
-      try {
-        const raw = localStorage.getItem('dismissed-duplicates');
-        return raw ? new Set(JSON.parse(raw)) : new Set();
-      } catch { return new Set(); }
-    }
-  );
+  const { duplicateAccounts, duplicateOpportunities, mergeAccounts, mergeOpportunities, dismissGroup } = useDuplicateDetection();
 
-  const dismiss = (key: string) => {
-    setDismissedKeys(prev => {
-      const next = new Set(prev).add(key);
-      localStorage.setItem('dismissed-duplicates', JSON.stringify([...next]));
-      return next;
-    });
-  };
-
-  const visibleAccountGroups = duplicateAccounts.filter(g => !dismissedKeys.has(g.key));
-  const visibleOppGroups = duplicateOpportunities.filter(g => !dismissedKeys.has(g.key));
-  const visibleCount = visibleAccountGroups.length + visibleOppGroups.length;
-
+  const visibleCount = duplicateAccounts.length + duplicateOpportunities.length;
   if (visibleCount === 0) return null;
 
   return (
@@ -165,27 +132,25 @@ export function DuplicateDetector() {
         </Badge>
       </div>
 
-      {visibleAccountGroups.map(group => (
+      {duplicateAccounts.map(group => (
         <DuplicateGroupCard
           key={group.key}
           group={group}
           onMerge={(keepId, removeIds) => {
             mergeAccounts(keepId, removeIds);
-            dismiss(group.key);
           }}
-          onDismiss={() => dismiss(group.key)}
+          onDismiss={() => dismissGroup(group.key, 'account')}
         />
       ))}
 
-      {visibleOppGroups.map(group => (
+      {duplicateOpportunities.map(group => (
         <DuplicateGroupCard
           key={group.key}
           group={group}
           onMerge={(keepId, removeIds) => {
             mergeOpportunities(keepId, removeIds);
-            dismiss(group.key);
           }}
-          onDismiss={() => dismiss(group.key)}
+          onDismiss={() => dismissGroup(group.key, 'opportunity')}
         />
       ))}
     </div>
