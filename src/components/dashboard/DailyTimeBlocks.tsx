@@ -380,6 +380,23 @@ export function DailyTimeBlocks() {
       .eq('id', plan.id);
   }, [plan, todayStr, queryClient]);
 
+  // Toggle build step completion
+  const toggleBuildStep = useCallback(async (blockIdx: number, stepIdx: number) => {
+    if (!plan) return;
+    const blocks = [...(plan.blocks as TimeBlock[])];
+    const block = blocks[blockIdx];
+    const steps = block.build_steps ? [...block.build_steps] : DEFAULT_BUILD_STEPS.map(s => ({ ...s }));
+    steps[stepIdx] = { ...steps[stepIdx], done: !steps[stepIdx].done };
+    blocks[blockIdx] = { ...block, build_steps: steps };
+
+    queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks });
+
+    await supabase
+      .from('daily_time_blocks' as 'daily_time_blocks')
+      .update({ blocks: blocks as unknown as Json })
+      .eq('id', plan.id);
+  }, [plan, todayStr, queryClient]);
+
   // Link opportunity to a block
   const linkOpportunity = useCallback((blockIdx: number, opp: { id: string; name: string }) => {
     setBlockOppLinks(prev => {
