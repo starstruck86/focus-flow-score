@@ -479,8 +479,8 @@ WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL):
 - This is research + cadence + cold outreach work — high-energy hunter mode
 - WARM-UP: Start the day with a short "Rust Buster" block (15-20 min, type: "prospecting"): quick dials to LOW-PREP targets — old leads, closed-lost re-engagements, prebuilt lists. Purpose: build momentum and shake off hesitation before the main blitz.
 - Then use PREP → EXECUTE paired cycles for TARGETED prospecting:
-  - "Prep" block (type: "prep", 25-35 min): Research 2-3 specific accounts, review contacts, build call notes + email drafts
-  - Immediately followed by "Call Blitz" block (type: "prospecting", 45-60 min): Dial into those prepped accounts. MINIMUM 30 minutes — no short blitzes to targeted accounts.
+   - "Prep" block (type: "prep", 30 min): Research 2-3 specific accounts, review contacts, build call notes + email drafts
+   - Immediately followed by "Call Blitz" block (type: "prospecting", 60 min preferred, 30 min minimum): Dial into those prepped accounts. NEVER below 30 minutes.
   - Label prep blocks like: "Account Prep (Tessitura, Privy)"
   - Label call blocks like: "Call Blitz #1 (~22 dials)" — use realistic math: 45min ≈ 22 dials, 60min ≈ 30 dials
   - Each Prep block must be immediately followed by its Call Blitz — no gaps between a specific pair
