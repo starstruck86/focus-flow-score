@@ -431,6 +431,7 @@ CRITICAL RULES:
 3. Use "workstream" field to tag each block as "new_logo" or "renewal" or "general"
 4. Goals must be REALISTIC and ACHIEVABLE. Use these realistic pacing rates:
    - DIAL RATE: ~15 dials per 30 minutes (1 dial every 2 min including voicemail/notes). A 45-min Call Blitz = ~22 dials. A 60-min blitz = ~30 dials.
+   - BUILD RATE: 3 accounts per 45-60 min build block (selecting + researching + finding contacts + adding to cadence)
    - PREP RATE: 2-3 accounts per 25-30 min prep block
    - EMAIL RATE: ~8-10 personalized emails per 30 minutes
    - Do the math: if today's target is ${todayDialTarget} dials, you need ~${Math.ceil(todayDialTarget / 25)} Call Blitz blocks of 45-50 min each
