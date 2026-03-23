@@ -62,6 +62,7 @@ interface DailyPlan {
   block_feedback?: { blockIdx: number; thumbs: 'up' | 'down' }[];
   feedback_rating?: number;
   feedback_text?: string;
+  recast_at?: string | null;
 }
 
 const TYPE_CONFIG: Record<string, { icon: typeof Clock; color: string; bg: string }> = {
