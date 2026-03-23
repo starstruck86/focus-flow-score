@@ -1000,6 +1000,27 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               />
             </TableCell>
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <EditableDatePicker
+                value={opp.nextStepDate}
+                onChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
+                placeholder="—"
+                compact
+                className={cn(
+                  'w-28',
+                  opp.nextStepDate && isPast(parseISO(opp.nextStepDate)) && !isToday(parseISO(opp.nextStepDate)) && '[&_button]:border-status-red'
+                )}
+              />
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <EditableDatePicker
+                value={opp.lastTouchDate}
+                onChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
+                placeholder="—"
+                compact
+                className="w-28"
+              />
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <DisplaySelectCell
                 value={opp.stage || 'none'}
                 options={STAGE_SELECT_OPTIONS}
