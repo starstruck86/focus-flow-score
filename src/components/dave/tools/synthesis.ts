@@ -6,7 +6,7 @@ import { behaviorSummary, energyMatch } from './synthesis/behaviorEnergy';
 import { generateContent, meetingBrief } from './synthesis/contentBrief';
 import { executionNext, confirmExecution, blockExecution, skipExecution, snoozeExecution } from './synthesis/executionBinding';
 import { whoopPerformanceInsights, whoopTodayContext } from './synthesis/whoopInsights';
-import { dailyGamePlanSummary, dailyGamePlanDetailed, dailyGamePlanWalkthrough, queryDailyPlan } from './synthesis/dailyGamePlan';
+import { dailyGamePlanSummary, dailyGamePlanDetailed, dailyGamePlanWalkthrough, queryDailyPlan, newLogoTargetsTool } from './synthesis/dailyGamePlan';
 import { queryOpportunities, queryRenewals, queryTasks, queryQuota, queryPipeline, queryDashboard } from './synthesis/walkthroughs';
 import { compareTrends } from './synthesis/trendComparison';
 
