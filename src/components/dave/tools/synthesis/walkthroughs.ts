@@ -705,10 +705,17 @@ export async function queryQuota(ctx: ToolContext, params: { question?: string }
     sentences.push(`You've got ${dollars(activePipeline)} in active pipeline, giving you ${coverage}x coverage on the remaining gap.`);
   }
 
-  // Top deals to close the gap
+  // Decision layer — recommend specific action
   if (gap > 0 && active.length) {
     const top = active.slice(0, 3);
     sentences.push(`Your biggest open deals that could close the gap are ${joinNatural(top.map(o => `${o.name} at ${dollars(o.arr || 0)}`))}.`);
+
+    // Score and recommend
+    const prioritized = active.map(o => scoreOppPriority(o));
+    const best = [...prioritized].sort((a, b) => b.urgencyScore - a.urgencyScore)[0];
+    sentences.push(`My recommendation — focus on ${best.name} first. ${best.reason ? `It's ${best.reason}.` : ''} ${best.nextStep}.`);
+  } else if (gap <= 0) {
+    sentences.push('You\'re above quota, so focus on protecting what you\'ve closed and accelerating any upside deals.');
   }
 
   return sentences.join(' ');
