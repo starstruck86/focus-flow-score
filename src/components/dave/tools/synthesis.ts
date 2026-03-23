@@ -39,6 +39,7 @@ export function createSynthesisTools(ctx: ToolContext, allTools: Record<string, 
     daily_game_plan: () => dailyGamePlanSummary(ctx),
     daily_game_plan_detailed: () => dailyGamePlanDetailed(ctx),
     query_daily_plan: (params: { question: string }) => queryDailyPlan(ctx, params),
+    new_logo_targets: () => newLogoTargetsTool(),
 
     // Universal walkthrough tools
     query_opportunities: (params: { question?: string }) => queryOpportunities(ctx, params),
