@@ -88,8 +88,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const daveChannelRef = useRef<BroadcastChannel | null>(null);
   useVoiceReminders();
 
-  // Wake word — "Hey Dave"
-  const wakeWordEnabled = typeof window !== 'undefined' && localStorage.getItem('wake-word-enabled') === 'true';
+  // Wake word — "Hey Dave" (reactive to Settings toggle)
+  const [wakeWordEnabled, setWakeWordEnabled] = useState(() =>
+    typeof window !== 'undefined' && localStorage.getItem('wake-word-enabled') === 'true'
+  );
+  useEffect(() => {
+    const handler = (e: Event) => setWakeWordEnabled((e as CustomEvent).detail === true);
+    window.addEventListener('wake-word-changed', handler);
+    return () => window.removeEventListener('wake-word-changed', handler);
+  }, []);
   useWakeWord({ onWake: () => { if (!daveOpen) handleOpenDave(); }, enabled: wakeWordEnabled && !daveOpen });
 
   // ─── BroadcastChannel cross-tab guard ───
