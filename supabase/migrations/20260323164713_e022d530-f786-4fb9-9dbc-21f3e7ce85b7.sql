@@ -1,0 +1,1 @@
+ALTER TABLE public.daily_time_blocks ADD COLUMN IF NOT EXISTS dismissed_block_indices jsonb DEFAULT '[]'::jsonb;

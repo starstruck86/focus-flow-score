@@ -63,6 +63,7 @@ interface DailyPlan {
   feedback_rating?: number;
   feedback_text?: string;
   recast_at?: string | null;
+  dismissed_block_indices?: number[];
 }
 
 const TYPE_CONFIG: Record<string, { icon: typeof Clock; color: string; bg: string }> = {
@@ -155,7 +156,7 @@ export function DailyTimeBlocks() {
   const [editingBlock, setEditingBlock] = useState<number | null>(null);
   const [editLabel, setEditLabel] = useState('');
   const [editGoals, setEditGoals] = useState<string[]>([]);
-  const [dismissedBlocks, setDismissedBlocks] = useState<Set<number>>(new Set());
+  const [dismissedBlocks, setDismissedBlocks] = useState<Set<number>>(() => new Set());
   const [linkOppBlockIdx, setLinkOppBlockIdx] = useState<number | null>(null);
   const [blockOppLinks, setBlockOppLinks] = useState<Map<number, { id: string; name: string }>>(new Map());
   const [showPreferences, setShowPreferences] = useState(false);
@@ -178,6 +179,15 @@ export function DailyTimeBlocks() {
     enabled: !!user,
   });
 
+  // Load persisted dismissed blocks from plan data
+  useEffect(() => {
+    if (plan?.dismissed_block_indices?.length) {
+      setDismissedBlocks(new Set(plan.dismissed_block_indices));
+    } else {
+      setDismissedBlocks(new Set());
+    }
+  }, [plan?.id]);
+
   // Auto-refresh current block indicator every 60s
   useEffect(() => {
     if (!plan?.blocks) return;
@@ -199,10 +209,13 @@ export function DailyTimeBlocks() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['daily-time-blocks'] });
+      setDismissedBlocks(new Set());
       toast.success('Daily plan generated!');
     },
     onError: (e) => {
-      toast.error(e instanceof Error ? e.message : 'Failed to generate plan');
+      const msg = e instanceof Error ? e.message : 'Failed to generate plan';
+      console.error('[DailyTimeBlocks] generate error:', msg);
+      toast.error(`Plan generation failed: ${msg}`);
     },
   });
 
@@ -421,12 +434,19 @@ export function DailyTimeBlocks() {
     toast.success('Block moved');
   }, [plan, todayStr, queryClient]);
 
-  // Dismiss a block
+  // Dismiss a block — persists to DB
   const dismissBlock = useCallback(async (blockIdx: number) => {
     if (!plan) return;
-    setDismissedBlocks(prev => new Set([...prev, blockIdx]));
+    const newDismissed = new Set([...dismissedBlocks, blockIdx]);
+    setDismissedBlocks(newDismissed);
+    const indices = Array.from(newDismissed);
+    // Persist to DB
+    await supabase
+      .from('daily_time_blocks' as 'daily_time_blocks')
+      .update({ dismissed_block_indices: indices as unknown as Json })
+      .eq('id', plan.id);
     toast.success('Meeting dismissed from plan');
-  }, [plan]);
+  }, [plan, dismissedBlocks]);
 
   // Update actual dials/emails on a prospecting block
   const updateBlockActual = useCallback(async (blockIdx: number, field: 'actual_dials' | 'actual_emails', value: number) => {
@@ -486,10 +506,7 @@ export function DailyTimeBlocks() {
 
   // Regenerate with dismissed blocks and linked opps
   const regenerateWithChanges = useCallback(() => {
-    // The dismissed blocks and linked opps will be reflected in the current state
-    // For now, trigger a regenerate which will pull fresh calendar data with correct timezone
     generateMutation.mutate();
-    setDismissedBlocks(new Set());
     setBlockOppLinks(new Map());
   }, [generateMutation]);
 
