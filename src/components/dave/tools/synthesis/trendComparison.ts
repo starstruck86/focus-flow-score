@@ -522,11 +522,20 @@ export async function compareTrends(ctx: ToolContext, params: { question?: strin
 
 // ── Response builders ───────────────────────────────────────────
 
+function comparisonModeNote(result: ComparisonResult): string {
+  if (result.comparisonMode === 'to-date') {
+    return `(Note: this is a to-date comparison — ${result.periodALabel} vs ${result.periodBLabel}, so we're comparing the same number of days for a fair read.)`;
+  }
+  return '';
+}
+
 function buildSummaryTrend(result: ComparisonResult): string {
   const { periodALabel, periodBLabel } = result;
   const sentences: string[] = [];
 
   sentences.push(`Here's how ${periodALabel} compares to ${periodBLabel}.`);
+  const modeNote = comparisonModeNote(result);
+  if (modeNote) sentences.push(modeNote);
   sentences.push(interpretComparisons(result));
   sentences.push(`Want me to break down every metric, or drill into a specific one?`);
 
