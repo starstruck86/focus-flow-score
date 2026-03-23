@@ -177,6 +177,31 @@ function buildScript(
 
 // ── Main tool: execution_next ───────────────────────────────────
 
+/** Where to execute the action — inferred from stage */
+function inferExternalSystem(stage: FunnelStage): string {
+  if (stage === 'dial_to_connect' || stage === 'connect_to_meeting') return 'Outreach / Salesloft';
+  return 'Salesforce';
+}
+
+/** Suggest where in the external tool to go */
+function externalHint(stage: FunnelStage, accountName: string): string {
+  if (stage === 'dial_to_connect') return `Open ${accountName}'s cadence in Outreach/Salesloft and dial.`;
+  if (stage === 'connect_to_meeting') return `Find ${accountName} in Outreach/Salesloft — use the opener below.`;
+  return `Open ${accountName} in Salesforce and log discovery notes.`;
+}
+
+export interface ExecutionNextResult {
+  formatted: string;
+  actionId: string;
+  accountId: string;
+  accountName: string;
+  contactName?: string;
+  contactTitle?: string;
+  stage: string;
+  script?: string;
+  externalSystem: string;
+}
+
 export async function executionNext(ctx: ToolContext): Promise<string> {
   const userId = await ctx.getUserId();
   if (!userId) return 'Not authenticated';
@@ -224,7 +249,7 @@ export async function executionNext(ctx: ToolContext): Promise<string> {
   // 7. Build personalized script
   const script = buildScript(fix, account.name, contact?.name, contact?.title);
 
-  // 8. Format output
+  // 8. Format output — external execution model
   const BLOCK_LABELS: Record<WorkBlock, string> = {
     prospecting: 'Prospecting Block',
     calls: 'Call Block',
@@ -232,6 +257,10 @@ export async function executionNext(ctx: ToolContext): Promise<string> {
     admin: 'Admin',
     unknown: 'Current Focus',
   };
+
+  const extSystem = inferExternalSystem(stage);
+  const hint = externalHint(stage, account.name);
+  const actionId = `exec-${stage}-${account.id}`;
 
   const lines: string[] = [];
   lines.push(`🎯 **${fix.action}**`);
@@ -243,6 +272,11 @@ export async function executionNext(ctx: ToolContext): Promise<string> {
     lines.push('**Contact:** None found — say "discover contacts for ' + account.name + '" first');
   }
   lines.push(`**Context:** ${BLOCK_LABELS[workBlock]}`);
+  lines.push(`**Execute in:** ${extSystem}`);
+  lines.push('');
+
+  // External system guidance
+  lines.push(`📍 ${hint}`);
   lines.push('');
 
   if (diagnosis) {
@@ -259,5 +293,29 @@ export async function executionNext(ctx: ToolContext): Promise<string> {
     lines.push('\n_Tip: Add contacts first for a personalized opener._');
   }
 
+  lines.push('');
+  lines.push(`_When done, say "done" or tap ✓ — I'll suggest your next move._`);
+  lines.push(`[action_id: ${actionId}]`);
+
   return lines.join('\n');
+}
+
+/** Confirm an execution_next action was completed externally */
+export async function confirmExecution(params: { actionId: string }): Promise<string> {
+  try {
+    const records = JSON.parse(localStorage.getItem('jarvis-action-memory') || '[]');
+    records.push({ actionId: params.actionId, outcome: 'completed', timestamp: Date.now() });
+    localStorage.setItem('jarvis-action-memory', JSON.stringify(records.slice(-200)));
+  } catch {}
+  return 'Confirmed ✓ — ask for "next action" to keep moving.';
+}
+
+/** Skip an execution_next action */
+export async function skipExecution(params: { actionId: string; reason?: string }): Promise<string> {
+  try {
+    const records = JSON.parse(localStorage.getItem('jarvis-action-memory') || '[]');
+    records.push({ actionId: params.actionId, outcome: 'ignored', timestamp: Date.now() });
+    localStorage.setItem('jarvis-action-memory', JSON.stringify(records.slice(-200)));
+  } catch {}
+  return 'Skipped — this will be deprioritized. Ask for "next action" to continue.';
 }

@@ -1,9 +1,10 @@
 // Command Brief — the Jarvis layer UI surface
 // ONE state sentence + ONE primary action. No noise.
-// Extended with: delay consequence display, escalation indicators.
+// External execution model: actions happen in Salesforce/Outreach,
+// user confirms here with one tap.
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, Check, X, ArrowRight, AlertTriangle } from 'lucide-react';
+import { Zap, Check, SkipForward, ArrowRight, AlertTriangle, ExternalLink } from 'lucide-react';
 import { useOperatingState } from '@/hooks/useOperatingState';
 import { usePrimaryAction } from '@/hooks/usePrimaryAction';
 import { useActionMemory } from '@/hooks/useActionMemory';
@@ -33,6 +34,13 @@ const ESCALATION_STYLES: Record<string, string> = {
   low: 'text-muted-foreground',
 };
 
+/** Infer which external system to reference based on entity type */
+function inferExternalSystem(entityType: string): string | null {
+  if (entityType === 'opportunity' || entityType === 'renewal') return 'Salesforce';
+  if (entityType === 'account') return 'Outreach / Salesloft';
+  return null;
+}
+
 export function CommandBrief() {
   const { sentence, band } = useOperatingState();
   const primaryAction = usePrimaryAction();
@@ -42,22 +50,23 @@ export function CommandBrief() {
   const handleComplete = () => {
     if (primaryAction) {
       recordAction(primaryAction.id, 'completed', primaryAction.entityType, primaryAction.entityId);
-      toast.success('Action completed', { description: primaryAction.action });
+      toast.success('Confirmed ✓', { description: 'Advancing to next action...' });
       setDismissed(true);
-      setTimeout(() => setDismissed(false), 3000);
+      setTimeout(() => setDismissed(false), 2000);
     }
   };
 
-  const handleDefer = () => {
+  const handleSkip = () => {
     if (primaryAction) {
       recordAction(primaryAction.id, 'deferred', primaryAction.entityType, primaryAction.entityId);
-      toast('Deferred — will resurface later');
+      toast('Skipped — next action loading');
       setDismissed(true);
-      setTimeout(() => setDismissed(false), 3000);
+      setTimeout(() => setDismissed(false), 2000);
     }
   };
 
   const showEscalation = primaryAction?.escalation === 'critical' || primaryAction?.escalation === 'high';
+  const extSystem = primaryAction ? inferExternalSystem(primaryAction.entityType) : null;
 
   return (
     <motion.div
@@ -105,6 +114,14 @@ export function CommandBrief() {
               <span>{primaryAction.nextStep}</span>
             </div>
 
+            {/* External system hint */}
+            {extSystem && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground/70">
+                <ExternalLink className="h-3 w-3" />
+                <span>Execute in {extSystem}</span>
+              </div>
+            )}
+
             {/* Delay consequence — only shown for high/critical escalation */}
             {primaryAction.delayConsequence && showEscalation && (
               <p className={cn('text-xs italic', ESCALATION_STYLES[primaryAction.escalation!])}>
@@ -112,6 +129,7 @@ export function CommandBrief() {
               </p>
             )}
 
+            {/* One-tap confirm / skip — external execution model */}
             <div className="flex gap-2 pt-1">
               <Button
                 size="sm"
@@ -126,10 +144,10 @@ export function CommandBrief() {
                 size="sm"
                 variant="ghost"
                 className="h-7 text-xs gap-1 text-muted-foreground"
-                onClick={handleDefer}
+                onClick={handleSkip}
               >
-                <X className="h-3 w-3" />
-                Not now
+                <SkipForward className="h-3 w-3" />
+                Skip
               </Button>
             </div>
           </motion.div>
@@ -141,7 +159,7 @@ export function CommandBrief() {
             exit={{ opacity: 0 }}
             className="text-xs text-muted-foreground text-center py-2"
           >
-            ✓ Moving to next...
+            ✓ Loading next action...
           </motion.div>
         ) : (
           <motion.div
