@@ -245,8 +245,10 @@ export interface ScoredInsight {
     trust: number;
     recency: number;
     relevance: number;
+    personal: number;
   };
   reasoning: string;
+  personalNote: string | null;
 }
 
 /**
