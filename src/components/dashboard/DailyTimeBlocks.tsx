@@ -1103,6 +1103,17 @@ export function DailyTimeBlocks() {
               </span>
             )}
             {plan.key_metric_targets.conversations != null && <span>{plan.key_metric_targets.conversations} convos</span>}
+            {plan.key_metric_targets.accounts_sourced != null && (
+              <span className="flex items-center gap-1">
+                <Hammer className="h-3 w-3 text-orange-500" />
+                {(() => {
+                  const buildBlocks = blocks.filter(b => b.type === 'build');
+                  const completedSteps = buildBlocks.reduce((s, b) => s + (b.build_steps || DEFAULT_BUILD_STEPS).filter(st => st.done).length, 0);
+                  const totalSteps = buildBlocks.reduce((s, b) => s + (b.build_steps || DEFAULT_BUILD_STEPS).length, 0);
+                  return totalSteps > 0 ? `${completedSteps}/${totalSteps} build steps` : `${plan.key_metric_targets.accounts_sourced} sourced`;
+                })()}
+              </span>
+            )}
             {plan.key_metric_targets.accounts_researched != null && <span>{plan.key_metric_targets.accounts_researched} researched</span>}
             {plan.key_metric_targets.contacts_prepped != null && <span>{plan.key_metric_targets.contacts_prepped} prepped</span>}
           </div>
