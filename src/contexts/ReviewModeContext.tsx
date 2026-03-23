@@ -11,7 +11,7 @@ import { createContext, useContext, ReactNode } from 'react';
 import { toast } from 'sonner';
 
 // ──────────────────────── MASTER SWITCH ────────────────────────
-export const REVIEW_MODE = true;
+export const REVIEW_MODE = false;
 // ───────────────────────────────────────────────────────────────
 
 interface ReviewModeContextType {
