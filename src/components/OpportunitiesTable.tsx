@@ -867,9 +867,13 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               />
             </TableCell>
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-              <span className={cn("text-[10px] font-medium", lastTouchColor)}>
-                {lastTouchDays === null ? 'Never' : `${lastTouchDays}d ago`}
-              </span>
+              <EditableDatePicker
+                value={opp.lastTouchDate}
+                onChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
+                placeholder="—"
+                compact
+                className="w-28"
+              />
             </TableCell>
             <NextStepTextCell opp={opp} />
             {summaryCustomFields.map(field => (
