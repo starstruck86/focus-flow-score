@@ -32,7 +32,7 @@ import { CalendarScreenshotDrop } from './CalendarScreenshotDrop';
 import { DailyPlanPreferences } from './DailyPlanPreferences';
 import { RustBusterQuickLinks } from './RustBusterQuickLinks';
 import { isRustBusterBlock } from '@/lib/rustBusterLinks';
-import { useNewLogoTargets } from '@/hooks/useNewLogoTargets';
+import { useWeeklyResearchQueue, type AccountState } from '@/hooks/useWeeklyResearchQueue';
 import type { CalendarScreenshotEvent } from '@/types/dashboard';
 import type { Json } from '@/integrations/supabase/types';
 
