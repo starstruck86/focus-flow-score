@@ -4,7 +4,7 @@ import { lookupContact, addContact, stakeholderQuery, contactTimeline } from './
 import { lookupRenewal, updateRenewal } from './intelligence/renewals';
 import { readResource, searchResources, lookupTranscript, trendQuery } from './intelligence/resources';
 import { bulkUpdate } from './intelligence/bulk';
-import { citeInsight, knowledgeTrends, insightReliability, recommendStrategy, recordStrategyOutcome, strategyPerformance } from './intelligence/knowledge';
+import { citeInsight, knowledgeTrends, insightReliability, recommendStrategy, recordStrategyOutcome, strategyPerformance, pipelineImpact, recordPipelineEvent } from './intelligence/knowledge';
 
 export function createIntelligenceTools(ctx: ToolContext): ToolMap {
   return {
