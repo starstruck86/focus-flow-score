@@ -506,10 +506,7 @@ export function DailyTimeBlocks() {
 
   // Regenerate with dismissed blocks and linked opps
   const regenerateWithChanges = useCallback(() => {
-    // The dismissed blocks and linked opps will be reflected in the current state
-    // For now, trigger a regenerate which will pull fresh calendar data with correct timezone
     generateMutation.mutate();
-    setDismissedBlocks(new Set());
     setBlockOppLinks(new Map());
   }, [generateMutation]);
 
