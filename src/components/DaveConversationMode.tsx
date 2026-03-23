@@ -50,7 +50,7 @@ function assertSessionContract(session: DaveSessionData): string | null {
   return null;
 }
 
-export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, minimized = false, onMinimize }: Props) {
+export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, minimized = false, onMinimize, preacquiredMicStream }: Props) {
   const navigate = useNavigate();
   const { ask: askCopilot } = useCopilot();
   const { addUserMessage, addDaveResponse } = useDaveConversation();
