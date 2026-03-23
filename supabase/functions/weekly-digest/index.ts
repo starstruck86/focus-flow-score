@@ -14,7 +14,31 @@ Deno.serve(async (req: Request) => {
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    // Authenticate the requesting user
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const anonClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await anonClient.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims?.sub) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const userId = claimsData.claims.sub as string;
+
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     // Get all users who have journal entries (active users)
@@ -27,65 +51,46 @@ Deno.serve(async (req: Request) => {
     const { data: entries, error: entriesError } = await supabase
       .from("daily_journal_entries")
       .select("user_id, dials, conversations, meetings_set, opportunities_created, daily_score, goal_met")
+      .eq("user_id", userId)
       .gte("date", lastMondayStr)
       .lt("date", todayStr);
 
     if (entriesError) throw entriesError;
 
-    // Group by user
-    const userStats = new Map<string, {
-      totalDials: number;
-      totalConversations: number;
-      totalMeetingsSet: number;
-      totalOppsCreated: number;
-      avgScore: number;
-      goalMetDays: number;
-      workDays: number;
-    }>();
+    // Compute stats for the authenticated user
+    const stats = {
+      totalDials: 0, totalConversations: 0, totalMeetingsSet: 0,
+      totalOppsCreated: 0, avgScore: 0, goalMetDays: 0, workDays: 0,
+    };
 
     for (const entry of entries || []) {
-      if (!entry.user_id) continue;
-      const existing = userStats.get(entry.user_id) || {
-        totalDials: 0, totalConversations: 0, totalMeetingsSet: 0,
-        totalOppsCreated: 0, avgScore: 0, goalMetDays: 0, workDays: 0,
-      };
-      existing.totalDials += entry.dials || 0;
-      existing.totalConversations += entry.conversations || 0;
-      existing.totalMeetingsSet += entry.meetings_set || 0;
-      existing.totalOppsCreated += entry.opportunities_created || 0;
-      existing.avgScore += entry.daily_score || 0;
-      existing.goalMetDays += entry.goal_met ? 1 : 0;
-      existing.workDays += 1;
-      userStats.set(entry.user_id, existing);
+      stats.totalDials += entry.dials || 0;
+      stats.totalConversations += entry.conversations || 0;
+      stats.totalMeetingsSet += entry.meetings_set || 0;
+      stats.totalOppsCreated += entry.opportunities_created || 0;
+      stats.avgScore += entry.daily_score || 0;
+      stats.goalMetDays += entry.goal_met ? 1 : 0;
+      stats.workDays += 1;
     }
 
-    // Get upcoming renewals for each user
+    // Get upcoming renewals for the authenticated user
     const nextFriday = new Date();
-    nextFriday.setDate(nextFriday.getDate() + 12); // ~2 weeks out
+    nextFriday.setDate(nextFriday.getDate() + 12);
     const nextFridayStr = nextFriday.toISOString().slice(0, 10);
 
     const { data: renewals } = await supabase
       .from("renewals")
-      .select("user_id, account_name, arr, renewal_due, churn_risk")
+      .select("account_name, arr, renewal_due, churn_risk")
+      .eq("user_id", userId)
       .gte("renewal_due", todayStr)
       .lte("renewal_due", nextFridayStr)
       .order("renewal_due", { ascending: true });
 
-    const userRenewals = new Map<string, typeof renewals>();
-    for (const r of renewals || []) {
-      const existing = userRenewals.get(r.user_id) || [];
-      existing.push(r);
-      userRenewals.set(r.user_id, existing);
-    }
+    const avgScore = stats.workDays > 0 ? (stats.avgScore / stats.workDays).toFixed(1) : '0';
 
-    // Generate digest data per user (could be emailed or stored)
-    const digests = [];
-    for (const [userId, stats] of userStats) {
-      const avgScore = stats.workDays > 0 ? (stats.avgScore / stats.workDays).toFixed(1) : '0';
-      const upcomingRenewals = userRenewals.get(userId) || [];
-
-      digests.push({
-        userId,
+    return new Response(
+      JSON.stringify({
+        success: true,
         weekOf: lastMondayStr,
         summary: {
           workDays: stats.workDays,
@@ -96,20 +101,12 @@ Deno.serve(async (req: Request) => {
           avgDailyScore: avgScore,
           goalMetDays: stats.goalMetDays,
         },
-        upcomingRenewals: upcomingRenewals.map(r => ({
+        upcomingRenewals: (renewals || []).map(r => ({
           account: r.account_name,
           arr: r.arr,
           dueDate: r.renewal_due,
           risk: r.churn_risk,
         })),
-      });
-    }
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        digestCount: digests.length,
-        digests,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
