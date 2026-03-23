@@ -178,15 +178,41 @@ export function WhoopIntegration() {
 
   async function handleConnect() {
     setConnecting(true);
+    // Clear any stale local state before starting OAuth
+    setSyncError(null);
+    setConnection(null);
+    setMetrics([]);
     try {
       const response = await trackedInvoke<any>('whoop-auth', {
         body: { redirectUri: window.location.origin },
       });
-      if (response.error) throw new Error(response.error.message);
+      if (response.error) {
+        const msg = response.error.message || 'Unknown error';
+        console.error('WHOOP auth error:', msg, response.error);
+        // Surface specific failure reasons
+        if (/drift|mismatch/i.test(msg)) {
+          toast.error('WHOOP functions have a version mismatch', { description: msg, duration: 8000 });
+        } else if (/WHOOP_CLIENT_ID|not configured/i.test(msg)) {
+          toast.error('WHOOP integration not configured', { description: 'WHOOP API credentials are missing. Add WHOOP_CLIENT_ID and WHOOP_CLIENT_SECRET in settings.', duration: 8000 });
+        } else if (/Unauthorized|auth|session/i.test(msg)) {
+          toast.error('Session expired', { description: 'Sign in again and retry WHOOP connection.', duration: 6000 });
+        } else {
+          toast.error('Failed to start WHOOP connection', { description: msg, duration: 6000 });
+        }
+        setConnecting(false);
+        return;
+      }
+      if (!response.data?.authUrl) {
+        console.error('WHOOP auth response missing authUrl:', response.data);
+        toast.error('WHOOP connection failed', { description: 'No authorization URL returned. Check WHOOP API credentials.', duration: 6000 });
+        setConnecting(false);
+        return;
+      }
+      console.log('[WHOOP] Redirecting to OAuth URL');
       window.location.href = response.data.authUrl;
     } catch (err: any) {
       console.error('Connect error:', err);
-      toast.error('Failed to start WHOOP connection');
+      toast.error('Failed to start WHOOP connection', { description: err?.message || 'Network error', duration: 6000 });
       setConnecting(false);
     }
   }
