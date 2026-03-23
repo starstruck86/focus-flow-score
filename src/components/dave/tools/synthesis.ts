@@ -34,7 +34,8 @@ export function createSynthesisTools(ctx: ToolContext, allTools: Record<string, 
     snooze_execution: (params: { actionId: string; minutes?: number }) => snoozeExecution(params),
     whoop_performance_insights: () => whoopPerformanceInsights(ctx),
     whoop_today_context: () => whoopTodayContext(ctx),
-    daily_game_plan: () => dailyGamePlanWalkthrough(ctx),
+    daily_game_plan: () => dailyGamePlanSummary(ctx),
+    daily_game_plan_detailed: () => dailyGamePlanDetailed(ctx),
     query_daily_plan: (params: { question: string }) => queryDailyPlan(ctx, params),
   };
 }

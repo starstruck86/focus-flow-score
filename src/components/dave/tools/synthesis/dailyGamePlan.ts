@@ -1,7 +1,8 @@
 /**
  * Dave tool: daily_game_plan
  * Reads the STORED Daily Game Plan from daily_time_blocks table.
- * This is the single source of truth — same data shown on the dashboard.
+ * Two modes: summary (fast ~60s) and detailed (block-by-block guided).
+ * Single source of truth — same data shown on the dashboard.
  */
 import { supabase } from '@/integrations/supabase/client';
 import { formatTimeETLabel, todayInAppTz } from '@/lib/timeFormat';
@@ -31,6 +32,8 @@ interface DailyPlan {
   completed_goals: string[] | null;
 }
 
+// ── Shared helpers ──
+
 function formatBlockTime(t: string): string {
   const [h, m] = t.split(':').map(Number);
   const suffix = h >= 12 ? 'PM' : 'AM';
@@ -44,165 +47,242 @@ function blockDurationMin(block: TimeBlock): number {
   return (eh * 60 + em) - (sh * 60 + sm);
 }
 
-export async function dailyGamePlanWalkthrough(ctx: ToolContext): Promise<string> {
+function getCurrentMinutesET(): number {
+  const etNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  return etNow.getHours() * 60 + etNow.getMinutes();
+}
+
+function findCurrentAndNext(blocks: TimeBlock[]): { current: TimeBlock | null; next: TimeBlock | null } {
+  const now = getCurrentMinutesET();
+  let current: TimeBlock | null = null;
+  let next: TimeBlock | null = null;
+  for (const b of blocks) {
+    const [sh, sm] = b.start_time.split(':').map(Number);
+    const [eh, em] = b.end_time.split(':').map(Number);
+    if (now >= sh * 60 + sm && now < eh * 60 + em) current = b;
+    else if (now < sh * 60 + sm && !next) next = b;
+  }
+  return { current, next };
+}
+
+async function fetchTodayPlan(ctx: ToolContext): Promise<{ plan: DailyPlan | null; error: string | null }> {
   const userId = await ctx.getUserId();
-  if (!userId) return 'Not authenticated';
+  if (!userId) return { plan: null, error: 'Not authenticated' };
 
   const today = todayInAppTz();
-
-  // Read the STORED plan — same data the dashboard displays
-  const { data: plan, error } = await supabase
+  const { data, error } = await supabase
     .from('daily_time_blocks')
     .select('*')
     .eq('user_id', userId)
     .eq('plan_date', today)
     .maybeSingle();
 
-  if (error) return `Failed to load Daily Game Plan: ${error.message}`;
+  if (error) return { plan: null, error: `Failed to load Daily Game Plan: ${error.message}` };
+  if (!data) return { plan: null, error: `📋 No Daily Game Plan exists for today (${today}). Open the dashboard and generate one, or say "generate my daily plan."` };
 
-  if (!plan) {
-    return `📋 No Daily Game Plan exists for today (${today}). Open the dashboard and generate one, or say "generate my daily plan" to create it now.`;
-  }
+  const p = data as unknown as DailyPlan;
+  p.blocks = Array.isArray(p.blocks) ? p.blocks : [];
+  return { plan: p, error: null };
+}
 
-  const p = plan as unknown as DailyPlan;
-  const blocks = (Array.isArray(p.blocks) ? p.blocks : []) as TimeBlock[];
-  const targets = (p.key_metric_targets || {}) as Record<string, number>;
-  const completedGoals = new Set(p.completed_goals || []);
+// ── Summary mode (~60 seconds spoken) ──
 
+export async function dailyGamePlanSummary(ctx: ToolContext): Promise<string> {
+  const { plan, error } = await fetchTodayPlan(ctx);
+  if (!plan) return error!;
+
+  const blocks = plan.blocks as TimeBlock[];
+  const targets = (plan.key_metric_targets || {}) as Record<string, number>;
   const parts: string[] = [];
 
-  // ── Header ──
-  parts.push(`📋 DAILY GAME PLAN — ${today}`);
+  parts.push(`📋 DAILY GAME PLAN — ${plan.plan_date}`);
 
-  // ── Strategy overview ──
-  if (p.ai_reasoning) {
-    parts.push(`\n💡 Strategy: ${p.ai_reasoning}`);
-  }
+  // Strategy
+  if (plan.ai_reasoning) parts.push(`\n💡 Strategy: ${plan.ai_reasoning}`);
 
-  // ── Structure summary ──
-  const focusHrs = p.focus_hours_available ?? 0;
-  const meetingHrs = p.meeting_load_hours ?? 0;
+  // Structure
+  const focusHrs = plan.focus_hours_available ?? 0;
+  const meetingHrs = plan.meeting_load_hours ?? 0;
   parts.push(`\n⏱️ ${focusHrs.toFixed(1)}h focus time, ${meetingHrs.toFixed(1)}h meetings`);
 
-  // ── Targets ──
-  if (Object.keys(targets).length > 0) {
-    const targetParts: string[] = [];
-    if (targets.dials) targetParts.push(`${targets.dials} dials`);
-    if (targets.conversations) targetParts.push(`${targets.conversations} convos`);
-    if (targets.accounts_researched) targetParts.push(`${targets.accounts_researched} accounts researched`);
-    if (targets.contacts_prepped) targetParts.push(`${targets.contacts_prepped} contacts prepped`);
-    if (targetParts.length) parts.push(`🎯 Today's targets: ${targetParts.join(', ')}`);
-  }
+  // Targets
+  const targetParts: string[] = [];
+  if (targets.dials) targetParts.push(`${targets.dials} dials`);
+  if (targets.conversations) targetParts.push(`${targets.conversations} convos`);
+  if (targets.accounts_researched) targetParts.push(`${targets.accounts_researched} accounts researched`);
+  if (targets.contacts_prepped) targetParts.push(`${targets.contacts_prepped} contacts prepped`);
+  if (targetParts.length) parts.push(`🎯 Targets: ${targetParts.join(', ')}`);
 
-  // ── Time blocks walkthrough ──
-  if (blocks.length > 0) {
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-    // Find what's current/next
-    let currentBlock: TimeBlock | null = null;
-    let nextBlock: TimeBlock | null = null;
-
-    for (const b of blocks) {
-      const [sh, sm] = b.start_time.split(':').map(Number);
-      const [eh, em] = b.end_time.split(':').map(Number);
-      const startMin = sh * 60 + sm;
-      const endMin = eh * 60 + em;
-
-      if (currentMinutes >= startMin && currentMinutes < endMin) {
-        currentBlock = b;
-      } else if (currentMinutes < startMin && !nextBlock) {
-        nextBlock = b;
-      }
+  // Current / next
+  if (blocks.length) {
+    const { current, next } = findCurrentAndNext(blocks);
+    if (current) {
+      parts.push(`\n🔴 NOW: ${current.label} (${formatBlockTime(current.start_time)}–${formatBlockTime(current.end_time)})`);
+    }
+    if (next) {
+      const now = getCurrentMinutesET();
+      const [nh, nm] = next.start_time.split(':').map(Number);
+      parts.push(`⏭️ NEXT: ${next.label} at ${formatBlockTime(next.start_time)} (in ${(nh * 60 + nm) - now} min)`);
     }
 
-    // Current/next focus
-    if (currentBlock) {
-      parts.push(`\n🔴 RIGHT NOW: ${currentBlock.label} (${formatBlockTime(currentBlock.start_time)}–${formatBlockTime(currentBlock.end_time)})`);
-      if (currentBlock.goals?.length) {
-        parts.push(`   Goals: ${currentBlock.goals.join('; ')}`);
-      }
-    }
-    if (nextBlock) {
-      const [nh, nm] = nextBlock.start_time.split(':').map(Number);
-      const minsUntil = (nh * 60 + nm) - currentMinutes;
-      parts.push(`\n⏭️ UP NEXT: ${nextBlock.label} at ${formatBlockTime(nextBlock.start_time)} (in ${minsUntil} min)`);
-    }
-
-    // Categorized summary
+    // Key meetings
     const meetings = blocks.filter(b => b.type === 'meeting');
-    const prospecting = blocks.filter(b => b.type === 'prospecting');
-    const prepBlocks = blocks.filter(b => b.type === 'prep');
-    const rustBuster = prospecting.filter(b => b.label.toLowerCase().includes('rust'));
-
     if (meetings.length) {
-      parts.push(`\n📅 Meetings (${meetings.length}):`);
-      for (const m of meetings) {
-        parts.push(`  • ${formatBlockTime(m.start_time)} — ${m.label}`);
-      }
+      parts.push(`\n📅 ${meetings.length} meeting${meetings.length !== 1 ? 's' : ''}:`);
+      for (const m of meetings) parts.push(`  • ${formatBlockTime(m.start_time)} — ${m.label}`);
     }
 
-    if (rustBuster.length) {
-      parts.push(`\n🔥 Rust Buster: ${formatBlockTime(rustBuster[0].start_time)} — ${rustBuster[0].label}`);
-    }
-
-    if (prospecting.length) {
-      const totalProspectingMin = prospecting.reduce((s, b) => s + blockDurationMin(b), 0);
-      const nonRust = prospecting.filter(b => !b.label.toLowerCase().includes('rust'));
-      parts.push(`\n📞 Prospecting: ${nonRust.length} block${nonRust.length !== 1 ? 's' : ''} (${Math.round(totalProspectingMin / 60 * 10) / 10}h total)`);
-      for (const b of nonRust.slice(0, 3)) {
-        parts.push(`  • ${formatBlockTime(b.start_time)} — ${b.label}`);
-      }
-    }
-
-    if (prepBlocks.length) {
-      parts.push(`\n📚 Prep: ${prepBlocks.length} block${prepBlocks.length !== 1 ? 's' : ''}`);
-      for (const b of prepBlocks.slice(0, 2)) {
-        parts.push(`  • ${formatBlockTime(b.start_time)} — ${b.label}`);
-      }
-    }
-
-    // Full schedule (compact)
-    parts.push(`\n📝 Full schedule (${blocks.length} blocks):`);
-    for (const b of blocks) {
-      const dur = blockDurationMin(b);
-      const check = b.goals?.some((_, gi) => completedGoals.has(`${blocks.indexOf(b)}-${gi}`)) ? '✅' : '⬜';
-      parts.push(`  ${check} ${formatBlockTime(b.start_time)}–${formatBlockTime(b.end_time)} (${dur}m) ${b.label}`);
-    }
+    // Rust buster
+    const rust = blocks.filter(b => b.label.toLowerCase().includes('rust'));
+    if (rust.length) parts.push(`\n🔥 Rust Buster at ${formatBlockTime(rust[0].start_time)}`);
   }
 
-  // ── First focus recommendation ──
-  const firstActionBlock = blocks.find(b => b.type !== 'meeting' && b.type !== 'break');
-  if (firstActionBlock) {
-    parts.push(`\n🎯 Start here: ${firstActionBlock.label} at ${formatBlockTime(firstActionBlock.start_time)}`);
-    if (firstActionBlock.goals?.length) {
-      parts.push(`   → ${firstActionBlock.goals[0]}`);
-    }
+  // First focus
+  const first = blocks.find(b => b.type !== 'meeting' && b.type !== 'break');
+  if (first) {
+    parts.push(`\n🎯 Start here: ${first.label} at ${formatBlockTime(first.start_time)}`);
+    if (first.goals?.length) parts.push(`   → ${first.goals[0]}`);
   }
 
   return parts.join('\n');
+}
+
+// ── Detailed step-by-step mode ──
+
+export async function dailyGamePlanDetailed(ctx: ToolContext): Promise<string> {
+  const { plan, error } = await fetchTodayPlan(ctx);
+  if (!plan) return error!;
+
+  const blocks = plan.blocks as TimeBlock[];
+  const targets = (plan.key_metric_targets || {}) as Record<string, number>;
+  const completedGoals = new Set(plan.completed_goals || []);
+  const parts: string[] = [];
+
+  parts.push(`📋 DAILY GAME PLAN — DETAILED WALKTHROUGH — ${plan.plan_date}`);
+
+  // Strategy context
+  if (plan.ai_reasoning) parts.push(`\n💡 Today's strategy: ${plan.ai_reasoning}`);
+
+  // Day shape
+  const focusHrs = plan.focus_hours_available ?? 0;
+  const meetingHrs = plan.meeting_load_hours ?? 0;
+  parts.push(`\n⏱️ Day shape: ${focusHrs.toFixed(1)}h focus, ${meetingHrs.toFixed(1)}h meetings, ${blocks.length} blocks total`);
+
+  // Targets
+  const targetParts: string[] = [];
+  if (targets.dials) targetParts.push(`${targets.dials} dials`);
+  if (targets.conversations) targetParts.push(`${targets.conversations} conversations`);
+  if (targets.accounts_researched) targetParts.push(`${targets.accounts_researched} accounts researched`);
+  if (targets.contacts_prepped) targetParts.push(`${targets.contacts_prepped} contacts prepped`);
+  if (targetParts.length) parts.push(`🎯 Daily targets: ${targetParts.join(', ')}`);
+
+  // Current position
+  const { current, next } = findCurrentAndNext(blocks);
+  if (current) {
+    parts.push(`\n🔴 You are currently in: ${current.label} (${formatBlockTime(current.start_time)}–${formatBlockTime(current.end_time)})`);
+  }
+
+  // Block-by-block walkthrough
+  parts.push(`\n${'═'.repeat(40)}`);
+  parts.push(`BLOCK-BY-BLOCK WALKTHROUGH`);
+  parts.push(`${'═'.repeat(40)}`);
+
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    const dur = blockDurationMin(b);
+    const isCurrent = b === current;
+    const marker = isCurrent ? '🔴' : '⬜';
+    const hasCompleted = b.goals?.some((_, gi) => completedGoals.has(`${i}-${gi}`));
+    const statusTag = hasCompleted ? ' ✅' : '';
+
+    parts.push(`\n${marker} Block ${i + 1}: ${b.label}${statusTag}`);
+    parts.push(`   ⏰ ${formatBlockTime(b.start_time)} → ${formatBlockTime(b.end_time)} (${dur} min)`);
+    parts.push(`   📂 Type: ${b.type}${b.workstream ? ` — ${b.workstream}` : ''}`);
+
+    // Purpose
+    if (b.reasoning) {
+      parts.push(`   💡 Why: ${b.reasoning}`);
+    }
+
+    // Goals = what success looks like
+    if (b.goals?.length) {
+      parts.push(`   ✅ Success looks like:`);
+      for (const g of b.goals) {
+        const goalDone = completedGoals.has(`${i}-${b.goals.indexOf(g)}`);
+        parts.push(`      ${goalDone ? '✓' : '○'} ${g}`);
+      }
+    }
+
+    // Linked accounts
+    if (b.linked_accounts?.length) {
+      parts.push(`   🏢 Accounts: ${b.linked_accounts.map(a => a.name).join(', ')}`);
+    }
+
+    // Actuals (if tracking has started)
+    if (b.actual_dials || b.actual_emails) {
+      const actuals: string[] = [];
+      if (b.actual_dials) actuals.push(`${b.actual_dials} dials`);
+      if (b.actual_emails) actuals.push(`${b.actual_emails} emails`);
+      parts.push(`   📊 Progress: ${actuals.join(', ')}`);
+    }
+  }
+
+  // Wrap-up
+  parts.push(`\n${'═'.repeat(40)}`);
+
+  // What to do right now
+  if (current) {
+    parts.push(`\n🎯 Focus now: ${current.label}`);
+    if (current.goals?.length) parts.push(`   → ${current.goals[0]}`);
+  } else if (next) {
+    const now = getCurrentMinutesET();
+    const [nh, nm] = next.start_time.split(':').map(Number);
+    parts.push(`\n🎯 Next up: ${next.label} at ${formatBlockTime(next.start_time)} (in ${(nh * 60 + nm) - now} min)`);
+    if (next.goals?.length) parts.push(`   → ${next.goals[0]}`);
+  } else {
+    parts.push(`\n✅ All blocks complete or past. Great work today.`);
+  }
+
+  parts.push(`\nAsk me about any specific block for more detail.`);
+
+  return parts.join('\n');
+}
+
+// ── Legacy alias — defaults to summary ──
+
+export async function dailyGamePlanWalkthrough(ctx: ToolContext): Promise<string> {
+  return dailyGamePlanSummary(ctx);
 }
 
 /**
  * Answer specific questions about the daily plan.
  */
 export async function queryDailyPlan(ctx: ToolContext, params: { question: string }): Promise<string> {
-  const userId = await ctx.getUserId();
-  if (!userId) return 'Not authenticated';
+  const { plan, error } = await fetchTodayPlan(ctx);
+  if (!plan) return error || 'No Daily Game Plan for today.';
 
-  const today = todayInAppTz();
-  const { data: plan } = await supabase
-    .from('daily_time_blocks')
-    .select('blocks, key_metric_targets, ai_reasoning, focus_hours_available, meeting_load_hours')
-    .eq('user_id', userId)
-    .eq('plan_date', today)
-    .maybeSingle();
-
-  if (!plan) return `No Daily Game Plan for today. Generate one from the dashboard first.`;
-
-  const blocks = (Array.isArray(plan.blocks) ? plan.blocks : []) as unknown as TimeBlock[];
+  const blocks = plan.blocks as TimeBlock[];
   const targets = (plan.key_metric_targets || {}) as Record<string, number>;
   const q = params.question.toLowerCase();
+
+  // Block-specific follow-up: "tell me about block 3" or "block 3"
+  const blockNumMatch = q.match(/block\s*(\d+)/);
+  if (blockNumMatch) {
+    const idx = parseInt(blockNumMatch[1], 10) - 1;
+    if (idx >= 0 && idx < blocks.length) {
+      const b = blocks[idx];
+      const dur = blockDurationMin(b);
+      const lines = [
+        `Block ${idx + 1}: ${b.label}`,
+        `⏰ ${formatBlockTime(b.start_time)} → ${formatBlockTime(b.end_time)} (${dur} min)`,
+        `Type: ${b.type}${b.workstream ? ` — ${b.workstream}` : ''}`,
+      ];
+      if (b.reasoning) lines.push(`Why: ${b.reasoning}`);
+      if (b.goals?.length) lines.push(`Goals: ${b.goals.join('; ')}`);
+      if (b.linked_accounts?.length) lines.push(`Accounts: ${b.linked_accounts.map(a => a.name).join(', ')}`);
+      return lines.join('\n');
+    }
+  }
 
   // Time blocks question
   if (q.includes('time block') || q.includes('schedule') || q.includes('blocks')) {
@@ -237,12 +317,12 @@ export async function queryDailyPlan(ctx: ToolContext, params: { question: strin
     return `🎯 Start with: ${first.label} at ${formatBlockTime(first.start_time)}\n→ ${first.goals?.[0] || first.reasoning}`;
   }
 
-  // Meeting question  
+  // Meeting question
   if (q.includes('meeting')) {
     const meetings = blocks.filter(b => b.type === 'meeting');
     return `${meetings.length} meetings today (${plan.meeting_load_hours || 0}h):\n${meetings.map(b => `• ${formatBlockTime(b.start_time)}–${formatBlockTime(b.end_time)}: ${b.label}`).join('\n')}`;
   }
 
-  // Default: return strategy + targets
+  // Default
   return `Strategy: ${plan.ai_reasoning || 'No strategy notes'}\nTargets: ${JSON.stringify(targets)}\nFocus hours: ${plan.focus_hours_available || 0}h, Meeting load: ${plan.meeting_load_hours || 0}h`;
 }
