@@ -29,5 +29,6 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
     strategy_performance: (params: { topic?: string }) => strategyPerformance(ctx, params),
     pipeline_impact: () => pipelineImpact(ctx),
     record_pipeline_outcome: (params: { insightId: string; outcomeType: string; opportunityId?: string; dealValue?: number; fromStage?: string; toStage?: string }) => recordPipelineEvent(ctx, params),
+    pipeline_forecast: () => pipelineForecast(ctx),
   };
 }
