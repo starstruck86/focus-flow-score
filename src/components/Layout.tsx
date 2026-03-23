@@ -179,18 +179,33 @@ export function Layout({ children }: { children: React.ReactNode }) {
       setDaveOpen(true);
     } catch (err: any) {
       console.error('[Dave] Failed to fetch session:', err);
-      if (err instanceof DaveSessionError && err.errorType === 'concurrency_limit') {
-        const waitSec = err.cooldownUntil ? Math.ceil((err.cooldownUntil - Date.now()) / 1000) : 30;
-        toast.error('Dave is at capacity', {
-          description: `ElevenLabs concurrency limit — try again in ${waitSec}s`,
-          duration: 6000,
-        });
-      } else if (err instanceof DaveSessionError && err.errorType === 'auth_failed') {
-        toast.error('Dave authentication failed', { description: err.message });
-      } else if (err instanceof DaveSessionError && err.errorType === 'agent_error') {
-        toast.error('Dave configuration issue', { description: err.message });
+      if (err instanceof DaveSessionError) {
+        switch (err.errorType) {
+          case 'concurrency_limit': {
+            const waitSec = err.cooldownUntil ? Math.ceil((err.cooldownUntil - Date.now()) / 1000) : 30;
+            toast.error('Dave is at capacity', {
+              description: `ElevenLabs concurrency limit — try again in ${waitSec}s`,
+              duration: 6000,
+            });
+            break;
+          }
+          case 'auth_failed':
+            toast.error('Sign in required', { description: err.message });
+            break;
+          case 'agent_error':
+            toast.error('Dave configuration issue', { description: err.message });
+            break;
+          default:
+            toast.error('Dave startup failed', { description: err.message || 'Token fetch returned an error. Check your connection and try again.' });
+        }
       } else {
-        toast.error('Could not start Dave', { description: err.message });
+        // Network errors, timeouts, etc.
+        const msg = err instanceof Error ? err.message : String(err);
+        const isNetwork = /fetch|network|timeout|timed out|aborted/i.test(msg);
+        toast.error(isNetwork ? 'Network error starting Dave' : 'Dave startup failed', {
+          description: msg || 'An unexpected error occurred. Please try again.',
+          duration: 5000,
+        });
       }
     }
   }, [getDaveSession, isFetchingDaveSession, daveBlockedByTab]);

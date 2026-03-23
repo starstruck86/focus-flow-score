@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 interface UseWakeWordOptions {
   onWake: () => void;
@@ -15,13 +16,20 @@ const WAKE_PHRASES = ['hey dave', 'ok dave', 'okay dave'];
 export function useWakeWord({ onWake, enabled }: UseWakeWordOptions) {
   const recognitionRef = useRef<any>(null);
   const onWakeRef = useRef(onWake);
+  const [lastError, setLastError] = useState<string | null>(null);
   onWakeRef.current = onWake;
 
   const isSupported = typeof window !== 'undefined' &&
     ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
 
   const startListening = useCallback(() => {
-    if (!isSupported || recognitionRef.current) return;
+    if (!isSupported) {
+      const msg = 'Speech recognition not supported in this browser';
+      console.warn('[WakeWord]', msg);
+      setLastError(msg);
+      return;
+    }
+    if (recognitionRef.current) return;
 
     const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
     const recognition = new SpeechRecognition();
@@ -35,10 +43,13 @@ export function useWakeWord({ onWake, enabled }: UseWakeWordOptions) {
         const transcript = event.results[i][0].transcript.toLowerCase().trim();
         if (WAKE_PHRASES.some(phrase => transcript.includes(phrase))) {
           console.log('[WakeWord] Wake phrase detected:', transcript);
-          // Stop listening before triggering to release mic
+          // Stop listening to release the mic for Dave
           recognition.stop();
           recognitionRef.current = null;
-          onWakeRef.current();
+          // Small delay to ensure mic is released before Dave tries to acquire it
+          setTimeout(() => {
+            onWakeRef.current();
+          }, 300);
           return;
         }
       }
@@ -50,27 +61,40 @@ export function useWakeWord({ onWake, enabled }: UseWakeWordOptions) {
         return;
       }
       console.warn('[WakeWord] Error:', event.error);
-      // On 'not-allowed', stop trying and notify user
       if (event.error === 'not-allowed') {
         recognition.stop();
         recognitionRef.current = null;
-        console.error('[WakeWord] Microphone permission denied. Allow microphone access for this site to use "Hey Dave".');
-      }
-      // 'audio-capture' means no mic available
-      if (event.error === 'audio-capture') {
+        const msg = 'Microphone permission denied — allow microphone access for "Hey Dave"';
+        setLastError(msg);
+        console.error('[WakeWord]', msg);
+        toast.error('Hey Dave unavailable', { description: 'Microphone permission denied. Enable it in browser settings.', duration: 6000 });
+      } else if (event.error === 'audio-capture') {
         recognition.stop();
         recognitionRef.current = null;
-        console.error('[WakeWord] No microphone found. Connect a microphone to use "Hey Dave".');
+        const msg = 'No microphone found — connect a microphone for "Hey Dave"';
+        setLastError(msg);
+        console.error('[WakeWord]', msg);
+        toast.error('Hey Dave unavailable', { description: 'No microphone detected on this device.', duration: 6000 });
+      } else if (event.error === 'service-not-allowed' || event.error === 'language-not-supported') {
+        recognition.stop();
+        recognitionRef.current = null;
+        const msg = `Speech recognition error: ${event.error}`;
+        setLastError(msg);
+        console.error('[WakeWord]', msg);
+      } else {
+        const msg = `Speech recognition error: ${event.error}`;
+        setLastError(msg);
+        console.error('[WakeWord]', msg);
       }
     };
 
     recognition.onend = () => {
-      // Auto-restart if still enabled
+      // Auto-restart if still enabled and ref is still set
       if (recognitionRef.current) {
         try {
           recognition.start();
         } catch {
-          // Already started
+          // Already started or disposed
         }
       }
     };
@@ -78,11 +102,14 @@ export function useWakeWord({ onWake, enabled }: UseWakeWordOptions) {
     try {
       recognition.start();
       recognitionRef.current = recognition;
+      setLastError(null);
       console.log('[WakeWord] Listening for wake phrase...');
     } catch (e: any) {
       const msg = e?.message || 'Unknown error starting speech recognition';
       console.error('[WakeWord] Failed to start:', msg);
+      setLastError(msg);
       recognitionRef.current = null;
+      toast.error('Hey Dave failed to start', { description: msg, duration: 5000 });
     }
   }, [isSupported]);
 
@@ -106,5 +133,5 @@ export function useWakeWord({ onWake, enabled }: UseWakeWordOptions) {
     return stopListening;
   }, [enabled, isSupported, startListening, stopListening]);
 
-  return { isSupported };
+  return { isSupported, lastError };
 }
