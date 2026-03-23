@@ -212,9 +212,9 @@ export function detectGaps(rates: PipelineRates, targets: PipelineTargets): GapI
 // ── Funnel diagnosis ────────────────────────────────────────────
 
 const STAGE_RECOMMENDATIONS: Record<FunnelStage, string> = {
-  dial_to_connect: 'Improve targeting or list quality — you're dialing but not reaching decision-makers. Try better contact data or timing.',
-  connect_to_meeting: 'Improve your opening pitch or value proposition — you're connecting but not converting to meetings. Sharpen your hook.',
-  meeting_to_opp: 'Improve discovery or qualification — meetings aren't converting to pipeline. Focus on uncovering pain and building urgency.',
+  dial_to_connect: 'Improve targeting or list quality. You may be dialing but not reaching decision-makers. Try better contact data or timing.',
+  connect_to_meeting: 'Improve your opening pitch or value proposition. Connects are not converting to meetings. Sharpen your hook.',
+  meeting_to_opp: 'Improve discovery or qualification. Meetings are not converting to pipeline. Focus on uncovering pain and building urgency.',
 };
 
 export function diagnoseFunnel(conversions: ConversionRates): FunnelDiagnosis | null {
