@@ -1,7 +1,6 @@
 /**
- * Dave tools for prospecting execution engine.
- * Gives Dave the ability to query the daily prospecting plan,
- * suggest next accounts, and guide prospecting workflow.
+ * Dave tools for step-driven prospecting execution engine.
+ * Surfaces cycle state, suggests next accounts, and guides step-by-step workflow.
  */
 import { supabase } from '@/integrations/supabase/client';
 import type { ToolContext, ToolMap } from '../toolTypes';
@@ -12,7 +11,6 @@ export function createProspectingTools(ctx: ToolContext): ToolMap {
       const userId = await ctx.getUserId();
       if (!userId) return 'Not authenticated';
 
-      // Gather live data for plan summary
       const [accountsRes, contactsRes, journalRes] = await Promise.all([
         supabase.from('accounts').select('id, name, created_at, tier, icp_fit_score, outreach_status, account_status')
           .eq('user_id', userId).order('created_at', { ascending: false }),
@@ -26,84 +24,101 @@ export function createProspectingTools(ctx: ToolContext): ToolMap {
       const journal = journalRes.data || [];
 
       const now = new Date();
-      const dayOfWeek = now.getDay();
+      const dow = now.getDay();
       const monday = new Date(now);
-      monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+      monday.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1));
       const mondayStr = monday.toISOString().split('T')[0];
 
-      const weekAccounts = accounts.filter(a => a.created_at >= mondayStr).length;
+      const weekAccts = accounts.filter(a => a.created_at >= mondayStr).length;
       const weekContacts = contacts.filter(c => c.created_at >= mondayStr).length;
-      const weekProspects = journal.filter(j => j.date >= mondayStr).reduce((s, j) => s + (j.prospects_added || 0), 0);
+      const weekCadences = journal.filter(j => j.date >= mondayStr).reduce((s, j) => s + (j.prospects_added || 0), 0);
       const weekCalls = journal.filter(j => j.date >= mondayStr).reduce((s, j) => s + (j.conversations || 0), 0);
-      const daysLeft = Math.max(1, 5 - Math.min(dayOfWeek === 0 ? 5 : dayOfWeek - 1, 5));
+      const daysLeft = Math.max(1, 5 - Math.min(dow === 0 ? 5 : dow - 1, 5));
 
-      return `Prospecting progress this week:\n` +
-        `• Accounts added: ${weekAccounts}/15 (need ${Math.max(0, Math.ceil((15 - weekAccounts) / daysLeft))}/day)\n` +
-        `• Contacts added: ${weekContacts}/30\n` +
-        `• Cadences launched: ${weekProspects}/10\n` +
-        `• Calls made: ${weekCalls}/50\n` +
-        `• ${daysLeft} selling days remaining\n` +
-        `Next step: ${weekAccounts === 0 ? 'Select your first target account' : weekContacts < weekAccounts * 2 ? 'Find contacts for your newest accounts' : 'Launch cadences for prepped accounts'}`;
+      // Determine where user is in the prospecting cycle
+      const needsAccounts = weekAccts < 3;
+      const needsContacts = weekContacts < weekAccts * 2;
+      const needsCadences = weekCadences < weekAccts;
+
+      let nextStep: string;
+      if (needsAccounts) nextStep = 'Select your next target account — say "suggest next accounts" for top picks';
+      else if (needsContacts) nextStep = 'Find contacts for your newest accounts — say "discover contacts for [account]"';
+      else if (needsCadences) nextStep = 'Launch cadences for prepped accounts — start outreach today';
+      else nextStep = 'Make calls — connect with contacts already in cadence';
+
+      return `Prospecting this week:\n` +
+        `• Accounts: ${weekAccts}/15 (${Math.ceil(Math.max(0, 15 - weekAccts) / daysLeft)}/day needed)\n` +
+        `• Contacts: ${weekContacts}/30\n` +
+        `• Cadences: ${weekCadences}/10\n` +
+        `• Calls: ${weekCalls}/50\n` +
+        `• ${daysLeft} days left\n\n` +
+        `Next step: ${nextStep}`;
     },
 
     suggest_next_accounts: async () => {
       const userId = await ctx.getUserId();
       if (!userId) return 'Not authenticated';
 
-      const { data: accounts } = await supabase
+      // First check prepped/researching accounts
+      const { data: ready } = await supabase
         .from('accounts')
-        .select('name, tier, icp_fit_score, outreach_status, account_status, priority_score')
+        .select('name, tier, icp_fit_score, account_status, priority_score')
         .eq('user_id', userId)
         .in('account_status', ['researching', 'prepped'])
         .order('priority_score', { ascending: false })
         .limit(5);
 
-      if (!accounts?.length) {
-        // Check ICP sourced accounts
-        const { data: sourced } = await supabase
-          .from('icp_sourced_accounts')
-          .select('company_name, fit_score, icp_fit_reason, trigger_signal')
-          .eq('user_id', userId)
-          .eq('status', 'new')
-          .order('fit_score', { ascending: false })
-          .limit(5);
-
-        if (sourced?.length) {
-          return `No prepped accounts ready. Here are ICP-fit sourced leads to promote:\n` +
-            sourced.map((s, i) => `${i + 1}. ${s.company_name} (fit: ${s.fit_score}%) — ${s.icp_fit_reason}${s.trigger_signal ? ` | Signal: ${s.trigger_signal}` : ''}`).join('\n');
-        }
-        return 'No target accounts ready. Consider running ICP Account Sourcing to find new prospects.';
+      if (ready?.length) {
+        return `Top accounts ready to work:\n` +
+          ready.map((a, i) =>
+            `${i + 1}. ${a.name} — Tier ${a.tier || '?'}, ICP ${a.icp_fit_score || '?'}%`
+          ).join('\n') +
+          `\n\nPick one and say "I'm working on [account name]" to start the cycle.`;
       }
 
-      return `Recommended next accounts to work:\n` +
-        accounts.map((a, i) =>
-          `${i + 1}. ${a.name} — Tier ${a.tier || '?'}, ICP ${a.icp_fit_score || '?'}%, Status: ${a.account_status || 'unknown'}`
-        ).join('\n') +
-        `\nPick 1-3 to start prospecting.`;
+      // Fallback to ICP sourced
+      const { data: sourced } = await supabase
+        .from('icp_sourced_accounts')
+        .select('company_name, fit_score, icp_fit_reason, trigger_signal')
+        .eq('user_id', userId).eq('status', 'new')
+        .order('fit_score', { ascending: false }).limit(5);
+
+      if (sourced?.length) {
+        return `No prepped accounts. Promote from sourced leads:\n` +
+          sourced.map((s, i) => `${i + 1}. ${s.company_name} (${s.fit_score}% fit) — ${s.icp_fit_reason}`).join('\n');
+      }
+
+      return 'No accounts ready. Run ICP sourcing first, or add an account manually.';
     },
 
     prospecting_next_step: async () => {
       const userId = await ctx.getUserId();
       if (!userId) return 'Not authenticated';
 
-      // Check what's in progress
+      // Find the most recently updated account to determine where user is
       const { data: recent } = await supabase
         .from('accounts')
         .select('name, account_status, outreach_status, contact_status')
         .eq('user_id', userId)
         .order('updated_at', { ascending: false })
-        .limit(3);
+        .limit(1);
 
-      if (!recent?.length) return 'Start by selecting a target account. Say "suggest next accounts" for recommendations.';
+      if (!recent?.length) return 'Step 1: Select a target account. Say "suggest next accounts" for recommendations.';
 
-      const top = recent[0];
-      if (top.contact_status === 'not-started') {
-        return `Your most recent account "${top.name}" needs contacts. Say "discover contacts for ${top.name}" to find key people.`;
+      const acct = recent[0];
+
+      // Walk through the step sequence
+      if (acct.contact_status === 'not-started' || !acct.contact_status) {
+        return `Step 2 for "${acct.name}": Find contacts. Say "discover contacts for ${acct.name}" to identify 2-3 decision-makers.`;
       }
-      if (top.outreach_status === 'not-started') {
-        return `"${top.name}" has contacts but no outreach started. Time to launch a cadence or make a call.`;
+      if (acct.outreach_status === 'not-started' || !acct.outreach_status) {
+        return `Step 5 for "${acct.name}": Launch a cadence. Update the outreach status or say "update outreach status for ${acct.name} to in-progress".`;
       }
-      return `"${top.name}" is in ${top.outreach_status} status. Next: check response rates or follow up. Say "account status for ${top.name}" for details.`;
+      if (acct.outreach_status === 'in-progress' || acct.outreach_status === 'working') {
+        return `Step 6 for "${acct.name}": Make a call. Connect with a contact and log the touch. Then start a new cycle with another account.`;
+      }
+
+      return `"${acct.name}" is in ${acct.outreach_status} status. Start a new prospecting cycle — say "suggest next accounts".`;
     },
   };
 }

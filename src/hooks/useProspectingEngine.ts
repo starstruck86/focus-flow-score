@@ -1,32 +1,38 @@
 /**
  * Hook: useProspectingEngine
- * Connects the prospecting plan generator to live store + calendar data.
+ * Step-driven execution system. Persists cycle state to localStorage.
+ * Always surfaces ONE next action. Never a blank state.
  */
-import { useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useStore } from '@/store/useStore';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import {
   generateDailyPlan,
   buildWeeklyProgress,
   getTierStatus,
+  resolveNextAction,
+  completeStepInState,
+  emptyState,
   PROSPECTING_STEPS,
-  type DailyActuals,
-  type DailyProspectingPlan,
+  type ProspectingState,
   type ProspectingStepId,
 } from '@/lib/prospectingEngine';
 
-const STORAGE_KEY = 'prospecting-actuals';
+const STORAGE_KEY = 'prospecting-state';
 
-function loadActuals(date: string): DailyActuals {
+function loadState(date: string): ProspectingState {
   try {
     const raw = localStorage.getItem(`${STORAGE_KEY}-${date}`);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed.date === date) return parsed;
+    }
   } catch {}
-  return { accountsWorked: 0, contactsAdded: 0, cadencesLaunched: 0, callsMade: 0, stepsCompleted: [] };
+  return emptyState(date);
 }
 
-function saveActuals(date: string, actuals: DailyActuals) {
-  localStorage.setItem(`${STORAGE_KEY}-${date}`, JSON.stringify(actuals));
+function saveState(state: ProspectingState) {
+  localStorage.setItem(`${STORAGE_KEY}-${state.date}`, JSON.stringify(state));
 }
 
 export function useProspectingEngine() {
@@ -34,8 +40,9 @@ export function useProspectingEngine() {
   const { data: calendarEvents } = useCalendarEvents();
   const today = new Date().toISOString().split('T')[0];
 
-  const actuals = useMemo(() => loadActuals(today), [today]);
+  const [state, setState] = useState<ProspectingState>(() => loadState(today));
 
+  // Meeting hours
   const meetingHoursToday = useMemo(() => {
     if (!calendarEvents?.length) return 0;
     const todayStart = new Date(today + 'T00:00:00');
@@ -51,63 +58,56 @@ export function useProspectingEngine() {
     return totalMinutes / 60;
   }, [calendarEvents, today]);
 
-  const contactRows = useMemo(() =>
-    contacts.map(c => ({ created_at: c.createdAt })),
-    [contacts]
-  );
-
-  const journalEntries = useMemo(() =>
-    days.map(d => ({
+  // Weekly progress from store data
+  const weeklyProgress = useMemo(() => {
+    const accountRows = accounts.map(a => ({ createdAt: a.createdAt }));
+    const contactRows = contacts.map(c => ({ created_at: c.createdAt }));
+    const journalEntries = days.map(d => ({
       date: d.date,
       prospects_added: d.rawInputs.prospectsAddedToCadence,
       conversations: d.rawInputs.coldCallsWithConversations,
-    })),
-    [days]
-  );
+    }));
+    return buildWeeklyProgress(accountRows, contactRows, journalEntries);
+  }, [accounts, contacts, days]);
 
-  const accountRows = useMemo(() =>
-    accounts.map(a => ({ createdAt: a.createdAt })),
-    [accounts]
-  );
-
-  const weeklyProgress = useMemo(
-    () => buildWeeklyProgress(accountRows, contactRows, journalEntries),
-    [accountRows, contactRows, journalEntries]
-  );
-
+  // Daily plan (tier targets)
   const plan = useMemo(
-    () => generateDailyPlan(weeklyProgress, meetingHoursToday, actuals),
-    [weeklyProgress, meetingHoursToday, actuals]
+    () => generateDailyPlan(weeklyProgress, meetingHoursToday),
+    [weeklyProgress, meetingHoursToday],
   );
 
+  // Tier status
   const tierStatus = useMemo(
-    () => getTierStatus(actuals, plan),
-    [actuals, plan]
+    () => getTierStatus(state.actuals, plan),
+    [state.actuals, plan],
   );
 
-  const completeStep = (stepId: ProspectingStepId) => {
-    const updated = { ...actuals };
-    if (!updated.stepsCompleted.includes(stepId)) {
-      updated.stepsCompleted = [...updated.stepsCompleted, stepId];
-    }
-    // Auto-increment relevant counters
-    if (stepId === 'select_account') updated.accountsWorked++;
-    if (stepId === 'find_contacts') updated.contactsAdded += 2;
-    if (stepId === 'launch_cadence') updated.cadencesLaunched++;
-    saveActuals(today, updated);
-  };
+  // THE next action — always resolves to something
+  const nextAction = useMemo(() => resolveNextAction(state), [state]);
 
-  const incrementMetric = (metric: keyof Omit<DailyActuals, 'stepsCompleted'>, amount = 1) => {
-    const updated = { ...actuals, [metric]: (actuals[metric] as number) + amount };
-    saveActuals(today, updated);
-  };
+  // Complete current step
+  const completeStep = useCallback((stepId: ProspectingStepId, accountName?: string) => {
+    setState(prev => {
+      const next = completeStepInState(prev, stepId, accountName);
+      saveState(next);
+      return next;
+    });
+  }, []);
+
+  // Current cycle info
+  const currentCycle = state.cycles[state.cycles.length - 1] || null;
+  const cyclesCompleted = state.cycles.filter(
+    c => PROSPECTING_STEPS.every(s => c.completedSteps.includes(s.id))
+  ).length;
 
   return {
+    state,
     plan,
-    actuals,
     tierStatus,
+    nextAction,
     completeStep,
-    incrementMetric,
+    currentCycle,
+    cyclesCompleted,
     steps: PROSPECTING_STEPS,
   };
 }

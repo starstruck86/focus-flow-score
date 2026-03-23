@@ -1,26 +1,76 @@
 /**
- * Prospecting Execution Engine — deterministic daily plan generator.
- * Breaks new-logo prospecting into atomic steps with floor/target/stretch tiers.
- * Adapts daily expectations based on meeting load and weekly progress.
+ * Prospecting Execution Engine — step-driven execution system.
+ * Guides user through atomic steps in prospecting cycles.
+ * Each cycle: select_account → find_contacts → enrich → add_to_system → launch_cadence → make_call
+ * Completing steps auto-increments target metrics. Never a blank state.
  */
 
 // ── Data Model ──────────────────────────────────────────────────
 
-export type ProspectingStepId = 'select_account' | 'find_contacts' | 'enrich' | 'add_to_system' | 'launch_cadence';
+export type ProspectingStepId =
+  | 'select_account'
+  | 'find_contacts'
+  | 'enrich'
+  | 'add_to_system'
+  | 'launch_cadence'
+  | 'make_call';
 
 export interface ProspectingStep {
   id: ProspectingStepId;
   label: string;
+  verb: string;            // action verb for the "Next Action" card
   description: string;
+  daveHint: string;        // what Dave can help with
+  estimateMinutes: number; // <5 always
   order: number;
+  /** Which target metric this step increments */
+  incrementsMetric: keyof DailyTargetActuals | null;
+  incrementAmount: number;
 }
 
 export const PROSPECTING_STEPS: ProspectingStep[] = [
-  { id: 'select_account', label: 'Select Account', description: 'Choose a high-fit target account', order: 1 },
-  { id: 'find_contacts', label: 'Find Contacts', description: 'Identify 2-3 key contacts', order: 2 },
-  { id: 'enrich', label: 'Enrich', description: 'Research account & contacts', order: 3 },
-  { id: 'add_to_system', label: 'Add to CRM', description: 'Create account + contacts in system', order: 4 },
-  { id: 'launch_cadence', label: 'Launch Cadence', description: 'Start outreach sequence', order: 5 },
+  {
+    id: 'select_account', label: 'Select Account', verb: 'Pick your next target account',
+    description: 'Choose a high-fit account from your pipeline or sourced leads',
+    daveHint: 'Say "suggest next accounts" for AI-ranked picks',
+    estimateMinutes: 2, order: 0,
+    incrementsMetric: 'accountsWorked', incrementAmount: 1,
+  },
+  {
+    id: 'find_contacts', label: 'Find Contacts', verb: 'Identify 2–3 key contacts',
+    description: 'Find decision-makers and champions at the selected account',
+    daveHint: 'Say "discover contacts for [account]" to auto-find',
+    estimateMinutes: 3, order: 1,
+    incrementsMetric: 'contactsAdded', incrementAmount: 2,
+  },
+  {
+    id: 'enrich', label: 'Enrich', verb: 'Research the account & contacts',
+    description: 'Review enrichment data, check tech stack, recent news',
+    daveHint: 'Say "enrich [account]" for automated research',
+    estimateMinutes: 3, order: 2,
+    incrementsMetric: null, incrementAmount: 0,
+  },
+  {
+    id: 'add_to_system', label: 'Add to CRM', verb: 'Save account + contacts to system',
+    description: 'Ensure account and contacts exist in your CRM',
+    daveHint: 'Say "create account [name]" or "add contact [name]"',
+    estimateMinutes: 2, order: 3,
+    incrementsMetric: null, incrementAmount: 0,
+  },
+  {
+    id: 'launch_cadence', label: 'Launch Cadence', verb: 'Start the outreach sequence',
+    description: 'Begin multi-touch cadence for this account',
+    daveHint: 'Say "update outreach status for [account]"',
+    estimateMinutes: 2, order: 4,
+    incrementsMetric: 'cadencesLaunched', incrementAmount: 1,
+  },
+  {
+    id: 'make_call', label: 'Make Call', verb: 'Call a contact at this account',
+    description: 'Make a prospecting call to advance the conversation',
+    daveHint: 'Say "log touch for [account]" after the call',
+    estimateMinutes: 5, order: 5,
+    incrementsMetric: 'callsMade', incrementAmount: 1,
+  },
 ];
 
 export type TierLevel = 'floor' | 'target' | 'stretch';
@@ -32,17 +82,31 @@ export interface DailyTierTargets {
   callsToMake: number;
 }
 
-export interface DailyProspectingPlan {
-  date: string;
-  floor: DailyTierTargets;
-  target: DailyTierTargets;
-  stretch: DailyTierTargets;
-  adjustmentReason: string | null;
-  riskAlerts: string[];
-  nextAction: ProspectingStep;
-  meetingLoadHours: number;
-  weeklyProgress: WeeklyProgress;
+// ── Cycle State ─────────────────────────────────────────────────
+
+/** One pass through the step sequence for a single account */
+export interface ProspectingCycle {
+  cycleIndex: number;       // 0-based: which account cycle we're on today
+  accountName?: string;     // set after select_account
+  completedSteps: ProspectingStepId[];
+  startedAt: string;        // ISO timestamp
 }
+
+export interface DailyTargetActuals {
+  accountsWorked: number;
+  contactsAdded: number;
+  cadencesLaunched: number;
+  callsMade: number;
+}
+
+export interface ProspectingState {
+  date: string;
+  cycles: ProspectingCycle[];
+  actuals: DailyTargetActuals;
+  totalStepsCompleted: number;
+}
+
+// ── Weekly Progress (unchanged) ─────────────────────────────────
 
 export interface WeeklyProgress {
   accountsAdded: number;
@@ -57,150 +121,241 @@ export interface WeeklyProgress {
   weeklyCallTarget: number;
 }
 
-export interface DailyActuals {
-  accountsWorked: number;
-  contactsAdded: number;
-  cadencesLaunched: number;
-  callsMade: number;
-  stepsCompleted: ProspectingStepId[];
+// ── Daily Plan ──────────────────────────────────────────────────
+
+export interface DailyProspectingPlan {
+  date: string;
+  floor: DailyTierTargets;
+  target: DailyTierTargets;
+  stretch: DailyTierTargets;
+  adjustmentReason: string | null;
+  riskAlerts: string[];
+  meetingLoadHours: number;
+  weeklyProgress: WeeklyProgress;
+}
+
+// ── Step Engine Output ──────────────────────────────────────────
+
+export interface NextActionResult {
+  step: ProspectingStep;
+  cycleIndex: number;
+  accountName?: string;
+  contextMessage: string; // e.g. "Account 2 of 3 — find contacts"
 }
 
 // ── Constants ───────────────────────────────────────────────────
 
 const BASE_WEEKLY = {
-  accounts: 15,    // 3/day × 5 days
-  contacts: 30,    // 6/day (2 per account)
-  cadences: 10,    // 2/day
-  calls: 50,       // 10/day
+  accounts: 15,
+  contacts: 30,
+  cadences: 10,
+  calls: 50,
 };
 
 const TIER_MULTIPLIERS = {
-  floor: 0.6,      // ~60% of target (always achievable)
+  floor: 0.6,
   target: 1.0,
-  stretch: 1.4,    // 140% of target
+  stretch: 1.4,
 };
 
-// ── Plan Generator ──────────────────────────────────────────────
+// ── Step Engine ─────────────────────────────────────────────────
+
+/**
+ * Determines the ONE next action. Never returns null — always has a step.
+ * After completing a full cycle, starts a new one automatically.
+ */
+export function resolveNextAction(state: ProspectingState): NextActionResult {
+  const currentCycle = state.cycles[state.cycles.length - 1];
+
+  // No cycles started yet → start first cycle
+  if (!currentCycle) {
+    return {
+      step: PROSPECTING_STEPS[0],
+      cycleIndex: 0,
+      contextMessage: 'Start your first prospecting cycle — pick an account',
+    };
+  }
+
+  // Find first incomplete step in current cycle
+  for (const step of PROSPECTING_STEPS) {
+    if (!currentCycle.completedSteps.includes(step.id)) {
+      const accountLabel = currentCycle.accountName || `Account ${currentCycle.cycleIndex + 1}`;
+      return {
+        step,
+        cycleIndex: currentCycle.cycleIndex,
+        accountName: currentCycle.accountName,
+        contextMessage: step.id === 'select_account'
+          ? `Cycle ${currentCycle.cycleIndex + 1} — pick your next account`
+          : `${accountLabel} — ${step.verb}`,
+      };
+    }
+  }
+
+  // Current cycle complete → suggest starting next cycle
+  const nextIndex = currentCycle.cycleIndex + 1;
+  return {
+    step: PROSPECTING_STEPS[0],
+    cycleIndex: nextIndex,
+    contextMessage: `Cycle ${nextIndex + 1} — pick your next account 🔥`,
+  };
+}
+
+/**
+ * Complete a step in the current cycle. Returns updated state.
+ * Auto-increments the relevant target metric.
+ */
+export function completeStepInState(
+  state: ProspectingState,
+  stepId: ProspectingStepId,
+  accountName?: string,
+): ProspectingState {
+  const step = PROSPECTING_STEPS.find(s => s.id === stepId)!;
+  let cycles = [...state.cycles];
+  let actuals = { ...state.actuals };
+
+  // Ensure we have a current cycle
+  if (cycles.length === 0) {
+    cycles.push({
+      cycleIndex: 0,
+      completedSteps: [],
+      startedAt: new Date().toISOString(),
+      accountName,
+    });
+  }
+
+  const currentIdx = cycles.length - 1;
+  const current = { ...cycles[currentIdx] };
+
+  // Mark step done
+  if (!current.completedSteps.includes(stepId)) {
+    current.completedSteps = [...current.completedSteps, stepId];
+  }
+
+  // Set account name if this is the select step
+  if (stepId === 'select_account' && accountName) {
+    current.accountName = accountName;
+  }
+
+  cycles[currentIdx] = current;
+
+  // Auto-increment metric
+  if (step.incrementsMetric && step.incrementAmount > 0) {
+    actuals = {
+      ...actuals,
+      [step.incrementsMetric]: (actuals[step.incrementsMetric] as number) + step.incrementAmount,
+    };
+  }
+
+  // If cycle is fully complete, start next cycle skeleton
+  const allDone = PROSPECTING_STEPS.every(s => current.completedSteps.includes(s.id));
+  if (allDone) {
+    cycles.push({
+      cycleIndex: current.cycleIndex + 1,
+      completedSteps: [],
+      startedAt: new Date().toISOString(),
+    });
+  }
+
+  return {
+    ...state,
+    cycles,
+    actuals,
+    totalStepsCompleted: state.totalStepsCompleted + 1,
+  };
+}
+
+// ── Plan Generator (kept for tier tracking) ─────────────────────
 
 export function generateDailyPlan(
   weeklyProgress: WeeklyProgress,
   meetingHoursToday: number,
-  todayActuals: DailyActuals,
 ): DailyProspectingPlan {
   const today = new Date().toISOString().split('T')[0];
-  const { daysRemaining } = weeklyProgress;
-  const effectiveDays = Math.max(1, daysRemaining);
+  const effectiveDays = Math.max(1, weeklyProgress.daysRemaining);
 
-  // Calculate remaining weekly work
-  const remainingAccounts = Math.max(0, weeklyProgress.weeklyAccountTarget - weeklyProgress.accountsAdded);
-  const remainingContacts = Math.max(0, weeklyProgress.weeklyContactTarget - weeklyProgress.contactsAdded);
-  const remainingCadences = Math.max(0, weeklyProgress.weeklyCadenceTarget - weeklyProgress.cadencesLaunched);
-  const remainingCalls = Math.max(0, weeklyProgress.weeklyCallTarget - weeklyProgress.callsMade);
+  const remaining = (weekly: number, done: number) => Math.max(0, weekly - done);
+  const base = (rem: number) => Math.ceil(rem / effectiveDays);
 
-  // Base daily = remaining / days left
-  const baseDailyAccounts = Math.ceil(remainingAccounts / effectiveDays);
-  const baseDailyContacts = Math.ceil(remainingContacts / effectiveDays);
-  const baseDailyCadences = Math.ceil(remainingCadences / effectiveDays);
-  const baseDailyCalls = Math.ceil(remainingCalls / effectiveDays);
+  const rAccounts = remaining(weeklyProgress.weeklyAccountTarget, weeklyProgress.accountsAdded);
+  const rContacts = remaining(weeklyProgress.weeklyContactTarget, weeklyProgress.contactsAdded);
+  const rCadences = remaining(weeklyProgress.weeklyCadenceTarget, weeklyProgress.cadencesLaunched);
+  const rCalls = remaining(weeklyProgress.weeklyCallTarget, weeklyProgress.callsMade);
 
-  // Meeting load adjustment: reduce by 15% per hour of meetings beyond 2
-  const excessMeetingHours = Math.max(0, meetingHoursToday - 2);
-  const loadFactor = Math.max(0.4, 1 - excessMeetingHours * 0.15);
+  // Meeting load: reduce by 15% per hour beyond 2
+  const excess = Math.max(0, meetingHoursToday - 2);
+  const loadFactor = Math.max(0.4, 1 - excess * 0.15);
 
   let adjustmentReason: string | null = null;
   if (loadFactor < 1) {
-    adjustmentReason = `Reduced targets by ${Math.round((1 - loadFactor) * 100)}% — ${meetingHoursToday.toFixed(1)}h of meetings today`;
+    adjustmentReason = `Reduced ${Math.round((1 - loadFactor) * 100)}% — ${meetingHoursToday.toFixed(1)}h meetings`;
   }
 
-  // Behind-pace boost: if we've used 60%+ of days but done <40% of work, boost 20%
-  const daysPctUsed = weeklyProgress.daysCompleted / (weeklyProgress.daysCompleted + daysRemaining);
+  // Behind-pace boost
+  const daysPctUsed = weeklyProgress.daysCompleted / (weeklyProgress.daysCompleted + weeklyProgress.daysRemaining);
   const workPctDone = weeklyProgress.weeklyAccountTarget > 0
-    ? weeklyProgress.accountsAdded / weeklyProgress.weeklyAccountTarget
-    : 1;
+    ? weeklyProgress.accountsAdded / weeklyProgress.weeklyAccountTarget : 1;
   let paceFactor = 1;
   if (daysPctUsed > 0.6 && workPctDone < 0.4) {
     paceFactor = 1.2;
-    adjustmentReason = (adjustmentReason ? adjustmentReason + '. ' : '') + 'Behind pace — daily targets increased 20%';
+    adjustmentReason = (adjustmentReason ? adjustmentReason + '. ' : '') + 'Behind pace +20%';
   }
 
-  const adjusted = (base: number) => Math.max(1, Math.round(base * loadFactor * paceFactor));
+  const adj = (b: number) => Math.max(1, Math.round(base(b) * loadFactor * paceFactor));
 
   const targetTier: DailyTierTargets = {
-    accountsToWork: adjusted(baseDailyAccounts),
-    contactsToAdd: adjusted(baseDailyContacts),
-    cadencesToLaunch: adjusted(baseDailyCadences),
-    callsToMake: adjusted(baseDailyCalls),
+    accountsToWork: adj(rAccounts),
+    contactsToAdd: adj(rContacts),
+    cadencesToLaunch: adj(rCadences),
+    callsToMake: adj(rCalls),
   };
 
-  const applyMultiplier = (tier: DailyTierTargets, mult: number): DailyTierTargets => ({
-    accountsToWork: Math.max(1, Math.round(tier.accountsToWork * mult)),
-    contactsToAdd: Math.max(1, Math.round(tier.contactsToAdd * mult)),
-    cadencesToLaunch: Math.max(1, Math.round(tier.cadencesToLaunch * mult)),
-    callsToMake: Math.max(1, Math.round(tier.callsToMake * mult)),
+  const mult = (t: DailyTierTargets, m: number): DailyTierTargets => ({
+    accountsToWork: Math.max(1, Math.round(t.accountsToWork * m)),
+    contactsToAdd: Math.max(1, Math.round(t.contactsToAdd * m)),
+    cadencesToLaunch: Math.max(1, Math.round(t.cadencesToLaunch * m)),
+    callsToMake: Math.max(1, Math.round(t.callsToMake * m)),
   });
 
   // Risk alerts
   const riskAlerts: string[] = [];
-  if (remainingAccounts > effectiveDays * 5) {
-    riskAlerts.push(`${remainingAccounts} accounts still needed this week — risk of missing target`);
-  }
-  if (weeklyProgress.cadencesLaunched === 0 && weeklyProgress.daysCompleted >= 2) {
-    riskAlerts.push('No cadences launched yet — pipeline generation at risk');
-  }
-  if (todayActuals.accountsWorked === 0 && new Date().getHours() >= 14) {
-    riskAlerts.push('No accounts worked today — start with 1 account now');
-  }
-
-  // Determine next step based on actuals
-  const nextAction = determineNextStep(todayActuals);
+  if (rAccounts > effectiveDays * 5) riskAlerts.push(`${rAccounts} accounts left — risk of missing target`);
+  if (weeklyProgress.cadencesLaunched === 0 && weeklyProgress.daysCompleted >= 2) riskAlerts.push('No cadences yet — pipeline at risk');
 
   return {
     date: today,
-    floor: applyMultiplier(targetTier, TIER_MULTIPLIERS.floor),
+    floor: mult(targetTier, TIER_MULTIPLIERS.floor),
     target: targetTier,
-    stretch: applyMultiplier(targetTier, TIER_MULTIPLIERS.stretch),
+    stretch: mult(targetTier, TIER_MULTIPLIERS.stretch),
     adjustmentReason,
     riskAlerts,
-    nextAction,
     meetingLoadHours: meetingHoursToday,
     weeklyProgress,
   };
 }
 
-function determineNextStep(actuals: DailyActuals): ProspectingStep {
-  // Always present the smallest achievable next action
-  if (actuals.accountsWorked === 0) return PROSPECTING_STEPS[0]; // select_account
-  if (actuals.contactsAdded === 0) return PROSPECTING_STEPS[1]; // find_contacts
-  if (!actuals.stepsCompleted.includes('enrich')) return PROSPECTING_STEPS[2]; // enrich
-  if (!actuals.stepsCompleted.includes('add_to_system')) return PROSPECTING_STEPS[3]; // add_to_system
-  if (actuals.cadencesLaunched === 0) return PROSPECTING_STEPS[4]; // launch_cadence
-  // If all done for one cycle, restart with next account
-  return PROSPECTING_STEPS[0];
-}
+// ── Tier Status ─────────────────────────────────────────────────
 
-// ── Progress Tracking ───────────────────────────────────────────
-
-export function getTierStatus(actuals: DailyActuals, plan: DailyProspectingPlan): {
+export function getTierStatus(actuals: DailyTargetActuals, plan: DailyProspectingPlan): {
   currentTier: TierLevel | 'none';
-  accountPct: number;
-  contactPct: number;
-  cadencePct: number;
-  callPct: number;
+  overallPct: number;
 } {
-  const accountPct = plan.target.accountsToWork > 0 ? actuals.accountsWorked / plan.target.accountsToWork : 1;
-  const contactPct = plan.target.contactsToAdd > 0 ? actuals.contactsAdded / plan.target.contactsToAdd : 1;
-  const cadencePct = plan.target.cadencesToLaunch > 0 ? actuals.cadencesLaunched / plan.target.cadencesToLaunch : 1;
-  const callPct = plan.target.callsToMake > 0 ? actuals.callsMade / plan.target.callsToMake : 1;
-
-  const avgPct = (accountPct + contactPct + cadencePct + callPct) / 4;
+  const pct = (a: number, t: number) => t > 0 ? a / t : 1;
+  const avg = (
+    pct(actuals.accountsWorked, plan.target.accountsToWork) +
+    pct(actuals.contactsAdded, plan.target.contactsToAdd) +
+    pct(actuals.cadencesLaunched, plan.target.cadencesToLaunch) +
+    pct(actuals.callsMade, plan.target.callsToMake)
+  ) / 4;
 
   let currentTier: TierLevel | 'none' = 'none';
-  if (avgPct >= TIER_MULTIPLIERS.stretch) currentTier = 'stretch';
-  else if (avgPct >= TIER_MULTIPLIERS.target) currentTier = 'target';
-  else if (avgPct >= TIER_MULTIPLIERS.floor) currentTier = 'floor';
+  if (avg >= TIER_MULTIPLIERS.stretch) currentTier = 'stretch';
+  else if (avg >= TIER_MULTIPLIERS.target) currentTier = 'target';
+  else if (avg >= TIER_MULTIPLIERS.floor) currentTier = 'floor';
 
-  return { currentTier, accountPct, contactPct, cadencePct, callPct };
+  return { currentTier, overallPct: avg };
 }
+
+// ── Weekly Progress Builder ─────────────────────────────────────
 
 export function buildWeeklyProgress(
   accounts: Array<{ createdAt: string }>,
@@ -208,32 +363,39 @@ export function buildWeeklyProgress(
   journalEntries: Array<{ date: string; prospects_added: number; conversations: number }>,
 ): WeeklyProgress {
   const now = new Date();
-  const dayOfWeek = now.getDay();
+  const dow = now.getDay();
   const monday = new Date(now);
-  monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+  monday.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1));
   monday.setHours(0, 0, 0, 0);
   const mondayStr = monday.toISOString().split('T')[0];
 
   const weekAccounts = accounts.filter(a => a.createdAt >= mondayStr).length;
   const weekContacts = contacts.filter(c => c.created_at >= mondayStr).length;
-
   const weekJournal = journalEntries.filter(j => j.date >= mondayStr);
-  const weekProspects = weekJournal.reduce((s, j) => s + (j.prospects_added || 0), 0);
-  const weekCalls = weekJournal.reduce((s, j) => s + (j.conversations || 0), 0);
 
-  const daysCompleted = Math.min(dayOfWeek === 0 ? 5 : dayOfWeek - 1, 5);
-  const daysRemaining = Math.max(1, 5 - daysCompleted);
+  const daysCompleted = Math.min(dow === 0 ? 5 : dow - 1, 5);
 
   return {
     accountsAdded: weekAccounts,
     contactsAdded: weekContacts,
-    cadencesLaunched: weekProspects,
-    callsMade: weekCalls,
+    cadencesLaunched: weekJournal.reduce((s, j) => s + (j.prospects_added || 0), 0),
+    callsMade: weekJournal.reduce((s, j) => s + (j.conversations || 0), 0),
     daysCompleted,
-    daysRemaining,
+    daysRemaining: Math.max(1, 5 - daysCompleted),
     weeklyAccountTarget: BASE_WEEKLY.accounts,
     weeklyContactTarget: BASE_WEEKLY.contacts,
     weeklyCadenceTarget: BASE_WEEKLY.cadences,
     weeklyCallTarget: BASE_WEEKLY.calls,
+  };
+}
+
+// ── Empty state factory ─────────────────────────────────────────
+
+export function emptyState(date: string): ProspectingState {
+  return {
+    date,
+    cycles: [],
+    actuals: { accountsWorked: 0, contactsAdded: 0, cadencesLaunched: 0, callsMade: 0 },
+    totalStepsCompleted: 0,
   };
 }
