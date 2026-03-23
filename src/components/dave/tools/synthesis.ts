@@ -6,7 +6,7 @@ import { behaviorSummary, energyMatch } from './synthesis/behaviorEnergy';
 import { generateContent, meetingBrief } from './synthesis/contentBrief';
 import { executionNext, confirmExecution, blockExecution, skipExecution, snoozeExecution } from './synthesis/executionBinding';
 import { whoopPerformanceInsights, whoopTodayContext } from './synthesis/whoopInsights';
-import { dailyGamePlanWalkthrough, queryDailyPlan } from './synthesis/dailyGamePlan';
+import { dailyGamePlanSummary, dailyGamePlanDetailed, dailyGamePlanWalkthrough, queryDailyPlan } from './synthesis/dailyGamePlan';
 
 export function createSynthesisTools(ctx: ToolContext, allTools: Record<string, any>): ToolMap {
   return {
@@ -34,7 +34,8 @@ export function createSynthesisTools(ctx: ToolContext, allTools: Record<string, 
     snooze_execution: (params: { actionId: string; minutes?: number }) => snoozeExecution(params),
     whoop_performance_insights: () => whoopPerformanceInsights(ctx),
     whoop_today_context: () => whoopTodayContext(ctx),
-    daily_game_plan: () => dailyGamePlanWalkthrough(ctx),
+    daily_game_plan: () => dailyGamePlanSummary(ctx),
+    daily_game_plan_detailed: () => dailyGamePlanDetailed(ctx),
     query_daily_plan: (params: { question: string }) => queryDailyPlan(ctx, params),
   };
 }

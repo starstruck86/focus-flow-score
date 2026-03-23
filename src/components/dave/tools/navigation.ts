@@ -24,8 +24,13 @@ export function createNavigationTools(ctx: ToolContext): ToolMap {
     },
 
     daily_briefing: async () => {
-      const { dailyGamePlanWalkthrough } = await import('./synthesis/dailyGamePlan');
-      return dailyGamePlanWalkthrough(ctx);
+      const { dailyGamePlanSummary } = await import('./synthesis/dailyGamePlan');
+      return dailyGamePlanSummary(ctx);
+    },
+
+    daily_briefing_detailed: async () => {
+      const { dailyGamePlanDetailed } = await import('./synthesis/dailyGamePlan');
+      return dailyGamePlanDetailed(ctx);
     },
 
     start_roleplay: (params: { call_type?: string; difficulty?: number; industry?: string }) => {
