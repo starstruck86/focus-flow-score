@@ -1151,6 +1151,21 @@ export default function Settings() {
                       }}
                     />
                  </div>
+
+                 {/* PWA Install Hint */}
+                 <div className="metric-card bg-muted/30">
+                   <div className="flex items-center gap-3">
+                     <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                       <Download className="h-5 w-5 text-primary" />
+                     </div>
+                     <div className="flex-1">
+                       <h3 className="font-semibold text-sm">Install to Home Screen</h3>
+                       <p className="text-xs text-muted-foreground mt-0.5">
+                         For fastest Dave access: tap <span className="font-medium">Share</span> → <span className="font-medium">Add to Home Screen</span> in Safari, or the install icon in Chrome's address bar.
+                       </p>
+                     </div>
+                   </div>
+                 </div>
                </div>
              )}
            </TabsContent>

@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { GlobalFAB } from '@/components/fab';
 import { GlobalSearch } from '@/components/GlobalSearch';
 import { TerritoryCopilot } from '@/components/TerritoryCopilot';
-import { VoiceCommandButton } from '@/components/VoiceCommandButton';
+import { DaveMicFAB } from '@/components/DaveMicFAB';
 import { DaveConversationMode } from '@/components/DaveConversationMode';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { BackToToday } from '@/components/BackToToday';
@@ -294,7 +294,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
         <GlobalSearch className="flex-1 min-w-0" />
         <div className="flex items-center gap-1 shrink-0">
-          <VoiceCommandButton data-testid="dave-voice-btn" onOpenDave={handleOpenDave} disabled={isFetchingDaveSession} />
           <TerritoryCopilot />
           {!isReviewMode && (
             <Tooltip>
@@ -327,6 +326,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <BottomNav />
       <BackToToday />
       <GlobalFAB position="bottom-right" />
+
+      {/* Persistent Dave mic FAB — always visible, one tap to start */}
+      <DaveMicFAB
+        onTap={handleOpenDave}
+        isLoading={isFetchingDaveSession}
+        isActive={daveOpen}
+      />
 
       {/* Dave Tap Prompt for Siri Shortcut opens */}
       <AnimatePresence>
