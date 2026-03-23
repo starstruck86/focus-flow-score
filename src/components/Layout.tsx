@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { GlobalFAB } from '@/components/fab';
 import { GlobalSearch } from '@/components/GlobalSearch';
 import { TerritoryCopilot } from '@/components/TerritoryCopilot';
-import { VoiceCommandButton } from '@/components/VoiceCommandButton';
+import { DaveMicFAB } from '@/components/DaveMicFAB';
 import { DaveConversationMode } from '@/components/DaveConversationMode';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { BackToToday } from '@/components/BackToToday';
