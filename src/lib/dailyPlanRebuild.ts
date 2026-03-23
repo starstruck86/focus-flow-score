@@ -46,6 +46,9 @@ function durationMinutes(block: RebuildPlanBlock) {
   return Math.max(0, toMinutes(block.end_time) - toMinutes(block.start_time));
 }
 
+const DEFAULT_WORK_START_MINUTES = 9 * 60;
+const DEFAULT_WORK_END_MINUTES = 17 * 60;
+
 export function getVisiblePlanBlocks<T>(blocks: T[] | null | undefined, dismissed: Set<number>) {
   return (blocks || []).filter((_, index) => !dismissed.has(index));
 }
@@ -101,8 +104,10 @@ export function buildLocalFallbackPlan(input: {
     .filter((block) => !dismissedKeys.has(meetingKey(block)))
     .sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
 
-  const dayStart = allBlocks.length ? toMinutes(allBlocks[0].start_time) : 9 * 60;
-  const dayEnd = allBlocks.length ? toMinutes(allBlocks[allBlocks.length - 1].end_time) : 17 * 60 + 30;
+  const firstBlockStart = allBlocks.length ? toMinutes(allBlocks[0].start_time) : DEFAULT_WORK_START_MINUTES;
+  const lastBlockEnd = allBlocks.length ? toMinutes(allBlocks[allBlocks.length - 1].end_time) : DEFAULT_WORK_END_MINUTES;
+  const dayStart = Math.min(firstBlockStart, DEFAULT_WORK_START_MINUTES);
+  const dayEnd = Math.max(lastBlockEnd, DEFAULT_WORK_END_MINUTES);
 
   const blocks: RebuildFallbackBlock[] = [...lockedMeetings];
   const gaps: Array<{ start: number; end: number }> = [];
