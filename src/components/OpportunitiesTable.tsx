@@ -1153,22 +1153,43 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             </TableCell>
           )}
           <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-            <EditableDatePicker
-              value={opp.closeDate}
-              onChange={(v) => updateOpportunity(opp.id, { closeDate: v })}
-              placeholder="—"
-              compact
-              className="w-28"
-            />
-          </TableCell>
-          <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-            <DisplaySelectCell
-              value={opp.stage || 'none'}
-              options={STAGE_SELECT_OPTIONS}
-              onChange={(v) => updateOpportunity(opp.id, { stage: (v === 'none' ? '' : v) as OpportunityStage })}
-            />
-          </TableCell>
-          <NextStepTextCell opp={opp} />
+              <EditableDatePicker
+                value={opp.closeDate}
+                onChange={(v) => updateOpportunity(opp.id, { closeDate: v })}
+                placeholder="—"
+                compact
+                className="w-28"
+              />
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <EditableDatePicker
+                value={opp.nextStepDate}
+                onChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
+                placeholder="—"
+                compact
+                className={cn(
+                  'w-28',
+                  opp.nextStepDate && isPast(parseISO(opp.nextStepDate)) && !isToday(parseISO(opp.nextStepDate)) && '[&_button]:border-status-red'
+                )}
+              />
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <EditableDatePicker
+                value={opp.lastTouchDate}
+                onChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
+                placeholder="—"
+                compact
+                className="w-28"
+              />
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <DisplaySelectCell
+                value={opp.stage || 'none'}
+                options={STAGE_SELECT_OPTIONS}
+                onChange={(v) => updateOpportunity(opp.id, { stage: (v === 'none' ? '' : v) as OpportunityStage })}
+              />
+            </TableCell>
+            <NextStepTextCell opp={opp} />
             {summaryCustomFields.map(field => (
               <TableCell key={field.id} className="align-top py-2" onClick={(e) => e.stopPropagation()}>
                 <MetricFieldCell field={field} recordId={opp.id} />
