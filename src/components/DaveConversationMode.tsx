@@ -380,10 +380,10 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
     onClose();
   }, [conversation, onClose]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const isDesktop = navigator.maxTouchPoints === 0;
     const hasMicStream = !!preacquiredMicStream;
-    // Auto-start on desktop (always) or mobile when mic was preacquired during tap gesture
+    // Auto-start on desktop (always) or mobile when mic permission was secured during the initial tap.
     if ((isDesktop || hasMicStream) && !startingRef.current) {
       setNeedsTap(false);
       startConversation();
