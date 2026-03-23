@@ -2571,6 +2571,57 @@ export type Database = {
         }
         Relationships: []
       }
+      strategy_outcomes: {
+        Row: {
+          account_type: string | null
+          context_metadata: Json | null
+          created_at: string
+          deal_stage: string | null
+          event_type: string
+          execution_state: string | null
+          id: string
+          insight_id: string
+          insight_maturity: string
+          insight_text: string
+          outcome: string | null
+          score_at_recommendation: number | null
+          user_feedback: string | null
+          user_id: string
+        }
+        Insert: {
+          account_type?: string | null
+          context_metadata?: Json | null
+          created_at?: string
+          deal_stage?: string | null
+          event_type?: string
+          execution_state?: string | null
+          id?: string
+          insight_id: string
+          insight_maturity?: string
+          insight_text: string
+          outcome?: string | null
+          score_at_recommendation?: number | null
+          user_feedback?: string | null
+          user_id: string
+        }
+        Update: {
+          account_type?: string | null
+          context_metadata?: Json | null
+          created_at?: string
+          deal_stage?: string | null
+          event_type?: string
+          execution_state?: string | null
+          id?: string
+          insight_id?: string
+          insight_maturity?: string
+          insight_text?: string
+          outcome?: string | null
+          score_at_recommendation?: number | null
+          user_feedback?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       streak_events: {
         Row: {
           check_in_method: string | null
