@@ -40,6 +40,10 @@ import {
   formatAggregatedImpact,
   type StrategyPipelineImpact,
 } from '@/data/pipeline-impact';
+import {
+  getPipelineForecast,
+  formatForecast,
+} from '@/data/pipeline-forecast';
 
 // ── Helpers ─────────────────────────────────────────────────────
 

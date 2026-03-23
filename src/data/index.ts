@@ -11,3 +11,4 @@ export * from './resource-links';
 export * from './intelligence';
 export * from './strategy-outcomes';
 export * from './pipeline-impact';
+export * from './pipeline-forecast';
