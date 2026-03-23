@@ -9,6 +9,7 @@ import { whoopPerformanceInsights, whoopTodayContext } from './synthesis/whoopIn
 import { dailyGamePlanSummary, dailyGamePlanDetailed, dailyGamePlanWalkthrough, queryDailyPlan, newLogoTargetsTool } from './synthesis/dailyGamePlan';
 import { queryOpportunities, queryRenewals, queryTasks, queryQuota, queryPipeline, queryDashboard } from './synthesis/walkthroughs';
 import { compareTrends } from './synthesis/trendComparison';
+import { recastToday } from './synthesis/recastToday';
 
 export function createSynthesisTools(ctx: ToolContext, allTools: Record<string, any>): ToolMap {
   return {
