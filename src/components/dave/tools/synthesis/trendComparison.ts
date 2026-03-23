@@ -71,6 +71,24 @@ export async function compareTrends(ctx: ToolContext, params: { question?: strin
   return detail ? buildDetailedTrend(result) : buildSummaryTrend(result);
 }
 
+// ── Confidence-aware language ────────────────────────────────────
+
+function confidenceQualifier(level: ConfidenceLevel): string {
+  switch (level) {
+    case 'high': return '';
+    case 'moderate': return 'It looks like ';
+    case 'low': return 'Early signal — ';
+  }
+}
+
+function confidenceNote(level: ConfidenceLevel): string {
+  switch (level) {
+    case 'high': return '';
+    case 'moderate': return ' (based on a moderate sample — worth watching)';
+    case 'low': return ' (small sample size — monitor before acting)';
+  }
+}
+
 // ── Interpretation & response formatting ────────────────────────
 
 function comparisonModeNote(result: ComparisonResult): string {
