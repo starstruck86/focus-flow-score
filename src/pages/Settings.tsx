@@ -1138,14 +1138,15 @@ export default function Settings() {
                        <p className="text-sm text-muted-foreground">Summon Dave hands-free using voice</p>
                      </div>
                    </div>
-                   <Switch
-                     checked={localStorage.getItem('wake-word-enabled') === 'true'}
-                     onCheckedChange={(checked) => {
-                       localStorage.setItem('wake-word-enabled', String(checked));
-                       toast.success(checked ? 'Wake word enabled — say "Hey Dave"' : 'Wake word disabled');
-                       window.dispatchEvent(new Event('storage'));
-                     }}
-                   />
+                    <Switch
+                      checked={wakeWordOn}
+                      onCheckedChange={(checked) => {
+                        localStorage.setItem('wake-word-enabled', String(checked));
+                        setWakeWordOn(checked);
+                        toast.success(checked ? 'Wake word enabled — say "Hey Dave"' : 'Wake word disabled');
+                        window.dispatchEvent(new CustomEvent('wake-word-changed', { detail: checked }));
+                      }}
+                    />
                  </div>
                </div>
              )}
