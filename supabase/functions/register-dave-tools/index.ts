@@ -175,6 +175,9 @@ const DAVE_TOOLS: ToolDef[] = [
   { name: "kill_switch", description: "Identify low-value or stale deals that should be deprioritized or closed lost. Helps free up focus for higher-ROI work.", parameters: {} },
   { name: "behavior_summary", description: "Show the user's action completion patterns — what gets done vs ignored, broken down by entity type. Helps understand execution habits.", parameters: {} },
   { name: "energy_match", description: "Recommend task types based on current energy level. Uses WHOOP biometrics if available, otherwise journal self-report.", parameters: {} },
+
+  // ── Recast Engine ────────────────────────────────────────────
+  { name: "recast_today", description: "Re-optimize the remaining blocks of today's Daily Game Plan based on current progress and time remaining. Use when the user says 'recast my day', 'what should I do now', 'I'm behind', or asks to reprioritize the rest of their day. Returns adjusted blocks, what was dropped/compressed, and the next suggested action.", parameters: {} },
 ];
 
 serve(async (req) => {
