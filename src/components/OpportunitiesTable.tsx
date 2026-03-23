@@ -914,10 +914,6 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 <OpportunityDetailsField
                   tabTarget={oppTabTarget}
                   opportunityId={opp.id}
-                  nextStepDate={opp.nextStepDate}
-                  onNextStepDateChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
-                  lastTouchDate={opp.lastTouchDate}
-                  onLastTouchDateChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
                   notes={opp.notes}
                   onNotesChange={(v) => updateOpportunity(opp.id, { notes: v })}
                   isRenewal={renewalsOnly}
