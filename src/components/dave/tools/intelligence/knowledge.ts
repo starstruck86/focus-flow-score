@@ -33,6 +33,13 @@ import {
   getUserPerformanceMap,
   type StrategyPerformance,
 } from '@/data/strategy-outcomes';
+import {
+  getUserPipelineImpact,
+  computePipelineImpact,
+  formatPipelineImpact,
+  formatAggregatedImpact,
+  type StrategyPipelineImpact,
+} from '@/data/pipeline-impact';
 
 // ── Helpers ─────────────────────────────────────────────────────
 
