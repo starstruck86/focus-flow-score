@@ -244,11 +244,12 @@ export function formatAggregatedImpact(agg: AggregatedPipelineImpact): string {
   lines.push(`Opportunities created: **${agg.totalOpportunities}**`);
   lines.push(`Stage progressions: **${agg.totalProgressions}**`);
   lines.push(`Pipeline influenced: **$${Math.round(agg.totalPipelineValue / 1000)}k**`);
+  lines.push(`Weighted impact score: **${agg.totalWeightedScore.toFixed(1)}**`);
 
   if (agg.topStrategies.length) {
-    lines.push('\n**Top strategies by impact:**');
+    lines.push('\n**Top strategies by weighted impact:**');
     for (const s of agg.topStrategies.slice(0, 5)) {
-      lines.push(`  → \`${s.insightId.slice(0, 12)}…\` — ${formatPipelineImpact(s)}`);
+      lines.push(`  → \`${s.insightId.slice(0, 12)}…\` (score ${s.weightedScore.toFixed(1)}) — ${formatPipelineImpact(s)}`);
     }
   }
 
