@@ -503,11 +503,14 @@ function buildSummaryRenewals(renewals: any[], totalArr: number, timeLabel: stri
 }
 
 function buildDetailedRenewals(renewals: any[], totalArr: number, timeLabel: string): string {
-  const sentences: string[] = [];
-  sentences.push(`Let me walk through your ${renewals.length} open renewals${timeLabel}, totaling ${dollars(totalArr)}.`);
+  const prioritized = renewals.map(r => ({ ...r, _priority: scoreRenewalPriority(r) }));
+  prioritized.sort((a, b) => b._priority.urgencyScore - a._priority.urgencyScore);
 
-  for (let i = 0; i < renewals.length; i++) {
-    const r = renewals[i];
+  const sentences: string[] = [];
+  sentences.push(`Let me walk through your ${renewals.length} open renewals${timeLabel}, totaling ${dollars(totalArr)}. Starting with the ones that need attention most.`);
+
+  for (let i = 0; i < prioritized.length; i++) {
+    const r = prioritized[i];
     const trans = i < transitions.length ? transitions[i] : 'Then, ';
     let line = `${trans}${r.account_name}, ${dollars(Number(r.arr || 0))}`;
     if (r.renewal_stage) line += ` in ${r.renewal_stage}`;
@@ -515,27 +518,25 @@ function buildDetailedRenewals(renewals: any[], totalArr: number, timeLabel: str
     line += '.';
     sentences.push(line);
 
-    // Days until due
     if (r.renewal_due) {
       const days = daysFromNow(r.renewal_due);
       if (days < 0) sentences.push(`This one is ${Math.abs(days)} days overdue.`);
       else if (days <= 14) sentences.push(`Only ${days} days out, so this needs focus.`);
     }
 
-    // Health / risk
     if (r.health_status === 'red' || r.churn_risk === 'high') {
       sentences.push('This is flagged as at-risk — worth a proactive check-in.');
     } else if (r.churn_risk === 'medium') {
       sentences.push('Moderate risk on this one — keep monitoring.');
     }
 
-    // Next step
     if (r.next_step) {
       sentences.push(`Next step here is to ${r.next_step.charAt(0).toLowerCase()}${r.next_step.slice(1).replace(/\.$/, '')}.`);
     }
   }
 
-  sentences.push(`That covers all ${renewals.length}. Ask me about any specific renewal to dig deeper.`);
+  const top = prioritized[0]._priority;
+  sentences.push(`Bottom line — ${top.name} is your top priority. ${top.nextStep}.`);
   return sentences.join(' ');
 }
 
