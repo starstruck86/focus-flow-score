@@ -562,7 +562,7 @@ Also provide an overall "day_strategy" (2-3 sentences: how today fits into the w
                       start_time: { type: "string", description: "HH:MM in 24h format" },
                       end_time: { type: "string", description: "HH:MM in 24h format" },
                       label: { type: "string" },
-                      type: { type: "string", enum: ["prospecting", "meeting", "research", "admin", "break", "pipeline", "prep"] },
+                      type: { type: "string", enum: ["prospecting", "meeting", "research", "admin", "break", "pipeline", "prep", "build"] },
                       workstream: { type: "string", enum: ["new_logo", "renewal", "general"], description: "Which workstream this block belongs to" },
                       goals: { type: "array", items: { type: "string" } },
                       reasoning: { type: "string" },
