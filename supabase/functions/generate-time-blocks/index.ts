@@ -440,7 +440,7 @@ CRITICAL RULES:
 7. If feedback says past suggestions were unrealistic, SIGNIFICANTLY dial back goals
 8. DO NOT schedule an EOD wrap-up or journal block. The user handles reflection during their morning check-in the next day.
 9. DO NOT schedule lunch breaks, mid-morning breaks, or mid-afternoon breaks. Every available minute should be productive.
-10. NAME SPECIFIC ACCOUNTS in Prep and Call Blitz block goals (from prospecting list only)
+10. NAME SPECIFIC ACCOUNTS in Prep, Build, and Call Blitz block goals (from prospecting list only)
 11. PERSONAL/FAMILY blocks are NON-NEGOTIABLE — the user has children (Quinn, Emmett). School drop-offs, pickups, and activities MUST be respected.
 12. If screenshot-confirmed meetings differ from calendar DB, TRUST the screenshot.
 13. CALENDAR MEETINGS ARE FIXED ANCHORS. Do NOT generate your own meeting blocks — they are provided as locked blocks and merged automatically.
