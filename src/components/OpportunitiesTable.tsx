@@ -855,6 +855,18 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               />
             </TableCell>
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <EditableDatePicker
+                value={opp.nextStepDate}
+                onChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
+                placeholder="—"
+                compact
+                className={cn(
+                  'w-28',
+                  opp.nextStepDate && isPast(parseISO(opp.nextStepDate)) && !isToday(parseISO(opp.nextStepDate)) && '[&_button]:border-status-red'
+                )}
+              />
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <span className={cn("text-[10px] font-medium", lastTouchColor)}>
                 {lastTouchDays === null ? 'Never' : `${lastTouchDays}d ago`}
               </span>
@@ -902,10 +914,6 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 <OpportunityDetailsField
                   tabTarget={oppTabTarget}
                   opportunityId={opp.id}
-                  nextStepDate={opp.nextStepDate}
-                  onNextStepDateChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
-                  lastTouchDate={opp.lastTouchDate}
-                  onLastTouchDateChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
                   notes={opp.notes}
                   onNotesChange={(v) => updateOpportunity(opp.id, { notes: v })}
                   isRenewal={renewalsOnly}
@@ -992,6 +1000,27 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               />
             </TableCell>
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <EditableDatePicker
+                value={opp.nextStepDate}
+                onChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
+                placeholder="—"
+                compact
+                className={cn(
+                  'w-28',
+                  opp.nextStepDate && isPast(parseISO(opp.nextStepDate)) && !isToday(parseISO(opp.nextStepDate)) && '[&_button]:border-status-red'
+                )}
+              />
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <EditableDatePicker
+                value={opp.lastTouchDate}
+                onChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
+                placeholder="—"
+                compact
+                className="w-28"
+              />
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
               <DisplaySelectCell
                 value={opp.stage || 'none'}
                 options={STAGE_SELECT_OPTIONS}
@@ -1026,6 +1055,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             <TableCell className="align-top py-3 text-right font-mono text-sm font-semibold">
               {totalValue !== 0 ? formatCurrency(totalValue) : <span className="text-muted-foreground">—</span>}
             </TableCell>
+            <NextStepTextCell opp={opp} />
             {summaryCustomFields.map(field => (
               <TableCell key={field.id} className="align-top py-2" onClick={(e) => e.stopPropagation()}>
                 <MetricFieldCell field={field} recordId={opp.id} />
@@ -1068,10 +1098,6 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                 <OpportunityDetailsField
                   tabTarget={oppTabTarget}
                   opportunityId={opp.id}
-                  nextStepDate={opp.nextStepDate}
-                  onNextStepDateChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
-                  lastTouchDate={opp.lastTouchDate}
-                  onLastTouchDateChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
                   notes={opp.notes}
                   onNotesChange={(v) => updateOpportunity(opp.id, { notes: v })}
                   isRenewal={true}
@@ -1153,22 +1179,43 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
             </TableCell>
           )}
           <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-            <EditableDatePicker
-              value={opp.closeDate}
-              onChange={(v) => updateOpportunity(opp.id, { closeDate: v })}
-              placeholder="—"
-              compact
-              className="w-28"
-            />
-          </TableCell>
-          <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-            <DisplaySelectCell
-              value={opp.stage || 'none'}
-              options={STAGE_SELECT_OPTIONS}
-              onChange={(v) => updateOpportunity(opp.id, { stage: (v === 'none' ? '' : v) as OpportunityStage })}
-            />
-          </TableCell>
-          <NextStepTextCell opp={opp} />
+              <EditableDatePicker
+                value={opp.closeDate}
+                onChange={(v) => updateOpportunity(opp.id, { closeDate: v })}
+                placeholder="—"
+                compact
+                className="w-28"
+              />
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <EditableDatePicker
+                value={opp.nextStepDate}
+                onChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
+                placeholder="—"
+                compact
+                className={cn(
+                  'w-28',
+                  opp.nextStepDate && isPast(parseISO(opp.nextStepDate)) && !isToday(parseISO(opp.nextStepDate)) && '[&_button]:border-status-red'
+                )}
+              />
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <EditableDatePicker
+                value={opp.lastTouchDate}
+                onChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
+                placeholder="—"
+                compact
+                className="w-28"
+              />
+            </TableCell>
+            <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
+              <DisplaySelectCell
+                value={opp.stage || 'none'}
+                options={STAGE_SELECT_OPTIONS}
+                onChange={(v) => updateOpportunity(opp.id, { stage: (v === 'none' ? '' : v) as OpportunityStage })}
+              />
+            </TableCell>
+            <NextStepTextCell opp={opp} />
             {summaryCustomFields.map(field => (
               <TableCell key={field.id} className="align-top py-2" onClick={(e) => e.stopPropagation()}>
                 <MetricFieldCell field={field} recordId={opp.id} />
@@ -1187,20 +1234,16 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
           <TableRow className="hover:bg-transparent border-b-2">
             <TableCell colSpan={99} className="pt-0 pb-3">
               <OpportunityDetailsField
-                tabTarget={oppTabTarget}
-                opportunityId={opp.id}
-                nextStepDate={opp.nextStepDate}
-                onNextStepDateChange={(v) => updateOpportunity(opp.id, { nextStepDate: v })}
-                lastTouchDate={opp.lastTouchDate}
-                onLastTouchDateChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
-                notes={opp.notes}
-                onNotesChange={(v) => updateOpportunity(opp.id, { notes: v })}
-                accountId={opp.accountId}
-                accountName={stakeholderAccountName}
-                accountWebsite={linkedAccount?.website}
-                accountIndustry={linkedAccount?.industry}
-                opportunityContext={`${opp.name} - ${opp.stage} - $${opp.arr || 0} ARR`}
-              />
+                  tabTarget={oppTabTarget}
+                  opportunityId={opp.id}
+                  notes={opp.notes}
+                  onNotesChange={(v) => updateOpportunity(opp.id, { notes: v })}
+                  accountId={opp.accountId}
+                  accountName={stakeholderAccountName}
+                  accountWebsite={linkedAccount?.website}
+                  accountIndustry={linkedAccount?.industry}
+                  opportunityContext={`${opp.name} - ${opp.stage} - $${opp.arr || 0} ARR`}
+                />
             </TableCell>
           </TableRow>
         )}
@@ -1541,6 +1584,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   <SortableHeader sortKey="stage" currentSort={sortConfig} onSort={handleSort} className="w-[10%]">Stage</SortableHeader>
                   <SortableHeader sortKey="arr" currentSort={sortConfig} onSort={handleSort} className="w-[9%]">ARR</SortableHeader>
                   <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[10%]">Close Date</SortableHeader>
+                  <TableHead className="w-[8%] text-xs">Next Step Date</TableHead>
                   <TableHead className="w-[7%] text-xs">Last Touch</TableHead>
                   <SortableHeader sortKey="nextStep" currentSort={sortConfig} onSort={handleSort} className="w-[18%]">Next Step</SortableHeader>
                   {summaryCustomFields.map(field => (
@@ -1560,20 +1604,23 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   <SortableHeader sortKey="status" currentSort={sortConfig} onSort={handleSort} className="w-[10%]">Status</SortableHeader>
                   <SortableHeader sortKey="name" currentSort={sortConfig} onSort={handleSort} className="w-[16%]">Opportunity</SortableHeader>
                   {showChurnRisk && <SortableHeader sortKey="churnRisk" currentSort={sortConfig} onSort={handleSort} className="w-[8%]">Churn Risk</SortableHeader>}
-                  <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[10%]">Close Date</SortableHeader>
-                  <SortableHeader sortKey="stage" currentSort={sortConfig} onSort={handleSort} className="w-[10%]">Stage</SortableHeader>
+                  <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[8%]">Close Date</SortableHeader>
+                  <TableHead className="w-[7%] text-xs">Next Step Date</TableHead>
+                  <TableHead className="w-[6%] text-xs">Last Touch</TableHead>
+                  <SortableHeader sortKey="stage" currentSort={sortConfig} onSort={handleSort} className="w-[8%]">Stage</SortableHeader>
                   <SortableHeader sortKey="priorContractArr" currentSort={sortConfig} onSort={handleSort} className="w-[8%]">Prior Contract</SortableHeader>
                   <SortableHeader sortKey="renewalArr" currentSort={sortConfig} onSort={handleSort} className="w-[8%]">Renewal ARR</SortableHeader>
                   <SortableHeader sortKey="oneTimeAmount" currentSort={sortConfig} onSort={handleSort} className="w-[7%]">One-Time</SortableHeader>
-                  <TableHead className="w-[7%] text-xs">Expansion</TableHead>
-                  <TableHead className="w-[7%] text-xs">Total Value</TableHead>
+                  <TableHead className="w-[6%] text-xs">Expansion</TableHead>
+                  <TableHead className="w-[6%] text-xs">Total Value</TableHead>
+                  <SortableHeader sortKey="nextStep" currentSort={sortConfig} onSort={handleSort} className="w-[12%]">Next Step Notes</SortableHeader>
                   {summaryCustomFields.map(field => (
                     <SortableHeader key={field.id} sortKey={`custom:${field.id}`} currentSort={sortConfig} onSort={handleSort}>{field.name}</SortableHeader>
                   ))}
                   <TableHead className="w-[4%]"></TableHead>
                 </>
               ) : (
-                <>
+              <>
                   <TableHead className="w-8">
                     <Checkbox
                       checked={bulkSelection.isAllSelected(activeFilteredOpps)}
@@ -1581,13 +1628,15 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                     />
                   </TableHead>
                   <TableHead className="w-8"></TableHead>
-                  <SortableHeader sortKey="status" currentSort={sortConfig} onSort={handleSort} className="w-[110px]">Status</SortableHeader>
-                  <SortableHeader sortKey="name" currentSort={sortConfig} onSort={handleSort} className="w-[180px]">Opportunity</SortableHeader>
-                  <SortableHeader sortKey="arr" currentSort={sortConfig} onSort={handleSort} className="w-[90px]">ARR</SortableHeader>
-                  {showChurnRisk && <SortableHeader sortKey="churnRisk" currentSort={sortConfig} onSort={handleSort} className="w-[90px]">Churn Risk</SortableHeader>}
-                  <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[110px]">Close Date</SortableHeader>
-                  <SortableHeader sortKey="stage" currentSort={sortConfig} onSort={handleSort} className="w-[90px]">Stage</SortableHeader>
-                  <SortableHeader sortKey="nextStep" currentSort={sortConfig} onSort={handleSort} className="w-[150px]">Next Step</SortableHeader>
+                  <SortableHeader sortKey="status" currentSort={sortConfig} onSort={handleSort} className="w-[100px]">Status</SortableHeader>
+                  <SortableHeader sortKey="name" currentSort={sortConfig} onSort={handleSort} className="w-[160px]">Opportunity</SortableHeader>
+                  <SortableHeader sortKey="arr" currentSort={sortConfig} onSort={handleSort} className="w-[80px]">ARR</SortableHeader>
+                  {showChurnRisk && <SortableHeader sortKey="churnRisk" currentSort={sortConfig} onSort={handleSort} className="w-[80px]">Churn Risk</SortableHeader>}
+                  <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[100px]">Close Date</SortableHeader>
+                  <TableHead className="w-[90px] text-xs">Next Step Date</TableHead>
+                  <TableHead className="w-[80px] text-xs">Last Touch</TableHead>
+                  <SortableHeader sortKey="stage" currentSort={sortConfig} onSort={handleSort} className="w-[80px]">Stage</SortableHeader>
+                  <SortableHeader sortKey="nextStep" currentSort={sortConfig} onSort={handleSort} className="w-[150px]">Next Step Notes</SortableHeader>
                   {summaryCustomFields.map(field => (
                     <SortableHeader key={field.id} sortKey={`custom:${field.id}`} currentSort={sortConfig} onSort={handleSort}>{field.name}</SortableHeader>
                   ))}
