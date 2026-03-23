@@ -143,6 +143,15 @@ export async function dailyGamePlanSummary(ctx: ToolContext): Promise<string> {
     }
   }
 
+  // Build block
+  const buildBlocks = blocks.filter(b => b.type === 'build');
+  if (buildBlocks.length) {
+    const b = buildBlocks[0];
+    const done = (b as any).build_steps?.filter((s: any) => s.done).length || 0;
+    const total = (b as any).build_steps?.length || 5;
+    sentences.push(`You've got a New Logo Build block at ${spokenTime(b.start_time)} — that's where you source ${targets.accounts_sourced || 3} fresh accounts, research them, find contacts, and add them to cadence.${done > 0 ? ` You've completed ${done} of ${total} steps so far.` : ''}`);
+  }
+
   // Rust buster
   const rust = blocks.filter(b => b.label.toLowerCase().includes('rust'));
   if (rust.length) {
