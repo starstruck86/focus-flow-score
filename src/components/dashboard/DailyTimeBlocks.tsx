@@ -607,6 +607,12 @@ export function DailyTimeBlocks() {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-semibold">Daily Game Plan</h3>
+                {plan.ai_reasoning?.startsWith('[FALLBACK]') && (
+                  <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-muted-foreground/40 bg-muted/50 text-muted-foreground gap-1">
+                    <Shield className="h-2.5 w-2.5" />
+                    Fallback Plan
+                  </Badge>
+                )}
                 {plan.recast_at && (
                   <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400 gap-1">
                     <RotateCcw className="h-2.5 w-2.5" />
