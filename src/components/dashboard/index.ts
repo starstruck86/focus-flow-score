@@ -36,3 +36,4 @@ export { DealVelocityWidget } from './DealVelocityWidget';
 export { RelationshipHealthCard } from './RelationshipHealthCard';
 export { AIInsightsNarrator } from './AIInsightsNarrator';
 export { CommandBrief } from './CommandBrief';
+export { ProspectingEngine } from './ProspectingEngine';

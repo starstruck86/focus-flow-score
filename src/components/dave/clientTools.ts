@@ -29,6 +29,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
     ...createPipelineTools(ctx),
     ...createIntelligenceTools(ctx),
     ...createIntegrationTools(ctx),
+    ...createProspectingTools(ctx),
   };
 
   // Synthesis tools need access to allTools for execution_brief composition
