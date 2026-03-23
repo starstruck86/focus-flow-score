@@ -25,6 +25,7 @@ import { DayTimeline } from '@/components/tasks/DayTimeline';
 import { ActivityRings } from '@/components/ActivityRings';
 import { GlobalWeekStrip } from '@/components/GlobalWeekStrip';
 import { useDaveContext, DaveSessionError, type DaveSessionData } from '@/hooks/useDaveContext';
+import { useGroupDrift } from '@/hooks/useGroupDrift';
 import { useVoiceReminders } from '@/hooks/useVoiceReminders';
 import { useWakeWord } from '@/hooks/useWakeWord';
 import { motion, AnimatePresence } from 'framer-motion';
