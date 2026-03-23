@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { formatTimeETLabel } from '@/lib/timeFormat';
 import type { ToolContext } from '../../toolTypes';
 
 export async function generateContent(ctx: ToolContext, params: { contentType: string; accountName?: string; opportunityName?: string; contactName?: string; customInstructions?: string }): Promise<string> {
@@ -87,7 +88,7 @@ export async function meetingBrief(ctx: ToolContext, params: { meetingTitle?: st
   ) as MatchedAccount | undefined;
 
   if (!matchedAccount) {
-    return `📅 Next meeting: "${target.title}" at ${new Date(target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n\nCouldn't match to an account — try "prep meeting for [account name]" for a full brief.`;
+    return `📅 Next meeting: "${target.title}" at ${formatTimeETLabel(target.start_time)}\n\nCouldn't match to an account — try "prep meeting for [account name]" for a full brief.`;
   }
 
   const { data: opps } = await supabase.from('opportunities').select('id, name, stage, arr, close_date, next_step').eq('user_id', userId).eq('account_id', matchedAccount.id).not('status', 'eq', 'closed-won').not('status', 'eq', 'closed-lost').limit(3);
@@ -105,7 +106,7 @@ export async function meetingBrief(ctx: ToolContext, params: { meetingTitle?: st
   const { data: transcripts } = await supabase.from('call_transcripts').select('summary, call_date').eq('user_id', userId).eq('account_id', matchedAccount.id).order('call_date', { ascending: false }).limit(1);
   const { data: contacts } = await supabase.from('contacts').select('name, title, buyer_role').eq('user_id', userId).eq('account_id', matchedAccount.id).limit(5);
 
-  const meetTime = new Date(target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const meetTime = formatTimeETLabel(target.start_time);
   const minsAway = Math.round((new Date(target.start_time).getTime() - Date.now()) / 60000);
 
   let brief = `📋 MEETING BRIEF: "${target.title}" at ${meetTime} (${minsAway > 0 ? `in ${minsAway} min` : 'now'})\n\n`;

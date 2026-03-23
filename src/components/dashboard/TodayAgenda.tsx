@@ -4,13 +4,11 @@ import { motion } from 'framer-motion';
 import { Calendar, Clock, MapPin, CheckSquare, Building2, Video, AlertTriangle, Zap } from 'lucide-react';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { useStore } from '@/store/useStore';
-import { format, parseISO, differenceInMinutes, isValid } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
+import { format, differenceInMinutes, isValid } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { toAppTime, APP_TIMEZONE } from '@/lib/timeFormat';
 import { Badge } from '@/components/ui/badge';
 import type { Task } from '@/types';
-
-const TIMEZONE = 'America/New_York';
 
 interface AgendaItem {
   type: 'meeting' | 'task';
@@ -34,7 +32,7 @@ export function TodayAgenda() {
   const { data: events, isLoading: eventsLoading } = useCalendarEvents();
   const { tasks, accounts } = useStore();
   
-  const now = toZonedTime(new Date(), TIMEZONE);
+  const now = toAppTime(new Date());
   const todayStr = format(now, 'yyyy-MM-dd');
 
   const agenda = useMemo(() => {
@@ -43,10 +41,10 @@ export function TodayAgenda() {
     // Add today's calendar events
     if (events) {
       events.forEach(event => {
-        const utcDate = parseISO(event.start_time);
+      const utcDate = new Date(event.start_time);
         if (!isValid(utcDate)) return;
 
-        const estDate = toZonedTime(utcDate, TIMEZONE);
+        const estDate = toAppTime(utcDate);
         if (!isValid(estDate)) return;
 
         const eventDateStr = format(estDate, 'yyyy-MM-dd');
