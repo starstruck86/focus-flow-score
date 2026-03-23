@@ -355,7 +355,69 @@ export function decideTopInsights(
 }
 
 /**
- * Format a decision result for Dave's output.
+ * Derive execution guidance from an insight's content and context.
+ */
+interface ExecutionGuidance {
+  expected_outcome: string;
+  execution_hints: string[];
+  when_not_to_use: string;
+}
+
+function deriveGuidance(insight: ExtractedInsight, context: DecisionContext): ExecutionGuidance {
+  const text = insight.text.toLowerCase();
+  const stage = (context.executionState || context.dealStage || '').toLowerCase();
+
+  // Expected outcome based on maturity + category
+  const outcomeByMaturity: Record<IdeaMaturity, string> = {
+    principle: 'High-probability improvement — proven across multiple contexts',
+    pattern: 'Likely positive impact — consistent results in similar situations',
+    trend: 'Directional advantage — early adopters seeing results',
+    experimental: 'Uncertain — worth testing in low-stakes situations first',
+  };
+  const expected_outcome = outcomeByMaturity[insight.idea_maturity];
+
+  // Execution hints: derive from the insight text + stage
+  const hints: string[] = [];
+  if (text.includes('question') || text.includes('ask') || text.includes('discovery')) {
+    hints.push('Open with this in the first 5 minutes of your next call');
+    hints.push('Pair with a follow-up that quantifies the impact');
+  } else if (text.includes('objection') || text.includes('concern') || text.includes('pushback')) {
+    hints.push('Acknowledge the concern before redirecting');
+    hints.push('Use a customer proof point to reinforce your response');
+  } else if (text.includes('close') || text.includes('commit') || text.includes('next step')) {
+    hints.push('Propose a specific next step with a date');
+    hints.push('Confirm mutual agreement before ending the conversation');
+  } else if (text.includes('email') || text.includes('outreach') || text.includes('cadence')) {
+    hints.push('Lead with relevance — reference a trigger event or pain point');
+    hints.push('Keep to 3 sentences max; end with a clear ask');
+  } else {
+    hints.push('Apply on your next relevant interaction');
+    hints.push('Track whether it changes the conversation dynamic');
+  }
+  if (stage === 'discovery') hints.push('Validate findings with a second stakeholder');
+  if (stage === 'negotiation') hints.push('Anchor before conceding on any terms');
+
+  // When not to use: derive from maturity + context
+  let when_not: string;
+  if (insight.idea_maturity === 'experimental') {
+    when_not = 'Avoid on high-stakes deals — test on lower-risk accounts first';
+  } else if (text.includes('cold') || text.includes('outbound')) {
+    when_not = 'Skip with warm inbound leads who already have context';
+  } else if (text.includes('executive') || text.includes('c-level')) {
+    when_not = 'Less effective with individual contributors or technical evaluators';
+  } else if (text.includes('discount') || text.includes('pricing')) {
+    when_not = 'Avoid early in the sales cycle before value is established';
+  } else if (stage === 'prospecting') {
+    when_not = 'Less effective once a deal is already in late-stage negotiation';
+  } else {
+    when_not = 'Reconsider if the buyer has already committed to a different approach';
+  }
+
+  return { expected_outcome, execution_hints: hints.slice(0, 3), when_not_to_use: when_not };
+}
+
+/**
+ * Format a decision result for Dave's output, including execution guidance.
  */
 export function formatDecision(result: DecisionResult, context: DecisionContext): string {
   const lines: string[] = [];
@@ -366,12 +428,22 @@ export function formatDecision(result: DecisionResult, context: DecisionContext)
   lines.push(`_Why:_ ${p.reasoning} (score ${Math.round(p.score * 100)}/100)`);
   lines.push(`_Classification:_ ${MATURITY_LABELS[p.insight.idea_maturity]} · Trust ${Math.round(p.breakdown.trust * 100)}% · Recency ${Math.round(p.breakdown.recency * 100)}%`);
 
+  // Execution guidance for primary
+  const guidance = deriveGuidance(p.insight, context);
+  lines.push(`_Expected outcome:_ ${guidance.expected_outcome}`);
+  lines.push('_How to apply:_');
+  for (const h of guidance.execution_hints) lines.push(`  → ${h}`);
+  lines.push(`_When not to use:_ ${guidance.when_not_to_use}`);
+
   if (result.alternative) {
     const a = result.alternative;
+    const altGuidance = deriveGuidance(a.insight, context);
     lines.push('');
     lines.push('💡 **Alternative**');
     lines.push(`${a.insight.text}`);
     lines.push(`_Why:_ ${a.reasoning} (score ${Math.round(a.score * 100)}/100)`);
+    lines.push(`_Expected outcome:_ ${altGuidance.expected_outcome}`);
+    lines.push(`_When not to use:_ ${altGuidance.when_not_to_use}`);
   }
 
   if (result.deprioritised.length) {
