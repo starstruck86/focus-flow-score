@@ -46,12 +46,19 @@ export interface GapItem {
   severity: 'on_track' | 'warning' | 'critical';
 }
 
+export interface BottleneckFix {
+  action: string;       // concise imperative
+  detail: string;       // 1-sentence why/how
+  example?: string;     // example phrasing or execution step
+}
+
 export interface FunnelDiagnosis {
   stage: FunnelStage;
   rate: number;
   benchmark: number;
   label: string;
-  recommendation: string;
+  fixes: BottleneckFix[];            // max 3
+  strategyTopics: string[];          // topics to query from strategy engine
 }
 
 export interface ForecastResult {
