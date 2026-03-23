@@ -46,6 +46,12 @@ const DEFAULT_RETRY: RetryOptions = { maxAttempts: 2, baseDelayMs: 1_500 };
 export async function authenticatedFetch(
   opts: AuthenticatedFetchOptions,
 ): Promise<Response> {
+  // ── Fail-fast drift guard ──
+  const drift = checkDriftBlock(opts.functionName);
+  if (drift) {
+    throw new Error(driftErrorMessage(drift));
+  }
+
   const traceId = opts.traceId ?? generateTraceId();
   const isFormData = opts.body instanceof FormData;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
