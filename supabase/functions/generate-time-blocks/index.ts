@@ -486,7 +486,7 @@ WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL):
   - Label like: "Email Blitz (~10 personalized emails)"
   - Can follow a Call Blitz (call first, then email the ones who didn't pick up) or stand alone
 - Schedule enough cycles to hit TODAY'S ADJUSTED dial + email target, NOT the raw daily average
-- Fill ALL available non-meeting time with prospecting activity (calls, emails, prep)
+- Fill ALL available non-meeting time with prospecting activity (calls, emails, prep, build)
 
 **ACTIVE NEW LOGO OPPORTUNITIES (deals already in pipeline):**
 - TASK-ORIENTED and MEETING-DRIVEN only — NOT research/cadence work
