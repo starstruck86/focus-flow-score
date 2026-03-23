@@ -441,3 +441,20 @@ export async function queryDailyPlan(ctx: ToolContext, params: { question: strin
   }
   return resp;
 }
+
+/**
+ * Dedicated tool: returns today's auto-selected new logo targets.
+ */
+export function newLogoTargetsTool(): string {
+  const today = todayInAppTz();
+  const selection = loadCachedSelection(today);
+  if (!selection || selection.accounts.length === 0) {
+    return 'No new logo targets have been selected for today yet. Head to the dashboard to generate your Daily Game Plan, or there may not be enough eligible accounts.';
+  }
+
+  const parts = selection.accounts.map(a =>
+    `Number ${a.rank}: ${a.name}. ${a.reason}. Suggested first step: ${a.suggestedFirstStep}.`
+  );
+
+  return `Today's 3 auto-selected new logo accounts are:\n\n${parts.join('\n\n')}\n\nThese were picked based on ICP fit, tier, buying signals, and freshness rotation. Want me to walk you through the first one?`;
+}
