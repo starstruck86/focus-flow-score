@@ -11,12 +11,16 @@ import {
   type ExtractedInsight,
   type TrendSignal,
   type IdeaMaturity,
+  type DecisionContext,
   bestAvailableDate,
   computeTrustScore,
   classifyMaturity,
   detectTrends,
   rankInsights,
   formatCitation,
+  decideTopInsights,
+  formatDecision,
+  MATURITY_LABELS,
 } from '@/lib/knowledgeIntelligence';
 import {
   getIntelligenceUnits,
