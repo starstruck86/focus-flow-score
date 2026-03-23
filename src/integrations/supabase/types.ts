@@ -946,6 +946,7 @@ export type Database = {
           key_metric_targets: Json | null
           meeting_load_hours: number | null
           plan_date: string
+          recast_at: string | null
           updated_at: string
           user_id: string
         }
@@ -963,6 +964,7 @@ export type Database = {
           key_metric_targets?: Json | null
           meeting_load_hours?: number | null
           plan_date: string
+          recast_at?: string | null
           updated_at?: string
           user_id: string
         }
@@ -980,6 +982,7 @@ export type Database = {
           key_metric_targets?: Json | null
           meeting_load_hours?: number | null
           plan_date?: string
+          recast_at?: string | null
           updated_at?: string
           user_id?: string
         }
