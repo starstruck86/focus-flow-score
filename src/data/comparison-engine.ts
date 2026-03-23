@@ -437,5 +437,6 @@ export async function runComparison(
     metrics,
     topImprovement: improvements[0] || null,
     topDecline: declines[0] || null,
+    overallConfidence: computeOverallConfidence(metrics),
   };
 }
