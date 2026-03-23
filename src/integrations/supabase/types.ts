@@ -1964,6 +1964,39 @@ export type Database = {
           },
         ]
       }
+      research_queue_events: {
+        Row: {
+          account_id: string
+          account_name: string
+          assigned_day: string
+          created_at: string
+          event_type: string
+          id: string
+          user_id: string
+          week_start: string
+        }
+        Insert: {
+          account_id: string
+          account_name: string
+          assigned_day: string
+          created_at?: string
+          event_type: string
+          id?: string
+          user_id: string
+          week_start: string
+        }
+        Update: {
+          account_id?: string
+          account_name?: string
+          assigned_day?: string
+          created_at?: string
+          event_type?: string
+          id?: string
+          user_id?: string
+          week_start?: string
+        }
+        Relationships: []
+      }
       resource_chunks: {
         Row: {
           actions: Json | null
@@ -3069,6 +3102,33 @@ export type Database = {
           updated_at?: string
           user_id?: string
           week_end?: string
+          week_start?: string
+        }
+        Relationships: []
+      }
+      weekly_research_queue: {
+        Row: {
+          assignments: Json
+          created_at: string
+          id: string
+          updated_at: string
+          user_id: string
+          week_start: string
+        }
+        Insert: {
+          assignments?: Json
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+          week_start: string
+        }
+        Update: {
+          assignments?: Json
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
           week_start?: string
         }
         Relationships: []
