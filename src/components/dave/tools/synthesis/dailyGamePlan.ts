@@ -359,7 +359,19 @@ export async function queryDailyPlan(ctx: ToolContext, params: { question: strin
     return resp;
   }
 
-  // Prospecting
+  // Prospecting / build
+  if (q.includes('build') || q.includes('sourc') || q.includes('cadence')) {
+    const buildBlocks = blocks.filter(b => b.type === 'build');
+    if (!buildBlocks.length) return 'There\'s no New Logo Build block in today\'s plan. You may want to regenerate it.';
+    const b = buildBlocks[0];
+    const steps = (b as any).build_steps || [];
+    const done = steps.filter((s: any) => s.done).length;
+    let resp = `Your New Logo Build block runs from ${spokenTime(b.start_time)} to ${spokenTime(b.end_time)}.`;
+    resp += ` The goal is to source ${targets.accounts_sourced || 3} accounts end-to-end: select, research, find contacts, get their info, and add to cadence.`;
+    if (done > 0) resp += ` You've completed ${done} of ${steps.length} steps so far.`;
+    return resp;
+  }
+
   if (q.includes('prospect') || q.includes('dial') || q.includes('call')) {
     const prospBlocks = blocks.filter(b => b.type === 'prospecting');
     const totalMin = prospBlocks.reduce((s, b) => s + blockDurationMin(b), 0);
