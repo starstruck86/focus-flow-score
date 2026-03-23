@@ -40,6 +40,10 @@ import {
   formatAggregatedImpact,
   type StrategyPipelineImpact,
 } from '@/data/pipeline-impact';
+import {
+  getPipelineForecast,
+  formatForecast,
+} from '@/data/pipeline-forecast';
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -524,4 +528,18 @@ export async function insightReliability(ctx: ToolContext, params: { claim: stri
   }
 
   return lines.join('\n');
+}
+
+// ── Tool: pipeline_forecast ─────────────────────────────────────
+
+export async function pipelineForecast(ctx: ToolContext): Promise<string> {
+  const userId = await ctx.getUserId();
+  if (!userId) return 'Not authenticated';
+
+  try {
+    const forecast = await getPipelineForecast(userId);
+    return formatForecast(forecast);
+  } catch {
+    return 'Unable to compute pipeline forecast at this time.';
+  }
 }
