@@ -258,20 +258,32 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
 
     logStatus(`✅ Contract passed — token: ${sessionData.token.length} chars, context: ${sessionData.context.length} chars, firstMessage: "${sessionData.firstMessage?.substring(0, 50)}"`);
 
-    const needsExplicitMicPermission = navigator.maxTouchPoints > 0;
+    const isMobile = navigator.maxTouchPoints > 0;
     let timeout: ReturnType<typeof setTimeout> | undefined;
 
     try {
-      if (needsExplicitMicPermission) {
-        logStatus('🎤 Requesting microphone access');
+      // On mobile, request mic permission explicitly to unlock audio context
+      if (isMobile) {
+        logStatus('🎤 Requesting microphone access (mobile)');
         releasePreflightStream();
-        preflightStreamRef.current = await requestMicrophoneAccess();
-        logStatus('🎤 Microphone access granted');
+        try {
+          preflightStreamRef.current = await requestMicrophoneAccess();
+          logStatus('🎤 Microphone access granted');
+        } catch (micErr: any) {
+          const friendlyMessage = classifyMicrophoneAccessError(micErr);
+          logStatus(`🔴 Mic permission failed: ${friendlyMessage}`);
+          setError(friendlyMessage);
+          setIsConnecting(false);
+          startingRef.current = false;
+          toast.error('Microphone access required', { description: friendlyMessage, duration: 6000 });
+          return;
+        }
       }
 
       timeout = setTimeout(() => {
         if (startingRef.current) {
-          setError('Connection timed out. Tap to retry.');
+          logStatus('⏰ Connection timed out after 15s');
+          setError('Connection timed out. Tap Retry to try again.');
           setIsConnecting(false);
           startingRef.current = false;
           try { conversation.endSession(); } catch (_) {}
@@ -289,10 +301,25 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
       if (timeout) clearTimeout(timeout);
     } catch (err: any) {
       if (timeout) clearTimeout(timeout);
+      const rawMsg = err?.message || String(err);
       console.error('[Dave] Failed to start:', err);
-      const friendlyMessage = classifyMicrophoneAccessError(err);
+
+      // Classify the startup error specifically
+      let friendlyMessage: string;
+      if (/NotAllowedError|Permission denied|microphone/i.test(rawMsg)) {
+        friendlyMessage = classifyMicrophoneAccessError(err);
+      } else if (/token|auth|unauthorized|403|401/i.test(rawMsg)) {
+        friendlyMessage = 'Session token expired or invalid. Tap Retry for a fresh session.';
+      } else if (/network|fetch|connect|socket|WebSocket/i.test(rawMsg)) {
+        friendlyMessage = 'Network error connecting to voice service. Check your connection and retry.';
+      } else if (/aborted|abort/i.test(rawMsg)) {
+        friendlyMessage = 'Connection was cancelled. Tap Retry to try again.';
+      } else {
+        friendlyMessage = `Voice startup failed: ${rawMsg}`;
+      }
+
       setError(friendlyMessage);
-      toast.error('Could not start conversation', { description: friendlyMessage });
+      toast.error('Dave startup failed', { description: friendlyMessage, duration: 6000 });
     } finally {
       releasePreflightStream();
       setIsConnecting(false);
