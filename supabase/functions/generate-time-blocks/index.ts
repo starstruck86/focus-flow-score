@@ -576,6 +576,7 @@ Also provide an overall "day_strategy" (2-3 sentences: how today fits into the w
                   properties: {
                     dials: { type: "number" },
                     conversations: { type: "number" },
+                    accounts_sourced: { type: "number", description: "New logo accounts sourced and added to cadence (default 3)" },
                     accounts_researched: { type: "number" },
                     contacts_prepped: { type: "number" },
                   },
