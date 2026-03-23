@@ -218,7 +218,8 @@ export function recastDay(input: RecastInput): RecastResult {
     const ab = keptBlocks[actionIdx];
     const dur = blockMinutes(ab);
     const actualDur = Math.min(dur, workEndMinutes - cursor);
-    if (actualDur >= 15) {
+    const minDur = minBlockDuration(ab.type);
+    if (actualDur >= minDur) {
       scheduled.push({
         ...ab,
         start_time: fromMinutes(cursor),
