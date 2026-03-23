@@ -8,6 +8,7 @@ import { executionNext, confirmExecution, blockExecution, skipExecution, snoozeE
 import { whoopPerformanceInsights, whoopTodayContext } from './synthesis/whoopInsights';
 import { dailyGamePlanSummary, dailyGamePlanDetailed, dailyGamePlanWalkthrough, queryDailyPlan } from './synthesis/dailyGamePlan';
 import { queryOpportunities, queryRenewals, queryTasks, queryQuota, queryPipeline, queryDashboard } from './synthesis/walkthroughs';
+import { compareTrends } from './synthesis/trendComparison';
 
 export function createSynthesisTools(ctx: ToolContext, allTools: Record<string, any>): ToolMap {
   return {
@@ -46,5 +47,8 @@ export function createSynthesisTools(ctx: ToolContext, allTools: Record<string, 
     query_quota: (params: { question?: string }) => queryQuota(ctx, params),
     query_pipeline: (params: { question?: string }) => queryPipeline(ctx, params),
     query_dashboard: (params: { question?: string }) => queryDashboard(ctx, params),
+
+    // Trend & comparison
+    compare_trends: (params: { question?: string }) => compareTrends(ctx, params),
   };
 }
