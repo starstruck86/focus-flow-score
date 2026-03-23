@@ -127,7 +127,24 @@ export function DailyTimeBlocks() {
   const { opportunities, accounts } = useStore();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { targets: autoSelectedAccounts } = useNewLogoTargets();
+  const {
+    todayAccounts: queueTodayAccounts,
+    todayKey: queueTodayKey,
+    isEmpty: queueEmpty,
+    generateQueue,
+    advanceState,
+    removeAccount,
+    addAccount,
+    dailyProgress: queueDailyProgress,
+    weeklyResearched,
+    weeklyAddedToCadence,
+    weeklyTotal,
+    assignments: queueAssignments,
+    DAY_KEYS: queueDayKeys,
+    loading: queueLoading,
+  } = useWeeklyResearchQueue();
+  const [showQueueAdd, setShowQueueAdd] = useState(false);
+  const [queueAddQuery, setQueueAddQuery] = useState('');
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState(0);
