@@ -621,8 +621,12 @@ function buildSummaryTasks(tasks: any[], overdue: any[], dueToday: any[], upcomi
 }
 
 function buildDetailedTasks(tasks: any[], overdue: any[], dueToday: any[], upcoming: any[], p1s: any[], accountMap: Record<string, string>, today: string): string {
+  // Sort all tasks by priority score
+  const allScored = tasks.map(t => ({ ...t, _priority: scoreTaskPriority(t, accountMap) }));
+  allScored.sort((a, b) => b._priority.urgencyScore - a._priority.urgencyScore);
+
   const sentences: string[] = [];
-  sentences.push(`Let me walk through your ${tasks.length} active tasks.`);
+  sentences.push(`Let me walk through your ${tasks.length} active tasks, ordered by what matters most.`);
 
   if (overdue.length) {
     sentences.push(`First, you have ${overdue.length} overdue.`);
@@ -651,9 +655,8 @@ function buildDetailedTasks(tasks: any[], overdue: any[], dueToday: any[], upcom
     if (upcoming.length > 5) sentences.push(`And ${upcoming.length - 5} more after that.`);
   }
 
-  if (p1s.length) {
-    sentences.push(`If I had to pick where to start, I'd go with ${p1s[0].title} since it's your highest priority.`);
-  }
+  const top = allScored[0]._priority;
+  sentences.push(`Bottom line — start with ${top.name}. ${top.reason ? `It's ${top.reason}.` : ''} ${top.nextStep}.`);
 
   return sentences.join(' ');
 }
