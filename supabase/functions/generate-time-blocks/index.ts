@@ -620,12 +620,13 @@ Also provide an overall "day_strategy" (2-3 sentences: how today fits into the w
     // SAFETY NET: If AI omitted a "build" block and there are prospecting accounts, inject one
     const hasBuildBlock = mergedBlocks.some((b: any) => b.type === 'build');
     if (!hasBuildBlock && prospectingAccounts.length > 0) {
-      // Find the first non-meeting gap >= 45 min to insert a build block
+      // Find the first non-meeting gap >= 60 min (or 30 min on heavy days) to insert a build block
+      const buildDuration = todayMeetingMin > 180 ? 30 : 60; // 30 min on heavy meeting days, 60 min default
       const firstNonMeeting = mergedBlocks.findIndex((b: any) => b.type !== 'meeting');
       const insertIdx = firstNonMeeting >= 0 ? firstNonMeeting : 0;
       const buildStart = insertIdx > 0 ? mergedBlocks[insertIdx - 1].end_time : workStart;
       const [bh, bm] = buildStart.split(':').map(Number);
-      const buildEndMin = bh * 60 + bm + 45;
+      const buildEndMin = bh * 60 + bm + buildDuration;
       const buildEnd = `${Math.floor(buildEndMin / 60).toString().padStart(2, '0')}:${(buildEndMin % 60).toString().padStart(2, '0')}`;
       const topNames = prospectingAccounts.slice(0, 3).map((a: any) => a.name).join(', ');
       mergedBlocks.splice(insertIdx, 0, {
@@ -639,7 +640,7 @@ Also provide an overall "day_strategy" (2-3 sentences: how today fits into the w
           'Research companies & identify contacts',
           'Find contact info & add to cadence',
         ],
-        reasoning: 'Pipeline sourcing cannot be zero — injected because AI plan omitted account build work.',
+        reasoning: `Pipeline sourcing cannot be zero — injected ${buildDuration}-min build block because AI plan omitted it.`,
       });
       // Re-sort by start time
       mergedBlocks.sort((a: any, b: any) => toMinutes(a.start_time) - toMinutes(b.start_time));
