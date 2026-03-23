@@ -1,8 +1,8 @@
 /**
  * Dave tools for Knowledge Intelligence Engine.
  *
- * These give Dave the ability to cite sources, explain trust levels,
- * distinguish principles from trends, and surface detected trends.
+ * Hybrid model: prefer persisted intelligence_units & knowledge_signals,
+ * fall back to query-time computation from resource_digests.
  */
 import { supabase } from '@/integrations/supabase/client';
 import type { ToolContext } from '../../toolTypes';
@@ -18,6 +18,12 @@ import {
   rankInsights,
   formatCitation,
 } from '@/lib/knowledgeIntelligence';
+import {
+  getIntelligenceUnits,
+  getKnowledgeSignals,
+  rowToExtractedInsight,
+  rowToTrendSignal,
+} from '@/data/intelligence';
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -38,10 +44,7 @@ function normaliseResource(r: any): NormalisedContent {
   };
 }
 
-function insightsFromDigest(
-  digest: any,
-  resource: NormalisedContent,
-): ExtractedInsight[] {
+function insightsFromDigest(digest: any, resource: NormalisedContent): ExtractedInsight[] {
   const takeaways: string[] = digest.takeaways || [];
   return takeaways.map((text: string, i: number) => ({
     id: `${digest.resource_id}-t${i}`,
@@ -62,16 +65,13 @@ function insightsFromDigest(
   }));
 }
 
-// Cross-reference insights across multiple digests to compute trust
 function crossReferenceInsights(allInsights: ExtractedInsight[]): ExtractedInsight[] {
-  // Group by normalised text similarity (simple: lowercase trim)
   const seen = new Map<string, ExtractedInsight[]>();
   for (const ins of allInsights) {
     const key = ins.text.toLowerCase().trim().slice(0, 80);
     if (!seen.has(key)) seen.set(key, []);
     seen.get(key)!.push(ins);
   }
-
   const merged: ExtractedInsight[] = [];
   for (const [, group] of seen) {
     const primary = { ...group[0] };
@@ -86,137 +86,146 @@ function crossReferenceInsights(allInsights: ExtractedInsight[]): ExtractedInsig
   return merged;
 }
 
-// ── Tool: cite_insight ──────────────────────────────────────────
+// ── Hybrid fetch: stored units first, fallback to digest computation ──
 
-export async function citeInsight(
-  ctx: ToolContext,
-  params: { topic: string },
-): Promise<string> {
-  const userId = await ctx.getUserId();
-  if (!userId) return 'Not authenticated';
-
-  const q = `%${params.topic}%`;
-
-  // Fetch matching digests + their resources
-  const { data: digests } = await supabase
-    .from('resource_digests')
-    .select('*, resources:resource_id(id, title, resource_type, created_at, tags)')
-    .eq('user_id', userId)
-    .or(`takeaways.cs.{${params.topic}},summary.ilike.${q}`)
-    .limit(10);
-
-  if (!digests?.length) {
-    // Fallback: search resources directly
-    const { data: resources } = await supabase
-      .from('resources')
-      .select('id, title, resource_type, created_at, tags')
-      .eq('user_id', userId)
-      .ilike('title', q)
-      .limit(5);
-
-    if (!resources?.length) return `No knowledge found matching "${params.topic}".`;
-    return `Found ${resources.length} resources related to "${params.topic}" but they haven't been analysed yet. Run the operationalise flow first to extract insights.`;
-  }
-
-  // Build insights from all matching digests
-  let allInsights: ExtractedInsight[] = [];
+async function fetchInsightsHybrid(
+  userId: string,
+  topic: string,
+): Promise<{ insights: ExtractedInsight[]; sourceMap: Map<string, any>; fromStore: boolean }> {
   const sourceMap = new Map<string, any>();
 
+  // 1. Try persisted intelligence_units
+  try {
+    const stored = await getIntelligenceUnits({ limit: 50 });
+    const relevant = stored.filter(u =>
+      u.text.toLowerCase().includes(topic.toLowerCase()) ||
+      (u.category || '').toLowerCase().includes(topic.toLowerCase()),
+    );
+    if (relevant.length) {
+      // Fetch resource metadata for sources
+      const resourceIds = [...new Set(relevant.map(r => r.resource_id))];
+      const { data: resources } = await supabase
+        .from('resources')
+        .select('id, title, resource_type, created_at, source_created_at, source_published_at, author_or_speaker')
+        .eq('user_id', userId)
+        .in('id', resourceIds);
+
+      for (const res of resources || []) {
+        const norm = normaliseResource(res);
+        sourceMap.set(res.id, { title: res.title, author: norm.author_or_speaker, date: bestAvailableDate(norm) });
+      }
+
+      return { insights: relevant.map(rowToExtractedInsight), sourceMap, fromStore: true };
+    }
+  } catch {
+    // Table may not exist yet or be empty — fall through
+  }
+
+  // 2. Fallback: compute from resource_digests
+  const q = `%${topic}%`;
+  const { data: digests } = await supabase
+    .from('resource_digests')
+    .select('*, resources:resource_id(id, title, resource_type, created_at, tags, source_created_at, source_published_at, author_or_speaker)')
+    .eq('user_id', userId)
+    .or(`takeaways.cs.{${topic}},summary.ilike.${q}`)
+    .limit(10);
+
+  if (!digests?.length) return { insights: [], sourceMap, fromStore: false };
+
+  let allInsights: ExtractedInsight[] = [];
   for (const d of digests) {
     const res = (d as any).resources;
     if (!res) continue;
     const norm = normaliseResource(res);
     sourceMap.set(res.id, { title: res.title, author: norm.author_or_speaker, date: bestAvailableDate(norm) });
-
     const insights = insightsFromDigest(d, norm);
-    // Filter to topic-relevant
-    const relevant = insights.filter(i =>
-      i.text.toLowerCase().includes(params.topic.toLowerCase()),
-    );
+    const relevant = insights.filter(i => i.text.toLowerCase().includes(topic.toLowerCase()));
     allInsights.push(...(relevant.length ? relevant : insights.slice(0, 2)));
   }
 
-  // Cross-reference for trust
   allInsights = crossReferenceInsights(allInsights);
 
-  // Classify maturity for each
+  // Classify maturity
   for (const ins of allInsights) {
     const dates = [...sourceMap.values()].map(s => s.date).filter(Boolean);
     const years = dates.length >= 2
       ? (new Date(dates[dates.length - 1]).getTime() - new Date(dates[0]).getTime()) / (365.25 * 24 * 60 * 60 * 1000)
       : 0;
-    const recentRatio = dates.filter(d => {
-      const age = Date.now() - new Date(d).getTime();
-      return age < 365.25 * 24 * 60 * 60 * 1000;
-    }).length / Math.max(1, dates.length);
-
-    ins.idea_maturity = classifyMaturity(
-      ins.support_count,
-      ins.consistency_score,
-      years,
-      recentRatio,
-      'unknown',
-    );
+    const recentRatio = dates.filter((d: string) => (Date.now() - new Date(d).getTime()) < 365.25 * 24 * 60 * 60 * 1000).length / Math.max(1, dates.length);
+    ins.idea_maturity = classifyMaturity(ins.support_count, ins.consistency_score, years, recentRatio, 'unknown');
   }
 
-  // Rank and take top 3
-  const ranked = rankInsights(allInsights, true).slice(0, 3);
-  if (!ranked.length) return `No actionable insights found for "${params.topic}".`;
+  return { insights: allInsights, sourceMap, fromStore: false };
+}
 
+// ── Tool: cite_insight ──────────────────────────────────────────
+
+export async function citeInsight(ctx: ToolContext, params: { topic: string }): Promise<string> {
+  const userId = await ctx.getUserId();
+  if (!userId) return 'Not authenticated';
+
+  const { insights, sourceMap } = await fetchInsightsHybrid(userId, params.topic);
+
+  if (!insights.length) {
+    const q = `%${params.topic}%`;
+    const { data: resources } = await supabase
+      .from('resources')
+      .select('id')
+      .eq('user_id', userId)
+      .ilike('title', q)
+      .limit(1);
+    if (resources?.length) return `Found resources matching "${params.topic}" but no extracted insights yet. Run the operationalise flow first.`;
+    return `No knowledge found matching "${params.topic}".`;
+  }
+
+  const ranked = rankInsights(insights, true).slice(0, 3);
   const parts: string[] = [`**Knowledge Intelligence: "${params.topic}"**\n`];
 
   for (const ins of ranked) {
     const trust = computeTrustScore(ins, sourceMap.get(ins.provenance.source_content_id)?.date || null);
     const sources = [sourceMap.get(ins.provenance.source_content_id)].filter(Boolean);
-
-    parts.push(formatCitation({
-      insightText: ins.text,
-      maturity: ins.idea_maturity,
-      trustScore: trust,
-      sources,
-      conflicts: ins.conflicts,
-    }));
+    parts.push(formatCitation({ insightText: ins.text, maturity: ins.idea_maturity, trustScore: trust, sources, conflicts: ins.conflicts }));
     parts.push('');
   }
 
   return parts.join('\n');
 }
 
-// ── Tool: knowledge_trends ──────────────────────────────────────
+// ── Tool: knowledge_trends (hybrid) ─────────────────────────────
 
-export async function knowledgeTrends(
-  ctx: ToolContext,
-  params: { category?: string },
-): Promise<string> {
+export async function knowledgeTrends(ctx: ToolContext, params: { category?: string }): Promise<string> {
   const userId = await ctx.getUserId();
   if (!userId) return 'Not authenticated';
 
-  // Gather all digests as trend signals
-  const { data: digests } = await supabase
-    .from('resource_digests')
-    .select('*, resources:resource_id(id, title, resource_type, created_at, tags)')
-    .eq('user_id', userId)
-    .limit(50);
+  let signals: TrendSignal[] = [];
 
-  if (!digests?.length) return 'No analysed resources to detect trends from.';
+  // 1. Try persisted signals
+  try {
+    const stored = await getKnowledgeSignals({ theme: params.category, limit: 200 });
+    if (stored.length) {
+      signals = stored.map(rowToTrendSignal);
+    }
+  } catch { /* fall through */ }
 
-  const signals: TrendSignal[] = [];
-  for (const d of digests) {
-    const res = (d as any).resources;
-    if (!res) continue;
-    const norm = normaliseResource(res);
-    const date = bestAvailableDate(norm);
+  // 2. Fallback: compute from digests
+  if (!signals.length) {
+    const { data: digests } = await supabase
+      .from('resource_digests')
+      .select('*, resources:resource_id(id, title, resource_type, created_at, tags, source_created_at, source_published_at, author_or_speaker)')
+      .eq('user_id', userId)
+      .limit(50);
 
-    for (const uc of (d.use_cases || [])) {
-      if (params.category && !uc.toLowerCase().includes(params.category.toLowerCase())) continue;
-      signals.push({
-        theme: uc,
-        source_content_id: res.id,
-        author_or_speaker: norm.author_or_speaker,
-        timestamp: date,
-        confidence: 0.7,
-        relevance: 0.8,
-      });
+    if (!digests?.length) return 'No analysed resources to detect trends from.';
+
+    for (const d of digests) {
+      const res = (d as any).resources;
+      if (!res) continue;
+      const norm = normaliseResource(res);
+      const date = bestAvailableDate(norm);
+      for (const uc of (d.use_cases || [])) {
+        if (params.category && !uc.toLowerCase().includes(params.category.toLowerCase())) continue;
+        signals.push({ theme: uc, source_content_id: res.id, author_or_speaker: norm.author_or_speaker, timestamp: date, confidence: 0.7, relevance: 0.8 });
+      }
     }
   }
 
@@ -235,37 +244,54 @@ export async function knowledgeTrends(
   return lines.join('\n');
 }
 
-// ── Tool: insight_reliability ───────────────────────────────────
+// ── Tool: insight_reliability (hybrid) ──────────────────────────
 
-export async function insightReliability(
-  ctx: ToolContext,
-  params: { claim: string },
-): Promise<string> {
+export async function insightReliability(ctx: ToolContext, params: { claim: string }): Promise<string> {
   const userId = await ctx.getUserId();
   if (!userId) return 'Not authenticated';
 
-  const q = `%${params.claim}%`;
-  const { data: digests } = await supabase
-    .from('resource_digests')
-    .select('takeaways, summary, use_cases, resource_id, created_at')
-    .eq('user_id', userId)
-    .or(`summary.ilike.${q}`)
-    .limit(20);
+  let supportCount = 0;
+  let uniqueResources = 0;
+  let consistency = 0.3;
+  let bestDate: string | null = null;
 
-  // Count how many digests mention this claim
-  const matching = (digests || []).filter(d => {
-    const all = [...(d.takeaways || []), d.summary || ''].join(' ').toLowerCase();
-    return all.includes(params.claim.toLowerCase());
-  });
+  // 1. Try persisted units
+  try {
+    const stored = await getIntelligenceUnits({ limit: 100 });
+    const matching = stored.filter(u => u.text.toLowerCase().includes(params.claim.toLowerCase()));
+    if (matching.length) {
+      supportCount = matching.reduce((s, m) => s + m.support_count, 0);
+      uniqueResources = new Set(matching.map(m => m.resource_id)).size;
+      consistency = matching.reduce((s, m) => s + m.consistency_score, 0) / matching.length;
+      bestDate = matching[0]?.extracted_at || null;
+    }
+  } catch { /* fall through */ }
 
-  const supportCount = matching.length;
-  const uniqueResources = new Set(matching.map(m => m.resource_id)).size;
-  const consistency = supportCount >= 3 ? 0.8 : supportCount >= 2 ? 0.6 : 0.3;
+  // 2. Fallback if no stored matches
+  if (supportCount === 0) {
+    const q = `%${params.claim}%`;
+    const { data: digests } = await supabase
+      .from('resource_digests')
+      .select('takeaways, summary, use_cases, resource_id, created_at')
+      .eq('user_id', userId)
+      .or(`summary.ilike.${q}`)
+      .limit(20);
+
+    const matching = (digests || []).filter(d => {
+      const all = [...(d.takeaways || []), d.summary || ''].join(' ').toLowerCase();
+      return all.includes(params.claim.toLowerCase());
+    });
+
+    supportCount = matching.length;
+    uniqueResources = new Set(matching.map(m => m.resource_id)).size;
+    consistency = supportCount >= 3 ? 0.8 : supportCount >= 2 ? 0.6 : 0.3;
+    bestDate = matching[0]?.created_at || null;
+  }
 
   const maturity = classifyMaturity(supportCount, consistency, 0, 0, 'unknown');
   const trust = computeTrustScore(
     { support_count: supportCount, source_diversity: uniqueResources, consistency_score: consistency, idea_maturity: maturity },
-    matching[0]?.created_at || null,
+    bestDate,
   );
 
   const MATURITY_LABELS: Record<IdeaMaturity, string> = {
