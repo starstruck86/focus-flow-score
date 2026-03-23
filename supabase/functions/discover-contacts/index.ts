@@ -943,6 +943,6 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error('discover-contacts error:', error);
-    return jsonResponse({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
+    return jsonResponse({ error: 'An unexpected error occurred. Please try again.' }, 500);
   }
 });

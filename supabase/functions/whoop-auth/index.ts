@@ -64,7 +64,7 @@ serve(async (req) => {
     });
   } catch (error: any) {
     console.error('whoop-auth error:', error);
-    return new Response(JSON.stringify({ error: error.message || 'Unknown whoop-auth error' }), {
+    return new Response(JSON.stringify({ error: 'An unexpected error occurred. Please try again.' }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

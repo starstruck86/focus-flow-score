@@ -254,7 +254,7 @@ serve(async (req) => {
     console.error("journal-nudge error:", e);
     return new Response(
       JSON.stringify({
-        error: e instanceof Error ? e.message : "Unknown error",
+        error: "An unexpected error occurred. Please try again.",
       }),
       {
         status: 500,

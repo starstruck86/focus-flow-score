@@ -115,7 +115,11 @@ serve(async (req) => {
     return Response.redirect(`${redirectUri}/settings?whoop=success`, 302);
   } catch (error) {
     console.error('whoop-callback error:', error);
-    return new Response(`Error: ${error.message}`, { status: 500 });
+    const redirectBase = getRedirectBase(null);
+    if (redirectBase) {
+      return Response.redirect(`${redirectBase}/settings?whoop=error`, 302);
+    }
+    return new Response('An unexpected error occurred.', { status: 500 });
   }
 });
 
