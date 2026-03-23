@@ -7,6 +7,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { generateTraceId, normalizeError, recordError } from './appError';
 import { createLogger } from './logger';
+import { checkDriftBlock, recordFunctionVersion, driftErrorMessage, VERSION_HEADER } from './functionGroupDrift';
 import { withRetry, withTimeout, isRetryableError, type RetryOptions } from './reliability';
 
 const logger = createLogger('AuthenticatedFetch');
