@@ -38,5 +38,13 @@ export function createSynthesisTools(ctx: ToolContext, allTools: Record<string, 
     daily_game_plan: () => dailyGamePlanSummary(ctx),
     daily_game_plan_detailed: () => dailyGamePlanDetailed(ctx),
     query_daily_plan: (params: { question: string }) => queryDailyPlan(ctx, params),
+
+    // Universal walkthrough tools
+    query_opportunities: (params: { question?: string }) => queryOpportunities(ctx, params),
+    query_renewals: (params: { question?: string }) => queryRenewals(ctx, params),
+    query_tasks: (params: { question?: string }) => queryTasks(ctx, params),
+    query_quota: (params: { question?: string }) => queryQuota(ctx, params),
+    query_pipeline: (params: { question?: string }) => queryPipeline(ctx, params),
+    query_dashboard: (params: { question?: string }) => queryDashboard(ctx, params),
   };
 }
