@@ -41,10 +41,10 @@ export function TodayAgenda() {
     // Add today's calendar events
     if (events) {
       events.forEach(event => {
-        const utcDate = parseISO(event.start_time);
+      const utcDate = new Date(event.start_time);
         if (!isValid(utcDate)) return;
 
-        const estDate = toZonedTime(utcDate, TIMEZONE);
+        const estDate = toAppTime(utcDate);
         if (!isValid(estDate)) return;
 
         const eventDateStr = format(estDate, 'yyyy-MM-dd');
