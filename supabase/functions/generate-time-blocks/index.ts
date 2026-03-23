@@ -291,7 +291,7 @@ serve(async (req) => {
     const workEnd = userPrefs?.work_end_time?.slice(0, 5) || '17:00';
     const noMeetingsBefore = userPrefs?.no_meetings_before?.slice(0, 5) || workStart;
     const noMeetingsAfter = userPrefs?.no_meetings_after?.slice(0, 5) || workEnd;
-    const minBlockMin = userPrefs?.min_block_minutes || 25;
+    const minBlockMin = Math.max(userPrefs?.min_block_minutes || 30, 30);
     const preferNewLogoMorning = userPrefs?.prefer_new_logo_morning !== false;
     const maxBackToBack = userPrefs?.max_back_to_back_meetings || 3;
     const personalRules: string[] = Array.isArray(userPrefs?.personal_rules) ? userPrefs.personal_rules : [];
