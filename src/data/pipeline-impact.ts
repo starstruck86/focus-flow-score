@@ -182,6 +182,7 @@ export function aggregatePipelineImpact(
   let totalOpportunities = 0;
   let totalProgressions = 0;
   let totalPipelineValue = 0;
+  let totalWeightedScore = 0;
 
   const entries = [...impactMap.values()];
   for (const e of entries) {
@@ -189,11 +190,12 @@ export function aggregatePipelineImpact(
     totalOpportunities += e.opportunitiesCreated;
     totalProgressions += e.stageProgressions;
     totalPipelineValue += e.pipelineValueInfluenced;
+    totalWeightedScore += e.weightedScore;
   }
 
   const topStrategies = entries
-    .sort((a, b) => b.pipelineValueInfluenced - a.pipelineValueInfluenced
-      || (b.meetingsGenerated + b.opportunitiesCreated) - (a.meetingsGenerated + a.opportunitiesCreated))
+    .sort((a, b) => b.weightedScore - a.weightedScore
+      || b.pipelineValueInfluenced - a.pipelineValueInfluenced)
     .slice(0, 10);
 
   return {
@@ -201,8 +203,9 @@ export function aggregatePipelineImpact(
     totalOpportunities,
     totalProgressions,
     totalPipelineValue,
+    totalWeightedScore,
     topStrategies,
-    byContext: new Map(), // populated by caller if needed
+    byContext: new Map(),
   };
 }
 
