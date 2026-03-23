@@ -194,7 +194,8 @@ export function recastDay(input: RecastInput): RecastResult {
       const ab = keptBlocks[actionIdx];
       const dur = blockMinutes(ab);
       const actualDur = Math.min(dur, meetStart - cursor);
-      if (actualDur >= 15) {
+      const minDur = minBlockDuration(ab.type);
+      if (actualDur >= minDur) {
         scheduled.push({
           ...ab,
           start_time: fromMinutes(cursor),
@@ -203,7 +204,8 @@ export function recastDay(input: RecastInput): RecastResult {
         cursor += actualDur;
         actionIdx++;
       } else {
-        break;
+        // Gap too small for this block type — skip to next block or break
+        actionIdx++;
       }
     }
     // Place meeting
