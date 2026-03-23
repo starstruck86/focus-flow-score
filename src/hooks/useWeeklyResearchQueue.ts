@@ -10,7 +10,7 @@ import { useStore } from '@/store/useStore';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { startOfWeek, format } from 'date-fns';
-import { scoreAccountForQueue, filterEligible } from '@/lib/weeklyResearchQueue';
+import { scoreAccountForQueue, filterEligible, isEligibleForQueue } from '@/lib/weeklyResearchQueue';
 import { toast } from 'sonner';
 
 // ── Types ──
