@@ -50,10 +50,23 @@ const TYPE_PRIORITY: Record<string, number> = {
   break: 10,
 };
 
+// Minimum duration for meaningful work vs light tasks
+const MEANINGFUL_TYPES = new Set(['prospecting', 'pipeline', 'build', 'research']);
+const MIN_MEANINGFUL_MINUTES = 30;
+const MIN_LIGHT_MINUTES = 15;
+
 function blockMinutes(b: RecastBlock): number {
   const [sh, sm] = b.start_time.split(':').map(Number);
   const [eh, em] = b.end_time.split(':').map(Number);
   return (eh * 60 + em) - (sh * 60 + sm);
+}
+
+function isMeaningfulWork(type: string): boolean {
+  return MEANINGFUL_TYPES.has(type);
+}
+
+function minBlockDuration(type: string): number {
+  return isMeaningfulWork(type) ? MIN_MEANINGFUL_MINUTES : MIN_LIGHT_MINUTES;
 }
 
 function toMinutes(time: string): number {
@@ -147,17 +160,19 @@ export function recastDay(input: RecastInput): RecastResult {
       continue;
     }
 
+    const minDur = minBlockDuration(block.type);
+
     if (dur <= availableActionMinutes) {
       keptBlocks.push(block);
       availableActionMinutes -= dur;
-    } else if (availableActionMinutes >= 15) {
-      // Compress block to fit
-      const newDur = availableActionMinutes;
+    } else if (availableActionMinutes >= minDur) {
+      // Compress block to fit, but never below minimum for its type
+      const newDur = Math.max(minDur, availableActionMinutes);
       compressedBlocks.push({ label: block.label, originalMinutes: dur, newMinutes: newDur });
       keptBlocks.push({ ...block, reasoning: `Compressed from ${dur} to ${newDur} min — focus on highest-impact goals` });
-      availableActionMinutes = 0;
+      availableActionMinutes -= newDur;
     } else {
-      droppedBlocks.push({ label: block.label, reason: 'Not enough time to fit even compressed' });
+      droppedBlocks.push({ label: block.label, reason: isMeaningfulWork(block.type) ? `Only ${availableActionMinutes} min left — below ${minDur} min minimum for deep work` : 'Not enough time to fit even compressed' });
     }
   }
 
@@ -179,7 +194,8 @@ export function recastDay(input: RecastInput): RecastResult {
       const ab = keptBlocks[actionIdx];
       const dur = blockMinutes(ab);
       const actualDur = Math.min(dur, meetStart - cursor);
-      if (actualDur >= 15) {
+      const minDur = minBlockDuration(ab.type);
+      if (actualDur >= minDur) {
         scheduled.push({
           ...ab,
           start_time: fromMinutes(cursor),
@@ -188,7 +204,8 @@ export function recastDay(input: RecastInput): RecastResult {
         cursor += actualDur;
         actionIdx++;
       } else {
-        break;
+        // Gap too small for this block type — skip to next block or break
+        actionIdx++;
       }
     }
     // Place meeting
@@ -201,7 +218,8 @@ export function recastDay(input: RecastInput): RecastResult {
     const ab = keptBlocks[actionIdx];
     const dur = blockMinutes(ab);
     const actualDur = Math.min(dur, workEndMinutes - cursor);
-    if (actualDur >= 15) {
+    const minDur = minBlockDuration(ab.type);
+    if (actualDur >= minDur) {
       scheduled.push({
         ...ab,
         start_time: fromMinutes(cursor),
