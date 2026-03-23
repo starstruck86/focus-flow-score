@@ -125,6 +125,7 @@ export async function dailyGamePlanSummary(ctx: ToolContext): Promise<string> {
   const targetParts: string[] = [];
   if (targets.dials) targetParts.push(`${targets.dials} dials`);
   if (targets.conversations) targetParts.push(`${targets.conversations} conversations`);
+  if (targets.accounts_sourced) targetParts.push(`${targets.accounts_sourced} accounts sourced and added to cadence`);
   if (targets.accounts_researched) targetParts.push(`${targets.accounts_researched} accounts researched`);
   if (targets.contacts_prepped) targetParts.push(`${targets.contacts_prepped} contacts prepped`);
   if (targetParts.length) {
