@@ -106,7 +106,7 @@ export async function meetingBrief(ctx: ToolContext, params: { meetingTitle?: st
   const { data: transcripts } = await supabase.from('call_transcripts').select('summary, call_date').eq('user_id', userId).eq('account_id', matchedAccount.id).order('call_date', { ascending: false }).limit(1);
   const { data: contacts } = await supabase.from('contacts').select('name, title, buyer_role').eq('user_id', userId).eq('account_id', matchedAccount.id).limit(5);
 
-  const meetTime = new Date(target.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const meetTime = formatTimeETLabel(target.start_time);
   const minsAway = Math.round((new Date(target.start_time).getTime() - Date.now()) / 60000);
 
   let brief = `📋 MEETING BRIEF: "${target.title}" at ${meetTime} (${minsAway > 0 ? `in ${minsAway} min` : 'now'})\n\n`;
