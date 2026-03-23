@@ -48,7 +48,7 @@ export function PipelineHygieneCard() {
     } else if (issue.record_type === 'renewal') {
       navigate('/renewals');
     } else if (issue.record_type === 'account') {
-      navigate('/weekly-outreach');
+      navigate('/outreach');
     }
   };
 

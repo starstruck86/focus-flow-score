@@ -4,7 +4,7 @@ import { primaryAction, completeAction, deferAction } from './synthesis/primaryA
 import { momentumCheck, nextAction, killSwitch } from './synthesis/momentum';
 import { behaviorSummary, energyMatch } from './synthesis/behaviorEnergy';
 import { generateContent, meetingBrief } from './synthesis/contentBrief';
-import { executionNext, confirmExecution, blockExecution, skipExecution, snoozeExecution, reconcileExecution } from './synthesis/executionBinding';
+import { executionNext, confirmExecution, blockExecution, skipExecution, snoozeExecution } from './synthesis/executionBinding';
 
 export function createSynthesisTools(ctx: ToolContext, allTools: Record<string, any>): ToolMap {
   return {
@@ -30,6 +30,5 @@ export function createSynthesisTools(ctx: ToolContext, allTools: Record<string, 
     block_execution: (params: { actionId: string; reason?: string }) => blockExecution(params),
     skip_execution: (params: { actionId: string; reason?: string }) => skipExecution(params),
     snooze_execution: (params: { actionId: string; minutes?: number }) => snoozeExecution(params),
-    reconcile_execution: (params: { actionId: string; source: string }) => reconcileExecution(params),
   };
 }

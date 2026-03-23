@@ -3,6 +3,10 @@
  * recommendations into a single, concrete next action tied to
  * real accounts, contacts, and current work context.
  *
+ * This is a standalone coaching layer. Actions are recommendations
+ * for the user to execute wherever they work (calls, CRM, email).
+ * No external system integration is assumed or required.
+ *
  * Output contract: exactly ONE action, with account, contact,
  * script/phrasing, and rationale.
  */
@@ -35,7 +39,6 @@ type WorkBlock = 'prospecting' | 'calls' | 'meetings' | 'admin' | 'unknown';
 async function detectWorkBlock(userId: string): Promise<WorkBlock> {
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];
-  const nowIso = now.toISOString();
 
   // Check time blocks for today
   const { data: plans } = await supabase
@@ -71,6 +74,7 @@ async function detectWorkBlock(userId: string): Promise<WorkBlock> {
   }
 
   // Check if there's a meeting soon (within 30 min)
+  const nowIso = now.toISOString();
   const thirtyMin = new Date(now.getTime() + 30 * 60_000).toISOString();
   const { data: upcoming } = await supabase
     .from('calendar_events')
@@ -84,7 +88,7 @@ async function detectWorkBlock(userId: string): Promise<WorkBlock> {
 
   // Default: infer from time of day
   const hour = now.getHours();
-  if (hour < 10) return 'prospecting'; // morning = hunt
+  if (hour < 10) return 'prospecting';
   if (hour < 12) return 'calls';
   return 'unknown';
 }
@@ -96,7 +100,6 @@ async function findTargetAccount(
   stage: FunnelStage,
 ): Promise<{ id: string; name: string; tier: string | null; icpScore: number | null } | null> {
   if (stage === 'dial_to_connect' || stage === 'connect_to_meeting') {
-    // Need accounts in active outreach or ready to work
     const { data } = await supabase
       .from('accounts')
       .select('id, name, tier, icp_fit_score, outreach_status, priority_score')
@@ -109,7 +112,6 @@ async function findTargetAccount(
       return { id: data[0].id, name: data[0].name, tier: data[0].tier, icpScore: data[0].icp_fit_score };
     }
 
-    // Fallback: any account with high ICP
     const { data: fallback } = await supabase
       .from('accounts')
       .select('id, name, tier, icp_fit_score')
@@ -122,7 +124,6 @@ async function findTargetAccount(
       : null;
   }
 
-  // meeting_to_opp: find accounts with recent meetings but no opp
   const { data: accts } = await supabase
     .from('accounts')
     .select('id, name, tier, icp_fit_score, account_status')
@@ -161,7 +162,6 @@ function buildScript(
   contactName?: string,
   contactTitle?: string,
 ): string {
-  // Personalize the fix example with real names
   let script = fix.example || fix.detail;
   script = script.replace(/\[Company\]/gi, accountName);
   script = script.replace(/\[account\]/gi, accountName);
@@ -176,31 +176,6 @@ function buildScript(
 }
 
 // ── Main tool: execution_next ───────────────────────────────────
-
-/** Where to execute the action — inferred from stage */
-function inferExternalSystem(stage: FunnelStage): string {
-  if (stage === 'dial_to_connect' || stage === 'connect_to_meeting') return 'Outreach / Salesloft';
-  return 'Salesforce';
-}
-
-/** Suggest where in the external tool to go */
-function externalHint(stage: FunnelStage, accountName: string): string {
-  if (stage === 'dial_to_connect') return `Open ${accountName}'s cadence in Outreach/Salesloft and dial.`;
-  if (stage === 'connect_to_meeting') return `Find ${accountName} in Outreach/Salesloft — use the opener below.`;
-  return `Open ${accountName} in Salesforce and log discovery notes.`;
-}
-
-export interface ExecutionNextResult {
-  formatted: string;
-  actionId: string;
-  accountId: string;
-  accountName: string;
-  contactName?: string;
-  contactTitle?: string;
-  stage: string;
-  script?: string;
-  externalSystem: string;
-}
 
 export async function executionNext(ctx: ToolContext, opts?: { liveMode?: boolean }): Promise<string> {
   const userId = await ctx.getUserId();
@@ -219,7 +194,7 @@ export async function executionNext(ctx: ToolContext, opts?: { liveMode?: boolea
   // Auto-engage live mode during execution blocks
   const liveMode = opts?.liveMode ?? (workBlock === 'prospecting' || workBlock === 'calls');
 
-  // 3. Choose stage to fix (from diagnosis or infer from work block)
+  // 3. Choose stage to fix
   const stage: FunnelStage = diagnosis?.stage
     || (workBlock === 'prospecting' ? 'dial_to_connect'
       : workBlock === 'calls' ? 'connect_to_meeting'
@@ -281,9 +256,6 @@ export async function executionNext(ctx: ToolContext, opts?: { liveMode?: boolea
     unknown: 'Current Focus',
   };
 
-  const extSystem = inferExternalSystem(stage);
-  const hint = externalHint(stage, account.name);
-
   const lines: string[] = [];
   lines.push(`🎯 **${fix.action}**`);
   lines.push('');
@@ -294,11 +266,6 @@ export async function executionNext(ctx: ToolContext, opts?: { liveMode?: boolea
     lines.push('**Contact:** None found — say "discover contacts for ' + account.name + '" first');
   }
   lines.push(`**Context:** ${BLOCK_LABELS[workBlock]}`);
-  lines.push(`**Execute in:** ${extSystem}`);
-  lines.push('');
-
-  // External system guidance
-  lines.push(`📍 ${hint}`);
   lines.push('');
 
   if (diagnosis) {
@@ -322,7 +289,7 @@ export async function executionNext(ctx: ToolContext, opts?: { liveMode?: boolea
   return lines.join('\n');
 }
 
-// ── Action resolution tools (lag-tolerant) ──────────────────────
+// ── Action resolution tools ─────────────────────────────────────
 
 type ActionOutcome = 'done' | 'blocked' | 'skipped' | 'snoozed';
 
@@ -334,7 +301,7 @@ function recordOutcome(actionId: string, outcome: ActionOutcome, extra?: Record<
   } catch {}
 }
 
-/** User confirms they completed the action in an external system */
+/** User confirms they completed the action */
 export async function confirmExecution(params: { actionId: string }): Promise<string> {
   recordOutcome(params.actionId, 'done');
   return 'Confirmed ✓ — ask for "next action" to keep moving.';
@@ -357,20 +324,4 @@ export async function snoozeExecution(params: { actionId: string; minutes?: numb
   const mins = params.minutes || 30;
   recordOutcome(params.actionId, 'snoozed', { snoozeUntil: Date.now() + mins * 60_000 });
   return `Snoozed for ${mins} min — I'll resurface this later. Ask for "next action" now.`;
-}
-
-/** Reconcile a past recommendation with delayed data (transcript/CRM sync) */
-export async function reconcileExecution(params: { actionId: string; source: string }): Promise<string> {
-  try {
-    const records = JSON.parse(localStorage.getItem('jarvis-action-memory') || '[]');
-    const idx = records.findIndex((r: any) => r.actionId === params.actionId && !r.reconciled);
-    if (idx >= 0) {
-      records[idx].reconciled = true;
-      records[idx].reconciledAt = Date.now();
-      records[idx].reconciledSource = params.source;
-      localStorage.setItem('jarvis-action-memory', JSON.stringify(records));
-      return `Reconciled with ${params.source} data — learning updated.`;
-    }
-  } catch {}
-  return 'No matching unreconciled action found.';
 }
