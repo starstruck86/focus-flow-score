@@ -8,6 +8,7 @@ import { createTaskTools } from './tools/tasks';
 import { createJournalTools } from './tools/journal';
 import { createPipelineTools } from './tools/pipeline';
 import { createIntelligenceTools } from './tools/intelligence';
+import { createProspectingTools } from './tools/prospecting';
 import { createSynthesisTools } from './tools/synthesis';
 import { createIntegrationTools } from './tools/integrations';
 
@@ -28,6 +29,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
     ...createPipelineTools(ctx),
     ...createIntelligenceTools(ctx),
     ...createIntegrationTools(ctx),
+    ...createProspectingTools(ctx),
   };
 
   // Synthesis tools need access to allTools for execution_brief composition
