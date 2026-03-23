@@ -202,12 +202,20 @@ export function bestAvailableDate(content: NormalisedContent): string {
   return content.source_published_at || content.source_created_at || content.uploaded_at;
 }
 
-// ── 9. Decision Weighting ───────────────────────────────────────
+// ── 9. Decision Weighting Engine ────────────────────────────────
 
 /**
- * Rank insights for decision-making.
- * Principles/patterns first, trends contextually, experimental last.
+ * Context that shapes which insights matter most right now.
  */
+export interface DecisionContext {
+  accountType?: string;          // e.g. 'new_logo', 'existing', 'renewal'
+  industry?: string;
+  dealStage?: string;            // e.g. 'Discovery', 'Demo', 'Negotiation'
+  executionState?: string;       // e.g. 'prospecting', 'discovery', 'closing'
+  activeSignals?: string[];      // themes/trends currently active
+  topic?: string;                // the query topic for relevance matching
+}
+
 const MATURITY_WEIGHT: Record<IdeaMaturity, number> = {
   principle: 1.0,
   pattern: 0.75,
@@ -215,6 +223,174 @@ const MATURITY_WEIGHT: Record<IdeaMaturity, number> = {
   experimental: 0.2,
 };
 
+// Stage-to-category relevance boosts
+const STAGE_RELEVANCE: Record<string, string[]> = {
+  prospecting: ['outbound', 'prospecting', 'icp', 'cold call', 'cadence'],
+  discovery: ['discovery', 'qualification', 'meddicc', 'pain', 'questions'],
+  demo: ['demo', 'presentation', 'value prop', 'storytelling'],
+  negotiation: ['negotiation', 'pricing', 'objection', 'closing', 'commercial'],
+  closing: ['closing', 'negotiation', 'urgency', 'commitment'],
+  renewal: ['renewal', 'expansion', 'retention', 'churn', 'customer success'],
+};
+
+export interface ScoredInsight {
+  insight: ExtractedInsight;
+  score: number;
+  breakdown: {
+    maturity: number;
+    trust: number;
+    recency: number;
+    relevance: number;
+  };
+  reasoning: string;
+}
+
+/**
+ * Score a single insight against a decision context.
+ */
+export function scoreInsight(
+  insight: ExtractedInsight,
+  bestDate: string | null,
+  context: DecisionContext,
+): ScoredInsight {
+  // 1. Maturity weight (0–1)
+  const maturityScore = MATURITY_WEIGHT[insight.idea_maturity];
+
+  // 2. Trust composite (0–1)
+  const trustScore = Math.min(1,
+    (Math.min(1, insight.support_count / 5) * 0.4) +
+    (Math.min(1, insight.source_diversity / 4) * 0.3) +
+    (insight.consistency_score * 0.3),
+  );
+
+  // 3. Recency (0–1), decays over 3 years
+  let recencyScore = 0.5;
+  if (bestDate) {
+    const ageYears = (Date.now() - new Date(bestDate).getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+    recencyScore = Math.max(0, 1 - (ageYears / 3));
+  }
+
+  // 4. Contextual relevance (0–1)
+  let relevanceScore = 0.3; // baseline
+  const insightText = `${insight.text} ${insight.category || ''}`.toLowerCase();
+
+  // Topic match
+  if (context.topic && insightText.includes(context.topic.toLowerCase())) {
+    relevanceScore += 0.3;
+  }
+
+  // Stage/execution relevance
+  const stageKey = (context.executionState || context.dealStage || '').toLowerCase();
+  const relevantTerms = STAGE_RELEVANCE[stageKey] || [];
+  if (relevantTerms.some(term => insightText.includes(term))) {
+    relevanceScore += 0.25;
+  }
+
+  // Active signal alignment
+  if (context.activeSignals?.length) {
+    const signalMatch = context.activeSignals.some(s => insightText.includes(s.toLowerCase()));
+    if (signalMatch) relevanceScore += 0.15;
+  }
+
+  relevanceScore = Math.min(1, relevanceScore);
+
+  // Composite: weighted sum
+  const score =
+    (maturityScore * 0.25) +
+    (trustScore * 0.25) +
+    (recencyScore * 0.2) +
+    (relevanceScore * 0.3);
+
+  // Build reasoning
+  const reasons: string[] = [];
+  if (maturityScore >= 0.75) reasons.push(`established ${insight.idea_maturity}`);
+  if (trustScore >= 0.6) reasons.push(`backed by ${insight.support_count} sources`);
+  if (recencyScore >= 0.7) reasons.push('recent');
+  if (relevanceScore >= 0.5) reasons.push(`relevant to ${stageKey || context.topic || 'context'}`);
+  if (reasons.length === 0) reasons.push('general relevance');
+
+  return {
+    insight,
+    score,
+    breakdown: { maturity: maturityScore, trust: trustScore, recency: recencyScore, relevance: relevanceScore },
+    reasoning: reasons.join(', '),
+  };
+}
+
+/**
+ * Rank all insights, return top N with reasoning + deprioritisation notes.
+ */
+export interface DecisionResult {
+  primary: ScoredInsight;
+  alternative: ScoredInsight | null;
+  deprioritised: { text: string; reason: string }[];
+  totalConsidered: number;
+}
+
+export function decideTopInsights(
+  insights: ExtractedInsight[],
+  sourceMap: Map<string, { date: string | null }>,
+  context: DecisionContext,
+): DecisionResult | null {
+  if (!insights.length) return null;
+
+  const scored = insights.map(ins =>
+    scoreInsight(ins, sourceMap.get(ins.provenance.source_content_id)?.date ?? null, context),
+  ).sort((a, b) => b.score - a.score);
+
+  const primary = scored[0];
+  const alternative = scored.length > 1 && scored[1].score >= primary.score * 0.65
+    ? scored[1] : null;
+
+  const deprioritised = scored.slice(alternative ? 2 : 1, 5).map(s => ({
+    text: s.insight.text.slice(0, 80),
+    reason: s.score < primary.score * 0.5
+      ? 'significantly lower relevance'
+      : s.insight.idea_maturity === 'experimental'
+        ? 'experimental — insufficient evidence'
+        : 'lower priority in current context',
+  }));
+
+  return { primary, alternative, deprioritised, totalConsidered: scored.length };
+}
+
+/**
+ * Format a decision result for Dave's output.
+ */
+export function formatDecision(result: DecisionResult, context: DecisionContext): string {
+  const lines: string[] = [];
+  const p = result.primary;
+
+  lines.push('🎯 **Recommended Action**');
+  lines.push(`**${p.insight.text}**`);
+  lines.push(`_Why:_ ${p.reasoning} (score ${Math.round(p.score * 100)}/100)`);
+  lines.push(`_Classification:_ ${MATURITY_LABELS[p.insight.idea_maturity]} · Trust ${Math.round(p.breakdown.trust * 100)}% · Recency ${Math.round(p.breakdown.recency * 100)}%`);
+
+  if (result.alternative) {
+    const a = result.alternative;
+    lines.push('');
+    lines.push('💡 **Alternative**');
+    lines.push(`${a.insight.text}`);
+    lines.push(`_Why:_ ${a.reasoning} (score ${Math.round(a.score * 100)}/100)`);
+  }
+
+  if (result.deprioritised.length) {
+    lines.push('');
+    lines.push(`_${result.deprioritised.length} other insight(s) deprioritised:_`);
+    for (const d of result.deprioritised.slice(0, 3)) {
+      lines.push(`  ↓ "${d.text}…" — ${d.reason}`);
+    }
+  }
+
+  if (context.dealStage || context.executionState) {
+    lines.push('');
+    lines.push(`_Context: ${context.executionState || context.dealStage} · ${result.totalConsidered} insights evaluated_`);
+  }
+
+  return lines.join('\n');
+}
+
+// Keep backward-compatible rankInsights
 export function rankInsights(insights: ExtractedInsight[], includeExperimental = false): ExtractedInsight[] {
   const filtered = includeExperimental
     ? insights
@@ -237,7 +413,7 @@ export interface CitationContext {
   conflicts: ConflictingView[];
 }
 
-const MATURITY_LABELS: Record<IdeaMaturity, string> = {
+export const MATURITY_LABELS: Record<IdeaMaturity, string> = {
   principle: '🏛️ Established Principle',
   pattern: '🔄 Recognised Pattern',
   trend: '📈 Emerging Trend',
