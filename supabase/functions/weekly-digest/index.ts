@@ -51,36 +51,26 @@ Deno.serve(async (req: Request) => {
     const { data: entries, error: entriesError } = await supabase
       .from("daily_journal_entries")
       .select("user_id, dials, conversations, meetings_set, opportunities_created, daily_score, goal_met")
+      .eq("user_id", userId)
       .gte("date", lastMondayStr)
       .lt("date", todayStr);
 
     if (entriesError) throw entriesError;
 
-    // Group by user
-    const userStats = new Map<string, {
-      totalDials: number;
-      totalConversations: number;
-      totalMeetingsSet: number;
-      totalOppsCreated: number;
-      avgScore: number;
-      goalMetDays: number;
-      workDays: number;
-    }>();
+    // Compute stats for the authenticated user
+    const stats = {
+      totalDials: 0, totalConversations: 0, totalMeetingsSet: 0,
+      totalOppsCreated: 0, avgScore: 0, goalMetDays: 0, workDays: 0,
+    };
 
     for (const entry of entries || []) {
-      if (!entry.user_id) continue;
-      const existing = userStats.get(entry.user_id) || {
-        totalDials: 0, totalConversations: 0, totalMeetingsSet: 0,
-        totalOppsCreated: 0, avgScore: 0, goalMetDays: 0, workDays: 0,
-      };
-      existing.totalDials += entry.dials || 0;
-      existing.totalConversations += entry.conversations || 0;
-      existing.totalMeetingsSet += entry.meetings_set || 0;
-      existing.totalOppsCreated += entry.opportunities_created || 0;
-      existing.avgScore += entry.daily_score || 0;
-      existing.goalMetDays += entry.goal_met ? 1 : 0;
-      existing.workDays += 1;
-      userStats.set(entry.user_id, existing);
+      stats.totalDials += entry.dials || 0;
+      stats.totalConversations += entry.conversations || 0;
+      stats.totalMeetingsSet += entry.meetings_set || 0;
+      stats.totalOppsCreated += entry.opportunities_created || 0;
+      stats.avgScore += entry.daily_score || 0;
+      stats.goalMetDays += entry.goal_met ? 1 : 0;
+      stats.workDays += 1;
     }
 
     // Get upcoming renewals for each user
