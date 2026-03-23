@@ -34,6 +34,16 @@ interface WhoopMetric {
   strain_score: number | null;
 }
 
+interface SyncFamilyResult {
+  name: 'cycles' | 'recovery' | 'sleep';
+  ok: boolean;
+  count: number;
+  valueCount?: number;
+  reason?: 'missing_scope' | 'endpoint_error' | 'parse_error' | 'empty_response' | 'auth_error';
+  error?: string;
+  httpStatus?: number;
+}
+
 function deriveConnectionState(
   connection: WhoopConnection | null,
   metrics: WhoopMetric[],
@@ -84,6 +94,12 @@ function scoreColor(score: number | null, type: 'recovery' | 'sleep' | 'strain')
   return 'text-destructive';
 }
 
+function shouldReconnect(syncError: string | null, connectionState: WhoopConnectionState) {
+  if (connectionState === 'token_expired') return true;
+  if (!syncError) return false;
+  return /auth_error|missing_scope|missing_offline_scope/i.test(syncError);
+}
+
 // ── Main component ─────────────────────────────────────────────
 export function WhoopIntegration() {
   const { user } = useAuth();
@@ -97,6 +113,7 @@ export function WhoopIntegration() {
   const [syncError, setSyncError] = useState<string | null>(null);
 
   const connectionState = deriveConnectionState(connection, metrics, syncError, syncing);
+  const reconnectRequired = shouldReconnect(syncError, connectionState);
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -109,7 +126,6 @@ export function WhoopIntegration() {
         .maybeSingle();
 
       setConnection(conn);
-      setSyncError(null);
 
       if (conn) {
         const { data: metricsData } = await supabase
@@ -121,6 +137,7 @@ export function WhoopIntegration() {
         setMetrics(metricsData || []);
       } else {
         setMetrics([]);
+        setSyncError(null);
       }
     } catch (err) {
       console.error('Failed to load WHOOP data:', err);
@@ -134,6 +151,7 @@ export function WhoopIntegration() {
     const whoopStatus = searchParams.get('whoop');
     if (whoopStatus === 'success') {
       toast.success('WHOOP connected successfully!');
+      setSyncError(null);
       searchParams.delete('whoop');
       setSearchParams(searchParams, { replace: true });
       // Reload to pick up fresh connection + optionally trigger sync
@@ -178,24 +196,26 @@ export function WhoopIntegration() {
 
       const data = response.data;
       if (data?.needsReconnect) {
-        setSyncError(data.errorDetail || 'token_expired');
+        const reconnectMessage = data.scopeDiagnostics?.refreshCapability === 'missing_offline_scope'
+          ? 'offline scope missing — reconnect required'
+          : (data.errorDetail || 'token_expired');
+        setSyncError(reconnectMessage);
         toast.error(data.error || 'WHOOP token expired — please reconnect');
         await loadData();
         return;
       }
 
-      // Show per-family diagnostics
-      const families: Array<{ name: string; ok: boolean; count: number; error?: string }> = data.families || [];
-      const failedFamilies = families.filter(f => !f.ok);
-      const emptyFamilies = families.filter(f => f.ok && f.count === 0);
+      const families: SyncFamilyResult[] = data.families || [];
+      const failedFamilies = families.filter((family) => !family.ok);
+      const failureSummary = failedFamilies
+        .map((family) => `${family.name}: ${family.reason ?? 'unknown'}${family.httpStatus ? ` (${family.httpStatus})` : ''}${family.error ? ` — ${family.error}` : ''}`)
+        .join(' · ');
 
       if (failedFamilies.length > 0) {
-        const names = failedFamilies.map(f => f.name).join(', ');
-        toast.warning(`Synced ${data.synced} day(s), but ${names} failed to fetch`);
-      } else if (emptyFamilies.length > 0) {
-        const names = emptyFamilies.map(f => f.name).join(', ');
-        toast.success(`Synced ${data.synced} day(s). No recent ${names} data from WHOOP.`);
+        setSyncError(failureSummary || 'sync_failed');
+        toast.warning(`Synced ${data.synced} day(s), but ${failureSummary}`);
       } else {
+        setSyncError(null);
         toast.success(`Synced ${data.synced} day(s) of WHOOP data`);
       }
 
@@ -229,7 +249,6 @@ export function WhoopIntegration() {
   }
 
   const latestMetric = metrics[0];
-  const needsReconnect = connectionState === 'token_expired' || connectionState === 'sync_failed';
 
   if (loading) {
     return (
@@ -270,18 +289,26 @@ export function WhoopIntegration() {
         {/* Connected states */}
         {connectionState !== 'not_connected' && (
           <div className="space-y-4">
-            {/* Token expired / sync failed banner */}
-            {needsReconnect && (
+            {/* Token expired banner */}
+            {reconnectRequired && (
               <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2">
                 <p className="text-sm font-medium text-destructive">
                   {connectionState === 'token_expired'
                     ? 'Your WHOOP token has expired. Reconnect to resume syncing.'
-                    : `Sync failed: ${syncError || 'Unknown error'}`}
+                    : `Reconnect required: ${syncError || 'Missing WHOOP authorization scope.'}`}
                 </p>
                 <Button onClick={handleConnect} disabled={connecting} size="sm" className="gap-1.5">
                   {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
                   Reconnect WHOOP
                 </Button>
+              </div>
+            )}
+
+            {/* Non-auth sync failure banner */}
+            {!reconnectRequired && connectionState === 'sync_failed' && syncError && (
+              <div className="rounded-lg border border-border bg-muted/40 p-3">
+                <p className="text-sm font-medium">Partial sync issue</p>
+                <p className="mt-1 text-sm text-muted-foreground break-words">{syncError}</p>
               </div>
             )}
 
@@ -312,8 +339,8 @@ export function WhoopIntegration() {
               </div>
             )}
 
-            {/* Footer actions — only show sync/disconnect when not in error state */}
-            {!needsReconnect && (
+            {/* Footer actions */}
+            {!reconnectRequired && (
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">
                   Last sync: {connection ? format(parseISO(connection.updated_at), 'MMM d, h:mm a') : '—'}
@@ -330,8 +357,8 @@ export function WhoopIntegration() {
               </div>
             )}
 
-            {/* Disconnect available even in error state */}
-            {needsReconnect && (
+            {/* Disconnect available even in reconnect state */}
+            {reconnectRequired && (
               <div className="flex justify-end">
                 <Button variant="ghost" size="sm" onClick={handleDisconnect} disabled={disconnecting} className="gap-1.5 text-destructive hover:text-destructive">
                   {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unlink className="h-3.5 w-3.5" />}

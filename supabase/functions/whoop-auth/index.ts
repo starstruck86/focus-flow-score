@@ -46,7 +46,7 @@ serve(async (req) => {
     // Encode userId + redirectUri in state so the callback knows which user to associate
     const encodedState = btoa(JSON.stringify({ userId, redirectUri, nonce: crypto.randomUUID() }));
 
-    const scopes = 'read:recovery read:sleep read:workout read:cycles read:profile';
+    const scopes = 'read:recovery read:sleep read:workout read:cycles read:profile offline';
 
     const authUrl = new URL('https://api.prod.whoop.com/oauth/oauth2/auth');
     authUrl.searchParams.set('client_id', WHOOP_CLIENT_ID);
