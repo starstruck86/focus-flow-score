@@ -867,9 +867,13 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
               />
             </TableCell>
             <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-              <span className={cn("text-[10px] font-medium", lastTouchColor)}>
-                {lastTouchDays === null ? 'Never' : `${lastTouchDays}d ago`}
-              </span>
+              <EditableDatePicker
+                value={opp.lastTouchDate}
+                onChange={(v) => updateOpportunity(opp.id, { lastTouchDate: v })}
+                placeholder="—"
+                compact
+                className="w-28"
+              />
             </TableCell>
             <NextStepTextCell opp={opp} />
             {summaryCustomFields.map(field => (
@@ -1585,7 +1589,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   <SortableHeader sortKey="arr" currentSort={sortConfig} onSort={handleSort} className="w-[9%]">ARR</SortableHeader>
                   <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[10%]">Close Date</SortableHeader>
                   <TableHead className="w-[8%] text-xs">Next Step Date</TableHead>
-                  <TableHead className="w-[7%] text-xs">Last Touch</TableHead>
+                  <TableHead className="w-[7%] text-xs">Last Touch Date</TableHead>
                   <SortableHeader sortKey="nextStep" currentSort={sortConfig} onSort={handleSort} className="w-[18%]">Next Step</SortableHeader>
                   {summaryCustomFields.map(field => (
                     <SortableHeader key={field.id} sortKey={`custom:${field.id}`} currentSort={sortConfig} onSort={handleSort}>{field.name}</SortableHeader>
@@ -1606,7 +1610,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   {showChurnRisk && <SortableHeader sortKey="churnRisk" currentSort={sortConfig} onSort={handleSort} className="w-[8%]">Churn Risk</SortableHeader>}
                   <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[8%]">Close Date</SortableHeader>
                   <TableHead className="w-[7%] text-xs">Next Step Date</TableHead>
-                  <TableHead className="w-[6%] text-xs">Last Touch</TableHead>
+                  <TableHead className="w-[6%] text-xs">Last Touch Date</TableHead>
                   <SortableHeader sortKey="stage" currentSort={sortConfig} onSort={handleSort} className="w-[8%]">Stage</SortableHeader>
                   <SortableHeader sortKey="priorContractArr" currentSort={sortConfig} onSort={handleSort} className="w-[8%]">Prior Contract</SortableHeader>
                   <SortableHeader sortKey="renewalArr" currentSort={sortConfig} onSort={handleSort} className="w-[8%]">Renewal ARR</SortableHeader>
@@ -1634,7 +1638,7 @@ export function OpportunitiesTable({ onOpenDrawer, renewalsOnly = false, exclude
                   {showChurnRisk && <SortableHeader sortKey="churnRisk" currentSort={sortConfig} onSort={handleSort} className="w-[80px]">Churn Risk</SortableHeader>}
                   <SortableHeader sortKey="closeDate" currentSort={sortConfig} onSort={handleSort} className="w-[100px]">Close Date</SortableHeader>
                   <TableHead className="w-[90px] text-xs">Next Step Date</TableHead>
-                  <TableHead className="w-[80px] text-xs">Last Touch</TableHead>
+                  <TableHead className="w-[80px] text-xs">Last Touch Date</TableHead>
                   <SortableHeader sortKey="stage" currentSort={sortConfig} onSort={handleSort} className="w-[80px]">Stage</SortableHeader>
                   <SortableHeader sortKey="nextStep" currentSort={sortConfig} onSort={handleSort} className="w-[150px]">Next Step Notes</SortableHeader>
                   {summaryCustomFields.map(field => (

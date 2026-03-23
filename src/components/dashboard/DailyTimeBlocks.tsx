@@ -206,6 +206,62 @@ export function DailyTimeBlocks() {
     },
   });
 
+  // Recast mutation — re-optimizes remaining blocks using the recast engine
+  const recastMutation = useMutation({
+    mutationFn: async () => {
+      if (!plan) throw new Error('No plan to recast');
+      const { recastDay } = await import('@/data/recast-engine');
+      type RBlock = import('@/data/recast-engine').RecastBlock;
+      type RInput = import('@/data/recast-engine').RecastInput;
+
+      const now = new Date();
+      const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
+      const completedSet = new Set<string>((plan.completed_goals || []) as string[]);
+      const planBlocks = (plan.blocks || []) as TimeBlock[];
+      const tgts = (plan.key_metric_targets || {}) as Record<string, number>;
+
+      const act: Record<string, number> = {};
+      for (const b of planBlocks) {
+        if (b.actual_dials) act.dials = (act.dials || 0) + b.actual_dials;
+        if (b.actual_emails) act.emails = (act.emails || 0) + b.actual_emails;
+      }
+      act.completed_goals = completedSet.size;
+
+      const input: RInput = {
+        currentTimeMinutes,
+        allBlocks: planBlocks as RBlock[],
+        completedGoals: completedSet,
+        meetingSchedule: [],
+        targets: tgts,
+        actuals: act,
+        workEndMinutes: 17 * 60 + 30,
+      };
+
+      const result = recastDay(input);
+
+      const updatedBlocks = result.remainingBlocks as unknown as Json;
+      await supabase
+        .from('daily_time_blocks' as 'daily_time_blocks')
+        .update({
+          blocks: updatedBlocks,
+          recast_at: new Date().toISOString(),
+        })
+        .eq('id', plan.id);
+
+      return result;
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['daily-time-blocks'] });
+      const msg = result.droppedBlocks.length > 0
+        ? `Recast — dropped ${result.droppedBlocks.length} block(s), ${Math.round(result.minutesRemaining / 60 * 10) / 10}h left`
+        : `Recast — ${Math.round(result.minutesRemaining / 60 * 10) / 10}h remaining, all blocks kept`;
+      toast.success(msg);
+    },
+    onError: (e) => {
+      toast.error(e instanceof Error ? e.message : 'Failed to recast plan');
+    },
+  });
+
   // Handle confirmed screenshot events — rebuild plan with them
   const handleScreenshotEventsConfirmed = useCallback((events: CalendarScreenshotEvent[]) => {
     generateMutation.mutate({ confirmedScreenshotEvents: events });
@@ -555,6 +611,15 @@ export function DailyTimeBlocks() {
               title="Plan preferences"
             >
               <Settings2 className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="outline" size="sm" className="h-7 text-xs gap-1 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+              onClick={() => recastMutation.mutate()}
+              disabled={recastMutation.isPending}
+              title="Re-optimize remaining blocks based on current progress"
+            >
+              <RotateCcw className={cn("h-3 w-3", recastMutation.isPending && "animate-spin")} />
+              Recast
             </Button>
             <Button
               variant="ghost" size="sm" className="h-7 text-xs"
