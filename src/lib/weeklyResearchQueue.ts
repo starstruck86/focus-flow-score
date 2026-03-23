@@ -5,19 +5,25 @@
  */
 import type { Account } from '@/types';
 
+/** Check if a single account is eligible for the new-logo queue */
+export function isEligibleForQueue(
+  account: Account,
+  activeOppAccountIds: Set<string>,
+): boolean {
+  if (activeOppAccountIds.has(account.id)) return false;
+  if (account.motion === 'renewal') return false;
+  if (account.accountStatus === 'disqualified') return false;
+  if (account.outreachStatus === 'closed-won' || account.outreachStatus === 'closed-lost') return false;
+  if (account.outreachStatus === 'opp-open') return false;
+  return true;
+}
+
 /** Filter to eligible new-logo accounts only */
 export function filterEligible(
   accounts: Account[],
   activeOppAccountIds: Set<string>,
 ): Account[] {
-  return accounts.filter(a => {
-    if (activeOppAccountIds.has(a.id)) return false;
-    if (a.motion === 'renewal') return false;
-    if (a.accountStatus === 'disqualified') return false;
-    if (a.outreachStatus === 'closed-won' || a.outreachStatus === 'closed-lost') return false;
-    if (a.outreachStatus === 'opp-open') return false;
-    return true;
-  });
+  return accounts.filter(a => isEligibleForQueue(a, activeOppAccountIds));
 }
 
 /** Score an account for weekly queue placement. Higher = better. */

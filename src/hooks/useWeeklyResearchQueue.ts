@@ -10,7 +10,7 @@ import { useStore } from '@/store/useStore';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { startOfWeek, format } from 'date-fns';
-import { scoreAccountForQueue, filterEligible } from '@/lib/weeklyResearchQueue';
+import { scoreAccountForQueue, filterEligible, isEligibleForQueue } from '@/lib/weeklyResearchQueue';
 import { toast } from 'sonner';
 
 // ── Types ──
@@ -206,7 +206,7 @@ export function useWeeklyResearchQueue() {
     await persistAssignments(updated);
   }, [assignments, persistAssignments]);
 
-  // ── Add account to a day ──
+  // ── Add account to a day (with eligibility check) ──
   const addAccount = useCallback(async (day: keyof WeeklyAssignments, account: { id: string; name: string; tier?: string; industry?: string }) => {
     if (assignments[day].length >= 3) {
       toast.error('Day already has 3 accounts — remove one first');
@@ -216,10 +216,16 @@ export function useWeeklyResearchQueue() {
       toast.error('Account already in this week\'s queue');
       return;
     }
+    // Validate eligibility
+    const fullAccount = accounts.find(a => a.id === account.id);
+    if (fullAccount && !isEligibleForQueue(fullAccount, activeOppAccountIds)) {
+      toast.error('Account is not eligible (renewal, open opp, or closed)');
+      return;
+    }
     const updated = { ...assignments };
     updated[day] = [...updated[day], { ...account, state: 'not_started' as AccountState }];
     await persistAssignments(updated);
-  }, [assignments, persistAssignments]);
+  }, [assignments, persistAssignments, accounts, activeOppAccountIds]);
 
   // ── Swap accounts between days ──
   const swapAccounts = useCallback(async (
