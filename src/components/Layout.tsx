@@ -25,6 +25,7 @@ import { DayTimeline } from '@/components/tasks/DayTimeline';
 import { ActivityRings } from '@/components/ActivityRings';
 import { GlobalWeekStrip } from '@/components/GlobalWeekStrip';
 import { useDaveContext, DaveSessionError, type DaveSessionData } from '@/hooks/useDaveContext';
+import { useGroupDrift } from '@/hooks/useGroupDrift';
 import { useVoiceReminders } from '@/hooks/useVoiceReminders';
 import { useWakeWord } from '@/hooks/useWakeWord';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -85,6 +86,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [daveRetryCount, setDaveRetryCount] = useState(0);
   const [daveBlockedByTab, setDaveBlockedByTab] = useState(false);
   const { getSession: getDaveSession, invalidateCache: invalidateDaveCache, isFetching: isFetchingDaveSession } = useDaveContext();
+  const daveDrift = useGroupDrift('dave');
   const daveChannelRef = useRef<BroadcastChannel | null>(null);
   useVoiceReminders();
 
@@ -327,12 +329,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <BackToToday />
       <GlobalFAB position="bottom-right" />
 
-      {/* Persistent Dave mic FAB — always visible, one tap to start */}
-      <DaveMicFAB
-        onTap={handleOpenDave}
-        isLoading={isFetchingDaveSession}
-        isActive={daveOpen}
-      />
+      {/* Persistent Dave mic FAB — hidden when drift detected */}
+      {!daveDrift && (
+        <DaveMicFAB
+          onTap={handleOpenDave}
+          isLoading={isFetchingDaveSession}
+          isActive={daveOpen}
+        />
+      )}
+      {daveDrift && !daveOpen && (
+        <div className="fixed left-4 bottom-[calc(7.5rem+env(safe-area-inset-bottom))] z-50">
+          <button
+            onClick={() => toast.error(
+              `Dave is unavailable: deployment version mismatch (${daveDrift.expected} vs ${daveDrift.actual}). Redeploy dave functions to fix.`,
+              { duration: 6000 }
+            )}
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-muted text-muted-foreground shadow-lg"
+            aria-label="Dave unavailable — version drift"
+          >
+            <Mic className="h-6 w-6 opacity-40" />
+          </button>
+        </div>
+      )}
 
       {/* Dave Tap Prompt for Siri Shortcut opens */}
       <AnimatePresence>

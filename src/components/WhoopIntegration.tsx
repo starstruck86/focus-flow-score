@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useGroupDrift } from '@/hooks/useGroupDrift';
+import { driftErrorMessage } from '@/lib/functionGroupDrift';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -103,6 +105,7 @@ function shouldReconnect(syncError: string | null, connectionState: WhoopConnect
 // ── Main component ─────────────────────────────────────────────
 export function WhoopIntegration() {
   const { user } = useAuth();
+  const whoopDrift = useGroupDrift('whoop');
   const [searchParams, setSearchParams] = useSearchParams();
   const [connection, setConnection] = useState<WhoopConnection | null>(null);
   const [metrics, setMetrics] = useState<WhoopMetric[]>([]);
@@ -252,6 +255,30 @@ export function WhoopIntegration() {
   }
 
   const latestMetric = metrics[0];
+
+  // ── Fail-fast: block WHOOP UI when deployment drift detected ──
+  if (whoopDrift) {
+    return (
+      <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-sm">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+          <div className="space-y-2">
+            <p className="font-semibold text-destructive">WHOOP Integration Unavailable</p>
+            <p className="text-muted-foreground">
+              A deployment version mismatch was detected between WHOOP backend functions.
+            </p>
+            <div className="rounded bg-muted/50 p-3 font-mono text-xs space-y-1">
+              <p><span className="text-muted-foreground">Expected:</span> <span className="font-bold">{whoopDrift.expected}</span> <span className="text-muted-foreground">({whoopDrift.firstFunction})</span></p>
+              <p><span className="text-muted-foreground">Actual:</span> <span className="font-bold text-destructive">{whoopDrift.actual}</span> <span className="text-muted-foreground">({whoopDrift.conflictingFunction})</span></p>
+            </div>
+            <p className="text-muted-foreground text-xs">
+              Redeploy all WHOOP functions together (whoop-auth, whoop-callback, whoop-sync) to resolve this issue.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
