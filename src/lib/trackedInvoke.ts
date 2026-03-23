@@ -11,6 +11,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { generateTraceId, normalizeError, recordError, type AppError } from './appError';
 import { createLogger } from './logger';
+import { checkDriftBlock, driftErrorMessage } from './functionGroupDrift';
 import { withRetry, withTimeout, type RetryOptions } from './reliability';
 
 const logger = createLogger('TrackedInvoke');
