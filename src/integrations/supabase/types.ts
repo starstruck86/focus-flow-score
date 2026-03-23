@@ -1324,6 +1324,105 @@ export type Database = {
         }
         Relationships: []
       }
+      intelligence_units: {
+        Row: {
+          category: string | null
+          chunk_id: string | null
+          conflicts: Json | null
+          consistency_score: number
+          created_at: string
+          extracted_at: string
+          extraction_confidence: number
+          extraction_version: string
+          id: string
+          idea_maturity: string
+          metadata: Json | null
+          resource_id: string
+          source_diversity: number
+          support_count: number
+          text: string
+          unit_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          chunk_id?: string | null
+          conflicts?: Json | null
+          consistency_score?: number
+          created_at?: string
+          extracted_at?: string
+          extraction_confidence?: number
+          extraction_version?: string
+          id?: string
+          idea_maturity?: string
+          metadata?: Json | null
+          resource_id: string
+          source_diversity?: number
+          support_count?: number
+          text: string
+          unit_type?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          chunk_id?: string | null
+          conflicts?: Json | null
+          consistency_score?: number
+          created_at?: string
+          extracted_at?: string
+          extraction_confidence?: number
+          extraction_version?: string
+          id?: string
+          idea_maturity?: string
+          metadata?: Json | null
+          resource_id?: string
+          source_diversity?: number
+          support_count?: number
+          text?: string
+          unit_type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      knowledge_signals: {
+        Row: {
+          author_or_speaker: string | null
+          confidence: number
+          created_at: string
+          id: string
+          relevance: number
+          resource_id: string
+          signal_timestamp: string
+          theme: string
+          user_id: string
+        }
+        Insert: {
+          author_or_speaker?: string | null
+          confidence?: number
+          created_at?: string
+          id?: string
+          relevance?: number
+          resource_id: string
+          signal_timestamp?: string
+          theme: string
+          user_id: string
+        }
+        Update: {
+          author_or_speaker?: string | null
+          confidence?: number
+          created_at?: string
+          id?: string
+          relevance?: number
+          resource_id?: string
+          signal_timestamp?: string
+          theme?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       mock_call_sessions: {
         Row: {
           call_type: string
@@ -2266,11 +2365,14 @@ export type Database = {
       resources: {
         Row: {
           account_id: string | null
+          author_or_speaker: string | null
           content: string | null
           content_length: number | null
           content_status: string
           created_at: string
           current_version: number | null
+          date_confidence: string | null
+          date_source: string | null
           description: string | null
           enriched_at: string | null
           file_url: string | null
@@ -2281,6 +2383,8 @@ export type Database = {
           opportunity_id: string | null
           resource_type: string
           screenshot_structure: string | null
+          source_created_at: string | null
+          source_published_at: string | null
           source_resource_id: string | null
           tags: string[] | null
           template_category: string | null
@@ -2290,11 +2394,14 @@ export type Database = {
         }
         Insert: {
           account_id?: string | null
+          author_or_speaker?: string | null
           content?: string | null
           content_length?: number | null
           content_status?: string
           created_at?: string
           current_version?: number | null
+          date_confidence?: string | null
+          date_source?: string | null
           description?: string | null
           enriched_at?: string | null
           file_url?: string | null
@@ -2305,6 +2412,8 @@ export type Database = {
           opportunity_id?: string | null
           resource_type?: string
           screenshot_structure?: string | null
+          source_created_at?: string | null
+          source_published_at?: string | null
           source_resource_id?: string | null
           tags?: string[] | null
           template_category?: string | null
@@ -2314,11 +2423,14 @@ export type Database = {
         }
         Update: {
           account_id?: string | null
+          author_or_speaker?: string | null
           content?: string | null
           content_length?: number | null
           content_status?: string
           created_at?: string
           current_version?: number | null
+          date_confidence?: string | null
+          date_source?: string | null
           description?: string | null
           enriched_at?: string | null
           file_url?: string | null
@@ -2329,6 +2441,8 @@ export type Database = {
           opportunity_id?: string | null
           resource_type?: string
           screenshot_structure?: string | null
+          source_created_at?: string | null
+          source_published_at?: string | null
           source_resource_id?: string | null
           tags?: string[] | null
           template_category?: string | null

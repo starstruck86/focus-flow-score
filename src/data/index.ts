@@ -8,3 +8,4 @@ export * from './renewals';
 export * from './contacts';
 export * from './call-transcripts';
 export * from './resource-links';
+export * from './intelligence';
