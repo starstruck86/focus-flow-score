@@ -612,9 +612,37 @@ Also provide an overall "day_strategy" (2-3 sentences: how today fits into the w
     if (!toolCall) throw new Error("No tool call in AI response");
 
     const plan = JSON.parse(toolCall.function.arguments);
-    const mergedBlocks = mergeLockedCalendarBlocks(plan.blocks || [], lockedCalendarBlocks);
+    let mergedBlocks = mergeLockedCalendarBlocks(plan.blocks || [], lockedCalendarBlocks);
 
-    // Upsert the plan with all data persisted
+    // SAFETY NET: If AI omitted a "build" block and there are prospecting accounts, inject one
+    const hasBuildBlock = mergedBlocks.some((b: any) => b.type === 'build');
+    if (!hasBuildBlock && prospectingAccounts.length > 0) {
+      // Find the first non-meeting gap >= 45 min to insert a build block
+      const firstNonMeeting = mergedBlocks.findIndex((b: any) => b.type !== 'meeting');
+      const insertIdx = firstNonMeeting >= 0 ? firstNonMeeting : 0;
+      const buildStart = insertIdx > 0 ? mergedBlocks[insertIdx - 1].end_time : workStart;
+      const [bh, bm] = buildStart.split(':').map(Number);
+      const buildEndMin = bh * 60 + bm + 45;
+      const buildEnd = `${Math.floor(buildEndMin / 60).toString().padStart(2, '0')}:${(buildEndMin % 60).toString().padStart(2, '0')}`;
+      const topNames = prospectingAccounts.slice(0, 3).map((a: any) => a.name).join(', ');
+      mergedBlocks.splice(insertIdx, 0, {
+        start_time: buildStart,
+        end_time: buildEnd,
+        label: `New Logo Build (3 accounts)`,
+        type: 'build',
+        workstream: 'new_logo',
+        goals: [
+          `Select 3 target accounts (${topNames})`,
+          'Research companies & identify contacts',
+          'Find contact info & add to cadence',
+        ],
+        reasoning: 'Pipeline sourcing cannot be zero — injected because AI plan omitted account build work.',
+      });
+      // Re-sort by start time
+      mergedBlocks.sort((a: any, b: any) => toMinutes(a.start_time) - toMinutes(b.start_time));
+    }
+
+    // Upsert the plan with all data persisted — reset dismissals on rebuild
     const { data: saved, error: saveError } = await supabase
       .from("daily_time_blocks")
       .upsert({
@@ -627,6 +655,8 @@ Also provide an overall "day_strategy" (2-3 sentences: how today fits into the w
         key_metric_targets: plan.key_metric_targets || {},
         completed_goals: [],
         block_feedback: [],
+        dismissed_block_indices: [],
+        recast_at: null,
       }, { onConflict: "user_id,plan_date" })
       .select()
       .single();
