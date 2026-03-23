@@ -9,6 +9,7 @@ import {
   type PeriodType,
   type ComparisonResult,
   type MetricComparison,
+  type ConfidenceLevel,
 } from '@/data/comparison-engine';
 
 // ── NLP helpers (Dave-specific) ─────────────────────────────────
