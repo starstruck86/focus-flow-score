@@ -463,7 +463,7 @@ WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL):
 - type: "build", workstream: "new_logo"
 - This is the structured work BEFORE you can dial. Without it, your call blitz has no fresh targets.
 - DEFAULT DAILY TARGET: 3 new accounts sourced, researched, contacts found, and added to cadence
-- A "New Logo Build" block (45-60 min) is a REQUIRED part of the daily plan — NOT optional
+- A "New Logo Build" block (60 min default, 30 min minimum on heavy days) is a REQUIRED part of the daily plan — NOT optional
 - The build block has 5 sequential steps the user tracks:
   1. Select 3 target accounts (from ICP-fit sourced list or prospecting accounts)
   2. Research company (website, news, tech stack, pain points)
