@@ -133,6 +133,120 @@ function getTimeBounds(timeframe?: string): { start: string; end: string } | nul
 
 const transitions = ['', 'Next up, ', 'Then there\'s ', 'After that, ', 'Also, ', 'And then, ', 'Moving on, ', 'Following that, ', 'Then we\'ve got ', 'Finally, '];
 
+// ── Decision / recommendation helpers ───────────────────────────
+
+interface PrioritizedItem {
+  name: string;
+  arr?: number;
+  urgencyScore: number;
+  riskLabel?: string;
+  reason: string;
+  nextStep: string;
+}
+
+function scoreOppPriority(o: any): PrioritizedItem {
+  let score = 0;
+  const reasons: string[] = [];
+  const arr = Number(o.arr || 0);
+
+  // Deal size weight
+  score += arr / 1000;
+
+  // Close date urgency
+  if (o.close_date) {
+    const days = daysFromNow(o.close_date);
+    if (days < 0) { score += 80; reasons.push(`${Math.abs(days)}d past close date`); }
+    else if (days <= 14) { score += 50; reasons.push(`closing in ${days}d`); }
+    else if (days <= 30) { score += 25; reasons.push(`closing in ${days}d`); }
+  }
+
+  // Stale
+  if (o.last_touch_date && daysFromNow(o.last_touch_date) < -14) {
+    const staleDays = Math.abs(daysFromNow(o.last_touch_date));
+    score += 30; reasons.push(`${staleDays}d since last touch`);
+  }
+
+  // Risk
+  if (o.churn_risk === 'high') { score += 40; reasons.push('high risk'); }
+  else if (o.churn_risk === 'medium') { score += 15; reasons.push('moderate risk'); }
+
+  // No next step
+  if (!o.next_step) { score += 20; reasons.push('no next step defined'); }
+
+  const nextStep = o.next_step
+    ? `${o.next_step.charAt(0).toUpperCase()}${o.next_step.slice(1).replace(/\.$/, '')}`
+    : 'Define a next step and reach out to your contact';
+
+  return { name: o.name || o.account_name, arr, urgencyScore: score, riskLabel: o.churn_risk, reason: joinNatural(reasons) || 'high value', nextStep };
+}
+
+function scoreRenewalPriority(r: any): PrioritizedItem {
+  let score = 0;
+  const reasons: string[] = [];
+  const arr = Number(r.arr || 0);
+
+  score += arr / 1000;
+
+  if (r.renewal_due) {
+    const days = daysFromNow(r.renewal_due);
+    if (days < 0) { score += 90; reasons.push(`${Math.abs(days)}d overdue`); }
+    else if (days <= 14) { score += 60; reasons.push(`due in ${days}d`); }
+    else if (days <= 30) { score += 30; reasons.push(`due in ${days}d`); }
+  }
+
+  if (r.churn_risk === 'high' || r.churn_risk === 'certain') { score += 50; reasons.push(`${r.churn_risk} churn risk`); }
+  else if (r.churn_risk === 'medium') { score += 20; reasons.push('moderate risk'); }
+  if (r.health_status === 'red') { score += 30; reasons.push('red health'); }
+  if (!r.next_step) { score += 15; reasons.push('no next step'); }
+
+  const nextStep = r.next_step
+    ? `${r.next_step.charAt(0).toUpperCase()}${r.next_step.slice(1).replace(/\.$/, '')}`
+    : 'Schedule a check-in with the account team';
+
+  return { name: r.account_name, arr, urgencyScore: score, riskLabel: r.churn_risk || r.health_status, reason: joinNatural(reasons) || 'upcoming renewal', nextStep };
+}
+
+function scoreTaskPriority(t: any, accountMap: Record<string, string>): PrioritizedItem {
+  let score = 0;
+  const reasons: string[] = [];
+
+  if (t.priority === 'P0') { score += 100; reasons.push('P0'); }
+  else if (t.priority === 'P1') { score += 60; reasons.push('P1'); }
+  else if (t.priority === 'P2') { score += 25; }
+
+  const today = new Date().toISOString().split('T')[0];
+  if (t.due_date && t.due_date < today) {
+    const daysLate = Math.abs(daysFromNow(t.due_date));
+    score += 40 + daysLate * 2;
+    reasons.push(`${daysLate}d overdue`);
+  } else if (t.due_date === today) {
+    score += 30;
+    reasons.push('due today');
+  }
+
+  const acct = t.linked_account_id ? accountMap[t.linked_account_id] : null;
+  const name = `${t.title}${acct ? ` (${acct})` : ''}`;
+
+  return { name, urgencyScore: score, reason: joinNatural(reasons) || 'pending task', nextStep: 'Complete or reschedule this task' };
+}
+
+function buildActionRecommendation(items: PrioritizedItem[]): string {
+  if (!items.length) return '';
+  const sorted = [...items].sort((a, b) => b.urgencyScore - a.urgencyScore);
+  const top = sorted[0];
+
+  let rec = `\n\nIf I had to pick one thing to focus on right now, it's ${top.name}`;
+  if (top.reason) rec += ` — ${top.reason}`;
+  rec += `. ${top.nextStep}.`;
+
+  if (sorted.length > 1) {
+    const second = sorted[1];
+    rec += ` After that, turn to ${second.name}.`;
+  }
+
+  return rec;
+}
+
 // ── Opportunities walkthrough ───────────────────────────────────
 
 export async function queryOpportunities(ctx: ToolContext, params: { question?: string; filter?: DaveQueryFilter }): Promise<string> {
