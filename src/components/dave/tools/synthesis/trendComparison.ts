@@ -22,6 +22,7 @@ export interface MetricComparison {
 export interface ComparisonResult {
   periodALabel: string;
   periodBLabel: string;
+  comparisonMode: ComparisonMode;
   metrics: MetricComparison[];
   topImprovement: MetricComparison | null;
   topDecline: MetricComparison | null;
