@@ -7,6 +7,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { generateTraceId, normalizeError, recordError } from './appError';
 import { createLogger } from './logger';
+import { checkDriftBlock, recordFunctionVersion, driftErrorMessage, VERSION_HEADER } from './functionGroupDrift';
 import { withRetry, withTimeout, isRetryableError, type RetryOptions } from './reliability';
 
 const logger = createLogger('AuthenticatedFetch');
@@ -45,6 +46,12 @@ const DEFAULT_RETRY: RetryOptions = { maxAttempts: 2, baseDelayMs: 1_500 };
 export async function authenticatedFetch(
   opts: AuthenticatedFetchOptions,
 ): Promise<Response> {
+  // ── Fail-fast drift guard ──
+  const drift = checkDriftBlock(opts.functionName);
+  if (drift) {
+    throw new Error(driftErrorMessage(drift));
+  }
+
   const traceId = opts.traceId ?? generateTraceId();
   const isFormData = opts.body instanceof FormData;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -81,6 +88,15 @@ export async function authenticatedFetch(
     const resp = timeoutMs > 0
       ? await withTimeout(fetchPromise, timeoutMs, `${opts.functionName} fetch`)
       : await fetchPromise;
+
+    // Track function group version from response header
+    const groupVersion = resp.headers.get(VERSION_HEADER);
+    if (groupVersion) {
+      const drift = recordFunctionVersion(opts.functionName, groupVersion);
+      if (drift) {
+        throw new Error(driftErrorMessage(drift));
+      }
+    }
 
     // Throw on retryable HTTP statuses so withRetry can catch them
     if (!resp.ok && isRetryableStatus(resp.status)) {

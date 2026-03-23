@@ -11,6 +11,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { generateTraceId, normalizeError, recordError, type AppError } from './appError';
 import { createLogger } from './logger';
+import { checkDriftBlock, driftErrorMessage } from './functionGroupDrift';
 import { withRetry, withTimeout, type RetryOptions } from './reliability';
 
 const logger = createLogger('TrackedInvoke');
@@ -92,6 +93,20 @@ export async function trackedInvoke<T = unknown>(
   functionName: string,
   options?: InvokeOptions,
 ): Promise<TrackedResult<T>> {
+  // ── Fail-fast drift guard ──
+  const drift = checkDriftBlock(functionName);
+  if (drift) {
+    const appError = normalizeError({
+      error: new Error(driftErrorMessage(drift)),
+      source: 'function',
+      functionName,
+      componentName: options?.componentName,
+      metadata: { driftInfo: drift },
+    });
+    recordError(appError);
+    return { data: null, error: appError, traceId: options?.traceId ?? generateTraceId(), attempts: 0 };
+  }
+
   const traceId = options?.traceId ?? generateTraceId();
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   let attempts = 0;
