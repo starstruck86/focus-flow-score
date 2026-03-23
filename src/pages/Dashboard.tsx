@@ -175,6 +175,8 @@ export default function Dashboard() {
     switch (widgetId) {
       case 'command-brief':
         return <CommandBrief />;
+      case 'prospecting-engine':
+        return <ProspectingEngine />;
       case 'daily-time-blocks':
         return <DailyTimeBlocks />;
       case 'post-meeting':
