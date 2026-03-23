@@ -123,13 +123,13 @@ function interpretComparisons(result: ComparisonResult): string {
   if (result.topImprovement) {
     const m = result.topImprovement;
     const pct = m.percentChange !== null ? `${m.percentChange > 0 ? '+' : ''}${m.percentChange}%` : '';
-    sentences.push(`Your biggest improvement is ${m.label} — ${formatVal(m)} ${pct}.`);
+    sentences.push(`${confidenceQualifier(m.confidenceLevel)}your biggest improvement is ${m.label} — ${formatVal(m)} ${pct}${confidenceNote(m.confidenceLevel)}.`);
   }
 
   if (result.topDecline) {
     const m = result.topDecline;
     const pct = m.percentChange !== null ? `${m.percentChange}%` : '';
-    sentences.push(`Biggest drop is ${m.label} — ${formatVal(m)} ${pct}.`);
+    sentences.push(`${confidenceQualifier(m.confidenceLevel)}biggest drop is ${m.label} — ${formatVal(m)} ${pct}${confidenceNote(m.confidenceLevel)}.`);
   }
 
   // Efficiency insight
