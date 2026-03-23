@@ -12,3 +12,4 @@ export * from './intelligence';
 export * from './strategy-outcomes';
 export * from './pipeline-impact';
 export * from './pipeline-forecast';
+export * from './comparison-engine';
