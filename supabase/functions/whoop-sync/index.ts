@@ -16,7 +16,6 @@ async function refreshTokenIfNeeded(supabase: any, connection: any): Promise<str
   }
 
   if (!connection.refresh_token) {
-    // Mark token as expired in DB so UI can detect it
     await supabase
       .from('whoop_connections')
       .update({ token_expires_at: new Date(0).toISOString(), updated_at: new Date().toISOString() })
@@ -38,7 +37,6 @@ async function refreshTokenIfNeeded(supabase: any, connection: any): Promise<str
 
   if (!response.ok) {
     const errorText = await response.text();
-    // Mark token as expired in DB
     await supabase
       .from('whoop_connections')
       .update({ token_expires_at: new Date(0).toISOString(), updated_at: new Date().toISOString() })
@@ -62,90 +60,187 @@ async function refreshTokenIfNeeded(supabase: any, connection: any): Promise<str
   return tokenData.access_token;
 }
 
+// ── Date helpers ───────────────────────────────────────────────
+/** Extract the physiological calendar date from a WHOOP record.
+ *  For sleep, use the END time (sleep that starts at 11pm belongs to the next day).
+ *  For cycles/recovery, use the start time. */
+function extractDate(record: any, preferEnd = false): string | null {
+  const raw = preferEnd
+    ? (record.end ?? record.during?.upper ?? record.start ?? record.during?.lower ?? record.created_at)
+    : (record.start ?? record.during?.lower ?? record.created_at);
+  if (!raw || typeof raw !== 'string') return null;
+  return raw.substring(0, 10);
+}
+
+// ── Per-family fetch with diagnostics ──────────────────────────
+interface FamilyResult {
+  name: string;
+  ok: boolean;
+  count: number;
+  error?: string;
+  httpStatus?: number;
+}
+
+async function fetchFamily(
+  url: string,
+  accessToken: string,
+  name: string,
+): Promise<{ result: FamilyResult; records: any[] }> {
+  try {
+    const resp = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+    });
+
+    if (resp.status === 401) {
+      return {
+        result: { name, ok: false, count: 0, error: 'unauthorized', httpStatus: 401 },
+        records: [],
+      };
+    }
+    if (!resp.ok) {
+      const text = await resp.text();
+      console.error(`[whoop-sync] ${name} API error ${resp.status}:`, text);
+      return {
+        result: { name, ok: false, count: 0, error: text.substring(0, 200), httpStatus: resp.status },
+        records: [],
+      };
+    }
+
+    const body = await resp.json();
+    const records = body.records ?? body.data ?? [];
+    return {
+      result: { name, ok: true, count: records.length },
+      records,
+    };
+  } catch (err: any) {
+    console.error(`[whoop-sync] ${name} fetch exception:`, err.message);
+    return {
+      result: { name, ok: false, count: 0, error: err.message },
+      records: [],
+    };
+  }
+}
+
 // ── Fetch & upsert metrics ─────────────────────────────────────
-async function fetchAndUpsertMetrics(supabase: any, connection: any): Promise<number> {
+async function fetchAndUpsertMetrics(
+  supabase: any,
+  connection: any,
+): Promise<{ synced: number; families: FamilyResult[] }> {
   const accessToken = await refreshTokenIfNeeded(supabase, connection);
   const userId = connection.user_id;
 
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - 7);
+  const startISO = startDate.toISOString();
 
-  const [cyclesResponse, recoveryResponse, sleepResponse] = await Promise.all([
-    fetch(`https://api.prod.whoop.com/developer/v1/cycle?start=${startDate.toISOString()}&limit=10`, {
-      headers: { 'Authorization': `Bearer ${accessToken}` },
-    }),
-    fetch(`https://api.prod.whoop.com/developer/v1/recovery?start=${startDate.toISOString()}&limit=10`, {
-      headers: { 'Authorization': `Bearer ${accessToken}` },
-    }),
-    fetch(`https://api.prod.whoop.com/developer/v1/activity/sleep?start=${startDate.toISOString()}&limit=10`, {
-      headers: { 'Authorization': `Bearer ${accessToken}` },
-    }),
+  // Fetch all three families in parallel
+  const [cyclesFetch, recoveryFetch, sleepFetch] = await Promise.all([
+    fetchFamily(
+      `https://api.prod.whoop.com/developer/v1/cycle?start=${startISO}&limit=10`,
+      accessToken, 'cycles',
+    ),
+    fetchFamily(
+      `https://api.prod.whoop.com/developer/v1/recovery?start=${startISO}&limit=10`,
+      accessToken, 'recovery',
+    ),
+    fetchFamily(
+      `https://api.prod.whoop.com/developer/v1/activity/sleep?start=${startISO}&limit=10`,
+      accessToken, 'sleep',
+    ),
   ]);
 
-  // If any API call returns 401, the token is actually invalid despite refresh succeeding
-  for (const [name, resp] of [['Cycles', cyclesResponse], ['Recovery', recoveryResponse], ['Sleep', sleepResponse]] as const) {
-    if ((resp as Response).status === 401) {
-      await supabase
-        .from('whoop_connections')
-        .update({ token_expires_at: new Date(0).toISOString(), updated_at: new Date().toISOString() })
-        .eq('id', connection.id);
-      throw Object.assign(new Error(`WHOOP API returned 401 on ${name}. Please reconnect.`), { errorDetail: 'api_unauthorized' });
+  const families = [cyclesFetch.result, recoveryFetch.result, sleepFetch.result];
+
+  // If any returned 401, mark token expired
+  if (families.some(f => f.httpStatus === 401)) {
+    await supabase
+      .from('whoop_connections')
+      .update({ token_expires_at: new Date(0).toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', connection.id);
+    throw Object.assign(
+      new Error('WHOOP API returned 401. Please reconnect.'),
+      { errorDetail: 'api_unauthorized' },
+    );
+  }
+
+  // ── Build per-date metrics map ────────────────────────────────
+  const metricsMap: Record<string, {
+    recovery_score: number | null;
+    sleep_score: number | null;
+    strain_score: number | null;
+    raw: Record<string, any>;
+  }> = {};
+
+  function ensureDate(date: string) {
+    if (!metricsMap[date]) {
+      metricsMap[date] = { recovery_score: null, sleep_score: null, strain_score: null, raw: {} };
     }
   }
 
-  const cycles = cyclesResponse.ok ? (await cyclesResponse.json()).records || [] : [];
-  const recoveries = recoveryResponse.ok ? (await recoveryResponse.json()).records || [] : [];
-  const sleeps = sleepResponse.ok ? (await sleepResponse.json()).records || [] : [];
-
-  if (!cyclesResponse.ok) console.error('Cycles API error:', cyclesResponse.status);
-  if (!recoveryResponse.ok) console.error('Recovery API error:', recoveryResponse.status);
-  if (!sleepResponse.ok) console.error('Sleep API error:', sleepResponse.status);
-
-  const metricsMap: Record<string, any> = {};
-
-  for (const cycle of cycles) {
-    const date = cycle.start?.substring(0, 10);
-    if (!date) continue;
-    if (!metricsMap[date]) metricsMap[date] = { raw: {} };
+  // Cycles → strain
+  for (const cycle of cyclesFetch.records) {
+    const date = extractDate(cycle, false);
+    if (!date) { console.warn('[whoop-sync] cycle missing date:', JSON.stringify(cycle).substring(0, 120)); continue; }
+    ensureDate(date);
     metricsMap[date].strain_score = cycle.score?.strain ?? null;
     metricsMap[date].raw.cycle = cycle;
   }
 
-  for (const rec of recoveries) {
-    const date = rec.created_at?.substring(0, 10) || rec.cycle?.start?.substring(0, 10);
-    if (!date) continue;
-    if (!metricsMap[date]) metricsMap[date] = { raw: {} };
+  // Recovery → recovery_score
+  // WHOOP recovery records contain a nested `score` with `recovery_score`.
+  // The record may have `cycle_id` linking to a cycle, or its own start/created_at.
+  for (const rec of recoveryFetch.records) {
+    // Try to get date from the recovery's cycle start, or sleep start, or created_at
+    const date = extractDate(rec, false)
+      || rec.cycle_id && cyclesFetch.records.find((c: any) => c.id === rec.cycle_id)?.start?.substring(0, 10)
+      || null;
+    if (!date) { console.warn('[whoop-sync] recovery missing date:', JSON.stringify(rec).substring(0, 120)); continue; }
+    ensureDate(date);
     metricsMap[date].recovery_score = rec.score?.recovery_score ?? null;
     metricsMap[date].raw.recovery = rec;
   }
 
-  for (const slp of sleeps) {
-    const date = slp.start?.substring(0, 10);
-    if (!date) continue;
-    if (!metricsMap[date]) metricsMap[date] = { raw: {} };
-    metricsMap[date].sleep_score = slp.score?.sleep_performance_percentage ?? slp.score?.stage_summary?.sleep_efficiency_percentage ?? null;
+  // Sleep → sleep_score
+  // Sleep sessions start late at night; use END time for the physiological date
+  for (const slp of sleepFetch.records) {
+    const date = extractDate(slp, true); // use end time
+    if (!date) { console.warn('[whoop-sync] sleep missing date:', JSON.stringify(slp).substring(0, 120)); continue; }
+    ensureDate(date);
+    metricsMap[date].sleep_score =
+      slp.score?.sleep_performance_percentage
+      ?? slp.score?.stage_summary?.sleep_efficiency_percentage
+      ?? slp.score?.sleep_score
+      ?? null;
     metricsMap[date].raw.sleep = slp;
   }
 
-  const upserts = Object.entries(metricsMap).map(([date, m]: [string, any]) => ({
-    user_id: userId,
-    date,
-    recovery_score: m.recovery_score ?? null,
-    sleep_score: m.sleep_score ?? null,
-    strain_score: m.strain_score ?? null,
-    raw_payload: m.raw,
-    imported_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }));
+  // ── Upsert: merge with existing data (don't null-out fields that already exist) ──
+  const upserts = Object.entries(metricsMap).map(([date, m]) => {
+    const row: Record<string, any> = {
+      user_id: userId,
+      date,
+      raw_payload: m.raw,
+      imported_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    // Only set score fields if we got a value — prevents overwriting existing data with null
+    if (m.recovery_score !== null) row.recovery_score = m.recovery_score;
+    if (m.sleep_score !== null) row.sleep_score = m.sleep_score;
+    if (m.strain_score !== null) row.strain_score = m.strain_score;
+    return row;
+  });
 
   if (upserts.length > 0) {
-    const { error: upsertError } = await supabase
-      .from('whoop_daily_metrics')
-      .upsert(upserts, { onConflict: 'user_id,date' });
+    // Use upsert with onConflict, but since we may be omitting null fields,
+    // we need to do individual upserts to avoid overwriting existing non-null values
+    for (const row of upserts) {
+      const { error: upsertError } = await supabase
+        .from('whoop_daily_metrics')
+        .upsert(row, { onConflict: 'user_id,date' });
 
-    if (upsertError) {
-      console.error('Upsert error for user', userId, ':', upsertError);
-      throw new Error(`Failed to save metrics: ${upsertError.message}`);
+      if (upsertError) {
+        console.error('[whoop-sync] Upsert error for date', row.date, ':', upsertError);
+      }
     }
   }
 
@@ -154,7 +249,10 @@ async function fetchAndUpsertMetrics(supabase: any, connection: any): Promise<nu
     .update({ updated_at: new Date().toISOString() })
     .eq('user_id', userId);
 
-  return upserts.length;
+  console.log(`[whoop-sync] User ${userId}: synced ${upserts.length} days. Families:`,
+    families.map(f => `${f.name}=${f.count}${f.ok ? '' : '(FAIL)'}`).join(', '));
+
+  return { synced: upserts.length, families };
 }
 
 // ── Main handler ───────────────────────────────────────────────
@@ -184,14 +282,14 @@ serve(async (req) => {
         });
       }
 
-      const results: { user_id: string; synced: number; error?: string }[] = [];
+      const results: { user_id: string; synced: number; families: FamilyResult[]; error?: string }[] = [];
       for (const conn of connections) {
         try {
-          const count = await fetchAndUpsertMetrics(supabase, conn);
-          results.push({ user_id: conn.user_id, synced: count });
+          const r = await fetchAndUpsertMetrics(supabase, conn);
+          results.push({ user_id: conn.user_id, synced: r.synced, families: r.families });
         } catch (err: any) {
           console.error(`[whoop-sync] User ${conn.user_id} failed:`, err.message);
-          results.push({ user_id: conn.user_id, synced: 0, error: err.message });
+          results.push({ user_id: conn.user_id, synced: 0, families: [], error: err.message });
         }
       }
 
@@ -223,7 +321,6 @@ serve(async (req) => {
     // Disconnect
     if (action === 'disconnect') {
       await supabase.from('whoop_connections').delete().eq('user_id', userId);
-      // NOTE: We intentionally do NOT delete whoop_daily_metrics to preserve historical data
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -242,9 +339,9 @@ serve(async (req) => {
       });
     }
 
-    const synced = await fetchAndUpsertMetrics(supabase, connection);
+    const { synced, families } = await fetchAndUpsertMetrics(supabase, connection);
 
-    return new Response(JSON.stringify({ success: true, synced }), {
+    return new Response(JSON.stringify({ success: true, synced, families }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error: any) {

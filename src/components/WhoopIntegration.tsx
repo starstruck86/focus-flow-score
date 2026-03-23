@@ -178,14 +178,27 @@ export function WhoopIntegration() {
 
       const data = response.data;
       if (data?.needsReconnect) {
-        // Token truly dead — update connection to reflect expired state
         setSyncError(data.errorDetail || 'token_expired');
         toast.error(data.error || 'WHOOP token expired — please reconnect');
-        // Reload connection to get fresh token_expires_at
         await loadData();
         return;
       }
-      toast.success(`Synced ${data.synced} day(s) of WHOOP data`);
+
+      // Show per-family diagnostics
+      const families: Array<{ name: string; ok: boolean; count: number; error?: string }> = data.families || [];
+      const failedFamilies = families.filter(f => !f.ok);
+      const emptyFamilies = families.filter(f => f.ok && f.count === 0);
+
+      if (failedFamilies.length > 0) {
+        const names = failedFamilies.map(f => f.name).join(', ');
+        toast.warning(`Synced ${data.synced} day(s), but ${names} failed to fetch`);
+      } else if (emptyFamilies.length > 0) {
+        const names = emptyFamilies.map(f => f.name).join(', ');
+        toast.success(`Synced ${data.synced} day(s). No recent ${names} data from WHOOP.`);
+      } else {
+        toast.success(`Synced ${data.synced} day(s) of WHOOP data`);
+      }
+
       await loadData();
     } catch (err: any) {
       console.error('Sync error:', err);
