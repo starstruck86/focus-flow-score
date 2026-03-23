@@ -203,6 +203,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
 
       if (uptime > 0 && uptime < 2000 && isOpenRef.current) {
         logStatus('⚠️ Immediate disconnect — likely transport or auth issue');
+        setNeedsTap(true);
         setError('Connection dropped immediately. Tap to retry.');
       }
     },
