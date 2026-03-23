@@ -23,7 +23,7 @@ import {
   ThumbsUp, ThumbsDown, RotateCcw, CheckCircle2,
   ArrowRight, ExternalLink, Pencil, Check, X, GripVertical,
   Rocket, Shield, MoreVertical, EyeOff, Link2, Building2,
-  Settings2,
+  Settings2, Hammer,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -39,13 +39,14 @@ interface TimeBlock {
   start_time: string;
   end_time: string;
   label: string;
-  type: 'prospecting' | 'meeting' | 'research' | 'admin' | 'break' | 'pipeline' | 'prep';
+  type: 'prospecting' | 'meeting' | 'research' | 'admin' | 'break' | 'pipeline' | 'prep' | 'build';
   workstream?: 'new_logo' | 'renewal' | 'general';
   goals: string[];
   reasoning: string;
   actual_dials?: number;
   actual_emails?: number;
   linked_accounts?: { id: string; name: string }[];
+  build_steps?: { step: string; done: boolean }[];
 }
 
 interface DailyPlan {
@@ -70,6 +71,7 @@ const TYPE_CONFIG: Record<string, { icon: typeof Clock; color: string; bg: strin
   break: { icon: Coffee, color: 'text-green-500', bg: 'bg-green-500/10 border-green-500/20' },
   pipeline: { icon: Target, color: 'text-red-500', bg: 'bg-red-500/10 border-red-500/20' },
   prep: { icon: Lightbulb, color: 'text-cyan-500', bg: 'bg-cyan-500/10 border-cyan-500/20' },
+  build: { icon: Hammer, color: 'text-orange-500', bg: 'bg-orange-500/10 border-orange-500/20' },
 };
 
 function formatTime(t: string) {
@@ -102,7 +104,16 @@ const BLOCK_ACTIONS: Record<string, { label: string; route?: string; dispatch?: 
   pipeline: { label: '→ Open Pipeline', route: '/quota' },
   prep: { label: '→ Open Accounts', route: '/outreach' },
   meeting: { label: '→ Meeting Prep', dispatch: 'scroll-meeting-prep' },
+  build: { label: '→ Open Outreach', route: '/outreach' },
 };
+
+const DEFAULT_BUILD_STEPS = [
+  { step: 'Select 3 target accounts', done: false },
+  { step: 'Research companies', done: false },
+  { step: 'Identify contacts', done: false },
+  { step: 'Find emails/phone numbers', done: false },
+  { step: 'Add to cadence', done: false },
+];
 
 const WORKSTREAM_CONFIG: Record<string, { label: string; icon: typeof Rocket; color: string }> = {
   new_logo: { label: 'New Logo', icon: Rocket, color: 'text-blue-500' },
@@ -360,6 +371,23 @@ export function DailyTimeBlocks() {
     if (!plan) return;
     const blocks = [...(plan.blocks as TimeBlock[])];
     blocks[blockIdx] = { ...blocks[blockIdx], linked_accounts: linkedAccounts };
+
+    queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks });
+
+    await supabase
+      .from('daily_time_blocks' as 'daily_time_blocks')
+      .update({ blocks: blocks as unknown as Json })
+      .eq('id', plan.id);
+  }, [plan, todayStr, queryClient]);
+
+  // Toggle build step completion
+  const toggleBuildStep = useCallback(async (blockIdx: number, stepIdx: number) => {
+    if (!plan) return;
+    const blocks = [...(plan.blocks as TimeBlock[])];
+    const block = blocks[blockIdx];
+    const steps = block.build_steps ? [...block.build_steps] : DEFAULT_BUILD_STEPS.map(s => ({ ...s }));
+    steps[stepIdx] = { ...steps[stepIdx], done: !steps[stepIdx].done };
+    blocks[blockIdx] = { ...block, build_steps: steps };
 
     queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks });
 
@@ -958,7 +986,36 @@ export function DailyTimeBlocks() {
                     </div>
                   )}
 
-                  {/* Linked opportunity badge */}
+                  {/* New Logo Build step tracker */}
+                  {editingBlock !== i && block.type === 'build' && (
+                    <div className="mt-2 py-2 px-2.5 rounded-md bg-orange-500/5 border border-orange-500/20">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Hammer className="h-3 w-3 text-orange-500" />
+                        <span className="text-[10px] text-muted-foreground font-medium">New Logo Build — 3 accounts</span>
+                        <span className="ml-auto text-[10px] text-muted-foreground">
+                          {(block.build_steps || DEFAULT_BUILD_STEPS).filter(s => s.done).length}/{(block.build_steps || DEFAULT_BUILD_STEPS).length}
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        {(block.build_steps || DEFAULT_BUILD_STEPS).map((step, si) => (
+                          <label key={si} className="flex items-center gap-2 cursor-pointer group/step">
+                            <Checkbox
+                              checked={step.done}
+                              onCheckedChange={() => toggleBuildStep(i, si)}
+                              className="h-3.5 w-3.5"
+                            />
+                            <span className={cn(
+                              "text-[11px] transition-all",
+                              step.done ? "line-through text-muted-foreground/50" : "text-muted-foreground"
+                            )}>
+                              {step.step}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {linkedOpp && (
                     <div className="flex items-center gap-1.5 mt-1.5">
                       <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-accent/50">
@@ -1046,6 +1103,17 @@ export function DailyTimeBlocks() {
               </span>
             )}
             {plan.key_metric_targets.conversations != null && <span>{plan.key_metric_targets.conversations} convos</span>}
+            {plan.key_metric_targets.accounts_sourced != null && (
+              <span className="flex items-center gap-1">
+                <Hammer className="h-3 w-3 text-orange-500" />
+                {(() => {
+                  const buildBlocks = blocks.filter(b => b.type === 'build');
+                  const completedSteps = buildBlocks.reduce((s, b) => s + (b.build_steps || DEFAULT_BUILD_STEPS).filter(st => st.done).length, 0);
+                  const totalSteps = buildBlocks.reduce((s, b) => s + (b.build_steps || DEFAULT_BUILD_STEPS).length, 0);
+                  return totalSteps > 0 ? `${completedSteps}/${totalSteps} build steps` : `${plan.key_metric_targets.accounts_sourced} sourced`;
+                })()}
+              </span>
+            )}
             {plan.key_metric_targets.accounts_researched != null && <span>{plan.key_metric_targets.accounts_researched} researched</span>}
             {plan.key_metric_targets.contacts_prepped != null && <span>{plan.key_metric_targets.contacts_prepped} prepped</span>}
           </div>

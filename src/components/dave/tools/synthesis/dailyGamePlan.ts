@@ -125,6 +125,7 @@ export async function dailyGamePlanSummary(ctx: ToolContext): Promise<string> {
   const targetParts: string[] = [];
   if (targets.dials) targetParts.push(`${targets.dials} dials`);
   if (targets.conversations) targetParts.push(`${targets.conversations} conversations`);
+  if (targets.accounts_sourced) targetParts.push(`${targets.accounts_sourced} accounts sourced and added to cadence`);
   if (targets.accounts_researched) targetParts.push(`${targets.accounts_researched} accounts researched`);
   if (targets.contacts_prepped) targetParts.push(`${targets.contacts_prepped} contacts prepped`);
   if (targetParts.length) {
@@ -140,6 +141,15 @@ export async function dailyGamePlanSummary(ctx: ToolContext): Promise<string> {
       const first = meetings[0];
       sentences.push(`You've got ${meetings.length} meetings today, starting with ${first.label} at ${spokenTime(first.start_time)}.`);
     }
+  }
+
+  // Build block
+  const buildBlocks = blocks.filter(b => b.type === 'build');
+  if (buildBlocks.length) {
+    const b = buildBlocks[0];
+    const done = (b as any).build_steps?.filter((s: any) => s.done).length || 0;
+    const total = (b as any).build_steps?.length || 5;
+    sentences.push(`You've got a New Logo Build block at ${spokenTime(b.start_time)} — that's where you source ${targets.accounts_sourced || 3} fresh accounts, research them, find contacts, and add them to cadence.${done > 0 ? ` You've completed ${done} of ${total} steps so far.` : ''}`);
   }
 
   // Rust buster
@@ -200,6 +210,7 @@ export async function dailyGamePlanDetailed(ctx: ToolContext): Promise<string> {
   const targetParts: string[] = [];
   if (targets.dials) targetParts.push(`${targets.dials} dials`);
   if (targets.conversations) targetParts.push(`${targets.conversations} conversations`);
+  if (targets.accounts_sourced) targetParts.push(`${targets.accounts_sourced} accounts sourced and added to cadence`);
   if (targets.accounts_researched) targetParts.push(`${targets.accounts_researched} accounts researched`);
   if (targets.contacts_prepped) targetParts.push(`${targets.contacts_prepped} contacts prepped`);
   if (targetParts.length) {
@@ -348,7 +359,19 @@ export async function queryDailyPlan(ctx: ToolContext, params: { question: strin
     return resp;
   }
 
-  // Prospecting
+  // Prospecting / build
+  if (q.includes('build') || q.includes('sourc') || q.includes('cadence')) {
+    const buildBlocks = blocks.filter(b => b.type === 'build');
+    if (!buildBlocks.length) return 'There\'s no New Logo Build block in today\'s plan. You may want to regenerate it.';
+    const b = buildBlocks[0];
+    const steps = (b as any).build_steps || [];
+    const done = steps.filter((s: any) => s.done).length;
+    let resp = `Your New Logo Build block runs from ${spokenTime(b.start_time)} to ${spokenTime(b.end_time)}.`;
+    resp += ` The goal is to source ${targets.accounts_sourced || 3} accounts end-to-end: select, research, find contacts, get their info, and add to cadence.`;
+    if (done > 0) resp += ` You've completed ${done} of ${steps.length} steps so far.`;
+    return resp;
+  }
+
   if (q.includes('prospect') || q.includes('dial') || q.includes('call')) {
     const prospBlocks = blocks.filter(b => b.type === 'prospecting');
     const totalMin = prospBlocks.reduce((s, b) => s + blockDurationMin(b), 0);

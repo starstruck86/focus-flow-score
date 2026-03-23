@@ -427,10 +427,11 @@ ${weeklyContext}
 
 CRITICAL RULES:
 1. NO time blocks shorter than ${minBlockMin} minutes.
-2. NEW LOGO IS THE PRIORITY. Use TODAY'S ADJUSTED TARGETS (from weekly context above) — NOT the raw daily averages. Schedule enough Prep→Call Blitz + Email Outreach cycles to hit TODAY'S target.
+2. NEW LOGO IS THE PRIORITY. Use TODAY'S ADJUSTED TARGETS (from weekly context above) — NOT the raw daily averages. Schedule a New Logo Build block + enough Prep→Call Blitz + Email Outreach cycles to hit TODAY'S target.
 3. Use "workstream" field to tag each block as "new_logo" or "renewal" or "general"
 4. Goals must be REALISTIC and ACHIEVABLE. Use these realistic pacing rates:
    - DIAL RATE: ~15 dials per 30 minutes (1 dial every 2 min including voicemail/notes). A 45-min Call Blitz = ~22 dials. A 60-min blitz = ~30 dials.
+   - BUILD RATE: 3 accounts per 45-60 min build block (selecting + researching + finding contacts + adding to cadence)
    - PREP RATE: 2-3 accounts per 25-30 min prep block
    - EMAIL RATE: ~8-10 personalized emails per 30 minutes
    - Do the math: if today's target is ${todayDialTarget} dials, you need ~${Math.ceil(todayDialTarget / 25)} Call Blitz blocks of 45-50 min each
@@ -439,7 +440,7 @@ CRITICAL RULES:
 7. If feedback says past suggestions were unrealistic, SIGNIFICANTLY dial back goals
 8. DO NOT schedule an EOD wrap-up or journal block. The user handles reflection during their morning check-in the next day.
 9. DO NOT schedule lunch breaks, mid-morning breaks, or mid-afternoon breaks. Every available minute should be productive.
-10. NAME SPECIFIC ACCOUNTS in Prep and Call Blitz block goals (from prospecting list only)
+10. NAME SPECIFIC ACCOUNTS in Prep, Build, and Call Blitz block goals (from prospecting list only)
 11. PERSONAL/FAMILY blocks are NON-NEGOTIABLE — the user has children (Quinn, Emmett). School drop-offs, pickups, and activities MUST be respected.
 12. If screenshot-confirmed meetings differ from calendar DB, TRUST the screenshot.
 13. CALENDAR MEETINGS ARE FIXED ANCHORS. Do NOT generate your own meeting blocks — they are provided as locked blocks and merged automatically.
@@ -455,7 +456,23 @@ CRITICAL RULES:
 
 WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL):
 
-**NEW LOGO PROSPECTING — THIS IS THE CORE OF THE DAY:**
+**NEW LOGO BUILD — SOURCING & CADENCE SETUP (FIRST-CLASS BLOCK):**
+- type: "build", workstream: "new_logo"
+- This is the structured work BEFORE you can dial. Without it, your call blitz has no fresh targets.
+- DEFAULT DAILY TARGET: 3 new accounts sourced, researched, contacts found, and added to cadence
+- A "New Logo Build" block (45-60 min) is a REQUIRED part of the daily plan — NOT optional
+- The build block has 5 sequential steps the user tracks:
+  1. Select 3 target accounts (from ICP-fit sourced list or prospecting accounts)
+  2. Research company (website, news, tech stack, pain points)
+  3. Identify contacts (buying committee, champions, influencers)
+  4. Find emails/phone numbers (LinkedIn, ZoomInfo, Apollo, manual research)
+  5. Add to cadence (email + phone sequences ready to execute)
+- Label like: "New Logo Build (3 accounts)"
+- Goals should reference specific accounts from the prospecting list
+- Schedule this BEFORE the main Prep→Call Blitz cycle so newly built accounts feed into today's or tomorrow's calls
+- On HEAVY meeting days: reduce to 1-2 accounts but DO NOT skip entirely — pipeline sourcing cannot be zero
+
+**NEW LOGO PROSPECTING — EXECUTION (CALLS & EMAILS):**
 - This is research + cadence + cold outreach work — high-energy hunter mode
 - WARM-UP: Start the day with a short "Rust Buster" block (15-20 min, type: "prospecting"): quick dials to LOW-PREP targets — old leads, closed-lost re-engagements, prebuilt lists. Purpose: build momentum and shake off hesitation before the main blitz.
 - Then use PREP → EXECUTE paired cycles for TARGETED prospecting:
@@ -469,7 +486,7 @@ WORKSTREAM WORKFLOW DIFFERENCES (CRITICAL):
   - Label like: "Email Blitz (~10 personalized emails)"
   - Can follow a Call Blitz (call first, then email the ones who didn't pick up) or stand alone
 - Schedule enough cycles to hit TODAY'S ADJUSTED dial + email target, NOT the raw daily average
-- Fill ALL available non-meeting time with prospecting activity (calls, emails, prep)
+- Fill ALL available non-meeting time with prospecting activity (calls, emails, prep, build)
 
 **ACTIVE NEW LOGO OPPORTUNITIES (deals already in pipeline):**
 - TASK-ORIENTED and MEETING-DRIVEN only — NOT research/cadence work
@@ -545,7 +562,7 @@ Also provide an overall "day_strategy" (2-3 sentences: how today fits into the w
                       start_time: { type: "string", description: "HH:MM in 24h format" },
                       end_time: { type: "string", description: "HH:MM in 24h format" },
                       label: { type: "string" },
-                      type: { type: "string", enum: ["prospecting", "meeting", "research", "admin", "break", "pipeline", "prep"] },
+                      type: { type: "string", enum: ["prospecting", "meeting", "research", "admin", "break", "pipeline", "prep", "build"] },
                       workstream: { type: "string", enum: ["new_logo", "renewal", "general"], description: "Which workstream this block belongs to" },
                       goals: { type: "array", items: { type: "string" } },
                       reasoning: { type: "string" },
@@ -559,6 +576,7 @@ Also provide an overall "day_strategy" (2-3 sentences: how today fits into the w
                   properties: {
                     dials: { type: "number" },
                     conversations: { type: "number" },
+                    accounts_sourced: { type: "number", description: "New logo accounts sourced and added to cadence (default 3)" },
                     accounts_researched: { type: "number" },
                     contacts_prepped: { type: "number" },
                   },
