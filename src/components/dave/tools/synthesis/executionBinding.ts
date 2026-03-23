@@ -294,28 +294,61 @@ export async function executionNext(ctx: ToolContext): Promise<string> {
   }
 
   lines.push('');
-  lines.push(`_When done, say "done" or tap ✓ — I'll suggest your next move._`);
+  lines.push(`_When done, say "done", "blocked", "skip", or "snooze" — I'll keep you moving._`);
   lines.push(`[action_id: ${actionId}]`);
 
   return lines.join('\n');
 }
 
-/** Confirm an execution_next action was completed externally */
-export async function confirmExecution(params: { actionId: string }): Promise<string> {
+// ── Action resolution tools (lag-tolerant) ──────────────────────
+
+type ActionOutcome = 'done' | 'blocked' | 'skipped' | 'snoozed';
+
+function recordOutcome(actionId: string, outcome: ActionOutcome, extra?: Record<string, any>) {
   try {
     const records = JSON.parse(localStorage.getItem('jarvis-action-memory') || '[]');
-    records.push({ actionId: params.actionId, outcome: 'completed', timestamp: Date.now() });
-    localStorage.setItem('jarvis-action-memory', JSON.stringify(records.slice(-200)));
+    records.push({ actionId, outcome, timestamp: Date.now(), ...extra });
+    localStorage.setItem('jarvis-action-memory', JSON.stringify(records.slice(-300)));
   } catch {}
+}
+
+/** User confirms they completed the action in an external system */
+export async function confirmExecution(params: { actionId: string }): Promise<string> {
+  recordOutcome(params.actionId, 'done');
   return 'Confirmed ✓ — ask for "next action" to keep moving.';
 }
 
-/** Skip an execution_next action */
+/** User is blocked on this action */
+export async function blockExecution(params: { actionId: string; reason?: string }): Promise<string> {
+  recordOutcome(params.actionId, 'blocked', { blockReason: params.reason });
+  return `Blocked${params.reason ? ` (${params.reason})` : ''} — moving past this. Ask for "next action".`;
+}
+
+/** User skips — not now */
 export async function skipExecution(params: { actionId: string; reason?: string }): Promise<string> {
+  recordOutcome(params.actionId, 'skipped');
+  return 'Skipped — this will be deprioritized. Ask for "next action" to continue.';
+}
+
+/** User wants to come back to this later */
+export async function snoozeExecution(params: { actionId: string; minutes?: number }): Promise<string> {
+  const mins = params.minutes || 30;
+  recordOutcome(params.actionId, 'snoozed', { snoozeUntil: Date.now() + mins * 60_000 });
+  return `Snoozed for ${mins} min — I'll resurface this later. Ask for "next action" now.`;
+}
+
+/** Reconcile a past recommendation with delayed data (transcript/CRM sync) */
+export async function reconcileExecution(params: { actionId: string; source: string }): Promise<string> {
   try {
     const records = JSON.parse(localStorage.getItem('jarvis-action-memory') || '[]');
-    records.push({ actionId: params.actionId, outcome: 'ignored', timestamp: Date.now() });
-    localStorage.setItem('jarvis-action-memory', JSON.stringify(records.slice(-200)));
+    const idx = records.findIndex((r: any) => r.actionId === params.actionId && !r.reconciled);
+    if (idx >= 0) {
+      records[idx].reconciled = true;
+      records[idx].reconciledAt = Date.now();
+      records[idx].reconciledSource = params.source;
+      localStorage.setItem('jarvis-action-memory', JSON.stringify(records));
+      return `Reconciled with ${params.source} data — learning updated.`;
+    }
   } catch {}
-  return 'Skipped — this will be deprioritized. Ask for "next action" to continue.';
+  return 'No matching unreconciled action found.';
 }
