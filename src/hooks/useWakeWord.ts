@@ -50,10 +50,17 @@ export function useWakeWord({ onWake, enabled }: UseWakeWordOptions) {
         return;
       }
       console.warn('[WakeWord] Error:', event.error);
-      // On 'not-allowed', stop trying
+      // On 'not-allowed', stop trying and notify user
       if (event.error === 'not-allowed') {
         recognition.stop();
         recognitionRef.current = null;
+        console.error('[WakeWord] Microphone permission denied. Allow microphone access for this site to use "Hey Dave".');
+      }
+      // 'audio-capture' means no mic available
+      if (event.error === 'audio-capture') {
+        recognition.stop();
+        recognitionRef.current = null;
+        console.error('[WakeWord] No microphone found. Connect a microphone to use "Hey Dave".');
       }
     };
 

@@ -151,7 +151,10 @@ export function WhoopIntegration() {
     const whoopStatus = searchParams.get('whoop');
     if (whoopStatus === 'success') {
       toast.success('WHOOP connected successfully!');
+      // Clear ALL stale state before reloading fresh data
       setSyncError(null);
+      setConnection(null);
+      setMetrics([]);
       searchParams.delete('whoop');
       setSearchParams(searchParams, { replace: true });
       // Reload to pick up fresh connection + optionally trigger sync
