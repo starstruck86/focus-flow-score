@@ -35,6 +35,8 @@ import { isRustBusterBlock } from '@/lib/rustBusterLinks';
 import { useWeeklyResearchQueue, type AccountState } from '@/hooks/useWeeklyResearchQueue';
 import type { CalendarScreenshotEvent } from '@/types/dashboard';
 import type { Json } from '@/integrations/supabase/types';
+import { generateTraceId } from '@/lib/appError';
+import { getVisiblePlanBlocks, summarizePlanDelta, type RebuildPlanBlock } from '@/lib/dailyPlanRebuild';
 
 interface TimeBlock {
   start_time: string;
@@ -54,6 +56,7 @@ interface DailyPlan {
   id: string;
   plan_date: string;
   blocks: TimeBlock[];
+  updated_at?: string;
   meeting_load_hours: number;
   focus_hours_available: number;
   ai_reasoning: string;
@@ -64,6 +67,27 @@ interface DailyPlan {
   feedback_text?: string;
   recast_at?: string | null;
   dismissed_block_indices?: number[];
+}
+
+interface RebuildDiagnostics {
+  trace_id: string;
+  request_source: 'generate' | 'manual_rebuild' | 'screenshot_rebuild';
+  stages: Array<{ stage: string; detail: string; at: string }>;
+  used_fallback: boolean;
+  fallback_reason?: string | null;
+  failure_stage?: string | null;
+  exact_failure_reason?: string | null;
+  change_summary?: string | null;
+  preserved_state?: {
+    dismissed_meetings: string;
+    recast_state: string;
+    weekly_queue_progress: string;
+  };
+}
+
+interface GeneratePlanResponse extends DailyPlan {
+  is_fallback?: boolean;
+  rebuild_diagnostics?: RebuildDiagnostics;
 }
 
 const TYPE_CONFIG: Record<string, { icon: typeof Clock; color: string; bg: string }> = {
@@ -164,6 +188,12 @@ export function DailyTimeBlocks() {
   const [accountSearchQuery, setAccountSearchQuery] = useState('');
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  const [rebuildStatus, setRebuildStatus] = useState<{
+    traceId: string;
+    stage: string;
+    message: string;
+    usedFallback?: boolean;
+  } | null>(null);
 
   const { data: plan, isLoading } = useQuery({
     queryKey: ['daily-time-blocks', todayStr],
@@ -199,26 +229,96 @@ export function DailyTimeBlocks() {
   }, [plan?.blocks]);
 
   const generateMutation = useMutation({
-    mutationFn: async (opts: { confirmedScreenshotEvents?: CalendarScreenshotEvent[] } | void) => {
+    mutationFn: async (opts: { confirmedScreenshotEvents?: CalendarScreenshotEvent[]; source?: 'generate' | 'manual_rebuild' | 'screenshot_rebuild' } | void) => {
       const screenshotEvents = opts && 'confirmedScreenshotEvents' in opts ? opts.confirmedScreenshotEvents : undefined;
+      const source = opts && 'source' in opts && opts.source ? opts.source : 'generate';
+      const traceId = generateTraceId();
+      const visibleBlocks = getVisiblePlanBlocks(plan?.blocks as TimeBlock[] | undefined, dismissedBlocks);
+      const dismissedMeetingBlocks = Array.from(dismissedBlocks)
+        .sort((a, b) => a - b)
+        .map((index) => (plan?.blocks as TimeBlock[] | undefined)?.[index])
+        .filter((block): block is TimeBlock => !!block && block.type === 'meeting');
+      const linkedOpportunities = Array.from(blockOppLinks.entries()).map(([blockIdx, opp]) => ({
+        block_index: blockIdx,
+        block_label: (plan?.blocks as TimeBlock[] | undefined)?.[blockIdx]?.label ?? null,
+        opportunity_id: opp.id,
+        opportunity_name: opp.name,
+      }));
 
-      // First attempt
-      const { data, error } = await trackedInvoke<DailyPlan & { is_fallback?: boolean }>('generate-time-blocks', {
-        body: { date: todayStr, confirmedScreenshotEvents: screenshotEvents },
-        retry: { maxAttempts: 2, baseDelayMs: 2000 },
-        componentName: 'DailyTimeBlocks',
+      setRebuildStatus({
+        traceId,
+        stage: 'request_sent',
+        message: source === 'manual_rebuild' ? 'Sending rebuild request…' : 'Generating plan…',
       });
 
-      if (error) throw error;
-      return data as DailyPlan & { is_fallback?: boolean };
+      const { data, error } = await trackedInvoke<GeneratePlanResponse>('generate-time-blocks', {
+        body: {
+          date: todayStr,
+          confirmedScreenshotEvents: screenshotEvents,
+          rebuildContext: {
+            source,
+            dismissed_blocks: source === 'manual_rebuild' ? dismissedMeetingBlocks : [],
+            linked_opportunities: source === 'manual_rebuild' ? linkedOpportunities : [],
+            current_visible_blocks: visibleBlocks,
+          },
+        },
+        retry: { maxAttempts: 2, baseDelayMs: 2000 },
+        componentName: 'DailyTimeBlocks',
+        traceId,
+      });
+
+      if (error) {
+        setRebuildStatus({
+          traceId,
+          stage: 'failed',
+          message: `Rebuild failed before apply: ${error.rawMessage}`,
+        });
+        throw error;
+      }
+
+      if (!data?.blocks?.length) {
+        setRebuildStatus({
+          traceId,
+          stage: 'failed',
+          message: 'Rebuild returned no plan blocks.',
+        });
+        throw new Error('Rebuild returned no plan blocks');
+      }
+
+      return data;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['daily-time-blocks'] });
-      setDismissedBlocks(new Set());
-      if (data?.is_fallback) {
-        toast.info('Using fallback plan — AI was unavailable. Your meetings and core blocks are preserved.', { duration: 6000 });
+    onSuccess: (data, variables) => {
+      const previousVisible = getVisiblePlanBlocks(plan?.blocks as TimeBlock[] | undefined, dismissedBlocks) as RebuildPlanBlock[];
+      const changeSummary = data.rebuild_diagnostics?.change_summary || summarizePlanDelta(previousVisible, data.blocks as RebuildPlanBlock[]);
+
+      queryClient.setQueryData(['daily-time-blocks', todayStr], data);
+      queryClient.invalidateQueries({ queryKey: ['daily-time-blocks', todayStr] });
+      setDismissedBlocks(new Set(data.dismissed_block_indices || []));
+      setBlockOppLinks(new Map());
+
+      const traceId = data.rebuild_diagnostics?.trace_id || rebuildStatus?.traceId || generateTraceId();
+      const usedFallback = !!data?.is_fallback;
+      const source = variables && 'source' in variables && variables.source ? variables.source : 'generate';
+      const successPrefix = source === 'manual_rebuild' ? 'Rebuild applied' : 'Plan applied';
+      const detail = usedFallback
+        ? `Fallback applied: ${data.rebuild_diagnostics?.fallback_reason || 'AI rebuild was unavailable.'}`
+        : `${successPrefix} — ${changeSummary}`;
+
+      setRebuildStatus({
+        traceId,
+        stage: 'applied',
+        message: detail,
+        usedFallback,
+      });
+
+      requestAnimationFrame(() => {
+        setRebuildStatus((current) => current ? { ...current, stage: 'rendered', message: `${detail} UI updated.` } : current);
+      });
+
+      if (usedFallback) {
+        toast.info(`Fallback rebuild applied: ${data.rebuild_diagnostics?.fallback_reason || 'AI rebuild failed.'}`, { duration: 7000 });
       } else {
-        toast.success('Daily plan generated!');
+        toast.success(`${successPrefix}: ${changeSummary}`);
       }
     },
     onError: (e) => {
@@ -286,9 +386,9 @@ export function DailyTimeBlocks() {
 
   // Handle confirmed screenshot events — rebuild plan with them
   const handleScreenshotEventsConfirmed = useCallback((events: CalendarScreenshotEvent[]) => {
-    generateMutation.mutate({ confirmedScreenshotEvents: events });
-    setDismissedBlocks(new Set());
-    setBlockOppLinks(new Map());
+    const traceId = generateTraceId();
+    setRebuildStatus({ traceId, stage: 'button_clicked', message: 'Screenshot confirmed — rebuilding plan…' });
+    generateMutation.mutate({ confirmedScreenshotEvents: events, source: 'screenshot_rebuild' });
   }, [generateMutation]);
 
   const feedbackMutation = useMutation({
@@ -515,8 +615,9 @@ export function DailyTimeBlocks() {
 
   // Regenerate with dismissed blocks and linked opps
   const regenerateWithChanges = useCallback(() => {
-    generateMutation.mutate();
-    setBlockOppLinks(new Map());
+    const traceId = generateTraceId();
+    setRebuildStatus({ traceId, stage: 'button_clicked', message: 'Rebuild requested — applying dismissed meetings and plan changes…' });
+    generateMutation.mutate({ source: 'manual_rebuild' });
   }, [generateMutation]);
 
   const hasChanges = dismissedBlocks.size > 0 || blockOppLinks.size > 0;
@@ -694,6 +795,19 @@ export function DailyTimeBlocks() {
         </div>
       )}
 
+      {rebuildStatus && (
+        <div className="px-4 py-2 border-b border-border/30 bg-muted/20 text-[11px] text-muted-foreground flex items-center justify-between gap-3" data-testid="rebuild-plan-status">
+          <span>
+            <span className="font-medium text-foreground">Rebuild status:</span> {rebuildStatus.message}
+          </span>
+          {rebuildStatus.usedFallback && (
+            <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+              Fallback used
+            </Badge>
+          )}
+        </div>
+      )}
+
       {/* Feedback panel */}
       {showFeedback && (
         <div className="px-4 py-3 bg-muted/30 border-b border-border/30 space-y-2">
@@ -753,6 +867,7 @@ export function DailyTimeBlocks() {
                 {blockOppLinks.size > 0 && `${blockOppLinks.size} linked`}
               </span>
               <Button size="sm" className="h-6 text-[11px] gap-1" onClick={regenerateWithChanges} disabled={generateMutation.isPending}>
+                data-testid="rebuild-plan-button"
                 <RotateCcw className={cn("h-3 w-3", generateMutation.isPending && "animate-spin")} />
                 Rebuild Plan
               </Button>

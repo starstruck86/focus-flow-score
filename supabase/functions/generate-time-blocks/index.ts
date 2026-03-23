@@ -8,6 +8,31 @@ const corsHeaders = {
 
 const EASTERN_TIMEZONE = "America/New_York";
 
+function normalizeStageLabel(label: string): string {
+  return label.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function blockSignature(blocks: Array<Record<string, any>>) {
+  return blocks
+    .map((block) => `${block.start_time}-${block.end_time}-${normalizeStageLabel(String(block.label || ''))}-${block.type || 'unknown'}`)
+    .join('|');
+}
+
+function summarizePlanDelta(beforeBlocks: Array<Record<string, any>>, afterBlocks: Array<Record<string, any>>) {
+  if (!beforeBlocks.length && afterBlocks.length) return `created ${afterBlocks.length} blocks`;
+  if (blockSignature(beforeBlocks) === blockSignature(afterBlocks)) return 'plan unchanged';
+
+  const before = new Set(beforeBlocks.map((block) => `${block.start_time}-${block.end_time}-${normalizeStageLabel(String(block.label || ''))}-${block.type || 'unknown'}`));
+  const after = new Set(afterBlocks.map((block) => `${block.start_time}-${block.end_time}-${normalizeStageLabel(String(block.label || ''))}-${block.type || 'unknown'}`));
+
+  let changed = 0;
+  for (const key of after) if (!before.has(key)) changed += 1;
+  if (!changed) {
+    for (const key of before) if (!after.has(key)) changed += 1;
+  }
+  return changed > 0 ? `${changed} block${changed === 1 ? '' : 's'} changed` : 'plan updated';
+}
+
 function extractEasternTime(dateString: string) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: EASTERN_TIMEZONE,
@@ -70,6 +95,16 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    const traceId = req.headers.get("x-trace-id") || crypto.randomUUID().slice(0, 8);
+    const stages: Array<{ stage: string; detail: string; at: string }> = [];
+    const logStage = (stage: string, detail: string, extra?: Record<string, unknown>) => {
+      const entry = { stage, detail, at: new Date().toISOString() };
+      stages.push(entry);
+      console.info(JSON.stringify({ traceId, ...entry, ...(extra || {}) }));
+    };
+
+    logStage("request_received", "generate-time-blocks request received");
+
     const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -101,8 +136,13 @@ serve(async (req) => {
     // Use service role client for all DB operations (works for both paths)
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    const { date, confirmedScreenshotEvents } = await req.json();
+    const { date, confirmedScreenshotEvents, rebuildContext } = await req.json();
     const targetDate = date || new Date().toISOString().split("T")[0];
+    const requestSource = rebuildContext?.source || "generate";
+    logStage("request_parsed", `request parsed for ${requestSource}`, {
+      dismissedCount: Array.isArray(rebuildContext?.dismissed_blocks) ? rebuildContext.dismissed_blocks.length : 0,
+      linkedCount: Array.isArray(rebuildContext?.linked_opportunities) ? rebuildContext.linked_opportunities.length : 0,
+    });
 
     // Determine week boundaries (Mon-Fri) for the target date
     const targetDateObj = new Date(targetDate + 'T12:00:00');
@@ -244,6 +284,22 @@ serve(async (req) => {
       ? mergeLockedCalendarBlocks(baseLockedCalendarBlocks, screenshotMeetingBlocks)
       : baseLockedCalendarBlocks;
 
+    const dismissedMeetingKeys = new Set(
+      (Array.isArray(rebuildContext?.dismissed_blocks) ? rebuildContext.dismissed_blocks : [])
+        .filter((block: any) => block?.type === 'meeting')
+        .map((block: any) => `${block.start_time}-${block.end_time}-${normalizeStageLabel(String(block.label || ''))}`),
+    );
+
+    const activeLockedCalendarBlocks = lockedCalendarBlocks.filter((block: any) => {
+      const key = `${block.start_time}-${block.end_time}-${normalizeStageLabel(String(block.label || ''))}`;
+      return !dismissedMeetingKeys.has(key);
+    });
+
+    logStage("request_context_ready", "calendar context prepared", {
+      lockedMeetings: activeLockedCalendarBlocks.length,
+      dismissedMeetingsApplied: dismissedMeetingKeys.size,
+    });
+
     // Build feedback context (day-level + block-level)
     const prevPlans = prevPlansRes.data || [];
     let feedbackContext = "";
@@ -279,8 +335,8 @@ serve(async (req) => {
       }
     }
 
-    const calendarContext = lockedCalendarBlocks.length > 0
-      ? lockedCalendarBlocks.map((block: any) => {
+    const calendarContext = activeLockedCalendarBlocks.length > 0
+      ? activeLockedCalendarBlocks.map((block: any) => {
           const dur = toMinutes(block.end_time) - toMinutes(block.start_time);
           return `- ${block.start_time}–${block.end_time} EST (${dur}min): ${block.label}`;
         }).join("\n")
@@ -418,6 +474,19 @@ Renewal: ${renewalTasks.slice(0, 5).map((t: any) => `${t.title} (${t.priority})`
       });
     }
 
+    const rebuildContextText = requestSource !== 'generate'
+      ? `\n\nMANUAL REBUILD CONTEXT:
+- Source: ${requestSource}
+- Dismissed meetings already removed from the working schedule: ${dismissedMeetingKeys.size}
+- Linked opportunity hints: ${Array.isArray(rebuildContext?.linked_opportunities) && rebuildContext.linked_opportunities.length > 0
+          ? rebuildContext.linked_opportunities.map((item: any) => `${item.block_label || 'block'} → ${item.opportunity_name}`).join('; ')
+          : 'none'}
+- Current visible plan before rebuild: ${Array.isArray(rebuildContext?.current_visible_blocks) && rebuildContext.current_visible_blocks.length > 0
+          ? rebuildContext.current_visible_blocks.map((block: any) => `${block.start_time}-${block.end_time} ${block.label}`).join(' | ')
+          : 'none'}
+- This rebuild MUST materially change the plan when meetings were dismissed or priorities changed.`
+      : '';
+
     const prompt = `You are an elite sales time management coach for a B2B SaaS account executive. The PRIMARY GOAL of each day is to maximize time spent on NEW LOGO prospecting — the work required to create more new logo opportunities. Everything else is secondary.
 
 THIS DAY IS PART OF A WEEKLY PLAN. Today's targets are ADJUSTED based on meeting load and what's already been accomplished this week. On heavy meeting days, lower dial targets are expected — but lighter days should compensate. The weekly target MUST be hit across all 5 days combined.
@@ -521,6 +590,7 @@ ${pipelineContext}
 ${journalRes.data ? `TODAY'S JOURNAL SO FAR: ${journalRes.data.dials || 0} dials, ${journalRes.data.conversations || 0} conversations, ${journalRes.data.meetings_set || 0} meetings set` : "No journal entry yet today."}
 
 ${feedbackContext}
+${rebuildContextText}
 
 Generate a daily time-blocked schedule. For each block provide:
 - start_time (HH:MM in 24h EST)
@@ -542,7 +612,7 @@ Also provide an overall "day_strategy" (2-3 sentences: how today fits into the w
       const workEndMin = weh * 60 + wem;
 
       // Collect locked meetings as immovable anchors
-      const meetingSlots = lockedCalendarBlocks.map((m: any) => ({
+      const meetingSlots = activeLockedCalendarBlocks.map((m: any) => ({
         ...m,
         startMin: toMinutes(m.start_time),
         endMin: toMinutes(m.end_time),
@@ -667,14 +737,73 @@ Also provide an overall "day_strategy" (2-3 sentences: how today fits into the w
       };
     }
 
+    function injectCoreBlock(blocks: any[], block: any) {
+      const sorted = [...blocks].sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
+      const anchors = sorted.map((item) => ({ start: toMinutes(item.start_time), end: toMinutes(item.end_time), type: item.type }));
+      let cursor = workStartMin;
+
+      for (const anchor of anchors) {
+        if (anchor.start - cursor >= 30) {
+          const end = Math.min(anchor.start, cursor + 30);
+          sorted.push({ ...block, start_time: minToTime(cursor), end_time: minToTime(end) });
+          return sorted.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
+        }
+        cursor = Math.max(cursor, anchor.end);
+      }
+
+      if (workEndMin - cursor >= 30) {
+        sorted.push({ ...block, start_time: minToTime(cursor), end_time: minToTime(Math.min(workEndMin, cursor + 30)) });
+        return sorted.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
+      }
+
+      const repurposeIdx = sorted.findIndex((item) => item.type !== 'meeting');
+      if (repurposeIdx >= 0) {
+        sorted[repurposeIdx] = {
+          ...sorted[repurposeIdx],
+          ...block,
+          start_time: sorted[repurposeIdx].start_time,
+          end_time: sorted[repurposeIdx].end_time,
+        };
+      }
+      return sorted.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
+    }
+
+    function ensureCoreBlocks(blocks: any[]) {
+      let next = [...blocks].sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
+
+      if (!next.some((block) => block.type === 'build')) {
+        next = injectCoreBlock(next, {
+          label: 'New Logo Build (2 accounts)',
+          type: 'build',
+          workstream: 'new_logo',
+          goals: ['Select & research 2 accounts', 'Find contacts & add to cadence'],
+          reasoning: 'Safety fallback — ensured at least one build block.',
+        });
+      }
+
+      if (!next.some((block) => block.type === 'prospecting')) {
+        next = injectCoreBlock(next, {
+          label: 'Call Blitz (~15 dials)',
+          type: 'prospecting',
+          workstream: 'new_logo',
+          goals: ['Make ~15 dials', 'Log conversations'],
+          reasoning: 'Safety fallback — ensured at least one call block.',
+        });
+      }
+
+      return next.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
+    }
+
     // ── AI call with fallback ──
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
     let plan: any;
     let isFallback = false;
+    let fallbackReason: string | null = null;
 
     try {
+      logStage("plan_generation_started", "calling AI planner");
       const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -737,14 +866,10 @@ Also provide an overall "day_strategy" (2-3 sentences: how today fits into the w
       if (!aiResponse.ok) {
         const status = aiResponse.status;
         if (status === 429) {
-          return new Response(JSON.stringify({ error: "Rate limit exceeded, try again shortly." }), {
-            status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          throw new Error("AI planner rate limited");
         }
         if (status === 402) {
-          return new Response(JSON.stringify({ error: "AI credits exhausted. Add funds in Settings." }), {
-            status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          throw new Error("AI planner credits exhausted");
         }
         throw new Error(`AI gateway error: ${status}`);
       }
@@ -759,16 +884,20 @@ Also provide an overall "day_strategy" (2-3 sentences: how today fits into the w
       if (!Array.isArray(plan.blocks) || plan.blocks.length === 0) {
         throw new Error("AI returned empty blocks array");
       }
+
+      logStage("plan_generation_completed", "AI planner returned blocks", { blockCount: plan.blocks.length });
     } catch (aiError) {
       // AI failed — use deterministic fallback
       console.error("AI plan generation failed, using fallback:", aiError);
-      plan = buildFallbackPlan(aiError instanceof Error ? aiError.message : "AI unavailable");
+      fallbackReason = aiError instanceof Error ? aiError.message : "AI unavailable";
+      plan = buildFallbackPlan(fallbackReason);
       isFallback = true;
+      logStage("plan_generation_failed", `using fallback: ${fallbackReason}`);
     }
 
     let mergedBlocks = isFallback
       ? plan.blocks
-      : mergeLockedCalendarBlocks(plan.blocks || [], lockedCalendarBlocks);
+      : mergeLockedCalendarBlocks(plan.blocks || [], activeLockedCalendarBlocks);
 
     // SAFETY NET: If AI omitted a "build" block and there are prospecting accounts, inject one
     if (!isFallback) {
@@ -799,7 +928,30 @@ Also provide an overall "day_strategy" (2-3 sentences: how today fits into the w
       }
     }
 
+    mergedBlocks = ensureCoreBlocks(mergedBlocks);
+
+    const previousVisibleBlocks = Array.isArray(rebuildContext?.current_visible_blocks)
+      ? rebuildContext.current_visible_blocks.filter((block: any) => !!block?.start_time && !!block?.end_time)
+      : [];
+
+    const changeSummary = summarizePlanDelta(previousVisibleBlocks, mergedBlocks);
+
+    if (requestSource === 'manual_rebuild' && previousVisibleBlocks.length > 0 && blockSignature(previousVisibleBlocks) === blockSignature(mergedBlocks)) {
+      fallbackReason = 'Manual rebuild returned unchanged plan';
+      isFallback = true;
+      plan = buildFallbackPlan(fallbackReason);
+      mergedBlocks = ensureCoreBlocks(plan.blocks || []);
+      logStage("plan_generation_failed", fallbackReason);
+    }
+
+    logStage("response_validated", "plan validated and normalized", {
+      blockCount: mergedBlocks.length,
+      changeSummary,
+      usedFallback: isFallback,
+    });
+
     // Upsert the plan with all data persisted — reset dismissals on rebuild
+    logStage("plan_persist_started", "writing rebuilt plan to database");
     const { data: saved, error: saveError } = await supabase
       .from("daily_time_blocks")
       .upsert({
@@ -820,7 +972,27 @@ Also provide an overall "day_strategy" (2-3 sentences: how today fits into the w
 
     if (saveError) throw saveError;
 
-    return new Response(JSON.stringify({ ...saved, is_fallback: isFallback }), {
+    logStage("plan_persist_completed", "rebuilt plan saved successfully", { planId: saved.id });
+
+    return new Response(JSON.stringify({
+      ...saved,
+      is_fallback: isFallback,
+      rebuild_diagnostics: {
+        trace_id: traceId,
+        request_source: requestSource,
+        stages,
+        used_fallback: isFallback,
+        fallback_reason: fallbackReason,
+        failure_stage: isFallback ? 'plan_generation' : null,
+        exact_failure_reason: fallbackReason,
+        change_summary: changeSummary,
+        preserved_state: {
+          dismissed_meetings: 'reset_after_apply',
+          recast_state: 'reset_to_null',
+          weekly_queue_progress: 'preserved',
+        },
+      },
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
