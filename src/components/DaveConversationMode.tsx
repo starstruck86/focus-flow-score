@@ -53,7 +53,7 @@ function assertSessionContract(session: DaveSessionData): string | null {
 function classifyDaveStartupError(error: unknown): string {
   const rawMsg = error instanceof Error ? error.message : String(error ?? 'Unknown error');
 
-  if (/NotAllowedError|Permission denied|microphone|NotFoundError|NotReadableError|TrackStartError|OverconstrainedError/i.test(rawMsg)) {
+  if (/NotAllowedError|Permission denied|microphone|NotFoundError|NotReadableError|TrackStartError|OverconstrainedError|Requested device not found/i.test(rawMsg)) {
     return classifyMicrophoneAccessError(error);
   }
 
