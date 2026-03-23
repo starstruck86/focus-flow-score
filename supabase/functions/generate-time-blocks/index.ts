@@ -427,7 +427,7 @@ ${weeklyContext}
 
 CRITICAL RULES:
 1. NO time blocks shorter than ${minBlockMin} minutes.
-2. NEW LOGO IS THE PRIORITY. Use TODAY'S ADJUSTED TARGETS (from weekly context above) — NOT the raw daily averages. Schedule enough Prep→Call Blitz + Email Outreach cycles to hit TODAY'S target.
+2. NEW LOGO IS THE PRIORITY. Use TODAY'S ADJUSTED TARGETS (from weekly context above) — NOT the raw daily averages. Schedule a New Logo Build block + enough Prep→Call Blitz + Email Outreach cycles to hit TODAY'S target.
 3. Use "workstream" field to tag each block as "new_logo" or "renewal" or "general"
 4. Goals must be REALISTIC and ACHIEVABLE. Use these realistic pacing rates:
    - DIAL RATE: ~15 dials per 30 minutes (1 dial every 2 min including voicemail/notes). A 45-min Call Blitz = ~22 dials. A 60-min blitz = ~30 dials.
