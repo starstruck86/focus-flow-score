@@ -27,5 +27,7 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
     recommend_strategy: (params: { topic: string; dealStage?: string; executionState?: string; accountType?: string; industry?: string }) => recommendStrategy(ctx, params),
     record_strategy_outcome: (params: { insightId: string; outcome: string; dealStage?: string; feedback?: string }) => recordStrategyOutcome(ctx, params),
     strategy_performance: (params: { topic?: string }) => strategyPerformance(ctx, params),
+    pipeline_impact: () => pipelineImpact(ctx),
+    record_pipeline_outcome: (params: { insightId: string; outcomeType: string; opportunityId?: string; dealValue?: number; fromStage?: string; toStage?: string }) => recordPipelineEvent(ctx, params),
   };
 }

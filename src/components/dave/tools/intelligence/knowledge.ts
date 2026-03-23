@@ -346,6 +346,53 @@ export async function strategyPerformance(
   return lines.join('\n');
 }
 
+// ── Tool: pipeline_impact ───────────────────────────────────────
+
+export async function pipelineImpact(ctx: ToolContext): Promise<string> {
+  const userId = await ctx.getUserId();
+  if (!userId) return 'Not authenticated';
+
+  try {
+    const agg = await getUserPipelineImpact(userId);
+    if (agg.totalMeetings + agg.totalOpportunities + agg.totalProgressions === 0) {
+      return 'No pipeline impact data yet. As you use and record strategy outcomes, pipeline influence will be tracked automatically.';
+    }
+    return formatAggregatedImpact(agg);
+  } catch {
+    return 'Unable to compute pipeline impact at this time.';
+  }
+}
+
+// ── Tool: record_pipeline_outcome ───────────────────────────────
+
+export async function recordPipelineEvent(
+  ctx: ToolContext,
+  params: {
+    insightId: string;
+    outcomeType: string;
+    opportunityId?: string;
+    dealValue?: number;
+    fromStage?: string;
+    toStage?: string;
+  },
+): Promise<string> {
+  const userId = await ctx.getUserId();
+  if (!userId) return 'Not authenticated';
+
+  const { recordPipelineOutcome } = await import('@/data/pipeline-impact');
+  await recordPipelineOutcome(userId, {
+    insightId: params.insightId,
+    outcomeType: params.outcomeType as any,
+    opportunityId: params.opportunityId,
+    dealValue: params.dealValue,
+    fromStage: params.fromStage,
+    toStage: params.toStage,
+    timestamp: new Date().toISOString(),
+  });
+
+  return `✅ Pipeline outcome recorded: ${params.outcomeType} for insight ${params.insightId.slice(0, 8)}…${params.dealValue ? ` ($${Math.round(params.dealValue / 1000)}k)` : ''}`;
+}
+
 // ── Tool: knowledge_trends (hybrid) ─────────────────────────────
 
 export async function knowledgeTrends(ctx: ToolContext, params: { category?: string }): Promise<string> {
