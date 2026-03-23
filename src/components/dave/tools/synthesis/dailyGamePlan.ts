@@ -6,7 +6,7 @@
  */
 import { supabase } from '@/integrations/supabase/client';
 import { todayInAppTz } from '@/lib/timeFormat';
-import { loadCachedSelection } from '@/lib/newLogoSelection';
+import { startOfWeek, format } from 'date-fns';
 import type { ToolContext } from '../../toolTypes';
 
 interface TimeBlock {

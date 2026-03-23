@@ -1251,14 +1251,14 @@ export function DailyTimeBlocks() {
             )}
             {plan.key_metric_targets.conversations != null && <span>{plan.key_metric_targets.conversations} convos</span>}
             {plan.key_metric_targets.accounts_sourced != null && (
-              <span className="flex items-center gap-1">
+              <span className={cn(
+                "flex items-center gap-1",
+                queueDailyProgress >= 3 && "text-emerald-500 font-medium",
+                queueDailyProgress > 0 && queueDailyProgress < 3 && "text-amber-500 font-medium",
+              )}>
                 <Hammer className="h-3 w-3 text-orange-500" />
-                {(() => {
-                  const buildBlocks = blocks.filter(b => b.type === 'build');
-                  const completedSteps = buildBlocks.reduce((s, b) => s + (b.build_steps || DEFAULT_BUILD_STEPS).filter(st => st.done).length, 0);
-                  const totalSteps = buildBlocks.reduce((s, b) => s + (b.build_steps || DEFAULT_BUILD_STEPS).length, 0);
-                  return totalSteps > 0 ? `${completedSteps}/${totalSteps} build steps` : `${plan.key_metric_targets.accounts_sourced} sourced`;
-                })()}
+                {queueDailyProgress}/3 today · {weeklyResearched}/{weeklyTotal} week
+                {queueDailyProgress >= 3 && ' ✓'}
               </span>
             )}
             {plan.key_metric_targets.accounts_researched != null && <span>{plan.key_metric_targets.accounts_researched} researched</span>}
