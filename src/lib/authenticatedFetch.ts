@@ -89,6 +89,15 @@ export async function authenticatedFetch(
       ? await withTimeout(fetchPromise, timeoutMs, `${opts.functionName} fetch`)
       : await fetchPromise;
 
+    // Track function group version from response header
+    const groupVersion = resp.headers.get(VERSION_HEADER);
+    if (groupVersion) {
+      const drift = recordFunctionVersion(opts.functionName, groupVersion);
+      if (drift) {
+        throw new Error(driftErrorMessage(drift));
+      }
+    }
+
     // Throw on retryable HTTP statuses so withRetry can catch them
     if (!resp.ok && isRetryableStatus(resp.status)) {
       throw new Error(`HTTP ${resp.status} from ${opts.functionName}`);
