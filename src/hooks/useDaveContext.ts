@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { generateTraceId, normalizeError, recordError } from '@/lib/appError';
 import { createLogger } from '@/lib/logger';
+import { trackedInvoke } from '@/lib/trackedInvoke';
 
 const logger = createLogger('DaveContext');
 // URL no longer needed — authenticatedFetch builds it from functionName
@@ -27,6 +28,22 @@ export class DaveSessionError extends Error {
     this.errorType = errorType;
     this.cooldownUntil = cooldownUntil;
   }
+}
+
+function classifyDaveTokenError(message: string) {
+  if (/Failed to fetch|Load failed|NetworkError|network request failed/i.test(message)) {
+    return 'Network error reaching Dave session service.';
+  }
+
+  if (/timeout|timed out/i.test(message)) {
+    return 'Dave session request timed out.';
+  }
+
+  if (/aborted|abort/i.test(message)) {
+    return 'Dave session request was cancelled.';
+  }
+
+  return message;
 }
 
 /**
@@ -71,18 +88,53 @@ export function useDaveContext() {
 
     const tzOffsetHours = new Date().getTimezoneOffset() / -60;
 
-    const resp = await authenticatedFetch({
-      functionName: 'dave-conversation-token',
-      body: {
-        tzOffsetHours,
-        currentPage: locationRef.current,
-        conversationHistory: conversationHistory || '',
-      },
-      traceId,
-      retry: false, // Dave has its own concurrency backoff — skip auto-retry
-      timeoutMs: 30_000,
-      componentName: 'DaveContext',
-    });
+    const requestBody = {
+      tzOffsetHours,
+      currentPage: locationRef.current,
+      conversationHistory: conversationHistory || '',
+    };
+
+    let resp: Response;
+
+    try {
+      resp = await authenticatedFetch({
+        functionName: 'dave-conversation-token',
+        body: requestBody,
+        traceId,
+        retry: false,
+        timeoutMs: 30_000,
+        componentName: 'DaveContext',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? 'Unknown token fetch failure');
+      const isTransportFailure = /Failed to fetch|Load failed|network|timeout|timed out|aborted|abort/i.test(message);
+
+      if (!isTransportFailure) {
+        throw new DaveSessionError(classifyDaveTokenError(message), 'unknown');
+      }
+
+      logger.warn('Dave token fetch failed over authenticatedFetch, retrying via invoke', { traceId, message });
+
+      const { data, error: invokeError } = await trackedInvoke<DaveSessionData>('dave-conversation-token', {
+        body: requestBody,
+        traceId,
+        retry: false,
+        timeoutMs: 30_000,
+        componentName: 'DaveContext',
+      });
+
+      if (invokeError) {
+        throw new DaveSessionError(classifyDaveTokenError(invokeError.message), 'unknown');
+      }
+
+      if (!data?.token) {
+        throw new DaveSessionError('Dave session service returned no token.', 'unknown');
+      }
+
+      concurrencyErrorCountRef.current = 0;
+      cooldownUntilRef.current = 0;
+      return data;
+    }
 
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({ error: 'Token fetch failed', errorType: 'unknown' }));
@@ -106,7 +158,7 @@ export function useDaveContext() {
       }
 
       throw new DaveSessionError(
-        err.error || `Error ${resp.status}`,
+        classifyDaveTokenError(err.error || `Error ${resp.status}`),
         errorType,
       );
     }
