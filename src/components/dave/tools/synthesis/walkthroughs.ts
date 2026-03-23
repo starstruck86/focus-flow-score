@@ -367,11 +367,15 @@ function buildSummaryOpps(opps: any[], totalArr: number, dealLabel: string, time
 }
 
 function buildDetailedOpps(opps: any[], totalArr: number, dealLabel: string, timeLabel: string): string {
-  const sentences: string[] = [];
-  sentences.push(`Let me walk you through your ${opps.length} ${dealLabel} ${opps.length === 1 ? 'opportunity' : 'opportunities'}${timeLabel}, totaling ${dollars(totalArr)}.`);
+  // Sort by priority before walking through
+  const prioritized = opps.map(o => ({ ...o, _priority: scoreOppPriority(o) }));
+  prioritized.sort((a, b) => b._priority.urgencyScore - a._priority.urgencyScore);
 
-  for (let i = 0; i < opps.length; i++) {
-    const o = opps[i];
+  const sentences: string[] = [];
+  sentences.push(`Let me walk you through your ${opps.length} ${dealLabel} ${opps.length === 1 ? 'opportunity' : 'opportunities'}${timeLabel}, totaling ${dollars(totalArr)}. I've ordered these by what needs attention most.`);
+
+  for (let i = 0; i < prioritized.length; i++) {
+    const o = prioritized[i];
     const trans = i < transitions.length ? transitions[i] : 'Then, ';
     let line = `${trans}${o.name}`;
 
@@ -380,7 +384,6 @@ function buildDetailedOpps(opps: any[], totalArr: number, dealLabel: string, tim
     line += '.';
     sentences.push(line);
 
-    // Close date context
     if (o.close_date) {
       const days = daysFromNow(o.close_date);
       if (days < 0) sentences.push(`This one is ${Math.abs(days)} days past its close date, so it needs attention.`);
@@ -388,13 +391,11 @@ function buildDetailedOpps(opps: any[], totalArr: number, dealLabel: string, tim
       else if (days <= 30) sentences.push(`About ${days} days until close.`);
     }
 
-    // Risk
     if (o.churn_risk === 'high') sentences.push('This deal is flagged as high risk.');
     if (o.last_touch_date && daysFromNow(o.last_touch_date) < -14) {
       sentences.push(`It's been ${Math.abs(daysFromNow(o.last_touch_date))} days since the last touch — that's gone stale.`);
     }
 
-    // Next step
     if (o.next_step) {
       sentences.push(`Next step is to ${o.next_step.charAt(0).toLowerCase()}${o.next_step.slice(1).replace(/\.$/, '')}.`);
     } else {
@@ -402,7 +403,8 @@ function buildDetailedOpps(opps: any[], totalArr: number, dealLabel: string, tim
     }
   }
 
-  sentences.push(`That's all ${opps.length}. Let me know if you want to drill into any specific deal.`);
+  const top = prioritized[0]._priority;
+  sentences.push(`Bottom line — ${top.name} is your top priority here. ${top.nextStep}.`);
   return sentences.join(' ');
 }
 
