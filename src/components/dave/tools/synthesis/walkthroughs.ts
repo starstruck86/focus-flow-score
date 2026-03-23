@@ -133,6 +133,120 @@ function getTimeBounds(timeframe?: string): { start: string; end: string } | nul
 
 const transitions = ['', 'Next up, ', 'Then there\'s ', 'After that, ', 'Also, ', 'And then, ', 'Moving on, ', 'Following that, ', 'Then we\'ve got ', 'Finally, '];
 
+// ── Decision / recommendation helpers ───────────────────────────
+
+interface PrioritizedItem {
+  name: string;
+  arr?: number;
+  urgencyScore: number;
+  riskLabel?: string;
+  reason: string;
+  nextStep: string;
+}
+
+function scoreOppPriority(o: any): PrioritizedItem {
+  let score = 0;
+  const reasons: string[] = [];
+  const arr = Number(o.arr || 0);
+
+  // Deal size weight
+  score += arr / 1000;
+
+  // Close date urgency
+  if (o.close_date) {
+    const days = daysFromNow(o.close_date);
+    if (days < 0) { score += 80; reasons.push(`${Math.abs(days)}d past close date`); }
+    else if (days <= 14) { score += 50; reasons.push(`closing in ${days}d`); }
+    else if (days <= 30) { score += 25; reasons.push(`closing in ${days}d`); }
+  }
+
+  // Stale
+  if (o.last_touch_date && daysFromNow(o.last_touch_date) < -14) {
+    const staleDays = Math.abs(daysFromNow(o.last_touch_date));
+    score += 30; reasons.push(`${staleDays}d since last touch`);
+  }
+
+  // Risk
+  if (o.churn_risk === 'high') { score += 40; reasons.push('high risk'); }
+  else if (o.churn_risk === 'medium') { score += 15; reasons.push('moderate risk'); }
+
+  // No next step
+  if (!o.next_step) { score += 20; reasons.push('no next step defined'); }
+
+  const nextStep = o.next_step
+    ? `${o.next_step.charAt(0).toUpperCase()}${o.next_step.slice(1).replace(/\.$/, '')}`
+    : 'Define a next step and reach out to your contact';
+
+  return { name: o.name || o.account_name, arr, urgencyScore: score, riskLabel: o.churn_risk, reason: joinNatural(reasons) || 'high value', nextStep };
+}
+
+function scoreRenewalPriority(r: any): PrioritizedItem {
+  let score = 0;
+  const reasons: string[] = [];
+  const arr = Number(r.arr || 0);
+
+  score += arr / 1000;
+
+  if (r.renewal_due) {
+    const days = daysFromNow(r.renewal_due);
+    if (days < 0) { score += 90; reasons.push(`${Math.abs(days)}d overdue`); }
+    else if (days <= 14) { score += 60; reasons.push(`due in ${days}d`); }
+    else if (days <= 30) { score += 30; reasons.push(`due in ${days}d`); }
+  }
+
+  if (r.churn_risk === 'high' || r.churn_risk === 'certain') { score += 50; reasons.push(`${r.churn_risk} churn risk`); }
+  else if (r.churn_risk === 'medium') { score += 20; reasons.push('moderate risk'); }
+  if (r.health_status === 'red') { score += 30; reasons.push('red health'); }
+  if (!r.next_step) { score += 15; reasons.push('no next step'); }
+
+  const nextStep = r.next_step
+    ? `${r.next_step.charAt(0).toUpperCase()}${r.next_step.slice(1).replace(/\.$/, '')}`
+    : 'Schedule a check-in with the account team';
+
+  return { name: r.account_name, arr, urgencyScore: score, riskLabel: r.churn_risk || r.health_status, reason: joinNatural(reasons) || 'upcoming renewal', nextStep };
+}
+
+function scoreTaskPriority(t: any, accountMap: Record<string, string>): PrioritizedItem {
+  let score = 0;
+  const reasons: string[] = [];
+
+  if (t.priority === 'P0') { score += 100; reasons.push('P0'); }
+  else if (t.priority === 'P1') { score += 60; reasons.push('P1'); }
+  else if (t.priority === 'P2') { score += 25; }
+
+  const today = new Date().toISOString().split('T')[0];
+  if (t.due_date && t.due_date < today) {
+    const daysLate = Math.abs(daysFromNow(t.due_date));
+    score += 40 + daysLate * 2;
+    reasons.push(`${daysLate}d overdue`);
+  } else if (t.due_date === today) {
+    score += 30;
+    reasons.push('due today');
+  }
+
+  const acct = t.linked_account_id ? accountMap[t.linked_account_id] : null;
+  const name = `${t.title}${acct ? ` (${acct})` : ''}`;
+
+  return { name, urgencyScore: score, reason: joinNatural(reasons) || 'pending task', nextStep: 'Complete or reschedule this task' };
+}
+
+function buildActionRecommendation(items: PrioritizedItem[]): string {
+  if (!items.length) return '';
+  const sorted = [...items].sort((a, b) => b.urgencyScore - a.urgencyScore);
+  const top = sorted[0];
+
+  let rec = `\n\nIf I had to pick one thing to focus on right now, it's ${top.name}`;
+  if (top.reason) rec += ` — ${top.reason}`;
+  rec += `. ${top.nextStep}.`;
+
+  if (sorted.length > 1) {
+    const second = sorted[1];
+    rec += ` After that, turn to ${second.name}.`;
+  }
+
+  return rec;
+}
+
 // ── Opportunities walkthrough ───────────────────────────────────
 
 export async function queryOpportunities(ctx: ToolContext, params: { question?: string; filter?: DaveQueryFilter }): Promise<string> {
@@ -212,7 +326,6 @@ function buildSummaryOpps(opps: any[], totalArr: number, dealLabel: string, time
   const sentences: string[] = [];
   sentences.push(`You've got ${opps.length} ${dealLabel} ${opps.length === 1 ? 'opportunity' : 'opportunities'}${timeLabel} worth ${dollars(totalArr)} total.`);
 
-  // Group by stage
   const byStage: Record<string, any[]> = {};
   for (const o of opps) {
     const stage = o.stage || 'No Stage';
@@ -229,35 +342,40 @@ function buildSummaryOpps(opps: any[], totalArr: number, dealLabel: string, time
     sentences.push(`Broken down, you have ${joinNatural(stageParts)}.`);
   }
 
-  // Biggest deals
   const top3 = [...opps].sort((a, b) => (b.arr || 0) - (a.arr || 0)).slice(0, 3);
   if (top3.length) {
     const topParts = top3.map(o => `${o.name} at ${dollars(o.arr || 0)}`);
     sentences.push(`Your biggest ${top3.length === 1 ? 'deal is' : 'deals are'} ${joinNatural(topParts)}.`);
   }
 
-  // Risk callout
   const atRisk = opps.filter(o => o.churn_risk === 'high' || (o.close_date && daysFromNow(o.close_date) < 14 && daysFromNow(o.close_date) >= 0));
   if (atRisk.length) {
     sentences.push(`${atRisk.length} ${atRisk.length === 1 ? 'deal needs' : 'deals need'} attention — ${joinNatural(atRisk.slice(0, 3).map(o => o.name))}${atRisk.length > 3 ? ` and ${atRisk.length - 3} more` : ''}.`);
   }
 
-  // Stale
   const stale = opps.filter(o => o.last_touch_date && daysFromNow(o.last_touch_date) < -14);
   if (stale.length) {
     sentences.push(`${stale.length} haven't been touched in over two weeks.`);
   }
+
+  // Decision layer — prioritize and recommend
+  const prioritized = opps.map(o => scoreOppPriority(o));
+  sentences.push(buildActionRecommendation(prioritized));
 
   sentences.push('Want me to go through them one by one?');
   return sentences.join(' ');
 }
 
 function buildDetailedOpps(opps: any[], totalArr: number, dealLabel: string, timeLabel: string): string {
-  const sentences: string[] = [];
-  sentences.push(`Let me walk you through your ${opps.length} ${dealLabel} ${opps.length === 1 ? 'opportunity' : 'opportunities'}${timeLabel}, totaling ${dollars(totalArr)}.`);
+  // Sort by priority before walking through
+  const prioritized = opps.map(o => ({ ...o, _priority: scoreOppPriority(o) }));
+  prioritized.sort((a, b) => b._priority.urgencyScore - a._priority.urgencyScore);
 
-  for (let i = 0; i < opps.length; i++) {
-    const o = opps[i];
+  const sentences: string[] = [];
+  sentences.push(`Let me walk you through your ${opps.length} ${dealLabel} ${opps.length === 1 ? 'opportunity' : 'opportunities'}${timeLabel}, totaling ${dollars(totalArr)}. I've ordered these by what needs attention most.`);
+
+  for (let i = 0; i < prioritized.length; i++) {
+    const o = prioritized[i];
     const trans = i < transitions.length ? transitions[i] : 'Then, ';
     let line = `${trans}${o.name}`;
 
@@ -266,7 +384,6 @@ function buildDetailedOpps(opps: any[], totalArr: number, dealLabel: string, tim
     line += '.';
     sentences.push(line);
 
-    // Close date context
     if (o.close_date) {
       const days = daysFromNow(o.close_date);
       if (days < 0) sentences.push(`This one is ${Math.abs(days)} days past its close date, so it needs attention.`);
@@ -274,13 +391,11 @@ function buildDetailedOpps(opps: any[], totalArr: number, dealLabel: string, tim
       else if (days <= 30) sentences.push(`About ${days} days until close.`);
     }
 
-    // Risk
     if (o.churn_risk === 'high') sentences.push('This deal is flagged as high risk.');
     if (o.last_touch_date && daysFromNow(o.last_touch_date) < -14) {
       sentences.push(`It's been ${Math.abs(daysFromNow(o.last_touch_date))} days since the last touch — that's gone stale.`);
     }
 
-    // Next step
     if (o.next_step) {
       sentences.push(`Next step is to ${o.next_step.charAt(0).toLowerCase()}${o.next_step.slice(1).replace(/\.$/, '')}.`);
     } else {
@@ -288,7 +403,8 @@ function buildDetailedOpps(opps: any[], totalArr: number, dealLabel: string, tim
     }
   }
 
-  sentences.push(`That's all ${opps.length}. Let me know if you want to drill into any specific deal.`);
+  const top = prioritized[0]._priority;
+  sentences.push(`Bottom line — ${top.name} is your top priority here. ${top.nextStep}.`);
   return sentences.join(' ');
 }
 
@@ -347,7 +463,6 @@ function buildSummaryRenewals(renewals: any[], totalArr: number, timeLabel: stri
   const sentences: string[] = [];
   sentences.push(`You have ${renewals.length} open ${renewals.length === 1 ? 'renewal' : 'renewals'}${timeLabel} worth ${dollars(totalArr)}.`);
 
-  // Group by stage
   const byStage: Record<string, any[]> = {};
   for (const r of renewals) {
     const stage = r.renewal_stage || 'No Stage';
@@ -364,34 +479,38 @@ function buildSummaryRenewals(renewals: any[], totalArr: number, timeLabel: stri
     sentences.push(`By stage, that's ${joinNatural(stageParts)}.`);
   }
 
-  // Risk callout
   const atRisk = renewals.filter(r => r.churn_risk === 'high' || r.health_status === 'red');
   if (atRisk.length) {
     sentences.push(`${atRisk.length} ${atRisk.length === 1 ? 'is' : 'are'} flagged at risk — ${joinNatural(atRisk.slice(0, 3).map(r => r.account_name))}.`);
   }
 
-  // Soonest
   const soonest = renewals.filter(r => r.renewal_due && daysFromNow(r.renewal_due) <= 30 && daysFromNow(r.renewal_due) >= 0);
   if (soonest.length) {
     sentences.push(`${soonest.length} coming due in the next 30 days.`);
   }
 
-  // Biggest
   const top = [...renewals].sort((a, b) => Number(b.arr || 0) - Number(a.arr || 0)).slice(0, 3);
   if (top.length && renewals.length > 3) {
     sentences.push(`Your biggest are ${joinNatural(top.map(r => `${r.account_name} at ${dollars(Number(r.arr || 0))}`))}. `);
   }
+
+  // Decision layer
+  const prioritized = renewals.map(r => scoreRenewalPriority(r));
+  sentences.push(buildActionRecommendation(prioritized));
 
   sentences.push('Want me to go through them one by one?');
   return sentences.join(' ');
 }
 
 function buildDetailedRenewals(renewals: any[], totalArr: number, timeLabel: string): string {
-  const sentences: string[] = [];
-  sentences.push(`Let me walk through your ${renewals.length} open renewals${timeLabel}, totaling ${dollars(totalArr)}.`);
+  const prioritized = renewals.map(r => ({ ...r, _priority: scoreRenewalPriority(r) }));
+  prioritized.sort((a, b) => b._priority.urgencyScore - a._priority.urgencyScore);
 
-  for (let i = 0; i < renewals.length; i++) {
-    const r = renewals[i];
+  const sentences: string[] = [];
+  sentences.push(`Let me walk through your ${renewals.length} open renewals${timeLabel}, totaling ${dollars(totalArr)}. Starting with the ones that need attention most.`);
+
+  for (let i = 0; i < prioritized.length; i++) {
+    const r = prioritized[i];
     const trans = i < transitions.length ? transitions[i] : 'Then, ';
     let line = `${trans}${r.account_name}, ${dollars(Number(r.arr || 0))}`;
     if (r.renewal_stage) line += ` in ${r.renewal_stage}`;
@@ -399,27 +518,25 @@ function buildDetailedRenewals(renewals: any[], totalArr: number, timeLabel: str
     line += '.';
     sentences.push(line);
 
-    // Days until due
     if (r.renewal_due) {
       const days = daysFromNow(r.renewal_due);
       if (days < 0) sentences.push(`This one is ${Math.abs(days)} days overdue.`);
       else if (days <= 14) sentences.push(`Only ${days} days out, so this needs focus.`);
     }
 
-    // Health / risk
     if (r.health_status === 'red' || r.churn_risk === 'high') {
       sentences.push('This is flagged as at-risk — worth a proactive check-in.');
     } else if (r.churn_risk === 'medium') {
       sentences.push('Moderate risk on this one — keep monitoring.');
     }
 
-    // Next step
     if (r.next_step) {
       sentences.push(`Next step here is to ${r.next_step.charAt(0).toLowerCase()}${r.next_step.slice(1).replace(/\.$/, '')}.`);
     }
   }
 
-  sentences.push(`That covers all ${renewals.length}. Ask me about any specific renewal to dig deeper.`);
+  const top = prioritized[0]._priority;
+  sentences.push(`Bottom line — ${top.name} is your top priority. ${top.nextStep}.`);
   return sentences.join(' ');
 }
 
@@ -495,13 +612,21 @@ function buildSummaryTasks(tasks: any[], overdue: any[], dueToday: any[], upcomi
     sentences.push(`Your top priority ${p1s.length === 1 ? 'item is' : 'items are'} ${joinNatural(topNames)}.`);
   }
 
+  // Decision layer
+  const prioritized = tasks.map(t => scoreTaskPriority(t, accountMap));
+  sentences.push(buildActionRecommendation(prioritized));
+
   sentences.push('Say "walk me through them" for the full rundown.');
   return sentences.join(' ');
 }
 
 function buildDetailedTasks(tasks: any[], overdue: any[], dueToday: any[], upcoming: any[], p1s: any[], accountMap: Record<string, string>, today: string): string {
+  // Sort all tasks by priority score
+  const allScored = tasks.map(t => ({ ...t, _priority: scoreTaskPriority(t, accountMap) }));
+  allScored.sort((a, b) => b._priority.urgencyScore - a._priority.urgencyScore);
+
   const sentences: string[] = [];
-  sentences.push(`Let me walk through your ${tasks.length} active tasks.`);
+  sentences.push(`Let me walk through your ${tasks.length} active tasks, ordered by what matters most.`);
 
   if (overdue.length) {
     sentences.push(`First, you have ${overdue.length} overdue.`);
@@ -530,9 +655,8 @@ function buildDetailedTasks(tasks: any[], overdue: any[], dueToday: any[], upcom
     if (upcoming.length > 5) sentences.push(`And ${upcoming.length - 5} more after that.`);
   }
 
-  if (p1s.length) {
-    sentences.push(`If I had to pick where to start, I'd go with ${p1s[0].title} since it's your highest priority.`);
-  }
+  const top = allScored[0]._priority;
+  sentences.push(`Bottom line — start with ${top.name}. ${top.reason ? `It's ${top.reason}.` : ''} ${top.nextStep}.`);
 
   return sentences.join(' ');
 }
@@ -581,10 +705,17 @@ export async function queryQuota(ctx: ToolContext, params: { question?: string }
     sentences.push(`You've got ${dollars(activePipeline)} in active pipeline, giving you ${coverage}x coverage on the remaining gap.`);
   }
 
-  // Top deals to close the gap
+  // Decision layer — recommend specific action
   if (gap > 0 && active.length) {
     const top = active.slice(0, 3);
     sentences.push(`Your biggest open deals that could close the gap are ${joinNatural(top.map(o => `${o.name} at ${dollars(o.arr || 0)}`))}.`);
+
+    // Score and recommend
+    const prioritized = active.map(o => scoreOppPriority(o));
+    const best = [...prioritized].sort((a, b) => b.urgencyScore - a.urgencyScore)[0];
+    sentences.push(`My recommendation — focus on ${best.name} first. ${best.reason ? `It's ${best.reason}.` : ''} ${best.nextStep}.`);
+  } else if (gap <= 0) {
+    sentences.push('You\'re above quota, so focus on protecting what you\'ve closed and accelerating any upside deals.');
   }
 
   return sentences.join(' ');
@@ -656,8 +787,11 @@ export async function queryPipeline(ctx: ToolContext, params: { question?: strin
     sentences.push(`Split is ${newLogos.length} new logo deals at ${dollars(newLogos.reduce((s, o) => s + (o.arr || 0), 0))} and ${renewalDeals.length} renewal at ${dollars(renewalDeals.reduce((s, o) => s + (o.arr || 0), 0))}.`);
   }
 
+  // Decision layer — pipeline recommendation
+  const prioritized = opps.map(o => scoreOppPriority(o));
+  sentences.push(buildActionRecommendation(prioritized));
+
   sentences.push('Ask me to dig into any segment — new logo, renewals, stalled, or at risk.');
-  return sentences.join(' ');
 }
 
 // ── Dashboard overview walkthrough ──────────────────────────────
@@ -729,6 +863,31 @@ export async function queryDashboard(ctx: ToolContext, params: { question?: stri
     } else {
       sentences.push('You haven\'t checked in yet today.');
     }
+  }
+
+  // Decision layer — cross-section recommendation
+  const urgentItems: PrioritizedItem[] = [];
+
+  // Score overdue tasks
+  const overdueTasks = tasks.filter(t => t.due_date && t.due_date < today);
+  for (const t of overdueTasks.slice(0, 5)) {
+    urgentItems.push(scoreTaskPriority(t, {}));
+  }
+
+  // Score at-risk renewals
+  const atRiskRenewals = renewals.filter(r => r.churn_risk === 'high' || r.health_status === 'red');
+  for (const r of atRiskRenewals.slice(0, 5)) {
+    urgentItems.push(scoreRenewalPriority(r));
+  }
+
+  // Score closing-soon opps
+  const closingSoonOpps = opps.filter(o => o.close_date && daysFromNow(o.close_date) <= 30 && daysFromNow(o.close_date) >= 0);
+  for (const o of closingSoonOpps.slice(0, 5)) {
+    urgentItems.push(scoreOppPriority(o));
+  }
+
+  if (urgentItems.length) {
+    sentences.push(buildActionRecommendation(urgentItems));
   }
 
   sentences.push('Ask me about any specific area to go deeper.');
