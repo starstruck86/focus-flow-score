@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import type { Json } from '@/integrations/supabase/types';
 import { useConversation } from '@elevenlabs/react';
@@ -53,7 +53,7 @@ function assertSessionContract(session: DaveSessionData): string | null {
 function classifyDaveStartupError(error: unknown): string {
   const rawMsg = error instanceof Error ? error.message : String(error ?? 'Unknown error');
 
-  if (/NotAllowedError|Permission denied|microphone|NotFoundError|NotReadableError|TrackStartError|OverconstrainedError/i.test(rawMsg)) {
+  if (/NotAllowedError|Permission denied|microphone|NotFoundError|NotReadableError|TrackStartError|OverconstrainedError|Requested device not found/i.test(rawMsg)) {
     return classifyMicrophoneAccessError(error);
   }
 
@@ -203,6 +203,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
 
       if (uptime > 0 && uptime < 2000 && isOpenRef.current) {
         logStatus('⚠️ Immediate disconnect — likely transport or auth issue');
+        setNeedsTap(true);
         setError('Connection dropped immediately. Tap to retry.');
       }
     },
@@ -286,22 +287,23 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
     let timeout: ReturnType<typeof setTimeout> | undefined;
 
     try {
-      // If we have a preacquired mic stream (from the user's tap gesture on mobile),
-      // use it — no need to request mic again. Just store it for cleanup.
+      // On mobile, use a short warm-up getUserMedia call only to secure permission during a tap.
+      // The ElevenLabs SDK cannot accept an external MediaStream, so we must release this warm-up
+      // stream before `startSession()` to avoid double-acquiring / stale-device failures.
       if (isMobile && preacquiredMicStream) {
-        logStatus('🎤 Using preacquired mic stream from tap gesture');
+        logStatus('🎤 Using mic permission from initial tap');
         preflightStreamRef.current = preacquiredMicStream;
       } else if (isMobile) {
-        // Fallback: request mic directly (may fail on Safari if gesture expired)
-        logStatus('🎤 Requesting microphone access (mobile, no preacquired stream)');
+        logStatus('🎤 Priming microphone access from tap');
         releasePreflightStream();
         try {
           preflightStreamRef.current = await requestMicrophoneAccess();
-          logStatus('🎤 Microphone access granted');
+          logStatus('🎤 Microphone permission granted');
         } catch (micErr: any) {
           const friendlyMessage = classifyMicrophoneAccessError(micErr);
           logStatus(`🔴 Mic permission failed: ${friendlyMessage}`);
           setError(friendlyMessage);
+          setNeedsTap(true);
           setIsConnecting(false);
           startingRef.current = false;
           toast.error('Microphone access required', { description: friendlyMessage, duration: 6000 });
@@ -309,10 +311,17 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
         }
       }
 
+      if (preflightStreamRef.current) {
+        logStatus('🎤 Releasing warm-up mic stream before Dave session starts');
+        releasePreflightStream();
+        await new Promise((resolve) => setTimeout(resolve, 75));
+      }
+
       timeout = setTimeout(() => {
         if (startingRef.current) {
           logStatus('⏰ Connection timed out after 15s');
           setError('Connection timed out. Tap Retry to try again.');
+          setNeedsTap(true);
           setIsConnecting(false);
           startingRef.current = false;
           try { conversation.endSession(); } catch (_) {}
@@ -333,10 +342,10 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
       const rawMsg = err?.message || String(err);
       console.error('[Dave] Failed to start:', err);
 
-      // Classify the startup error specifically
       const friendlyMessage = classifyDaveStartupError(err);
 
       setError(friendlyMessage);
+      setNeedsTap(true);
       toast.error('Dave startup failed', { description: friendlyMessage, duration: 6000 });
     } finally {
       releasePreflightStream();
@@ -372,10 +381,10 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
     onClose();
   }, [conversation, onClose]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const isDesktop = navigator.maxTouchPoints === 0;
     const hasMicStream = !!preacquiredMicStream;
-    // Auto-start on desktop (always) or mobile when mic was preacquired during tap gesture
+    // Auto-start on desktop (always) or mobile when mic permission was secured during the initial tap.
     if ((isDesktop || hasMicStream) && !startingRef.current) {
       setNeedsTap(false);
       startConversation();
