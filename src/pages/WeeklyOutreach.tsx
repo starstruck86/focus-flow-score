@@ -1253,6 +1253,16 @@ export default function WeeklyOutreach() {
           {/* Accounts Tab - Funnel View */}
           <TabsContent value="accounts" className="space-y-4">
             <CollapsibleWidgetSection
+              label="Weekly Research Queue (15 Accounts)"
+              collapsed={isOutreachSectionCollapsed('weekly-queue-overview')}
+              onToggle={() => outreachSectionLayout.collapseWidget('weekly-queue-overview')}
+            >
+              <WidgetErrorBoundary widgetId="weekly-queue-overview">
+                <WeeklyQueueOverview />
+              </WidgetErrorBoundary>
+            </CollapsibleWidgetSection>
+
+            <CollapsibleWidgetSection
               label="Staleness & Urgency Summary"
               collapsed={isOutreachSectionCollapsed('account-staleness')}
               onToggle={() => outreachSectionLayout.collapseWidget('account-staleness')}
