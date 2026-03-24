@@ -1425,12 +1425,15 @@ export function DailyTimeBlocks() {
                               </button>
 
                               <div className="min-w-0 flex-1">
-                                <button
-                                  className="text-[11px] font-medium text-foreground hover:text-primary truncate block text-left"
-                                  onClick={() => navigate(`/account/${acct.id}`)}
-                                >
-                                  {acct.name}
-                                </button>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    className="text-[11px] font-medium text-foreground hover:text-primary truncate block text-left"
+                                    onClick={() => navigate(`/account/${acct.id}`)}
+                                  >
+                                    {acct.name}
+                                  </button>
+                                  <LinkedAccountContactCount accountId={acct.id} />
+                                </div>
                                 <span className={cn(
                                   "text-[10px]",
                                   acct.state === 'not_started' && "text-muted-foreground",
@@ -1473,7 +1476,6 @@ export function DailyTimeBlocks() {
                                         if (a.motion === 'renewal') return false;
                                         if (a.accountStatus === 'disqualified') return false;
                                         if (a.outreachStatus === 'closed-won' || a.outreachStatus === 'closed-lost' || a.outreachStatus === 'opp-open') return false;
-                                        // Not already in any day
                                         const allQueued = queueDayKeys.flatMap(k => queueAssignments[k].map(qa => qa.id));
                                         return !allQueued.includes(a.id);
                                       })
@@ -1505,6 +1507,57 @@ export function DailyTimeBlocks() {
                           )}
                         </div>
                       ) : null}
+
+                      {/* Weekly 15 Queue — collapsible */}
+                      {!queueEmpty && (
+                        <Collapsible>
+                          <CollapsibleTrigger className="flex items-center gap-1 w-full text-[10px] text-muted-foreground hover:text-foreground transition-colors py-1 mb-1">
+                            <ChevronDown className="h-3 w-3 transition-transform [[data-state=open]>&]:rotate-180" />
+                            <span className="font-medium">Weekly New Logo Queue ({weeklyTotal} accounts)</span>
+                            <span className="ml-auto">{weeklyResearched} researched · {weeklyAddedToCadence} in cadence</span>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <div className="space-y-2 pt-1 pb-1">
+                              {queueDayKeys.map(dayKey => {
+                                const dayAccts = queueAssignments[dayKey];
+                                if (!dayAccts?.length) return null;
+                                const isToday = dayKey === queueTodayKey;
+                                return (
+                                  <div key={dayKey}>
+                                    <div className="flex items-center gap-1 mb-0.5">
+                                      <span className={cn(
+                                        "text-[10px] font-medium capitalize",
+                                        isToday ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"
+                                      )}>
+                                        {dayKey}{isToday ? ' (today)' : ''}
+                                      </span>
+                                    </div>
+                                    <div className="space-y-0.5 pl-2">
+                                      {dayAccts.map(a => (
+                                        <div key={a.id} className="flex items-center gap-1.5 text-[10px]">
+                                          <span className={cn(
+                                            "h-1.5 w-1.5 rounded-full shrink-0",
+                                            a.state === 'not_started' && "bg-muted-foreground/30",
+                                            a.state === 'researched' && "bg-amber-500",
+                                            a.state === 'added_to_cadence' && "bg-emerald-500",
+                                          )} />
+                                          <span className={cn(
+                                            "truncate",
+                                            isToday ? "text-foreground" : "text-muted-foreground"
+                                          )}>
+                                            {a.name}
+                                          </span>
+                                          <LinkedAccountContactCount accountId={a.id} />
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      )}
 
                       {/* Build steps checklist */}
                       <div className="space-y-1">
