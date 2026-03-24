@@ -891,8 +891,8 @@ export function DailyTimeBlocks() {
                       )}>
                         <Phone className="h-3 w-3 inline mr-0.5" />
                         {hasActuals
-                          ? `${actualDials}/${DAILY_DIALS_MIN}–${DAILY_DIALS_TARGET}`
-                          : `${dc.plannedDials}–${dc.plannedDialsTarget} / ${DAILY_DIALS_MIN}–${DAILY_DIALS_TARGET}`
+                          ? `${actualDials} dials (target ${DAILY_DIALS_MIN}–${DAILY_DIALS_TARGET})`
+                          : `${dc.plannedDials}–${dc.plannedDialsTarget} dials planned (target ${DAILY_DIALS_MIN}–${DAILY_DIALS_TARGET})`
                         }
                       </span>
                       {dc.status === 'below_minimum' && !hasActuals && (
