@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { Input } from '@/components/ui/input';
