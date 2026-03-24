@@ -957,6 +957,7 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
     function ensureCoreBlocks(blocks: any[]) {
       let next = [...blocks].sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
 
+      // Ensure at least 1 build block
       if (!next.some((block) => block.type === 'build')) {
         next = injectCoreBlock(next, {
           label: 'New Logo Build (2 accounts)',
@@ -967,14 +968,30 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
         });
       }
 
-      if (!next.some((block) => block.type === 'prospecting')) {
+      // Count planned dials using MVP rate (10 per 30 min)
+      const prospectingBlocks = next.filter((b: any) => b.type === 'prospecting');
+      let plannedDials = 0;
+      for (const b of prospectingBlocks) {
+        const dur = toMinutes(b.end_time) - toMinutes(b.start_time);
+        plannedDials += Math.round((dur / 30) * DIALS_PER_30_MIN);
+      }
+
+      // Ensure minimum 20 dials (2 call blocks of 30 min each)
+      let callsNeeded = Math.max(0, Math.ceil((DAILY_DIALS_MIN - plannedDials) / DIALS_PER_30_MIN));
+      while (callsNeeded > 0) {
+        const seq = prospectingBlocks.length + 1;
         next = injectCoreBlock(next, {
-          label: 'Call Blitz (~15 dials)',
+          label: `Call Block${seq > 1 ? ` #${seq}` : ''} (~${DIALS_PER_30_MIN} dials)`,
           type: 'prospecting',
           workstream: 'new_logo',
-          goals: ['Make ~15 dials', 'Log conversations'],
-          reasoning: 'Safety fallback — ensured at least one call block.',
+          goals: [`Make ~${DIALS_PER_30_MIN} dials to sourced contacts`, 'Log responses and next steps'],
+          reasoning: `Safety fallback — minimum ${DAILY_DIALS_MIN} dials required.`,
         });
+        plannedDials += DIALS_PER_30_MIN;
+        callsNeeded--;
+        // Re-count after injection
+        const updated = next.filter((b: any) => b.type === 'prospecting');
+        if (updated.length > prospectingBlocks.length) break; // injection succeeded
       }
 
       return next.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
