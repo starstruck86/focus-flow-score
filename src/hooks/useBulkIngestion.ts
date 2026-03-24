@@ -463,7 +463,7 @@ export function useBulkIngestion() {
         } catch (err) {
           processedCount++;
           failedCount++;
-          const msg = err instanceof Error ? err.message : 'Unknown error';
+          const msg = classifyError(err, 'Ingestion');
           updateItem(item.id, { stage: 'failed', error: msg });
           setState(prev => ({ ...prev, processedCount, failedCount }));
         }
