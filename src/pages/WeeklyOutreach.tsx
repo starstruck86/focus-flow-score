@@ -99,6 +99,8 @@ import { emitSaveStatus } from '@/components/SaveIndicator';
 import { TouchLogButtons } from '@/components/TouchLogButtons';
 import { LifecycleTierBadge, IcpScorePill, TriggeredBadge, EnrichButton, SignalDetailPanel } from '@/components/LifecycleIntelligence';
 import { useAccountEnrichment } from '@/hooks/useAccountEnrichment';
+import { useBulkEnrichment } from '@/hooks/useBulkEnrichment';
+import { BulkEnrichmentPanel } from '@/components/BulkEnrichmentPanel';
 import { 
   sortAccountsDefault, 
   applySortWithFallback,
@@ -765,6 +767,7 @@ export default function WeeklyOutreach() {
   const { accounts, addAccount, updateAccount: rawUpdateAccount, deleteAccount } = useStore();
   const bulkSelection = useBulkSelection<Account>();
   const { enrichMultiple } = useAccountEnrichment();
+  const bulkEnrich = useBulkEnrichment();
   
   // Wrap update with save indicator
   const updateAccount = useCallback((id: string, updates: Partial<Account>) => {
@@ -1673,7 +1676,7 @@ export default function WeeklyOutreach() {
                   label: 'Enrich ICP',
                   onExecute: (ids) => {
                     const selected = accounts.filter(a => ids.includes(a.id));
-                    enrichMultiple(selected);
+                    bulkEnrich.start(selected);
                     bulkSelection.clear();
                   },
                 },
@@ -1701,6 +1704,19 @@ export default function WeeklyOutreach() {
                 Showing <span className="font-semibold text-foreground">{filteredAccounts.length}</span> of {newLogoAccounts.length} accounts
               </div>
             )}
+
+            {/* Bulk Enrichment Panel */}
+            <BulkEnrichmentPanel
+              state={bulkEnrich.state}
+              accounts={filteredAccounts}
+              onSetBatchSize={bulkEnrich.setBatchSize}
+              onStart={bulkEnrich.start}
+              onPause={bulkEnrich.pause}
+              onResume={bulkEnrich.resume}
+              onCancel={bulkEnrich.cancel}
+              onReset={bulkEnrich.reset}
+              hasFailures={bulkEnrich.hasFailures}
+            />
 
             {newLogoAccounts.length === 0 ? (
               <EmptyState
