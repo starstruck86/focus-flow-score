@@ -53,11 +53,14 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
             <Zap className="h-5 w-5 text-primary" />
             Deep Enrich Resources
           </DialogTitle>
-          <p className="text-sm text-muted-foreground">
-            {selectedIds && selectedIds.size > 0
-              ? `Deep enrich ${sourceItems.length} selected resources with URL links.`
-              : `Deep enrich ${sourceItems.length} resources with URL links from your library.`}
-          </p>
+          {!isProcessing && !isDone && (
+            <p className="text-sm text-muted-foreground">
+              {selectedIds && selectedIds.size > 0
+                ? `${sourceItems.length} selected resources eligible for deep enrichment.`
+                : `${sourceItems.length} resources with URL links eligible for deep enrichment.`}
+              {' '}Choose a batch size below — the primary button processes only that batch.
+            </p>
+          )}
         </DialogHeader>
 
         <BulkIngestionPanel

@@ -145,15 +145,36 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
               </Select>
             </div>
           </div>
-          <Button
-            size="sm"
-            className="h-8 text-xs gap-1.5"
-            disabled={sourceItems.length === 0}
-            onClick={() => onStart(sourceItems)}
-          >
-            <Zap className="h-3.5 w-3.5" />
-            Deep Enrich {sourceItems.length} {sourceLabel}
-          </Button>
+          {sourceItems.length > 0 && (
+            <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+              <span className="font-medium text-foreground">{sourceItems.length}</span>
+              <span>eligible {sourceLabel}</span>
+              <span>·</span>
+              <span>will process <span className="font-medium text-foreground">{Math.min(state.batchSize, sourceItems.length)}</span> per batch</span>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              disabled={sourceItems.length === 0}
+              onClick={() => onStart(sourceItems.slice(0, state.batchSize))}
+            >
+              <Play className="h-3.5 w-3.5" />
+              Run next {Math.min(state.batchSize, sourceItems.length)}
+            </Button>
+            {sourceItems.length > state.batchSize && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs gap-1.5"
+                onClick={() => onStart(sourceItems)}
+              >
+                <Zap className="h-3.5 w-3.5" />
+                Queue all {sourceItems.length} in batches
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
@@ -216,6 +237,7 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
 
           {/* Retry */}
           {isDone && hasFailures && (
+            <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -225,6 +247,15 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
               <RotateCcw className="h-3 w-3" />
               Retry {failedItems.length} failed
             </Button>
+            </div>
+          )}
+
+          {/* Post-batch remaining count */}
+          {isDone && sourceItems.length > state.processedCount && (
+            <div className="text-[11px] text-muted-foreground pt-1">
+              {state.successCount > 0 && <span className="text-status-green font-medium">{state.successCount} completed</span>}
+              {' · '}{sourceItems.length - state.processedCount} {sourceLabel} remaining
+            </div>
           )}
         </div>
       )}
