@@ -59,28 +59,88 @@ export interface IngestionState {
 const INTER_ITEM_DELAY = 1200;
 const INTER_BATCH_DELAY = 2500;
 const MIN_CONTENT_LENGTH = 200;
+const EMPTY_TRANSCRIPT_THRESHOLD = 80;
 
-// ── Helpers ────────────────────────────────────────────────
+// ── Canonical identity ─────────────────────────────────────
+export type SourceType = 'youtube' | 'webpage' | 'file' | 'unknown';
+
+export interface CanonicalSource {
+  canonical_url: string;
+  source_type: SourceType;
+  source_id: string | null;
+}
+
 function extractYouTubeVideoId(url: string): string | null {
   try {
     const u = new URL(url);
-    if (u.hostname.includes('youtu.be')) return u.pathname.slice(1).split('/')[0];
+    if (u.hostname.includes('youtu.be')) return u.pathname.slice(1).split('/')[0] || null;
     if (u.searchParams.has('v')) return u.searchParams.get('v');
-    if (u.pathname.includes('/embed/')) return u.pathname.split('/embed/')[1]?.split(/[?/]/)[0];
+    if (u.pathname.includes('/embed/')) return u.pathname.split('/embed/')[1]?.split(/[?/]/)[0] || null;
+    if (u.pathname.includes('/shorts/')) return u.pathname.split('/shorts/')[1]?.split(/[?/]/)[0] || null;
   } catch {}
   return null;
 }
 
-function normalizeUrl(raw: string): string {
+function detectSourceType(url: string): SourceType {
   try {
-    const u = new URL(raw.trim());
-    u.hash = '';
-    // Remove tracking params
-    ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'si', 'feature'].forEach(p => u.searchParams.delete(p));
-    return u.toString();
+    const hostname = new URL(url).hostname;
+    if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) return 'youtube';
+    return 'webpage';
   } catch {
-    return raw.trim();
+    return 'unknown';
   }
+}
+
+/**
+ * Build a canonical source identity from a raw URL.
+ * YouTube: canonical URL is always https://www.youtube.com/watch?v=VIDEO_ID
+ * Other: strip tracking params, hash, trailing slashes.
+ */
+function canonicalize(rawUrl: string): CanonicalSource {
+  const sourceType = detectSourceType(rawUrl);
+  const videoId = extractYouTubeVideoId(rawUrl);
+
+  if (sourceType === 'youtube' && videoId) {
+    return {
+      canonical_url: `https://www.youtube.com/watch?v=${videoId}`,
+      source_type: 'youtube',
+      source_id: videoId,
+    };
+  }
+
+  // General URL normalization
+  try {
+    const u = new URL(rawUrl.trim());
+    u.hash = '';
+    // Strip tracking / noise params
+    ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
+     'si', 'feature', 'ref', 'fbclid', 'gclid', 'mc_cid', 'mc_eid',
+    ].forEach(p => u.searchParams.delete(p));
+    // Remove trailing slash
+    let canonical = u.toString();
+    if (canonical.endsWith('/') && u.pathname !== '/') canonical = canonical.slice(0, -1);
+    return { canonical_url: canonical, source_type: sourceType, source_id: null };
+  } catch {
+    return { canonical_url: rawUrl.trim(), source_type: 'unknown', source_id: null };
+  }
+}
+
+// ── Failure classification ─────────────────────────────────
+function classifyError(err: unknown, context: string): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  const lower = msg.toLowerCase();
+
+  if (lower.includes('429') || lower.includes('rate limit')) return 'Rate limited — wait and retry';
+  if (lower.includes('401') || lower.includes('403') || lower.includes('unauthorized')) return 'Authentication/access error';
+  if (lower.includes('private') || lower.includes('restricted')) return 'Private or restricted content';
+  if (lower.includes('unavailable') || lower.includes('not found') || lower.includes('404')) return 'Content not found or unavailable';
+  if (lower.includes('timeout') || lower.includes('timed out') || lower.includes('aborted')) return 'Request timed out';
+  if (lower.includes('parse') || lower.includes('json') || lower.includes('syntax')) return 'Parse/format error';
+  if (lower.includes('network') || lower.includes('fetch') || lower.includes('econnrefused')) return 'Network error';
+  if (lower.includes('transcript')) return 'Transcript unavailable';
+  if (lower.includes('embed')) return 'Embedding failed';
+
+  return `${context}: ${msg.slice(0, 120)}`;
 }
 
 // ── Hook ───────────────────────────────────────────────────
@@ -122,28 +182,27 @@ export function useBulkIngestion() {
     }));
   };
 
-  // ── Duplicate check ────────────────────────────────────
-  async function checkDuplicate(url: string, videoId: string | null): Promise<string | null> {
+  // ── Duplicate check using canonical identity ─────────
+  async function checkDuplicate(url: string): Promise<string | null> {
     if (!user) return null;
-    const normalizedUrl = normalizeUrl(url);
+    const { canonical_url, source_id } = canonicalize(url);
 
-    // Check by file_url (covers both direct URL and YouTube URLs)
+    // Check by canonical URL
     const { data } = await supabase
       .from('resources')
       .select('id')
       .eq('user_id', user.id)
-      .eq('file_url', normalizedUrl)
+      .eq('file_url', canonical_url)
       .limit(1);
-
     if (data?.length) return data[0].id;
 
-    // YouTube-specific: also check by video ID in URL patterns
-    if (videoId) {
+    // YouTube: also check by video ID across URL variants
+    if (source_id) {
       const { data: ytMatch } = await supabase
         .from('resources')
-        .select('id, file_url')
+        .select('id')
         .eq('user_id', user.id)
-        .ilike('file_url', `%${videoId}%`)
+        .ilike('file_url', `%${source_id}%`)
         .limit(1);
       if (ytMatch?.length) return ytMatch[0].id;
     }
@@ -155,9 +214,9 @@ export function useBulkIngestion() {
   async function processItem(item: IngestionItem, reprocessMode: ReprocessMode): Promise<void> {
     if (!user) throw new Error('Not authenticated');
 
-    // Step 1: Duplicate check
+    // Step 1: Duplicate check using canonical identity
     updateItem(item.id, { stage: 'checking_duplicate' });
-    const existingId = await checkDuplicate(item.url, item.videoId || null);
+    const existingId = await checkDuplicate(item.url);
 
     if (existingId) {
       if (reprocessMode === 'skip_processed') {
@@ -182,25 +241,27 @@ export function useBulkIngestion() {
         classification = { ...classification, title: item.title || item.url };
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Classification failed';
-      if (msg.includes('rate limit') || msg.includes('429')) {
-        throw new Error('Rate limited — try again in a moment');
-      }
-      throw new Error(`Classification: ${msg}`);
+      throw new Error(classifyError(err, 'Classification'));
     }
 
-    // Step 3: Save or update
+    // Step 3: Save or update with canonical identity + provenance
     updateItem(item.id, { stage: 'saving' });
-    const normalizedUrl = normalizeUrl(item.url);
+    const source = canonicalize(item.url);
     const contentToStore = classification.scraped_content?.length > 50
       ? classification.scraped_content
-      : `[External Link: ${normalizedUrl}]`;
+      : `[External Link: ${source.canonical_url}]`;
     const contentStatus = contentToStore.startsWith('[External Link:') ? 'placeholder' : 'enriched';
+
+    // Quality: detect empty/junk transcript
+    if (contentStatus === 'enriched' && contentToStore.length < EMPTY_TRANSCRIPT_THRESHOLD) {
+      updateItem(item.id, { stage: 'needs_review', error: 'Content too short — possible empty transcript' });
+      return;
+    }
 
     let resourceId: string;
 
     if (existingId && reprocessMode !== 'skip_processed') {
-      // Update existing
+      // Safe upsert: update existing — no duplicate rows
       const updatePayload: Record<string, any> = {};
       if (reprocessMode === 'full_reprocess' || reprocessMode === 'metadata_only') {
         updatePayload.title = classification.title;
@@ -212,6 +273,8 @@ export function useBulkIngestion() {
         updatePayload.content = contentToStore;
         updatePayload.content_status = contentStatus;
       }
+      // Always update canonical URL to latest normalized form
+      updatePayload.file_url = source.canonical_url;
       if (Object.keys(updatePayload).length > 0) {
         await supabase.from('resources').update(updatePayload).eq('id', existingId);
       }
@@ -238,16 +301,19 @@ export function useBulkIngestion() {
         }
       }
 
+      // Insert with canonical URL — provenance is the file_url + description
       const { data: resource, error } = await supabase
         .from('resources')
         .insert({
           user_id: user.id,
           title: classification.title,
-          description: classification.description,
+          description: classification.description
+            ? `${classification.description}\n\n---\nSource: ${source.source_type}${source.source_id ? ` (${source.source_id})` : ''} · Ingested ${new Date().toISOString().split('T')[0]}`
+            : `Source: ${source.source_type}${source.source_id ? ` (${source.source_id})` : ''} · Ingested ${new Date().toISOString().split('T')[0]}`,
           resource_type: classification.resource_type,
           tags: classification.tags,
           folder_id: folderId,
-          file_url: normalizedUrl,
+          file_url: source.canonical_url,
           content: contentToStore,
           content_status: contentStatus,
         } as any)
@@ -259,7 +325,7 @@ export function useBulkIngestion() {
 
     // Step 4: Quality check
     if (contentStatus === 'enriched' && contentToStore.length < MIN_CONTENT_LENGTH) {
-      updateItem(item.id, { stage: 'needs_review' });
+      updateItem(item.id, { stage: 'needs_review', error: `Content only ${contentToStore.length} chars — may be low quality` });
       return;
     }
 
@@ -272,8 +338,11 @@ export function useBulkIngestion() {
           componentName: 'BulkIngestion',
           timeoutMs: 60_000,
         });
-      } catch {
-        // Non-fatal — resource saved, enrichment can be retried later
+      } catch (enrichErr) {
+        // Non-fatal — resource saved, but flag the enrichment failure
+        const enrichMsg = classifyError(enrichErr, 'Enrichment');
+        updateItem(item.id, { stage: 'needs_review', error: `Saved but enrichment failed: ${enrichMsg}` });
+        return;
       }
     }
 
@@ -394,7 +463,7 @@ export function useBulkIngestion() {
         } catch (err) {
           processedCount++;
           failedCount++;
-          const msg = err instanceof Error ? err.message : 'Unknown error';
+          const msg = classifyError(err, 'Ingestion');
           updateItem(item.id, { stage: 'failed', error: msg });
           setState(prev => ({ ...prev, processedCount, failedCount }));
         }
