@@ -182,28 +182,27 @@ export function useBulkIngestion() {
     }));
   };
 
-  // ── Duplicate check ────────────────────────────────────
-  async function checkDuplicate(url: string, videoId: string | null): Promise<string | null> {
+  // ── Duplicate check using canonical identity ─────────
+  async function checkDuplicate(url: string): Promise<string | null> {
     if (!user) return null;
-    const normalizedUrl = normalizeUrl(url);
+    const { canonical_url, source_id } = canonicalize(url);
 
-    // Check by file_url (covers both direct URL and YouTube URLs)
+    // Check by canonical URL
     const { data } = await supabase
       .from('resources')
       .select('id')
       .eq('user_id', user.id)
-      .eq('file_url', normalizedUrl)
+      .eq('file_url', canonical_url)
       .limit(1);
-
     if (data?.length) return data[0].id;
 
-    // YouTube-specific: also check by video ID in URL patterns
-    if (videoId) {
+    // YouTube: also check by video ID across URL variants
+    if (source_id) {
       const { data: ytMatch } = await supabase
         .from('resources')
-        .select('id, file_url')
+        .select('id')
         .eq('user_id', user.id)
-        .ilike('file_url', `%${videoId}%`)
+        .ilike('file_url', `%${source_id}%`)
         .limit(1);
       if (ytMatch?.length) return ytMatch[0].id;
     }
