@@ -175,7 +175,7 @@ export function buildLocalFallbackPlan(input: {
         prepPlaced = true;
 
         const activityDuration = Math.min(60, gapRemaining);
-        if (activityDuration >= 30) {
+        if (activityDuration >= 30 && canAddMoreDials(activityDuration)) {
           const halfHours = activityDuration / 30;
           const estDials = Math.round(halfHours * DIALS_PER_30_MIN);
           const label = activityIndex === 1 ? `Call Block (~${estDials} dials)` : `Call Block #${activityIndex} (~${estDials} dials)`;
@@ -187,6 +187,16 @@ export function buildLocalFallbackPlan(input: {
             reasoning: 'Execution block paired with prep.',
           });
           activityIndex += 1;
+          gapRemaining = gap.end - gapCursor;
+        } else if (activityDuration >= 30) {
+          // Dial cap reached — fill with build/admin
+          gapCursor = pushBlock(gapCursor, activityDuration, {
+            label: 'Account Research & Contact Sourcing',
+            type: 'build',
+            workstream: 'new_logo',
+            goals: ['Research additional accounts', 'Source contacts for tomorrow'],
+            reasoning: 'Dial target reached — investing time in pipeline build.',
+          });
           gapRemaining = gap.end - gapCursor;
         }
       } else if (gapRemaining >= 60) {
