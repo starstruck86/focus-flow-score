@@ -244,18 +244,24 @@ export function useBulkIngestion() {
       throw new Error(classifyError(err, 'Classification'));
     }
 
-    // Step 3: Save or update
+    // Step 3: Save or update with canonical identity + provenance
     updateItem(item.id, { stage: 'saving' });
-    const normalizedUrl = normalizeUrl(item.url);
+    const source = canonicalize(item.url);
     const contentToStore = classification.scraped_content?.length > 50
       ? classification.scraped_content
-      : `[External Link: ${normalizedUrl}]`;
+      : `[External Link: ${source.canonical_url}]`;
     const contentStatus = contentToStore.startsWith('[External Link:') ? 'placeholder' : 'enriched';
+
+    // Quality: detect empty/junk transcript
+    if (contentStatus === 'enriched' && contentToStore.length < EMPTY_TRANSCRIPT_THRESHOLD) {
+      updateItem(item.id, { stage: 'needs_review', error: 'Content too short — possible empty transcript' });
+      return;
+    }
 
     let resourceId: string;
 
     if (existingId && reprocessMode !== 'skip_processed') {
-      // Update existing
+      // Safe upsert: update existing — no duplicate rows
       const updatePayload: Record<string, any> = {};
       if (reprocessMode === 'full_reprocess' || reprocessMode === 'metadata_only') {
         updatePayload.title = classification.title;
@@ -267,6 +273,8 @@ export function useBulkIngestion() {
         updatePayload.content = contentToStore;
         updatePayload.content_status = contentStatus;
       }
+      // Always update canonical URL to latest normalized form
+      updatePayload.file_url = source.canonical_url;
       if (Object.keys(updatePayload).length > 0) {
         await supabase.from('resources').update(updatePayload).eq('id', existingId);
       }
@@ -293,16 +301,19 @@ export function useBulkIngestion() {
         }
       }
 
+      // Insert with canonical URL — provenance is the file_url + description
       const { data: resource, error } = await supabase
         .from('resources')
         .insert({
           user_id: user.id,
           title: classification.title,
-          description: classification.description,
+          description: classification.description
+            ? `${classification.description}\n\n---\nSource: ${source.source_type}${source.source_id ? ` (${source.source_id})` : ''} · Ingested ${new Date().toISOString().split('T')[0]}`
+            : `Source: ${source.source_type}${source.source_id ? ` (${source.source_id})` : ''} · Ingested ${new Date().toISOString().split('T')[0]}`,
           resource_type: classification.resource_type,
           tags: classification.tags,
           folder_id: folderId,
-          file_url: normalizedUrl,
+          file_url: source.canonical_url,
           content: contentToStore,
           content_status: contentStatus,
         } as any)
