@@ -913,9 +913,9 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
         blocks,
         day_strategy: `Fallback plan generated — ${reason}. Follows strict dependency order: Build → Prep → Outreach. All available time utilized.`,
         key_metric_targets: {
-          dials: todayDialTarget || 30,
-          conversations: Math.max(1, todayConvoTarget || 3),
-          accounts_sourced: 3,
+        dials: Math.max(DAILY_DIALS_MIN, Math.min(DAILY_DIALS_TARGET, todayDialTarget || DAILY_DIALS_MIN)),
+        conversations: Math.max(1, todayConvoTarget || 3),
+        accounts_sourced: 3,
           accounts_researched: 3,
           contacts_prepped: 3,
         },
