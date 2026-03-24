@@ -1252,6 +1252,7 @@ export function DailyTimeBlocks() {
                             >
                               <Building2 className="h-3 w-3" />
                               {acct.name}
+                              <LinkedAccountContactCount accountId={acct.id} />
                               <button
                                 onClick={() => {
                                   const updated = (block.linked_accounts || []).filter(a => a.id !== acct.id);
