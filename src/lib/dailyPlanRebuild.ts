@@ -211,7 +211,7 @@ export function buildLocalFallbackPlan(input: {
         prepPlaced = true;
         gapRemaining = gap.end - gapCursor;
 
-        if (gapRemaining >= 30) {
+        if (gapRemaining >= 30 && canAddMoreDials(gapRemaining)) {
           const estDials = Math.round((gapRemaining / 30) * DIALS_PER_30_MIN);
           gapCursor = pushBlock(gapCursor, gapRemaining, {
             label: `Call Block (~${estDials} dials)`,
@@ -221,6 +221,15 @@ export function buildLocalFallbackPlan(input: {
             reasoning: 'Execution block paired with prep.',
           });
           activityIndex += 1;
+          gapRemaining = 0;
+        } else if (gapRemaining >= 30) {
+          gapCursor = pushBlock(gapCursor, gapRemaining, {
+            label: 'Admin & CRM Updates',
+            type: 'admin',
+            workstream: 'general',
+            goals: ['Log activity', 'Update CRM', 'Pipeline tasks'],
+            reasoning: 'Dial target reached — use remaining time for admin.',
+          });
           gapRemaining = 0;
         }
       } else if (gapRemaining >= 30) {
