@@ -1661,13 +1661,13 @@ export function DailyTimeBlocks() {
               <span className="font-medium text-foreground">Dial capacity:</span>
               <span className={cn(
                 "font-medium",
-                dialCapacity.status === 'above_target' && "text-emerald-500",
-                dialCapacity.status === 'on_track' && "text-foreground",
-                dialCapacity.status === 'below_minimum' && "text-amber-500",
-              )}>
-                {hasActuals ? `${actualDialsTotal}` : `${dialCapacity.plannedDials} planned`}
-                {' / '}
-                {DAILY_DIALS_MIN}–{DAILY_DIALS_TARGET} target
+                 dialCapacity.status === 'above_target' && "text-emerald-500",
+                 dialCapacity.status === 'on_track' && "text-foreground",
+                 dialCapacity.status === 'below_minimum' && "text-amber-500",
+               )}>
+                 {hasActuals ? `${actualDialsTotal}` : `${dialCapacity.plannedDials}–${dialCapacity.plannedDialsTarget} planned`}
+                 {' / '}
+                 {DAILY_DIALS_MIN}–{DAILY_DIALS_TARGET} target
               </span>
               {dialCapacity.status === 'below_minimum' && (
                 <Badge variant="outline" className="h-4 px-1.5 text-[9px] border-amber-500/40 text-amber-600 gap-0.5">
