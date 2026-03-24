@@ -2,17 +2,16 @@
  * WeeklyQueueOverview — shows all 15 weekly research queue accounts
  * grouped by day (Mon–Fri, 3 each) with state badges, progress,
  * inline contact counts, and edit controls (remove / add / swap).
+ *
+ * HARDENED: uses eligibleForAdd from hook, no raw store filtering.
  */
 import { memo, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
   CheckCircle2, Circle, ArrowRight, RefreshCw, Loader2,
-  X, Plus, Users, MoreVertical, ArrowUpDown,
+  X, Plus, Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useStore } from '@/store/useStore';
@@ -20,12 +19,7 @@ import {
   useWeeklyResearchQueue,
   type AccountState, type QueueAccount, type WeeklyAssignments,
 } from '@/hooks/useWeeklyResearchQueue';
-
-// ── Helpers ──
-
-const DAY_LABELS: Record<string, string> = {
-  monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu', friday: 'Fri',
-};
+import type { Account } from '@/types';
 
 // ── Contact count (real data) ──
 
@@ -68,40 +62,30 @@ function StateBadge({ state }: { state: AccountState }) {
   }
 }
 
-// ── Add account picker (inline) ──
+// ── Add account picker — uses pre-filtered eligible list ──
 
-function AddAccountPicker({ day, onAdd, onClose, assignments }: {
+function AddAccountPicker({ day, eligibleAccounts, onAdd, onClose }: {
   day: keyof WeeklyAssignments;
+  eligibleAccounts: Account[];
   onAdd: (day: keyof WeeklyAssignments, account: { id: string; name: string; tier?: string; industry?: string }) => void;
   onClose: () => void;
-  assignments: WeeklyAssignments;
 }) {
   const [q, setQ] = useState('');
-  const { accounts } = useStore();
-
-  // IDs already in the queue this week
-  const queuedIds = useMemo(() => {
-    const set = new Set<string>();
-    for (const k of Object.keys(assignments)) {
-      for (const a of assignments[k as keyof WeeklyAssignments]) set.add(a.id);
-    }
-    return set;
-  }, [assignments]);
 
   const filtered = useMemo(() => {
     if (!q.trim()) return [];
     const lower = q.toLowerCase();
-    return accounts
-      .filter(a => !queuedIds.has(a.id) && a.name.toLowerCase().includes(lower))
+    return eligibleAccounts
+      .filter(a => a.name.toLowerCase().includes(lower))
       .slice(0, 6);
-  }, [q, accounts, queuedIds]);
+  }, [q, eligibleAccounts]);
 
   return (
     <div className="relative mt-1">
       <Input
         autoFocus
         className="h-6 text-xs"
-        placeholder="Search accounts to add…"
+        placeholder="Search eligible accounts…"
         value={q}
         onChange={e => setQ(e.target.value)}
         onKeyDown={e => e.key === 'Escape' && onClose()}
@@ -118,7 +102,7 @@ function AddAccountPicker({ day, onAdd, onClose, assignments }: {
             </button>
           ))}
           {filtered.length === 0 && (
-            <div className="px-2 py-1.5 text-[10px] text-muted-foreground">No eligible accounts</div>
+            <div className="px-2 py-1.5 text-[10px] text-muted-foreground">No eligible accounts found</div>
           )}
         </div>
       )}
@@ -128,14 +112,14 @@ function AddAccountPicker({ day, onAdd, onClose, assignments }: {
 
 // ── Day card ──
 
-function DayRow({ dayKey, label, accounts: dayAccounts, isToday, onAdvance, onRemove, assignments, onAdd }: {
+function DayRow({ dayKey, label, accounts: dayAccounts, isToday, onAdvance, onRemove, eligibleAccounts, onAdd }: {
   dayKey: string;
   label: string;
   accounts: QueueAccount[];
   isToday: boolean;
   onAdvance: (day: keyof WeeklyAssignments, accountId: string, newState: 'researched' | 'added_to_cadence') => void;
   onRemove: (day: keyof WeeklyAssignments, accountId: string) => void;
-  assignments: WeeklyAssignments;
+  eligibleAccounts: Account[];
   onAdd: (day: keyof WeeklyAssignments, account: { id: string; name: string; tier?: string; industry?: string }) => void;
 }) {
   const [showAdd, setShowAdd] = useState(false);
@@ -173,7 +157,6 @@ function DayRow({ dayKey, label, accounts: dayAccounts, isToday, onAdvance, onRe
               </div>
               <div className="flex items-center gap-0.5 shrink-0">
                 <StateBadge state={account.state} />
-                {/* Advance buttons */}
                 {account.state === 'not_started' && (
                   <Button variant="ghost" size="icon" className="h-5 w-5 opacity-0 group-hover:opacity-100"
                     onClick={() => onAdvance(day, account.id, 'researched')} title="Mark researched">
@@ -186,7 +169,6 @@ function DayRow({ dayKey, label, accounts: dayAccounts, isToday, onAdvance, onRe
                     <ArrowRight className="h-3 w-3" />
                   </Button>
                 )}
-                {/* Remove */}
                 <Button variant="ghost" size="icon" className="h-5 w-5 opacity-0 group-hover:opacity-100 text-destructive"
                   onClick={() => onRemove(day, account.id)} title="Remove">
                   <X className="h-3 w-3" />
@@ -197,7 +179,6 @@ function DayRow({ dayKey, label, accounts: dayAccounts, isToday, onAdvance, onRe
         </div>
       )}
 
-      {/* Add account */}
       {dayAccounts.length < 3 && !showAdd && (
         <button onClick={() => setShowAdd(true)}
           className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors w-full">
@@ -205,11 +186,17 @@ function DayRow({ dayKey, label, accounts: dayAccounts, isToday, onAdvance, onRe
         </button>
       )}
       {showAdd && (
-        <AddAccountPicker day={day} onAdd={onAdd} onClose={() => setShowAdd(false)} assignments={assignments} />
+        <AddAccountPicker day={day} eligibleAccounts={eligibleAccounts} onAdd={onAdd} onClose={() => setShowAdd(false)} />
       )}
     </div>
   );
 }
+
+// ── Day labels ──
+
+const DAY_LABELS: Record<string, string> = {
+  monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu', friday: 'Fri',
+};
 
 // ── Main component ──
 
@@ -218,7 +205,7 @@ export const WeeklyQueueOverview = memo(function WeeklyQueueOverview() {
     assignments, todayKey, loading, isEmpty,
     weeklyResearched, weeklyAddedToCadence, weeklyTotal,
     generateQueue, advanceState, removeAccount, addAccount,
-    DAY_KEYS, weekStart,
+    eligibleForAdd, DAY_KEYS, weekStart,
   } = useWeeklyResearchQueue();
 
   const progress = useMemo(() => {
@@ -282,7 +269,7 @@ export const WeeklyQueueOverview = memo(function WeeklyQueueOverview() {
             onAdvance={advanceState}
             onRemove={removeAccount}
             onAdd={addAccount}
-            assignments={assignments}
+            eligibleAccounts={eligibleForAdd}
           />
         ))}
       </div>

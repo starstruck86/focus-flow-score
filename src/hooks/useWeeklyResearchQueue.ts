@@ -4,6 +4,8 @@
  * Manages a fixed 15-account weekly research queue (3 per day, Mon–Fri).
  * Persists to weekly_research_queue table. Logs events idempotently to
  * research_queue_events table for future analysis.
+ *
+ * HARDENED: dedup, eligibility, queue↔block sync events, swap safety.
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useStore } from '@/store/useStore';
@@ -49,6 +51,39 @@ function getWeekStart(): string {
   return format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
 }
 
+// ── Integrity helpers ──
+
+/** Deduplicate assignments: keep first occurrence of each account ID */
+function deduplicateAssignments(a: WeeklyAssignments): WeeklyAssignments {
+  const seen = new Set<string>();
+  const result = emptyAssignments();
+  for (const k of DAY_KEYS) {
+    for (const acct of a[k]) {
+      if (!seen.has(acct.id)) {
+        seen.add(acct.id);
+        result[k].push(acct);
+      }
+    }
+  }
+  return result;
+}
+
+/** Get all account IDs currently in the queue */
+function getAllQueueIds(a: WeeklyAssignments): Set<string> {
+  const ids = new Set<string>();
+  for (const k of DAY_KEYS) {
+    for (const acct of a[k]) ids.add(acct.id);
+  }
+  return ids;
+}
+
+/** Custom event name for queue↔block sync */
+export const QUEUE_CHANGED_EVENT = 'weekly-queue-changed';
+
+function emitQueueChanged(queueIds: string[]) {
+  window.dispatchEvent(new CustomEvent(QUEUE_CHANGED_EVENT, { detail: { queueIds } }));
+}
+
 // ── Hook ──
 
 export function useWeeklyResearchQueue() {
@@ -68,7 +103,7 @@ export function useWeeklyResearchQueue() {
       .filter(Boolean) as string[]
   ), [opportunities]);
 
-  // ── Load existing queue ──
+  // ── Load existing queue (with dedup sanitization) ──
   useEffect(() => {
     if (!user) return;
     (async () => {
@@ -82,16 +117,17 @@ export function useWeeklyResearchQueue() {
 
       if (!error && data) {
         setQueueId((data as any).id);
-        const a = (data as any).assignments as WeeklyAssignments;
-        // Validate structure
-        const valid = DAY_KEYS.every(k => Array.isArray(a?.[k]));
-        setAssignments(valid ? a : emptyAssignments());
+        const raw = (data as any).assignments as WeeklyAssignments;
+        const valid = DAY_KEYS.every(k => Array.isArray(raw?.[k]));
+        const sanitized = valid ? deduplicateAssignments(raw) : emptyAssignments();
+        setAssignments(sanitized);
+        emitQueueChanged(Array.from(getAllQueueIds(sanitized)));
       }
       setLoading(false);
     })();
   }, [user, weekStart]);
 
-  // ── Generate queue (if empty) ──
+  // ── Generate queue ──
   const generateQueue = useCallback(async () => {
     if (!user || !accounts.length) return;
 
@@ -102,11 +138,13 @@ export function useWeeklyResearchQueue() {
       .slice(0, 15);
 
     const newAssignments: WeeklyAssignments = emptyAssignments();
+    const seen = new Set<string>();
     scored.forEach((s, i) => {
+      if (seen.has(s.account.id)) return; // safety dedup
+      seen.add(s.account.id);
       const dayIdx = Math.floor(i / 3);
       if (dayIdx < 5) {
-        const day = DAY_KEYS[dayIdx];
-        newAssignments[day].push({
+        newAssignments[DAY_KEYS[dayIdx]].push({
           id: s.account.id,
           name: s.account.name,
           state: 'not_started',
@@ -129,26 +167,29 @@ export function useWeeklyResearchQueue() {
     if (!error && data) {
       setQueueId((data as any).id);
       setAssignments(newAssignments);
+      emitQueueChanged(Array.from(getAllQueueIds(newAssignments)));
       toast.success('Weekly research queue generated — 15 accounts, 3 per day');
     } else {
       toast.error('Failed to generate queue');
     }
   }, [user, accounts, activeOppAccountIds, weekStart]);
 
-  // ── Persist assignments ──
+  // ── Persist assignments (with dedup + sync event) ──
   const persistAssignments = useCallback(async (updated: WeeklyAssignments) => {
     if (!user) return;
-    setAssignments(updated);
+    const clean = deduplicateAssignments(updated);
+    setAssignments(clean);
+    emitQueueChanged(Array.from(getAllQueueIds(clean)));
     await supabase
       .from('weekly_research_queue' as any)
       .upsert({
         user_id: user.id,
         week_start: weekStart,
-        assignments: updated,
+        assignments: clean,
       } as any, { onConflict: 'user_id,week_start' });
   }, [user, weekStart]);
 
-  // ── Advance state (idempotent event logging) ──
+  // ── Advance state ──
   const advanceState = useCallback(async (
     day: keyof WeeklyAssignments,
     accountId: string,
@@ -162,17 +203,15 @@ export function useWeeklyResearchQueue() {
     if (idx === -1) return;
 
     const current = dayAccounts[idx];
-    // Don't go backwards
     if (newState === 'researched' && current.state === 'added_to_cadence') return;
-    if (current.state === newState) return; // Already in this state
+    if (current.state === newState) return;
 
     dayAccounts[idx] = { ...current, state: newState };
     updated[day] = dayAccounts;
 
-    // Persist assignment state
     await persistAssignments(updated);
 
-    // Log event idempotently (UNIQUE constraint prevents duplicates)
+    // Log event idempotently
     await supabase
       .from('research_queue_events' as any)
       .upsert({
@@ -184,7 +223,6 @@ export function useWeeklyResearchQueue() {
         event_type: newState,
       } as any, { onConflict: 'user_id,account_id,week_start,event_type' });
 
-    // If advancing from not_started to added_to_cadence, also log researched
     if (newState === 'added_to_cadence' && current.state === 'not_started') {
       await supabase
         .from('research_queue_events' as any)
@@ -199,26 +237,31 @@ export function useWeeklyResearchQueue() {
     }
   }, [user, assignments, persistAssignments, weekStart]);
 
-  // ── Remove account from a day ──
+  // ── Remove account ──
   const removeAccount = useCallback(async (day: keyof WeeklyAssignments, accountId: string) => {
     const updated = { ...assignments };
     updated[day] = updated[day].filter(a => a.id !== accountId);
     await persistAssignments(updated);
   }, [assignments, persistAssignments]);
 
-  // ── Add account to a day (with eligibility check) ──
+  // ── Add account (hardened: dedup + eligibility) ──
   const addAccount = useCallback(async (day: keyof WeeklyAssignments, account: { id: string; name: string; tier?: string; industry?: string }) => {
     if (assignments[day].length >= 3) {
       toast.error('Day already has 3 accounts — remove one first');
       return;
     }
+    // Cross-day duplicate check
     if (DAY_KEYS.some(k => assignments[k].some(a => a.id === account.id))) {
       toast.error('Account already in this week\'s queue');
       return;
     }
-    // Validate eligibility
+    // Eligibility check
     const fullAccount = accounts.find(a => a.id === account.id);
-    if (fullAccount && !isEligibleForQueue(fullAccount, activeOppAccountIds)) {
+    if (!fullAccount) {
+      toast.error('Account not found');
+      return;
+    }
+    if (!isEligibleForQueue(fullAccount, activeOppAccountIds)) {
       toast.error('Account is not eligible (renewal, open opp, or closed)');
       return;
     }
@@ -227,7 +270,7 @@ export function useWeeklyResearchQueue() {
     await persistAssignments(updated);
   }, [assignments, persistAssignments, accounts, activeOppAccountIds]);
 
-  // ── Swap accounts between days ──
+  // ── Swap accounts (hardened: validates indices, preserves size) ──
   const swapAccounts = useCallback(async (
     fromDay: keyof WeeklyAssignments, fromIdx: number,
     toDay: keyof WeeklyAssignments, toIdx: number,
@@ -235,6 +278,13 @@ export function useWeeklyResearchQueue() {
     const updated = { ...assignments };
     const fromList = [...updated[fromDay]];
     const toList = fromDay === toDay ? fromList : [...updated[toDay]];
+
+    // Bounds check
+    if (fromIdx < 0 || fromIdx >= fromList.length || toIdx < 0 || toIdx >= toList.length) {
+      toast.error('Invalid swap — index out of range');
+      return;
+    }
+
     const temp = fromList[fromIdx];
     fromList[fromIdx] = toList[toIdx];
     toList[toIdx] = temp;
@@ -243,17 +293,23 @@ export function useWeeklyResearchQueue() {
     await persistAssignments(updated);
   }, [assignments, persistAssignments]);
 
+  // ── Eligible accounts for manual add (exported for UI filtering) ──
+  const eligibleForAdd = useMemo(() => {
+    const queueIds = getAllQueueIds(assignments);
+    return accounts.filter(a =>
+      !queueIds.has(a.id) && isEligibleForQueue(a, activeOppAccountIds)
+    );
+  }, [accounts, assignments, activeOppAccountIds]);
+
   // ── Computed stats ──
   const todayKey = todayDayKey();
   const todayAccounts = todayKey ? assignments[todayKey] : [];
-
   const dailyProgress = todayAccounts.filter(a => a.state !== 'not_started').length;
   const weeklyResearched = DAY_KEYS.reduce((s, k) =>
     s + assignments[k].filter(a => a.state === 'researched' || a.state === 'added_to_cadence').length, 0);
   const weeklyAddedToCadence = DAY_KEYS.reduce((s, k) =>
     s + assignments[k].filter(a => a.state === 'added_to_cadence').length, 0);
   const weeklyTotal = DAY_KEYS.reduce((s, k) => s + assignments[k].length, 0);
-
   const isEmpty = weeklyTotal === 0;
 
   return {
@@ -263,18 +319,16 @@ export function useWeeklyResearchQueue() {
     loading,
     isEmpty,
     queueId,
-    // Stats
     dailyProgress,
     weeklyResearched,
     weeklyAddedToCadence,
     weeklyTotal,
-    // Actions
     generateQueue,
     advanceState,
     removeAccount,
     addAccount,
     swapAccounts,
-    // Constants
+    eligibleForAdd,
     DAY_KEYS,
     weekStart,
   };

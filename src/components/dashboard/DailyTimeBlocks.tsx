@@ -37,6 +37,7 @@ import type { CalendarScreenshotEvent } from '@/types/dashboard';
 import type { Json } from '@/integrations/supabase/types';
 import { generateTraceId } from '@/lib/appError';
 import { buildLocalFallbackPlan, getVisiblePlanBlocks, summarizePlanDelta, type RebuildFallbackBlock, type RebuildPlanBlock } from '@/lib/dailyPlanRebuild';
+import { QUEUE_CHANGED_EVENT } from '@/hooks/useWeeklyResearchQueue';
 
 
 /** Inline contact count for linked account pills */
@@ -253,6 +254,36 @@ export function DailyTimeBlocks() {
     }, 60_000);
     return () => clearInterval(interval);
   }, [plan?.blocks]);
+
+  // ── Queue↔Block sync: prune orphaned linked_accounts when queue changes ──
+  useEffect(() => {
+    function handleQueueChanged(e: Event) {
+      const queueIds = new Set<string>((e as CustomEvent).detail?.queueIds ?? []);
+      if (!plan?.blocks || queueIds.size === 0) return;
+      const blocks = plan.blocks as TimeBlock[];
+      let dirty = false;
+      const updated = blocks.map(block => {
+        if (!block.linked_accounts?.length) return block;
+        const filtered = block.linked_accounts.filter(a => queueIds.has(a.id));
+        if (filtered.length !== block.linked_accounts.length) {
+          dirty = true;
+          return { ...block, linked_accounts: filtered };
+        }
+        return block;
+      });
+      if (dirty) {
+        queryClient.setQueryData(['daily-time-blocks', todayStr], { ...plan, blocks: updated });
+        // Persist pruned blocks
+        supabase
+          .from('daily_time_blocks' as 'daily_time_blocks')
+          .update({ blocks: updated as unknown as Json })
+          .eq('id', plan.id)
+          .then(() => {});
+      }
+    }
+    window.addEventListener(QUEUE_CHANGED_EVENT, handleQueueChanged);
+    return () => window.removeEventListener(QUEUE_CHANGED_EVENT, handleQueueChanged);
+  }, [plan, todayStr, queryClient]);
 
   const generateMutation = useMutation({
     mutationFn: async (opts: { confirmedScreenshotEvents?: CalendarScreenshotEvent[]; source?: 'generate' | 'manual_rebuild' | 'screenshot_rebuild' } | void) => {
