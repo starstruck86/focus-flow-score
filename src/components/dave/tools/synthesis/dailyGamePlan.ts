@@ -147,6 +147,26 @@ export async function dailyGamePlanSummary(ctx: ToolContext): Promise<string> {
   }
   sentences.push(opener);
 
+  // Dial capacity check — MVP model
+  const dialCapacity = calculateDialCapacity(blocks);
+  const actualDials = getActualDials(blocks);
+  if (actualDials > 0) {
+    if (actualDials >= DAILY_DIALS_TARGET) {
+      sentences.push(`You've already hit ${actualDials} dials — above your ${DAILY_DIALS_TARGET} target. Strong day.`);
+    } else if (actualDials >= DAILY_DIALS_MIN) {
+      sentences.push(`You're at ${actualDials} dials so far, on track for the ${DAILY_DIALS_MIN} to ${DAILY_DIALS_TARGET} range.`);
+    } else {
+      const remaining = DAILY_DIALS_MIN - actualDials;
+      sentences.push(`You're at ${actualDials} dials — need ${remaining} more to hit your minimum of ${DAILY_DIALS_MIN}. ${dialCapacity.suggestedAdditionalBlocks > 0 ? `You need ${dialCapacity.suggestedAdditionalBlocks} more call block${dialCapacity.suggestedAdditionalBlocks !== 1 ? 's' : ''}.` : ''}`);
+    }
+  } else {
+    if (dialCapacity.status === 'below_minimum') {
+      sentences.push(`Dial capacity is ${dialCapacity.plannedDials} — below the ${DAILY_DIALS_MIN} minimum. You need ${dialCapacity.suggestedAdditionalBlocks} more call block${dialCapacity.suggestedAdditionalBlocks !== 1 ? 's' : ''} to hit target.`);
+    } else {
+      sentences.push(`You have ${dialCapacity.callBlockCount} call blocks planned for about ${dialCapacity.plannedDials} dials — ${dialCapacity.status === 'above_target' ? 'above target' : 'on track'} for the ${DAILY_DIALS_MIN} to ${DAILY_DIALS_TARGET} range.`);
+    }
+  }
+
   // Strategy
   if (plan.ai_reasoning) {
     sentences.push(`The game plan today is to ${plan.ai_reasoning.charAt(0).toLowerCase()}${plan.ai_reasoning.slice(1).replace(/\.$/, '')}.`);
@@ -154,13 +174,12 @@ export async function dailyGamePlanSummary(ctx: ToolContext): Promise<string> {
 
   // Targets
   const targetParts: string[] = [];
-  if (targets.dials) targetParts.push(`${targets.dials} dials`);
   if (targets.conversations) targetParts.push(`${targets.conversations} conversations`);
   if (targets.accounts_sourced) targetParts.push(`${targets.accounts_sourced} accounts sourced and added to cadence`);
   if (targets.accounts_researched) targetParts.push(`${targets.accounts_researched} accounts researched`);
   if (targets.contacts_prepped) targetParts.push(`${targets.contacts_prepped} contacts prepped`);
   if (targetParts.length) {
-    sentences.push(`You're aiming for ${joinNatural(targetParts)} today.`);
+    sentences.push(`Beyond dials, you're aiming for ${joinNatural(targetParts)} today.`);
   }
 
   // Meetings
@@ -180,15 +199,8 @@ export async function dailyGamePlanSummary(ctx: ToolContext): Promise<string> {
     const b = buildBlocks[0];
     const done = (b as any).build_steps?.filter((s: any) => s.done).length || 0;
     const total = (b as any).build_steps?.length || 5;
-    let buildSentence = `You've got a New Logo Build block at ${spokenTime(b.start_time)} — that's where you source ${targets.accounts_sourced || 3} fresh accounts, research them, find contacts, and add them to cadence.${done > 0 ? ` You've completed ${done} of ${total} steps so far.` : ''}`;
-    // Queue context is added async in summary — skip here for sync perf
+    let buildSentence = `You've got a New Logo Build block at ${spokenTime(b.start_time)} — MVP is 2 to 3 accounts with 6 to 8 contacts sourced end to end.${done > 0 ? ` You've completed ${done} of ${total} steps so far.` : ''}`;
     sentences.push(buildSentence);
-  }
-
-  // Rust buster
-  const rust = blocks.filter(b => b.label.toLowerCase().includes('rust'));
-  if (rust.length) {
-    sentences.push(`Your Rust Buster warm-up kicks off at ${spokenTime(rust[0].start_time)}.`);
   }
 
   // Current / next awareness
