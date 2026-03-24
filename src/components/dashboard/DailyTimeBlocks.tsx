@@ -1385,8 +1385,8 @@ export function DailyTimeBlocks() {
                     </div>
                   )}
 
-                  {/* New Logo Build step tracker */}
-                  {editingBlock !== i && block.type === 'build' && (
+                  {/* New Logo Build step tracker — shown for both 'build' and 'prep' new_logo blocks */}
+                  {editingBlock !== i && (block.type === 'build' || (block.type === 'prep' && block.workstream === 'new_logo')) && (
                     <div className="mt-2 py-2 px-2.5 rounded-md bg-orange-500/5 border border-orange-500/20">
                       <div className="flex items-center gap-1.5 mb-2">
                         <Hammer className="h-3 w-3 text-orange-500" />

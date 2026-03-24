@@ -198,13 +198,13 @@ export function buildLocalFallbackPlan(input: {
         }
       } else if (gapRemaining >= 30) {
         gapCursor = pushBlock(gapCursor, gapRemaining, {
-          label: prepPlaced ? 'Admin & CRM Updates' : 'New Logo Prep',
-          type: prepPlaced ? 'admin' : 'prep',
+          label: prepPlaced ? 'Admin & CRM Updates' : 'New Logo Build',
+          type: prepPlaced ? 'admin' : 'build',
           workstream: 'new_logo',
           goals: prepPlaced
             ? ['Log activity', 'Update CRM']
-            : ['Research target accounts', 'Find contacts + source emails/phone numbers'],
-          reasoning: 'Use available time productively.',
+            : ['Select 3 target accounts', 'Research companies', 'Identify contacts', 'Find emails/phone numbers', 'Add to cadence'],
+          reasoning: prepPlaced ? 'Use available time productively.' : 'Canonical New Logo build block.',
         });
         prepPlaced = true;
         gapRemaining = 0;
