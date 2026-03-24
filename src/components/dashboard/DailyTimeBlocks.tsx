@@ -1646,40 +1646,69 @@ export function DailyTimeBlocks() {
         </div>
       )}
 
-      {/* Metric targets footer */}
+      {/* Dial capacity + metric targets footer */}
       {expanded && plan.key_metric_targets && Object.keys(plan.key_metric_targets).length > 0 && (() => {
-        const actualDialsTotal = blocks
-          .filter(b => b.type === 'prospecting')
-          .reduce((s, b) => s + (b.actual_dials || 0), 0);
+        const dialCapacity = calculateDialCapacity(blocks);
+        const actualDialsTotal = getActualDials(blocks);
         const targetDials = plan.key_metric_targets.dials;
         const hasActuals = actualDialsTotal > 0;
         
         return (
-          <div className="px-4 py-2.5 bg-muted/20 border-t border-border/30 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-            <span className="font-medium text-foreground">Today's targets:</span>
-            {targetDials != null && (
+          <div className="px-4 py-2.5 bg-muted/20 border-t border-border/30 space-y-1.5">
+            {/* Dial capacity status */}
+            <div className="flex items-center gap-2 text-[11px]">
+              <Phone className="h-3 w-3 text-primary" />
+              <span className="font-medium text-foreground">Dial capacity:</span>
               <span className={cn(
-                hasActuals && actualDialsTotal >= targetDials && "text-status-green font-medium",
-                hasActuals && actualDialsTotal < targetDials && actualDialsTotal >= targetDials * 0.7 && "text-amber-500 font-medium",
+                "font-medium",
+                dialCapacity.status === 'above_target' && "text-emerald-500",
+                dialCapacity.status === 'on_track' && "text-foreground",
+                dialCapacity.status === 'below_minimum' && "text-amber-500",
               )}>
-                {hasActuals ? `${actualDialsTotal}/${targetDials} dials` : `${targetDials} dials`}
-                {hasActuals && actualDialsTotal >= targetDials && ' ✓'}
+                {hasActuals ? `${actualDialsTotal}` : `${dialCapacity.plannedDials} planned`}
+                {' / '}
+                {DAILY_DIALS_MIN}–{DAILY_DIALS_TARGET} target
               </span>
-            )}
-            {plan.key_metric_targets.conversations != null && <span>{plan.key_metric_targets.conversations} convos</span>}
-            {plan.key_metric_targets.accounts_sourced != null && (
-              <span className={cn(
-                "flex items-center gap-1",
-                queueDailyProgress >= 3 && "text-emerald-500 font-medium",
-                queueDailyProgress > 0 && queueDailyProgress < 3 && "text-amber-500 font-medium",
-              )}>
-                <Hammer className="h-3 w-3 text-orange-500" />
-                {queueDailyProgress}/3 today · {weeklyResearched}/{weeklyTotal} week
-                {queueDailyProgress >= 3 && ' ✓'}
-              </span>
-            )}
-            {plan.key_metric_targets.accounts_researched != null && <span>{plan.key_metric_targets.accounts_researched} researched</span>}
-            {plan.key_metric_targets.contacts_prepped != null && <span>{plan.key_metric_targets.contacts_prepped} prepped</span>}
+              {dialCapacity.status === 'below_minimum' && (
+                <Badge variant="outline" className="h-4 px-1.5 text-[9px] border-amber-500/40 text-amber-600 gap-0.5">
+                  <AlertTriangle className="h-2.5 w-2.5" />
+                  Need {dialCapacity.suggestedAdditionalBlocks} more call block{dialCapacity.suggestedAdditionalBlocks !== 1 ? 's' : ''}
+                </Badge>
+              )}
+              {dialCapacity.status === 'above_target' && (
+                <Badge variant="outline" className="h-4 px-1.5 text-[9px] border-emerald-500/40 text-emerald-600 gap-0.5">
+                  <TrendingUp className="h-2.5 w-2.5" />
+                  Above target
+                </Badge>
+              )}
+            </div>
+            {/* Other targets */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+              <span className="font-medium text-foreground">Targets:</span>
+              {targetDials != null && (
+                <span className={cn(
+                  hasActuals && actualDialsTotal >= targetDials && "text-emerald-500 font-medium",
+                  hasActuals && actualDialsTotal < targetDials && actualDialsTotal >= targetDials * 0.7 && "text-amber-500 font-medium",
+                )}>
+                  {hasActuals ? `${actualDialsTotal}/${targetDials} dials` : `${targetDials} dials`}
+                  {hasActuals && actualDialsTotal >= targetDials && ' ✓'}
+                </span>
+              )}
+              {plan.key_metric_targets.conversations != null && <span>{plan.key_metric_targets.conversations} convos</span>}
+              {plan.key_metric_targets.accounts_sourced != null && (
+                <span className={cn(
+                  "flex items-center gap-1",
+                  queueDailyProgress >= 3 && "text-emerald-500 font-medium",
+                  queueDailyProgress > 0 && queueDailyProgress < 3 && "text-amber-500 font-medium",
+                )}>
+                  <Hammer className="h-3 w-3 text-orange-500" />
+                  {queueDailyProgress}/3 today · {weeklyResearched}/{weeklyTotal} week
+                  {queueDailyProgress >= 3 && ' ✓'}
+                </span>
+              )}
+              {plan.key_metric_targets.accounts_researched != null && <span>{plan.key_metric_targets.accounts_researched} researched</span>}
+              {plan.key_metric_targets.contacts_prepped != null && <span>{plan.key_metric_targets.contacts_prepped} prepped</span>}
+            </div>
           </div>
         );
       })()}
