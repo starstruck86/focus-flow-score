@@ -145,48 +145,76 @@ export function buildLocalFallbackPlan(input: {
     if (gapRemaining < 30) continue;
 
     while (gapRemaining > 15) {
-      if (gapRemaining >= 60) {
+      if (gapRemaining >= 90) {
+        // Canonical: 30-min prep + 60-min call block
         gapCursor = pushBlock(gapCursor, 30, {
-          label: prepPlaced ? 'Quick outreach prep' : 'Prep contacts for outreach',
-          type: 'admin' as any,
+          label: prepPlaced ? 'Account Research & Contact Sourcing' : 'New Logo Prep (3 accounts)',
+          type: 'prep',
           workstream: 'new_logo',
           goals: ['Research target accounts', 'Find contacts + source emails/phone numbers', 'Load contacts into cadence'],
-          reasoning: 'Prep time before outreach so execution is actually possible.',
+          reasoning: 'Prep is required before any outreach block.',
         });
         gapRemaining = gap.end - gapCursor;
         prepPlaced = true;
 
         const activityDuration = Math.min(60, gapRemaining);
         if (activityDuration >= 30) {
-          const estimatedTouches = Math.max(8, Math.round(activityDuration / 3));
-          const label = activityIndex === 1 ? 'Work sourced contacts' : 'Continue outreach follow-up';
+          const halfHours = activityDuration / 30;
+          const estDials = Math.round(halfHours * DIALS_PER_30_MIN);
+          const label = activityIndex === 1 ? `Call Block (~${estDials} dials)` : `Call Block #${activityIndex} (~${estDials} dials)`;
           gapCursor = pushBlock(gapCursor, activityDuration, {
             label,
             type: 'prospecting',
             workstream: 'new_logo',
-            goals: [`Make calls / send emails for ~${estimatedTouches} outreach touches`, 'Log responses and next steps'],
-            reasoning: 'Activity block paired with prep so time is used efficiently.',
+            goals: [`Make ~${estDials} dials to sourced contacts`, 'Log responses and next steps'],
+            reasoning: 'Execution block paired with prep.',
           });
           activityIndex += 1;
           gapRemaining = gap.end - gapCursor;
         }
+      } else if (gapRemaining >= 60) {
+        // 30 prep + 30 call
+        gapCursor = pushBlock(gapCursor, 30, {
+          label: 'New Logo Prep',
+          type: 'prep',
+          workstream: 'new_logo',
+          goals: ['Research target accounts', 'Find contacts + source emails/phone numbers'],
+          reasoning: 'Prep block before outreach.',
+        });
+        prepPlaced = true;
+        gapRemaining = gap.end - gapCursor;
+
+        if (gapRemaining >= 30) {
+          const estDials = Math.round((gapRemaining / 30) * DIALS_PER_30_MIN);
+          gapCursor = pushBlock(gapCursor, gapRemaining, {
+            label: `Call Block (~${estDials} dials)`,
+            type: 'prospecting',
+            workstream: 'new_logo',
+            goals: [`Make ~${estDials} dials to sourced contacts`, 'Log responses and next steps'],
+            reasoning: 'Execution block paired with prep.',
+          });
+          activityIndex += 1;
+          gapRemaining = 0;
+        }
       } else if (gapRemaining >= 30) {
         gapCursor = pushBlock(gapCursor, gapRemaining, {
-          label: 'Prep contacts for outreach',
-          type: 'admin' as any,
+          label: prepPlaced ? 'Admin & CRM Updates' : 'New Logo Prep',
+          type: prepPlaced ? 'admin' : 'prep',
           workstream: 'new_logo',
-          goals: ['Research target accounts', 'Find contacts + source emails/phone numbers', 'Load contacts into cadence'],
-          reasoning: 'Use remaining half hour for prep instead of leaving time idle.',
+          goals: prepPlaced
+            ? ['Log activity', 'Update CRM']
+            : ['Research target accounts', 'Find contacts + source emails/phone numbers'],
+          reasoning: 'Use available time productively.',
         });
         prepPlaced = true;
         gapRemaining = 0;
       } else {
         gapCursor = pushBlock(gapCursor, gapRemaining, {
-          label: 'Quick admin & CRM updates',
-          type: 'admin' as any,
+          label: 'Admin & CRM Updates',
+          type: 'admin',
           workstream: 'general',
           goals: ['Log activity', 'Update CRM'],
-          reasoning: 'Use short window productively instead of leaving dead time.',
+          reasoning: 'Use short window productively.',
         });
         gapRemaining = 0;
       }
