@@ -119,8 +119,8 @@ export function calculateDialCapacity(blocks: Array<{ type: string; start_time: 
     plannedDials >= DAILY_DIALS_MIN ? 'on_track' :
     'below_minimum';
 
-  // Each 30-min call block adds ~15 dials
-  const suggestedAdditionalBlocks = gap > 0 ? Math.ceil(gap / 15) : 0;
+  // Use MVP rate (10 dials per 30-min block) for minimum-gap closure
+  const suggestedAdditionalBlocks = gap > 0 ? Math.ceil(gap / DIALS_PER_30_MIN) : 0;
 
   return {
     plannedDials,

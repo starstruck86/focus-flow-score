@@ -1526,7 +1526,7 @@ export function DailyTimeBlocks() {
 
                       {/* Weekly 15 Queue — collapsible */}
                       {!queueEmpty && (
-                        <Collapsible>
+                        <Collapsible defaultOpen={false}>
                           <CollapsibleTrigger className="flex items-center gap-1 w-full text-[10px] text-muted-foreground hover:text-foreground transition-colors py-1 mb-1">
                             <ChevronDown className="h-3 w-3 transition-transform [[data-state=open]>&]:rotate-180" />
                             <span className="font-medium">Weekly New Logo Queue ({weeklyTotal} accounts)</span>
