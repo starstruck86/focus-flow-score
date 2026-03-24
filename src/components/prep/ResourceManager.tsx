@@ -124,9 +124,8 @@ export function ResourceManager() {
   const [competitorContext, setCompetitorContext] = useState('');
   const [battlecardLoading, setBattlecardLoading] = useState(false);
   const [battlecardProgress, setBattlecardProgress] = useState('');
-  const [bulkEnriching, setBulkEnriching] = useState(false);
   const [selectedResourceIds, setSelectedResourceIds] = useState<Set<string>>(new Set());
-  const [bulkReenriching, setBulkReenriching] = useState(false);
+  const [showDeepEnrich, setShowDeepEnrich] = useState(false);
 
   // AI Generate / Transform states
   const [showAIGenerate, setShowAIGenerate] = useState(false);
