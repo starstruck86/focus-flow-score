@@ -354,7 +354,10 @@ serve(async (req) => {
 
     // Quota targets context
     const targets = quotaRes.data;
-    const weeklyDialTarget = (targets?.target_dials_per_day || 60) * 5; // e.g., 300/week
+    // MVP dial model: daily 20-40, weekly 100-200
+    const DAILY_DIALS_MIN = 20;
+    const DAILY_DIALS_TARGET = 40;
+    const weeklyDialTarget = (targets?.target_dials_per_day || DAILY_DIALS_TARGET) * 5;
     const weeklyConnectsTarget = (targets?.target_connects_per_day || 6) * 5;
 
     // Build weekly context: what's been done + what's left
