@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { Input } from '@/components/ui/input';
@@ -37,6 +37,15 @@ import type { CalendarScreenshotEvent } from '@/types/dashboard';
 import type { Json } from '@/integrations/supabase/types';
 import { generateTraceId } from '@/lib/appError';
 import { buildLocalFallbackPlan, getVisiblePlanBlocks, summarizePlanDelta, type RebuildFallbackBlock, type RebuildPlanBlock } from '@/lib/dailyPlanRebuild';
+
+
+/** Inline contact count for linked account pills */
+const LinkedAccountContactCount = memo(function LinkedAccountContactCount({ accountId }: { accountId: string }) {
+  const { contacts } = useStore();
+  const count = useMemo(() => contacts.filter(c => c.accountId === accountId).length, [contacts, accountId]);
+  if (count === 0) return null;
+  return <span className="text-[9px] font-mono text-muted-foreground ml-0.5">({count})</span>;
+});
 
 interface TimeBlock {
   start_time: string;
@@ -1252,6 +1261,7 @@ export function DailyTimeBlocks() {
                             >
                               <Building2 className="h-3 w-3" />
                               {acct.name}
+                              <LinkedAccountContactCount accountId={acct.id} />
                               <button
                                 onClick={() => {
                                   const updated = (block.linked_accounts || []).filter(a => a.id !== acct.id);
