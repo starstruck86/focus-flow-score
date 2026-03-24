@@ -954,6 +954,182 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
       return sorted.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
     }
 
+    function calculatePlannedDials(blocks: any[]) {
+      return blocks
+        .filter((block: any) => block.type === 'prospecting')
+        .reduce((sum: number, block: any) => {
+          const duration = toMinutes(block.end_time) - toMinutes(block.start_time);
+          return sum + Math.round((duration / 30) * DIALS_PER_30_MIN);
+        }, 0);
+    }
+
+    function insertionPriority(type: string) {
+      if (type === 'admin') return 1;
+      if (type === 'break') return 2;
+      if (type === 'research') return 3;
+      if (type === 'prep') return 4;
+      if (type === 'build') return 5;
+      if (type === 'pipeline') return 6;
+      if (type === 'prospecting') return 7;
+      return 999;
+    }
+
+    function minimumRemainingMinutes(type: string) {
+      return type === 'admin' || type === 'break' ? 15 : 30;
+    }
+
+    function createMandatoryCallBlock(startMin: number, endMin: number, sequence: number, reason: string) {
+      return {
+        ...createCallBlock(startMin, endMin, sequence),
+        reasoning: reason,
+      };
+    }
+
+    function tryInsertMandatoryCallBlock(blocks: any[], sequence: number) {
+      const sorted = [...blocks].sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
+      let cursor = workStartMin;
+
+      for (const block of sorted) {
+        const blockStart = Math.max(workStartMin, toMinutes(block.start_time));
+        const blockEnd = Math.min(workEndMin, toMinutes(block.end_time));
+        if (blockEnd <= workStartMin || blockStart >= workEndMin) continue;
+
+        if (blockStart - cursor >= 30) {
+          sorted.push(createMandatoryCallBlock(cursor, cursor + 30, sequence, 'Dial minimum enforcement — inserted call block in open window.'));
+          return {
+            blocks: sorted.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time)),
+            inserted: true,
+            reason: `Inserted 30-minute call block in open window ${minToTime(cursor)}–${minToTime(cursor + 30)}.`,
+          };
+        }
+
+        cursor = Math.max(cursor, blockEnd);
+      }
+
+      if (workEndMin - cursor >= 30) {
+        sorted.push(createMandatoryCallBlock(cursor, cursor + 30, sequence, 'Dial minimum enforcement — inserted call block at day tail.'));
+        return {
+          blocks: sorted.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time)),
+          inserted: true,
+          reason: `Inserted 30-minute call block at ${minToTime(cursor)}–${minToTime(cursor + 30)}.`,
+        };
+      }
+
+      const splitCandidates = sorted
+        .map((block, index) => ({
+          block,
+          index,
+          start: toMinutes(block.start_time),
+          end: toMinutes(block.end_time),
+        }))
+        .filter(({ block, start, end }) => block.type !== 'meeting' && end - start >= minimumRemainingMinutes(block.type) + 30)
+        .sort((a, b) => {
+          const priorityDiff = insertionPriority(a.block.type) - insertionPriority(b.block.type);
+          if (priorityDiff !== 0) return priorityDiff;
+          return (b.end - b.start) - (a.end - a.start);
+        });
+
+      const splitCandidate = splitCandidates[0];
+      if (splitCandidate) {
+        const minRemaining = minimumRemainingMinutes(splitCandidate.block.type);
+        let callStart = splitCandidate.end - 30;
+        let callEnd = splitCandidate.end;
+        let keptStart = splitCandidate.start;
+        let keptEnd = splitCandidate.end - 30;
+
+        if (keptEnd - keptStart < minRemaining) {
+          callStart = splitCandidate.start;
+          callEnd = splitCandidate.start + 30;
+          keptStart = splitCandidate.start + 30;
+          keptEnd = splitCandidate.end;
+        }
+
+        if (keptEnd - keptStart >= minRemaining) {
+          const next: any[] = [];
+          sorted.forEach((block, index) => {
+            if (index !== splitCandidate.index) {
+              next.push(block);
+              return;
+            }
+            next.push({
+              ...block,
+              start_time: minToTime(keptStart),
+              end_time: minToTime(keptEnd),
+            });
+            next.push(createMandatoryCallBlock(callStart, callEnd, sequence, `Dial minimum enforcement — split ${block.label} for a mandatory call block.`));
+          });
+          return {
+            blocks: next.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time)),
+            inserted: true,
+            reason: `Split ${splitCandidate.block.label} to free ${minToTime(callStart)}–${minToTime(callEnd)} for a call block.`,
+          };
+        }
+      }
+
+      const repurposeCandidates = sorted
+        .map((block, index) => ({
+          block,
+          index,
+          start: toMinutes(block.start_time),
+          end: toMinutes(block.end_time),
+        }))
+        .filter(({ block, start, end }) => block.type !== 'meeting' && end - start >= 30)
+        .sort((a, b) => {
+          const priorityDiff = insertionPriority(a.block.type) - insertionPriority(b.block.type);
+          if (priorityDiff !== 0) return priorityDiff;
+          return (a.end - a.start) - (b.end - b.start);
+        });
+
+      const repurposeCandidate = repurposeCandidates[0];
+      if (repurposeCandidate) {
+        sorted[repurposeCandidate.index] = createMandatoryCallBlock(
+          repurposeCandidate.start,
+          repurposeCandidate.start + 30,
+          sequence,
+          `Dial minimum enforcement — replaced ${repurposeCandidate.block.label} with a mandatory call block.`,
+        );
+        return {
+          blocks: sorted.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time)),
+          inserted: true,
+          reason: `Replaced ${repurposeCandidate.block.label} with a mandatory call block at ${minToTime(repurposeCandidate.start)}–${minToTime(repurposeCandidate.start + 30)}.`,
+        };
+      }
+
+      return {
+        blocks: sorted,
+        inserted: false,
+        reason: `Unable to insert mandatory call block: no open 30-minute window or replaceable non-meeting block remained between ${workStart} and ${workEnd}.`,
+      };
+    }
+
+    function forceMinimumCallBlocks(blocks: any[], phase: string) {
+      let next = [...blocks].sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
+      let attempts = 0;
+      const logs: string[] = [];
+
+      while (calculatePlannedDials(next) < DAILY_DIALS_MIN && attempts < 8) {
+        const sequence = next.filter((block: any) => block.type === 'prospecting').length + 1;
+        const insertion = tryInsertMandatoryCallBlock(next, sequence);
+        logs.push(insertion.reason);
+        next = insertion.blocks;
+        attempts += 1;
+        if (!insertion.inserted) break;
+      }
+
+      const plannedDials = calculatePlannedDials(next);
+      const unmetBlocks = Math.max(0, Math.ceil((DAILY_DIALS_MIN - plannedDials) / DIALS_PER_30_MIN));
+
+      if (logs.length > 0) {
+        logStage(
+          unmetBlocks > 0 ? 'call_block_injection_failed' : 'call_block_injection_applied',
+          `${phase}: ${logs.join(' ')}`,
+          { plannedDials, unmetBlocks, attempts },
+        );
+      }
+
+      return next.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
+    }
+
     function ensureCoreBlocks(blocks: any[]) {
       let next = [...blocks].sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
 
@@ -968,32 +1144,14 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
         });
       }
 
-      // Count planned dials using MVP rate (10 per 30 min)
-      const prospectingBlocks = next.filter((b: any) => b.type === 'prospecting');
-      let plannedDials = 0;
-      for (const b of prospectingBlocks) {
-        const dur = toMinutes(b.end_time) - toMinutes(b.start_time);
-        plannedDials += Math.round((dur / 30) * DIALS_PER_30_MIN);
-      }
+      return forceMinimumCallBlocks(next, 'ensure_core_blocks');
+    }
 
-      // Ensure minimum 20 dials (2 call blocks of 30 min each)
-      let callsNeeded = Math.max(0, Math.ceil((DAILY_DIALS_MIN - plannedDials) / DIALS_PER_30_MIN));
-      while (callsNeeded > 0) {
-        const seq = prospectingBlocks.length + 1;
-        next = injectCoreBlock(next, {
-          label: `Call Block${seq > 1 ? ` #${seq}` : ''} (~${DIALS_PER_30_MIN} dials)`,
-          type: 'prospecting',
-          workstream: 'new_logo',
-          goals: [`Make ~${DIALS_PER_30_MIN} dials to sourced contacts`, 'Log responses and next steps'],
-          reasoning: `Safety fallback — minimum ${DAILY_DIALS_MIN} dials required.`,
-        });
-        plannedDials += DIALS_PER_30_MIN;
-        callsNeeded--;
-        // Re-count after injection
-        const updated = next.filter((b: any) => b.type === 'prospecting');
-        if (updated.length > prospectingBlocks.length) break; // injection succeeded
-      }
-
+    function finalizePlanBlocks(blocks: any[], phase: string) {
+      let next = ensureCoreBlocks(blocks);
+      next = validatePlanDependencies(next);
+      next = clampWorkBlocks(next);
+      next = forceMinimumCallBlocks(next, `${phase}_post_validation`);
       return next.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
     }
 
@@ -1131,13 +1289,7 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
       }
     }
 
-    mergedBlocks = ensureCoreBlocks(mergedBlocks);
-
-    // CRITICAL: Validate task dependencies and fill all time gaps
-    mergedBlocks = validatePlanDependencies(mergedBlocks);
-
-    // CRITICAL: Final 9-5 enforcement — no work blocks outside working hours
-    mergedBlocks = clampWorkBlocks(mergedBlocks);
+    mergedBlocks = finalizePlanBlocks(mergedBlocks, requestSource);
     logStage("dependencies_validated", "task dependencies enforced, gaps filled, 9-5 clamped", { finalBlockCount: mergedBlocks.length });
 
     const previousVisibleBlocks = Array.isArray(rebuildContext?.current_visible_blocks)
@@ -1150,9 +1302,14 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
       fallbackReason = 'Manual rebuild returned unchanged plan';
       isFallback = true;
       plan = buildFallbackPlan(fallbackReason);
-      mergedBlocks = ensureCoreBlocks(plan.blocks || []);
+      mergedBlocks = finalizePlanBlocks(plan.blocks || [], 'manual_rebuild_fallback');
       logStage("plan_generation_failed", fallbackReason);
     }
+
+    const finalMetricTargets = {
+      ...(plan.key_metric_targets || {}),
+      dials: Math.max(DAILY_DIALS_MIN, Math.min(DAILY_DIALS_TARGET, calculatePlannedDials(mergedBlocks))),
+    };
 
     logStage("response_validated", "plan validated and normalized", {
       blockCount: mergedBlocks.length,
@@ -1171,7 +1328,7 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
         meeting_load_hours: meetingHours,
         focus_hours_available: focusHoursAvailable,
         ai_reasoning: (isFallback ? '[FALLBACK] ' : '') + (plan.day_strategy || ''),
-        key_metric_targets: plan.key_metric_targets || {},
+        key_metric_targets: finalMetricTargets,
         completed_goals: [],
         block_feedback: [],
         dismissed_block_indices: [],

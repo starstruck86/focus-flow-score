@@ -73,8 +73,8 @@ export async function recastToday(ctx: ToolContext): Promise<string> {
     };
   });
 
-  // Determine work end time (default 5:30 PM = 17:30)
-  const workEndMinutes = 17 * 60 + 30;
+  // Determine work end time (hard boundary: 5:00 PM)
+  const workEndMinutes = 17 * 60;
 
   const input: RecastInput = {
     currentTimeMinutes: getCurrentMinutesET(),
@@ -91,7 +91,10 @@ export async function recastToday(ctx: ToolContext): Promise<string> {
   // ── Persist recast timestamp so UI can show "Recast Active" ──
   await supabase
     .from('daily_time_blocks')
-    .update({ recast_at: new Date().toISOString() } as any)
+    .update({
+      blocks: result.remainingBlocks as any,
+      recast_at: new Date().toISOString(),
+    } as any)
     .eq('id', planData.id);
 
   // ── Format for voice delivery ──

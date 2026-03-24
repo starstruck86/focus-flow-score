@@ -4,6 +4,9 @@
  * Pure logic module. No UI, no Dave persona. Dave calls this and interprets the result.
  */
 
+import { DIALS_PER_30_MIN } from '@/lib/mvpBlockModel';
+import { ensureMinimumCallBlocks } from '@/lib/planCallBlockGuarantee';
+
 export interface RecastBlock {
   start_time: string;
   end_time: string;
@@ -230,6 +233,23 @@ export function recastDay(input: RecastInput): RecastResult {
     actionIdx++;
   }
 
+  const guaranteedSchedule = ensureMinimumCallBlocks(scheduled, {
+    searchStartMinutes: Math.max(currentTimeMinutes, 9 * 60),
+    searchEndMinutes: workEndMinutes,
+    createCallBlock: ({ startTime, endTime, sequence, reason }): RecastBlock => ({
+      start_time: startTime,
+      end_time: endTime,
+      label: sequence === 1 ? `Call Block (~${DIALS_PER_30_MIN} dials)` : `Call Block #${sequence} (~${DIALS_PER_30_MIN} dials)`,
+      type: 'prospecting',
+      workstream: 'new_logo',
+      goals: [`Make ~${DIALS_PER_30_MIN} dials to sourced contacts`, 'Log responses and next steps'],
+      reasoning: reason,
+    }),
+    onLog: (message) => console.warn(`[recastDay] ${message}`),
+  });
+
+  const finalScheduled = guaranteedSchedule.blocks as RecastBlock[];
+
   // ── Determine priorities based on target gaps ──
   const updatedPriorities: string[] = [];
   for (const [key, target] of Object.entries(targets)) {
@@ -242,8 +262,12 @@ export function recastDay(input: RecastInput): RecastResult {
     }
   }
 
+  if (guaranteedSchedule.unmetBlocks > 0 && guaranteedSchedule.logs.length > 0) {
+    updatedPriorities.push(`dial minimum still at risk — ${guaranteedSchedule.logs[guaranteedSchedule.logs.length - 1]}`);
+  }
+
   // ── Suggested next action ──
-  const nextBlock = scheduled.find(b => b.type !== 'meeting');
+  const nextBlock = finalScheduled.find(b => b.type !== 'meeting');
   const suggestedNextAction = nextBlock
     ? `Focus on ${nextBlock.label} (${spokenTime(nextBlock.start_time)}–${spokenTime(nextBlock.end_time)})${nextBlock.goals.length ? ': ' + nextBlock.goals[0] : ''}`
     : meetingSorted.length
@@ -253,13 +277,15 @@ export function recastDay(input: RecastInput): RecastResult {
   // ── Build summary ──
   const summaryParts: string[] = [];
   summaryParts.push(`${Math.round(minutesRemaining / 60 * 10) / 10} hours remaining today.`);
-  summaryParts.push(`${scheduled.filter(b => b.type !== 'meeting').length} action blocks, ${meetingSorted.length} meetings.`);
+  summaryParts.push(`${finalScheduled.filter(b => b.type !== 'meeting').length} action blocks, ${meetingSorted.length} meetings.`);
   if (droppedBlocks.length) summaryParts.push(`Dropped ${droppedBlocks.length} block(s) to focus on what matters.`);
   if (compressedBlocks.length) summaryParts.push(`Compressed ${compressedBlocks.length} block(s) to fit available time.`);
+  if (guaranteedSchedule.insertedBlocks > 0) summaryParts.push(`Inserted ${guaranteedSchedule.insertedBlocks} mandatory call block(s) to protect the dial minimum.`);
+  if (guaranteedSchedule.unmetBlocks > 0 && guaranteedSchedule.logs.length > 0) summaryParts.push(`Call block enforcement issue: ${guaranteedSchedule.logs[guaranteedSchedule.logs.length - 1]}`);
   if (updatedPriorities.length) summaryParts.push(`Priorities: ${updatedPriorities.join('; ')}.`);
 
   return {
-    remainingBlocks: scheduled,
+    remainingBlocks: finalScheduled,
     droppedBlocks,
     compressedBlocks,
     updatedPriorities,

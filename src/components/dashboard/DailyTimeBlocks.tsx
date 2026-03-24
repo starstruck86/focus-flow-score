@@ -502,19 +502,28 @@ export function DailyTimeBlocks() {
       };
 
       const result = recastDay(input);
+      const recastAt = new Date().toISOString();
 
       const updatedBlocks = result.remainingBlocks as unknown as Json;
       await supabase
         .from('daily_time_blocks' as 'daily_time_blocks')
         .update({
           blocks: updatedBlocks,
-          recast_at: new Date().toISOString(),
+          recast_at: recastAt,
         })
         .eq('id', plan.id);
 
-      return result;
+      return {
+        result,
+        nextPlan: {
+          ...plan,
+          blocks: result.remainingBlocks as unknown as TimeBlock[],
+          recast_at: recastAt,
+        },
+      };
     },
-    onSuccess: (result) => {
+    onSuccess: ({ result, nextPlan }) => {
+      queryClient.setQueryData(['daily-time-blocks', todayStr], nextPlan);
       queryClient.invalidateQueries({ queryKey: ['daily-time-blocks'] });
       const msg = result.droppedBlocks.length > 0
         ? `Recast — dropped ${result.droppedBlocks.length} block(s), ${Math.round(result.minutesRemaining / 60 * 10) / 10}h left`
