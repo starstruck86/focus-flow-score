@@ -1,12 +1,4 @@
 import React, { useState, useRef, useMemo, useCallback, memo, useEffect } from 'react';
-// Contact count badge for collapsed account rows
-const ContactCountBadge = memo(function ContactCountBadge({ accountId }: { accountId: string }) {
-  const { contacts } = useStore();
-  const count = useMemo(() => contacts.filter(c => c.accountId === accountId).length, [contacts, accountId]);
-  if (count === 0) return null;
-  return <span className="text-[10px] font-mono text-muted-foreground ml-0.5">({count})</span>;
-});
-ContactCountBadge.displayName = 'ContactCountBadge';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useLinkedRecordContext } from '@/contexts/LinkedRecordContext';
 import {
