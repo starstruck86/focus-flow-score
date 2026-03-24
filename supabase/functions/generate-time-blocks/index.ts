@@ -419,9 +419,12 @@ ${remainingDays.map(d => `  ${dayNames[new Date(d + 'T12:00:00').getDay()]}: ${M
 ${battlePlan?.strategy_summary ? `\nWEEKLY BATTLE PLAN STRATEGY:\n${battlePlan.strategy_summary}` : ''}
 ${battlePlan?.moves?.length ? `\nTOP WEEKLY MOVES:\n${(battlePlan.moves as any[]).slice(0, 5).map((m: any) => `- ${m.action || m.title || m.description}`).join('\n')}` : ''}`;
 
+    // Clamp daily dial target to MVP model range (20-40)
+    const clampedDialTarget = Math.max(DAILY_DIALS_MIN, Math.min(DAILY_DIALS_TARGET, todayDialTarget));
+
     const quotaContext = targets
-      ? `WEEKLY targets: ${weeklyDialTarget} dials, ${weeklyConnectsTarget} connects. TODAY'S adjusted targets: ${todayDialTarget} dials, ${Math.max(1, todayConvoTarget)} convos, ${targets.target_accounts_researched_per_day} accounts researched, ${targets.target_contacts_prepped_per_day} contacts prepped.`
-      : `Default weekly targets: 300 dials, 30 connects. Adjust daily based on meeting load.`;
+      ? `WEEKLY targets: ${weeklyDialTarget} dials, ${weeklyConnectsTarget} connects. TODAY'S adjusted targets: ${clampedDialTarget} dials (minimum ${DAILY_DIALS_MIN}, target ${DAILY_DIALS_TARGET}), ${Math.max(1, todayConvoTarget)} convos, ${targets.target_accounts_researched_per_day || 3} accounts researched, ${targets.target_contacts_prepped_per_day || 3} contacts prepped.`
+      : `Default targets: ${DAILY_DIALS_MIN}-${DAILY_DIALS_TARGET} dials/day (100-200/week). Adjust daily based on meeting load.`;
 
     // Build pipeline context
     const activeOpps = oppsRes.data || [];
