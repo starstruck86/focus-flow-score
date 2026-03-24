@@ -16,6 +16,7 @@ import { Progress } from '@/components/ui/progress';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { 
   Clock, Zap, Phone, Users, BookOpen, Coffee, 
   BriefcaseBusiness, Target, RefreshCw, Star,
@@ -23,7 +24,7 @@ import {
   ThumbsUp, ThumbsDown, RotateCcw, CheckCircle2,
   ArrowRight, ExternalLink, Pencil, Check, X, GripVertical,
   Rocket, Shield, MoreVertical, EyeOff, Link2, Building2,
-  Settings2, Hammer,
+  Settings2, Hammer, AlertTriangle, TrendingUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -32,13 +33,13 @@ import { CalendarScreenshotDrop } from './CalendarScreenshotDrop';
 import { DailyPlanPreferences } from './DailyPlanPreferences';
 import { RustBusterQuickLinks } from './RustBusterQuickLinks';
 import { isRustBusterBlock } from '@/lib/rustBusterLinks';
-import { useWeeklyResearchQueue, type AccountState } from '@/hooks/useWeeklyResearchQueue';
+import { useWeeklyResearchQueue, type AccountState, type WeeklyAssignments } from '@/hooks/useWeeklyResearchQueue';
 import type { CalendarScreenshotEvent } from '@/types/dashboard';
 import type { Json } from '@/integrations/supabase/types';
 import { generateTraceId } from '@/lib/appError';
 import { buildLocalFallbackPlan, getVisiblePlanBlocks, summarizePlanDelta, type RebuildFallbackBlock, type RebuildPlanBlock } from '@/lib/dailyPlanRebuild';
 import { QUEUE_CHANGED_EVENT } from '@/hooks/useWeeklyResearchQueue';
-
+import { calculateDialCapacity, getActualDials, DAILY_DIALS_MIN, DAILY_DIALS_TARGET, BLOCK_MVPS } from '@/lib/mvpBlockModel';
 
 /** Inline contact count for linked account pills */
 const LinkedAccountContactCount = memo(function LinkedAccountContactCount({ accountId }: { accountId: string }) {
@@ -497,7 +498,7 @@ export function DailyTimeBlocks() {
         meetingSchedule: [],
         targets: tgts,
         actuals: act,
-        workEndMinutes: 17 * 60 + 30,
+        workEndMinutes: 17 * 60, // 5:00 PM hard boundary
       };
 
       const result = recastDay(input);
@@ -1424,12 +1425,15 @@ export function DailyTimeBlocks() {
                               </button>
 
                               <div className="min-w-0 flex-1">
-                                <button
-                                  className="text-[11px] font-medium text-foreground hover:text-primary truncate block text-left"
-                                  onClick={() => navigate(`/account/${acct.id}`)}
-                                >
-                                  {acct.name}
-                                </button>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    className="text-[11px] font-medium text-foreground hover:text-primary truncate block text-left"
+                                    onClick={() => navigate(`/account/${acct.id}`)}
+                                  >
+                                    {acct.name}
+                                  </button>
+                                  <LinkedAccountContactCount accountId={acct.id} />
+                                </div>
                                 <span className={cn(
                                   "text-[10px]",
                                   acct.state === 'not_started' && "text-muted-foreground",
@@ -1472,7 +1476,6 @@ export function DailyTimeBlocks() {
                                         if (a.motion === 'renewal') return false;
                                         if (a.accountStatus === 'disqualified') return false;
                                         if (a.outreachStatus === 'closed-won' || a.outreachStatus === 'closed-lost' || a.outreachStatus === 'opp-open') return false;
-                                        // Not already in any day
                                         const allQueued = queueDayKeys.flatMap(k => queueAssignments[k].map(qa => qa.id));
                                         return !allQueued.includes(a.id);
                                       })
@@ -1504,6 +1507,57 @@ export function DailyTimeBlocks() {
                           )}
                         </div>
                       ) : null}
+
+                      {/* Weekly 15 Queue — collapsible */}
+                      {!queueEmpty && (
+                        <Collapsible>
+                          <CollapsibleTrigger className="flex items-center gap-1 w-full text-[10px] text-muted-foreground hover:text-foreground transition-colors py-1 mb-1">
+                            <ChevronDown className="h-3 w-3 transition-transform [[data-state=open]>&]:rotate-180" />
+                            <span className="font-medium">Weekly New Logo Queue ({weeklyTotal} accounts)</span>
+                            <span className="ml-auto">{weeklyResearched} researched · {weeklyAddedToCadence} in cadence</span>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <div className="space-y-2 pt-1 pb-1">
+                              {queueDayKeys.map(dayKey => {
+                                const dayAccts = queueAssignments[dayKey];
+                                if (!dayAccts?.length) return null;
+                                const isToday = dayKey === queueTodayKey;
+                                return (
+                                  <div key={dayKey}>
+                                    <div className="flex items-center gap-1 mb-0.5">
+                                      <span className={cn(
+                                        "text-[10px] font-medium capitalize",
+                                        isToday ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"
+                                      )}>
+                                        {dayKey}{isToday ? ' (today)' : ''}
+                                      </span>
+                                    </div>
+                                    <div className="space-y-0.5 pl-2">
+                                      {dayAccts.map(a => (
+                                        <div key={a.id} className="flex items-center gap-1.5 text-[10px]">
+                                          <span className={cn(
+                                            "h-1.5 w-1.5 rounded-full shrink-0",
+                                            a.state === 'not_started' && "bg-muted-foreground/30",
+                                            a.state === 'researched' && "bg-amber-500",
+                                            a.state === 'added_to_cadence' && "bg-emerald-500",
+                                          )} />
+                                          <span className={cn(
+                                            "truncate",
+                                            isToday ? "text-foreground" : "text-muted-foreground"
+                                          )}>
+                                            {a.name}
+                                          </span>
+                                          <LinkedAccountContactCount accountId={a.id} />
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      )}
 
                       {/* Build steps checklist */}
                       <div className="space-y-1">
@@ -1592,40 +1646,69 @@ export function DailyTimeBlocks() {
         </div>
       )}
 
-      {/* Metric targets footer */}
+      {/* Dial capacity + metric targets footer */}
       {expanded && plan.key_metric_targets && Object.keys(plan.key_metric_targets).length > 0 && (() => {
-        const actualDialsTotal = blocks
-          .filter(b => b.type === 'prospecting')
-          .reduce((s, b) => s + (b.actual_dials || 0), 0);
+        const dialCapacity = calculateDialCapacity(blocks);
+        const actualDialsTotal = getActualDials(blocks);
         const targetDials = plan.key_metric_targets.dials;
         const hasActuals = actualDialsTotal > 0;
         
         return (
-          <div className="px-4 py-2.5 bg-muted/20 border-t border-border/30 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-            <span className="font-medium text-foreground">Today's targets:</span>
-            {targetDials != null && (
+          <div className="px-4 py-2.5 bg-muted/20 border-t border-border/30 space-y-1.5">
+            {/* Dial capacity status */}
+            <div className="flex items-center gap-2 text-[11px]">
+              <Phone className="h-3 w-3 text-primary" />
+              <span className="font-medium text-foreground">Dial capacity:</span>
               <span className={cn(
-                hasActuals && actualDialsTotal >= targetDials && "text-status-green font-medium",
-                hasActuals && actualDialsTotal < targetDials && actualDialsTotal >= targetDials * 0.7 && "text-amber-500 font-medium",
+                "font-medium",
+                dialCapacity.status === 'above_target' && "text-emerald-500",
+                dialCapacity.status === 'on_track' && "text-foreground",
+                dialCapacity.status === 'below_minimum' && "text-amber-500",
               )}>
-                {hasActuals ? `${actualDialsTotal}/${targetDials} dials` : `${targetDials} dials`}
-                {hasActuals && actualDialsTotal >= targetDials && ' ✓'}
+                {hasActuals ? `${actualDialsTotal}` : `${dialCapacity.plannedDials} planned`}
+                {' / '}
+                {DAILY_DIALS_MIN}–{DAILY_DIALS_TARGET} target
               </span>
-            )}
-            {plan.key_metric_targets.conversations != null && <span>{plan.key_metric_targets.conversations} convos</span>}
-            {plan.key_metric_targets.accounts_sourced != null && (
-              <span className={cn(
-                "flex items-center gap-1",
-                queueDailyProgress >= 3 && "text-emerald-500 font-medium",
-                queueDailyProgress > 0 && queueDailyProgress < 3 && "text-amber-500 font-medium",
-              )}>
-                <Hammer className="h-3 w-3 text-orange-500" />
-                {queueDailyProgress}/3 today · {weeklyResearched}/{weeklyTotal} week
-                {queueDailyProgress >= 3 && ' ✓'}
-              </span>
-            )}
-            {plan.key_metric_targets.accounts_researched != null && <span>{plan.key_metric_targets.accounts_researched} researched</span>}
-            {plan.key_metric_targets.contacts_prepped != null && <span>{plan.key_metric_targets.contacts_prepped} prepped</span>}
+              {dialCapacity.status === 'below_minimum' && (
+                <Badge variant="outline" className="h-4 px-1.5 text-[9px] border-amber-500/40 text-amber-600 gap-0.5">
+                  <AlertTriangle className="h-2.5 w-2.5" />
+                  Need {dialCapacity.suggestedAdditionalBlocks} more call block{dialCapacity.suggestedAdditionalBlocks !== 1 ? 's' : ''}
+                </Badge>
+              )}
+              {dialCapacity.status === 'above_target' && (
+                <Badge variant="outline" className="h-4 px-1.5 text-[9px] border-emerald-500/40 text-emerald-600 gap-0.5">
+                  <TrendingUp className="h-2.5 w-2.5" />
+                  Above target
+                </Badge>
+              )}
+            </div>
+            {/* Other targets */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+              <span className="font-medium text-foreground">Targets:</span>
+              {targetDials != null && (
+                <span className={cn(
+                  hasActuals && actualDialsTotal >= targetDials && "text-emerald-500 font-medium",
+                  hasActuals && actualDialsTotal < targetDials && actualDialsTotal >= targetDials * 0.7 && "text-amber-500 font-medium",
+                )}>
+                  {hasActuals ? `${actualDialsTotal}/${targetDials} dials` : `${targetDials} dials`}
+                  {hasActuals && actualDialsTotal >= targetDials && ' ✓'}
+                </span>
+              )}
+              {plan.key_metric_targets.conversations != null && <span>{plan.key_metric_targets.conversations} convos</span>}
+              {plan.key_metric_targets.accounts_sourced != null && (
+                <span className={cn(
+                  "flex items-center gap-1",
+                  queueDailyProgress >= 3 && "text-emerald-500 font-medium",
+                  queueDailyProgress > 0 && queueDailyProgress < 3 && "text-amber-500 font-medium",
+                )}>
+                  <Hammer className="h-3 w-3 text-orange-500" />
+                  {queueDailyProgress}/3 today · {weeklyResearched}/{weeklyTotal} week
+                  {queueDailyProgress >= 3 && ' ✓'}
+                </span>
+              )}
+              {plan.key_metric_targets.accounts_researched != null && <span>{plan.key_metric_targets.accounts_researched} researched</span>}
+              {plan.key_metric_targets.contacts_prepped != null && <span>{plan.key_metric_targets.contacts_prepped} prepped</span>}
+            </div>
           </div>
         );
       })()}
