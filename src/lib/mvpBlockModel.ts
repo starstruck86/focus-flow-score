@@ -80,10 +80,11 @@ export const BLOCK_MVPS: Record<string, BlockMVP> = {
 
 export interface DialCapacity {
   plannedDials: number;
+  plannedDialsTarget: number;
   dailyMin: number;
   dailyTarget: number;
   status: 'on_track' | 'below_minimum' | 'above_target';
-  gap: number; // negative = surplus, positive = shortfall vs minimum
+  gap: number;
   callBlockCount: number;
   suggestedAdditionalBlocks: number;
 }
