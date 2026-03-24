@@ -236,7 +236,7 @@ export function recastDay(input: RecastInput): RecastResult {
   const guaranteedSchedule = ensureMinimumCallBlocks(scheduled, {
     searchStartMinutes: Math.max(currentTimeMinutes, 9 * 60),
     searchEndMinutes: workEndMinutes,
-    createCallBlock: ({ startTime, endTime, sequence, reason }) => ({
+    createCallBlock: ({ startTime, endTime, sequence, reason }): RecastBlock => ({
       start_time: startTime,
       end_time: endTime,
       label: sequence === 1 ? `Call Block (~${DIALS_PER_30_MIN} dials)` : `Call Block #${sequence} (~${DIALS_PER_30_MIN} dials)`,
@@ -248,7 +248,7 @@ export function recastDay(input: RecastInput): RecastResult {
     onLog: (message) => console.warn(`[recastDay] ${message}`),
   });
 
-  const finalScheduled = guaranteedSchedule.blocks;
+  const finalScheduled = guaranteedSchedule.blocks as RecastBlock[];
 
   // ── Determine priorities based on target gaps ──
   const updatedPriorities: string[] = [];

@@ -229,7 +229,7 @@ export function buildLocalFallbackPlan(input: {
   const guaranteedCalls = ensureMinimumCallBlocks(sortedBlocks, {
     searchStartMinutes: DEFAULT_WORK_START_MINUTES,
     searchEndMinutes: DEFAULT_WORK_END_MINUTES,
-    createCallBlock: ({ startTime, endTime, sequence, reason }) => ({
+    createCallBlock: ({ startTime, endTime, sequence, reason }): RebuildFallbackBlock => ({
       start_time: startTime,
       end_time: endTime,
       label: sequence === 1 ? `Call Block (~${DIALS_PER_30_MIN} dials)` : `Call Block #${sequence} (~${DIALS_PER_30_MIN} dials)`,
@@ -240,7 +240,7 @@ export function buildLocalFallbackPlan(input: {
     }),
     onLog: (message) => console.warn(`[buildLocalFallbackPlan] ${message}`),
   });
-  sortedBlocks = guaranteedCalls.blocks.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
+  sortedBlocks = (guaranteedCalls.blocks as RebuildFallbackBlock[]).sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
 
   // ── Fail-safe: ensure at least 1 build block ──
   if (!sortedBlocks.some(b => b.type === 'build')) {
