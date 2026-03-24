@@ -104,10 +104,11 @@ export function buildLocalFallbackPlan(input: {
     .filter((block) => !dismissedKeys.has(meetingKey(block)))
     .sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
 
+  // Enforce strict 9-5 working hours — meetings outside are allowed but no work blocks
   const firstBlockStart = allBlocks.length ? toMinutes(allBlocks[0].start_time) : DEFAULT_WORK_START_MINUTES;
   const lastBlockEnd = allBlocks.length ? toMinutes(allBlocks[allBlocks.length - 1].end_time) : DEFAULT_WORK_END_MINUTES;
-  const dayStart = Math.min(firstBlockStart, DEFAULT_WORK_START_MINUTES);
-  const dayEnd = Math.max(lastBlockEnd, DEFAULT_WORK_END_MINUTES);
+  const dayStart = Math.max(Math.min(firstBlockStart, DEFAULT_WORK_START_MINUTES), DEFAULT_WORK_START_MINUTES);
+  const dayEnd = Math.min(Math.max(lastBlockEnd, DEFAULT_WORK_END_MINUTES), DEFAULT_WORK_END_MINUTES);
 
   const blocks: RebuildFallbackBlock[] = [...lockedMeetings];
   const gaps: Array<{ start: number; end: number }> = [];

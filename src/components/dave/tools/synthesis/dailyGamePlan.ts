@@ -3,10 +3,12 @@
  * Reads the STORED Daily Game Plan from daily_time_blocks table.
  * Two modes: summary (fast ~60s) and detailed (block-by-block guided).
  * Voice-first conversational output — optimized for spoken delivery.
+ * Uses MVP block model for dial targets and capacity language.
  */
 import { supabase } from '@/integrations/supabase/client';
 import { todayInAppTz } from '@/lib/timeFormat';
 import { startOfWeek, format } from 'date-fns';
+import { calculateDialCapacity, getActualDials, DAILY_DIALS_MIN, DAILY_DIALS_TARGET, BLOCK_MVPS } from '@/lib/mvpBlockModel';
 import type { ToolContext } from '../../toolTypes';
 
 interface TimeBlock {
