@@ -39,7 +39,8 @@ import type { Json } from '@/integrations/supabase/types';
 import { generateTraceId } from '@/lib/appError';
 import { buildLocalFallbackPlan, getVisiblePlanBlocks, summarizePlanDelta, type RebuildFallbackBlock, type RebuildPlanBlock } from '@/lib/dailyPlanRebuild';
 import { QUEUE_CHANGED_EVENT } from '@/hooks/useWeeklyResearchQueue';
-import { calculateDialCapacity, getActualDials, DAILY_DIALS_MIN, DAILY_DIALS_TARGET, BLOCK_MVPS } from '@/lib/mvpBlockModel';
+import { calculateDialCapacity, getActualDials, DAILY_DIALS_MIN, DAILY_DIALS_TARGET, BLOCK_MVPS, clampWorkBlocksToHours } from '@/lib/mvpBlockModel';
+import { ensureMinimumCallBlocks } from '@/lib/planCallBlockGuarantee';
 
 /** Inline contact count for linked account pills */
 const LinkedAccountContactCount = memo(function LinkedAccountContactCount({ accountId }: { accountId: string }) {
@@ -421,6 +422,24 @@ export function DailyTimeBlocks() {
         const data = parsed as GeneratePlanResponse;
         if (!data?.blocks?.length) {
           return await persistLocalFallback('Planner returned no blocks');
+        }
+
+        // Client-side dial minimum enforcement (belt-and-suspenders with edge function)
+        const dc = calculateDialCapacity(data.blocks as any[]);
+        if (dc.plannedDials < DAILY_DIALS_MIN) {
+          const enforced = ensureMinimumCallBlocks(data.blocks as any[], {
+            createCallBlock: ({ startTime, endTime, sequence, reason }) => ({
+              start_time: startTime,
+              end_time: endTime,
+              label: `Call Block ${sequence}`,
+              type: 'prospecting' as const,
+              workstream: 'new_logo' as const,
+              goals: [`Complete ${BLOCK_MVPS.call_block.mvp.dials} dials (MVP)`, 'Log all outcomes'],
+              reasoning: reason,
+            }),
+          });
+          data.blocks = enforced.blocks as any;
+          console.info('[DailyTimeBlocks] Client-side dial enforcement applied:', enforced.logs);
         }
 
         return data;
@@ -891,8 +910,8 @@ export function DailyTimeBlocks() {
                       )}>
                         <Phone className="h-3 w-3 inline mr-0.5" />
                         {hasActuals
-                          ? `${actualDials}/${DAILY_DIALS_MIN}–${DAILY_DIALS_TARGET}`
-                          : `${dc.plannedDials}–${dc.plannedDialsTarget} / ${DAILY_DIALS_MIN}–${DAILY_DIALS_TARGET}`
+                          ? `${actualDials} dials (target ${DAILY_DIALS_MIN}–${DAILY_DIALS_TARGET})`
+                          : `${dc.plannedDials}–${dc.plannedDialsTarget} dials planned (target ${DAILY_DIALS_MIN}–${DAILY_DIALS_TARGET})`
                         }
                       </span>
                       {dc.status === 'below_minimum' && !hasActuals && (
@@ -1696,23 +1715,26 @@ export function DailyTimeBlocks() {
         return (
           <div className="px-4 py-2.5 bg-muted/20 border-t border-border/30 space-y-1.5">
             {/* Dial capacity status */}
-            <div className="flex items-center gap-2 text-[11px]">
+            <div className="flex items-center gap-2 text-[11px] flex-wrap">
               <Phone className="h-3 w-3 text-primary" />
-              <span className="font-medium text-foreground">Dial capacity:</span>
+              <span className="font-medium text-foreground">Dials:</span>
               <span className={cn(
                 "font-medium",
                  dialCapacity.status === 'above_target' && "text-emerald-500",
                  dialCapacity.status === 'on_track' && "text-foreground",
                  dialCapacity.status === 'below_minimum' && "text-amber-500",
                )}>
-                 {hasActuals ? `${actualDialsTotal}` : `${dialCapacity.plannedDials}–${dialCapacity.plannedDialsTarget} planned`}
-                 {' / '}
-                 {DAILY_DIALS_MIN}–{DAILY_DIALS_TARGET} target
+                 {hasActuals
+                   ? `${actualDialsTotal} completed`
+                   : `${dialCapacity.plannedDials}–${dialCapacity.plannedDialsTarget} planned`
+                 }
+                 {' · target '}
+                 {DAILY_DIALS_MIN}–{DAILY_DIALS_TARGET}
               </span>
               {dialCapacity.status === 'below_minimum' && (
                 <Badge variant="outline" className="h-4 px-1.5 text-[9px] border-amber-500/40 text-amber-600 gap-0.5">
                   <AlertTriangle className="h-2.5 w-2.5" />
-                  Need {dialCapacity.suggestedAdditionalBlocks} more call block{dialCapacity.suggestedAdditionalBlocks !== 1 ? 's' : ''}
+                  +{dialCapacity.suggestedAdditionalBlocks} call block{dialCapacity.suggestedAdditionalBlocks !== 1 ? 's' : ''} needed
                 </Badge>
               )}
               {dialCapacity.status === 'above_target' && (
