@@ -46,8 +46,8 @@ function durationMinutes(block: RebuildPlanBlock) {
   return Math.max(0, toMinutes(block.end_time) - toMinutes(block.start_time));
 }
 
-const DEFAULT_WORK_START_MINUTES = 9 * 60;
-const DEFAULT_WORK_END_MINUTES = 17 * 60;
+const DEFAULT_WORK_START_MINUTES = 9 * 60;  // 9:00 AM — hard boundary
+const DEFAULT_WORK_END_MINUTES = 17 * 60;  // 5:00 PM — hard boundary
 
 export function getVisiblePlanBlocks<T>(blocks: T[] | null | undefined, dismissed: Set<number>) {
   return (blocks || []).filter((_, index) => !dismissed.has(index));
