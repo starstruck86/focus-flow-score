@@ -442,9 +442,13 @@ export async function queryDailyPlan(ctx: ToolContext, params: { question: strin
 
   if (q.includes('prospect') || q.includes('dial') || q.includes('call')) {
     const prospBlocks = blocks.filter(b => b.type === 'prospecting');
+    const dialCapacity = calculateDialCapacity(blocks);
+    const actualDials = getActualDials(blocks);
     const totalMin = prospBlocks.reduce((s, b) => s + blockDurationMin(b), 0);
     let resp = `You've got ${prospBlocks.length} prospecting block${prospBlocks.length !== 1 ? 's' : ''} today, about ${Math.round(totalMin / 60 * 10) / 10} hours total.`;
-    if (targets.dials) resp += ` Your dial target is ${targets.dials}.`;
+    resp += ` Planned dial capacity is ${dialCapacity.plannedDials}. Your target range is ${DAILY_DIALS_MIN} to ${DAILY_DIALS_TARGET}.`;
+    if (actualDials > 0) resp += ` You've logged ${actualDials} dials so far${actualDials >= DAILY_DIALS_MIN ? ' — on track.' : ` — need ${DAILY_DIALS_MIN - actualDials} more.`}`;
+    if (dialCapacity.status === 'below_minimum') resp += ` You need ${dialCapacity.suggestedAdditionalBlocks} more call block${dialCapacity.suggestedAdditionalBlocks !== 1 ? 's' : ''} to reach the minimum.`;
     return resp;
   }
 
