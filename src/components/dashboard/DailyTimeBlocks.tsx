@@ -1292,7 +1292,7 @@ export function DailyTimeBlocks() {
                   )}
 
                   {/* Account picker for prep blocks */}
-                  {editingBlock !== i && block.type === 'prep' && (
+                  {editingBlock !== i && block.type === 'prep' && block.workstream !== 'new_logo' && (
                     <div className="mt-2 py-1.5 px-2.5 rounded-md bg-muted/40 border border-border/30">
                       <div className="flex items-center gap-1.5 mb-1.5">
                         <Target className="h-3 w-3 text-cyan-500" />
