@@ -36,6 +36,7 @@ import { DuplicateResourcesModal } from './DuplicateResourcesModal';
 import { PlaylistImportModal } from './PlaylistImportModal';
 import { PodcastImportModal } from './PodcastImportModal';
 import { WebpageImportModal } from './WebpageImportModal';
+import { DeepEnrichModal } from './DeepEnrichModal';
 import { useResourceDuplicates } from '@/hooks/useResourceDuplicates';
 import { useConsolidateFolders } from '@/hooks/useConsolidateFolders';
 import { ResourceIntelligenceDashboard } from './ResourceIntelligenceDashboard';
