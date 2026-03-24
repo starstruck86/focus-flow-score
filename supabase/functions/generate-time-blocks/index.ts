@@ -1109,7 +1109,10 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
 
     // CRITICAL: Validate task dependencies and fill all time gaps
     mergedBlocks = validatePlanDependencies(mergedBlocks);
-    logStage("dependencies_validated", "task dependencies enforced, gaps filled", { finalBlockCount: mergedBlocks.length });
+
+    // CRITICAL: Final 9-5 enforcement — no work blocks outside working hours
+    mergedBlocks = clampWorkBlocks(mergedBlocks);
+    logStage("dependencies_validated", "task dependencies enforced, gaps filled, 9-5 clamped", { finalBlockCount: mergedBlocks.length });
 
     const previousVisibleBlocks = Array.isArray(rebuildContext?.current_visible_blocks)
       ? rebuildContext.current_visible_blocks.filter((block: any) => !!block?.start_time && !!block?.end_time)
