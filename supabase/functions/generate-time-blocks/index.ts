@@ -857,43 +857,41 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
           buildPlaced = true;
         }
 
-        // Phase 2: Admin/Prep block (contact sourcing & cadence loading)
+        // Phase 2: Prep block (canonical New Logo Prep)
         if (!adminPlaced && gap.endMin - gapCursor >= 30) {
-          const dur = Math.min(45, gap.endMin - gapCursor);
+          const dur = Math.min(30, gap.endMin - gapCursor);
           blocks.push({
             start_time: minToTime(gapCursor),
             end_time: minToTime(gapCursor + dur),
-            label: 'Account Research & Contact Sourcing',
-            type: 'admin',
+            label: 'New Logo Prep',
+            type: 'prep',
             workstream: 'new_logo',
             goals: [
-              'Source email addresses & phone numbers',
-              'Load contacts into cadence system',
-              'Verify contact data quality',
+              'Research target accounts',
+              'Find contacts + source emails/phone numbers',
+              'Load contacts into cadence',
             ],
-            reasoning: 'Step 2 — contacts must be sourced and loaded before outreach begins.',
+            reasoning: 'Step 2 — prep before outreach.',
           });
           gapCursor += dur;
           adminPlaced = true;
         }
 
-        // Phase 3: Outreach blocks (only after prep is done)
+        // Phase 3: Call blocks (MVP dial math)
         while (gap.endMin - gapCursor >= 30 && (buildPlaced || adminPlaced)) {
           const remaining = gap.endMin - gapCursor;
           const callDur = Math.min(60, remaining);
-          const estDials = Math.round(callDur / 2);
+          const halfHours = callDur / 30;
+          const estDials = Math.round(halfHours * DIALS_PER_30_MIN);
           prospectingCount++;
-          const label = prospectingCount === 1
-            ? `Call newly added prospects (~${estDials} dials)`
-            : `Follow up on yesterday's outreach (~${estDials} dials)`;
           blocks.push({
             start_time: minToTime(gapCursor),
             end_time: minToTime(gapCursor + callDur),
-            label,
+            label: `Call Block ${prospectingCount > 1 ? `#${prospectingCount} ` : ''}(~${estDials} dials)`,
             type: 'prospecting',
             workstream: 'new_logo',
             goals: [`Make ~${estDials} dials to sourced contacts`, 'Log conversations and outcomes'],
-            reasoning: `Step 3 — outreach to prepped contacts.`,
+            reasoning: `Outreach to prepped contacts.`,
           });
           gapCursor += callDur;
           callPlaced = true;
