@@ -505,12 +505,13 @@ CRITICAL RULES:
 4. NEW LOGO IS THE PRIORITY. Use TODAY'S ADJUSTED TARGETS (from weekly context above) — NOT the raw daily averages. Schedule a New Logo Build block + enough Prep→Call Blitz + Email Outreach cycles to hit TODAY'S target.
 5. FILL ALL AVAILABLE TIME: Every minute between ${workStart} and ${workEnd} must be accounted for. No idle gaps > 15 minutes. Stack meaningful blocks back-to-back. If a gap exists, fill it with the next appropriate workflow step.
 5. Use "workstream" field to tag each block as "new_logo" or "renewal" or "general"
-6. Goals must be REALISTIC and ACHIEVABLE. Use these realistic pacing rates:
-   - DIAL RATE: ~15 dials per 30 minutes (1 dial every 2 min including voicemail/notes). A 60-min Call Blitz = ~30 dials.
-   - BUILD RATE: 3 accounts per 60 min build block (selecting + researching + finding contacts + adding to cadence)
+6. Goals must be REALISTIC and ACHIEVABLE. Use these realistic pacing rates (MVP MODEL):
+   - DIAL RATE: ~10 dials per 30 minutes (MVP baseline). Target: 15 dials per 30 minutes. A 60-min Call Blitz = 20 dials (MVP) to 30 dials (target).
+   - DAILY DIAL TARGETS: Minimum 20 dials, Target 40 dials. NEVER plan more than 40 dials — that is already a strong day.
+   - BUILD RATE: 2-3 accounts per 60 min build block (selecting + researching + finding contacts + adding to cadence)
    - PREP RATE: 2-3 accounts per 30 min prep block
    - EMAIL RATE: ~8-10 personalized emails per 30 minutes
-   - Do the math: if today's target is ${todayDialTarget} dials, you need ~${Math.ceil(todayDialTarget / 30)} Call Blitz blocks of 60 min each
+   - Do the math: each 30-min call block = 10 dials minimum. To hit 20 dials minimum, you need at least 2 call blocks of 30 min each.
 7. ${preferNewLogoMorning ? 'Account for energy patterns: deep prospecting/new logo work in the morning, renewal tasks in the afternoon' : 'Distribute new logo and renewal work based on meeting gaps'}
 8. Include buffer time around meetings (5-10 min)
 9. If feedback says past suggestions were unrealistic, SIGNIFICANTLY dial back goals
