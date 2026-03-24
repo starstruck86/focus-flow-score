@@ -614,39 +614,44 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
     const pad = (n: number) => n.toString().padStart(2, '0');
     const minToTime = (m: number) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
 
+    // ── MVP dial constants ──
+    const DIALS_PER_30_MIN = 10;
+    const DIALS_TARGET_PER_30_MIN = 15;
+
     // ── OUTREACH TYPES that require prep to have been done first ──
     const OUTREACH_TYPES = new Set(['prospecting']);
-    const READINESS_TYPES = new Set(['admin', 'prep']);
+    const READINESS_TYPES = new Set(['admin', 'prep', 'build']);
 
-    function createAdminReadinessBlock(startMin: number, duration: number) {
+    function createPrepBlock(startMin: number, duration: number) {
       return {
         start_time: minToTime(startMin),
         end_time: minToTime(startMin + duration),
-        label: duration >= 45 ? 'Prep contacts for outreach' : 'Quick outreach prep',
-        type: 'admin',
+        label: duration >= 45 ? 'New Logo Prep (3 accounts)' : 'New Logo Prep',
+        type: 'prep',
         workstream: 'new_logo',
         goals: [
           'Research target accounts',
           'Find contacts + source emails/phone numbers',
           'Load contacts into cadence',
         ],
-        reasoning: 'Prep is required before any outreach block can happen.',
+        reasoning: 'Prep is required before any outreach block.',
       };
     }
 
-    function createActivityBlock(startMin: number, duration: number, sequence: number) {
-      const estTouches = Math.max(8, Math.round(duration / 3));
+    function createCallBlock(startMin: number, duration: number, sequence: number) {
+      const halfHours = duration / 30;
+      const estDials = Math.round(halfHours * DIALS_PER_30_MIN);
       return {
         start_time: minToTime(startMin),
         end_time: minToTime(startMin + duration),
-        label: sequence === 1 ? 'Work sourced contacts' : 'Continue outreach follow-up',
+        label: sequence === 1 ? `Call Block (~${estDials} dials)` : `Call Block #${sequence} (~${estDials} dials)`,
         type: 'prospecting',
         workstream: 'new_logo',
         goals: [
-          `Make calls / send emails for ~${estTouches} outreach touches`,
+          `Make ~${estDials} dials to sourced contacts`,
           'Log responses and next steps',
         ],
-        reasoning: 'Execution block for contacts prepared in the preceding prep block.',
+        reasoning: 'Execution block paired with prep.',
       };
     }
 
@@ -654,12 +659,31 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
       return {
         start_time: minToTime(startMin),
         end_time: minToTime(endMin),
-        label: 'Quick admin & CRM updates',
+        label: 'Admin & CRM Updates',
         type: 'admin',
         workstream: 'general',
         goals: ['Log activity', 'Update CRM'],
-        reasoning: 'Use short window productively instead of leaving dead time.',
+        reasoning: 'Use short window productively.',
       };
+    }
+
+    /** Clamp non-meeting blocks to working hours */
+    function clampWorkBlocks(blocks: any[]) {
+      return blocks.filter((b: any) => {
+        if (b.type === 'meeting') return true;
+        const startMin = toMinutes(b.start_time);
+        const endMin = toMinutes(b.end_time);
+        if (endMin <= workStartMin || startMin >= workEndMin) return false;
+        return true;
+      }).map((b: any) => {
+        if (b.type === 'meeting') return b;
+        let startMin = toMinutes(b.start_time);
+        let endMin = toMinutes(b.end_time);
+        startMin = Math.max(startMin, workStartMin);
+        endMin = Math.min(endMin, workEndMin);
+        if (endMin - startMin < 15) return null;
+        return { ...b, start_time: minToTime(startMin), end_time: minToTime(endMin) };
+      }).filter(Boolean);
     }
 
     function fillTimeGaps(blocks: any[]) {
