@@ -413,8 +413,8 @@ WEEKLY CONTEXT (this day fits into a bigger picture):
 - Weekly targets: ${weeklyDialTarget} dials, ${weeklyConnectsTarget} connects, ${targets?.target_meetings_set_per_week || 3} meetings set
 - Progress so far this week (${daysLoggedThisWeek} days logged): ${weekDialsSoFar} dials, ${weekConvosSoFar} convos, ${weekMeetingsSetSoFar} meetings set
 - Remaining needed: ${remainingDialsNeeded} dials across ${remainingDaysCount} remaining days
-- TODAY'S ADJUSTED TARGETS (based on available focus time vs rest of week): ~${todayDialTarget} dials, ~${Math.max(1, todayConvoTarget)} convos
-- Today's meeting load: ${Math.round(todayMeetingMin / 60 * 10) / 10}h — ${todayMeetingMin > 180 ? 'HEAVY meeting day, lower activity targets are expected' : todayMeetingMin > 90 ? 'moderate meeting day' : 'light meeting day — push hard on dials'}
+- TODAY'S ADJUSTED TARGETS (based on available focus time vs rest of week): ~${Math.min(todayDialTarget, DAILY_DIALS_TARGET)} dials (min ${DAILY_DIALS_MIN}), ~${Math.max(1, todayConvoTarget)} convos
+- Today's meeting load: ${Math.round(todayMeetingMin / 60 * 10) / 10}h — ${todayFocusMin < 90 ? 'HEAVY meeting day — focus on minimum viable dials + 1 build block' : todayFocusMin < 240 ? 'moderate meeting day — balance calls and build' : 'OPEN day — maximize output: 3-4 call blocks + 2 build blocks, aim for ~40 dials'}
 ${remainingDays.map(d => `  ${dayNames[new Date(d + 'T12:00:00').getDay()]}: ${Math.round((weekDayMeetingMinutes[d] || 0) / 60 * 10) / 10}h meetings`).join('\n')}
 ${battlePlan?.strategy_summary ? `\nWEEKLY BATTLE PLAN STRATEGY:\n${battlePlan.strategy_summary}` : ''}
 ${battlePlan?.moves?.length ? `\nTOP WEEKLY MOVES:\n${(battlePlan.moves as any[]).slice(0, 5).map((m: any) => `- ${m.action || m.title || m.description}`).join('\n')}` : ''}`;
