@@ -123,6 +123,7 @@ export function calculateDialCapacity(blocks: Array<{ type: string; start_time: 
 
   return {
     plannedDials,
+    plannedDialsTarget,
     dailyMin: DAILY_DIALS_MIN,
     dailyTarget: DAILY_DIALS_TARGET,
     status,
@@ -130,6 +131,35 @@ export function calculateDialCapacity(blocks: Array<{ type: string; start_time: 
     callBlockCount,
     suggestedAdditionalBlocks,
   };
+}
+
+/** Clamp all non-meeting blocks to 9:00–17:00. Meetings outside hours are allowed. */
+export function clampWorkBlocksToHours<T extends { type: string; start_time: string; end_time: string }>(blocks: T[]): T[] {
+  return blocks.filter(b => {
+    if (b.type === 'meeting') return true; // meetings allowed outside hours
+    const [sh, sm] = b.start_time.split(':').map(Number);
+    const [eh, em] = b.end_time.split(':').map(Number);
+    const startMin = sh * 60 + sm;
+    const endMin = eh * 60 + em;
+    // Drop blocks entirely outside working hours
+    if (endMin <= WORK_START_MINUTES || startMin >= WORK_END_MINUTES) return false;
+    return true;
+  }).map(b => {
+    if (b.type === 'meeting') return b;
+    const [sh, sm] = b.start_time.split(':').map(Number);
+    const [eh, em] = b.end_time.split(':').map(Number);
+    let startMin = sh * 60 + sm;
+    let endMin = eh * 60 + em;
+    startMin = Math.max(startMin, WORK_START_MINUTES);
+    endMin = Math.min(endMin, WORK_END_MINUTES);
+    if (endMin - startMin < 15) return null as any; // too short after clamping
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return {
+      ...b,
+      start_time: `${pad(Math.floor(startMin / 60))}:${pad(startMin % 60)}`,
+      end_time: `${pad(Math.floor(endMin / 60))}:${pad(endMin % 60)}`,
+    };
+  }).filter(Boolean);
 }
 
 /** Get actual dials from blocks */
