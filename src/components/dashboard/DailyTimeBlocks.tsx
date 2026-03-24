@@ -498,7 +498,7 @@ export function DailyTimeBlocks() {
         meetingSchedule: [],
         targets: tgts,
         actuals: act,
-        workEndMinutes: 17 * 60 + 30,
+        workEndMinutes: 17 * 60, // 5:00 PM hard boundary
       };
 
       const result = recastDay(input);
