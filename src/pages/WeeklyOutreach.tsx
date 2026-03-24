@@ -111,6 +111,16 @@ import {
 import type { Account, AccountTier, AccountStatus, Opportunity, OpportunityStage } from '@/types';
 import { useWidgetLayout, type WidgetConfig } from '@/hooks/useWidgetLayout';
 import { CollapsibleWidgetSection } from '@/components/CollapsibleWidgetSection';
+import { WeeklyQueueOverview } from '@/components/WeeklyQueueOverview';
+
+// Contact count badge for collapsed account rows
+const ContactCountBadge = memo(function ContactCountBadge({ accountId }: { accountId: string }) {
+  const { contacts } = useStore();
+  const count = useMemo(() => contacts.filter(c => c.accountId === accountId).length, [contacts, accountId]);
+  if (count === 0) return null;
+  return <span className="text-[10px] font-mono text-muted-foreground ml-0.5">({count})</span>;
+});
+ContactCountBadge.displayName = 'ContactCountBadge';
 
 // Quick Links
 const QUICK_LINKS = {
@@ -628,11 +638,14 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                         <LifecycleTierBadge account={account} />
                       </TableCell>
                       <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-                        <DisplaySelectCell
-                          value={account.contactStatus || 'not-started'}
-                          options={CONTACT_STATUS_OPTIONS}
-                          onChange={(v) => updateAccount(account.id, { contactStatus: v as any })}
-                        />
+                        <div className="flex items-center gap-1.5">
+                          <DisplaySelectCell
+                            value={account.contactStatus || 'not-started'}
+                            options={CONTACT_STATUS_OPTIONS}
+                            onChange={(v) => updateAccount(account.id, { contactStatus: v as any })}
+                          />
+                          <ContactCountBadge accountId={account.id} />
+                        </div>
                       </TableCell>
                       <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                         {(() => {
@@ -1239,6 +1252,16 @@ export default function WeeklyOutreach() {
 
           {/* Accounts Tab - Funnel View */}
           <TabsContent value="accounts" className="space-y-4">
+            <CollapsibleWidgetSection
+              label="Weekly Research Queue (15 Accounts)"
+              collapsed={isOutreachSectionCollapsed('weekly-queue-overview')}
+              onToggle={() => outreachSectionLayout.collapseWidget('weekly-queue-overview')}
+            >
+              <WidgetErrorBoundary widgetId="weekly-queue-overview">
+                <WeeklyQueueOverview />
+              </WidgetErrorBoundary>
+            </CollapsibleWidgetSection>
+
             <CollapsibleWidgetSection
               label="Staleness & Urgency Summary"
               collapsed={isOutreachSectionCollapsed('account-staleness')}
