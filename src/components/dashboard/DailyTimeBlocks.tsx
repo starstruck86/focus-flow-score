@@ -424,6 +424,24 @@ export function DailyTimeBlocks() {
           return await persistLocalFallback('Planner returned no blocks');
         }
 
+        // Client-side dial minimum enforcement (belt-and-suspenders with edge function)
+        const dc = calculateDialCapacity(data.blocks as any[]);
+        if (dc.plannedDials < DAILY_DIALS_MIN) {
+          const enforced = ensureMinimumCallBlocks(data.blocks as any[], {
+            createCallBlock: ({ startTime, endTime, sequence, reason }) => ({
+              start_time: startTime,
+              end_time: endTime,
+              label: `Call Block ${sequence}`,
+              type: 'prospecting' as const,
+              workstream: 'new_logo' as const,
+              goals: [`Complete ${BLOCK_MVPS.call_block.mvp.dials} dials (MVP)`, 'Log all outcomes'],
+              reasoning: reason,
+            }),
+          });
+          data.blocks = enforced.blocks as any;
+          console.info('[DailyTimeBlocks] Client-side dial enforcement applied:', enforced.logs);
+        }
+
         return data;
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown transport failure';
