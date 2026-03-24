@@ -608,13 +608,21 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
     return () => window.removeEventListener('dave-data-changed', handler);
   }, [userId]);
 
-  // ── Listen for Dave metrics updates → re-hydrate journal ──
+  // ── Listen for Dave metrics updates → re-hydrate journal + invalidate React Query ──
+  const queryClient = useQueryClient();
   useEffect(() => {
     if (!userId) return;
-    const handler = () => { hydrateJournalToday(userId); };
+    const handler = () => {
+      hydrateJournalToday(userId);
+      // Invalidate React Query cache so useTodayJournalEntry() and journal UI refresh
+      const today = format(new Date(), 'yyyy-MM-dd');
+      queryClient.invalidateQueries({ queryKey: ['journal-entry', today] });
+      queryClient.invalidateQueries({ queryKey: ['journal-entry'] });
+      queryClient.invalidateQueries({ queryKey: ['journal-week'] });
+    };
     window.addEventListener('dave-metrics-updated', handler);
     return () => window.removeEventListener('dave-metrics-updated', handler);
-  }, [userId]);
+  }, [userId, queryClient]);
 }
 
 // ── Journal hydration helper ──────────────────────────────────
