@@ -1706,19 +1706,17 @@ export default function WeeklyOutreach() {
             )}
 
             {/* Bulk Enrichment Panel */}
-            {bulkEnrich.state.status !== 'idle' && (
-              <BulkEnrichmentPanel
-                state={bulkEnrich.state}
-                accounts={filteredAccounts}
-                onSetBatchSize={bulkEnrich.setBatchSize}
-                onStart={bulkEnrich.start}
-                onPause={bulkEnrich.pause}
-                onResume={bulkEnrich.resume}
-                onCancel={bulkEnrich.cancel}
-                onReset={bulkEnrich.reset}
-                hasFailures={bulkEnrich.hasFailures}
-              />
-            )}
+            <BulkEnrichmentPanel
+              state={bulkEnrich.state}
+              accounts={filteredAccounts}
+              onSetBatchSize={bulkEnrich.setBatchSize}
+              onStart={bulkEnrich.start}
+              onPause={bulkEnrich.pause}
+              onResume={bulkEnrich.resume}
+              onCancel={bulkEnrich.cancel}
+              onReset={bulkEnrich.reset}
+              hasFailures={bulkEnrich.hasFailures}
+            />
 
             {newLogoAccounts.length === 0 ? (
               <EmptyState
