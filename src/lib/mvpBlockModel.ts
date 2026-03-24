@@ -88,8 +88,13 @@ export interface DialCapacity {
   suggestedAdditionalBlocks: number;
 }
 
+/** MVP dial rate: 10 dials per 30 minutes (not 1 per 2 min) */
+export const DIALS_PER_30_MIN = 10;
+export const DIALS_TARGET_PER_30_MIN = 15;
+
 export function calculateDialCapacity(blocks: Array<{ type: string; start_time: string; end_time: string; actual_dials?: number }>): DialCapacity {
-  let plannedDials = 0;
+  let plannedDialsMin = 0;
+  let plannedDialsTarget = 0;
   let callBlockCount = 0;
 
   for (const b of blocks) {
@@ -98,10 +103,14 @@ export function calculateDialCapacity(blocks: Array<{ type: string; start_time: 
       const [sh, sm] = b.start_time.split(':').map(Number);
       const [eh, em] = b.end_time.split(':').map(Number);
       const durMin = (eh * 60 + em) - (sh * 60 + sm);
-      // ~1 dial per 2 minutes
-      plannedDials += Math.round(durMin / 2);
+      const halfHours = durMin / 30;
+      // MVP: 10 dials per 30 min; Target: 15 dials per 30 min
+      plannedDialsMin += Math.round(halfHours * DIALS_PER_30_MIN);
+      plannedDialsTarget += Math.round(halfHours * DIALS_TARGET_PER_30_MIN);
     }
   }
+
+  const plannedDials = plannedDialsMin; // baseline for gap calc
 
   const gap = DAILY_DIALS_MIN - plannedDials;
   const status: DialCapacity['status'] =
