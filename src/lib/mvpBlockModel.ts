@@ -80,16 +80,22 @@ export const BLOCK_MVPS: Record<string, BlockMVP> = {
 
 export interface DialCapacity {
   plannedDials: number;
+  plannedDialsTarget: number;
   dailyMin: number;
   dailyTarget: number;
   status: 'on_track' | 'below_minimum' | 'above_target';
-  gap: number; // negative = surplus, positive = shortfall vs minimum
+  gap: number;
   callBlockCount: number;
   suggestedAdditionalBlocks: number;
 }
 
+/** MVP dial rate: 10 dials per 30 minutes (not 1 per 2 min) */
+export const DIALS_PER_30_MIN = 10;
+export const DIALS_TARGET_PER_30_MIN = 15;
+
 export function calculateDialCapacity(blocks: Array<{ type: string; start_time: string; end_time: string; actual_dials?: number }>): DialCapacity {
-  let plannedDials = 0;
+  let plannedDialsMin = 0;
+  let plannedDialsTarget = 0;
   let callBlockCount = 0;
 
   for (const b of blocks) {
@@ -98,10 +104,14 @@ export function calculateDialCapacity(blocks: Array<{ type: string; start_time: 
       const [sh, sm] = b.start_time.split(':').map(Number);
       const [eh, em] = b.end_time.split(':').map(Number);
       const durMin = (eh * 60 + em) - (sh * 60 + sm);
-      // ~1 dial per 2 minutes
-      plannedDials += Math.round(durMin / 2);
+      const halfHours = durMin / 30;
+      // MVP: 10 dials per 30 min; Target: 15 dials per 30 min
+      plannedDialsMin += Math.round(halfHours * DIALS_PER_30_MIN);
+      plannedDialsTarget += Math.round(halfHours * DIALS_TARGET_PER_30_MIN);
     }
   }
+
+  const plannedDials = plannedDialsMin; // baseline for gap calc
 
   const gap = DAILY_DIALS_MIN - plannedDials;
   const status: DialCapacity['status'] =
@@ -114,6 +124,7 @@ export function calculateDialCapacity(blocks: Array<{ type: string; start_time: 
 
   return {
     plannedDials,
+    plannedDialsTarget,
     dailyMin: DAILY_DIALS_MIN,
     dailyTarget: DAILY_DIALS_TARGET,
     status,
@@ -121,6 +132,35 @@ export function calculateDialCapacity(blocks: Array<{ type: string; start_time: 
     callBlockCount,
     suggestedAdditionalBlocks,
   };
+}
+
+/** Clamp all non-meeting blocks to 9:00–17:00. Meetings outside hours are allowed. */
+export function clampWorkBlocksToHours<T extends { type: string; start_time: string; end_time: string }>(blocks: T[]): T[] {
+  return blocks.filter(b => {
+    if (b.type === 'meeting') return true; // meetings allowed outside hours
+    const [sh, sm] = b.start_time.split(':').map(Number);
+    const [eh, em] = b.end_time.split(':').map(Number);
+    const startMin = sh * 60 + sm;
+    const endMin = eh * 60 + em;
+    // Drop blocks entirely outside working hours
+    if (endMin <= WORK_START_MINUTES || startMin >= WORK_END_MINUTES) return false;
+    return true;
+  }).map(b => {
+    if (b.type === 'meeting') return b;
+    const [sh, sm] = b.start_time.split(':').map(Number);
+    const [eh, em] = b.end_time.split(':').map(Number);
+    let startMin = sh * 60 + sm;
+    let endMin = eh * 60 + em;
+    startMin = Math.max(startMin, WORK_START_MINUTES);
+    endMin = Math.min(endMin, WORK_END_MINUTES);
+    if (endMin - startMin < 15) return null as any; // too short after clamping
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return {
+      ...b,
+      start_time: `${pad(Math.floor(startMin / 60))}:${pad(startMin % 60)}`,
+      end_time: `${pad(Math.floor(endMin / 60))}:${pad(endMin % 60)}`,
+    };
+  }).filter(Boolean);
 }
 
 /** Get actual dials from blocks */

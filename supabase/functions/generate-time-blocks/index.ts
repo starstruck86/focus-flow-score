@@ -614,39 +614,44 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
     const pad = (n: number) => n.toString().padStart(2, '0');
     const minToTime = (m: number) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
 
+    // ── MVP dial constants ──
+    const DIALS_PER_30_MIN = 10;
+    const DIALS_TARGET_PER_30_MIN = 15;
+
     // ── OUTREACH TYPES that require prep to have been done first ──
     const OUTREACH_TYPES = new Set(['prospecting']);
-    const READINESS_TYPES = new Set(['admin', 'prep']);
+    const READINESS_TYPES = new Set(['admin', 'prep', 'build']);
 
-    function createAdminReadinessBlock(startMin: number, duration: number) {
+    function createPrepBlock(startMin: number, duration: number) {
       return {
         start_time: minToTime(startMin),
         end_time: minToTime(startMin + duration),
-        label: duration >= 45 ? 'Prep contacts for outreach' : 'Quick outreach prep',
-        type: 'admin',
+        label: duration >= 45 ? 'New Logo Prep (3 accounts)' : 'New Logo Prep',
+        type: 'prep',
         workstream: 'new_logo',
         goals: [
           'Research target accounts',
           'Find contacts + source emails/phone numbers',
           'Load contacts into cadence',
         ],
-        reasoning: 'Prep is required before any outreach block can happen.',
+        reasoning: 'Prep is required before any outreach block.',
       };
     }
 
-    function createActivityBlock(startMin: number, duration: number, sequence: number) {
-      const estTouches = Math.max(8, Math.round(duration / 3));
+    function createCallBlock(startMin: number, duration: number, sequence: number) {
+      const halfHours = duration / 30;
+      const estDials = Math.round(halfHours * DIALS_PER_30_MIN);
       return {
         start_time: minToTime(startMin),
         end_time: minToTime(startMin + duration),
-        label: sequence === 1 ? 'Work sourced contacts' : 'Continue outreach follow-up',
+        label: sequence === 1 ? `Call Block (~${estDials} dials)` : `Call Block #${sequence} (~${estDials} dials)`,
         type: 'prospecting',
         workstream: 'new_logo',
         goals: [
-          `Make calls / send emails for ~${estTouches} outreach touches`,
+          `Make ~${estDials} dials to sourced contacts`,
           'Log responses and next steps',
         ],
-        reasoning: 'Execution block for contacts prepared in the preceding prep block.',
+        reasoning: 'Execution block paired with prep.',
       };
     }
 
@@ -654,12 +659,31 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
       return {
         start_time: minToTime(startMin),
         end_time: minToTime(endMin),
-        label: 'Quick admin & CRM updates',
+        label: 'Admin & CRM Updates',
         type: 'admin',
         workstream: 'general',
         goals: ['Log activity', 'Update CRM'],
-        reasoning: 'Use short window productively instead of leaving dead time.',
+        reasoning: 'Use short window productively.',
       };
+    }
+
+    /** Clamp non-meeting blocks to working hours */
+    function clampWorkBlocks(blocks: any[]) {
+      return blocks.filter((b: any) => {
+        if (b.type === 'meeting') return true;
+        const startMin = toMinutes(b.start_time);
+        const endMin = toMinutes(b.end_time);
+        if (endMin <= workStartMin || startMin >= workEndMin) return false;
+        return true;
+      }).map((b: any) => {
+        if (b.type === 'meeting') return b;
+        let startMin = toMinutes(b.start_time);
+        let endMin = toMinutes(b.end_time);
+        startMin = Math.max(startMin, workStartMin);
+        endMin = Math.min(endMin, workEndMin);
+        if (endMin - startMin < 15) return null;
+        return { ...b, start_time: minToTime(startMin), end_time: minToTime(endMin) };
+      }).filter(Boolean);
     }
 
     function fillTimeGaps(blocks: any[]) {
@@ -675,19 +699,19 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
 
         while (gapRemaining > 15) {
           if (gapRemaining >= 60) {
-            filled.push(createAdminReadinessBlock(gapStart, 30));
+            filled.push(createPrepBlock(gapStart, 30));
             gapStart += 30;
             gapRemaining -= 30;
 
             const activityDuration = Math.min(60, gapRemaining);
             if (activityDuration >= 30) {
               outreachSequence += 1;
-              filled.push(createActivityBlock(gapStart, activityDuration, outreachSequence));
+              filled.push(createCallBlock(gapStart, activityDuration, outreachSequence));
               gapStart += activityDuration;
               gapRemaining -= activityDuration;
             }
           } else if (gapRemaining >= 30) {
-            filled.push(createAdminReadinessBlock(gapStart, gapRemaining));
+            filled.push(createPrepBlock(gapStart, gapRemaining));
             gapStart += gapRemaining;
             gapRemaining = 0;
           } else {
@@ -704,19 +728,19 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
       let tailRemaining = workEndMin - tailStart;
       while (tailRemaining > 15) {
         if (tailRemaining >= 60) {
-          filled.push(createAdminReadinessBlock(tailStart, 30));
+          filled.push(createPrepBlock(tailStart, 30));
           tailStart += 30;
           tailRemaining -= 30;
 
           const activityDuration = Math.min(60, tailRemaining);
           if (activityDuration >= 30) {
             outreachSequence += 1;
-            filled.push(createActivityBlock(tailStart, activityDuration, outreachSequence));
+            filled.push(createCallBlock(tailStart, activityDuration, outreachSequence));
             tailStart += activityDuration;
             tailRemaining -= activityDuration;
           }
         } else if (tailRemaining >= 30) {
-          filled.push(createAdminReadinessBlock(tailStart, tailRemaining));
+          filled.push(createPrepBlock(tailStart, tailRemaining));
           tailStart += tailRemaining;
           tailRemaining = 0;
         } else {
@@ -740,12 +764,13 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
           continue;
         }
 
+        // Standardize AI label variants to canonical names
         const normalizedLabel = String(block.label || '').toLowerCase();
-        if (normalizedLabel.includes('email blitz')) {
-          block.label = 'Work sourced contacts';
-        }
-        if (normalizedLabel === 'call block' || normalizedLabel.includes('call blitz')) {
-          block.label = 'Work sourced contacts';
+        if (normalizedLabel.includes('email blitz') || normalizedLabel.includes('call blitz') || normalizedLabel === 'call block') {
+          const dur = toMinutes(block.end_time) - toMinutes(block.start_time);
+          const halfHours = dur / 30;
+          const estDials = Math.round(halfHours * DIALS_PER_30_MIN);
+          block.label = `Call Block (~${estDials} dials)`;
         }
 
         if (READINESS_TYPES.has(block.type)) {
@@ -761,9 +786,9 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
           const prepDuration = totalDuration >= 60 ? 30 : Math.max(30, Math.floor(totalDuration / 2));
           const activityDuration = totalDuration - prepDuration;
 
-          validated.push(createAdminReadinessBlock(startMin, prepDuration));
+          validated.push(createPrepBlock(startMin, prepDuration));
           if (activityDuration >= 30) {
-            validated.push(createActivityBlock(startMin + prepDuration, activityDuration, 1));
+            validated.push(createCallBlock(startMin + prepDuration, activityDuration, 1));
           }
           segmentHasReadiness = true;
           continue;
@@ -832,43 +857,41 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
           buildPlaced = true;
         }
 
-        // Phase 2: Admin/Prep block (contact sourcing & cadence loading)
+        // Phase 2: Prep block (canonical New Logo Prep)
         if (!adminPlaced && gap.endMin - gapCursor >= 30) {
-          const dur = Math.min(45, gap.endMin - gapCursor);
+          const dur = Math.min(30, gap.endMin - gapCursor);
           blocks.push({
             start_time: minToTime(gapCursor),
             end_time: minToTime(gapCursor + dur),
-            label: 'Account Research & Contact Sourcing',
-            type: 'admin',
+            label: 'New Logo Prep',
+            type: 'prep',
             workstream: 'new_logo',
             goals: [
-              'Source email addresses & phone numbers',
-              'Load contacts into cadence system',
-              'Verify contact data quality',
+              'Research target accounts',
+              'Find contacts + source emails/phone numbers',
+              'Load contacts into cadence',
             ],
-            reasoning: 'Step 2 — contacts must be sourced and loaded before outreach begins.',
+            reasoning: 'Step 2 — prep before outreach.',
           });
           gapCursor += dur;
           adminPlaced = true;
         }
 
-        // Phase 3: Outreach blocks (only after prep is done)
+        // Phase 3: Call blocks (MVP dial math)
         while (gap.endMin - gapCursor >= 30 && (buildPlaced || adminPlaced)) {
           const remaining = gap.endMin - gapCursor;
           const callDur = Math.min(60, remaining);
-          const estDials = Math.round(callDur / 2);
+          const halfHours = callDur / 30;
+          const estDials = Math.round(halfHours * DIALS_PER_30_MIN);
           prospectingCount++;
-          const label = prospectingCount === 1
-            ? `Call newly added prospects (~${estDials} dials)`
-            : `Follow up on yesterday's outreach (~${estDials} dials)`;
           blocks.push({
             start_time: minToTime(gapCursor),
             end_time: minToTime(gapCursor + callDur),
-            label,
+            label: `Call Block ${prospectingCount > 1 ? `#${prospectingCount} ` : ''}(~${estDials} dials)`,
             type: 'prospecting',
             workstream: 'new_logo',
             goals: [`Make ~${estDials} dials to sourced contacts`, 'Log conversations and outcomes'],
-            reasoning: `Step 3 — outreach to prepped contacts.`,
+            reasoning: `Outreach to prepped contacts.`,
           });
           gapCursor += callDur;
           callPlaced = true;
@@ -1086,7 +1109,10 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
 
     // CRITICAL: Validate task dependencies and fill all time gaps
     mergedBlocks = validatePlanDependencies(mergedBlocks);
-    logStage("dependencies_validated", "task dependencies enforced, gaps filled", { finalBlockCount: mergedBlocks.length });
+
+    // CRITICAL: Final 9-5 enforcement — no work blocks outside working hours
+    mergedBlocks = clampWorkBlocks(mergedBlocks);
+    logStage("dependencies_validated", "task dependencies enforced, gaps filled, 9-5 clamped", { finalBlockCount: mergedBlocks.length });
 
     const previousVisibleBlocks = Array.isArray(rebuildContext?.current_visible_blocks)
       ? rebuildContext.current_visible_blocks.filter((block: any) => !!block?.start_time && !!block?.end_time)
