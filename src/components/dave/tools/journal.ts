@@ -120,6 +120,7 @@ export function createJournalTools(ctx: ToolContext): ToolMap {
       }
 
       toast.success('Checked in ✓');
+      emitMetricsUpdated({ checked_in: true });
       return 'Checked in for today. Let\'s get after it.';
     },
 
