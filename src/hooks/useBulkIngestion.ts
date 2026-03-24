@@ -241,11 +241,7 @@ export function useBulkIngestion() {
         classification = { ...classification, title: item.title || item.url };
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Classification failed';
-      if (msg.includes('rate limit') || msg.includes('429')) {
-        throw new Error('Rate limited — try again in a moment');
-      }
-      throw new Error(`Classification: ${msg}`);
+      throw new Error(classifyError(err, 'Classification'));
     }
 
     // Step 3: Save or update
