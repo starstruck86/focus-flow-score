@@ -37,7 +37,7 @@ import type { CalendarScreenshotEvent } from '@/types/dashboard';
 import type { Json } from '@/integrations/supabase/types';
 import { generateTraceId } from '@/lib/appError';
 import { buildLocalFallbackPlan, getVisiblePlanBlocks, summarizePlanDelta, type RebuildFallbackBlock, type RebuildPlanBlock } from '@/lib/dailyPlanRebuild';
-import { memo, useMemo } from 'react';
+
 
 /** Inline contact count for linked account pills */
 const LinkedAccountContactCount = memo(function LinkedAccountContactCount({ accountId }: { accountId: string }) {
