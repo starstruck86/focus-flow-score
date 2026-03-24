@@ -37,6 +37,7 @@ import type { CalendarScreenshotEvent } from '@/types/dashboard';
 import type { Json } from '@/integrations/supabase/types';
 import { generateTraceId } from '@/lib/appError';
 import { buildLocalFallbackPlan, getVisiblePlanBlocks, summarizePlanDelta, type RebuildFallbackBlock, type RebuildPlanBlock } from '@/lib/dailyPlanRebuild';
+import { QUEUE_CHANGED_EVENT } from '@/hooks/useWeeklyResearchQueue';
 
 
 /** Inline contact count for linked account pills */
