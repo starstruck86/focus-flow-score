@@ -17,34 +17,32 @@ import {
 import {
   Play, Pause, Square, RotateCcw, ChevronDown,
   CheckCircle2, XCircle, SkipForward, AlertTriangle,
-  Eye, Loader2,
+  Eye, Loader2, Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type {
   IngestionState,
   IngestionJobStatus,
   IngestionItem,
-  ReprocessMode,
 } from '@/hooks/useBulkIngestion';
 
 interface BulkIngestionPanelProps {
   state: IngestionState;
   onSetBatchSize: (size: number) => void;
-  onSetReprocessMode: (mode: ReprocessMode) => void;
+  onSetReprocessMode?: (mode: any) => void;
   onStart: (items: Array<{ url: string; title: string; videoId?: string; channel?: string; publishDate?: string; duration?: string }>, opts?: { retryFailedOnly?: boolean }) => void;
   onPause: () => void;
   onResume: () => void;
   onCancel: () => void;
   onReset: () => void;
   hasFailures: boolean;
-  /** The items to process — pass selected/all videos or resources */
   sourceItems: Array<{ url: string; title: string; videoId?: string; channel?: string; publishDate?: string; duration?: string }>;
   sourceLabel?: string;
 }
 
 const STATUS_LABELS: Record<IngestionJobStatus, string> = {
   idle: 'Ready',
-  running: 'Processing…',
+  running: 'Deep Enriching…',
   paused: 'Paused',
   completed: 'Completed',
   failed: 'Completed with errors',
@@ -62,28 +60,29 @@ const STATUS_COLORS: Record<IngestionJobStatus, string> = {
 
 const STAGE_LABELS: Record<string, string> = {
   queued: 'Queued',
+  preprocessing: 'Preprocessing…',
   checking_duplicate: 'Checking duplicates…',
   fetching: 'Fetching…',
   classifying: 'Classifying…',
   saving: 'Saving…',
-  enriching: 'Enriching…',
+  enriching: 'Deep enriching…',
   complete: 'Complete',
-  skipped: 'Skipped (duplicate)',
+  skipped: 'Skipped',
   failed: 'Failed',
   needs_review: 'Needs review',
 };
 
-const REPROCESS_LABELS: Record<ReprocessMode, string> = {
-  skip_processed: 'Skip already processed',
-  metadata_only: 'Refresh metadata only',
-  summary_only: 'Refresh summaries',
-  full_reprocess: 'Full reprocess',
+const SKIP_REASON_LABELS: Record<string, string> = {
+  already_enriched: 'Already enriched',
+  duplicate_resource: 'Duplicate detected',
+  unsupported_source: 'Unsupported source type',
+  invalid_url: 'Invalid URL',
+  missing_data: 'Missing required data',
 };
 
 export const BulkIngestionPanel = memo(function BulkIngestionPanel({
   state,
   onSetBatchSize,
-  onSetReprocessMode,
   onStart,
   onPause,
   onResume,
@@ -96,21 +95,26 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
   const isActive = state.status === 'running' || state.status === 'paused';
   const isDone = state.status === 'completed' || state.status === 'failed' || state.status === 'cancelled';
   const progressPct = state.totalItems > 0 ? Math.round((state.processedCount / state.totalItems) * 100) : 0;
-  const [showDetails, setShowDetails] = useState(false);
+  const [showFailed, setShowFailed] = useState(false);
+  const [showSkipped, setShowSkipped] = useState(false);
 
   const failedItems = useMemo(() => state.items.filter(i => i.stage === 'failed'), [state.items]);
+  const skippedItems = useMemo(() => state.items.filter(i => i.stage === 'skipped'), [state.items]);
   const reviewItems = useMemo(() => state.items.filter(i => i.stage === 'needs_review'), [state.items]);
   const currentItem = useMemo(
     () => state.items.find(i => !['queued', 'complete', 'skipped', 'failed', 'needs_review'].includes(i.stage)),
     [state.items]
   );
 
+  const allSkipped = isDone && state.skippedCount > 0 && state.successCount === 0 && state.failedCount === 0;
+
   return (
     <div className="border border-border rounded-lg bg-card p-4 space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-foreground">Bulk Ingestion</h3>
+          <Zap className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold text-foreground">Deep Enrich</h3>
           <Badge className={cn('text-[10px]', STATUS_COLORS[state.status])}>
             {STATUS_LABELS[state.status]}
           </Badge>
@@ -125,6 +129,10 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
       {/* Controls — idle */}
       {state.status === 'idle' && (
         <div className="space-y-2">
+          <p className="text-[11px] text-muted-foreground">
+            Automatically normalizes, deduplicates, and deeply enriches selected {sourceLabel}.
+            Batch size capped for reliability.
+          </p>
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-1.5">
               <span className="text-xs text-muted-foreground">Batch:</span>
@@ -133,31 +141,18 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
                 <SelectContent>
                   <SelectItem value="5">5</SelectItem>
                   <SelectItem value="10">10</SelectItem>
-                  <SelectItem value="25">25</SelectItem>
-                  <SelectItem value="50">50</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-muted-foreground">Duplicates:</span>
-              <Select value={state.reprocessMode} onValueChange={v => onSetReprocessMode(v as ReprocessMode)}>
-                <SelectTrigger className="h-7 w-[160px] text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(REPROCESS_LABELS).map(([k, v]) => (
-                    <SelectItem key={k} value={k}>{v}</SelectItem>
-                  ))}
                 </SelectContent>
               </Select>
             </div>
           </div>
           <Button
             size="sm"
-            className="h-7 text-xs gap-1"
+            className="h-8 text-xs gap-1.5"
             disabled={sourceItems.length === 0}
             onClick={() => onStart(sourceItems)}
           >
-            <Play className="h-3 w-3" />
-            Process {sourceItems.length} {sourceLabel}
+            <Zap className="h-3.5 w-3.5" />
+            Deep Enrich {sourceItems.length} {sourceLabel}
           </Button>
         </div>
       )}
@@ -175,7 +170,7 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
                 <span className="ml-1 flex items-center gap-1">
                   · <Loader2 className="h-3 w-3 animate-spin" />
                   <span className="truncate max-w-[140px]">{currentItem.title}</span>
-                  <span className="text-primary">{STAGE_LABELS[currentItem.stage]}</span>
+                  <span className="text-primary">{STAGE_LABELS[currentItem.stage] || currentItem.stage}</span>
                 </span>
               )}
             </div>
@@ -234,23 +229,55 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
         </div>
       )}
 
+      {/* All-skipped explanation */}
+      {allSkipped && (
+        <div className="bg-muted/50 rounded-md p-3 text-[11px] text-muted-foreground space-y-1">
+          <p className="font-medium text-foreground">All {state.skippedCount} {sourceLabel} were skipped</p>
+          <p>Items were skipped because they were already enriched or are duplicates of existing resources. Expand skip details below to see per-item reasons.</p>
+        </div>
+      )}
+
       {/* Results summary */}
-      {isDone && (
+      {isDone && !allSkipped && (
         <div className="flex items-center gap-4 text-[11px] pt-1 border-t border-border">
-          <span className="text-status-green font-medium">{state.successCount} added</span>
+          <span className="text-status-green font-medium">{state.successCount} enriched</span>
           <span className="text-muted-foreground">{state.skippedCount} skipped</span>
           {state.failedCount > 0 && <span className="text-status-red">{state.failedCount} failed</span>}
           {state.reviewCount > 0 && <span className="text-status-yellow">{state.reviewCount} need review</span>}
         </div>
       )}
 
+      {/* Skip details */}
+      {isDone && skippedItems.length > 0 && (
+        <Collapsible open={showSkipped} onOpenChange={setShowSkipped}>
+          <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:underline">
+            <SkipForward className="h-3 w-3" />
+            {skippedItems.length} skipped — view reasons
+            <ChevronDown className={cn("h-3 w-3 transition-transform", showSkipped && "rotate-180")} />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2 space-y-1 max-h-36 overflow-y-auto">
+            {skippedItems.map(item => (
+              <div key={item.id} className="flex items-start gap-2 text-[11px] bg-muted/30 rounded px-2 py-1">
+                <SkipForward className="h-3 w-3 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <span className="font-medium text-foreground truncate block">{item.title}</span>
+                  <p className="text-muted-foreground">
+                    {item.error ? (SKIP_REASON_LABELS[item.error] || item.error) : 'Already enriched'}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
       {/* Failed details */}
       {isDone && failedItems.length > 0 && (
-        <Collapsible open={showDetails} onOpenChange={setShowDetails}>
+        <Collapsible open={showFailed} onOpenChange={setShowFailed}>
           <CollapsibleTrigger className="flex items-center gap-1 text-xs text-status-red hover:underline">
             <AlertTriangle className="h-3 w-3" />
             {failedItems.length} failed — view details
-            <ChevronDown className="h-3 w-3" />
+            <ChevronDown className={cn("h-3 w-3 transition-transform", showFailed && "rotate-180")} />
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-2 space-y-1 max-h-48 overflow-y-auto">
             {failedItems.map(item => (

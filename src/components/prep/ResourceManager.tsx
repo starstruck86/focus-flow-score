@@ -36,6 +36,7 @@ import { DuplicateResourcesModal } from './DuplicateResourcesModal';
 import { PlaylistImportModal } from './PlaylistImportModal';
 import { PodcastImportModal } from './PodcastImportModal';
 import { WebpageImportModal } from './WebpageImportModal';
+import { DeepEnrichModal } from './DeepEnrichModal';
 import { useResourceDuplicates } from '@/hooks/useResourceDuplicates';
 import { useConsolidateFolders } from '@/hooks/useConsolidateFolders';
 import { ResourceIntelligenceDashboard } from './ResourceIntelligenceDashboard';
@@ -124,9 +125,8 @@ export function ResourceManager() {
   const [competitorContext, setCompetitorContext] = useState('');
   const [battlecardLoading, setBattlecardLoading] = useState(false);
   const [battlecardProgress, setBattlecardProgress] = useState('');
-  const [bulkEnriching, setBulkEnriching] = useState(false);
   const [selectedResourceIds, setSelectedResourceIds] = useState<Set<string>>(new Set());
-  const [bulkReenriching, setBulkReenriching] = useState(false);
+  const [showDeepEnrich, setShowDeepEnrich] = useState(false);
 
   // AI Generate / Transform states
   const [showAIGenerate, setShowAIGenerate] = useState(false);
@@ -536,27 +536,10 @@ export function ResourceManager() {
           size="sm"
           variant="outline"
           className="h-8 text-xs"
-          disabled={bulkEnriching}
-          onClick={async () => {
-            setBulkEnriching(true);
-            try {
-              const { data, error } = await trackedInvoke<any>('enrich-resource-content', {
-                body: { batch: true, limit: 50 },
-              });
-              if (error) throw error;
-              const r = data?.results;
-              if (r) {
-                toast.success(`Enriched ${r.enriched} resources (${r.failed} failed, ${r.skipped} skipped)`);
-              }
-            } catch (e: any) {
-              toast.error(e.message || 'Bulk enrich failed');
-            } finally {
-              setBulkEnriching(false);
-            }
-          }}
+          onClick={() => setShowDeepEnrich(true)}
         >
-          {bulkEnriching ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Zap className="h-3.5 w-3.5 mr-1" />}
-          Bulk Enrich
+          <Zap className="h-3.5 w-3.5 mr-1" />
+          Deep Enrich
         </Button>
         <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setShowReorganize(true)}>
           <Sparkles className="h-3.5 w-3.5 mr-1" /> Reorganize
@@ -859,7 +842,7 @@ export function ResourceManager() {
                             toast.error('Enrichment failed');
                           }
                         }}>
-                          <RefreshCw className="h-3.5 w-3.5 mr-2" /> {resAny.content_status === 'enriched' ? 'Re-enrich' : 'Enrich Content'}
+                          <RefreshCw className="h-3.5 w-3.5 mr-2" /> {resAny.content_status === 'enriched' ? 'Re-enrich' : 'Deep Enrich'}
                         </DropdownMenuItem>
                       )}
                       <DropdownMenuItem onClick={(e) => {
@@ -1100,6 +1083,14 @@ export function ResourceManager() {
         initialOutputType={generateInitialType}
       />
 
+      {/* Deep Enrich modal for all unenriched resources */}
+      <DeepEnrichModal
+        open={showDeepEnrich}
+        onOpenChange={setShowDeepEnrich}
+        resources={resources}
+        selectedIds={selectedResourceIds}
+      />
+
       {/* Bulk selection bar */}
       {selectedResourceIds.size > 0 && (
         <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-card border border-border rounded-xl px-4 py-2.5 shadow-lg">
@@ -1108,27 +1099,12 @@ export function ResourceManager() {
             size="sm"
             variant="outline"
             className="h-7 text-xs gap-1"
-            disabled={bulkReenriching}
-            onClick={async () => {
-              setBulkReenriching(true);
-              try {
-                const { data, error } = await trackedInvoke<any>('enrich-resource-content', {
-                  body: { resource_ids: Array.from(selectedResourceIds), force: true },
-                });
-                if (error) throw error;
-                const results = data?.results || [];
-                const enriched = results.filter((r: any) => r.status === 'enriched').length;
-                toast.success(`Re-enriched ${enriched}/${results.length} resources`);
-                setSelectedResourceIds(new Set());
-              } catch (e: any) {
-                toast.error(e.message || 'Bulk re-enrich failed');
-              } finally {
-                setBulkReenriching(false);
-              }
+            onClick={() => {
+              setShowDeepEnrich(true);
             }}
           >
-            {bulkReenriching ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-            Re-enrich Selected
+            <Zap className="h-3 w-3" />
+            Deep Enrich Selected
           </Button>
           <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSelectedResourceIds(new Set())}>
             <X className="h-3 w-3 mr-1" /> Clear
