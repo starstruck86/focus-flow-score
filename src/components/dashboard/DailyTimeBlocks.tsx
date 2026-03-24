@@ -180,6 +180,7 @@ const WORKSTREAM_CONFIG: Record<string, { label: string; icon: typeof Rocket; co
 
 export function DailyTimeBlocks() {
   const { user } = useAuth();
+  const calendarFreshness = useCalendarFreshness();
   const { opportunities, accounts } = useStore();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
