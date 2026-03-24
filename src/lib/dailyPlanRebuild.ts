@@ -1,4 +1,4 @@
-import { WORK_START_MINUTES, WORK_END_MINUTES, DIALS_PER_30_MIN, clampWorkBlocksToHours } from './mvpBlockModel';
+import { WORK_START_MINUTES, WORK_END_MINUTES, DIALS_PER_30_MIN, DAILY_DIALS_MIN, clampWorkBlocksToHours } from './mvpBlockModel';
 
 export interface RebuildPlanBlock {
   start_time: string;
