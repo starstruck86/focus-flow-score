@@ -1,6 +1,10 @@
 /**
- * Controlled bulk resource ingestion engine with batching, progress,
- * retry, pause/cancel, duplicate prevention, and quality guardrails.
+ * Controlled bulk resource Deep Enrich engine with automatic preprocessing,
+ * batching, progress, retry, pause/cancel, duplicate prevention, and quality guardrails.
+ *
+ * Single user-facing action: "Deep Enrich"
+ * Batch cap: 5 or 10 (hard cap 10)
+ * Automatic preprocessing: canonicalize → deduplicate → validate → classify → enrich
  */
 import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,6 +16,7 @@ import { toast } from 'sonner';
 // ── Types ──────────────────────────────────────────────────
 export type IngestionItemStage =
   | 'queued'
+  | 'preprocessing'
   | 'checking_duplicate'
   | 'fetching'
   | 'classifying'
@@ -32,12 +37,10 @@ export interface IngestionItem {
   title: string;
   stage: IngestionItemStage;
   error?: string;
-  /** YouTube-specific metadata */
   videoId?: string;
   channel?: string;
   publishDate?: string;
   duration?: string;
-  /** Set if resource already exists in library */
   existingResourceId?: string;
 }
 
@@ -56,10 +59,13 @@ export interface IngestionState {
   items: IngestionItem[];
 }
 
+// ── Constants ──────────────────────────────────────────────
 const INTER_ITEM_DELAY = 1200;
 const INTER_BATCH_DELAY = 2500;
 const MIN_CONTENT_LENGTH = 200;
 const EMPTY_TRANSCRIPT_THRESHOLD = 80;
+const MAX_BATCH_SIZE = 10;
+const DEFAULT_BATCH_SIZE = 5;
 
 // ── Canonical identity ─────────────────────────────────────
 export type SourceType = 'youtube' | 'webpage' | 'file' | 'unknown';
@@ -91,11 +97,6 @@ function detectSourceType(url: string): SourceType {
   }
 }
 
-/**
- * Build a canonical source identity from a raw URL.
- * YouTube: canonical URL is always https://www.youtube.com/watch?v=VIDEO_ID
- * Other: strip tracking params, hash, trailing slashes.
- */
 function canonicalize(rawUrl: string): CanonicalSource {
   const sourceType = detectSourceType(rawUrl);
   const videoId = extractYouTubeVideoId(rawUrl);
@@ -108,15 +109,12 @@ function canonicalize(rawUrl: string): CanonicalSource {
     };
   }
 
-  // General URL normalization
   try {
     const u = new URL(rawUrl.trim());
     u.hash = '';
-    // Strip tracking / noise params
     ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
      'si', 'feature', 'ref', 'fbclid', 'gclid', 'mc_cid', 'mc_eid',
     ].forEach(p => u.searchParams.delete(p));
-    // Remove trailing slash
     let canonical = u.toString();
     if (canonical.endsWith('/') && u.pathname !== '/') canonical = canonical.slice(0, -1);
     return { canonical_url: canonical, source_type: sourceType, source_id: null };
@@ -143,6 +141,18 @@ function classifyError(err: unknown, context: string): string {
   return `${context}: ${msg.slice(0, 120)}`;
 }
 
+// ── Preprocessing: validate URL ────────────────────────────
+function validateUrl(rawUrl: string): string | null {
+  if (!rawUrl || !rawUrl.trim()) return 'missing_data';
+  try {
+    const u = new URL(rawUrl.trim());
+    if (!['http:', 'https:'].includes(u.protocol)) return 'unsupported_source';
+    return null;
+  } catch {
+    return 'invalid_url';
+  }
+}
+
 // ── Hook ───────────────────────────────────────────────────
 export function useBulkIngestion() {
   const { user } = useAuth();
@@ -150,7 +160,7 @@ export function useBulkIngestion() {
 
   const [state, setState] = useState<IngestionState>({
     status: 'idle',
-    batchSize: 10,
+    batchSize: DEFAULT_BATCH_SIZE,
     reprocessMode: 'skip_processed',
     totalItems: 0,
     currentBatch: 0,
@@ -168,7 +178,9 @@ export function useBulkIngestion() {
   const runningRef = useRef(false);
 
   const setBatchSize = useCallback((size: number) => {
-    setState(prev => ({ ...prev, batchSize: size }));
+    // Hard cap at MAX_BATCH_SIZE
+    const capped = Math.min(Math.max(size, 1), MAX_BATCH_SIZE);
+    setState(prev => ({ ...prev, batchSize: capped }));
   }, []);
 
   const setReprocessMode = useCallback((mode: ReprocessMode) => {
@@ -187,7 +199,6 @@ export function useBulkIngestion() {
     if (!user) return null;
     const { canonical_url, source_id } = canonicalize(url);
 
-    // Check by canonical URL
     const { data } = await supabase
       .from('resources')
       .select('id')
@@ -196,7 +207,6 @@ export function useBulkIngestion() {
       .limit(1);
     if (data?.length) return data[0].id;
 
-    // YouTube: also check by video ID across URL variants
     if (source_id) {
       const { data: ytMatch } = await supabase
         .from('resources')
@@ -210,20 +220,72 @@ export function useBulkIngestion() {
     return null;
   }
 
-  // ── Process single item ────────────────────────────────
+  // ── Preprocess: validate + deduplicate within batch ──
+  function preprocessItems(
+    rawItems: Array<{ url: string; title: string; videoId?: string; channel?: string; publishDate?: string; duration?: string }>
+  ): IngestionItem[] {
+    const seenCanonicals = new Set<string>();
+    return rawItems.map((item, idx) => {
+      const urlError = validateUrl(item.url);
+      if (urlError) {
+        return {
+          id: `ingest-${idx}-${Date.now()}`,
+          url: item.url,
+          title: item.title || 'Untitled',
+          stage: 'skipped' as const,
+          error: urlError,
+          videoId: item.videoId,
+          channel: item.channel,
+          publishDate: item.publishDate,
+          duration: item.duration,
+        };
+      }
+
+      const source = canonicalize(item.url);
+      const canonicalKey = source.source_id || source.canonical_url;
+
+      if (seenCanonicals.has(canonicalKey)) {
+        return {
+          id: `ingest-${idx}-${Date.now()}`,
+          url: item.url,
+          title: item.title || 'Untitled',
+          stage: 'skipped' as const,
+          error: 'duplicate_resource',
+          videoId: item.videoId || source.source_id || undefined,
+          channel: item.channel,
+          publishDate: item.publishDate,
+          duration: item.duration,
+        };
+      }
+
+      seenCanonicals.add(canonicalKey);
+
+      return {
+        id: `ingest-${idx}-${Date.now()}`,
+        url: item.url,
+        title: item.title || 'Untitled',
+        stage: 'queued' as const,
+        videoId: item.videoId || extractYouTubeVideoId(item.url) || undefined,
+        channel: item.channel,
+        publishDate: item.publishDate,
+        duration: item.duration,
+      };
+    });
+  }
+
+  // ── Process single item (Deep Enrich) ──────────────────
   async function processItem(item: IngestionItem, reprocessMode: ReprocessMode): Promise<void> {
     if (!user) throw new Error('Not authenticated');
 
-    // Step 1: Duplicate check using canonical identity
+    // Step 1: Duplicate check against DB using canonical identity
     updateItem(item.id, { stage: 'checking_duplicate' });
     const existingId = await checkDuplicate(item.url);
 
     if (existingId) {
       if (reprocessMode === 'skip_processed') {
-        updateItem(item.id, { stage: 'skipped', existingResourceId: existingId });
+        updateItem(item.id, { stage: 'skipped', existingResourceId: existingId, error: 'already_enriched' });
         return;
       }
-      // For other modes, we'll update the existing resource
       updateItem(item.id, { existingResourceId: existingId });
     }
 
@@ -233,7 +295,7 @@ export function useBulkIngestion() {
     try {
       const { data, error } = await trackedInvoke<any>('classify-resource', {
         body: { url: item.url },
-        componentName: 'BulkIngestion',
+        componentName: 'DeepEnrich',
       });
       if (error) throw new Error(error.message || 'Classification failed');
       classification = data;
@@ -261,7 +323,6 @@ export function useBulkIngestion() {
     let resourceId: string;
 
     if (existingId && reprocessMode !== 'skip_processed') {
-      // Safe upsert: update existing — no duplicate rows
       const updatePayload: Record<string, any> = {};
       if (reprocessMode === 'full_reprocess' || reprocessMode === 'metadata_only') {
         updatePayload.title = classification.title;
@@ -273,14 +334,12 @@ export function useBulkIngestion() {
         updatePayload.content = contentToStore;
         updatePayload.content_status = contentStatus;
       }
-      // Always update canonical URL to latest normalized form
       updatePayload.file_url = source.canonical_url;
       if (Object.keys(updatePayload).length > 0) {
         await supabase.from('resources').update(updatePayload).eq('id', existingId);
       }
       resourceId = existingId;
     } else {
-      // Resolve folder
       let folderId: string | null = null;
       if (classification.top_folder) {
         const { data: folders } = await supabase
@@ -301,7 +360,6 @@ export function useBulkIngestion() {
         }
       }
 
-      // Insert with canonical URL — provenance is the file_url + description
       const { data: resource, error } = await supabase
         .from('resources')
         .insert({
@@ -329,21 +387,18 @@ export function useBulkIngestion() {
       return;
     }
 
-    // Step 5: Enrich if placeholder
-    if (contentStatus === 'placeholder') {
-      updateItem(item.id, { stage: 'enriching' });
-      try {
-        await trackedInvoke<any>('enrich-resource-content', {
-          body: { resource_id: resourceId },
-          componentName: 'BulkIngestion',
-          timeoutMs: 60_000,
-        });
-      } catch (enrichErr) {
-        // Non-fatal — resource saved, but flag the enrichment failure
-        const enrichMsg = classifyError(enrichErr, 'Enrichment');
-        updateItem(item.id, { stage: 'needs_review', error: `Saved but enrichment failed: ${enrichMsg}` });
-        return;
-      }
+    // Step 5: Deep enrich
+    updateItem(item.id, { stage: 'enriching' });
+    try {
+      await trackedInvoke<any>('enrich-resource-content', {
+        body: { resource_id: resourceId, force: true },
+        componentName: 'DeepEnrich',
+        timeoutMs: 60_000,
+      });
+    } catch (enrichErr) {
+      const enrichMsg = classifyError(enrichErr, 'Deep enrichment');
+      updateItem(item.id, { stage: 'needs_review', error: `Saved but enrichment failed: ${enrichMsg}` });
+      return;
     }
 
     updateItem(item.id, { stage: 'complete' });
@@ -362,27 +417,18 @@ export function useBulkIngestion() {
     let ingestionItems: IngestionItem[];
 
     if (options?.retryFailedOnly) {
-      // Only retry failed items from previous run
       ingestionItems = state.items.map(i =>
         i.stage === 'failed'
           ? { ...i, stage: 'queued' as const, error: undefined }
           : i
       );
     } else {
-      ingestionItems = items.map((item, idx) => ({
-        id: `ingest-${idx}-${Date.now()}`,
-        url: item.url,
-        title: item.title,
-        stage: 'queued' as const,
-        videoId: item.videoId || extractYouTubeVideoId(item.url) || undefined,
-        channel: item.channel,
-        publishDate: item.publishDate,
-        duration: item.duration,
-      }));
+      // Automatic preprocessing: validate, canonicalize, deduplicate within input
+      ingestionItems = preprocessItems(items);
     }
 
     const queue = ingestionItems.filter(i => i.stage === 'queued');
-    const batchSize = state.batchSize;
+    const batchSize = Math.min(state.batchSize, MAX_BATCH_SIZE);
     const totalBatches = Math.max(1, Math.ceil(queue.length / batchSize));
     const priorSuccess = ingestionItems.filter(i => i.stage === 'complete').length;
     const priorSkipped = ingestionItems.filter(i => i.stage === 'skipped').length;
@@ -400,6 +446,13 @@ export function useBulkIngestion() {
       reviewCount: 0,
       items: ingestionItems,
     }));
+
+    // If all items were filtered during preprocessing
+    if (queue.length === 0) {
+      setState(prev => ({ ...prev, status: 'completed' }));
+      runningRef.current = false;
+      return;
+    }
 
     let successCount = priorSuccess;
     let failedCount = 0;
@@ -448,9 +501,6 @@ export function useBulkIngestion() {
           await processItem(item, state.reprocessMode);
           processedCount++;
 
-          // Read back the item's final stage
-          const finalItem = state.items.find(i => i.id === item.id);
-          // We need to read from the latest state — use a helper
           setState(prev => {
             const updated = prev.items.find(i => i.id === item.id);
             const stage = updated?.stage || 'complete';
@@ -463,7 +513,7 @@ export function useBulkIngestion() {
         } catch (err) {
           processedCount++;
           failedCount++;
-          const msg = classifyError(err, 'Ingestion');
+          const msg = classifyError(err, 'Deep enrichment');
           updateItem(item.id, { stage: 'failed', error: msg });
           setState(prev => ({ ...prev, processedCount, failedCount }));
         }
@@ -478,7 +528,6 @@ export function useBulkIngestion() {
       }
     }
 
-    // Invalidate queries to refresh library
     queryClient.invalidateQueries({ queryKey: ['resources'] });
     queryClient.invalidateQueries({ queryKey: ['resource-folders'] });
 
