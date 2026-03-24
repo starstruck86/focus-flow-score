@@ -863,10 +863,26 @@ export function DailyTimeBlocks() {
                   </Badge>
                 )}
               </div>
-              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
                 <span>{plan.meeting_load_hours}h meetings</span>
                 <span>·</span>
                 <span>{plan.focus_hours_available}h focus</span>
+                {(() => {
+                  const dc = calculateDialCapacity(blocks);
+                  return (
+                    <>
+                      <span>·</span>
+                      <span className={cn(
+                        "font-medium",
+                        dc.status === 'above_target' && "text-emerald-500",
+                        dc.status === 'on_track' && "text-foreground",
+                        dc.status === 'below_minimum' && "text-amber-500",
+                      )}>
+                        {dc.plannedDials}–{dc.plannedDialsTarget} dials planned
+                      </span>
+                    </>
+                  );
+                })()}
                 {completedGoals > 0 && (
                   <>
                     <span>·</span>
@@ -1276,7 +1292,7 @@ export function DailyTimeBlocks() {
                   )}
 
                   {/* Account picker for prep blocks */}
-                  {editingBlock !== i && block.type === 'prep' && (
+                  {editingBlock !== i && block.type === 'prep' && block.workstream !== 'new_logo' && (
                     <div className="mt-2 py-1.5 px-2.5 rounded-md bg-muted/40 border border-border/30">
                       <div className="flex items-center gap-1.5 mb-1.5">
                         <Target className="h-3 w-3 text-cyan-500" />
@@ -1369,8 +1385,8 @@ export function DailyTimeBlocks() {
                     </div>
                   )}
 
-                  {/* New Logo Build step tracker */}
-                  {editingBlock !== i && block.type === 'build' && (
+                  {/* New Logo Build step tracker — shown for both 'build' and 'prep' new_logo blocks */}
+                  {editingBlock !== i && (block.type === 'build' || (block.type === 'prep' && block.workstream === 'new_logo')) && (
                     <div className="mt-2 py-2 px-2.5 rounded-md bg-orange-500/5 border border-orange-500/20">
                       <div className="flex items-center gap-1.5 mb-2">
                         <Hammer className="h-3 w-3 text-orange-500" />

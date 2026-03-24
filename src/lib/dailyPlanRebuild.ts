@@ -148,11 +148,11 @@ export function buildLocalFallbackPlan(input: {
       if (gapRemaining >= 90) {
         // Canonical: 30-min prep + 60-min call block
         gapCursor = pushBlock(gapCursor, 30, {
-          label: prepPlaced ? 'Account Research & Contact Sourcing' : 'New Logo Prep (3 accounts)',
-          type: 'prep',
+          label: prepPlaced ? 'Account Research & Contact Sourcing' : 'New Logo Build',
+          type: 'build',
           workstream: 'new_logo',
-          goals: ['Research target accounts', 'Find contacts + source emails/phone numbers', 'Load contacts into cadence'],
-          reasoning: 'Prep is required before any outreach block.',
+          goals: ['Select 3 target accounts', 'Research companies', 'Identify contacts', 'Find emails/phone numbers', 'Add to cadence'],
+          reasoning: 'Canonical New Logo build block with full checklist.',
         });
         gapRemaining = gap.end - gapCursor;
         prepPlaced = true;
@@ -175,11 +175,11 @@ export function buildLocalFallbackPlan(input: {
       } else if (gapRemaining >= 60) {
         // 30 prep + 30 call
         gapCursor = pushBlock(gapCursor, 30, {
-          label: 'New Logo Prep',
-          type: 'prep',
+          label: 'New Logo Build',
+          type: 'build',
           workstream: 'new_logo',
-          goals: ['Research target accounts', 'Find contacts + source emails/phone numbers'],
-          reasoning: 'Prep block before outreach.',
+          goals: ['Select 3 target accounts', 'Research companies', 'Identify contacts', 'Find emails/phone numbers', 'Add to cadence'],
+          reasoning: 'Canonical New Logo build block with full checklist.',
         });
         prepPlaced = true;
         gapRemaining = gap.end - gapCursor;
@@ -198,13 +198,13 @@ export function buildLocalFallbackPlan(input: {
         }
       } else if (gapRemaining >= 30) {
         gapCursor = pushBlock(gapCursor, gapRemaining, {
-          label: prepPlaced ? 'Admin & CRM Updates' : 'New Logo Prep',
-          type: prepPlaced ? 'admin' : 'prep',
+          label: prepPlaced ? 'Admin & CRM Updates' : 'New Logo Build',
+          type: prepPlaced ? 'admin' : 'build',
           workstream: 'new_logo',
           goals: prepPlaced
             ? ['Log activity', 'Update CRM']
-            : ['Research target accounts', 'Find contacts + source emails/phone numbers'],
-          reasoning: 'Use available time productively.',
+            : ['Select 3 target accounts', 'Research companies', 'Identify contacts', 'Find emails/phone numbers', 'Add to cadence'],
+          reasoning: prepPlaced ? 'Use available time productively.' : 'Canonical New Logo build block.',
         });
         prepPlaced = true;
         gapRemaining = 0;
