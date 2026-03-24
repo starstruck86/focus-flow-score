@@ -1784,8 +1784,8 @@ export function DailyTimeBlocks() {
                   {queueDailyProgress >= 3 && ' ✓'}
                 </span>
               )}
-              {plan.key_metric_targets.accounts_researched != null && <span>{plan.key_metric_targets.accounts_researched} researched</span>}
-              {plan.key_metric_targets.contacts_prepped != null && <span>{plan.key_metric_targets.contacts_prepped} prepped</span>}
+              {plan.key_metric_targets.accounts_researched != null && <span>target {plan.key_metric_targets.accounts_researched} researched</span>}
+              {plan.key_metric_targets.contacts_prepped != null && <span>target {plan.key_metric_targets.contacts_prepped} prepped</span>}
             </div>
           </div>
         );
