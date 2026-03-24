@@ -842,7 +842,7 @@ export function ResourceManager() {
                             toast.error('Enrichment failed');
                           }
                         }}>
-                          <RefreshCw className="h-3.5 w-3.5 mr-2" /> {resAny.content_status === 'enriched' ? 'Re-enrich' : 'Enrich Content'}
+                          <RefreshCw className="h-3.5 w-3.5 mr-2" /> {resAny.content_status === 'enriched' ? 'Re-enrich' : 'Deep Enrich'}
                         </DropdownMenuItem>
                       )}
                       <DropdownMenuItem onClick={(e) => {
