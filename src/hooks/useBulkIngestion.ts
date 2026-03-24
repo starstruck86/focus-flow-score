@@ -59,28 +59,88 @@ export interface IngestionState {
 const INTER_ITEM_DELAY = 1200;
 const INTER_BATCH_DELAY = 2500;
 const MIN_CONTENT_LENGTH = 200;
+const EMPTY_TRANSCRIPT_THRESHOLD = 80;
 
-// ── Helpers ────────────────────────────────────────────────
+// ── Canonical identity ─────────────────────────────────────
+export type SourceType = 'youtube' | 'webpage' | 'file' | 'unknown';
+
+export interface CanonicalSource {
+  canonical_url: string;
+  source_type: SourceType;
+  source_id: string | null;
+}
+
 function extractYouTubeVideoId(url: string): string | null {
   try {
     const u = new URL(url);
-    if (u.hostname.includes('youtu.be')) return u.pathname.slice(1).split('/')[0];
+    if (u.hostname.includes('youtu.be')) return u.pathname.slice(1).split('/')[0] || null;
     if (u.searchParams.has('v')) return u.searchParams.get('v');
-    if (u.pathname.includes('/embed/')) return u.pathname.split('/embed/')[1]?.split(/[?/]/)[0];
+    if (u.pathname.includes('/embed/')) return u.pathname.split('/embed/')[1]?.split(/[?/]/)[0] || null;
+    if (u.pathname.includes('/shorts/')) return u.pathname.split('/shorts/')[1]?.split(/[?/]/)[0] || null;
   } catch {}
   return null;
 }
 
-function normalizeUrl(raw: string): string {
+function detectSourceType(url: string): SourceType {
   try {
-    const u = new URL(raw.trim());
-    u.hash = '';
-    // Remove tracking params
-    ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'si', 'feature'].forEach(p => u.searchParams.delete(p));
-    return u.toString();
+    const hostname = new URL(url).hostname;
+    if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) return 'youtube';
+    return 'webpage';
   } catch {
-    return raw.trim();
+    return 'unknown';
   }
+}
+
+/**
+ * Build a canonical source identity from a raw URL.
+ * YouTube: canonical URL is always https://www.youtube.com/watch?v=VIDEO_ID
+ * Other: strip tracking params, hash, trailing slashes.
+ */
+function canonicalize(rawUrl: string): CanonicalSource {
+  const sourceType = detectSourceType(rawUrl);
+  const videoId = extractYouTubeVideoId(rawUrl);
+
+  if (sourceType === 'youtube' && videoId) {
+    return {
+      canonical_url: `https://www.youtube.com/watch?v=${videoId}`,
+      source_type: 'youtube',
+      source_id: videoId,
+    };
+  }
+
+  // General URL normalization
+  try {
+    const u = new URL(rawUrl.trim());
+    u.hash = '';
+    // Strip tracking / noise params
+    ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
+     'si', 'feature', 'ref', 'fbclid', 'gclid', 'mc_cid', 'mc_eid',
+    ].forEach(p => u.searchParams.delete(p));
+    // Remove trailing slash
+    let canonical = u.toString();
+    if (canonical.endsWith('/') && u.pathname !== '/') canonical = canonical.slice(0, -1);
+    return { canonical_url: canonical, source_type: sourceType, source_id: null };
+  } catch {
+    return { canonical_url: rawUrl.trim(), source_type: 'unknown', source_id: null };
+  }
+}
+
+// ── Failure classification ─────────────────────────────────
+function classifyError(err: unknown, context: string): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  const lower = msg.toLowerCase();
+
+  if (lower.includes('429') || lower.includes('rate limit')) return 'Rate limited — wait and retry';
+  if (lower.includes('401') || lower.includes('403') || lower.includes('unauthorized')) return 'Authentication/access error';
+  if (lower.includes('private') || lower.includes('restricted')) return 'Private or restricted content';
+  if (lower.includes('unavailable') || lower.includes('not found') || lower.includes('404')) return 'Content not found or unavailable';
+  if (lower.includes('timeout') || lower.includes('timed out') || lower.includes('aborted')) return 'Request timed out';
+  if (lower.includes('parse') || lower.includes('json') || lower.includes('syntax')) return 'Parse/format error';
+  if (lower.includes('network') || lower.includes('fetch') || lower.includes('econnrefused')) return 'Network error';
+  if (lower.includes('transcript')) return 'Transcript unavailable';
+  if (lower.includes('embed')) return 'Embedding failed';
+
+  return `${context}: ${msg.slice(0, 120)}`;
 }
 
 // ── Hook ───────────────────────────────────────────────────
