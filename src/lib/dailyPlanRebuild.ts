@@ -1,4 +1,4 @@
-import { WORK_START_MINUTES, WORK_END_MINUTES, DIALS_PER_30_MIN, DAILY_DIALS_MIN, clampWorkBlocksToHours } from './mvpBlockModel';
+import { WORK_START_MINUTES, WORK_END_MINUTES, DIALS_PER_30_MIN, DAILY_DIALS_MIN, DAILY_DIALS_TARGET, clampWorkBlocksToHours } from './mvpBlockModel';
 import { ensureMinimumCallBlocks } from './planCallBlockGuarantee';
 
 export interface RebuildPlanBlock {
