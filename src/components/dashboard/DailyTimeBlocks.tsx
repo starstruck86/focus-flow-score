@@ -39,7 +39,8 @@ import type { Json } from '@/integrations/supabase/types';
 import { generateTraceId } from '@/lib/appError';
 import { buildLocalFallbackPlan, getVisiblePlanBlocks, summarizePlanDelta, type RebuildFallbackBlock, type RebuildPlanBlock } from '@/lib/dailyPlanRebuild';
 import { QUEUE_CHANGED_EVENT } from '@/hooks/useWeeklyResearchQueue';
-import { calculateDialCapacity, getActualDials, DAILY_DIALS_MIN, DAILY_DIALS_TARGET, BLOCK_MVPS } from '@/lib/mvpBlockModel';
+import { calculateDialCapacity, getActualDials, DAILY_DIALS_MIN, DAILY_DIALS_TARGET, BLOCK_MVPS, clampWorkBlocksToHours } from '@/lib/mvpBlockModel';
+import { ensureMinimumCallBlocks } from '@/lib/planCallBlockGuarantee';
 
 /** Inline contact count for linked account pills */
 const LinkedAccountContactCount = memo(function LinkedAccountContactCount({ accountId }: { accountId: string }) {
