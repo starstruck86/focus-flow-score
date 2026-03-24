@@ -148,11 +148,11 @@ export function buildLocalFallbackPlan(input: {
       if (gapRemaining >= 90) {
         // Canonical: 30-min prep + 60-min call block
         gapCursor = pushBlock(gapCursor, 30, {
-          label: prepPlaced ? 'Account Research & Contact Sourcing' : 'New Logo Prep (3 accounts)',
-          type: 'prep',
+          label: prepPlaced ? 'Account Research & Contact Sourcing' : 'New Logo Build',
+          type: 'build',
           workstream: 'new_logo',
-          goals: ['Research target accounts', 'Find contacts + source emails/phone numbers', 'Load contacts into cadence'],
-          reasoning: 'Prep is required before any outreach block.',
+          goals: ['Select 3 target accounts', 'Research companies', 'Identify contacts', 'Find emails/phone numbers', 'Add to cadence'],
+          reasoning: 'Canonical New Logo build block with full checklist.',
         });
         gapRemaining = gap.end - gapCursor;
         prepPlaced = true;
