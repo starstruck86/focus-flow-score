@@ -325,7 +325,7 @@ export function useBulkIngestion() {
 
     // Step 4: Quality check
     if (contentStatus === 'enriched' && contentToStore.length < MIN_CONTENT_LENGTH) {
-      updateItem(item.id, { stage: 'needs_review' });
+      updateItem(item.id, { stage: 'needs_review', error: `Content only ${contentToStore.length} chars — may be low quality` });
       return;
     }
 
@@ -338,8 +338,11 @@ export function useBulkIngestion() {
           componentName: 'BulkIngestion',
           timeoutMs: 60_000,
         });
-      } catch {
-        // Non-fatal — resource saved, enrichment can be retried later
+      } catch (enrichErr) {
+        // Non-fatal — resource saved, but flag the enrichment failure
+        const enrichMsg = classifyError(enrichErr, 'Enrichment');
+        updateItem(item.id, { stage: 'needs_review', error: `Saved but enrichment failed: ${enrichMsg}` });
+        return;
       }
     }
 
