@@ -237,6 +237,7 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
 
           {/* Retry */}
           {isDone && hasFailures && (
+            <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -246,6 +247,15 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
               <RotateCcw className="h-3 w-3" />
               Retry {failedItems.length} failed
             </Button>
+            </div>
+          )}
+
+          {/* Post-batch remaining count */}
+          {isDone && sourceItems.length > state.processedCount && (
+            <div className="text-[11px] text-muted-foreground pt-1">
+              {state.successCount > 0 && <span className="text-status-green font-medium">{state.successCount} completed</span>}
+              {' · '}{sourceItems.length - state.processedCount} {sourceLabel} remaining
+            </div>
           )}
         </div>
       )}
