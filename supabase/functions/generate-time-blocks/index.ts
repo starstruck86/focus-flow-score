@@ -699,19 +699,19 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
 
         while (gapRemaining > 15) {
           if (gapRemaining >= 60) {
-            filled.push(createAdminReadinessBlock(gapStart, 30));
+            filled.push(createPrepBlock(gapStart, 30));
             gapStart += 30;
             gapRemaining -= 30;
 
             const activityDuration = Math.min(60, gapRemaining);
             if (activityDuration >= 30) {
               outreachSequence += 1;
-              filled.push(createActivityBlock(gapStart, activityDuration, outreachSequence));
+              filled.push(createCallBlock(gapStart, activityDuration, outreachSequence));
               gapStart += activityDuration;
               gapRemaining -= activityDuration;
             }
           } else if (gapRemaining >= 30) {
-            filled.push(createAdminReadinessBlock(gapStart, gapRemaining));
+            filled.push(createPrepBlock(gapStart, gapRemaining));
             gapStart += gapRemaining;
             gapRemaining = 0;
           } else {
@@ -728,19 +728,19 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
       let tailRemaining = workEndMin - tailStart;
       while (tailRemaining > 15) {
         if (tailRemaining >= 60) {
-          filled.push(createAdminReadinessBlock(tailStart, 30));
+          filled.push(createPrepBlock(tailStart, 30));
           tailStart += 30;
           tailRemaining -= 30;
 
           const activityDuration = Math.min(60, tailRemaining);
           if (activityDuration >= 30) {
             outreachSequence += 1;
-            filled.push(createActivityBlock(tailStart, activityDuration, outreachSequence));
+            filled.push(createCallBlock(tailStart, activityDuration, outreachSequence));
             tailStart += activityDuration;
             tailRemaining -= activityDuration;
           }
         } else if (tailRemaining >= 30) {
-          filled.push(createAdminReadinessBlock(tailStart, tailRemaining));
+          filled.push(createPrepBlock(tailStart, tailRemaining));
           tailStart += tailRemaining;
           tailRemaining = 0;
         } else {
