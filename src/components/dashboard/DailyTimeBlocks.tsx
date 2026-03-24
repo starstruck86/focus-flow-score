@@ -1696,23 +1696,26 @@ export function DailyTimeBlocks() {
         return (
           <div className="px-4 py-2.5 bg-muted/20 border-t border-border/30 space-y-1.5">
             {/* Dial capacity status */}
-            <div className="flex items-center gap-2 text-[11px]">
+            <div className="flex items-center gap-2 text-[11px] flex-wrap">
               <Phone className="h-3 w-3 text-primary" />
-              <span className="font-medium text-foreground">Dial capacity:</span>
+              <span className="font-medium text-foreground">Dials:</span>
               <span className={cn(
                 "font-medium",
                  dialCapacity.status === 'above_target' && "text-emerald-500",
                  dialCapacity.status === 'on_track' && "text-foreground",
                  dialCapacity.status === 'below_minimum' && "text-amber-500",
                )}>
-                 {hasActuals ? `${actualDialsTotal}` : `${dialCapacity.plannedDials}–${dialCapacity.plannedDialsTarget} planned`}
-                 {' / '}
-                 {DAILY_DIALS_MIN}–{DAILY_DIALS_TARGET} target
+                 {hasActuals
+                   ? `${actualDialsTotal} completed`
+                   : `${dialCapacity.plannedDials}–${dialCapacity.plannedDialsTarget} planned`
+                 }
+                 {' · target '}
+                 {DAILY_DIALS_MIN}–{DAILY_DIALS_TARGET}
               </span>
               {dialCapacity.status === 'below_minimum' && (
                 <Badge variant="outline" className="h-4 px-1.5 text-[9px] border-amber-500/40 text-amber-600 gap-0.5">
                   <AlertTriangle className="h-2.5 w-2.5" />
-                  Need {dialCapacity.suggestedAdditionalBlocks} more call block{dialCapacity.suggestedAdditionalBlocks !== 1 ? 's' : ''}
+                  +{dialCapacity.suggestedAdditionalBlocks} call block{dialCapacity.suggestedAdditionalBlocks !== 1 ? 's' : ''} needed
                 </Badge>
               )}
               {dialCapacity.status === 'above_target' && (
