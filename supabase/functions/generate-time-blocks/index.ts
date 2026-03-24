@@ -354,7 +354,10 @@ serve(async (req) => {
 
     // Quota targets context
     const targets = quotaRes.data;
-    const weeklyDialTarget = (targets?.target_dials_per_day || 60) * 5; // e.g., 300/week
+    // MVP dial model: daily 20-40, weekly 100-200
+    const DAILY_DIALS_MIN = 20;
+    const DAILY_DIALS_TARGET = 40;
+    const weeklyDialTarget = (targets?.target_dials_per_day || DAILY_DIALS_TARGET) * 5;
     const weeklyConnectsTarget = (targets?.target_connects_per_day || 6) * 5;
 
     // Build weekly context: what's been done + what's left
@@ -410,15 +413,18 @@ WEEKLY CONTEXT (this day fits into a bigger picture):
 - Weekly targets: ${weeklyDialTarget} dials, ${weeklyConnectsTarget} connects, ${targets?.target_meetings_set_per_week || 3} meetings set
 - Progress so far this week (${daysLoggedThisWeek} days logged): ${weekDialsSoFar} dials, ${weekConvosSoFar} convos, ${weekMeetingsSetSoFar} meetings set
 - Remaining needed: ${remainingDialsNeeded} dials across ${remainingDaysCount} remaining days
-- TODAY'S ADJUSTED TARGETS (based on available focus time vs rest of week): ~${todayDialTarget} dials, ~${Math.max(1, todayConvoTarget)} convos
-- Today's meeting load: ${Math.round(todayMeetingMin / 60 * 10) / 10}h — ${todayMeetingMin > 180 ? 'HEAVY meeting day, lower activity targets are expected' : todayMeetingMin > 90 ? 'moderate meeting day' : 'light meeting day — push hard on dials'}
+- TODAY'S ADJUSTED TARGETS (based on available focus time vs rest of week): ~${Math.min(todayDialTarget, DAILY_DIALS_TARGET)} dials (min ${DAILY_DIALS_MIN}), ~${Math.max(1, todayConvoTarget)} convos
+- Today's meeting load: ${Math.round(todayMeetingMin / 60 * 10) / 10}h — ${todayFocusMin < 90 ? 'HEAVY meeting day — focus on minimum viable dials + 1 build block' : todayFocusMin < 240 ? 'moderate meeting day — balance calls and build' : 'OPEN day — maximize output: 3-4 call blocks + 2 build blocks, aim for ~40 dials'}
 ${remainingDays.map(d => `  ${dayNames[new Date(d + 'T12:00:00').getDay()]}: ${Math.round((weekDayMeetingMinutes[d] || 0) / 60 * 10) / 10}h meetings`).join('\n')}
 ${battlePlan?.strategy_summary ? `\nWEEKLY BATTLE PLAN STRATEGY:\n${battlePlan.strategy_summary}` : ''}
 ${battlePlan?.moves?.length ? `\nTOP WEEKLY MOVES:\n${(battlePlan.moves as any[]).slice(0, 5).map((m: any) => `- ${m.action || m.title || m.description}`).join('\n')}` : ''}`;
 
+    // Clamp daily dial target to MVP model range (20-40)
+    const clampedDialTarget = Math.max(DAILY_DIALS_MIN, Math.min(DAILY_DIALS_TARGET, todayDialTarget));
+
     const quotaContext = targets
-      ? `WEEKLY targets: ${weeklyDialTarget} dials, ${weeklyConnectsTarget} connects. TODAY'S adjusted targets: ${todayDialTarget} dials, ${Math.max(1, todayConvoTarget)} convos, ${targets.target_accounts_researched_per_day} accounts researched, ${targets.target_contacts_prepped_per_day} contacts prepped.`
-      : `Default weekly targets: 300 dials, 30 connects. Adjust daily based on meeting load.`;
+      ? `WEEKLY targets: ${weeklyDialTarget} dials, ${weeklyConnectsTarget} connects. TODAY'S adjusted targets: ${clampedDialTarget} dials (minimum ${DAILY_DIALS_MIN}, target ${DAILY_DIALS_TARGET}), ${Math.max(1, todayConvoTarget)} convos, ${targets.target_accounts_researched_per_day || 3} accounts researched, ${targets.target_contacts_prepped_per_day || 3} contacts prepped.`
+      : `Default targets: ${DAILY_DIALS_MIN}-${DAILY_DIALS_TARGET} dials/day (100-200/week). Adjust daily based on meeting load.`;
 
     // Build pipeline context
     const activeOpps = oppsRes.data || [];
@@ -502,12 +508,13 @@ CRITICAL RULES:
 4. NEW LOGO IS THE PRIORITY. Use TODAY'S ADJUSTED TARGETS (from weekly context above) — NOT the raw daily averages. Schedule a New Logo Build block + enough Prep→Call Blitz + Email Outreach cycles to hit TODAY'S target.
 5. FILL ALL AVAILABLE TIME: Every minute between ${workStart} and ${workEnd} must be accounted for. No idle gaps > 15 minutes. Stack meaningful blocks back-to-back. If a gap exists, fill it with the next appropriate workflow step.
 5. Use "workstream" field to tag each block as "new_logo" or "renewal" or "general"
-6. Goals must be REALISTIC and ACHIEVABLE. Use these realistic pacing rates:
-   - DIAL RATE: ~15 dials per 30 minutes (1 dial every 2 min including voicemail/notes). A 60-min Call Blitz = ~30 dials.
-   - BUILD RATE: 3 accounts per 60 min build block (selecting + researching + finding contacts + adding to cadence)
+6. Goals must be REALISTIC and ACHIEVABLE. Use these realistic pacing rates (MVP MODEL):
+   - DIAL RATE: ~10 dials per 30 minutes (MVP baseline). Target: 15 dials per 30 minutes. A 60-min Call Blitz = 20 dials (MVP) to 30 dials (target).
+   - DAILY DIAL TARGETS: Minimum 20 dials, Target 40 dials. NEVER plan more than 40 dials — that is already a strong day.
+   - BUILD RATE: 2-3 accounts per 60 min build block (selecting + researching + finding contacts + adding to cadence)
    - PREP RATE: 2-3 accounts per 30 min prep block
    - EMAIL RATE: ~8-10 personalized emails per 30 minutes
-   - Do the math: if today's target is ${todayDialTarget} dials, you need ~${Math.ceil(todayDialTarget / 30)} Call Blitz blocks of 60 min each
+   - Do the math: each 30-min call block = 10 dials minimum. To hit 20 dials minimum, you need at least 2 call blocks of 30 min each.
 7. ${preferNewLogoMorning ? 'Account for energy patterns: deep prospecting/new logo work in the morning, renewal tasks in the afternoon' : 'Distribute new logo and renewal work based on meeting gaps'}
 8. Include buffer time around meetings (5-10 min)
 9. If feedback says past suggestions were unrealistic, SIGNIFICANTLY dial back goals
@@ -524,7 +531,9 @@ CRITICAL RULES:
 20. Internal meetings like "Deal Desk" are OPTIONAL — do not treat them as locked anchors. Only external customer/prospect meetings are mandatory.
 21. MINIMUM Call Blitz block is 30 minutes. Prefer 60 minutes for momentum. NO 15-minute call blitzes to targeted/prepped accounts. Exception: a short 15-min "Rust Buster" dial block (type: "prospecting") is OK ONCE at the start of the day to warm up on LOW-PREP targets — NOT targeted prospecting accounts.
 22. EMAIL OUTREACH is part of prospecting, not just calling. Schedule dedicated "Email Blitz" blocks (type: "prospecting", 30 min) for personalized outbound emails to prospects. Alternate between Call Blitz and Email Blitz for variety and multi-channel coverage.
-23. On HEAVY MEETING DAYS (${todayMeetingMin > 180 ? 'TODAY IS ONE' : 'not today'}): SKIP the Renewal Review block entirely — those 30 minutes are better spent on prospecting. Catch up on renewals on lighter days.
+23. On HEAVY MEETING DAYS (${todayFocusMin < 90 ? 'TODAY IS ONE' : 'not today'}): SKIP the Renewal Review block entirely — those 30 minutes are better spent on prospecting. Catch up on renewals on lighter days.
+26. OPEN DAY OPTIMIZATION: When focus time is ${todayFocusMin >= 360 ? 'HIGH (today qualifies)' : 'limited'}, schedule 3-4 call blocks and 2+ build blocks to maximize output up to ${DAILY_DIALS_TARGET} dials. Do NOT just fill with admin.
+27. MINIMUM DIAL GUARANTEE: The plan MUST include enough call blocks to hit at least ${DAILY_DIALS_MIN} dials (2 x 30-min call blocks minimum). NEVER generate a plan with 0 dials planned.
 24. THINK LIKE A WORLD-CLASS SDR/AE: Cold calling works best with MOMENTUM. Schedule longer, uninterrupted Call Blitz blocks (60 min preferred) rather than scattered short ones. But a quick "Rust Buster" warm-up to shake off daily hesitation is a proven tactic.
 25. PRIORITIZE FLOW over filling every minute. If a gap between meetings is under 30 minutes, assign light admin or leave it as buffer — do NOT cram meaningful work into it.
 
@@ -904,9 +913,9 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
         blocks,
         day_strategy: `Fallback plan generated — ${reason}. Follows strict dependency order: Build → Prep → Outreach. All available time utilized.`,
         key_metric_targets: {
-          dials: todayDialTarget || 30,
-          conversations: Math.max(1, todayConvoTarget || 3),
-          accounts_sourced: 3,
+        dials: Math.max(DAILY_DIALS_MIN, Math.min(DAILY_DIALS_TARGET, todayDialTarget || DAILY_DIALS_MIN)),
+        conversations: Math.max(1, todayConvoTarget || 3),
+        accounts_sourced: 3,
           accounts_researched: 3,
           contacts_prepped: 3,
         },
@@ -948,6 +957,7 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
     function ensureCoreBlocks(blocks: any[]) {
       let next = [...blocks].sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
 
+      // Ensure at least 1 build block
       if (!next.some((block) => block.type === 'build')) {
         next = injectCoreBlock(next, {
           label: 'New Logo Build (2 accounts)',
@@ -958,14 +968,30 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
         });
       }
 
-      if (!next.some((block) => block.type === 'prospecting')) {
+      // Count planned dials using MVP rate (10 per 30 min)
+      const prospectingBlocks = next.filter((b: any) => b.type === 'prospecting');
+      let plannedDials = 0;
+      for (const b of prospectingBlocks) {
+        const dur = toMinutes(b.end_time) - toMinutes(b.start_time);
+        plannedDials += Math.round((dur / 30) * DIALS_PER_30_MIN);
+      }
+
+      // Ensure minimum 20 dials (2 call blocks of 30 min each)
+      let callsNeeded = Math.max(0, Math.ceil((DAILY_DIALS_MIN - plannedDials) / DIALS_PER_30_MIN));
+      while (callsNeeded > 0) {
+        const seq = prospectingBlocks.length + 1;
         next = injectCoreBlock(next, {
-          label: 'Call Blitz (~15 dials)',
+          label: `Call Block${seq > 1 ? ` #${seq}` : ''} (~${DIALS_PER_30_MIN} dials)`,
           type: 'prospecting',
           workstream: 'new_logo',
-          goals: ['Make ~15 dials', 'Log conversations'],
-          reasoning: 'Safety fallback — ensured at least one call block.',
+          goals: [`Make ~${DIALS_PER_30_MIN} dials to sourced contacts`, 'Log responses and next steps'],
+          reasoning: `Safety fallback — minimum ${DAILY_DIALS_MIN} dials required.`,
         });
+        plannedDials += DIALS_PER_30_MIN;
+        callsNeeded--;
+        // Re-count after injection
+        const updated = next.filter((b: any) => b.type === 'prospecting');
+        if (updated.length > prospectingBlocks.length) break; // injection succeeded
       }
 
       return next.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));

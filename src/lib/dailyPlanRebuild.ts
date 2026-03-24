@@ -1,4 +1,4 @@
-import { WORK_START_MINUTES, WORK_END_MINUTES, DIALS_PER_30_MIN, clampWorkBlocksToHours } from './mvpBlockModel';
+import { WORK_START_MINUTES, WORK_END_MINUTES, DIALS_PER_30_MIN, DAILY_DIALS_MIN, clampWorkBlocksToHours } from './mvpBlockModel';
 
 export interface RebuildPlanBlock {
   start_time: string;
@@ -223,22 +223,70 @@ export function buildLocalFallbackPlan(input: {
 
   // Clamp all work blocks to 9–5
   const clampedBlocks = clampWorkBlocksToHours(blocks) as RebuildFallbackBlock[];
-  const sortedBlocks = clampedBlocks.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
+  let sortedBlocks = clampedBlocks.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
+
+  // ── Fail-safe: ensure minimum dial capacity (20 dials = 2 call blocks) ──
+  const prospectingCount = sortedBlocks.filter(b => b.type === 'prospecting').length;
+  const plannedDials = sortedBlocks
+    .filter(b => b.type === 'prospecting')
+    .reduce((sum, b) => sum + Math.round((durationMinutes(b) / 30) * DIALS_PER_30_MIN), 0);
+
+  if (plannedDials < DAILY_DIALS_MIN) {
+    const blocksNeeded = Math.ceil((DAILY_DIALS_MIN - plannedDials) / DIALS_PER_30_MIN);
+    // Find gaps in existing schedule to inject call blocks
+    const lastBlock = sortedBlocks[sortedBlocks.length - 1];
+    let cursor = lastBlock ? toMinutes(lastBlock.end_time) : DEFAULT_WORK_START_MINUTES;
+    for (let i = 0; i < blocksNeeded && cursor + 30 <= DEFAULT_WORK_END_MINUTES; i++) {
+      const seq = prospectingCount + i + 1;
+      const estDials = DIALS_PER_30_MIN;
+      sortedBlocks.push({
+        start_time: toTime(cursor),
+        end_time: toTime(cursor + 30),
+        label: seq === 1 ? `Call Block (~${estDials} dials)` : `Call Block #${seq} (~${estDials} dials)`,
+        type: 'prospecting',
+        workstream: 'new_logo',
+        goals: [`Make ~${estDials} dials to sourced contacts`, 'Log responses and next steps'],
+        reasoning: `Minimum ${DAILY_DIALS_MIN} dials required — injected call block.`,
+      });
+      cursor += 30;
+    }
+    sortedBlocks = sortedBlocks.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
+  }
+
+  // ── Fail-safe: ensure at least 1 build block ──
+  if (!sortedBlocks.some(b => b.type === 'build')) {
+    const lastBlock = sortedBlocks[sortedBlocks.length - 1];
+    let cursor = lastBlock ? toMinutes(lastBlock.end_time) : DEFAULT_WORK_START_MINUTES;
+    if (cursor + 30 <= DEFAULT_WORK_END_MINUTES) {
+      sortedBlocks.push({
+        start_time: toTime(cursor),
+        end_time: toTime(Math.min(cursor + 60, DEFAULT_WORK_END_MINUTES)),
+        label: 'New Logo Build',
+        type: 'build',
+        workstream: 'new_logo',
+        goals: ['Select 3 target accounts', 'Research companies', 'Identify contacts', 'Find emails/phone numbers', 'Add to cadence'],
+        reasoning: 'Ensured at least one build block for pipeline sourcing.',
+      });
+      sortedBlocks = sortedBlocks.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
+    }
+  }
+
   const meetingMinutes = sortedBlocks
     .filter((block) => block.type === 'meeting')
     .reduce((sum, block) => sum + durationMinutes(block), 0);
   const focusMinutes = Math.max(0, (dayEnd - dayStart) - meetingMinutes);
 
   // Use MVP dial math: 10 dials per 30 min
-  const prospectingBlocks = sortedBlocks.filter((block) => block.type === 'prospecting');
-  const totalProspectingHalfHours = prospectingBlocks.reduce((sum, block) => sum + durationMinutes(block) / 30, 0);
+  const finalProspectingBlocks = sortedBlocks.filter((block) => block.type === 'prospecting');
+  const totalProspectingHalfHours = finalProspectingBlocks.reduce((sum, block) => sum + durationMinutes(block) / 30, 0);
+  const finalPlannedDials = Math.round(totalProspectingHalfHours * DIALS_PER_30_MIN);
 
   return {
     blocks: sortedBlocks,
     day_strategy: `Local fallback rebuild applied — ${input.reason}. Meetings were preserved, dismissed meetings stayed removed, and core prep/call blocks were reinserted.`,
     key_metric_targets: {
-      dials: Math.round(totalProspectingHalfHours * DIALS_PER_30_MIN),
-      conversations: Math.max(1, prospectingBlocks.length * 2),
+      dials: Math.max(DAILY_DIALS_MIN, finalPlannedDials),
+      conversations: Math.max(1, finalProspectingBlocks.length * 2),
       accounts_sourced: sortedBlocks.some((block) => block.type === 'build' || block.type === 'prep') ? 2 : 0,
       accounts_researched: sortedBlocks.some((block) => block.type === 'build' || block.type === 'prep') ? 2 : 0,
       contacts_prepped: sortedBlocks.some((block) => block.type === 'build' || block.type === 'prep') ? 2 : 0,

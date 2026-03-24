@@ -869,6 +869,8 @@ export function DailyTimeBlocks() {
                 <span>{plan.focus_hours_available}h focus</span>
                 {(() => {
                   const dc = calculateDialCapacity(blocks);
+                  const actualDials = getActualDials(blocks);
+                  const hasActuals = actualDials > 0;
                   return (
                     <>
                       <span>·</span>
@@ -878,8 +880,21 @@ export function DailyTimeBlocks() {
                         dc.status === 'on_track' && "text-foreground",
                         dc.status === 'below_minimum' && "text-amber-500",
                       )}>
-                        {dc.plannedDials}–{dc.plannedDialsTarget} dials planned
+                        <Phone className="h-3 w-3 inline mr-0.5" />
+                        {hasActuals
+                          ? `${actualDials}/${DAILY_DIALS_MIN}–${DAILY_DIALS_TARGET}`
+                          : `${dc.plannedDials}–${dc.plannedDialsTarget} / ${DAILY_DIALS_MIN}–${DAILY_DIALS_TARGET}`
+                        }
                       </span>
+                      {dc.status === 'below_minimum' && !hasActuals && (
+                        <>
+                          <span>·</span>
+                          <span className="text-amber-500 font-medium">
+                            <AlertTriangle className="h-3 w-3 inline mr-0.5" />
+                            +{dc.suggestedAdditionalBlocks} call block{dc.suggestedAdditionalBlocks !== 1 ? 's' : ''} needed
+                          </span>
+                        </>
+                      )}
                     </>
                   );
                 })()}
