@@ -1676,7 +1676,7 @@ export default function WeeklyOutreach() {
                   label: 'Enrich ICP',
                   onExecute: (ids) => {
                     const selected = accounts.filter(a => ids.includes(a.id));
-                    enrichMultiple(selected);
+                    bulkEnrich.start(selected);
                     bulkSelection.clear();
                   },
                 },
