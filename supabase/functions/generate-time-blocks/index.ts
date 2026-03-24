@@ -764,12 +764,13 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
           continue;
         }
 
+        // Standardize AI label variants to canonical names
         const normalizedLabel = String(block.label || '').toLowerCase();
-        if (normalizedLabel.includes('email blitz')) {
-          block.label = 'Work sourced contacts';
-        }
-        if (normalizedLabel === 'call block' || normalizedLabel.includes('call blitz')) {
-          block.label = 'Work sourced contacts';
+        if (normalizedLabel.includes('email blitz') || normalizedLabel.includes('call blitz') || normalizedLabel === 'call block') {
+          const dur = toMinutes(block.end_time) - toMinutes(block.start_time);
+          const halfHours = dur / 30;
+          const estDials = Math.round(halfHours * DIALS_PER_30_MIN);
+          block.label = `Call Block (~${estDials} dials)`;
         }
 
         if (READINESS_TYPES.has(block.type)) {
@@ -785,9 +786,9 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
           const prepDuration = totalDuration >= 60 ? 30 : Math.max(30, Math.floor(totalDuration / 2));
           const activityDuration = totalDuration - prepDuration;
 
-          validated.push(createAdminReadinessBlock(startMin, prepDuration));
+          validated.push(createPrepBlock(startMin, prepDuration));
           if (activityDuration >= 30) {
-            validated.push(createActivityBlock(startMin + prepDuration, activityDuration, 1));
+            validated.push(createCallBlock(startMin + prepDuration, activityDuration, 1));
           }
           segmentHasReadiness = true;
           continue;
