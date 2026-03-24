@@ -175,11 +175,11 @@ export function buildLocalFallbackPlan(input: {
       } else if (gapRemaining >= 60) {
         // 30 prep + 30 call
         gapCursor = pushBlock(gapCursor, 30, {
-          label: 'New Logo Prep',
-          type: 'prep',
+          label: 'New Logo Build',
+          type: 'build',
           workstream: 'new_logo',
-          goals: ['Research target accounts', 'Find contacts + source emails/phone numbers'],
-          reasoning: 'Prep block before outreach.',
+          goals: ['Select 3 target accounts', 'Research companies', 'Identify contacts', 'Find emails/phone numbers', 'Add to cadence'],
+          reasoning: 'Canonical New Logo build block with full checklist.',
         });
         prepPlaced = true;
         gapRemaining = gap.end - gapCursor;
