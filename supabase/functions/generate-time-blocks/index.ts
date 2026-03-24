@@ -531,7 +531,9 @@ CRITICAL RULES:
 20. Internal meetings like "Deal Desk" are OPTIONAL — do not treat them as locked anchors. Only external customer/prospect meetings are mandatory.
 21. MINIMUM Call Blitz block is 30 minutes. Prefer 60 minutes for momentum. NO 15-minute call blitzes to targeted/prepped accounts. Exception: a short 15-min "Rust Buster" dial block (type: "prospecting") is OK ONCE at the start of the day to warm up on LOW-PREP targets — NOT targeted prospecting accounts.
 22. EMAIL OUTREACH is part of prospecting, not just calling. Schedule dedicated "Email Blitz" blocks (type: "prospecting", 30 min) for personalized outbound emails to prospects. Alternate between Call Blitz and Email Blitz for variety and multi-channel coverage.
-23. On HEAVY MEETING DAYS (${todayMeetingMin > 180 ? 'TODAY IS ONE' : 'not today'}): SKIP the Renewal Review block entirely — those 30 minutes are better spent on prospecting. Catch up on renewals on lighter days.
+23. On HEAVY MEETING DAYS (${todayFocusMin < 90 ? 'TODAY IS ONE' : 'not today'}): SKIP the Renewal Review block entirely — those 30 minutes are better spent on prospecting. Catch up on renewals on lighter days.
+26. OPEN DAY OPTIMIZATION: When focus time is ${todayFocusMin >= 360 ? 'HIGH (today qualifies)' : 'limited'}, schedule 3-4 call blocks and 2+ build blocks to maximize output up to ${DAILY_DIALS_TARGET} dials. Do NOT just fill with admin.
+27. MINIMUM DIAL GUARANTEE: The plan MUST include enough call blocks to hit at least ${DAILY_DIALS_MIN} dials (2 x 30-min call blocks minimum). NEVER generate a plan with 0 dials planned.
 24. THINK LIKE A WORLD-CLASS SDR/AE: Cold calling works best with MOMENTUM. Schedule longer, uninterrupted Call Blitz blocks (60 min preferred) rather than scattered short ones. But a quick "Rust Buster" warm-up to shake off daily hesitation is a proven tactic.
 25. PRIORITIZE FLOW over filling every minute. If a gap between meetings is under 30 minutes, assign light admin or leave it as buffer — do NOT cram meaningful work into it.
 
