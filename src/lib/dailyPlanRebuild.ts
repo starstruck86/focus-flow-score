@@ -130,6 +130,22 @@ export function buildLocalFallbackPlan(input: {
   let prepPlaced = false;
   let activityIndex = 1;
 
+  /** Current planned dials from blocks array */
+  function currentPlannedDials() {
+    return blocks
+      .filter(b => b.type === 'prospecting')
+      .reduce((sum, b) => {
+        const dur = toMinutes(b.end_time) - toMinutes(b.start_time);
+        return sum + Math.round((dur / 30) * DIALS_PER_30_MIN);
+      }, 0);
+  }
+
+  /** Whether we can add more call blocks without exceeding daily target */
+  function canAddMoreDials(durationMin: number) {
+    const additionalDials = Math.round((durationMin / 30) * DIALS_PER_30_MIN);
+    return currentPlannedDials() + additionalDials <= DAILY_DIALS_TARGET;
+  }
+
   const pushBlock = (start: number, duration: number, block: Omit<RebuildFallbackBlock, 'start_time' | 'end_time'>) => {
     const end = Math.min(dayEnd, start + duration);
     blocks.push({
