@@ -613,12 +613,17 @@ export function useDataSync(onHydrated?: (v: boolean) => void) {
   useEffect(() => {
     if (!userId) return;
     const handler = () => {
-      hydrateJournalToday(userId);
-      // Invalidate React Query cache so useTodayJournalEntry() and journal UI refresh
-      const today = format(new Date(), 'yyyy-MM-dd');
-      queryClient.invalidateQueries({ queryKey: ['journal-entry', today] });
-      queryClient.invalidateQueries({ queryKey: ['journal-entry'] });
-      queryClient.invalidateQueries({ queryKey: ['journal-week'] });
+      // Small delay to let DB writes commit before re-fetching
+      setTimeout(() => {
+        hydrateJournalToday(userId);
+        // Invalidate React Query cache so useTodayJournalEntry() and journal UI refresh
+        const today = format(new Date(), 'yyyy-MM-dd');
+        queryClient.invalidateQueries({ queryKey: ['journal-entry', today] });
+        queryClient.invalidateQueries({ queryKey: ['journal-entry'] });
+        queryClient.invalidateQueries({ queryKey: ['journal-week'] });
+        queryClient.invalidateQueries({ queryKey: ['streak-events'] });
+        queryClient.invalidateQueries({ queryKey: ['streak-summary'] });
+      }, 300);
     };
     window.addEventListener('dave-metrics-updated', handler);
     return () => window.removeEventListener('dave-metrics-updated', handler);

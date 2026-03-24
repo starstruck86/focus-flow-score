@@ -628,11 +628,14 @@ const FunnelGroupSection = memo(function FunnelGroupSection({
                         <LifecycleTierBadge account={account} />
                       </TableCell>
                       <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
-                        <DisplaySelectCell
-                          value={account.contactStatus || 'not-started'}
-                          options={CONTACT_STATUS_OPTIONS}
-                          onChange={(v) => updateAccount(account.id, { contactStatus: v as any })}
-                        />
+                        <div className="flex items-center gap-1.5">
+                          <DisplaySelectCell
+                            value={account.contactStatus || 'not-started'}
+                            options={CONTACT_STATUS_OPTIONS}
+                            onChange={(v) => updateAccount(account.id, { contactStatus: v as any })}
+                          />
+                          <ContactCountBadge accountId={account.id} />
+                        </div>
                       </TableCell>
                       <TableCell className="align-top py-3" onClick={(e) => e.stopPropagation()}>
                         {(() => {

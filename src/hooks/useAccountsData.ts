@@ -252,8 +252,13 @@ export function useAddOpportunity() {
       if (!user?.id) throw new Error('Not authenticated');
       return insertOpportunity({ ...opp, user_id: user.id });
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['db-opportunities'] });
+      toast.success(`Opportunity "${data.name}" created`);
+    },
+    onError: (error) => {
+      console.error('Add opportunity error:', error);
+      toast.error('Failed to add opportunity: ' + (error as Error).message);
     },
   });
 }
