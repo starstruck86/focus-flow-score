@@ -91,6 +91,7 @@ export function createJournalTools(ctx: ToolContext): ToolMap {
       }
 
       toast.success('Reflection logged');
+      emitMetricsUpdated({ reflection: true });
       return 'Reflection captured for today.';
     },
 
