@@ -886,8 +886,28 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
           adminPlaced = true;
         }
 
-        // Phase 3: Call blocks (MVP dial math)
+        // Phase 3: Call blocks (MVP dial math, capped at daily target)
         while (gap.endMin - gapCursor >= 30 && (buildPlaced || adminPlaced)) {
+          // Check if adding another call block would exceed daily target
+          const currentDials = calculatePlannedDials(blocks);
+          if (currentDials >= DAILY_DIALS_TARGET) {
+            // Dial cap reached — fill remaining with admin/build
+            const remaining = gap.endMin - gapCursor;
+            if (remaining >= 30) {
+              blocks.push({
+                start_time: minToTime(gapCursor),
+                end_time: minToTime(gapCursor + remaining),
+                label: 'Account Research & Contact Sourcing',
+                type: 'build',
+                workstream: 'new_logo',
+                goals: ['Research additional accounts', 'Source contacts for tomorrow'],
+                reasoning: 'Dial target reached — investing time in pipeline build.',
+              });
+              gapCursor += remaining;
+            }
+            break;
+          }
+
           const remaining = gap.endMin - gapCursor;
           const callDur = Math.min(60, remaining);
           const halfHours = callDur / 30;
