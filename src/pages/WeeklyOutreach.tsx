@@ -99,6 +99,8 @@ import { emitSaveStatus } from '@/components/SaveIndicator';
 import { TouchLogButtons } from '@/components/TouchLogButtons';
 import { LifecycleTierBadge, IcpScorePill, TriggeredBadge, EnrichButton, SignalDetailPanel } from '@/components/LifecycleIntelligence';
 import { useAccountEnrichment } from '@/hooks/useAccountEnrichment';
+import { useBulkEnrichment } from '@/hooks/useBulkEnrichment';
+import { BulkEnrichmentPanel } from '@/components/BulkEnrichmentPanel';
 import { 
   sortAccountsDefault, 
   applySortWithFallback,
