@@ -214,9 +214,9 @@ export function useBulkIngestion() {
   async function processItem(item: IngestionItem, reprocessMode: ReprocessMode): Promise<void> {
     if (!user) throw new Error('Not authenticated');
 
-    // Step 1: Duplicate check
+    // Step 1: Duplicate check using canonical identity
     updateItem(item.id, { stage: 'checking_duplicate' });
-    const existingId = await checkDuplicate(item.url, item.videoId || null);
+    const existingId = await checkDuplicate(item.url);
 
     if (existingId) {
       if (reprocessMode === 'skip_processed') {
