@@ -221,21 +221,27 @@ export function buildLocalFallbackPlan(input: {
     }
   }
 
-  const sortedBlocks = blocks.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
+  // Clamp all work blocks to 9–5
+  const clampedBlocks = clampWorkBlocksToHours(blocks) as RebuildFallbackBlock[];
+  const sortedBlocks = clampedBlocks.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
   const meetingMinutes = sortedBlocks
     .filter((block) => block.type === 'meeting')
     .reduce((sum, block) => sum + durationMinutes(block), 0);
   const focusMinutes = Math.max(0, (dayEnd - dayStart) - meetingMinutes);
 
+  // Use MVP dial math: 10 dials per 30 min
+  const prospectingBlocks = sortedBlocks.filter((block) => block.type === 'prospecting');
+  const totalProspectingHalfHours = prospectingBlocks.reduce((sum, block) => sum + durationMinutes(block) / 30, 0);
+
   return {
     blocks: sortedBlocks,
-    day_strategy: `Local fallback rebuild applied — ${input.reason}. Meetings were preserved, dismissed meetings stayed removed, and core build/call blocks were reinserted.`,
+    day_strategy: `Local fallback rebuild applied — ${input.reason}. Meetings were preserved, dismissed meetings stayed removed, and core prep/call blocks were reinserted.`,
     key_metric_targets: {
-      dials: sortedBlocks.filter((block) => block.type === 'prospecting').reduce((sum, block) => sum + Math.round(durationMinutes(block) / 2), 0),
-      conversations: Math.max(1, sortedBlocks.filter((block) => block.type === 'prospecting').length * 2),
-      accounts_sourced: sortedBlocks.some((block) => block.type === 'build') ? 2 : 0,
-      accounts_researched: sortedBlocks.some((block) => block.type === 'build') ? 2 : 0,
-      contacts_prepped: sortedBlocks.some((block) => block.type === 'build') ? 2 : 0,
+      dials: Math.round(totalProspectingHalfHours * DIALS_PER_30_MIN),
+      conversations: Math.max(1, prospectingBlocks.length * 2),
+      accounts_sourced: sortedBlocks.some((block) => block.type === 'build' || block.type === 'prep') ? 2 : 0,
+      accounts_researched: sortedBlocks.some((block) => block.type === 'build' || block.type === 'prep') ? 2 : 0,
+      contacts_prepped: sortedBlocks.some((block) => block.type === 'build' || block.type === 'prep') ? 2 : 0,
     },
     meeting_load_hours: Math.round((meetingMinutes / 60) * 10) / 10,
     focus_hours_available: Math.round((focusMinutes / 60) * 10) / 10,
