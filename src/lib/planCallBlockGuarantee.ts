@@ -13,7 +13,6 @@ export interface GuaranteePlanBlock {
   workstream?: string;
   goals?: string[];
   reasoning?: string;
-  [key: string]: unknown;
 }
 
 export interface EnsureMinimumCallBlocksOptions<T extends GuaranteePlanBlock> {
