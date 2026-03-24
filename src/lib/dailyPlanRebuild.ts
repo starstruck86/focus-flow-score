@@ -1,4 +1,4 @@
-import { WORK_START_MINUTES, WORK_END_MINUTES, DIALS_PER_30_MIN, DAILY_DIALS_MIN, clampWorkBlocksToHours } from './mvpBlockModel';
+import { WORK_START_MINUTES, WORK_END_MINUTES, DIALS_PER_30_MIN, DAILY_DIALS_MIN, DAILY_DIALS_TARGET, clampWorkBlocksToHours } from './mvpBlockModel';
 import { ensureMinimumCallBlocks } from './planCallBlockGuarantee';
 
 export interface RebuildPlanBlock {
@@ -130,6 +130,22 @@ export function buildLocalFallbackPlan(input: {
   let prepPlaced = false;
   let activityIndex = 1;
 
+  /** Current planned dials from blocks array */
+  function currentPlannedDials() {
+    return blocks
+      .filter(b => b.type === 'prospecting')
+      .reduce((sum, b) => {
+        const dur = toMinutes(b.end_time) - toMinutes(b.start_time);
+        return sum + Math.round((dur / 30) * DIALS_PER_30_MIN);
+      }, 0);
+  }
+
+  /** Whether we can add more call blocks without exceeding daily target */
+  function canAddMoreDials(durationMin: number) {
+    const additionalDials = Math.round((durationMin / 30) * DIALS_PER_30_MIN);
+    return currentPlannedDials() + additionalDials <= DAILY_DIALS_TARGET;
+  }
+
   const pushBlock = (start: number, duration: number, block: Omit<RebuildFallbackBlock, 'start_time' | 'end_time'>) => {
     const end = Math.min(dayEnd, start + duration);
     blocks.push({
@@ -159,7 +175,7 @@ export function buildLocalFallbackPlan(input: {
         prepPlaced = true;
 
         const activityDuration = Math.min(60, gapRemaining);
-        if (activityDuration >= 30) {
+        if (activityDuration >= 30 && canAddMoreDials(activityDuration)) {
           const halfHours = activityDuration / 30;
           const estDials = Math.round(halfHours * DIALS_PER_30_MIN);
           const label = activityIndex === 1 ? `Call Block (~${estDials} dials)` : `Call Block #${activityIndex} (~${estDials} dials)`;
@@ -171,6 +187,16 @@ export function buildLocalFallbackPlan(input: {
             reasoning: 'Execution block paired with prep.',
           });
           activityIndex += 1;
+          gapRemaining = gap.end - gapCursor;
+        } else if (activityDuration >= 30) {
+          // Dial cap reached — fill with build/admin
+          gapCursor = pushBlock(gapCursor, activityDuration, {
+            label: 'Account Research & Contact Sourcing',
+            type: 'build',
+            workstream: 'new_logo',
+            goals: ['Research additional accounts', 'Source contacts for tomorrow'],
+            reasoning: 'Dial target reached — investing time in pipeline build.',
+          });
           gapRemaining = gap.end - gapCursor;
         }
       } else if (gapRemaining >= 60) {
@@ -185,7 +211,7 @@ export function buildLocalFallbackPlan(input: {
         prepPlaced = true;
         gapRemaining = gap.end - gapCursor;
 
-        if (gapRemaining >= 30) {
+        if (gapRemaining >= 30 && canAddMoreDials(gapRemaining)) {
           const estDials = Math.round((gapRemaining / 30) * DIALS_PER_30_MIN);
           gapCursor = pushBlock(gapCursor, gapRemaining, {
             label: `Call Block (~${estDials} dials)`,
@@ -195,6 +221,15 @@ export function buildLocalFallbackPlan(input: {
             reasoning: 'Execution block paired with prep.',
           });
           activityIndex += 1;
+          gapRemaining = 0;
+        } else if (gapRemaining >= 30) {
+          gapCursor = pushBlock(gapCursor, gapRemaining, {
+            label: 'Admin & CRM Updates',
+            type: 'admin',
+            workstream: 'general',
+            goals: ['Log activity', 'Update CRM', 'Pipeline tasks'],
+            reasoning: 'Dial target reached — use remaining time for admin.',
+          });
           gapRemaining = 0;
         }
       } else if (gapRemaining >= 30) {

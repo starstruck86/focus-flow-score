@@ -41,6 +41,7 @@ import { buildLocalFallbackPlan, getVisiblePlanBlocks, summarizePlanDelta, type 
 import { QUEUE_CHANGED_EVENT } from '@/hooks/useWeeklyResearchQueue';
 import { calculateDialCapacity, getActualDials, DAILY_DIALS_MIN, DAILY_DIALS_TARGET, BLOCK_MVPS, clampWorkBlocksToHours } from '@/lib/mvpBlockModel';
 import { ensureMinimumCallBlocks } from '@/lib/planCallBlockGuarantee';
+import { useCalendarFreshness } from '@/hooks/useCalendarFreshness';
 
 /** Inline contact count for linked account pills */
 const LinkedAccountContactCount = memo(function LinkedAccountContactCount({ accountId }: { accountId: string }) {
@@ -179,6 +180,7 @@ const WORKSTREAM_CONFIG: Record<string, { label: string; icon: typeof Rocket; co
 
 export function DailyTimeBlocks() {
   const { user } = useAuth();
+  const calendarFreshness = useCalendarFreshness();
   const { opportunities, accounts } = useStore();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -904,20 +906,20 @@ export function DailyTimeBlocks() {
                       <span>·</span>
                       <span className={cn(
                         "font-medium",
-                        dc.status === 'above_target' && "text-emerald-500",
+                        dc.status === 'above_target' && "text-status-green",
                         dc.status === 'on_track' && "text-foreground",
-                        dc.status === 'below_minimum' && "text-amber-500",
+                        dc.status === 'below_minimum' && "text-status-yellow",
                       )}>
                         <Phone className="h-3 w-3 inline mr-0.5" />
                         {hasActuals
-                          ? `${actualDials} dials (target ${DAILY_DIALS_MIN}–${DAILY_DIALS_TARGET})`
+                          ? `${actualDials} dials logged (target ${DAILY_DIALS_MIN}–${DAILY_DIALS_TARGET})`
                           : `${dc.plannedDials}–${dc.plannedDialsTarget} dials planned (target ${DAILY_DIALS_MIN}–${DAILY_DIALS_TARGET})`
                         }
                       </span>
                       {dc.status === 'below_minimum' && !hasActuals && (
                         <>
                           <span>·</span>
-                          <span className="text-amber-500 font-medium">
+                          <span className="text-status-yellow font-medium">
                             <AlertTriangle className="h-3 w-3 inline mr-0.5" />
                             +{dc.suggestedAdditionalBlocks} call block{dc.suggestedAdditionalBlocks !== 1 ? 's' : ''} needed
                           </span>
@@ -926,6 +928,20 @@ export function DailyTimeBlocks() {
                     </>
                   );
                 })()}
+                {/* Calendar freshness indicator */}
+                <span>·</span>
+                <button
+                  onClick={calendarFreshness.syncNow}
+                  disabled={calendarFreshness.isSyncing}
+                  className={cn(
+                    "inline-flex items-center gap-0.5 hover:underline cursor-pointer",
+                    calendarFreshness.isStale && "text-status-yellow font-medium",
+                  )}
+                  title={calendarFreshness.isStale ? 'Calendar data may be stale — click to sync' : `Last synced: ${calendarFreshness.lastSyncLabel}`}
+                >
+                  <RefreshCw className={cn("h-2.5 w-2.5", calendarFreshness.isSyncing && "animate-spin")} />
+                  {calendarFreshness.isStale ? 'Stale' : calendarFreshness.lastSyncLabel}
+                </button>
                 {completedGoals > 0 && (
                   <>
                     <span>·</span>
