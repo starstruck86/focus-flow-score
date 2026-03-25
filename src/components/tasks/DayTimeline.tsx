@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStore } from '@/store/useStore';
+import { useCalendarEvents } from '@/hooks/useCalendarEvents';
+import { enforceCalendarImmutability, type CalendarAnchor } from '@/lib/calendarTimeInvariants';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
