@@ -152,6 +152,12 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
             <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
               <span className="font-medium text-foreground">{sourceItems.length}</span>
               <span>eligible {sourceLabel}</span>
+              {totalEligible != null && totalEligible > sourceItems.length && (
+                <>
+                  <span>·</span>
+                  <span>{totalEligible} total eligible</span>
+                </>
+              )}
               <span>·</span>
               <span>will process <span className="font-medium text-foreground">{Math.min(state.batchSize, sourceItems.length)}</span> per batch</span>
             </div>
