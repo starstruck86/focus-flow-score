@@ -116,7 +116,7 @@ export async function recastToday(ctx: ToolContext): Promise<string> {
   const actionBlocks = result.remainingBlocks.filter(b => b.type !== 'meeting');
   const meetings = result.remainingBlocks.filter(b => b.type === 'meeting');
   if (actionBlocks.length > 0) {
-    const blockList = actionBlocks.map(b => `${b.label} at ${spokenTime(b.start_time)}`);
+    const blockList = actionBlocks.map(b => `${b.label} at ${spokenTimeET(b.start_time)}`);
     sentences.push(`Your remaining action blocks: ${blockList.join(', ')}.`);
   }
   if (meetings.length > 0) {
