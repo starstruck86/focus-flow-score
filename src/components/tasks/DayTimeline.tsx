@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useStore } from '@/store/useStore';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { enforceCalendarImmutability, type CalendarAnchor } from '@/lib/calendarTimeInvariants';
-import { format } from 'date-fns';
+import { getCurrentMinutesET, todayInAppTz } from '@/lib/timeFormat';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -75,7 +75,7 @@ export function DayTimeline() {
   const { user } = useAuth();
   const { accounts } = useStore();
   const queryClient = useQueryClient();
-  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const todayStr = todayInAppTz();
   const [selectedBlock, setSelectedBlock] = useState<number | null>(null);
   const [nowPct, setNowPct] = useState(0);
   const [accountSearchBlockIdx, setAccountSearchBlockIdx] = useState<number | null>(null);
@@ -139,8 +139,7 @@ export function DayTimeline() {
   useEffect(() => {
     if (blocks.length === 0) return;
     const update = () => {
-      const now = new Date();
-      const mins = now.getHours() * 60 + now.getMinutes();
+      const mins = getCurrentMinutesET();
       const pct = Math.max(0, Math.min(100, ((mins - dayStart) / totalMinutes) * 100));
       setNowPct(pct);
     };
@@ -219,19 +218,18 @@ export function DayTimeline() {
         </div>
 
         {/* The actual timeline bar */}
-        <div className="relative h-10 rounded-lg bg-muted/30 overflow-hidden flex">
+        <div className="relative h-10 rounded-lg bg-muted/30 overflow-hidden">
           {blocks.map((block, i) => {
+            const leftPct = ((toMinutes(block.start_time) - dayStart) / totalMinutes) * 100;
             const widthPct = ((toMinutes(block.end_time) - toMinutes(block.start_time)) / totalMinutes) * 100;
             const config = TYPE_CONFIG[block.type] || TYPE_CONFIG.admin;
             const Icon = config.icon;
             const isCurrent = (() => {
-              const now = new Date();
-              const mins = now.getHours() * 60 + now.getMinutes();
+              const mins = getCurrentMinutesET();
               return mins >= toMinutes(block.start_time) && mins < toMinutes(block.end_time);
             })();
             const isPast = (() => {
-              const now = new Date();
-              const mins = now.getHours() * 60 + now.getMinutes();
+              const mins = getCurrentMinutesET();
               return mins >= toMinutes(block.end_time);
             })();
             const isSelected = selectedBlock === i;
@@ -244,14 +242,14 @@ export function DayTimeline() {
                 key={i}
                 onClick={() => setSelectedBlock(isSelected ? null : i)}
                 className={cn(
-                  "relative h-full flex items-center justify-center gap-0.5 transition-all border-r border-background/40 last:border-r-0",
+                  "absolute top-0 bottom-0 flex items-center justify-center gap-0.5 transition-all border-r border-background/40 last:border-r-0",
                   config.barColor,
                   isPast && !isCurrent && "opacity-35",
                   isCurrent && "ring-2 ring-primary ring-inset shadow-lg z-10",
                   isSelected && "ring-2 ring-foreground/60 ring-inset z-20",
                   "hover:brightness-110 cursor-pointer"
                 )}
-                style={{ width: `${widthPct}%` }}
+                style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
                 title={`${block.label} (${formatTime(block.start_time)} – ${formatTime(block.end_time)})`}
               >
                 <Icon className="h-3 w-3 text-white/90 shrink-0" />

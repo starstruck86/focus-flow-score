@@ -42,6 +42,7 @@ import { QUEUE_CHANGED_EVENT } from '@/hooks/useWeeklyResearchQueue';
 import { calculateDialCapacity, getActualDials, DAILY_DIALS_MIN, DAILY_DIALS_TARGET, BLOCK_MVPS, clampWorkBlocksToHours } from '@/lib/mvpBlockModel';
 import { ensureMinimumCallBlocks } from '@/lib/planCallBlockGuarantee';
 import { useCalendarFreshness } from '@/hooks/useCalendarFreshness';
+import { getCurrentMinutesET, todayInAppTz } from '@/lib/timeFormat';
 
 /** Inline contact count for linked account pills */
 const LinkedAccountContactCount = memo(function LinkedAccountContactCount({ accountId }: { accountId: string }) {
@@ -202,7 +203,7 @@ export function DailyTimeBlocks() {
   } = useWeeklyResearchQueue();
   const [showQueueAdd, setShowQueueAdd] = useState(false);
   const [queueAddQuery, setQueueAddQuery] = useState('');
-  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const todayStr = todayInAppTz();
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState(0);
   const [feedbackText, setFeedbackText] = useState('');
@@ -499,8 +500,7 @@ export function DailyTimeBlocks() {
       type RBlock = import('@/data/recast-engine').RecastBlock;
       type RInput = import('@/data/recast-engine').RecastInput;
 
-      const now = new Date();
-      const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
+      const currentTimeMinutes = getCurrentMinutesET();
       const completedSet = new Set<string>((plan.completed_goals || []) as string[]);
       const planBlocks = (plan.blocks || []) as TimeBlock[];
       const tgts = (plan.key_metric_targets || {}) as Record<string, number>;
@@ -512,11 +512,52 @@ export function DailyTimeBlocks() {
       }
       act.completed_goals = completedSet.size;
 
+      const meetingSchedule = await (async () => {
+        const { data: events, error } = await supabase
+          .from('calendar_events')
+          .select('title, start_time, end_time, all_day')
+          .gte('start_time', `${todayStr}T00:00:00`)
+          .lt('start_time', `${todayStr}T23:59:59`)
+          .order('start_time', { ascending: true });
+
+        if (error) throw error;
+
+        return (events || [])
+          .filter((event) => !event.all_day && event.end_time)
+          .map((event) => {
+            const start = new Date(event.start_time);
+            const end = new Date(event.end_time!);
+            const startEt = new Intl.DateTimeFormat('en-US', {
+              timeZone: 'America/New_York',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            }).formatToParts(start);
+            const endEt = new Intl.DateTimeFormat('en-US', {
+              timeZone: 'America/New_York',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            }).formatToParts(end);
+
+            const startMinutes = Number(startEt.find((part) => part.type === 'hour')?.value ?? '0') * 60
+              + Number(startEt.find((part) => part.type === 'minute')?.value ?? '0');
+            const endMinutes = Number(endEt.find((part) => part.type === 'hour')?.value ?? '0') * 60
+              + Number(endEt.find((part) => part.type === 'minute')?.value ?? '0');
+
+            return {
+              start: startMinutes,
+              end: endMinutes,
+              label: event.title,
+            };
+          });
+      })();
+
       const input: RInput = {
         currentTimeMinutes,
         allBlocks: planBlocks as RBlock[],
         completedGoals: completedSet,
-        meetingSchedule: [],
+        meetingSchedule,
         targets: tgts,
         actuals: act,
         workEndMinutes: 17 * 60, // 5:00 PM hard boundary
