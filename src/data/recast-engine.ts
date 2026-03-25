@@ -97,6 +97,11 @@ function spokenTime(t: string): string {
  */
 export function recastDay(input: RecastInput): RecastResult {
   const { currentTimeMinutes, allBlocks, completedGoals, meetingSchedule, targets, actuals, workEndMinutes } = input;
+
+  // ── Snapshot calendar anchors BEFORE any mutation ──
+  const calendarAnchors: CalendarAnchor[] = allBlocks
+    .filter(b => b.type === 'meeting')
+    .map(b => ({ start_time: b.start_time, end_time: b.end_time, label: b.label }));
   const minutesRemaining = Math.max(0, workEndMinutes - currentTimeMinutes);
 
   // Separate past/current vs future blocks
