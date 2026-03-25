@@ -10,8 +10,8 @@ interface Props {
 }
 
 /**
- * Persistent floating mic button for instant Dave access.
- * Positioned above the bottom nav on the left side so it doesn't collide with the primary FAB.
+ * Primary floating mic button for instant Dave access.
+ * Positioned bottom-right as the most accessible action.
  */
 export function DaveMicFAB({ onTap, isLoading, isActive, isSpeaking }: Props) {
   // Hide when Dave conversation is already open
