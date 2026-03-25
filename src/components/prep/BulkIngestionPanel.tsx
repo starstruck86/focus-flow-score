@@ -38,6 +38,8 @@ interface BulkIngestionPanelProps {
   hasFailures: boolean;
   sourceItems: Array<{ url: string; title: string; videoId?: string; channel?: string; publishDate?: string; duration?: string }>;
   sourceLabel?: string;
+  /** Total eligible resources (pre-filtered). Used for remaining count after batch. */
+  totalEligible?: number;
 }
 
 const STATUS_LABELS: Record<IngestionJobStatus, string> = {
