@@ -614,14 +614,27 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
   return { sections, calendarCount, firstMeeting, overdueCount, pendingReminders, hasLastSession };
 }
 
-function buildFirstMessage(ctx: CrmContext, tzOffsetHours: number): string {
-  const localHour = (new Date().getUTCHours() + tzOffsetHours + 24) % 24;
+function buildFirstMessage(ctx: CrmContext, _tzOffsetHours: number): string {
+  // Always use Boston/Eastern Time — DST-aware
+  const bostonNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const dayOfWeek = bostonNow.toLocaleDateString("en-US", { weekday: "long", timeZone: "America/New_York" });
+  const monthDay = bostonNow.toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "America/New_York" });
+  const ordinal = (d: number) => {
+    if (d > 3 && d < 21) return d + "th";
+    switch (d % 10) { case 1: return d + "st"; case 2: return d + "nd"; case 3: return d + "rd"; default: return d + "th"; }
+  };
+  const dayNum = bostonNow.getDate();
+  const monthName = bostonNow.toLocaleDateString("en-US", { month: "long", timeZone: "America/New_York" });
+  const timeStr = bostonNow.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+  const localHour = bostonNow.getHours();
+
+  // Opening: always day, date, Boston time
+  let msg = `${dayOfWeek}, ${monthName} ${ordinal(dayNum)} — ${timeStr} Boston time. `;
 
   if (localHour < 10) {
-    let msg = "Good morning — it's Dave. ";
     if (ctx.calendarCount > 0 && ctx.firstMeeting) {
-      const time = new Date(ctx.firstMeeting.start_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-      msg += `You've got ${ctx.calendarCount} meeting${ctx.calendarCount > 1 ? "s" : ""} coming up, starting with "${ctx.firstMeeting.title}" at ${time}. `;
+      const meetTime = new Date(ctx.firstMeeting.start_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+      msg += `You've got ${ctx.calendarCount} meeting${ctx.calendarCount > 1 ? "s" : ""} coming up, starting with "${ctx.firstMeeting.title}" at ${meetTime}. `;
     }
     if (ctx.overdueCount > 0) {
       msg += `Heads up: ${ctx.overdueCount} overdue task${ctx.overdueCount > 1 ? "s" : ""} to knock out. `;
@@ -629,29 +642,20 @@ function buildFirstMessage(ctx: CrmContext, tzOffsetHours: number): string {
     if (ctx.pendingReminders.length > 0) {
       msg += `Quick reminder: ${ctx.pendingReminders[0]}. `;
     }
-    if (ctx.hasLastSession) {
-      msg += "I've got context from our last session too. ";
-    }
-    msg += "What do you want to tackle first?";
-    return msg;
+    msg += "How can I help?";
   } else if (localHour < 16) {
-    let msg = "Hey, it's Dave. ";
     if (ctx.calendarCount > 0 && ctx.firstMeeting) {
-      msg += `Next up: "${ctx.firstMeeting.title}" — want me to prep you? `;
-    }
-    if (ctx.pendingReminders.length > 0) {
-      msg += `Reminder: ${ctx.pendingReminders[0]}. `;
+      msg += `Next up: "${ctx.firstMeeting.title}" — want me to prep you? Otherwise, `;
     }
     msg += "How can I help?";
-    return msg;
   } else {
-    let msg = "Hey, Dave here for your day-wrap. ";
     if (ctx.overdueCount > 0) {
       msg += `${ctx.overdueCount} task${ctx.overdueCount > 1 ? "s" : ""} still pending. `;
     }
-    msg += "Want to debrief on today or plan for tomorrow?";
-    return msg;
+    msg += "How can I help?";
   }
+
+  return msg;
 }
 
 function trunc(s: string, max: number): string {
