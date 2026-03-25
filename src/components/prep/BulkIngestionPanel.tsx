@@ -260,10 +260,13 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
           )}
 
           {/* Post-batch remaining count */}
-          {isDone && sourceItems.length > state.processedCount && (
+          {isDone && (totalEligible != null ? totalEligible - state.successCount > 0 : sourceItems.length > state.processedCount) && (
             <div className="text-[11px] text-muted-foreground pt-1">
               {state.successCount > 0 && <span className="text-status-green font-medium">{state.successCount} completed</span>}
-              {' · '}{sourceItems.length - state.processedCount} {sourceLabel} remaining
+              {' · '}
+              {totalEligible != null
+                ? `${Math.max(0, totalEligible - state.successCount)} eligible ${sourceLabel} remaining`
+                : `${sourceItems.length - state.processedCount} ${sourceLabel} remaining`}
             </div>
           )}
         </div>
