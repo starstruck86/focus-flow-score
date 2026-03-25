@@ -34,6 +34,9 @@ export type Resource = {
   current_version: number | null;
   created_at: string;
   updated_at: string;
+  content_status?: string;
+  enriched_at?: string | null;
+  content_length?: number | null;
 };
 
 export type ResourceVersion = {

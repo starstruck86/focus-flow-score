@@ -38,6 +38,8 @@ interface BulkIngestionPanelProps {
   hasFailures: boolean;
   sourceItems: Array<{ url: string; title: string; videoId?: string; channel?: string; publishDate?: string; duration?: string }>;
   sourceLabel?: string;
+  /** Total eligible resources (pre-filtered). Used for remaining count after batch. */
+  totalEligible?: number;
 }
 
 const STATUS_LABELS: Record<IngestionJobStatus, string> = {
@@ -91,6 +93,7 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
   hasFailures,
   sourceItems,
   sourceLabel = 'items',
+  totalEligible,
 }: BulkIngestionPanelProps) {
   const isActive = state.status === 'running' || state.status === 'paused';
   const isDone = state.status === 'completed' || state.status === 'failed' || state.status === 'cancelled';
@@ -149,6 +152,12 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
             <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
               <span className="font-medium text-foreground">{sourceItems.length}</span>
               <span>eligible {sourceLabel}</span>
+              {totalEligible != null && totalEligible > sourceItems.length && (
+                <>
+                  <span>·</span>
+                  <span>{totalEligible} total eligible</span>
+                </>
+              )}
               <span>·</span>
               <span>will process <span className="font-medium text-foreground">{Math.min(state.batchSize, sourceItems.length)}</span> per batch</span>
             </div>
@@ -251,10 +260,13 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
           )}
 
           {/* Post-batch remaining count */}
-          {isDone && sourceItems.length > state.processedCount && (
+          {isDone && (totalEligible != null ? totalEligible - state.successCount > 0 : sourceItems.length > state.processedCount) && (
             <div className="text-[11px] text-muted-foreground pt-1">
               {state.successCount > 0 && <span className="text-status-green font-medium">{state.successCount} completed</span>}
-              {' · '}{sourceItems.length - state.processedCount} {sourceLabel} remaining
+              {' · '}
+              {totalEligible != null
+                ? `${Math.max(0, totalEligible - state.successCount)} eligible ${sourceLabel} remaining`
+                : `${sourceItems.length - state.processedCount} ${sourceLabel} remaining`}
             </div>
           )}
         </div>
