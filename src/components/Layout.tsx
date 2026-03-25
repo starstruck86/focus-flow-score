@@ -1,14 +1,14 @@
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { formatDistanceToNow } from 'date-fns';
-import { 
+import {
   Compass,
   LogOut,
   Mic,
 } from 'lucide-react';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { SaveIndicator } from '@/components/SaveIndicator';
+import { BostonClock } from '@/components/BostonClock';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useReviewMode } from '@/contexts/ReviewModeContext';
@@ -288,12 +288,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <Compass className="h-5 w-5" style={{ color: `hsl(${COLOR_VAR[activeColor]})` }} />
           <span className="font-display text-sm font-bold hidden sm:inline">Quota Compass</span>
           <SaveIndicator />
-          <span className="text-[10px] text-muted-foreground">
-            {formatDistanceToNow(new Date(), { addSuffix: false }).replace('less than a minute', 'just now')} ago
-          </span>
+        </div>
+        <div className="hidden sm:flex items-center">
+          <BostonClock />
         </div>
         <GlobalSearch className="flex-1 min-w-0" />
         <div className="flex items-center gap-1 shrink-0">
+          <div className="sm:hidden">
+            <BostonClock />
+          </div>
           <TerritoryCopilot />
           {!isReviewMode && (
             <Tooltip>
@@ -325,9 +328,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       <BottomNav />
       <BackToToday />
-      <GlobalFAB position="bottom-right" />
+      <GlobalFAB position="bottom-left" />
 
-      {/* Persistent Dave mic FAB — hidden when drift detected */}
+      {/* Dave is the PRIMARY floating action — bottom-right, thumb-accessible */}
       {!daveDrift && (
         <DaveMicFAB
           onTap={handleOpenDave}
@@ -336,7 +339,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         />
       )}
       {daveDrift && !daveOpen && (
-        <div className="fixed left-4 bottom-[calc(7.5rem+env(safe-area-inset-bottom))] z-50">
+        <div className="fixed right-4 bottom-[calc(7.5rem+env(safe-area-inset-bottom))] z-50">
           <button
             onClick={() => toast.error(
               `Dave is unavailable: deployment version mismatch (${daveDrift.expected} vs ${daveDrift.actual}). Redeploy dave functions to fix.`,
