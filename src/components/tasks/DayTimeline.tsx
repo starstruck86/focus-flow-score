@@ -218,8 +218,9 @@ export function DayTimeline() {
         </div>
 
         {/* The actual timeline bar */}
-        <div className="relative h-10 rounded-lg bg-muted/30 overflow-hidden flex">
+        <div className="relative h-10 rounded-lg bg-muted/30 overflow-hidden">
           {blocks.map((block, i) => {
+            const leftPct = ((toMinutes(block.start_time) - dayStart) / totalMinutes) * 100;
             const widthPct = ((toMinutes(block.end_time) - toMinutes(block.start_time)) / totalMinutes) * 100;
             const config = TYPE_CONFIG[block.type] || TYPE_CONFIG.admin;
             const Icon = config.icon;
@@ -241,14 +242,14 @@ export function DayTimeline() {
                 key={i}
                 onClick={() => setSelectedBlock(isSelected ? null : i)}
                 className={cn(
-                  "relative h-full flex items-center justify-center gap-0.5 transition-all border-r border-background/40 last:border-r-0",
+                  "absolute top-0 bottom-0 flex items-center justify-center gap-0.5 transition-all border-r border-background/40 last:border-r-0",
                   config.barColor,
                   isPast && !isCurrent && "opacity-35",
                   isCurrent && "ring-2 ring-primary ring-inset shadow-lg z-10",
                   isSelected && "ring-2 ring-foreground/60 ring-inset z-20",
                   "hover:brightness-110 cursor-pointer"
                 )}
-                style={{ width: `${widthPct}%` }}
+                style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
                 title={`${block.label} (${formatTime(block.start_time)} – ${formatTime(block.end_time)})`}
               >
                 <Icon className="h-3 w-3 text-white/90 shrink-0" />

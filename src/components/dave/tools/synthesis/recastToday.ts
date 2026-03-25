@@ -7,6 +7,19 @@ import { todayInAppTz, getCurrentMinutesET, spokenTimeET } from '@/lib/timeForma
 import { recastDay, type RecastBlock, type RecastInput } from '@/data/recast-engine';
 import type { ToolContext } from '../../toolTypes';
 
+function extractEasternMinutes(dateString: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(dateString));
+
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value ?? '0');
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value ?? '0');
+  return hour * 60 + minute;
+}
+
 export async function recastToday(ctx: ToolContext): Promise<string> {
   const userId = await ctx.getUserId();
   if (!userId) return 'Not authenticated.';
@@ -51,11 +64,11 @@ export async function recastToday(ctx: ToolContext): Promise<string> {
     .lte('start_time', `${today}T23:59:59`);
 
   const meetingSchedule = (calEvents || []).map(e => {
-    const s = new Date(e.start_time);
-    const end = e.end_time ? new Date(e.end_time) : new Date(s.getTime() + 30 * 60000);
+    const start = extractEasternMinutes(e.start_time);
+    const end = e.end_time ? extractEasternMinutes(e.end_time) : start + 30;
     return {
-      start: s.getHours() * 60 + s.getMinutes(),
-      end: end.getHours() * 60 + end.getMinutes(),
+      start,
+      end,
       label: e.title,
     };
   });
