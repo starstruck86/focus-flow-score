@@ -706,7 +706,7 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
         let gapStart = cursor;
         let gapRemaining = blockStart - gapStart;
 
-        while (gapRemaining > 15) {
+        while (gapRemaining > 0) {
           if (gapRemaining >= 60) {
             filled.push(createPrepBlock(gapStart, 30));
             gapStart += 30;
@@ -720,11 +720,17 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
               gapRemaining -= activityDuration;
             }
           } else if (gapRemaining >= 30) {
-            filled.push(createPrepBlock(gapStart, gapRemaining));
+            // 30-44 min: use the full window for a call block or prep
+            outreachSequence += 1;
+            filled.push(createCallBlock(gapStart, gapRemaining, outreachSequence));
             gapStart += gapRemaining;
             gapRemaining = 0;
+          } else if (gapRemaining >= 15) {
+            // 15-29 min: productive micro-block
+            filled.push(createShortAdminBlock(gapStart, gapStart + gapRemaining));
+            gapRemaining = 0;
           } else {
-            filled.push(createShortAdminBlock(gapStart, blockStart));
+            // < 15 min: buffer, skip
             gapRemaining = 0;
           }
         }
@@ -733,12 +739,12 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
         cursor = Math.max(cursor, toMinutes(block.end_time));
       }
 
-      // Fill tail ONLY if there's meaningful time (≥ 60 min) — don't stuff call blocks after back-to-back meetings
+      // Fill tail
       let tailStart = cursor;
       let tailRemaining = workEndMin - tailStart;
 
       if (tailRemaining >= 60) {
-        while (tailRemaining > 15) {
+        while (tailRemaining > 0) {
           if (tailRemaining >= 60) {
             filled.push(createPrepBlock(tailStart, 30));
             tailStart += 30;
@@ -752,16 +758,24 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
               tailRemaining -= activityDuration;
             }
           } else if (tailRemaining >= 30) {
-            filled.push(createPrepBlock(tailStart, tailRemaining));
+            // Use full remaining window for a call block
+            outreachSequence += 1;
+            filled.push(createCallBlock(tailStart, tailRemaining, outreachSequence));
             tailStart += tailRemaining;
             tailRemaining = 0;
-          } else {
+          } else if (tailRemaining >= 15) {
             filled.push(createShortAdminBlock(tailStart, workEndMin));
+            tailRemaining = 0;
+          } else {
             tailRemaining = 0;
           }
         }
+      } else if (tailRemaining >= 30) {
+        // 30-59 min tail: call block to fill
+        outreachSequence += 1;
+        filled.push(createCallBlock(tailStart, tailRemaining, outreachSequence));
       } else if (tailRemaining >= 15) {
-        // Short tail — just a wrap-up admin block, not a call block
+        // Short tail — wrap-up admin block
         filled.push(createShortAdminBlock(tailStart, workEndMin));
       }
 
