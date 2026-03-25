@@ -93,6 +93,7 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
   hasFailures,
   sourceItems,
   sourceLabel = 'items',
+  totalEligible,
 }: BulkIngestionPanelProps) {
   const isActive = state.status === 'running' || state.status === 'paused';
   const isDone = state.status === 'completed' || state.status === 'failed' || state.status === 'cancelled';
