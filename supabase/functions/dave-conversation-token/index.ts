@@ -655,25 +655,13 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
 }
 
 function buildFirstMessage(ctx: CrmContext, _tzOffsetHours: number): string {
-  // Always use Boston/Eastern Time — DST-aware
-  const bostonNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
-  const dayOfWeek = bostonNow.toLocaleDateString("en-US", { weekday: "long", timeZone: "America/New_York" });
-  const monthDay = bostonNow.toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "America/New_York" });
-  const ordinal = (d: number) => {
-    if (d > 3 && d < 21) return d + "th";
-    switch (d % 10) { case 1: return d + "st"; case 2: return d + "nd"; case 3: return d + "rd"; default: return d + "th"; }
-  };
-  const dayNum = bostonNow.getDate();
-  const monthName = bostonNow.toLocaleDateString("en-US", { month: "long", timeZone: "America/New_York" });
-  const timeStr = bostonNow.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
-  const localHour = bostonNow.getHours();
+  const bt = getBostonTime();
 
-  // Opening: always day, date, Boston time
-  let msg = `${dayOfWeek}, ${monthName} ${ordinal(dayNum)} — ${timeStr} Boston time. `;
+  let msg = `${bt.dayOfWeek}, ${bt.monthName} ${ordinal(bt.dayNum)} — ${bt.timeStr} Boston time. `;
 
-  if (localHour < 10) {
+  if (bt.hour < 10) {
     if (ctx.calendarCount > 0 && ctx.firstMeeting) {
-      const meetTime = new Date(ctx.firstMeeting.start_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+      const meetTime = formatMeetingTime(ctx.firstMeeting.start_time);
       msg += `You've got ${ctx.calendarCount} meeting${ctx.calendarCount > 1 ? "s" : ""} coming up, starting with "${ctx.firstMeeting.title}" at ${meetTime}. `;
     }
     if (ctx.overdueCount > 0) {
@@ -683,7 +671,7 @@ function buildFirstMessage(ctx: CrmContext, _tzOffsetHours: number): string {
       msg += `Quick reminder: ${ctx.pendingReminders[0]}. `;
     }
     msg += "How can I help?";
-  } else if (localHour < 16) {
+  } else if (bt.hour < 16) {
     if (ctx.calendarCount > 0 && ctx.firstMeeting) {
       msg += `Next up: "${ctx.firstMeeting.title}" — want me to prep you? Otherwise, `;
     }
