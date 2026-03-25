@@ -432,7 +432,7 @@ export function useBulkIngestion() {
 
   // ── Main start ─────────────────────────────────────────
   const start = useCallback(async (
-    items: Array<{ url: string; title: string; videoId?: string; channel?: string; publishDate?: string; duration?: string }>,
+    items: Array<{ resourceId?: string; url: string; title: string; enrichMode?: 'deep_enrich' | 're_enrich'; videoId?: string; channel?: string; publishDate?: string; duration?: string }>,
     options?: { retryFailedOnly?: boolean }
   ) => {
     if (runningRef.current || !user) return;
