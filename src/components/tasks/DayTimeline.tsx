@@ -59,6 +59,18 @@ function toMinutes(t: string): number {
   return h * 60 + m;
 }
 
+function extractEasternTime(dateString: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(dateString));
+  const hour = parts.find(p => p.type === 'hour')?.value ?? '00';
+  const minute = parts.find(p => p.type === 'minute')?.value ?? '00';
+  return `${hour}:${minute}`;
+}
+
 export function DayTimeline() {
   const { user } = useAuth();
   const { accounts } = useStore();
