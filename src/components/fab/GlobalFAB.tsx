@@ -364,7 +364,7 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
                   exit={{ rotate: -90, opacity: 0 }}
                   transition={{ duration: 0.15 }}
                 >
-                  <Plus className="h-6 w-6" />
+                  <Plus className="h-5 w-5" />
                 </motion.div>
               )}
             </AnimatePresence>
