@@ -289,14 +289,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <span className="font-display text-sm font-bold hidden sm:inline">Quota Compass</span>
           <SaveIndicator />
         </div>
-        <div className="hidden sm:flex items-center">
-          <BostonClock />
-        </div>
         <GlobalSearch className="flex-1 min-w-0" />
-        <div className="flex items-center gap-1 shrink-0">
-          <div className="sm:hidden">
-            <BostonClock />
-          </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <BostonClock />
           <TerritoryCopilot />
           {!isReviewMode && (
             <Tooltip>
