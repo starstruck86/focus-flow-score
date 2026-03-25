@@ -51,7 +51,7 @@ function blockDurationMin(block: TimeBlock): number {
   return (eh * 60 + em) - (sh * 60 + sm);
 }
 
-// getCurrentMinutesET imported from canonical timeFormat
+
 
 function findCurrentAndNext(blocks: TimeBlock[]): { current: TimeBlock | null; next: TimeBlock | null } {
   const now = getCurrentMinutesET();
