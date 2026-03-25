@@ -9,83 +9,48 @@ export async function momentumCheck(ctx: ToolContext): Promise<string> {
   const sevenDaysAgo = new Date(now.getTime() - 7 * 86400000).toISOString().split('T')[0];
 
   const [oppsRes, tasksRes, journalRes] = await Promise.all([
-    supabase.from('opportunities').select('id, name, arr, stage, status, last_touch_date, created_at').eq('user_id', userId).not('status', 'in', '("closed-lost")'),
+    // HARD FILTER: only active opps
+    supabase.from('opportunities').select('id, name, arr, stage, status, last_touch_date, created_at')
+      .eq('user_id', userId).eq('status', 'active'),
     supabase.from('tasks').select('id, status, completed_at').eq('user_id', userId).gte('completed_at', sevenDaysAgo),
-    supabase.from('daily_journal_entries').select('date, dials, conversations, meetings_set, daily_score').eq('user_id', userId).gte('date', sevenDaysAgo).order('date'),
+    supabase.from('daily_journal_entries').select('date, dials, conversations, meetings_set, daily_score')
+      .eq('user_id', userId).gte('date', sevenDaysAgo).order('date'),
   ]);
 
   const opps = (oppsRes.data || []) as Array<{ arr: number | null; status: string | null; last_touch_date: string | null; created_at: string }>;
   const completedTasks = (tasksRes.data || []).filter((t: { status: string }) => t.status === 'done').length;
   const journal = (journalRes.data || []) as Array<{ dials: number; meetings_set: number }>;
 
-  const activeOpps = opps.filter(o => o.status === 'active');
-  const totalPipeline = activeOpps.reduce((s, o) => s + (o.arr || 0), 0);
+  const totalPipeline = opps.reduce((s, o) => s + (o.arr || 0), 0);
   const newDeals = opps.filter(o => o.created_at >= sevenDaysAgo).length;
-  const staleDeals = activeOpps.filter(o => o.last_touch_date && o.last_touch_date < sevenDaysAgo).length;
+  const staleDeals = opps.filter(o => o.last_touch_date && o.last_touch_date < sevenDaysAgo).length;
 
   const avgDials = journal.length ? Math.round(journal.reduce((s, j) => s + (j.dials || 0), 0) / journal.length) : 0;
   const avgMeetings = journal.length ? Math.round(journal.reduce((s, j) => s + (j.meetings_set || 0), 0) / journal.length * 10) / 10 : 0;
 
   let summary = `📊 7-Day Momentum:\n`;
-  summary += `Pipeline: $${Math.round(totalPipeline / 1000)}k across ${activeOpps.length} deals\n`;
+  summary += `Pipeline: $${Math.round(totalPipeline / 1000)}k across ${opps.length} active deals\n`;
   summary += `New deals: ${newDeals} | Stale deals: ${staleDeals}\n`;
   summary += `Tasks completed: ${completedTasks}\n`;
   summary += `Avg daily: ${avgDials} dials, ${avgMeetings} meetings set\n`;
 
-  if (staleDeals > 2) summary += '\n⚠️ Multiple stale deals — re-engage or qualify out.';
+  // DUAL-MOTION ASSESSMENT
+  if (staleDeals > 2 && newDeals === 0) {
+    summary += '\n🔴 Pipeline at risk — stale deals AND no new creation. Prioritize closing actions first, then create pipeline.';
+  } else if (staleDeals > 2) {
+    summary += '\n⚠️ Multiple stale deals — re-engage or qualify out.';
+  } else if (newDeals === 0) {
+    summary += '\n⚠️ No new pipeline created this week — increase prospecting.';
+  }
   if (avgDials < 10) summary += '\n⚠️ Low dial volume — consider a power hour.';
-  if (newDeals === 0) summary += '\n⚠️ No new pipeline created this week.';
 
   return summary;
 }
 
 export async function nextAction(ctx: ToolContext): Promise<string> {
-  const userId = await ctx.getUserId();
-  if (!userId) return 'Not authenticated';
-
-  const today = new Date().toISOString().split('T')[0];
-  const now = new Date();
-
-  const [tasksRes, calendarRes, oppsRes, journalRes] = await Promise.all([
-    supabase.from('tasks').select('id, title, due_date, priority, linked_account_id, linked_opportunity_id').eq('user_id', userId).not('status', 'in', '("done","dropped")').lte('due_date', today).order('priority', { ascending: true }).limit(10),
-    supabase.from('calendar_events').select('id, title, start_time, description').eq('user_id', userId).gte('start_time', now.toISOString()).lte('start_time', new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString()).order('start_time', { ascending: true }).limit(3),
-    supabase.from('opportunities').select('id, name, arr, close_date, last_touch_date, status').eq('user_id', userId).eq('status', 'active').order('arr', { ascending: false }).limit(20),
-    supabase.from('daily_journal_entries').select('checked_in, dials, conversations').eq('user_id', userId).eq('date', today).maybeSingle(),
-  ]);
-
-  const candidates: { action: string; score: number; reason: string }[] = [];
-
-  for (const task of (tasksRes.data || []) as Array<{ title: string; priority: string | null }>) {
-    const priorityWeight = task.priority === 'P1' ? 3 : task.priority === 'P2' ? 2 : 1;
-    candidates.push({ action: `Complete overdue task: "${task.title}"`, score: 60 * priorityWeight, reason: `Overdue ${task.priority || 'P3'} task` });
-  }
-
-  for (const event of (calendarRes.data || []) as Array<{ title: string; start_time: string }>) {
-    const minsAway = Math.max(0, (new Date(event.start_time).getTime() - now.getTime()) / 60000);
-    candidates.push({ action: `Prep for meeting: "${event.title}" (in ${Math.round(minsAway)} min)`, score: minsAway < 30 ? 200 : 120, reason: `Meeting in ${Math.round(minsAway)} minutes` });
-  }
-
-  for (const opp of (oppsRes.data || []) as Array<{ name: string; arr: number | null; last_touch_date: string | null }>) {
-    if (!opp.last_touch_date) continue;
-    const daysSinceTouch = Math.ceil((now.getTime() - new Date(opp.last_touch_date).getTime()) / 86400000);
-    if (daysSinceTouch >= 7) {
-      candidates.push({ action: `Re-engage stale deal: "${opp.name}" ($${((opp.arr || 0) / 1000).toFixed(0)}k)`, score: (opp.arr || 0) / 1000 * (daysSinceTouch / 7), reason: `${daysSinceTouch} days since last touch, $${((opp.arr || 0) / 1000).toFixed(0)}k ARR` });
-    }
-  }
-
-  const journal = journalRes.data as { checked_in: boolean } | null;
-  if (!journal?.checked_in && now.getHours() >= 16) {
-    candidates.push({ action: 'Complete your daily journal check-in', score: 40, reason: 'After 4pm and not checked in yet' });
-  }
-
-  candidates.sort((a, b) => b.score - a.score);
-
-  if (candidates.length === 0) return '✅ Nothing urgent — you\'re caught up! Consider prospecting or prepping for tomorrow.';
-
-  const top = candidates[0];
-  const runners = candidates.slice(1, 3);
-
-  return `🎯 #1 Priority Right Now:\n${top.action}\nWhy: ${top.reason}${runners.length ? `\n\nAlso consider:\n${runners.map((r, i) => `${i + 2}. ${r.action} (${r.reason})`).join('\n')}` : ''}`;
+  // Delegate to primaryAction — single action, no competing list
+  const { primaryAction } = await import('./primaryAction');
+  return primaryAction(ctx);
 }
 
 export async function killSwitch(ctx: ToolContext): Promise<string> {
@@ -97,7 +62,7 @@ export async function killSwitch(ctx: ToolContext): Promise<string> {
     .from('opportunities')
     .select('id, name, arr, stage, last_touch_date, created_at, status')
     .eq('user_id', userId)
-    .eq('status', 'active')
+    .eq('status', 'active') // HARD FILTER: only active
     .order('arr', { ascending: true })
     .limit(50);
 
