@@ -1,11 +1,17 @@
 // Primary Action Engine — selects the SINGLE highest-ROI action
-// Uses existing store data. ONE action only. No lists.
-// Extended with: cost-of-delay, momentum awareness, pipeline creation, kill switch.
-// Updated: reflects Target Account → Contact → Outreach → Meeting → Opportunity flow.
+// Uses deterministic scoring engine. ONE action only. No lists.
+// Scoring: Revenue Impact (3-tier) + Time Sensitivity (3-tier) + Actionability (3-tier)
 
 import { useMemo } from 'react';
 import { useStore } from '@/store/useStore';
 import { useMomentumEngine } from '@/hooks/useMomentumEngine';
+import {
+  classifyRevenueImpact,
+  classifyTimeSensitivity,
+  classifyActionability,
+  calculateScore,
+  applyMemoryPenalty,
+} from '@/lib/scoringEngine';
 import {
   oppNoNextStepDelay,
   staleDealDelay,
@@ -47,7 +53,7 @@ export function usePrimaryAction(): PrimaryAction | null {
     const todayStr = now.toISOString().split('T')[0];
     const candidates: PrimaryAction[] = [];
 
-    // ── Action Memory: load ignore counts for score adjustment ──
+    // ── Action Memory: load ignore counts ──
     let ignoreMap: Record<string, number> = {};
     try {
       const raw = localStorage.getItem('jarvis-action-memory');
@@ -62,16 +68,7 @@ export function usePrimaryAction(): PrimaryAction | null {
       }
     } catch {}
 
-    function applyMemoryAdjustment(score: number, actionId: string): number {
-      const ignores = ignoreMap[actionId] || 0;
-      if (ignores >= 4) return score * 0.3;
-      if (ignores >= 3) return score * 0.5;
-      if (ignores >= 2) return score * 0.7;
-      if (ignores >= 1) return score * 0.9;
-      return score;
-    }
-
-    // ═══ 1. Overdue tasks (highest urgency) ═══
+    // ═══ 1. Overdue tasks ═══
     const overdueTasks = tasks.filter(t =>
       (t.status === 'next' || t.status === 'in-progress') &&
       t.dueDate && t.dueDate < todayStr
@@ -79,8 +76,13 @@ export function usePrimaryAction(): PrimaryAction | null {
     for (const task of overdueTasks) {
       const daysOverdue = Math.ceil((now.getTime() - new Date(task.dueDate!).getTime()) / 86400000);
       const delay = taskOverdueDelay(task.priority || 'P2', daysOverdue);
-      const baseScore = 50 * delay.decayMultiplier;
+      const scored = calculateScore({
+        revenueImpact: classifyRevenueImpact({ isClosingAction: false, arrK: 0, isPipelineCreation: false }),
+        timeSensitivity: classifyTimeSensitivity({ dueToday: false, overdueDays: daysOverdue }),
+        actionability: classifyActionability({ hasNextStep: true, hasContacts: false, needsClarification: false }),
+      });
       const actionId = `task-${task.id}`;
+      const adjustedScore = applyMemoryPenalty(scored.score * delay.decayMultiplier, ignoreMap[actionId] || 0);
       candidates.push({
         id: actionId,
         action: task.title,
@@ -89,7 +91,7 @@ export function usePrimaryAction(): PrimaryAction | null {
         entityType: 'task',
         entityId: task.id,
         entityName: task.title,
-        score: applyMemoryAdjustment(baseScore, actionId),
+        score: adjustedScore,
         delayConsequence: delay.delayConsequence,
         escalation: delay.escalationLevel,
       });
@@ -106,7 +108,11 @@ export function usePrimaryAction(): PrimaryAction | null {
           ? Math.ceil((now.getTime() - new Date(opp.lastTouchDate).getTime()) / 86400000)
           : 14;
         const delay = oppNoNextStepDelay(arrK, daysSince);
-        const baseScore = (100 + arrK * 0.5) * delay.decayMultiplier;
+        const scored = calculateScore({
+          revenueImpact: classifyRevenueImpact({ isClosingAction: true, arrK, isPipelineCreation: false }),
+          timeSensitivity: classifyTimeSensitivity({ dueToday: true }),
+          actionability: classifyActionability({ hasNextStep: false, hasContacts: true, needsClarification: true }),
+        });
         const actionId = `opp-nextstep-${opp.id}`;
         candidates.push({
           id: actionId,
@@ -116,7 +122,7 @@ export function usePrimaryAction(): PrimaryAction | null {
           entityType: 'opportunity',
           entityId: opp.id,
           entityName: opp.name,
-          score: applyMemoryAdjustment(baseScore, actionId),
+          score: applyMemoryPenalty(scored.score * delay.decayMultiplier, ignoreMap[actionId] || 0),
           delayConsequence: delay.delayConsequence,
           escalation: delay.escalationLevel,
         });
@@ -128,7 +134,11 @@ export function usePrimaryAction(): PrimaryAction | null {
         if (daysSince >= 7 && !isLowValueTarget(opp)) {
           const arrK = (opp.arr || 0) / 1000;
           const delay = staleDealDelay(arrK, daysSince, opp.closeDate);
-          const baseScore = arrK * (daysSince / 7) * 0.8 * delay.decayMultiplier;
+          const scored = calculateScore({
+            revenueImpact: classifyRevenueImpact({ isClosingAction: true, arrK, isPipelineCreation: false }),
+            timeSensitivity: classifyTimeSensitivity({ dueToday: false, daysUntilDeadline: daysSince > 14 ? 0 : 2 }),
+            actionability: classifyActionability({ hasNextStep: !!opp.nextStep, hasContacts: true, needsClarification: false }),
+          });
           const actionId = `opp-stale-${opp.id}`;
           candidates.push({
             id: actionId,
@@ -138,7 +148,7 @@ export function usePrimaryAction(): PrimaryAction | null {
             entityType: 'opportunity',
             entityId: opp.id,
             entityName: opp.name,
-            score: applyMemoryAdjustment(baseScore, actionId),
+            score: applyMemoryPenalty(scored.score * delay.decayMultiplier, ignoreMap[actionId] || 0),
             delayConsequence: delay.delayConsequence,
             escalation: delay.escalationLevel,
           });
@@ -151,7 +161,11 @@ export function usePrimaryAction(): PrimaryAction | null {
       if (r.daysToRenewal <= 30 && (r.churnRisk === 'high' || r.churnRisk === 'certain')) {
         const arrK = (r.arr || 0) / 1000;
         const delay = renewalRiskDelay(arrK, r.daysToRenewal, r.churnRisk || 'low');
-        const baseScore = (180 + arrK) * delay.decayMultiplier;
+        const scored = calculateScore({
+          revenueImpact: classifyRevenueImpact({ isClosingAction: true, arrK, isPipelineCreation: false }),
+          timeSensitivity: classifyTimeSensitivity({ dueToday: r.daysToRenewal <= 1, daysUntilDeadline: r.daysToRenewal }),
+          actionability: classifyActionability({ hasNextStep: !!r.nextStep, hasContacts: true, needsClarification: !r.nextStep }),
+        });
         const actionId = `renewal-risk-${r.id}`;
         candidates.push({
           id: actionId,
@@ -161,7 +175,7 @@ export function usePrimaryAction(): PrimaryAction | null {
           entityType: 'renewal',
           entityId: r.id,
           entityName: r.accountName,
-          score: applyMemoryAdjustment(baseScore, actionId),
+          score: applyMemoryPenalty(scored.score * delay.decayMultiplier, ignoreMap[actionId] || 0),
           delayConsequence: delay.delayConsequence,
           escalation: delay.escalationLevel,
         });
@@ -175,6 +189,12 @@ export function usePrimaryAction(): PrimaryAction | null {
     );
     for (const task of todayP1) {
       const actionId = `task-today-${task.id}`;
+      const scored = calculateScore({
+        revenueImpact: classifyRevenueImpact({ isClosingAction: false, arrK: 0, isPipelineCreation: false }),
+        timeSensitivity: classifyTimeSensitivity({ dueToday: true }),
+        actionability: classifyActionability({ hasNextStep: true, hasContacts: false, needsClarification: false }),
+      });
+      const priorityBoost = task.priority === 'P0' ? 50 : 25;
       candidates.push({
         id: actionId,
         action: task.title,
@@ -183,14 +203,12 @@ export function usePrimaryAction(): PrimaryAction | null {
         entityType: 'task',
         entityId: task.id,
         entityName: task.title,
-        score: applyMemoryAdjustment(task.priority === 'P0' ? 160 : 90, actionId),
+        score: applyMemoryPenalty(scored.score + priorityBoost, ignoreMap[actionId] || 0),
         escalation: 'moderate',
       });
     }
 
     // ═══ 5. TARGET ACCOUNT PIPELINE ENGINE ═══
-    // Full funnel: Target Accounts → Contacts → Outreach → Meetings → Opportunities
-
     const targetAccounts = accounts.filter(a => a.motion === 'new-logo');
 
     // 5a. Pipeline dry — need to select target accounts
@@ -203,15 +221,19 @@ export function usePrimaryAction(): PrimaryAction | null {
         }
       }
       const delay = pipelineGapDelay(daysSinceTargetActivity);
+      const scored = calculateScore({
+        revenueImpact: classifyRevenueImpact({ isClosingAction: false, arrK: 0, isPipelineCreation: true }),
+        timeSensitivity: classifyTimeSensitivity({ dueToday: false, daysUntilDeadline: daysSinceTargetActivity > 7 ? 1 : 3 }),
+        actionability: classifyActionability({ hasNextStep: true, hasContacts: false, needsClarification: false }),
+      });
       const actionId = 'system-select-target-accounts';
-      const baseScore = 130 * delay.decayMultiplier;
       candidates.push({
         id: actionId,
         action: 'Select 3–5 target accounts for outreach',
         why: `Pipeline creation ${momentum.pipelineCreationLabel} — ${daysSinceTargetActivity}d since target account activity`,
         nextStep: 'Review your territory and pick accounts to work this week.',
         entityType: 'system',
-        score: applyMemoryAdjustment(baseScore, actionId),
+        score: applyMemoryPenalty(scored.score * delay.decayMultiplier, ignoreMap[actionId] || 0),
         delayConsequence: delay.delayConsequence,
         escalation: delay.escalationLevel,
       });
@@ -226,6 +248,11 @@ export function usePrimaryAction(): PrimaryAction | null {
     if (accountsNeedingContacts.length > 0) {
       const topAccount = accountsNeedingContacts[0];
       const actionId = `account-add-contacts-${topAccount.id}`;
+      const scored = calculateScore({
+        revenueImpact: classifyRevenueImpact({ isClosingAction: false, arrK: 0, isPipelineCreation: true }),
+        timeSensitivity: classifyTimeSensitivity({ dueToday: false, daysUntilDeadline: 3 }),
+        actionability: classifyActionability({ hasNextStep: true, hasContacts: false, needsClarification: false }),
+      });
       candidates.push({
         id: actionId,
         action: `Add contacts to "${topAccount.name}"`,
@@ -234,7 +261,7 @@ export function usePrimaryAction(): PrimaryAction | null {
         entityType: 'account',
         entityId: topAccount.id,
         entityName: topAccount.name,
-        score: applyMemoryAdjustment(85, actionId),
+        score: applyMemoryPenalty(scored.score, ignoreMap[actionId] || 0),
         escalation: 'moderate',
       });
     }
@@ -248,6 +275,11 @@ export function usePrimaryAction(): PrimaryAction | null {
       const delay = outreachGapDelay(accountsNeedingOutreach.length);
       const topAccount = accountsNeedingOutreach[0];
       const actionId = `account-start-outreach-${topAccount.id}`;
+      const scored = calculateScore({
+        revenueImpact: classifyRevenueImpact({ isClosingAction: false, arrK: 0, isPipelineCreation: true }),
+        timeSensitivity: classifyTimeSensitivity({ dueToday: false, daysUntilDeadline: 2 }),
+        actionability: classifyActionability({ hasNextStep: true, hasContacts: true, needsClarification: false }),
+      });
       candidates.push({
         id: actionId,
         action: `Start outreach for "${topAccount.name}"`,
@@ -256,13 +288,13 @@ export function usePrimaryAction(): PrimaryAction | null {
         entityType: 'account',
         entityId: topAccount.id,
         entityName: topAccount.name,
-        score: applyMemoryAdjustment(95 * delay.decayMultiplier, actionId),
+        score: applyMemoryPenalty(scored.score * delay.decayMultiplier, ignoreMap[actionId] || 0),
         delayConsequence: delay.delayConsequence,
         escalation: delay.escalationLevel,
       });
     }
 
-    // 5d. Outreach in progress but no meetings — push for meeting
+    // 5d. Outreach in progress but no meetings
     const accountsNeedingMeetings = targetAccounts.filter(a =>
       a.outreachStatus && ['in-progress', 'working', 'nurture'].includes(a.outreachStatus) &&
       a.lastTouchDate
@@ -271,6 +303,11 @@ export function usePrimaryAction(): PrimaryAction | null {
       const daysSince = Math.ceil((now.getTime() - new Date(a.lastTouchDate!).getTime()) / 86400000);
       if (daysSince >= 5) {
         const actionId = `account-push-meeting-${a.id}`;
+        const scored = calculateScore({
+          revenueImpact: classifyRevenueImpact({ isClosingAction: false, arrK: 0, isPipelineCreation: true }),
+          timeSensitivity: classifyTimeSensitivity({ dueToday: false, daysUntilDeadline: 3 }),
+          actionability: classifyActionability({ hasNextStep: true, hasContacts: true, needsClarification: false }),
+        });
         candidates.push({
           id: actionId,
           action: `Push for meeting with "${a.name}"`,
@@ -279,7 +316,7 @@ export function usePrimaryAction(): PrimaryAction | null {
           entityType: 'account',
           entityId: a.id,
           entityName: a.name,
-          score: applyMemoryAdjustment(70, actionId),
+          score: applyMemoryPenalty(scored.score, ignoreMap[actionId] || 0),
           escalation: 'low',
         });
       }
@@ -287,8 +324,8 @@ export function usePrimaryAction(): PrimaryAction | null {
 
     if (candidates.length === 0) return null;
 
-    // Sort and return ONLY the top one
-    candidates.sort((a, b) => b.score - a.score);
+    // Deterministic sort: score desc, then id for stability
+    candidates.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
     return candidates[0];
   }, [opportunities, tasks, renewals, accounts, momentum]);
 }
