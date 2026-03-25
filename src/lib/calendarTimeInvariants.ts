@@ -10,7 +10,6 @@ export interface TimedBlock {
   end_time: string;
   label: string;
   type: string;
-  [key: string]: unknown;
 }
 
 export interface CalendarAnchor {

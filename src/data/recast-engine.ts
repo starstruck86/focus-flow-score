@@ -255,19 +255,22 @@ export function recastDay(input: RecastInput): RecastResult {
   });
 
   // ── INVARIANT: enforce calendar immutability post-recast ──
-  const { blocks: immutableScheduled, corrections } = enforceCalendarImmutability(
-    guaranteedSchedule.blocks as RecastBlock[],
-    calendarAnchors,
-  );
-  if (corrections.length > 0) {
-    console.error(`[recastDay] CALENDAR DRIFT CORRECTED: ${corrections.join('; ')}`);
-  }
-  const postValidation = validateCalendarInvariants(immutableScheduled, calendarAnchors);
-  if (!postValidation.valid) {
-    console.error(`[recastDay] CALENDAR INVARIANT VIOLATION after correction:`, postValidation.drifts);
-  }
+  const guaranteedBlocks = guaranteedSchedule.blocks as RecastBlock[];
+  const anchorMap = new Map<string, CalendarAnchor>();
+  for (const a of calendarAnchors) anchorMap.set(a.label.trim().toLowerCase(), a);
 
-  const finalScheduled = immutableScheduled;
+  const correctedBlocks = guaranteedBlocks.map(block => {
+    if (block.type !== 'meeting') return block;
+    const anchor = anchorMap.get(block.label.trim().toLowerCase());
+    if (!anchor) return block;
+    if (block.start_time !== anchor.start_time || block.end_time !== anchor.end_time) {
+      console.error(`[recastDay] CALENDAR DRIFT CORRECTED: "${block.label}" ${block.start_time}-${block.end_time} → ${anchor.start_time}-${anchor.end_time}`);
+      return { ...block, start_time: anchor.start_time, end_time: anchor.end_time };
+    }
+    return block;
+  });
+
+  const finalScheduled = correctedBlocks;
 
   // ── Determine priorities based on target gaps ──
   const updatedPriorities: string[] = [];
