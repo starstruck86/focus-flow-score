@@ -12,6 +12,41 @@ const corsHeaders = {
   "x-function-group-version": FUNCTION_GROUP_VERSION,
 };
 
+// ── Canonical Boston time helper (edge function version) ──
+// Mirrors src/lib/timeFormat.ts logic for server-side use.
+const BOSTON_TZ = "America/New_York";
+
+interface BostonTimeSnapshot {
+  utcIso: string;
+  dateStr: string;      // "Monday, March 24, 2025"
+  timeStr: string;      // "7:11 AM"
+  dayOfWeek: string;    // "Monday"
+  monthName: string;    // "March"
+  dayNum: number;
+  hour: number;         // 0-23 in Boston
+}
+
+function getBostonTime(): BostonTimeSnapshot {
+  const utcNow = new Date();
+  // Intl-based formatting — DST-aware, no manual offsets
+  const dateStr = utcNow.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: BOSTON_TZ });
+  const timeStr = utcNow.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: BOSTON_TZ });
+  const dayOfWeek = utcNow.toLocaleDateString("en-US", { weekday: "long", timeZone: BOSTON_TZ });
+  const monthName = utcNow.toLocaleDateString("en-US", { month: "long", timeZone: BOSTON_TZ });
+  const dayNum = parseInt(utcNow.toLocaleDateString("en-US", { day: "numeric", timeZone: BOSTON_TZ }), 10);
+  const hour = parseInt(utcNow.toLocaleTimeString("en-US", { hour: "numeric", hour12: false, timeZone: BOSTON_TZ }), 10);
+  return { utcIso: utcNow.toISOString(), dateStr, timeStr, dayOfWeek, monthName, dayNum, hour };
+}
+
+function formatMeetingTime(isoStr: string): string {
+  return new Date(isoStr).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: BOSTON_TZ });
+}
+
+function ordinal(d: number): string {
+  if (d > 3 && d < 21) return d + "th";
+  switch (d % 10) { case 1: return d + "st"; case 2: return d + "nd"; case 3: return d + "rd"; default: return d + "th"; }
+}
+
 const DAVE_INSTRUCTIONS = `DAVE OPERATING INSTRUCTIONS:
 
 ═══ IDENTITY ═══
