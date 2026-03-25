@@ -704,10 +704,10 @@ export function ResourceManager() {
             const Icon = RESOURCE_TYPE_ICONS[resource.resource_type] || FileText;
             const hasFile = !!resource.file_url;
             const isExternal = resource.file_url?.startsWith('http');
-            const resAny = resource as any;
-            const enrichedAt = resAny.enriched_at ? new Date(resAny.enriched_at) : null;
-            const contentLen = resAny.content_length as number | null;
-            const isShallow = isExternal && resAny.content_status === 'enriched' && (contentLen || 0) < 5000;
+            const enrichStatus = (resource as any).enrichment_status as EnrichmentStatus | undefined;
+            const enrichedAt = resource.enriched_at ? new Date(resource.enriched_at) : null;
+            const contentLen = resource.content_length as number | null;
+            const recommended = getRecommendedAction(resource);
             const isSelected = selectedResourceIds.has(resource.id);
 
             const formatChars = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : `${n}`;
@@ -762,25 +762,28 @@ export function ResourceManager() {
                       <span className="text-sm font-medium text-foreground truncate">{resource.title}</span>
                     )}
                     {resource.is_template && <Badge variant="secondary" className="text-[10px] shrink-0">Template</Badge>}
-                    {resource.template_category && <Badge variant="outline" className="text-[10px] shrink-0">{resource.template_category}</Badge>}
+                    {/* Enrichment status badge */}
+                    {isExternal && (
+                      <Badge className={cn("text-[9px] shrink-0", getEnrichmentStatusColor(enrichStatus))}>
+                        {getEnrichmentStatusLabel(enrichStatus)}
+                      </Badge>
+                    )}
                     {hasFile && !isExternal && <Upload className="h-3 w-3 text-muted-foreground shrink-0" />}
                     {isExternal && <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />}
-                    {isExternal && resAny.content_status === 'enriched' && !isShallow && <span className="shrink-0" aria-label="Content enriched"><Check className="h-3 w-3 text-primary" /></span>}
-                    {isExternal && resAny.content_status === 'enriching' && <span className="shrink-0" aria-label="Enriching"><Loader2 className="h-3 w-3 text-primary animate-spin" /></span>}
-                    {isExternal && resAny.content_status === 'placeholder' && <span className="shrink-0" aria-label="Content not scraped"><AlertTriangle className="h-3 w-3 text-warning" /></span>}
-                    {isShallow && <span className="shrink-0" aria-label="Shallow content"><AlertTriangle className="h-3 w-3 text-amber-500" /></span>}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-[10px] text-muted-foreground capitalize">{resource.resource_type}</span>
-                    <span className="text-[10px] text-muted-foreground">v{resource.current_version}</span>
+                    <span className="text-[10px] text-muted-foreground">v{resource.enrichment_version ?? resource.current_version}</span>
                     <span className="text-[10px] text-muted-foreground">
-                      {new Date(resource.updated_at).toLocaleDateString()}
+                      {new Date(resource.created_at).toLocaleDateString()}
                     </span>
-                    {/* Enrichment metadata */}
                     {isExternal && enrichedAt && (
-                      <span className={cn("text-[10px]", isShallow ? "text-amber-500" : "text-muted-foreground")}>
-                        Enriched {formatAge(enrichedAt)}{contentLen ? ` · ${formatChars(contentLen)} chars` : ''}{isShallow ? ' ⚠️ shallow' : ''}
+                      <span className="text-[10px] text-muted-foreground">
+                        Enriched {formatAge(enrichedAt)}{contentLen ? ` · ${formatChars(contentLen)} chars` : ''}
                       </span>
+                    )}
+                    {(resource as any).failure_reason && enrichStatus === 'failed' && (
+                      <span className="text-[10px] text-status-red truncate max-w-[200px]">{(resource as any).failure_reason}</span>
                     )}
                     {resource.tags && resource.tags.length > 0 && (
                       <div className="flex items-center gap-1 ml-1">
