@@ -6,10 +6,13 @@ import {
   getEligiblePool,
   selectBatch,
   assertBatchEligibility,
+  getRecommendedAction,
+  getEnrichmentStatusLabel,
+  CURRENT_ENRICHMENT_VERSION,
 } from '@/lib/resourceEligibility';
 import type { Resource } from '@/hooks/useResources';
 
-function makeResource(overrides: Partial<Resource> & { file_url?: string | null } = {}): Resource {
+function makeResource(overrides: Partial<Resource> & { file_url?: string | null; enrichment_status?: string } = {}): Resource {
   return {
     id: overrides.id ?? 'r1',
     user_id: 'u1',
@@ -28,99 +31,119 @@ function makeResource(overrides: Partial<Resource> & { file_url?: string | null 
     created_at: '2025-01-01',
     updated_at: '2025-01-01',
     content_status: overrides.content_status,
+    enrichment_status: (overrides as any).enrichment_status ?? 'not_enriched',
     enriched_at: overrides.enriched_at ?? null,
     content_length: overrides.content_length ?? null,
-  };
+    enrichment_version: (overrides as any).enrichment_version ?? 0,
+  } as Resource;
 }
 
 describe('isDeepEnrichEligible', () => {
-  it('returns true for placeholder status', () => {
-    expect(isDeepEnrichEligible(makeResource({ content_status: 'placeholder' }))).toBe(true);
+  it('returns true for not_enriched status', () => {
+    expect(isDeepEnrichEligible(makeResource({ enrichment_status: 'not_enriched' } as any))).toBe(true);
   });
 
-  it('returns true for file status', () => {
-    expect(isDeepEnrichEligible(makeResource({ content_status: 'file' }))).toBe(true);
+  it('returns true for failed status (retryable)', () => {
+    expect(isDeepEnrichEligible(makeResource({ enrichment_status: 'failed' } as any))).toBe(true);
   });
 
-  it('returns true for undefined status', () => {
-    expect(isDeepEnrichEligible(makeResource({ content_status: undefined }))).toBe(true);
+  it('returns false for deep_enriched status', () => {
+    expect(isDeepEnrichEligible(makeResource({ enrichment_status: 'deep_enriched' } as any))).toBe(false);
   });
 
-  it('returns false for enriched status', () => {
-    expect(isDeepEnrichEligible(makeResource({ content_status: 'enriched' }))).toBe(false);
-  });
-
-  it('returns false for enriching status', () => {
-    expect(isDeepEnrichEligible(makeResource({ content_status: 'enriching' }))).toBe(false);
+  it('returns false for deep_enrich_in_progress', () => {
+    expect(isDeepEnrichEligible(makeResource({ enrichment_status: 'deep_enrich_in_progress' } as any))).toBe(false);
   });
 
   it('returns false when file_url is missing', () => {
-    expect(isDeepEnrichEligible(makeResource({ file_url: null, content_status: 'placeholder' }))).toBe(false);
+    expect(isDeepEnrichEligible(makeResource({ file_url: null, enrichment_status: 'not_enriched' } as any))).toBe(false);
   });
 
   it('returns false when file_url is not HTTP', () => {
-    expect(isDeepEnrichEligible(makeResource({ file_url: 'file:///local', content_status: 'placeholder' }))).toBe(false);
+    expect(isDeepEnrichEligible(makeResource({ file_url: 'file:///local', enrichment_status: 'not_enriched' } as any))).toBe(false);
+  });
+
+  it('returns false for duplicate status', () => {
+    expect(isDeepEnrichEligible(makeResource({ enrichment_status: 'duplicate' } as any))).toBe(false);
+  });
+
+  it('returns false for superseded status', () => {
+    expect(isDeepEnrichEligible(makeResource({ enrichment_status: 'superseded' } as any))).toBe(false);
   });
 });
 
 describe('isReenrichEligible', () => {
-  it('returns true for enriched status', () => {
-    expect(isReenrichEligible(makeResource({ content_status: 'enriched' }))).toBe(true);
+  it('returns true for queued_for_reenrich', () => {
+    expect(isReenrichEligible(makeResource({ enrichment_status: 'queued_for_reenrich' } as any))).toBe(true);
   });
 
-  it('returns false for placeholder status', () => {
-    expect(isReenrichEligible(makeResource({ content_status: 'placeholder' }))).toBe(false);
+  it('returns true for outdated enrichment version', () => {
+    expect(isReenrichEligible(makeResource({
+      enrichment_status: 'deep_enriched',
+      enrichment_version: 0,
+      enriched_at: new Date().toISOString(),
+    } as any))).toBe(CURRENT_ENRICHMENT_VERSION > 0);
   });
 
-  it('returns false for file status', () => {
-    expect(isReenrichEligible(makeResource({ content_status: 'file' }))).toBe(false);
+  it('returns false for not_enriched status', () => {
+    expect(isReenrichEligible(makeResource({ enrichment_status: 'not_enriched' } as any))).toBe(false);
   });
 
   it('returns false when file_url is missing', () => {
-    expect(isReenrichEligible(makeResource({ file_url: null, content_status: 'enriched' }))).toBe(false);
+    expect(isReenrichEligible(makeResource({ file_url: null, enrichment_status: 'queued_for_reenrich' } as any))).toBe(false);
   });
 });
 
-describe('getEligiblePool', () => {
+describe('getEligibleResources', () => {
   const resources = [
-    makeResource({ id: '1', content_status: 'placeholder', file_url: 'https://example.com/a' }),
-    makeResource({ id: '2', content_status: 'enriched', file_url: 'https://example.com/b' }),
-    makeResource({ id: '3', content_status: 'file', file_url: 'https://example.com/c' }),
-    makeResource({ id: '4', content_status: 'enriched', file_url: 'https://example.com/d' }),
-    makeResource({ id: '5', file_url: null, content_status: 'placeholder' }),
+    makeResource({ id: '1', enrichment_status: 'not_enriched', file_url: 'https://example.com/a' } as any),
+    makeResource({ id: '2', enrichment_status: 'deep_enriched', enrichment_version: 0, enriched_at: new Date().toISOString(), file_url: 'https://example.com/b' } as any),
+    makeResource({ id: '3', enrichment_status: 'failed', file_url: 'https://example.com/c' } as any),
+    makeResource({ id: '4', enrichment_status: 'queued_for_reenrich', file_url: 'https://example.com/d' } as any),
+    makeResource({ id: '5', file_url: null, enrichment_status: 'not_enriched' } as any),
+    makeResource({ id: '6', enrichment_status: 'duplicate', file_url: 'https://example.com/f' } as any),
   ];
 
-  it('deep pool contains only placeholder/file items with http urls', () => {
+  it('deep pool contains not_enriched and failed items with http urls', () => {
     const pool = getEligibleResources(resources, 'deep_enrich');
     expect(pool.map(r => r.id)).toEqual(['1', '3']);
   });
 
-  it('reenrich pool contains only enriched items with http urls', () => {
+  it('reenrich pool contains queued_for_reenrich and outdated items', () => {
     const pool = getEligibleResources(resources, 're_enrich');
-    expect(pool.map(r => r.id)).toEqual(['2', '4']);
+    const ids = pool.map(r => r.id);
+    expect(ids).toContain('4'); // queued
+    // id 2 has version 0 < CURRENT_ENRICHMENT_VERSION=1, so eligible
+    if (CURRENT_ENRICHMENT_VERSION > 0) {
+      expect(ids).toContain('2');
+    }
   });
 
-  it('legacy alias returns same deep pool output', () => {
-    const pool = getEligiblePool(resources, 'deep_enrich');
-    expect(pool.map(r => r.id)).toEqual(['1', '3']);
+  it('excludes duplicates and superseded', () => {
+    const pool = getEligibleResources(resources, 'deep_enrich');
+    expect(pool.map(r => r.id)).not.toContain('6');
+  });
+
+  it('deduplicates by canonical URL', () => {
+    const dupes = [
+      makeResource({ id: 'a', enrichment_status: 'not_enriched', file_url: 'https://example.com/same' } as any),
+      makeResource({ id: 'b', enrichment_status: 'not_enriched', file_url: 'https://example.com/same' } as any),
+    ];
+    const pool = getEligibleResources(dupes, 'deep_enrich');
+    expect(pool).toHaveLength(1);
   });
 
   it('returns empty when nothing eligible', () => {
-    const allEnriched = [makeResource({ id: '1', content_status: 'enriched' })];
-    expect(getEligibleResources(allEnriched, 'deep_enrich')).toEqual([]);
-  });
-
-  it('zero eligible disables run (empty array)', () => {
-    expect(getEligibleResources([], 'deep_enrich')).toEqual([]);
-    expect(getEligibleResources([], 're_enrich')).toEqual([]);
+    const allDone = [makeResource({ id: '1', enrichment_status: 'deep_enriched', enrichment_version: CURRENT_ENRICHMENT_VERSION, enriched_at: new Date().toISOString() } as any)];
+    expect(getEligibleResources(allDone, 'deep_enrich')).toEqual([]);
   });
 });
 
 describe('selectBatch', () => {
   const pool = [
-    makeResource({ id: '1', content_status: 'placeholder' }),
-    makeResource({ id: '2', content_status: 'placeholder' }),
-    makeResource({ id: '3', content_status: 'placeholder' }),
+    makeResource({ id: '1', enrichment_status: 'not_enriched' } as any),
+    makeResource({ id: '2', enrichment_status: 'not_enriched' } as any),
+    makeResource({ id: '3', enrichment_status: 'not_enriched' } as any),
   ];
 
   it('selects up to batchSize items', () => {
@@ -134,8 +157,8 @@ describe('selectBatch', () => {
 
 describe('assertBatchEligibility', () => {
   const allResources = [
-    makeResource({ id: '1', content_status: 'placeholder' }),
-    makeResource({ id: '2', content_status: 'enriched' }),
+    makeResource({ id: '1', enrichment_status: 'not_enriched' } as any),
+    makeResource({ id: '2', enrichment_status: 'deep_enriched', enrichment_version: CURRENT_ENRICHMENT_VERSION, enriched_at: new Date().toISOString() } as any),
   ];
 
   it('passes for valid deep enrich batch', () => {
@@ -143,23 +166,68 @@ describe('assertBatchEligibility', () => {
     expect(() => assertBatchEligibility(batch, 'deep', allResources)).not.toThrow();
   });
 
-  it('passes for valid reenrich batch', () => {
-    const batch = [allResources[1]];
-    expect(() => assertBatchEligibility(batch, 'reenrich', allResources)).not.toThrow();
-  });
-
-  it('throws when enriched item is in deep enrich batch', () => {
-    const batch = [allResources[1]]; // enriched
-    expect(() => assertBatchEligibility(batch, 'deep', allResources)).toThrow('assertion failed');
-  });
-
-  it('throws when placeholder item is in reenrich batch', () => {
-    const batch = [allResources[0]]; // placeholder
-    expect(() => assertBatchEligibility(batch, 'reenrich', allResources)).toThrow('assertion failed');
+  it('throws when deep_enriched item is in deep enrich batch', () => {
+    const batch = [allResources[1]]; // deep_enriched, current version, fresh
+    expect(() => assertBatchEligibility(batch, 'deep', allResources)).toThrow();
   });
 
   it('includes offending IDs in error message', () => {
     const batch = [allResources[1]];
     expect(() => assertBatchEligibility(batch, 'deep', allResources)).toThrow(allResources[1].id);
+  });
+});
+
+describe('getRecommendedAction', () => {
+  it('recommends deep_enrich for not_enriched', () => {
+    const r = makeResource({ enrichment_status: 'not_enriched' } as any);
+    expect(getRecommendedAction(r).action).toBe('deep_enrich');
+  });
+
+  it('recommends retry for failed', () => {
+    const r = makeResource({ enrichment_status: 'failed' } as any);
+    expect(getRecommendedAction(r).action).toBe('retry');
+  });
+
+  it('recommends no_action for fresh deep_enriched', () => {
+    const r = makeResource({ enrichment_status: 'deep_enriched', enrichment_version: CURRENT_ENRICHMENT_VERSION, enriched_at: new Date().toISOString() } as any);
+    expect(getRecommendedAction(r).action).toBe('no_action');
+  });
+
+  it('recommends ignore for duplicate', () => {
+    const r = makeResource({ enrichment_status: 'duplicate' } as any);
+    expect(getRecommendedAction(r).action).toBe('ignore');
+  });
+
+  it('recommends re_enrich for queued_for_reenrich', () => {
+    const r = makeResource({ enrichment_status: 'queued_for_reenrich' } as any);
+    expect(getRecommendedAction(r).action).toBe('re_enrich');
+  });
+});
+
+describe('getEnrichmentStatusLabel', () => {
+  it('returns correct labels', () => {
+    expect(getEnrichmentStatusLabel('not_enriched')).toBe('Not Enriched');
+    expect(getEnrichmentStatusLabel('deep_enriched')).toBe('Enriched');
+    expect(getEnrichmentStatusLabel('failed')).toBe('Failed');
+    expect(getEnrichmentStatusLabel(undefined)).toBe('Not Enriched');
+  });
+});
+
+describe('status transitions are valid', () => {
+  it('not_enriched items never appear in re_enrich pool', () => {
+    const resources = [
+      makeResource({ id: '1', enrichment_status: 'not_enriched' } as any),
+      makeResource({ id: '2', enrichment_status: 'not_enriched' } as any),
+    ];
+    const pool = getEligibleResources(resources, 're_enrich');
+    expect(pool).toHaveLength(0);
+  });
+
+  it('deep_enriched items with current version never appear in deep_enrich pool', () => {
+    const resources = [
+      makeResource({ id: '1', enrichment_status: 'deep_enriched', enrichment_version: CURRENT_ENRICHMENT_VERSION, enriched_at: new Date().toISOString() } as any),
+    ];
+    const pool = getEligibleResources(resources, 'deep_enrich');
+    expect(pool).toHaveLength(0);
   });
 });

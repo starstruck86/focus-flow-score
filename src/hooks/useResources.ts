@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { useCallback } from 'react';
+import type { EnrichmentStatus } from '@/lib/resourceEligibility';
 
 export type ResourceFolder = {
   id: string;
@@ -34,9 +35,17 @@ export type Resource = {
   current_version: number | null;
   created_at: string;
   updated_at: string;
+  // Legacy field (still populated but not authoritative)
   content_status?: string;
+  // Canonical lifecycle fields
+  enrichment_status: EnrichmentStatus;
   enriched_at?: string | null;
   content_length?: number | null;
+  last_enrichment_attempt_at?: string | null;
+  last_status_change_at?: string | null;
+  enrichment_version: number;
+  failure_reason?: string | null;
+  enrichment_audit_log?: any[];
 };
 
 export type ResourceVersion = {
@@ -187,7 +196,6 @@ export function useUpdateResource() {
       updates: Partial<Pick<Resource, 'title' | 'content' | 'description' | 'folder_id' | 'is_template' | 'template_category' | 'tags' | 'resource_type' | 'account_id' | 'opportunity_id'>>;
       createVersion?: { change_summary?: string };
     }) => {
-      // Get current resource for version tracking
       if (createVersion) {
         const { data: current } = await supabase.from('resources').select('current_version').eq('id', id).single();
         const nextVersion = (current?.current_version || 0) + 1;
@@ -211,6 +219,32 @@ export function useUpdateResource() {
       qc.invalidateQueries({ queryKey: ['resource-versions'] });
     },
     onError: () => toast.error('Failed to update resource'),
+  });
+}
+
+/** Update the enrichment_status of a resource (manual lifecycle control) */
+export function useUpdateEnrichmentStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, enrichment_status, failure_reason }: {
+      id: string;
+      enrichment_status: string;
+      failure_reason?: string | null;
+    }) => {
+      const { error } = await supabase
+        .from('resources')
+        .update({
+          enrichment_status,
+          last_status_change_at: new Date().toISOString(),
+          ...(failure_reason !== undefined ? { failure_reason } : {}),
+        } as any)
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['resources'] });
+    },
+    onError: () => toast.error('Failed to update status'),
   });
 }
 
@@ -329,7 +363,6 @@ export function useConfirmSuggestion() {
   return useMutation({
     mutationFn: async (suggestion: TemplateSuggestion) => {
       if (!user) throw new Error('Not authenticated');
-      // Create the template resource
       const { data: resource, error } = await supabase
         .from('resources')
         .insert({
@@ -346,7 +379,6 @@ export function useConfirmSuggestion() {
         .single();
       if (error) throw error;
 
-      // Create initial version
       await supabase.from('resource_versions').insert({
         resource_id: resource.id,
         user_id: user.id,
@@ -356,7 +388,6 @@ export function useConfirmSuggestion() {
         change_summary: 'Created from AI suggestion',
       });
 
-      // Mark suggestion as confirmed
       await supabase
         .from('template_suggestions')
         .update({ status: 'confirmed' })
@@ -433,7 +464,7 @@ export function useResourceSuggestions(enabled = false) {
       return (data?.suggestions || []) as ResourceSuggestion[];
     },
     enabled: !!user && enabled,
-    staleTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 }

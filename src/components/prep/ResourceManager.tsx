@@ -13,7 +13,7 @@ import { Progress } from '@/components/ui/progress';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { Zap, RefreshCw,
+import { Zap, RefreshCw, RotateCcw,
   Folder, FolderPlus, FilePlus, FileText, Presentation, Mail, BookOpen,
   ChevronRight, MoreHorizontal, Search, Trash2, Edit3, Clock,
   Star, Tag, Copy, Upload, Link2, Sparkles, Target, Shield,
@@ -23,9 +23,13 @@ import { cn } from '@/lib/utils';
 import {
   useResourceFolders, useResources, useCreateFolder, useCreateResource,
   useDeleteResource, useDeleteFolder, useRenameFolder, useUpdateResource,
-  useOperationalizeResource, useResourceSuggestions,
+  useOperationalizeResource, useResourceSuggestions, useUpdateEnrichmentStatus,
   type Resource, type ResourceFolder, type ResourceSuggestion,
 } from '@/hooks/useResources';
+import {
+  getEnrichmentStatusLabel, getEnrichmentStatusColor, getRecommendedAction,
+  type EnrichmentStatus,
+} from '@/lib/resourceEligibility';
 import { useClassifyResource, useUploadResource, useAddUrlResource, type ClassificationResult } from '@/hooks/useResourceUpload';
 import { ResourceEditor } from './ResourceEditor';
 import { AIGenerateDialog } from './AIGenerateDialog';
@@ -147,6 +151,7 @@ export function ResourceManager() {
   const addUrlResource = useAddUrlResource();
   const { totalDuplicates } = useResourceDuplicates();
   const operationalize = useOperationalizeResource();
+  const updateEnrichmentStatus = useUpdateEnrichmentStatus();
   const { data: suggestions = [], refetch: refetchSuggestions, isLoading: suggestionsLoading } = useResourceSuggestions(resources.length > 0);
 
   const currentFolders = folders.filter(f => f.parent_id === currentFolderId);
@@ -699,10 +704,10 @@ export function ResourceManager() {
             const Icon = RESOURCE_TYPE_ICONS[resource.resource_type] || FileText;
             const hasFile = !!resource.file_url;
             const isExternal = resource.file_url?.startsWith('http');
-            const resAny = resource as any;
-            const enrichedAt = resAny.enriched_at ? new Date(resAny.enriched_at) : null;
-            const contentLen = resAny.content_length as number | null;
-            const isShallow = isExternal && resAny.content_status === 'enriched' && (contentLen || 0) < 5000;
+            const enrichStatus = (resource as any).enrichment_status as EnrichmentStatus | undefined;
+            const enrichedAt = resource.enriched_at ? new Date(resource.enriched_at) : null;
+            const contentLen = resource.content_length as number | null;
+            const recommended = getRecommendedAction(resource);
             const isSelected = selectedResourceIds.has(resource.id);
 
             const formatChars = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : `${n}`;
@@ -757,25 +762,28 @@ export function ResourceManager() {
                       <span className="text-sm font-medium text-foreground truncate">{resource.title}</span>
                     )}
                     {resource.is_template && <Badge variant="secondary" className="text-[10px] shrink-0">Template</Badge>}
-                    {resource.template_category && <Badge variant="outline" className="text-[10px] shrink-0">{resource.template_category}</Badge>}
+                    {/* Enrichment status badge */}
+                    {isExternal && (
+                      <Badge className={cn("text-[9px] shrink-0", getEnrichmentStatusColor(enrichStatus))}>
+                        {getEnrichmentStatusLabel(enrichStatus)}
+                      </Badge>
+                    )}
                     {hasFile && !isExternal && <Upload className="h-3 w-3 text-muted-foreground shrink-0" />}
                     {isExternal && <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />}
-                    {isExternal && resAny.content_status === 'enriched' && !isShallow && <span className="shrink-0" aria-label="Content enriched"><Check className="h-3 w-3 text-primary" /></span>}
-                    {isExternal && resAny.content_status === 'enriching' && <span className="shrink-0" aria-label="Enriching"><Loader2 className="h-3 w-3 text-primary animate-spin" /></span>}
-                    {isExternal && resAny.content_status === 'placeholder' && <span className="shrink-0" aria-label="Content not scraped"><AlertTriangle className="h-3 w-3 text-warning" /></span>}
-                    {isShallow && <span className="shrink-0" aria-label="Shallow content"><AlertTriangle className="h-3 w-3 text-amber-500" /></span>}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-[10px] text-muted-foreground capitalize">{resource.resource_type}</span>
-                    <span className="text-[10px] text-muted-foreground">v{resource.current_version}</span>
+                    <span className="text-[10px] text-muted-foreground">v{resource.enrichment_version ?? resource.current_version}</span>
                     <span className="text-[10px] text-muted-foreground">
-                      {new Date(resource.updated_at).toLocaleDateString()}
+                      {new Date(resource.created_at).toLocaleDateString()}
                     </span>
-                    {/* Enrichment metadata */}
                     {isExternal && enrichedAt && (
-                      <span className={cn("text-[10px]", isShallow ? "text-amber-500" : "text-muted-foreground")}>
-                        Enriched {formatAge(enrichedAt)}{contentLen ? ` · ${formatChars(contentLen)} chars` : ''}{isShallow ? ' ⚠️ shallow' : ''}
+                      <span className="text-[10px] text-muted-foreground">
+                        Enriched {formatAge(enrichedAt)}{contentLen ? ` · ${formatChars(contentLen)} chars` : ''}
                       </span>
+                    )}
+                    {(resource as any).failure_reason && enrichStatus === 'failed' && (
+                      <span className="text-[10px] text-status-red truncate max-w-[200px]">{(resource as any).failure_reason}</span>
                     )}
                     {resource.tags && resource.tags.length > 0 && (
                       <div className="flex items-center gap-1 ml-1">
@@ -831,7 +839,7 @@ export function ResourceManager() {
                       {isExternal && (
                         <DropdownMenuItem onClick={async (e) => {
                           e.stopPropagation();
-                          const isReenrich = resAny.content_status === 'enriched';
+                          const isReenrich = enrichStatus === 'deep_enriched';
                           toast.info(isReenrich ? 'Re-enriching content...' : 'Enriching content...');
                           try {
                             const { data } = await trackedInvoke<any>('enrich-resource-content', {
@@ -842,7 +850,34 @@ export function ResourceManager() {
                             toast.error('Enrichment failed');
                           }
                         }}>
-                          <RefreshCw className="h-3.5 w-3.5 mr-2" /> {resAny.content_status === 'enriched' ? 'Re-enrich' : 'Deep Enrich'}
+                          <RefreshCw className="h-3.5 w-3.5 mr-2" /> {enrichStatus === 'deep_enriched' ? 'Re-enrich' : 'Deep Enrich'}
+                        </DropdownMenuItem>
+                      )}
+                      {isExternal && enrichStatus === 'failed' && (
+                        <DropdownMenuItem onClick={(e) => {
+                          e.stopPropagation();
+                          updateEnrichmentStatus.mutate({ id: resource.id, enrichment_status: 'not_enriched', failure_reason: null });
+                          toast.success('Reset to not enriched — ready for retry');
+                        }}>
+                          <RotateCcw className="h-3.5 w-3.5 mr-2" /> Reset Status
+                        </DropdownMenuItem>
+                      )}
+                      {isExternal && enrichStatus === 'deep_enriched' && (
+                        <DropdownMenuItem onClick={(e) => {
+                          e.stopPropagation();
+                          updateEnrichmentStatus.mutate({ id: resource.id, enrichment_status: 'queued_for_reenrich' });
+                          toast.success('Queued for re-enrichment');
+                        }}>
+                          <RefreshCw className="h-3.5 w-3.5 mr-2" /> Queue Re-enrich
+                        </DropdownMenuItem>
+                      )}
+                      {isExternal && (enrichStatus === 'not_enriched' || !enrichStatus) && (
+                        <DropdownMenuItem onClick={(e) => {
+                          e.stopPropagation();
+                          updateEnrichmentStatus.mutate({ id: resource.id, enrichment_status: 'duplicate' });
+                          toast.success('Marked as duplicate');
+                        }}>
+                          <AlertTriangle className="h-3.5 w-3.5 mr-2" /> Mark Duplicate
                         </DropdownMenuItem>
                       )}
                       <DropdownMenuItem onClick={(e) => {

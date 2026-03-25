@@ -3,11 +3,28 @@
  *
  * RULE: eligible count, next batch selection, remaining count, assertions,
  * and debug logging MUST all flow through this file.
+ *
+ * The ONLY source of truth is `enrichment_status`. Never infer from artifacts.
  */
 import type { Resource } from '@/hooks/useResources';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('ResourceEligibility');
+
+// ── Canonical lifecycle statuses ───────────────────────────
+export const ENRICHMENT_STATUSES = [
+  'not_enriched',
+  'queued_for_deep_enrich',
+  'deep_enrich_in_progress',
+  'deep_enriched',
+  'queued_for_reenrich',
+  'reenrich_in_progress',
+  'failed',
+  'duplicate',
+  'superseded',
+] as const;
+
+export type EnrichmentStatus = typeof ENRICHMENT_STATUSES[number];
 
 export type EnrichMode = 'deep_enrich' | 're_enrich';
 export type EnrichModeInput = EnrichMode | 'deep' | 'reenrich';
@@ -19,65 +36,122 @@ export interface EligibleResourceItem {
   enrichMode: EnrichMode;
 }
 
-interface EligibilityEvaluation {
-  eligible: boolean;
+export interface RecommendedAction {
+  action: 'deep_enrich' | 're_enrich' | 'retry' | 'no_action' | 'ignore';
   reason: string;
-  normalizedMode: EnrichMode;
 }
 
+// ── Current enrichment version ─────────────────────────────
+export const CURRENT_ENRICHMENT_VERSION = 1;
+
+// ── Freshness policy ───────────────────────────────────────
+const FRESHNESS_DAYS = 90; // re-enrich candidate after 90 days
+
+// ── Mode normalization ─────────────────────────────────────
 function normalizeMode(mode: EnrichModeInput): EnrichMode {
   if (mode === 'deep') return 'deep_enrich';
   if (mode === 'reenrich') return 're_enrich';
   return mode;
 }
 
+// ── Canonical key for dedup ────────────────────────────────
 function getEligibilityKey(resource: Resource): string {
   return (resource.file_url ?? '').trim().toLowerCase();
 }
 
+// ── Has valid HTTP source ──────────────────────────────────
+function hasValidSource(resource: Resource): boolean {
+  return !!resource.file_url && resource.file_url.startsWith('http');
+}
+
+// ── Eligibility evaluation ─────────────────────────────────
+interface EligibilityEvaluation {
+  eligible: boolean;
+  reason: string;
+  normalizedMode: EnrichMode;
+}
+
 export function evaluateResourceEligibility(resource: Resource, mode: EnrichModeInput): EligibilityEvaluation {
   const normalizedMode = normalizeMode(mode);
-  const status = resource.content_status;
+  const status = (resource as any).enrichment_status as EnrichmentStatus | undefined;
 
-  if (!resource.file_url) {
-    return { eligible: false, reason: 'missing file_url', normalizedMode };
+  if (!hasValidSource(resource)) {
+    return { eligible: false, reason: 'missing or non-http file_url', normalizedMode };
   }
 
-  if (!resource.file_url.startsWith('http')) {
-    return { eligible: false, reason: 'non-http file_url', normalizedMode };
+  if (status === 'duplicate' || status === 'superseded') {
+    return { eligible: false, reason: `excluded: ${status}`, normalizedMode };
   }
 
   if (normalizedMode === 'deep_enrich') {
-    if (!status || status === 'placeholder' || status === 'file') {
+    if (!status || status === 'not_enriched' || status === 'queued_for_deep_enrich') {
       return {
         eligible: true,
-        reason: `deep eligible: content_status="${status ?? 'missing'}" with http source`,
+        reason: `deep eligible: enrichment_status="${status ?? 'not_enriched'}"`,
         normalizedMode,
       };
     }
-
+    if (status === 'failed') {
+      return {
+        eligible: true,
+        reason: 'deep eligible: previously failed, retryable',
+        normalizedMode,
+      };
+    }
     return {
       eligible: false,
-      reason: `already processed for deep enrich: content_status="${status}"`,
+      reason: `not deep eligible: enrichment_status="${status}"`,
       normalizedMode,
     };
   }
 
-  if (status === 'enriched') {
+  // re_enrich mode
+  if (status === 'queued_for_reenrich') {
     return {
       eligible: true,
-      reason: 're-enrich eligible: content_status="enriched" with http source',
+      reason: 're-enrich eligible: explicitly queued',
+      normalizedMode,
+    };
+  }
+
+  if (status === 'deep_enriched') {
+    const version = (resource as any).enrichment_version ?? 0;
+    const enrichedAt = (resource as any).enriched_at;
+
+    if (version < CURRENT_ENRICHMENT_VERSION) {
+      return {
+        eligible: true,
+        reason: `re-enrich eligible: outdated version (v${version} < v${CURRENT_ENRICHMENT_VERSION})`,
+        normalizedMode,
+      };
+    }
+
+    if (enrichedAt) {
+      const daysSince = Math.floor((Date.now() - new Date(enrichedAt).getTime()) / 86400000);
+      if (daysSince >= FRESHNESS_DAYS) {
+        return {
+          eligible: true,
+          reason: `re-enrich eligible: stale (${daysSince} days since enrichment)`,
+          normalizedMode,
+        };
+      }
+    }
+
+    return {
+      eligible: false,
+      reason: `deep_enriched but fresh (v${version}, recently enriched)`,
       normalizedMode,
     };
   }
 
   return {
     eligible: false,
-    reason: `not re-enrichable: content_status="${status ?? 'missing'}"`,
+    reason: `not re-enrichable: enrichment_status="${status ?? 'unknown'}"`,
     normalizedMode,
   };
 }
 
+// ── Simple boolean checkers ────────────────────────────────
 export function isDeepEnrichEligible(resource: Resource): boolean {
   return evaluateResourceEligibility(resource, 'deep_enrich').eligible;
 }
@@ -86,10 +160,53 @@ export function isReenrichEligible(resource: Resource): boolean {
   return evaluateResourceEligibility(resource, 're_enrich').eligible;
 }
 
-/**
- * ONE canonical selector.
- * Returns only valid items, deduped by canonical source key.
- */
+// ── Recommended action per resource ────────────────────────
+export function getRecommendedAction(resource: Resource): RecommendedAction {
+  const status = (resource as any).enrichment_status as EnrichmentStatus | undefined;
+
+  if (status === 'duplicate' || status === 'superseded') {
+    return { action: 'ignore', reason: `Resource is ${status}` };
+  }
+
+  if (!hasValidSource(resource)) {
+    return { action: 'no_action', reason: 'No valid source URL' };
+  }
+
+  if (status === 'failed') {
+    return { action: 'retry', reason: `Last attempt failed: ${(resource as any).failure_reason || 'unknown'}` };
+  }
+
+  if (!status || status === 'not_enriched' || status === 'queued_for_deep_enrich') {
+    return { action: 'deep_enrich', reason: 'Not yet enriched' };
+  }
+
+  if (status === 'queued_for_reenrich') {
+    return { action: 're_enrich', reason: 'Queued for re-enrichment' };
+  }
+
+  if (status === 'deep_enriched') {
+    const version = (resource as any).enrichment_version ?? 0;
+    if (version < CURRENT_ENRICHMENT_VERSION) {
+      return { action: 're_enrich', reason: `Outdated version (v${version})` };
+    }
+    const enrichedAt = (resource as any).enriched_at;
+    if (enrichedAt) {
+      const daysSince = Math.floor((Date.now() - new Date(enrichedAt).getTime()) / 86400000);
+      if (daysSince >= FRESHNESS_DAYS) {
+        return { action: 're_enrich', reason: `Stale (${daysSince} days old)` };
+      }
+    }
+    return { action: 'no_action', reason: 'Fully enriched and fresh' };
+  }
+
+  if (status === 'deep_enrich_in_progress' || status === 'reenrich_in_progress') {
+    return { action: 'no_action', reason: 'Enrichment in progress' };
+  }
+
+  return { action: 'no_action', reason: 'Unknown state' };
+}
+
+// ── ONE canonical selector ─────────────────────────────────
 export function getEligibleResources(resources: Resource[], mode: EnrichModeInput): Resource[] {
   const seenKeys = new Set<string>();
   const eligible: Resource[] = [];
@@ -113,12 +230,12 @@ export function getEligibleCount(resources: Resource[], mode: EnrichModeInput): 
   return getEligibleResources(resources, mode).length;
 }
 
-/** Backward-compatible alias for older callers/tests. */
+/** Backward-compatible alias */
 export function getEligiblePool(resources: Resource[], mode: EnrichModeInput): Resource[] {
   return getEligibleResources(resources, mode);
 }
 
-/** Backward-compatible alias for older callers/tests. */
+/** Backward-compatible alias */
 export function selectBatch(pool: Resource[], batchSize: number): Resource[] {
   return pool.slice(0, batchSize);
 }
@@ -137,6 +254,7 @@ export function toEligibleResourceItems(resources: Resource[], mode: EnrichModeI
   }));
 }
 
+// ── Hard assertion ─────────────────────────────────────────
 export function assertBatchEligibility(
   batch: Resource[],
   mode: EnrichModeInput,
@@ -144,9 +262,9 @@ export function assertBatchEligibility(
 ): void {
   const normalizedMode = normalizeMode(mode);
   const canonicalEligible = getEligibleResources(allResources, normalizedMode);
-  const eligibleIds = new Set(canonicalEligible.map((resource) => resource.id));
+  const eligibleIds = new Set(canonicalEligible.map((r) => r.id));
   const seenKeys = new Set<string>();
-  const violations: Array<{ id: string; title: string; content_status: string | undefined; reason: string }> = [];
+  const violations: Array<{ id: string; title: string; enrichment_status: string | undefined; reason: string }> = [];
 
   for (const resource of batch) {
     const evaluation = evaluateResourceEligibility(resource, normalizedMode);
@@ -156,7 +274,7 @@ export function assertBatchEligibility(
       violations.push({
         id: resource.id,
         title: resource.title,
-        content_status: resource.content_status,
+        enrichment_status: (resource as any).enrichment_status,
         reason: evaluation.reason,
       });
       continue;
@@ -166,7 +284,7 @@ export function assertBatchEligibility(
       violations.push({
         id: resource.id,
         title: resource.title,
-        content_status: resource.content_status,
+        enrichment_status: (resource as any).enrichment_status,
         reason: `duplicate canonical source in batch: ${key}`,
       });
       continue;
@@ -178,16 +296,17 @@ export function assertBatchEligibility(
   if (violations.length > 0) {
     const msg = `Batch eligibility assertion failed: ${violations.length} of ${batch.length} items ineligible`;
     log.error(msg, { mode: normalizedMode, violations });
-    throw new Error(`${msg}. IDs: ${violations.map((violation) => violation.id).join(', ')}`);
+    throw new Error(`${msg}. IDs: ${violations.map((v) => v.id).join(', ')}`);
   }
 
   log.debug('Batch eligibility assertion passed', {
     mode: normalizedMode,
     eligibleCount: canonicalEligible.length,
-    batchIds: batch.map((resource) => resource.id),
+    batchIds: batch.map((r) => r.id),
   });
 }
 
+// ── Debug logging ──────────────────────────────────────────
 export function logEligibilitySnapshot(resources: Resource[], mode: EnrichModeInput, context: string): void {
   const normalizedMode = normalizeMode(mode);
   const eligible = getEligibleResources(resources, normalizedMode);
@@ -195,10 +314,11 @@ export function logEligibilitySnapshot(resources: Resource[], mode: EnrichModeIn
   log.info(`[${context}] Eligibility snapshot`, {
     mode: normalizedMode,
     eligibleCount: eligible.length,
-    selectedBatchPreview: eligible.slice(0, 10).map((resource) => ({
-      id: resource.id,
-      title: resource.title,
-      reason: evaluateResourceEligibility(resource, normalizedMode).reason,
+    preview: eligible.slice(0, 10).map((r) => ({
+      id: r.id,
+      title: r.title,
+      enrichment_status: (r as any).enrichment_status,
+      reason: evaluateResourceEligibility(r, normalizedMode).reason,
     })),
   });
 }
@@ -207,11 +327,42 @@ export function logSelectedBatch(resources: Resource[], mode: EnrichModeInput, c
   const normalizedMode = normalizeMode(mode);
   log.info(`[${context}] Selected batch`, {
     mode: normalizedMode,
-    selectedBatchIds: resources.map((resource) => resource.id),
-    qualificationReasons: resources.map((resource) => ({
-      id: resource.id,
-      title: resource.title,
-      reason: evaluateResourceEligibility(resource, normalizedMode).reason,
+    batchIds: resources.map((r) => r.id),
+    qualifications: resources.map((r) => ({
+      id: r.id,
+      title: r.title,
+      enrichment_status: (r as any).enrichment_status,
+      reason: evaluateResourceEligibility(r, normalizedMode).reason,
     })),
   });
+}
+
+// ── Enrichment status label helper ─────────────────────────
+export function getEnrichmentStatusLabel(status: EnrichmentStatus | string | undefined): string {
+  switch (status) {
+    case 'not_enriched': return 'Not Enriched';
+    case 'queued_for_deep_enrich': return 'Queued';
+    case 'deep_enrich_in_progress': return 'Enriching…';
+    case 'deep_enriched': return 'Enriched';
+    case 'queued_for_reenrich': return 'Re-enrich Queued';
+    case 'reenrich_in_progress': return 'Re-enriching…';
+    case 'failed': return 'Failed';
+    case 'duplicate': return 'Duplicate';
+    case 'superseded': return 'Superseded';
+    default: return 'Not Enriched';
+  }
+}
+
+export function getEnrichmentStatusColor(status: EnrichmentStatus | string | undefined): string {
+  switch (status) {
+    case 'deep_enriched': return 'bg-status-green/20 text-status-green';
+    case 'queued_for_deep_enrich':
+    case 'queued_for_reenrich': return 'bg-primary/20 text-primary';
+    case 'deep_enrich_in_progress':
+    case 'reenrich_in_progress': return 'bg-primary/20 text-primary';
+    case 'failed': return 'bg-status-red/20 text-status-red';
+    case 'duplicate':
+    case 'superseded': return 'bg-muted text-muted-foreground';
+    default: return 'bg-status-yellow/20 text-status-yellow';
+  }
 }

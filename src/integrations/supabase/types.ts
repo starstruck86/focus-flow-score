@@ -2438,11 +2438,17 @@ export type Database = {
           date_source: string | null
           description: string | null
           enriched_at: string | null
+          enrichment_audit_log: Json
+          enrichment_status: string
+          enrichment_version: number
+          failure_reason: string | null
           file_url: string | null
           folder_id: string | null
           id: string
           is_screenshot_template: boolean | null
           is_template: boolean | null
+          last_enrichment_attempt_at: string | null
+          last_status_change_at: string | null
           opportunity_id: string | null
           resource_type: string
           screenshot_structure: string | null
@@ -2467,11 +2473,17 @@ export type Database = {
           date_source?: string | null
           description?: string | null
           enriched_at?: string | null
+          enrichment_audit_log?: Json
+          enrichment_status?: string
+          enrichment_version?: number
+          failure_reason?: string | null
           file_url?: string | null
           folder_id?: string | null
           id?: string
           is_screenshot_template?: boolean | null
           is_template?: boolean | null
+          last_enrichment_attempt_at?: string | null
+          last_status_change_at?: string | null
           opportunity_id?: string | null
           resource_type?: string
           screenshot_structure?: string | null
@@ -2496,11 +2508,17 @@ export type Database = {
           date_source?: string | null
           description?: string | null
           enriched_at?: string | null
+          enrichment_audit_log?: Json
+          enrichment_status?: string
+          enrichment_version?: number
+          failure_reason?: string | null
           file_url?: string | null
           folder_id?: string | null
           id?: string
           is_screenshot_template?: boolean | null
           is_template?: boolean | null
+          last_enrichment_attempt_at?: string | null
+          last_status_change_at?: string | null
           opportunity_id?: string | null
           resource_type?: string
           screenshot_structure?: string | null
