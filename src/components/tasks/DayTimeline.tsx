@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStore } from '@/store/useStore';
+import { useCalendarEvents } from '@/hooks/useCalendarEvents';
+import { enforceCalendarImmutability, type CalendarAnchor } from '@/lib/calendarTimeInvariants';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
@@ -57,6 +59,18 @@ function toMinutes(t: string): number {
   return h * 60 + m;
 }
 
+function extractEasternTime(dateString: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(dateString));
+  const hour = parts.find(p => p.type === 'hour')?.value ?? '00';
+  const minute = parts.find(p => p.type === 'minute')?.value ?? '00';
+  return `${hour}:${minute}`;
+}
+
 export function DayTimeline() {
   const { user } = useAuth();
   const { accounts } = useStore();
@@ -81,7 +95,37 @@ export function DayTimeline() {
     enabled: !!user,
   });
 
-  const blocks = (plan?.blocks || []) as TimeBlock[];
+  // Fetch live calendar events to enforce immutable meeting times
+  const { data: calendarEvents } = useCalendarEvents();
+
+  // Enforce calendar immutability: override stored meeting times with live calendar data
+  const blocks = useMemo(() => {
+    const rawBlocks = (plan?.blocks || []) as TimeBlock[];
+    if (!calendarEvents?.length || !rawBlocks.length) return rawBlocks;
+
+    // Build calendar anchors from live events (today only)
+    const todayStart = new Date(`${todayStr}T00:00:00`);
+    const todayEnd = new Date(`${todayStr}T23:59:59`);
+    const todayEvents = calendarEvents.filter((e: any) => {
+      const start = new Date(e.start_time);
+      return start >= todayStart && start <= todayEnd && !e.all_day && e.end_time;
+    });
+
+    if (!todayEvents.length) return rawBlocks;
+
+    const anchors: CalendarAnchor[] = todayEvents.map((e: any) => {
+      const startET = extractEasternTime(e.start_time);
+      const endET = extractEasternTime(e.end_time);
+      return { start_time: startET, end_time: endET, label: e.title };
+    });
+
+    const { blocks: corrected, corrections } = enforceCalendarImmutability(rawBlocks, anchors);
+    if (corrections.length > 0) {
+      console.warn('[DayTimeline] Calendar immutability enforced at render:', corrections);
+    }
+    return corrected;
+  }, [plan?.blocks, calendarEvents, todayStr]);
+
   const completedGoals = new Set((plan?.completed_goals || []) as string[]);
 
   const { dayStart, dayEnd, totalMinutes } = useMemo(() => {
