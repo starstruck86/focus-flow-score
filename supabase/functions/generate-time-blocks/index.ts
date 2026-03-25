@@ -733,29 +733,36 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
         cursor = Math.max(cursor, toMinutes(block.end_time));
       }
 
+      // Fill tail ONLY if there's meaningful time (≥ 60 min) — don't stuff call blocks after back-to-back meetings
       let tailStart = cursor;
       let tailRemaining = workEndMin - tailStart;
-      while (tailRemaining > 15) {
-        if (tailRemaining >= 60) {
-          filled.push(createPrepBlock(tailStart, 30));
-          tailStart += 30;
-          tailRemaining -= 30;
 
-          const activityDuration = Math.min(60, tailRemaining);
-          if (activityDuration >= 30) {
-            outreachSequence += 1;
-            filled.push(createCallBlock(tailStart, activityDuration, outreachSequence));
-            tailStart += activityDuration;
-            tailRemaining -= activityDuration;
+      if (tailRemaining >= 60) {
+        while (tailRemaining > 15) {
+          if (tailRemaining >= 60) {
+            filled.push(createPrepBlock(tailStart, 30));
+            tailStart += 30;
+            tailRemaining -= 30;
+
+            const activityDuration = Math.min(60, tailRemaining);
+            if (activityDuration >= 30) {
+              outreachSequence += 1;
+              filled.push(createCallBlock(tailStart, activityDuration, outreachSequence));
+              tailStart += activityDuration;
+              tailRemaining -= activityDuration;
+            }
+          } else if (tailRemaining >= 30) {
+            filled.push(createPrepBlock(tailStart, tailRemaining));
+            tailStart += tailRemaining;
+            tailRemaining = 0;
+          } else {
+            filled.push(createShortAdminBlock(tailStart, workEndMin));
+            tailRemaining = 0;
           }
-        } else if (tailRemaining >= 30) {
-          filled.push(createPrepBlock(tailStart, tailRemaining));
-          tailStart += tailRemaining;
-          tailRemaining = 0;
-        } else {
-          filled.push(createShortAdminBlock(tailStart, workEndMin));
-          tailRemaining = 0;
         }
+      } else if (tailRemaining >= 15) {
+        // Short tail — just a wrap-up admin block, not a call block
+        filled.push(createShortAdminBlock(tailStart, workEndMin));
       }
 
       return filled.sort((a: any, b: any) => toMinutes(a.start_time) - toMinutes(b.start_time));
