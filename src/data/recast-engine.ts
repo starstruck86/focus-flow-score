@@ -305,7 +305,21 @@ export function recastDay(input: RecastInput): RecastResult {
     return block;
   });
 
-  const finalScheduled = correctedBlocks;
+  // Fill remaining 15–29 min gaps with light admin micro-blocks
+  const finalScheduled = fillRemainingGaps(
+    correctedBlocks,
+    currentTimeMinutes,
+    workEndMinutes,
+    (startTime: string, endTime: string): RecastBlock => ({
+      start_time: startTime,
+      end_time: endTime,
+      label: 'CRM & Follow-up',
+      type: 'admin',
+      workstream: 'general',
+      goals: ['Log activity', 'Quick follow-ups'],
+      reasoning: 'Filling short gap with productive light work.',
+    }),
+  );
 
   // ── Determine priorities based on target gaps ──
   const updatedPriorities: string[] = [];
