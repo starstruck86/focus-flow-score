@@ -136,6 +136,45 @@ function tryInsertIntoGap<T extends GuaranteePlanBlock>(
   return null;
 }
 
+/**
+ * Fill any remaining gaps (15–29 min) between blocks with light admin micro-blocks.
+ * This prevents dead time after call blocks or between meetings.
+ */
+export function fillRemainingGaps<T extends GuaranteePlanBlock>(
+  blocks: T[],
+  searchStart: number,
+  searchEnd: number,
+  createMicroBlock: (startTime: string, endTime: string) => T,
+): T[] {
+  const sorted = sortBlocks(blocks);
+  const result: T[] = [...sorted];
+  let cursor = searchStart;
+
+  for (const block of sorted) {
+    const blockStart = toMinutes(block.start_time);
+    const blockEnd = toMinutes(block.end_time);
+    if (blockEnd <= searchStart || blockStart >= searchEnd) continue;
+
+    const gapStart = Math.max(cursor, searchStart);
+    const gapEnd = Math.min(blockStart, searchEnd);
+    const gap = gapEnd - gapStart;
+
+    if (gap >= 15 && gap < 30) {
+      result.push(createMicroBlock(fromMinutes(gapStart), fromMinutes(gapEnd)));
+    }
+
+    cursor = Math.max(cursor, blockEnd);
+  }
+
+  // Check tail gap
+  const tailGap = searchEnd - Math.max(cursor, searchStart);
+  if (tailGap >= 15 && tailGap < 30) {
+    result.push(createMicroBlock(fromMinutes(Math.max(cursor, searchStart)), fromMinutes(searchEnd)));
+  }
+
+  return sortBlocks(result);
+}
+
 function trySplitBlock<T extends GuaranteePlanBlock>(
   blocks: T[],
   options: EnsureMinimumCallBlocksOptions<T>,

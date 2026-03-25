@@ -5,7 +5,7 @@
  */
 
 import { DIALS_PER_30_MIN } from '@/lib/mvpBlockModel';
-import { ensureMinimumCallBlocks } from '@/lib/planCallBlockGuarantee';
+import { ensureMinimumCallBlocks, fillRemainingGaps } from '@/lib/planCallBlockGuarantee';
 import { validateCalendarInvariants, enforceCalendarImmutability, type CalendarAnchor } from '@/lib/calendarTimeInvariants';
 
 export interface RecastBlock {
