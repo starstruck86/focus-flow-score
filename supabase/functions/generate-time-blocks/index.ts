@@ -706,7 +706,7 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
         let gapStart = cursor;
         let gapRemaining = blockStart - gapStart;
 
-        while (gapRemaining > 15) {
+        while (gapRemaining > 0) {
           if (gapRemaining >= 60) {
             filled.push(createPrepBlock(gapStart, 30));
             gapStart += 30;
@@ -720,11 +720,17 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
               gapRemaining -= activityDuration;
             }
           } else if (gapRemaining >= 30) {
-            filled.push(createPrepBlock(gapStart, gapRemaining));
+            // 30-44 min: use the full window for a call block or prep
+            outreachSequence += 1;
+            filled.push(createCallBlock(gapStart, gapRemaining, outreachSequence));
             gapStart += gapRemaining;
             gapRemaining = 0;
+          } else if (gapRemaining >= 15) {
+            // 15-29 min: productive micro-block
+            filled.push(createShortAdminBlock(gapStart, gapStart + gapRemaining));
+            gapRemaining = 0;
           } else {
-            filled.push(createShortAdminBlock(gapStart, blockStart));
+            // < 15 min: buffer, skip
             gapRemaining = 0;
           }
         }
@@ -733,12 +739,12 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
         cursor = Math.max(cursor, toMinutes(block.end_time));
       }
 
-      // Fill tail ONLY if there's meaningful time (≥ 60 min) — don't stuff call blocks after back-to-back meetings
+      // Fill tail
       let tailStart = cursor;
       let tailRemaining = workEndMin - tailStart;
 
       if (tailRemaining >= 60) {
-        while (tailRemaining > 15) {
+        while (tailRemaining > 0) {
           if (tailRemaining >= 60) {
             filled.push(createPrepBlock(tailStart, 30));
             tailStart += 30;
@@ -752,16 +758,24 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
               tailRemaining -= activityDuration;
             }
           } else if (tailRemaining >= 30) {
-            filled.push(createPrepBlock(tailStart, tailRemaining));
+            // Use full remaining window for a call block
+            outreachSequence += 1;
+            filled.push(createCallBlock(tailStart, tailRemaining, outreachSequence));
             tailStart += tailRemaining;
             tailRemaining = 0;
-          } else {
+          } else if (tailRemaining >= 15) {
             filled.push(createShortAdminBlock(tailStart, workEndMin));
+            tailRemaining = 0;
+          } else {
             tailRemaining = 0;
           }
         }
+      } else if (tailRemaining >= 30) {
+        // 30-59 min tail: call block to fill
+        outreachSequence += 1;
+        filled.push(createCallBlock(tailStart, tailRemaining, outreachSequence));
       } else if (tailRemaining >= 15) {
-        // Short tail — just a wrap-up admin block, not a call block
+        // Short tail — wrap-up admin block
         filled.push(createShortAdminBlock(tailStart, workEndMin));
       }
 
@@ -1021,12 +1035,16 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
         const blockEnd = Math.min(workEndMin, toMinutes(block.end_time));
         if (blockEnd <= workStartMin || blockStart >= workEndMin) continue;
 
-        if (blockStart - cursor >= 30) {
-          sorted.push(createMandatoryCallBlock(cursor, cursor + 30, sequence, 'Dial minimum enforcement — inserted call block in open window.'));
+        const gap = blockStart - cursor;
+        if (gap >= 30) {
+          // Fill up to 60 min of the gap
+          const callEnd = Math.min(cursor + Math.min(gap, 60), blockStart);
+          const dur = callEnd - cursor;
+          sorted.push(createMandatoryCallBlock(cursor, callEnd, sequence, `Dial minimum enforcement — inserted ${dur}-min call block in open window.`));
           return {
             blocks: sorted.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time)),
             inserted: true,
-            reason: `Inserted 30-minute call block in open window ${minToTime(cursor)}–${minToTime(cursor + 30)}.`,
+            reason: `Inserted ${dur}-minute call block in open window ${minToTime(cursor)}–${minToTime(callEnd)}.`,
           };
         }
 
@@ -1034,11 +1052,14 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
       }
 
       if (workEndMin - cursor >= 30) {
-        sorted.push(createMandatoryCallBlock(cursor, cursor + 30, sequence, 'Dial minimum enforcement — inserted call block at day tail.'));
+        // Fill up to 60 min of tail
+        const callEnd = Math.min(cursor + 60, workEndMin);
+        const dur = callEnd - cursor;
+        sorted.push(createMandatoryCallBlock(cursor, callEnd, sequence, `Dial minimum enforcement — inserted ${dur}-min call block at day tail.`));
         return {
           blocks: sorted.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time)),
           inserted: true,
-          reason: `Inserted 30-minute call block at ${minToTime(cursor)}–${minToTime(cursor + 30)}.`,
+          reason: `Inserted ${dur}-minute call block at ${minToTime(cursor)}–${minToTime(callEnd)}.`,
         };
       }
 

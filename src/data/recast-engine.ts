@@ -5,7 +5,7 @@
  */
 
 import { DIALS_PER_30_MIN } from '@/lib/mvpBlockModel';
-import { ensureMinimumCallBlocks } from '@/lib/planCallBlockGuarantee';
+import { ensureMinimumCallBlocks, fillRemainingGaps } from '@/lib/planCallBlockGuarantee';
 import { validateCalendarInvariants, enforceCalendarImmutability, type CalendarAnchor } from '@/lib/calendarTimeInvariants';
 
 export interface RecastBlock {
@@ -237,9 +237,11 @@ export function recastDay(input: RecastInput): RecastResult {
     while (actionIdx < keptBlocks.length && cursor < meetStart) {
       const ab = keptBlocks[actionIdx];
       const dur = blockMinutes(ab);
-      const actualDur = Math.min(dur, meetStart - cursor);
+      const gapToMeeting = meetStart - cursor;
+      const actualDur = Math.min(dur, gapToMeeting);
       const minDur = minBlockDuration(ab.type);
       if (actualDur >= minDur) {
+        // Use the full available window, not just the block's original duration
         scheduled.push({
           ...ab,
           start_time: fromMinutes(cursor),
@@ -247,9 +249,11 @@ export function recastDay(input: RecastInput): RecastResult {
         });
         cursor += actualDur;
         actionIdx++;
-      } else {
-        // Gap too small for this block type — skip to next block or break
+      } else if (gapToMeeting >= 15) {
+        // Gap too small for this block type but >= 15 min — skip block, gap will be filled later
         actionIdx++;
+      } else {
+        break;
       }
     }
     // Place meeting
@@ -261,9 +265,11 @@ export function recastDay(input: RecastInput): RecastResult {
   while (actionIdx < keptBlocks.length && cursor < workEndMinutes) {
     const ab = keptBlocks[actionIdx];
     const dur = blockMinutes(ab);
-    const actualDur = Math.min(dur, workEndMinutes - cursor);
+    const remainingTime = workEndMinutes - cursor;
+    const actualDur = Math.min(dur, remainingTime);
     const minDur = minBlockDuration(ab.type);
     if (actualDur >= minDur) {
+      // Expand block to fill available time (up to original duration)
       scheduled.push({
         ...ab,
         start_time: fromMinutes(cursor),
@@ -305,7 +311,21 @@ export function recastDay(input: RecastInput): RecastResult {
     return block;
   });
 
-  const finalScheduled = correctedBlocks;
+  // Fill remaining 15–29 min gaps with light admin micro-blocks
+  const finalScheduled = fillRemainingGaps(
+    correctedBlocks,
+    currentTimeMinutes,
+    workEndMinutes,
+    (startTime: string, endTime: string): RecastBlock => ({
+      start_time: startTime,
+      end_time: endTime,
+      label: 'CRM & Follow-up',
+      type: 'admin',
+      workstream: 'general',
+      goals: ['Log activity', 'Quick follow-ups'],
+      reasoning: 'Filling short gap with productive light work.',
+    }),
+  );
 
   // ── Determine priorities based on target gaps ──
   const updatedPriorities: string[] = [];
