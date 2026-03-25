@@ -839,7 +839,7 @@ export function ResourceManager() {
                       {isExternal && (
                         <DropdownMenuItem onClick={async (e) => {
                           e.stopPropagation();
-                          const isReenrich = resAny.content_status === 'enriched';
+                          const isReenrich = enrichStatus === 'deep_enriched';
                           toast.info(isReenrich ? 'Re-enriching content...' : 'Enriching content...');
                           try {
                             const { data } = await trackedInvoke<any>('enrich-resource-content', {
@@ -850,7 +850,34 @@ export function ResourceManager() {
                             toast.error('Enrichment failed');
                           }
                         }}>
-                          <RefreshCw className="h-3.5 w-3.5 mr-2" /> {resAny.content_status === 'enriched' ? 'Re-enrich' : 'Deep Enrich'}
+                          <RefreshCw className="h-3.5 w-3.5 mr-2" /> {enrichStatus === 'deep_enriched' ? 'Re-enrich' : 'Deep Enrich'}
+                        </DropdownMenuItem>
+                      )}
+                      {isExternal && enrichStatus === 'failed' && (
+                        <DropdownMenuItem onClick={(e) => {
+                          e.stopPropagation();
+                          updateEnrichmentStatus.mutate({ id: resource.id, enrichment_status: 'not_enriched', failure_reason: null });
+                          toast.success('Reset to not enriched — ready for retry');
+                        }}>
+                          <RotateCcw className="h-3.5 w-3.5 mr-2" /> Reset Status
+                        </DropdownMenuItem>
+                      )}
+                      {isExternal && enrichStatus === 'deep_enriched' && (
+                        <DropdownMenuItem onClick={(e) => {
+                          e.stopPropagation();
+                          updateEnrichmentStatus.mutate({ id: resource.id, enrichment_status: 'queued_for_reenrich' });
+                          toast.success('Queued for re-enrichment');
+                        }}>
+                          <RefreshCw className="h-3.5 w-3.5 mr-2" /> Queue Re-enrich
+                        </DropdownMenuItem>
+                      )}
+                      {isExternal && (enrichStatus === 'not_enriched' || !enrichStatus) && (
+                        <DropdownMenuItem onClick={(e) => {
+                          e.stopPropagation();
+                          updateEnrichmentStatus.mutate({ id: resource.id, enrichment_status: 'duplicate' });
+                          toast.success('Marked as duplicate');
+                        }}>
+                          <AlertTriangle className="h-3.5 w-3.5 mr-2" /> Mark Duplicate
                         </DropdownMenuItem>
                       )}
                       <DropdownMenuItem onClick={(e) => {
