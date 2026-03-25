@@ -279,6 +279,27 @@ export function useBulkIngestion() {
   async function processItem(item: IngestionItem, reprocessMode: ReprocessMode): Promise<void> {
     if (!user) throw new Error('Not authenticated');
 
+    const isDirectResourceRun = !!item.resourceId;
+    const resourceId = item.resourceId;
+
+    if (isDirectResourceRun && resourceId) {
+      updateItem(item.id, { stage: 'enriching', existingResourceId: resourceId });
+      try {
+        const force = item.enrichMode === 're_enrich';
+        await trackedInvoke<any>('enrich-resource-content', {
+          body: { resource_id: resourceId, force },
+          componentName: 'DeepEnrich',
+          timeoutMs: 60_000,
+        });
+        updateItem(item.id, { stage: 'complete' });
+        return;
+      } catch (enrichErr) {
+        const enrichMsg = classifyError(enrichErr, 'Deep enrichment');
+        updateItem(item.id, { stage: 'failed', error: enrichMsg, existingResourceId: resourceId });
+        throw new Error(enrichMsg);
+      }
+    }
+
     // Step 1: Duplicate check against DB using canonical identity
     updateItem(item.id, { stage: 'checking_duplicate' });
     const existingId = await checkDuplicate(item.url);
@@ -316,13 +337,12 @@ export function useBulkIngestion() {
       : `[External Link: ${source.canonical_url}]`;
     const contentStatus = contentToStore.startsWith('[External Link:') ? 'placeholder' : 'enriched';
 
-    // Quality: detect empty/junk transcript
     if (contentStatus === 'enriched' && contentToStore.length < EMPTY_TRANSCRIPT_THRESHOLD) {
       updateItem(item.id, { stage: 'needs_review', error: 'Content too short — possible empty transcript' });
       return;
     }
 
-    let resourceId: string;
+    let savedResourceId: string;
 
     if (existingId && reprocessMode !== 'skip_processed') {
       const updatePayload: Record<string, any> = {};
@@ -340,7 +360,7 @@ export function useBulkIngestion() {
       if (Object.keys(updatePayload).length > 0) {
         await supabase.from('resources').update(updatePayload).eq('id', existingId);
       }
-      resourceId = existingId;
+      savedResourceId = existingId;
     } else {
       let folderId: string | null = null;
       if (classification.top_folder) {
@@ -380,20 +400,18 @@ export function useBulkIngestion() {
         .select('id')
         .single();
       if (error) throw new Error(`Save failed: ${error.message}`);
-      resourceId = resource.id;
+      savedResourceId = resource.id;
     }
 
-    // Step 4: Quality check
     if (contentStatus === 'enriched' && contentToStore.length < MIN_CONTENT_LENGTH) {
       updateItem(item.id, { stage: 'needs_review', error: `Content only ${contentToStore.length} chars — may be low quality` });
       return;
     }
 
-    // Step 5: Deep enrich
-    updateItem(item.id, { stage: 'enriching' });
+    updateItem(item.id, { stage: 'enriching', existingResourceId: savedResourceId });
     try {
       await trackedInvoke<any>('enrich-resource-content', {
-        body: { resource_id: resourceId, force: true },
+        body: { resource_id: savedResourceId, force: true },
         componentName: 'DeepEnrich',
         timeoutMs: 60_000,
       });
@@ -403,7 +421,7 @@ export function useBulkIngestion() {
       return;
     }
 
-    updateItem(item.id, { stage: 'complete' });
+    updateItem(item.id, { stage: 'complete', existingResourceId: savedResourceId });
   }
 
   // ── Main start ─────────────────────────────────────────
