@@ -3,22 +3,9 @@
  * Calls the shared recast engine and formats results for voice delivery.
  */
 import { supabase } from '@/integrations/supabase/client';
-import { todayInAppTz } from '@/lib/timeFormat';
+import { todayInAppTz, getCurrentMinutesET, spokenTimeET } from '@/lib/timeFormat';
 import { recastDay, type RecastBlock, type RecastInput } from '@/data/recast-engine';
 import type { ToolContext } from '../../toolTypes';
-
-function getCurrentMinutesET(): number {
-  const etNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  return etNow.getHours() * 60 + etNow.getMinutes();
-}
-
-function spokenTime(t: string): string {
-  const [h, m] = t.split(':').map(Number);
-  const suffix = h >= 12 ? 'PM' : 'AM';
-  const hour = h > 12 ? h - 12 : h === 0 ? 12 : h;
-  if (m === 0) return `${hour} ${suffix}`;
-  return `${hour}:${m.toString().padStart(2, '0')} ${suffix}`;
-}
 
 export async function recastToday(ctx: ToolContext): Promise<string> {
   const userId = await ctx.getUserId();
@@ -129,7 +116,7 @@ export async function recastToday(ctx: ToolContext): Promise<string> {
   const actionBlocks = result.remainingBlocks.filter(b => b.type !== 'meeting');
   const meetings = result.remainingBlocks.filter(b => b.type === 'meeting');
   if (actionBlocks.length > 0) {
-    const blockList = actionBlocks.map(b => `${b.label} at ${spokenTime(b.start_time)}`);
+    const blockList = actionBlocks.map(b => `${b.label} at ${spokenTimeET(b.start_time)}`);
     sentences.push(`Your remaining action blocks: ${blockList.join(', ')}.`);
   }
   if (meetings.length > 0) {

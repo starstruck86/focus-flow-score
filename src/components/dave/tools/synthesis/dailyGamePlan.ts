@@ -6,7 +6,7 @@
  * Uses MVP block model for dial targets and capacity language.
  */
 import { supabase } from '@/integrations/supabase/client';
-import { todayInAppTz } from '@/lib/timeFormat';
+import { todayInAppTz, getCurrentMinutesET } from '@/lib/timeFormat';
 import { startOfWeek, format } from 'date-fns';
 import { calculateDialCapacity, getActualDials, DAILY_DIALS_MIN, DAILY_DIALS_TARGET, BLOCK_MVPS } from '@/lib/mvpBlockModel';
 import type { ToolContext } from '../../toolTypes';
@@ -51,10 +51,7 @@ function blockDurationMin(block: TimeBlock): number {
   return (eh * 60 + em) - (sh * 60 + sm);
 }
 
-function getCurrentMinutesET(): number {
-  const etNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  return etNow.getHours() * 60 + etNow.getMinutes();
-}
+
 
 function findCurrentAndNext(blocks: TimeBlock[]): { current: TimeBlock | null; next: TimeBlock | null } {
   const now = getCurrentMinutesET();

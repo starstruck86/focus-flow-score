@@ -12,6 +12,41 @@ const corsHeaders = {
   "x-function-group-version": FUNCTION_GROUP_VERSION,
 };
 
+// ── Canonical Boston time helper (edge function version) ──
+// Mirrors src/lib/timeFormat.ts logic for server-side use.
+const BOSTON_TZ = "America/New_York";
+
+interface BostonTimeSnapshot {
+  utcIso: string;
+  dateStr: string;      // "Monday, March 24, 2025"
+  timeStr: string;      // "7:11 AM"
+  dayOfWeek: string;    // "Monday"
+  monthName: string;    // "March"
+  dayNum: number;
+  hour: number;         // 0-23 in Boston
+}
+
+function getBostonTime(): BostonTimeSnapshot {
+  const utcNow = new Date();
+  // Intl-based formatting — DST-aware, no manual offsets
+  const dateStr = utcNow.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: BOSTON_TZ });
+  const timeStr = utcNow.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: BOSTON_TZ });
+  const dayOfWeek = utcNow.toLocaleDateString("en-US", { weekday: "long", timeZone: BOSTON_TZ });
+  const monthName = utcNow.toLocaleDateString("en-US", { month: "long", timeZone: BOSTON_TZ });
+  const dayNum = parseInt(utcNow.toLocaleDateString("en-US", { day: "numeric", timeZone: BOSTON_TZ }), 10);
+  const hour = parseInt(utcNow.toLocaleTimeString("en-US", { hour: "numeric", hour12: false, timeZone: BOSTON_TZ }), 10);
+  return { utcIso: utcNow.toISOString(), dateStr, timeStr, dayOfWeek, monthName, dayNum, hour };
+}
+
+function formatMeetingTime(isoStr: string): string {
+  return new Date(isoStr).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: BOSTON_TZ });
+}
+
+function ordinal(d: number): string {
+  if (d > 3 && d < 21) return d + "th";
+  switch (d % 10) { case 1: return d + "st"; case 2: return d + "nd"; case 3: return d + "rd"; default: return d + "th"; }
+}
+
 const DAVE_INSTRUCTIONS = `DAVE OPERATING INSTRUCTIONS:
 
 ═══ IDENTITY ═══
@@ -228,11 +263,10 @@ Deno.serve(async (req) => {
 
     const { token } = await tokenResp.json();
 
-    // Inject current Boston ET time into context so Dave always has it
-    const bostonNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
-    const bostonTimeStr = bostonNow.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
-    const bostonDateStr = bostonNow.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "America/New_York" });
-    const currentTimeSection = `CURRENT BOSTON TIME: ${bostonDateStr}, ${bostonTimeStr} ET (Eastern Time, DST-aware)`;
+    // Inject current Boston ET time — single canonical source
+    const bt = getBostonTime();
+    console.log(`[BostonTime] utc=${bt.utcIso} boston=${bt.timeStr} hour=${bt.hour}`);
+    const currentTimeSection = `CURRENT BOSTON TIME: ${bt.dateStr}, ${bt.timeStr} ET (Eastern Time, DST-aware)`;
 
     let contextString = DAVE_INSTRUCTIONS + "\n\n" + currentTimeSection + "\n\n" + crmContext.sections.join("\n\n");
     if (contextString.length > 20000) {
@@ -621,25 +655,13 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
 }
 
 function buildFirstMessage(ctx: CrmContext, _tzOffsetHours: number): string {
-  // Always use Boston/Eastern Time — DST-aware
-  const bostonNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
-  const dayOfWeek = bostonNow.toLocaleDateString("en-US", { weekday: "long", timeZone: "America/New_York" });
-  const monthDay = bostonNow.toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "America/New_York" });
-  const ordinal = (d: number) => {
-    if (d > 3 && d < 21) return d + "th";
-    switch (d % 10) { case 1: return d + "st"; case 2: return d + "nd"; case 3: return d + "rd"; default: return d + "th"; }
-  };
-  const dayNum = bostonNow.getDate();
-  const monthName = bostonNow.toLocaleDateString("en-US", { month: "long", timeZone: "America/New_York" });
-  const timeStr = bostonNow.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
-  const localHour = bostonNow.getHours();
+  const bt = getBostonTime();
 
-  // Opening: always day, date, Boston time
-  let msg = `${dayOfWeek}, ${monthName} ${ordinal(dayNum)} — ${timeStr} Boston time. `;
+  let msg = `${bt.dayOfWeek}, ${bt.monthName} ${ordinal(bt.dayNum)} — ${bt.timeStr} Boston time. `;
 
-  if (localHour < 10) {
+  if (bt.hour < 10) {
     if (ctx.calendarCount > 0 && ctx.firstMeeting) {
-      const meetTime = new Date(ctx.firstMeeting.start_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+      const meetTime = formatMeetingTime(ctx.firstMeeting.start_time);
       msg += `You've got ${ctx.calendarCount} meeting${ctx.calendarCount > 1 ? "s" : ""} coming up, starting with "${ctx.firstMeeting.title}" at ${meetTime}. `;
     }
     if (ctx.overdueCount > 0) {
@@ -649,7 +671,7 @@ function buildFirstMessage(ctx: CrmContext, _tzOffsetHours: number): string {
       msg += `Quick reminder: ${ctx.pendingReminders[0]}. `;
     }
     msg += "How can I help?";
-  } else if (localHour < 16) {
+  } else if (bt.hour < 16) {
     if (ctx.calendarCount > 0 && ctx.firstMeeting) {
       msg += `Next up: "${ctx.firstMeeting.title}" — want me to prep you? Otherwise, `;
     }
