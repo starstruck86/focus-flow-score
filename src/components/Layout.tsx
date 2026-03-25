@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { SaveIndicator } from '@/components/SaveIndicator';
+import { BostonClock } from '@/components/BostonClock';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useReviewMode } from '@/contexts/ReviewModeContext';
