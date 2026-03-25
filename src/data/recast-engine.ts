@@ -92,6 +92,10 @@ function spokenTime(t: string): string {
   return `${hour}:${m.toString().padStart(2, '0')} ${suffix}`;
 }
 
+function normalizeLabel(label: string): string {
+  return label.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 /**
  * Core recast logic.
  */
@@ -99,26 +103,57 @@ export function recastDay(input: RecastInput): RecastResult {
   const { currentTimeMinutes, allBlocks, completedGoals, meetingSchedule, targets, actuals, workEndMinutes } = input;
 
   // ── Snapshot calendar anchors BEFORE any mutation ──
-  const calendarAnchors: CalendarAnchor[] = allBlocks
-    .filter(b => b.type === 'meeting')
-    .map(b => ({ start_time: b.start_time, end_time: b.end_time, label: b.label }));
+  const canonicalMeetings = meetingSchedule.length > 0
+    ? meetingSchedule
+        .map(meeting => ({
+          start_time: fromMinutes(meeting.start),
+          end_time: fromMinutes(meeting.end),
+          label: meeting.label,
+        }))
+        .sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time))
+    : allBlocks
+        .filter(b => b.type === 'meeting')
+        .map(b => ({ start_time: b.start_time, end_time: b.end_time, label: b.label }))
+        .sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
+
+  const calendarAnchors: CalendarAnchor[] = canonicalMeetings;
+  const existingMeetingMap = new Map(
+    allBlocks
+      .filter(b => b.type === 'meeting')
+      .map(b => [normalizeLabel(b.label), b] as const)
+  );
   const minutesRemaining = Math.max(0, workEndMinutes - currentTimeMinutes);
 
   // Separate past/current vs future blocks
   const futureBlocks: (RecastBlock & { originalIdx: number })[] = [];
-  const pastBlocks: RecastBlock[] = [];
 
   for (let i = 0; i < allBlocks.length; i++) {
     const endMin = toMinutes(allBlocks[i].end_time);
-    if (endMin <= currentTimeMinutes) {
-      pastBlocks.push(allBlocks[i]);
-    } else {
+    if (allBlocks[i].type !== 'meeting' && endMin > currentTimeMinutes) {
       futureBlocks.push({ ...allBlocks[i], originalIdx: i });
     }
   }
 
+  const futureMeetingBlocks: RecastBlock[] = canonicalMeetings
+    .filter(meeting => toMinutes(meeting.end_time) > currentTimeMinutes)
+    .map(meeting => {
+      const existing = existingMeetingMap.get(normalizeLabel(meeting.label));
+      return {
+        start_time: meeting.start_time,
+        end_time: meeting.end_time,
+        label: meeting.label,
+        type: 'meeting',
+        workstream: existing?.workstream ?? 'general',
+        goals: existing?.goals?.length ? existing.goals : [`Attend ${meeting.label}`],
+        reasoning: existing?.reasoning ?? 'Fixed calendar meeting — this time is locked.',
+        linked_accounts: existing?.linked_accounts,
+        actual_dials: existing?.actual_dials,
+        actual_emails: existing?.actual_emails,
+      };
+    });
+
   // If no time left, nothing to recast
-  if (minutesRemaining <= 0 || futureBlocks.length === 0) {
+  if (minutesRemaining <= 0 || (futureBlocks.length === 0 && futureMeetingBlocks.length === 0)) {
     return {
       remainingBlocks: [],
       droppedBlocks: [],
@@ -131,8 +166,8 @@ export function recastDay(input: RecastInput): RecastResult {
   }
 
   // ── Identify meetings (immovable) ──
-  const meetingBlocks = futureBlocks.filter(b => b.type === 'meeting');
-  const actionBlocks = futureBlocks.filter(b => b.type !== 'meeting');
+  const meetingBlocks = futureMeetingBlocks;
+  const actionBlocks = futureBlocks;
 
   // Sort action blocks by priority (highest first)
   actionBlocks.sort((a, b) => (TYPE_PRIORITY[b.type] || 0) - (TYPE_PRIORITY[a.type] || 0));
