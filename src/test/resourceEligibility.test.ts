@@ -91,23 +91,28 @@ describe('getEligiblePool', () => {
   ];
 
   it('deep pool contains only placeholder/file items with http urls', () => {
-    const pool = getEligiblePool(resources, 'deep');
+    const pool = getEligibleResources(resources, 'deep_enrich');
     expect(pool.map(r => r.id)).toEqual(['1', '3']);
   });
 
   it('reenrich pool contains only enriched items with http urls', () => {
-    const pool = getEligiblePool(resources, 'reenrich');
+    const pool = getEligibleResources(resources, 're_enrich');
     expect(pool.map(r => r.id)).toEqual(['2', '4']);
+  });
+
+  it('legacy alias returns same deep pool output', () => {
+    const pool = getEligiblePool(resources, 'deep_enrich');
+    expect(pool.map(r => r.id)).toEqual(['1', '3']);
   });
 
   it('returns empty when nothing eligible', () => {
     const allEnriched = [makeResource({ id: '1', content_status: 'enriched' })];
-    expect(getEligiblePool(allEnriched, 'deep')).toEqual([]);
+    expect(getEligibleResources(allEnriched, 'deep_enrich')).toEqual([]);
   });
 
   it('zero eligible disables run (empty array)', () => {
-    expect(getEligiblePool([], 'deep')).toEqual([]);
-    expect(getEligiblePool([], 'reenrich')).toEqual([]);
+    expect(getEligibleResources([], 'deep_enrich')).toEqual([]);
+    expect(getEligibleResources([], 're_enrich')).toEqual([]);
   });
 });
 
