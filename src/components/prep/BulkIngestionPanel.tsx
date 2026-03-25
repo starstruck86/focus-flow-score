@@ -30,13 +30,13 @@ interface BulkIngestionPanelProps {
   state: IngestionState;
   onSetBatchSize: (size: number) => void;
   onSetReprocessMode?: (mode: any) => void;
-  onStart: (items: Array<{ url: string; title: string; videoId?: string; channel?: string; publishDate?: string; duration?: string }>, opts?: { retryFailedOnly?: boolean }) => void;
+  onStart: (items: Array<{ resourceId?: string; url: string; title: string; enrichMode?: 'deep_enrich' | 're_enrich'; videoId?: string; channel?: string; publishDate?: string; duration?: string }>, opts?: { retryFailedOnly?: boolean }) => void;
   onPause: () => void;
   onResume: () => void;
   onCancel: () => void;
   onReset: () => void;
   hasFailures: boolean;
-  sourceItems: Array<{ url: string; title: string; videoId?: string; channel?: string; publishDate?: string; duration?: string }>;
+  sourceItems: Array<{ resourceId?: string; url: string; title: string; enrichMode?: 'deep_enrich' | 're_enrich'; videoId?: string; channel?: string; publishDate?: string; duration?: string }>;
   sourceLabel?: string;
   /** Total eligible resources (pre-filtered). Used for remaining count after batch. */
   totalEligible?: number;

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   isDeepEnrichEligible,
   isReenrichEligible,
+  getEligibleResources,
   getEligiblePool,
   selectBatch,
   assertBatchEligibility,
@@ -82,31 +83,36 @@ describe('isReenrichEligible', () => {
 
 describe('getEligiblePool', () => {
   const resources = [
-    makeResource({ id: '1', content_status: 'placeholder' }),
-    makeResource({ id: '2', content_status: 'enriched' }),
-    makeResource({ id: '3', content_status: 'file' }),
-    makeResource({ id: '4', content_status: 'enriched' }),
+    makeResource({ id: '1', content_status: 'placeholder', file_url: 'https://example.com/a' }),
+    makeResource({ id: '2', content_status: 'enriched', file_url: 'https://example.com/b' }),
+    makeResource({ id: '3', content_status: 'file', file_url: 'https://example.com/c' }),
+    makeResource({ id: '4', content_status: 'enriched', file_url: 'https://example.com/d' }),
     makeResource({ id: '5', file_url: null, content_status: 'placeholder' }),
   ];
 
   it('deep pool contains only placeholder/file items with http urls', () => {
-    const pool = getEligiblePool(resources, 'deep');
+    const pool = getEligibleResources(resources, 'deep_enrich');
     expect(pool.map(r => r.id)).toEqual(['1', '3']);
   });
 
   it('reenrich pool contains only enriched items with http urls', () => {
-    const pool = getEligiblePool(resources, 'reenrich');
+    const pool = getEligibleResources(resources, 're_enrich');
     expect(pool.map(r => r.id)).toEqual(['2', '4']);
+  });
+
+  it('legacy alias returns same deep pool output', () => {
+    const pool = getEligiblePool(resources, 'deep_enrich');
+    expect(pool.map(r => r.id)).toEqual(['1', '3']);
   });
 
   it('returns empty when nothing eligible', () => {
     const allEnriched = [makeResource({ id: '1', content_status: 'enriched' })];
-    expect(getEligiblePool(allEnriched, 'deep')).toEqual([]);
+    expect(getEligibleResources(allEnriched, 'deep_enrich')).toEqual([]);
   });
 
   it('zero eligible disables run (empty array)', () => {
-    expect(getEligiblePool([], 'deep')).toEqual([]);
-    expect(getEligiblePool([], 'reenrich')).toEqual([]);
+    expect(getEligibleResources([], 'deep_enrich')).toEqual([]);
+    expect(getEligibleResources([], 're_enrich')).toEqual([]);
   });
 });
 

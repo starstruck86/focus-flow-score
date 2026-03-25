@@ -41,6 +41,8 @@ export interface IngestionItem {
   channel?: string;
   publishDate?: string;
   duration?: string;
+  resourceId?: string;
+  enrichMode?: 'deep_enrich' | 're_enrich';
   existingResourceId?: string;
 }
 
@@ -222,14 +224,14 @@ export function useBulkIngestion() {
 
   // ── Preprocess: validate + deduplicate within batch ──
   function preprocessItems(
-    rawItems: Array<{ url: string; title: string; videoId?: string; channel?: string; publishDate?: string; duration?: string }>
+    rawItems: Array<{ resourceId?: string; url: string; title: string; enrichMode?: 'deep_enrich' | 're_enrich'; videoId?: string; channel?: string; publishDate?: string; duration?: string }>
   ): IngestionItem[] {
     const seenCanonicals = new Set<string>();
     return rawItems.map((item, idx) => {
       const urlError = validateUrl(item.url);
       if (urlError) {
         return {
-          id: `ingest-${idx}-${Date.now()}`,
+          id: item.resourceId ?? `ingest-${idx}-${Date.now()}`,
           url: item.url,
           title: item.title || 'Untitled',
           stage: 'skipped' as const,
@@ -238,15 +240,17 @@ export function useBulkIngestion() {
           channel: item.channel,
           publishDate: item.publishDate,
           duration: item.duration,
+          resourceId: item.resourceId,
+          enrichMode: item.enrichMode,
         };
       }
 
       const source = canonicalize(item.url);
-      const canonicalKey = source.source_id || source.canonical_url;
+      const canonicalKey = item.resourceId || source.source_id || source.canonical_url;
 
       if (seenCanonicals.has(canonicalKey)) {
         return {
-          id: `ingest-${idx}-${Date.now()}`,
+          id: item.resourceId ?? `ingest-${idx}-${Date.now()}`,
           url: item.url,
           title: item.title || 'Untitled',
           stage: 'skipped' as const,
@@ -255,13 +259,15 @@ export function useBulkIngestion() {
           channel: item.channel,
           publishDate: item.publishDate,
           duration: item.duration,
+          resourceId: item.resourceId,
+          enrichMode: item.enrichMode,
         };
       }
 
       seenCanonicals.add(canonicalKey);
 
       return {
-        id: `ingest-${idx}-${Date.now()}`,
+        id: item.resourceId ?? `ingest-${idx}-${Date.now()}`,
         url: item.url,
         title: item.title || 'Untitled',
         stage: 'queued' as const,
@@ -269,6 +275,8 @@ export function useBulkIngestion() {
         channel: item.channel,
         publishDate: item.publishDate,
         duration: item.duration,
+        resourceId: item.resourceId,
+        enrichMode: item.enrichMode,
       };
     });
   }
@@ -276,6 +284,27 @@ export function useBulkIngestion() {
   // ── Process single item (Deep Enrich) ──────────────────
   async function processItem(item: IngestionItem, reprocessMode: ReprocessMode): Promise<void> {
     if (!user) throw new Error('Not authenticated');
+
+    const isDirectResourceRun = !!item.resourceId;
+    const resourceId = item.resourceId;
+
+    if (isDirectResourceRun && resourceId) {
+      updateItem(item.id, { stage: 'enriching', existingResourceId: resourceId });
+      try {
+        const force = item.enrichMode === 're_enrich';
+        await trackedInvoke<any>('enrich-resource-content', {
+          body: { resource_id: resourceId, force },
+          componentName: 'DeepEnrich',
+          timeoutMs: 60_000,
+        });
+        updateItem(item.id, { stage: 'complete' });
+        return;
+      } catch (enrichErr) {
+        const enrichMsg = classifyError(enrichErr, 'Deep enrichment');
+        updateItem(item.id, { stage: 'failed', error: enrichMsg, existingResourceId: resourceId });
+        throw new Error(enrichMsg);
+      }
+    }
 
     // Step 1: Duplicate check against DB using canonical identity
     updateItem(item.id, { stage: 'checking_duplicate' });
@@ -314,13 +343,12 @@ export function useBulkIngestion() {
       : `[External Link: ${source.canonical_url}]`;
     const contentStatus = contentToStore.startsWith('[External Link:') ? 'placeholder' : 'enriched';
 
-    // Quality: detect empty/junk transcript
     if (contentStatus === 'enriched' && contentToStore.length < EMPTY_TRANSCRIPT_THRESHOLD) {
       updateItem(item.id, { stage: 'needs_review', error: 'Content too short — possible empty transcript' });
       return;
     }
 
-    let resourceId: string;
+    let savedResourceId: string;
 
     if (existingId && reprocessMode !== 'skip_processed') {
       const updatePayload: Record<string, any> = {};
@@ -338,7 +366,7 @@ export function useBulkIngestion() {
       if (Object.keys(updatePayload).length > 0) {
         await supabase.from('resources').update(updatePayload).eq('id', existingId);
       }
-      resourceId = existingId;
+      savedResourceId = existingId;
     } else {
       let folderId: string | null = null;
       if (classification.top_folder) {
@@ -378,20 +406,18 @@ export function useBulkIngestion() {
         .select('id')
         .single();
       if (error) throw new Error(`Save failed: ${error.message}`);
-      resourceId = resource.id;
+      savedResourceId = resource.id;
     }
 
-    // Step 4: Quality check
     if (contentStatus === 'enriched' && contentToStore.length < MIN_CONTENT_LENGTH) {
       updateItem(item.id, { stage: 'needs_review', error: `Content only ${contentToStore.length} chars — may be low quality` });
       return;
     }
 
-    // Step 5: Deep enrich
-    updateItem(item.id, { stage: 'enriching' });
+    updateItem(item.id, { stage: 'enriching', existingResourceId: savedResourceId });
     try {
       await trackedInvoke<any>('enrich-resource-content', {
-        body: { resource_id: resourceId, force: true },
+        body: { resource_id: savedResourceId, force: true },
         componentName: 'DeepEnrich',
         timeoutMs: 60_000,
       });
@@ -401,12 +427,12 @@ export function useBulkIngestion() {
       return;
     }
 
-    updateItem(item.id, { stage: 'complete' });
+    updateItem(item.id, { stage: 'complete', existingResourceId: savedResourceId });
   }
 
   // ── Main start ─────────────────────────────────────────
   const start = useCallback(async (
-    items: Array<{ url: string; title: string; videoId?: string; channel?: string; publishDate?: string; duration?: string }>,
+    items: Array<{ resourceId?: string; url: string; title: string; enrichMode?: 'deep_enrich' | 're_enrich'; videoId?: string; channel?: string; publishDate?: string; duration?: string }>,
     options?: { retryFailedOnly?: boolean }
   ) => {
     if (runningRef.current || !user) return;
