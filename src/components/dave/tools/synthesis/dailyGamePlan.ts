@@ -6,7 +6,7 @@
  * Uses MVP block model for dial targets and capacity language.
  */
 import { supabase } from '@/integrations/supabase/client';
-import { todayInAppTz } from '@/lib/timeFormat';
+import { todayInAppTz, getCurrentMinutesET } from '@/lib/timeFormat';
 import { startOfWeek, format } from 'date-fns';
 import { calculateDialCapacity, getActualDials, DAILY_DIALS_MIN, DAILY_DIALS_TARGET, BLOCK_MVPS } from '@/lib/mvpBlockModel';
 import type { ToolContext } from '../../toolTypes';
