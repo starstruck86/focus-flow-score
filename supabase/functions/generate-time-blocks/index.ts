@@ -1280,6 +1280,56 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
       ? plan.blocks
       : mergeLockedCalendarBlocks(plan.blocks || [], activeLockedCalendarBlocks);
 
+    // ── CALENDAR INVARIANT: validate & enforce meeting immutability ──
+    const calendarAnchorMap = new Map<string, { start_time: string; end_time: string }>();
+    for (const locked of activeLockedCalendarBlocks) {
+      calendarAnchorMap.set(normalizeLabel(locked.label), {
+        start_time: locked.start_time,
+        end_time: locked.end_time,
+      });
+    }
+
+    // Enforce: restore any drifted meeting times
+    let driftCorrected = 0;
+    mergedBlocks = mergedBlocks.map((block: any) => {
+      if (block.type !== 'meeting') return block;
+      const anchor = calendarAnchorMap.get(normalizeLabel(block.label));
+      if (!anchor) return block;
+      if (block.start_time !== anchor.start_time || block.end_time !== anchor.end_time) {
+        driftCorrected++;
+        logStage('calendar_drift_corrected', `"${block.label}" ${block.start_time}-${block.end_time} → ${anchor.start_time}-${anchor.end_time}`);
+        return { ...block, start_time: anchor.start_time, end_time: anchor.end_time };
+      }
+      return block;
+    });
+
+    if (driftCorrected > 0) {
+      logStage('calendar_invariant_enforced', `Corrected ${driftCorrected} drifted meeting(s)`);
+    }
+
+    // Validate: assert all calendar events are present with exact times
+    for (const locked of activeLockedCalendarBlocks) {
+      const normalizedKey = normalizeLabel(locked.label);
+      const match = mergedBlocks.find((b: any) =>
+        b.type === 'meeting' && normalizeLabel(b.label) === normalizedKey
+      );
+      if (!match) {
+        logStage('calendar_invariant_violation', `Missing meeting: "${locked.label}" ${locked.start_time}-${locked.end_time}`);
+        // Re-inject the missing meeting
+        mergedBlocks.push({
+          ...locked,
+          type: 'meeting',
+          workstream: 'general',
+          goals: [`Attend ${locked.label}`],
+          reasoning: 'Re-injected missing calendar meeting to enforce invariant.',
+        });
+      } else if (match.start_time !== locked.start_time || match.end_time !== locked.end_time) {
+        logStage('calendar_invariant_violation', `Post-correction drift for "${locked.label}": ${match.start_time}-${match.end_time} vs expected ${locked.start_time}-${locked.end_time}`);
+      }
+    }
+
+    mergedBlocks.sort((a: any, b: any) => toMinutes(a.start_time) - toMinutes(b.start_time));
+
     // SAFETY NET: If AI omitted a "build" block and there are prospecting accounts, inject one
     if (!isFallback) {
       const hasBuildBlock = mergedBlocks.some((b: any) => b.type === 'build');
@@ -1310,7 +1360,21 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
     }
 
     mergedBlocks = finalizePlanBlocks(mergedBlocks, requestSource);
-    logStage("dependencies_validated", "task dependencies enforced, gaps filled, 9-5 clamped", { finalBlockCount: mergedBlocks.length });
+
+    // ── FINAL INVARIANT CHECK: post-finalization calendar audit ──
+    for (const locked of activeLockedCalendarBlocks) {
+      const normalizedKey = normalizeLabel(locked.label);
+      const match = mergedBlocks.find((b: any) =>
+        b.type === 'meeting' && normalizeLabel(b.label) === normalizedKey
+      );
+      if (match && (match.start_time !== locked.start_time || match.end_time !== locked.end_time)) {
+        logStage('calendar_post_finalize_drift', `FINAL CORRECTION: "${locked.label}" ${match.start_time}-${match.end_time} → ${locked.start_time}-${locked.end_time}`);
+        match.start_time = locked.start_time;
+        match.end_time = locked.end_time;
+      }
+    }
+
+    logStage("dependencies_validated", "task dependencies enforced, gaps filled, 9-5 clamped, calendar invariants verified", { finalBlockCount: mergedBlocks.length, driftCorrected });
 
     const previousVisibleBlocks = Array.isArray(rebuildContext?.current_visible_blocks)
       ? rebuildContext.current_visible_blocks.filter((block: any) => !!block?.start_time && !!block?.end_time)
