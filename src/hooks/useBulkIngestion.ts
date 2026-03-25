@@ -224,14 +224,14 @@ export function useBulkIngestion() {
 
   // ── Preprocess: validate + deduplicate within batch ──
   function preprocessItems(
-    rawItems: Array<{ url: string; title: string; videoId?: string; channel?: string; publishDate?: string; duration?: string }>
+    rawItems: Array<{ resourceId?: string; url: string; title: string; enrichMode?: 'deep_enrich' | 're_enrich'; videoId?: string; channel?: string; publishDate?: string; duration?: string }>
   ): IngestionItem[] {
     const seenCanonicals = new Set<string>();
     return rawItems.map((item, idx) => {
       const urlError = validateUrl(item.url);
       if (urlError) {
         return {
-          id: `ingest-${idx}-${Date.now()}`,
+          id: item.resourceId ?? `ingest-${idx}-${Date.now()}`,
           url: item.url,
           title: item.title || 'Untitled',
           stage: 'skipped' as const,
@@ -240,15 +240,17 @@ export function useBulkIngestion() {
           channel: item.channel,
           publishDate: item.publishDate,
           duration: item.duration,
+          resourceId: item.resourceId,
+          enrichMode: item.enrichMode,
         };
       }
 
       const source = canonicalize(item.url);
-      const canonicalKey = source.source_id || source.canonical_url;
+      const canonicalKey = item.resourceId || source.source_id || source.canonical_url;
 
       if (seenCanonicals.has(canonicalKey)) {
         return {
-          id: `ingest-${idx}-${Date.now()}`,
+          id: item.resourceId ?? `ingest-${idx}-${Date.now()}`,
           url: item.url,
           title: item.title || 'Untitled',
           stage: 'skipped' as const,
@@ -257,13 +259,15 @@ export function useBulkIngestion() {
           channel: item.channel,
           publishDate: item.publishDate,
           duration: item.duration,
+          resourceId: item.resourceId,
+          enrichMode: item.enrichMode,
         };
       }
 
       seenCanonicals.add(canonicalKey);
 
       return {
-        id: `ingest-${idx}-${Date.now()}`,
+        id: item.resourceId ?? `ingest-${idx}-${Date.now()}`,
         url: item.url,
         title: item.title || 'Untitled',
         stage: 'queued' as const,
@@ -271,6 +275,8 @@ export function useBulkIngestion() {
         channel: item.channel,
         publishDate: item.publishDate,
         duration: item.duration,
+        resourceId: item.resourceId,
+        enrichMode: item.enrichMode,
       };
     });
   }
