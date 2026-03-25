@@ -237,9 +237,11 @@ export function recastDay(input: RecastInput): RecastResult {
     while (actionIdx < keptBlocks.length && cursor < meetStart) {
       const ab = keptBlocks[actionIdx];
       const dur = blockMinutes(ab);
-      const actualDur = Math.min(dur, meetStart - cursor);
+      const gapToMeeting = meetStart - cursor;
+      const actualDur = Math.min(dur, gapToMeeting);
       const minDur = minBlockDuration(ab.type);
       if (actualDur >= minDur) {
+        // Use the full available window, not just the block's original duration
         scheduled.push({
           ...ab,
           start_time: fromMinutes(cursor),
@@ -247,9 +249,11 @@ export function recastDay(input: RecastInput): RecastResult {
         });
         cursor += actualDur;
         actionIdx++;
-      } else {
-        // Gap too small for this block type — skip to next block or break
+      } else if (gapToMeeting >= 15) {
+        // Gap too small for this block type but >= 15 min — skip block, gap will be filled later
         actionIdx++;
+      } else {
+        break;
       }
     }
     // Place meeting
