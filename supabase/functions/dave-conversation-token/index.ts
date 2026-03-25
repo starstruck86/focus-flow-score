@@ -228,7 +228,13 @@ Deno.serve(async (req) => {
 
     const { token } = await tokenResp.json();
 
-    let contextString = DAVE_INSTRUCTIONS + "\n\n" + crmContext.sections.join("\n\n");
+    // Inject current Boston ET time into context so Dave always has it
+    const bostonNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+    const bostonTimeStr = bostonNow.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+    const bostonDateStr = bostonNow.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "America/New_York" });
+    const currentTimeSection = `CURRENT BOSTON TIME: ${bostonDateStr}, ${bostonTimeStr} ET (Eastern Time, DST-aware)`;
+
+    let contextString = DAVE_INSTRUCTIONS + "\n\n" + currentTimeSection + "\n\n" + crmContext.sections.join("\n\n");
     if (contextString.length > 20000) {
       contextString = contextString.slice(0, 20000) + "\n\n[Context trimmed for performance]";
     }
