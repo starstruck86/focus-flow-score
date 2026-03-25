@@ -107,11 +107,15 @@ function tryInsertIntoGap<T extends GuaranteePlanBlock>(
     const end = Math.min(searchEnd, toMinutes(block.end_time));
     if (end <= searchStart || start >= searchEnd) continue;
 
-    if (start - cursor >= 30) {
-      const next = [...sorted, buildCallBlock(options, cursor, cursor + 30, sequence, 'Dial minimum enforcement — inserted call block in open window.')];
+    const gap = start - cursor;
+    if (gap >= 30) {
+      // Fill the entire gap (up to 60 min) instead of a fixed 30-min block
+      const blockEnd = Math.min(cursor + Math.min(gap, 60), start);
+      const dur = blockEnd - cursor;
+      const next = [...sorted, buildCallBlock(options, cursor, blockEnd, sequence, 'Dial minimum enforcement — inserted call block in open window.')];
       return {
         blocks: sortBlocks(next),
-        log: `Inserted 30-minute call block in open window ${fromMinutes(cursor)}–${fromMinutes(cursor + 30)}.`,
+        log: `Inserted ${dur}-minute call block in open window ${fromMinutes(cursor)}–${fromMinutes(blockEnd)}.`,
       };
     }
 
@@ -119,10 +123,13 @@ function tryInsertIntoGap<T extends GuaranteePlanBlock>(
   }
 
   if (searchEnd - cursor >= 30) {
-    const next = [...sorted, buildCallBlock(options, cursor, cursor + 30, sequence, 'Dial minimum enforcement — inserted call block at day tail.')];
+    // Fill available tail time (up to 60 min)
+    const blockEnd = Math.min(cursor + 60, searchEnd);
+    const dur = blockEnd - cursor;
+    const next = [...sorted, buildCallBlock(options, cursor, blockEnd, sequence, 'Dial minimum enforcement — inserted call block at day tail.')];
     return {
       blocks: sortBlocks(next),
-      log: `Inserted 30-minute call block at ${fromMinutes(cursor)}–${fromMinutes(cursor + 30)}.`,
+      log: `Inserted ${dur}-minute call block at ${fromMinutes(cursor)}–${fromMinutes(blockEnd)}.`,
     };
   }
 
