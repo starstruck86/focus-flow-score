@@ -8,7 +8,7 @@ import {
 } from '@/lib/resourceEligibility';
 import type { Resource } from '@/hooks/useResources';
 
-function makeResource(overrides: Partial<Resource> = {}): Resource {
+function makeResource(overrides: Partial<Resource> & { file_url?: string | null } = {}): Resource {
   return {
     id: overrides.id ?? 'r1',
     user_id: 'u1',
@@ -21,7 +21,7 @@ function makeResource(overrides: Partial<Resource> = {}): Resource {
     template_category: null,
     account_id: null,
     opportunity_id: null,
-    file_url: overrides.file_url ?? 'https://example.com/article',
+    file_url: 'file_url' in overrides ? overrides.file_url as any : 'https://example.com/article',
     tags: [],
     current_version: 1,
     created_at: '2025-01-01',
