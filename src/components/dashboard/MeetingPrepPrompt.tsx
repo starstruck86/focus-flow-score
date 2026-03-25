@@ -15,7 +15,8 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { matchAccountToEvent } from '@/lib/accountMatcher';
 
-const TIMEZONE = 'America/New_York';
+import { APP_TIMEZONE } from '@/lib/timeFormat';
+const TIMEZONE = APP_TIMEZONE;
 const DISMISSED_KEY = 'meeting_prep_dismissed';
 
 interface UpcomingClientMeeting {

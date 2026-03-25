@@ -17,7 +17,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { matchAccountToEvent } from '@/lib/accountMatcher';
 
-const TIMEZONE = 'America/New_York';
+import { APP_TIMEZONE } from '@/lib/timeFormat';
+const TIMEZONE = APP_TIMEZONE;
 const DISMISSED_KEY = 'post_meeting_dismissed';
 
 interface PostMeetingItem {

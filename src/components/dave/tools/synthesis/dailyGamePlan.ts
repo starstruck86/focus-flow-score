@@ -51,10 +51,7 @@ function blockDurationMin(block: TimeBlock): number {
   return (eh * 60 + em) - (sh * 60 + sm);
 }
 
-function getCurrentMinutesET(): number {
-  const etNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  return etNow.getHours() * 60 + etNow.getMinutes();
-}
+// getCurrentMinutesET imported from canonical timeFormat
 
 function findCurrentAndNext(blocks: TimeBlock[]): { current: TimeBlock | null; next: TimeBlock | null } {
   const now = getCurrentMinutesET();
