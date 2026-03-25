@@ -1127,6 +1127,18 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
       let attempts = 0;
       const logs: string[] = [];
 
+      // Calculate how much non-meeting time actually exists in the day
+      const meetingMin = next.filter((b: any) => b.type === 'meeting')
+        .reduce((s: number, b: any) => s + Math.max(0, toMinutes(b.end_time) - toMinutes(b.start_time)), 0);
+      const totalWorkMin = workEndMin - workStartMin;
+      const availableFocusMin = totalWorkMin - meetingMin;
+
+      // If meetings consume most of the day (< 60 min focus time), don't force-inject call blocks
+      if (availableFocusMin < 60) {
+        logStage('call_block_injection_skipped', `${phase}: only ${availableFocusMin} min focus time — skipping dial enforcement on meeting-heavy day`, { meetingMin, availableFocusMin });
+        return next;
+      }
+
       while (calculatePlannedDials(next) < DAILY_DIALS_MIN && attempts < 8) {
         const sequence = next.filter((block: any) => block.type === 'prospecting').length + 1;
         const insertion = tryInsertMandatoryCallBlock(next, sequence);
