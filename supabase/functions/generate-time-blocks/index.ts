@@ -733,29 +733,36 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
         cursor = Math.max(cursor, toMinutes(block.end_time));
       }
 
+      // Fill tail ONLY if there's meaningful time (≥ 60 min) — don't stuff call blocks after back-to-back meetings
       let tailStart = cursor;
       let tailRemaining = workEndMin - tailStart;
-      while (tailRemaining > 15) {
-        if (tailRemaining >= 60) {
-          filled.push(createPrepBlock(tailStart, 30));
-          tailStart += 30;
-          tailRemaining -= 30;
 
-          const activityDuration = Math.min(60, tailRemaining);
-          if (activityDuration >= 30) {
-            outreachSequence += 1;
-            filled.push(createCallBlock(tailStart, activityDuration, outreachSequence));
-            tailStart += activityDuration;
-            tailRemaining -= activityDuration;
+      if (tailRemaining >= 60) {
+        while (tailRemaining > 15) {
+          if (tailRemaining >= 60) {
+            filled.push(createPrepBlock(tailStart, 30));
+            tailStart += 30;
+            tailRemaining -= 30;
+
+            const activityDuration = Math.min(60, tailRemaining);
+            if (activityDuration >= 30) {
+              outreachSequence += 1;
+              filled.push(createCallBlock(tailStart, activityDuration, outreachSequence));
+              tailStart += activityDuration;
+              tailRemaining -= activityDuration;
+            }
+          } else if (tailRemaining >= 30) {
+            filled.push(createPrepBlock(tailStart, tailRemaining));
+            tailStart += tailRemaining;
+            tailRemaining = 0;
+          } else {
+            filled.push(createShortAdminBlock(tailStart, workEndMin));
+            tailRemaining = 0;
           }
-        } else if (tailRemaining >= 30) {
-          filled.push(createPrepBlock(tailStart, tailRemaining));
-          tailStart += tailRemaining;
-          tailRemaining = 0;
-        } else {
-          filled.push(createShortAdminBlock(tailStart, workEndMin));
-          tailRemaining = 0;
         }
+      } else if (tailRemaining >= 15) {
+        // Short tail — just a wrap-up admin block, not a call block
+        filled.push(createShortAdminBlock(tailStart, workEndMin));
       }
 
       return filled.sort((a: any, b: any) => toMinutes(a.start_time) - toMinutes(b.start_time));
@@ -1126,6 +1133,18 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
       let next = [...blocks].sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
       let attempts = 0;
       const logs: string[] = [];
+
+      // Calculate how much non-meeting time actually exists in the day
+      const meetingMin = next.filter((b: any) => b.type === 'meeting')
+        .reduce((s: number, b: any) => s + Math.max(0, toMinutes(b.end_time) - toMinutes(b.start_time)), 0);
+      const totalWorkMin = workEndMin - workStartMin;
+      const availableFocusMin = totalWorkMin - meetingMin;
+
+      // If meetings consume most of the day (< 60 min focus time), don't force-inject call blocks
+      if (availableFocusMin < 60) {
+        logStage('call_block_injection_skipped', `${phase}: only ${availableFocusMin} min focus time — skipping dial enforcement on meeting-heavy day`, { meetingMin, availableFocusMin });
+        return next;
+      }
 
       while (calculatePlannedDials(next) < DAILY_DIALS_MIN && attempts < 8) {
         const sequence = next.filter((block: any) => block.type === 'prospecting').length + 1;
