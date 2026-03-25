@@ -41,6 +41,8 @@ export interface IngestionItem {
   channel?: string;
   publishDate?: string;
   duration?: string;
+  resourceId?: string;
+  enrichMode?: 'deep_enrich' | 're_enrich';
   existingResourceId?: string;
 }
 
