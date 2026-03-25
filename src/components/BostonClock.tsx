@@ -14,11 +14,11 @@ export function BostonClock() {
     return () => clearInterval(id);
   }, []);
 
-  const display = format(now, "EEEE, MMMM d • h:mm a");
+  const display = format(now, "EEE, MMM d • h:mm a");
 
   return (
     <span className="text-[10px] text-muted-foreground whitespace-nowrap" title="Boston time (ET)">
-      {display} ET
+      {display} Boston
     </span>
   );
 }

@@ -339,9 +339,9 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
           <Button
             size="lg"
             className={cn(
-              "h-14 w-14 rounded-full shadow-lg relative",
+              "h-12 w-12 rounded-full shadow-md relative",
               isExpanded && "bg-muted text-muted-foreground hover:bg-muted",
-              !hasCheckedInToday && isTodayEligible && !isExpanded && "bg-primary animate-pulse",
+              !isExpanded && "bg-secondary text-secondary-foreground hover:bg-secondary/80",
             )}
             onClick={() => setIsExpanded(!isExpanded)}
           >
@@ -354,7 +354,7 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
                   exit={{ rotate: 90, opacity: 0 }}
                   transition={{ duration: 0.15 }}
                 >
-                  <X className="h-6 w-6" />
+                  <X className="h-5 w-5" />
                 </motion.div>
               ) : (
                 <motion.div
@@ -364,7 +364,7 @@ export function GlobalFAB({ position = 'bottom-right' }: GlobalFABProps) {
                   exit={{ rotate: -90, opacity: 0 }}
                   transition={{ duration: 0.15 }}
                 >
-                  <Plus className="h-6 w-6" />
+                  <Plus className="h-5 w-5" />
                 </motion.div>
               )}
             </AnimatePresence>
