@@ -347,11 +347,12 @@ async function fetchCrmContext(supabase: any, userId: string, conversationHistor
       .in("status", ["next", "in-progress"])
       .order("due_date", { ascending: true })
       .limit(30),
+    // HARD FILTER: only active opps — closed-won/lost NEVER surface
     supabase
       .from("opportunities")
       .select("id, name, stage, arr, close_date, next_step, deal_type, notes, status, term_months, last_touch_date, account_id")
       .eq("user_id", userId)
-      .not("status", "eq", "closed-lost")
+      .eq("status", "active")
       .order("close_date", { ascending: true })
       .limit(50),
     supabase
