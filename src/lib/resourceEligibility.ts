@@ -113,6 +113,16 @@ export function getEligibleCount(resources: Resource[], mode: EnrichModeInput): 
   return getEligibleResources(resources, mode).length;
 }
 
+/** Backward-compatible alias for older callers/tests. */
+export function getEligiblePool(resources: Resource[], mode: EnrichModeInput): Resource[] {
+  return getEligibleResources(resources, mode);
+}
+
+/** Backward-compatible alias for older callers/tests. */
+export function selectBatch(pool: Resource[], batchSize: number): Resource[] {
+  return pool.slice(0, batchSize);
+}
+
 export function selectEligibleBatch(resources: Resource[], mode: EnrichModeInput, batchSize: number): Resource[] {
   return getEligibleResources(resources, mode).slice(0, batchSize);
 }
