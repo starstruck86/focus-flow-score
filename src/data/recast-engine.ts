@@ -6,6 +6,7 @@
 
 import { DIALS_PER_30_MIN } from '@/lib/mvpBlockModel';
 import { ensureMinimumCallBlocks } from '@/lib/planCallBlockGuarantee';
+import { validateCalendarInvariants, enforceCalendarImmutability, type CalendarAnchor } from '@/lib/calendarTimeInvariants';
 
 export interface RecastBlock {
   start_time: string;
@@ -96,6 +97,11 @@ function spokenTime(t: string): string {
  */
 export function recastDay(input: RecastInput): RecastResult {
   const { currentTimeMinutes, allBlocks, completedGoals, meetingSchedule, targets, actuals, workEndMinutes } = input;
+
+  // ── Snapshot calendar anchors BEFORE any mutation ──
+  const calendarAnchors: CalendarAnchor[] = allBlocks
+    .filter(b => b.type === 'meeting')
+    .map(b => ({ start_time: b.start_time, end_time: b.end_time, label: b.label }));
   const minutesRemaining = Math.max(0, workEndMinutes - currentTimeMinutes);
 
   // Separate past/current vs future blocks
@@ -248,7 +254,23 @@ export function recastDay(input: RecastInput): RecastResult {
     onLog: (message) => console.warn(`[recastDay] ${message}`),
   });
 
-  const finalScheduled = guaranteedSchedule.blocks as RecastBlock[];
+  // ── INVARIANT: enforce calendar immutability post-recast ──
+  const guaranteedBlocks = guaranteedSchedule.blocks as RecastBlock[];
+  const anchorMap = new Map<string, CalendarAnchor>();
+  for (const a of calendarAnchors) anchorMap.set(a.label.trim().toLowerCase(), a);
+
+  const correctedBlocks = guaranteedBlocks.map(block => {
+    if (block.type !== 'meeting') return block;
+    const anchor = anchorMap.get(block.label.trim().toLowerCase());
+    if (!anchor) return block;
+    if (block.start_time !== anchor.start_time || block.end_time !== anchor.end_time) {
+      console.error(`[recastDay] CALENDAR DRIFT CORRECTED: "${block.label}" ${block.start_time}-${block.end_time} → ${anchor.start_time}-${anchor.end_time}`);
+      return { ...block, start_time: anchor.start_time, end_time: anchor.end_time };
+    }
+    return block;
+  });
+
+  const finalScheduled = correctedBlocks;
 
   // ── Determine priorities based on target gaps ──
   const updatedPriorities: string[] = [];
