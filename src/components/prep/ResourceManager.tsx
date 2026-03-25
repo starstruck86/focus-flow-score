@@ -23,9 +23,13 @@ import { cn } from '@/lib/utils';
 import {
   useResourceFolders, useResources, useCreateFolder, useCreateResource,
   useDeleteResource, useDeleteFolder, useRenameFolder, useUpdateResource,
-  useOperationalizeResource, useResourceSuggestions,
+  useOperationalizeResource, useResourceSuggestions, useUpdateEnrichmentStatus,
   type Resource, type ResourceFolder, type ResourceSuggestion,
 } from '@/hooks/useResources';
+import {
+  getEnrichmentStatusLabel, getEnrichmentStatusColor, getRecommendedAction,
+  type EnrichmentStatus,
+} from '@/lib/resourceEligibility';
 import { useClassifyResource, useUploadResource, useAddUrlResource, type ClassificationResult } from '@/hooks/useResourceUpload';
 import { ResourceEditor } from './ResourceEditor';
 import { AIGenerateDialog } from './AIGenerateDialog';
