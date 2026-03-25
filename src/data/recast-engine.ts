@@ -254,7 +254,20 @@ export function recastDay(input: RecastInput): RecastResult {
     onLog: (message) => console.warn(`[recastDay] ${message}`),
   });
 
-  const finalScheduled = guaranteedSchedule.blocks as RecastBlock[];
+  // ── INVARIANT: enforce calendar immutability post-recast ──
+  const { blocks: immutableScheduled, corrections } = enforceCalendarImmutability(
+    guaranteedSchedule.blocks as RecastBlock[],
+    calendarAnchors,
+  );
+  if (corrections.length > 0) {
+    console.error(`[recastDay] CALENDAR DRIFT CORRECTED: ${corrections.join('; ')}`);
+  }
+  const postValidation = validateCalendarInvariants(immutableScheduled, calendarAnchors);
+  if (!postValidation.valid) {
+    console.error(`[recastDay] CALENDAR INVARIANT VIOLATION after correction:`, postValidation.drifts);
+  }
+
+  const finalScheduled = immutableScheduled;
 
   // ── Determine priorities based on target gaps ──
   const updatedPriorities: string[] = [];
