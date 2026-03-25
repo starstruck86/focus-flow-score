@@ -1035,12 +1035,16 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
         const blockEnd = Math.min(workEndMin, toMinutes(block.end_time));
         if (blockEnd <= workStartMin || blockStart >= workEndMin) continue;
 
-        if (blockStart - cursor >= 30) {
-          sorted.push(createMandatoryCallBlock(cursor, cursor + 30, sequence, 'Dial minimum enforcement — inserted call block in open window.'));
+        const gap = blockStart - cursor;
+        if (gap >= 30) {
+          // Fill up to 60 min of the gap
+          const callEnd = Math.min(cursor + Math.min(gap, 60), blockStart);
+          const dur = callEnd - cursor;
+          sorted.push(createMandatoryCallBlock(cursor, callEnd, sequence, `Dial minimum enforcement — inserted ${dur}-min call block in open window.`));
           return {
             blocks: sorted.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time)),
             inserted: true,
-            reason: `Inserted 30-minute call block in open window ${minToTime(cursor)}–${minToTime(cursor + 30)}.`,
+            reason: `Inserted ${dur}-minute call block in open window ${minToTime(cursor)}–${minToTime(callEnd)}.`,
           };
         }
 
@@ -1048,11 +1052,14 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
       }
 
       if (workEndMin - cursor >= 30) {
-        sorted.push(createMandatoryCallBlock(cursor, cursor + 30, sequence, 'Dial minimum enforcement — inserted call block at day tail.'));
+        // Fill up to 60 min of tail
+        const callEnd = Math.min(cursor + 60, workEndMin);
+        const dur = callEnd - cursor;
+        sorted.push(createMandatoryCallBlock(cursor, callEnd, sequence, `Dial minimum enforcement — inserted ${dur}-min call block at day tail.`));
         return {
           blocks: sorted.sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time)),
           inserted: true,
-          reason: `Inserted 30-minute call block at ${minToTime(cursor)}–${minToTime(cursor + 30)}.`,
+          reason: `Inserted ${dur}-minute call block at ${minToTime(cursor)}–${minToTime(callEnd)}.`,
         };
       }
 
