@@ -1,8 +1,7 @@
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { formatDistanceToNow } from 'date-fns';
-import { 
+import {
   Compass,
   LogOut,
   Mic,
