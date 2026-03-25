@@ -83,7 +83,37 @@ export function DayTimeline() {
     enabled: !!user,
   });
 
-  const blocks = (plan?.blocks || []) as TimeBlock[];
+  // Fetch live calendar events to enforce immutable meeting times
+  const { data: calendarEvents } = useCalendarEvents();
+
+  // Enforce calendar immutability: override stored meeting times with live calendar data
+  const blocks = useMemo(() => {
+    const rawBlocks = (plan?.blocks || []) as TimeBlock[];
+    if (!calendarEvents?.length || !rawBlocks.length) return rawBlocks;
+
+    // Build calendar anchors from live events (today only)
+    const todayStart = new Date(`${todayStr}T00:00:00`);
+    const todayEnd = new Date(`${todayStr}T23:59:59`);
+    const todayEvents = calendarEvents.filter((e: any) => {
+      const start = new Date(e.start_time);
+      return start >= todayStart && start <= todayEnd && !e.all_day && e.end_time;
+    });
+
+    if (!todayEvents.length) return rawBlocks;
+
+    const anchors: CalendarAnchor[] = todayEvents.map((e: any) => {
+      const startET = extractEasternTime(e.start_time);
+      const endET = extractEasternTime(e.end_time);
+      return { start_time: startET, end_time: endET, label: e.title };
+    });
+
+    const { blocks: corrected, corrections } = enforceCalendarImmutability(rawBlocks, anchors);
+    if (corrections.length > 0) {
+      console.warn('[DayTimeline] Calendar immutability enforced at render:', corrections);
+    }
+    return corrected;
+  }, [plan?.blocks, calendarEvents, todayStr]);
+
   const completedGoals = new Set((plan?.completed_goals || []) as string[]);
 
   const { dayStart, dayEnd, totalMinutes } = useMemo(() => {
