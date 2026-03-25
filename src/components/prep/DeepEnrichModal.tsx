@@ -1,43 +1,28 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useMemo, useState, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Zap, RefreshCw } from 'lucide-react';
 import { useBulkIngestion } from '@/hooks/useBulkIngestion';
 import { BulkIngestionPanel } from './BulkIngestionPanel';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  getEligiblePool,
+  toSourceItems,
+  assertBatchEligibility,
+  logEligibilitySnapshot,
+  type EnrichMode,
+} from '@/lib/resourceEligibility';
+import { createLogger } from '@/lib/logger';
 import type { Resource } from '@/hooks/useResources';
+
+const log = createLogger('DeepEnrichModal');
 
 interface DeepEnrichModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   resources: Resource[];
   selectedIds?: Set<string>;
-}
-
-/** Resources eligible for first-time deep enrichment */
-function getDeepEnrichPool(resources: Resource[]): Resource[] {
-  return resources.filter(r => {
-    if (!r.file_url || !r.file_url.startsWith('http')) return false;
-    const status = (r as any).content_status;
-    // Eligible if never enriched (placeholder, file, or missing status)
-    return !status || status === 'placeholder' || status === 'file';
-  });
-}
-
-/** Resources eligible for re-enrichment */
-function getReenrichPool(resources: Resource[]): Resource[] {
-  return resources.filter(r => {
-    if (!r.file_url || !r.file_url.startsWith('http')) return false;
-    const status = (r as any).content_status;
-    return status === 'enriched';
-  });
-}
-
-function toSourceItems(pool: Resource[]) {
-  return pool.map(r => ({
-    url: r.file_url as string,
-    title: r.title,
-  }));
 }
 
 export const DeepEnrichModal = memo(function DeepEnrichModal({
@@ -47,9 +32,10 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
   selectedIds,
 }: DeepEnrichModalProps) {
   const bulk = useBulkIngestion();
+  const queryClient = useQueryClient();
   const isProcessing = bulk.state.status === 'running' || bulk.state.status === 'paused';
   const isDone = bulk.state.status === 'completed' || bulk.state.status === 'failed' || bulk.state.status === 'cancelled';
-  const [mode, setMode] = useState<'deep' | 'reenrich'>('deep');
+  const [mode, setMode] = useState<EnrichMode>('deep');
 
   // Scope to selected or all
   const scopedResources = useMemo(() => {
@@ -59,21 +45,49 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
     return resources;
   }, [resources, selectedIds]);
 
-  const deepPool = useMemo(() => getDeepEnrichPool(scopedResources), [scopedResources]);
-  const reenrichPool = useMemo(() => getReenrichPool(scopedResources), [scopedResources]);
+  // ── Canonical eligibility pools (single source of truth) ──
+  const deepPool = useMemo(() => getEligiblePool(scopedResources, 'deep'), [scopedResources]);
+  const reenrichPool = useMemo(() => getEligiblePool(scopedResources, 'reenrich'), [scopedResources]);
 
   const activePool = mode === 'deep' ? deepPool : reenrichPool;
   const sourceItems = useMemo(() => toSourceItems(activePool), [activePool]);
 
-  const handleClose = () => {
+  // ── Wrapped start with pre-batch assertion ──
+  const handleStart = useCallback(
+    (items: Array<{ url: string; title: string }>, opts?: { retryFailedOnly?: boolean }) => {
+      if (!opts?.retryFailedOnly) {
+        // Map source items back to Resource objects for assertion
+        const urlSet = new Set(items.map(i => i.url));
+        const batchResources = activePool.filter(r => r.file_url && urlSet.has(r.file_url));
+
+        try {
+          assertBatchEligibility(batchResources, mode, scopedResources);
+        } catch (err) {
+          log.error('Batch rejected by eligibility assertion', { error: err });
+          return; // Block the batch
+        }
+
+        logEligibilitySnapshot(scopedResources, mode, 'pre-batch');
+      }
+
+      bulk.start(items, opts);
+    },
+    [activePool, mode, scopedResources, bulk],
+  );
+
+  const handleClose = useCallback(() => {
     if (isProcessing) return;
-    if (isDone) bulk.reset();
+    if (isDone) {
+      bulk.reset();
+      // Recompute eligible counts from canonical source after batch
+      queryClient.invalidateQueries({ queryKey: ['resources'] });
+    }
     onOpenChange(false);
-  };
+  }, [isProcessing, isDone, bulk, queryClient, onOpenChange]);
 
   const handleModeChange = (v: string) => {
     if (isProcessing || isDone) return;
-    setMode(v as 'deep' | 'reenrich');
+    setMode(v as EnrichMode);
   };
 
   return (
@@ -128,7 +142,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
         <BulkIngestionPanel
           state={bulk.state}
           onSetBatchSize={bulk.setBatchSize}
-          onStart={bulk.start}
+          onStart={handleStart}
           onPause={bulk.pause}
           onResume={bulk.resume}
           onCancel={bulk.cancel}
