@@ -32,6 +32,7 @@ const AUTH_GATED_PATTERNS = [
   /slides\.google\.com/i, /\.zoom\.us\//i, /thinkific\.com/i, /udemy\.com/i,
   /coursera\.org/i, /linkedin\.com\/learning/i, /loom\.com/i, /notion\.so/i,
   /dropbox\.com/i, /onedrive\.live\.com/i, /sharepoint\.com/i,
+  /circle\.so/i, /teachable\.com/i, /kajabi\.com/i, /skool\.com/i,
 ];
 
 function isAuthGated(url: string): boolean {
