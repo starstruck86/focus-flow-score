@@ -164,7 +164,7 @@ const MIN_CONTENT_LENGTH = 200;
 const EMPTY_TRANSCRIPT_THRESHOLD = 80;
 const MAX_BATCH_SIZE = 10;
 const DEFAULT_BATCH_SIZE = 5;
-const ENRICHMENT_TIMEOUT_MS = 90_000;
+const ENRICHMENT_TIMEOUT_MS = 120_000;
 
 // ── Idempotency: track in-flight resource IDs ──────────────
 const inFlightResourceIds = new Set<string>();
