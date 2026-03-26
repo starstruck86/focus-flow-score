@@ -123,7 +123,7 @@ export function useWeeklyPlaybookSummary() {
       return {
         recommendationsShown: shown,
         recommendationsAccepted: accepted,
-        roleplaysSarted: byType('roleplay_started'),
+        roleplaysStarted: byType('roleplay_started'),
         roleplaysCompleted: byType('roleplay_completed'),
         postCallFeedbackCount: byType('post_call_feedback'),
         usedInCalls: byType('used_in_call'),
