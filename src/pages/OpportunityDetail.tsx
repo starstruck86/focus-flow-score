@@ -206,7 +206,7 @@ export default function OpportunityDetail() {
         </Card>
 
         {/* Playbook recommendation */}
-        <PlaybookRecommendationChip recommendation={playbookRec} />
+        <PlaybookRecommendationChip recommendation={playbookRec} showRoleplayNudge />
 
         {/* Quick Actions */}
         <div className="flex items-center gap-2 flex-wrap">

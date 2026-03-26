@@ -1,5 +1,7 @@
 // Post-Meeting Prompt — surfaces after a calendar meeting ends to prompt next-step logging + transcript upload
 import React, { useState, useMemo, useRef } from 'react';
+import { PostCallPlaybookReflection } from '@/components/PostCallPlaybookReflection';
+import { useOppPlaybookRecommendation } from '@/hooks/usePlaybookRecommendation';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import type { ExtractedTask } from '@/types/dashboard';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -149,14 +151,22 @@ export function PostMeetingPrompt() {
         </div>
 
         {recentlyEndedMeetings.slice(0, 3).map(item => (
-          <PostMeetingCard
-            key={item.eventId}
-            item={item}
-            nextStep={nextSteps[item.eventId] || ''}
-            onNextStepChange={val => setNextSteps(prev => ({ ...prev, [item.eventId]: val }))}
-            onLogNextStep={() => handleLogNextStep(item)}
-            onDismiss={() => handleDismiss(item.eventId)}
-          />
+          <div key={item.eventId} className="space-y-2">
+            <PostMeetingCard
+              item={item}
+              nextStep={nextSteps[item.eventId] || ''}
+              onNextStepChange={val => setNextSteps(prev => ({ ...prev, [item.eventId]: val }))}
+              onLogNextStep={() => handleLogNextStep(item)}
+              onDismiss={() => handleDismiss(item.eventId)}
+            />
+            {item.primaryOppId && (
+              <PostMeetingPlaybookReflection
+                oppId={item.primaryOppId}
+                accountId={item.accountId}
+                onDismiss={() => {}}
+              />
+            )}
+          </div>
         ))}
       </motion.div>
     </AnimatePresence>
@@ -394,3 +404,27 @@ const PostMeetingCard = React.forwardRef<HTMLDivElement, {
 });
 
 PostMeetingCard.displayName = 'PostMeetingCard';
+
+/** Wrapper that resolves the playbook recommendation for a given opp and shows reflection */
+function PostMeetingPlaybookReflection({
+  oppId,
+  accountId,
+  onDismiss,
+}: {
+  oppId: string;
+  accountId: string;
+  onDismiss: () => void;
+}) {
+  const rec = useOppPlaybookRecommendation(oppId);
+  const [dismissed, setDismissed] = useState(false);
+  if (!rec || dismissed) return null;
+  return (
+    <PostCallPlaybookReflection
+      playbookTitle={rec.playbook.title}
+      playbookId={rec.playbook.id}
+      accountId={accountId}
+      opportunityId={oppId}
+      onDismiss={() => { setDismissed(true); onDismiss(); }}
+    />
+  );
+}
