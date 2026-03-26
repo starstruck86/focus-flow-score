@@ -36,14 +36,48 @@ export const PlaybookRecommendationChip = memo(function PlaybookRecommendationCh
 }: Props) {
   const { track } = usePlaybookUsageTracking();
 
+  const handleClick = useCallback(() => {
+    if (!recommendation) return;
+    const { playbook, cta } = recommendation;
+    track({
+      playbookTitle: playbook.title,
+      playbookId: playbook.id,
+      eventType: 'recommendation_accepted',
+      blockType,
+    });
+
+    if (cta === 'prep') {
+      window.dispatchEvent(new CustomEvent('dave-playbook-request', {
+        detail: { playbookId: playbook.id, title: playbook.title },
+      }));
+    }
+    onAction?.(recommendation);
+  }, [recommendation, track, blockType, onAction]);
+
+  const handleRoleplay = useCallback(() => {
+    if (!recommendation) return;
+    const { playbook } = recommendation;
+    track({
+      playbookTitle: playbook.title,
+      playbookId: playbook.id,
+      eventType: 'roleplay_started',
+      blockType,
+    });
+
+    window.dispatchEvent(new CustomEvent('dave-playbook-request', {
+      detail: {
+        playbookId: playbook.id,
+        title: playbook.title,
+        mode: 'roleplay',
+      },
+    }));
+  }, [recommendation, track, blockType]);
+
   if (!recommendation) return null;
 
   const { playbook, reason, cta } = recommendation;
   const ctaConfig = CTA_CONFIG[cta];
   const CtaIcon = ctaConfig.icon;
-
-  const handleClick = useCallback(() => {
-    track({
       playbookTitle: playbook.title,
       playbookId: playbook.id,
       eventType: 'recommendation_accepted',
