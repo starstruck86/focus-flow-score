@@ -2,7 +2,7 @@
  * Playbook Roleplay Edge Function
  * 
  * Streams AI buyer responses during playbook roleplay sessions.
- * Uses the scenario prompt from the client and streams responses.
+ * Hardened: realistic pressure, anti-pattern detection, direct coaching.
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -39,17 +39,36 @@ serve(async (req) => {
     let systemPrompt = scenario;
     
     if (mode === 'feedback') {
-      // After roleplay ends, provide coaching feedback
-      systemPrompt = `You are an elite sales coach reviewing a roleplay session. The scenario was:
+      systemPrompt = `You are an elite sales coach who has just observed a live roleplay session. The scenario was:
 ${scenario}
 
-Analyze the rep's performance and provide:
-1. **What worked** — specific moments where the rep executed well (quote them)
-2. **Misses** — where they failed to apply the playbook (be direct)
-3. **Improved phrasing** — rewrite their weakest 2 responses with better versions
-4. **Score** — rate their execution 1-10 with one-line justification
+Review the conversation and provide BRUTALLY HONEST, DIRECT coaching. No sugarcoating.
 
-Be direct. No fluff. This is coaching, not praise.`;
+Format your response EXACTLY like this:
+
+## What Worked
+- Quote specific moments where the rep executed well (use their exact words)
+- Explain WHY it worked on the buyer
+- If nothing worked well, say so directly
+
+## What Hurt the Conversation
+- Identify the exact moment the conversation went sideways
+- Quote the rep's words that caused the problem
+- Explain the buyer's reaction and why it happened
+- Call out: rambling, pitching too early, avoiding questions, filler words, being too agreeable
+
+## What to Change Next Time
+- Give 2-3 specific, rewritten responses — show EXACTLY what they should have said instead
+- Each rewrite should include the context (what the buyer said) and the improved response
+- Explain why the rewrite is better
+
+## Score: X/10
+One sentence justification. Be honest — a 5 is average, a 7 is good, a 9 is exceptional.
+
+## Retry Focus
+If they retry right now, the ONE thing to focus on improving.
+
+Be direct. Be specific. Quote their actual words. This is coaching, not praise.`;
     }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
