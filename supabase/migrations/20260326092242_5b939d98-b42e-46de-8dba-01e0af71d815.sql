@@ -1,0 +1,1 @@
+ALTER TABLE public.playbooks ADD COLUMN IF NOT EXISTS success_criteria text NOT NULL DEFAULT '';

@@ -1759,6 +1759,7 @@ export type Database = {
           problem_type: string
           source_resource_ids: string[]
           stage_fit: string[]
+          success_criteria: string
           tactic_steps: string[]
           talk_tracks: string[]
           title: string
@@ -1778,6 +1779,7 @@ export type Database = {
           problem_type?: string
           source_resource_ids?: string[]
           stage_fit?: string[]
+          success_criteria?: string
           tactic_steps?: string[]
           talk_tracks?: string[]
           title: string
@@ -1797,6 +1799,7 @@ export type Database = {
           problem_type?: string
           source_resource_ids?: string[]
           stage_fit?: string[]
+          success_criteria?: string
           tactic_steps?: string[]
           talk_tracks?: string[]
           title?: string
