@@ -208,6 +208,25 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
       if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
       if (greetingRetryRef.current) clearTimeout(greetingRetryRef.current);
 
+      // Detect unexpected disconnect — auto-retry once if we had an active interaction
+      const wasActive = uptime > 2000 && messagesReceivedCountRef.current > 0;
+      const reqId = currentRequestIdRef.current;
+      if (wasActive && reqId && !autoRetryingRef.current) {
+        failInteraction(reqId);
+        const recoverable = getRecoverableInteraction();
+        if (recoverable && recoverable.retryCount < 1) {
+          logStatus('🔄 Unexpected disconnect — auto-retrying...');
+          autoRetryingRef.current = true;
+          incrementRetry(reqId);
+          toast.info('Dave got interrupted — reconnecting...', { duration: 3000 });
+          setTimeout(() => {
+            autoRetryingRef.current = false;
+            onRetry();
+          }, 1500);
+          return;
+        }
+      }
+
       if (uptime > 0 && uptime < 2000 && isOpenRef.current) {
         logStatus('⚠️ Immediate disconnect — likely transport or auth issue');
         setNeedsTap(true);
