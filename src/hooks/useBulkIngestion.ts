@@ -48,6 +48,7 @@ export interface IngestionItem {
 
 export interface IngestionState {
   status: IngestionJobStatus;
+  mode: 'deep_enrich' | 're_enrich';
   batchSize: number;
   reprocessMode: ReprocessMode;
   totalItems: number;
@@ -59,6 +60,7 @@ export interface IngestionState {
   skippedCount: number;
   reviewCount: number;
   items: IngestionItem[];
+  startedAt: number | null;
 }
 
 // ── Constants ──────────────────────────────────────────────
