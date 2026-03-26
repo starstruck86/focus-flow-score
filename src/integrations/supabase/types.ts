@@ -1751,11 +1751,16 @@ export type Database = {
       playbooks: {
         Row: {
           anti_patterns: string[]
+          common_mistakes: string[]
           confidence_score: number
           created_at: string
+          deal_impact: string
+          failure_consequences: string[]
           id: string
           key_questions: string[]
+          minimum_effective_version: string
           persona_fit: string[]
+          pressure_tactics: string[]
           problem_type: string
           source_resource_ids: string[]
           stage_fit: string[]
@@ -1766,16 +1771,22 @@ export type Database = {
           traps: string[]
           updated_at: string
           user_id: string
+          what_great_looks_like: string[]
           when_to_use: string
           why_it_matters: string
         }
         Insert: {
           anti_patterns?: string[]
+          common_mistakes?: string[]
           confidence_score?: number
           created_at?: string
+          deal_impact?: string
+          failure_consequences?: string[]
           id?: string
           key_questions?: string[]
+          minimum_effective_version?: string
           persona_fit?: string[]
+          pressure_tactics?: string[]
           problem_type?: string
           source_resource_ids?: string[]
           stage_fit?: string[]
@@ -1786,16 +1797,22 @@ export type Database = {
           traps?: string[]
           updated_at?: string
           user_id: string
+          what_great_looks_like?: string[]
           when_to_use?: string
           why_it_matters?: string
         }
         Update: {
           anti_patterns?: string[]
+          common_mistakes?: string[]
           confidence_score?: number
           created_at?: string
+          deal_impact?: string
+          failure_consequences?: string[]
           id?: string
           key_questions?: string[]
+          minimum_effective_version?: string
           persona_fit?: string[]
+          pressure_tactics?: string[]
           problem_type?: string
           source_resource_ids?: string[]
           stage_fit?: string[]
@@ -1806,6 +1823,7 @@ export type Database = {
           traps?: string[]
           updated_at?: string
           user_id?: string
+          what_great_looks_like?: string[]
           when_to_use?: string
           why_it_matters?: string
         }
