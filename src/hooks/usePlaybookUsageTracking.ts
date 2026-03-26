@@ -38,7 +38,7 @@ interface TrackEventParams {
 export interface WeeklyPlaybookSummary {
   recommendationsShown: number;
   recommendationsAccepted: number;
-  roleplaysSarted: number;
+  roleplaysStarted: number;
   roleplaysCompleted: number;
   postCallFeedbackCount: number;
   usedInCalls: number;
