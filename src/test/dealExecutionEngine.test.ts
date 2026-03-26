@@ -28,8 +28,22 @@ import {
   applyWeightAdjustments,
   loadLearnedWeights,
   computeEngineStats,
+  applyTimeDecay,
+  computeVariance,
+  countDealDiversity,
+  clampWeightChange,
+  shouldExploreWithSeed,
+  recordExploration,
+  loadExplorationLog,
+  computeExplorationPerformance,
+  assignControlGroupWithSeed,
+  recordControlOutcome,
+  computeControlComparison,
+  computeDecayedMemoryWeight,
+  getDecayedPlaybookScore,
   type DealSignals,
   type PrioritizationWeights,
+  type ExplorationRecord,
 } from '../lib/dealExecutionEngine';
 
 function makeDeal(overrides: Partial<DealSignals> = {}): DealSignals {
