@@ -497,11 +497,28 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
 
         // Check for application-level errors (quality validation failures)
         if (result.error) {
-          const enrichMsg = result.error.message || 'Enrichment failed';
-          const isQualityFail = enrichMsg.toLowerCase().includes('quality') || enrichMsg.toLowerCase().includes('score');
-          failItem(item.id, enrichMsg, isQualityFail ? 'failed_quality' : 'failed_request', true);
+          // Use rawMessage for actionable detail, not the generic friendly message
+          const rawMsg = result.error.rawMessage || result.error.message || 'Enrichment failed';
+          const friendlyMsg = result.error.message || rawMsg;
+          const isQualityFail = rawMsg.toLowerCase().includes('quality') || rawMsg.toLowerCase().includes('score');
+          const isTimeout = result.error.category === 'FUNCTION_TIMEOUT';
+          const isNetwork = result.error.category === 'NETWORK_ERROR';
+          
+          // Build a user-useful error with recovery hint
+          let displayMsg = rawMsg;
+          if (isTimeout) {
+            displayMsg = `Timed out after ${ENRICHMENT_TIMEOUT_MS / 1000}s — retry will use extended timeout`;
+          } else if (isNetwork) {
+            displayMsg = `Connection failed — retry will attempt again`;
+          } else if (isQualityFail) {
+            // Strip prefix for clarity
+            displayMsg = rawMsg.replace(/^Quality validation failed:\s*/i, 'Content quality: ');
+          }
+          
+          const category: FailureCategory = isTimeout ? 'failed_timeout' : isQualityFail ? 'failed_quality' : isNetwork ? 'failed_request' : 'failed_request';
+          failItem(item.id, displayMsg, category, true);
           inFlightResourceIds.delete(resourceId);
-          throw new Error(enrichMsg);
+          throw new Error(displayMsg);
         }
 
         // ── POST-WRITE VERIFICATION ─────────────────────────
