@@ -28,6 +28,7 @@ import {
   Activity, Sparkles, Network, Brain,
 } from 'lucide-react';
 import { ClaudeSynopsisModal } from '@/components/ClaudeSynopsisModal';
+import { DealIntelligenceCard } from '@/components/DealIntelligenceCard';
 import { OrgChartView } from '@/components/OrgChartView';
 import { MethodologyTracker } from '@/components/MethodologyTracker';
 import { cn } from '@/lib/utils';
