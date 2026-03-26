@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { trackedInvoke } from '@/lib/trackedInvoke';
+import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { toast } from 'sonner';
 
 // ── Types ──────────────────────────────────────────────────
@@ -302,12 +303,12 @@ export function useBulkIngestion() {
       updateItem(item.id, { stage: 'enriching', existingResourceId: resourceId });
       try {
         const force = item.enrichMode === 're_enrich';
-        await trackedInvoke<any>('enrich-resource-content', {
-          body: { resource_id: resourceId, force },
-          componentName: 'DeepEnrich',
-          timeoutMs: 60_000,
-        });
-        updateItem(item.id, { stage: 'complete' });
+        const result = await invokeEnrichResource<any>(
+          { resource_id: resourceId, force },
+          { componentName: 'DeepEnrich', timeoutMs: 60_000 },
+        );
+        if (result.error) throw new Error(result.error.message);
+        updateItem(item.id, { stage: result.data?.final_status === 'enriched' ? 'complete' : 'needs_review', error: result.data?.failure_reason, existingResourceId: resourceId });
         return;
       } catch (enrichErr) {
         const enrichMsg = classifyError(enrichErr, 'Deep enrichment');
@@ -426,11 +427,11 @@ export function useBulkIngestion() {
 
     updateItem(item.id, { stage: 'enriching', existingResourceId: savedResourceId });
     try {
-      await trackedInvoke<any>('enrich-resource-content', {
-        body: { resource_id: savedResourceId, force: true },
-        componentName: 'DeepEnrich',
-        timeoutMs: 60_000,
-      });
+      const result = await invokeEnrichResource<any>(
+        { resource_id: savedResourceId, force: true },
+        { componentName: 'DeepEnrich', timeoutMs: 60_000 },
+      );
+      if (result.error) throw new Error(result.error.message);
     } catch (enrichErr) {
       const enrichMsg = classifyError(enrichErr, 'Deep enrichment');
       updateItem(item.id, { stage: 'needs_review', error: `Saved but enrichment failed: ${enrichMsg}` });

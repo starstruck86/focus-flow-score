@@ -8,6 +8,7 @@
 import { create } from 'zustand';
 import { supabase } from '@/integrations/supabase/client';
 import { trackedInvoke } from '@/lib/trackedInvoke';
+import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { QueryClient } from '@tanstack/react-query';
 import type { EnrichMode } from '@/lib/resourceEligibility';
 
@@ -21,6 +22,14 @@ export type FailureCategory =
   | 'failed_timeout'
   | 'failed_needs_auth'
   | 'failed_unsupported'
+  | 'failed_bad_route'
+  | 'failed_missing_auth'
+  | 'failed_request_too_large'
+  | 'failed_request_serialization'
+  | 'failed_network_transport'
+  | 'failed_edge_unreachable'
+  | 'failed_preflight_blocked'
+  | 'failed_unknown_transport'
   | 'failed_unknown';
 
 // ── Enrichment final status (from orchestrator) ────────────
@@ -511,21 +520,16 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
       updateItem(item.id, { stage: 'enriching', existingResourceId: resourceId });
       try {
         const force = item.enrichMode === 're_enrich';
-        const result = await trackedInvoke<any>('enrich-resource-content', {
-          body: { resource_id: resourceId, force },
-          componentName: 'DeepEnrich',
-          timeoutMs: ENRICHMENT_TIMEOUT_MS,
-        });
+        const result = await invokeEnrichResource<any>(
+          { resource_id: resourceId, force },
+          { componentName: 'DeepEnrich', timeoutMs: ENRICHMENT_TIMEOUT_MS },
+        );
 
-        // Handle transport-level errors
         if (result.error) {
-          const isTimeout = result.error.category === 'FUNCTION_TIMEOUT';
-          const isNetwork = result.error.category === 'NETWORK_ERROR';
-          const rawMsg = result.error.rawMessage || result.error.message || 'Enrichment failed';
-          const category: FailureCategory = isTimeout ? 'failed_timeout' : isNetwork ? 'failed_request' : 'failed_request';
-          failItem(item.id, rawMsg, category, true);
+          updateItem(item.id, { recoveryHint: result.error.recoveryHint });
+          failItem(item.id, result.error.message, result.error.category as FailureCategory, result.error.retryable);
           inFlightResourceIds.delete(resourceId);
-          throw new Error(rawMsg);
+          throw new Error(result.error.exactError);
         }
 
         // Parse orchestrator output
@@ -695,15 +699,13 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
 
     updateItem(item.id, { stage: 'enriching', existingResourceId: savedResourceId });
     try {
-      const enrichResult = await trackedInvoke<any>('enrich-resource-content', {
-        body: { resource_id: savedResourceId, force: true },
-        componentName: 'DeepEnrich',
-        timeoutMs: ENRICHMENT_TIMEOUT_MS,
-      });
-      // Check for application-level errors
+      const enrichResult = await invokeEnrichResource<any>(
+        { resource_id: savedResourceId, force: true },
+        { componentName: 'DeepEnrich', timeoutMs: ENRICHMENT_TIMEOUT_MS },
+      );
       if (enrichResult.error) {
-        const enrichMsg = enrichResult.error.message || 'Enrichment failed';
-        failItem(item.id, `Saved but enrichment failed: ${enrichMsg}`, 'failed_quality', true);
+        updateItem(item.id, { recoveryHint: enrichResult.error.recoveryHint });
+        failItem(item.id, enrichResult.error.message, enrichResult.error.category as FailureCategory, enrichResult.error.retryable);
         inFlightResourceIds.delete(savedResourceId);
         return;
       }

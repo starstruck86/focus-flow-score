@@ -7,6 +7,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { generateTraceId, normalizeError, recordError } from './appError';
 import { trackedInvoke } from './trackedInvoke';
+import { invokeEnrichResource } from './invokeEnrichResource';
 import { createLogger } from './logger';
 
 const logger = createLogger('ResourcePipeline');
@@ -279,12 +280,11 @@ async function stepTranscriptAcquisition(job: ResourceJob, resource: Record<stri
     return;
   }
   // Invoke enrichment to get deep content
-  const result = await trackedInvoke<any>('enrich-resource-content', {
-    body: { resource_id: job.resource_id },
-    traceId: job.trace_id,
-    componentName: 'ResourcePipeline',
-  });
-  if (result.error) throw new Error(result.error.rawMessage);
+  const result = await invokeEnrichResource<any>(
+    { resource_id: job.resource_id },
+    { componentName: 'ResourcePipeline' },
+  );
+  if (result.error) throw new Error(result.error.exactError);
 }
 
 async function stepTranscriptChunking(job: ResourceJob, resource: Record<string, unknown>, jobId: string) {

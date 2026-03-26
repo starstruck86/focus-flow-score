@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { trackedInvoke } from '@/lib/trackedInvoke';
+import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -726,12 +727,16 @@ export function ResourceManager() {
                 case 're_enrich':
                   toast.info(action === 're_enrich' ? 'Re-enriching...' : 'Enriching...');
                   try {
-                    const { data } = await trackedInvoke<any>('enrich-resource-content', {
-                      body: { resource_id: resource.id, force: action === 're_enrich' },
-                    });
-                    toast.success(`Content enriched${data?.chars ? ` (${(data.chars / 1000).toFixed(1)}K chars)` : ''}`);
-                  } catch {
-                    toast.error('Enrichment failed');
+                    const result = await invokeEnrichResource<any>({ resource_id: resource.id, force: action === 're_enrich' });
+                    if (result.error) {
+                      toast.error(result.error.message, { description: result.error.recoveryHint });
+                      break;
+                    }
+                    if (result.data?.final_status === 'enriched') toast.success('Content enriched');
+                    else if (result.data?.final_status === 'partial') toast.info('Partially enriched', { description: result.data?.recovery_hint || result.data?.failure_reason });
+                    else toast.info(result.data?.failure_reason || 'Enrichment rerouted');
+                  } catch (error: any) {
+                    toast.error('Enrichment failed', { description: error?.message });
                   }
                   break;
                 case 'retry':

@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { trackedInvoke } from '@/lib/trackedInvoke';
+import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { Brain, Search, AlertTriangle, CheckCircle, Loader2, Zap, BookOpen, BarChart3, Clock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -215,12 +216,11 @@ export function ResourceIntelligenceDashboard() {
       }
 
       const ids = shallowResources.map(r => r.id);
-      const { data, error } = await trackedInvoke<any>('enrich-resource-content', {
-        body: { resource_ids: ids, force: true },
-      });
-      if (error) throw error;
+      const result = await invokeEnrichResource<any>({ resource_ids: ids, force: true });
+      if (result.error) throw new Error(result.error.message);
+      const data = result.data;
       const results = data?.results || [];
-      const enriched = results.filter((r: any) => r.status === 'enriched').length;
+      const enriched = results.filter((r: any) => r.status === 'enriched' || r.final_status === 'enriched').length;
       toast.success(`Re-enriched ${enriched}/${results.length} shallow resources`);
       loadStats();
     } catch (err: any) {

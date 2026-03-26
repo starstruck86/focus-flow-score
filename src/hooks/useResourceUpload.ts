@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { trackedInvoke } from '@/lib/trackedInvoke';
+import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -243,9 +244,7 @@ export function useAddUrlResource() {
 
       // Fire-and-forget background deep enrich if still placeholder
       if (contentStatus === 'placeholder') {
-        trackedInvoke<any>('enrich-resource-content', {
-          body: { resource_id: resource.id },
-        }).catch(() => {});
+        invokeEnrichResource<any>({ resource_id: resource.id }).catch(() => {});
       }
 
       return resource;

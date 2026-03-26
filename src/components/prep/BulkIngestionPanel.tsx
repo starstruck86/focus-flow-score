@@ -88,6 +88,9 @@ const SKIP_REASON_LABELS: Record<string, string> = {
 
 function ItemDetail({ item }: { item: IngestionItem }) {
   const isRetryable = item.retryEligible !== false;
+  const failureLabel = item.failureCategory
+    ? item.failureCategory.replace(/^failed_/, '').replace(/_/g, ' ')
+    : null;
   return (
     <div className="flex items-start gap-2 text-[11px] bg-destructive/5 rounded px-2 py-1.5">
       {item.stage === 'needs_auth' ? (
@@ -103,6 +106,11 @@ function ItemDetail({ item }: { item: IngestionItem }) {
         <span className="font-medium text-foreground truncate block">{item.title}</span>
         {item.error && <p className="text-muted-foreground">{item.error}</p>}
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+          {failureLabel && (
+            <Badge variant="outline" className="text-[9px] h-4 px-1 uppercase tracking-[0.08em]">
+              {failureLabel}
+            </Badge>
+          )}
           {item.sourceType && (
             <Badge variant="outline" className="text-[9px] h-4 px-1 font-mono">
               {item.sourceType}
