@@ -5,7 +5,22 @@
 import { create } from 'zustand';
 import { supabase } from '@/integrations/supabase/client';
 import { trackedInvoke } from '@/lib/trackedInvoke';
+import { QueryClient } from '@tanstack/react-query';
 import type { EnrichMode } from '@/lib/resourceEligibility';
+
+/**
+ * Invalidate resource-related queries globally.
+ * Called when the background job finishes so the UI updates
+ * even if the modal is already closed.
+ */
+function invalidateResourceQueries() {
+  // Access the singleton QueryClient mounted in main.tsx via window
+  const qc = (window as any).__QUERY_CLIENT__ as QueryClient | undefined;
+  if (!qc) return;
+  qc.invalidateQueries({ queryKey: ['resources'] });
+  qc.invalidateQueries({ queryKey: ['resource-digests'] });
+  qc.invalidateQueries({ queryKey: ['resource-jobs-active'] });
+}
 
 // ── Types ──────────────────────────────────────────────────
 export type IngestionItemStage =
