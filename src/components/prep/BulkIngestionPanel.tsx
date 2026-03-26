@@ -24,7 +24,7 @@ import type {
   IngestionState,
   IngestionJobStatus,
   IngestionItem,
-} from '@/hooks/useBulkIngestion';
+} from '@/store/useEnrichmentJobStore';
 
 interface BulkIngestionPanelProps {
   state: IngestionState;
