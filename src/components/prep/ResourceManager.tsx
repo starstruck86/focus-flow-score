@@ -698,215 +698,67 @@ export function ResourceManager() {
         </div>
       )}
 
-      {/* Resources */}
-      {filteredResources.length > 0 ? (
-        <div className="space-y-1.5">
-          {filteredResources.map(resource => {
-            const Icon = RESOURCE_TYPE_ICONS[resource.resource_type] || FileText;
-            const hasFile = !!resource.file_url;
-            const isExternal = resource.file_url?.startsWith('http');
-            const enrichStatus = (resource as any).enrichment_status as EnrichmentStatus | undefined;
-            const enrichedAt = resource.enriched_at ? new Date(resource.enriched_at) : null;
-            const contentLen = resource.content_length as number | null;
-            const recommended = getRecommendedAction(resource);
-            const isSelected = selectedResourceIds.has(resource.id);
-
-            const formatChars = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : `${n}`;
-            const formatAge = (d: Date) => {
-              const days = Math.floor((Date.now() - d.getTime()) / 86400000);
-              if (days === 0) return 'today';
-              if (days === 1) return '1d ago';
-              return `${days}d ago`;
-            };
-
-            return (
-              <div
-                key={resource.id}
-                className={cn(
-                  "group flex items-center gap-3 p-3 rounded-lg border bg-card/50 hover:bg-card cursor-pointer transition-colors",
-                  isSelected ? "border-primary/50 bg-primary/5" : "border-border/50 hover:border-primary/30"
-                )}
-                onClick={() => handleResourceClick(resource)}
-              >
-                {/* Selection checkbox */}
-                {(selectedResourceIds.size > 0 || isExternal) && (
-                  <div
-                    className={cn("shrink-0", selectedResourceIds.size === 0 && "opacity-0 group-hover:opacity-100 transition-opacity")}
-                    onClick={e => { e.stopPropagation(); setSelectedResourceIds(prev => { const next = new Set(prev); if (next.has(resource.id)) next.delete(resource.id); else next.add(resource.id); return next; }); }}
-                  >
-                    <input type="checkbox" checked={isSelected} readOnly className="rounded border-border cursor-pointer" />
-                  </div>
-                )}
-                <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    {renamingResourceId === resource.id ? (
-                      <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                        <Input
-                          value={renameResourceTitle}
-                          onChange={e => setRenameResourceTitle(e.target.value)}
-                          className="h-6 text-sm px-1.5 w-48"
-                          autoFocus
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') handleRenameResource();
-                            if (e.key === 'Escape') { setRenamingResourceId(null); setRenameResourceTitle(''); }
-                          }}
-                        />
-                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleRenameResource}>
-                          <Check className="h-3 w-3" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setRenamingResourceId(null); setRenameResourceTitle(''); }}>
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <span className="text-sm font-medium text-foreground truncate">{resource.title}</span>
-                    )}
-                    {resource.is_template && <Badge variant="secondary" className="text-[10px] shrink-0">Template</Badge>}
-                    {/* Enrichment status badge */}
-                    {isExternal && (
-                      <Badge className={cn("text-[9px] shrink-0", getEnrichmentStatusColor(enrichStatus))}>
-                        {getEnrichmentStatusLabel(enrichStatus)}
-                      </Badge>
-                    )}
-                    {hasFile && !isExternal && <Upload className="h-3 w-3 text-muted-foreground shrink-0" />}
-                    {isExternal && <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />}
-                  </div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[10px] text-muted-foreground capitalize">{resource.resource_type}</span>
-                    <span className="text-[10px] text-muted-foreground">v{resource.enrichment_version ?? resource.current_version}</span>
-                    <span className="text-[10px] text-muted-foreground">
-                      {new Date(resource.created_at).toLocaleDateString()}
-                    </span>
-                    {isExternal && enrichedAt && (
-                      <span className="text-[10px] text-muted-foreground">
-                        Enriched {formatAge(enrichedAt)}{contentLen ? ` · ${formatChars(contentLen)} chars` : ''}
-                      </span>
-                    )}
-                    {(resource as any).failure_reason && enrichStatus === 'failed' && (
-                      <span className="text-[10px] text-status-red truncate max-w-[200px]">{(resource as any).failure_reason}</span>
-                    )}
-                    {resource.tags && resource.tags.length > 0 && (
-                      <div className="flex items-center gap-1 ml-1">
-                        {resource.tags.slice(0, 3).map(t => (
-                          <Badge key={t} variant="outline" className="text-[8px] font-normal py-0 px-1">{t}</Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button
-                    variant="ghost" size="icon" className="h-7 w-7"
-                    onClick={(e) => { e.stopPropagation(); setViewingVersions(resource.id); }}
-                  >
-                    <Clock className="h-3.5 w-3.5" />
-                  </Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
-                      <Button variant="ghost" size="icon" className="h-7 w-7">
-                        <MoreHorizontal className="h-3.5 w-3.5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setEditingResource(resource); }}>
-                        <Edit3 className="h-3.5 w-3.5 mr-2" /> Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setRenamingResourceId(resource.id); setRenameResourceTitle(resource.title); }}>
-                        <Tag className="h-3.5 w-3.5 mr-2" /> Rename
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setViewingVersions(resource.id); }}>
-                        <Clock className="h-3.5 w-3.5 mr-2" /> Version History
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={(e) => {
-                        e.stopPropagation();
-                        createResource.mutate({
-                          title: `${resource.title} (Copy)`,
-                          folder_id: resource.folder_id,
-                          resource_type: resource.resource_type,
-                          content: resource.content || '',
-                          is_template: resource.is_template || false,
-                          template_category: resource.template_category || undefined,
-                        });
-                      }}>
-                        <Copy className="h-3.5 w-3.5 mr-2" /> Duplicate
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={(e) => {
-                        e.stopPropagation();
-                        operationalize.mutate(resource.id);
-                      }}>
-                        <Sparkles className="h-3.5 w-3.5 mr-2" /> Operationalize
-                      </DropdownMenuItem>
-                      {isExternal && (
-                        <DropdownMenuItem onClick={async (e) => {
-                          e.stopPropagation();
-                          const isReenrich = enrichStatus === 'deep_enriched';
-                          toast.info(isReenrich ? 'Re-enriching content...' : 'Enriching content...');
-                          try {
-                            const { data } = await trackedInvoke<any>('enrich-resource-content', {
-                              body: { resource_id: resource.id, force: true },
-                            });
-                            toast.success(`Content ${isReenrich ? 're-' : ''}enriched${data?.chars ? ` (${(data.chars / 1000).toFixed(1)}K chars)` : ''}`);
-                          } catch {
-                            toast.error('Enrichment failed');
-                          }
-                        }}>
-                          <RefreshCw className="h-3.5 w-3.5 mr-2" /> {enrichStatus === 'deep_enriched' ? 'Re-enrich' : 'Deep Enrich'}
-                        </DropdownMenuItem>
-                      )}
-                      {isExternal && enrichStatus === 'failed' && (
-                        <DropdownMenuItem onClick={(e) => {
-                          e.stopPropagation();
-                          updateEnrichmentStatus.mutate({ id: resource.id, enrichment_status: 'not_enriched', failure_reason: null });
-                          toast.success('Reset to not enriched — ready for retry');
-                        }}>
-                          <RotateCcw className="h-3.5 w-3.5 mr-2" /> Reset Status
-                        </DropdownMenuItem>
-                      )}
-                      {isExternal && enrichStatus === 'deep_enriched' && (
-                        <DropdownMenuItem onClick={(e) => {
-                          e.stopPropagation();
-                          updateEnrichmentStatus.mutate({ id: resource.id, enrichment_status: 'queued_for_reenrich' });
-                          toast.success('Queued for re-enrichment');
-                        }}>
-                          <RefreshCw className="h-3.5 w-3.5 mr-2" /> Queue Re-enrich
-                        </DropdownMenuItem>
-                      )}
-                      {isExternal && (enrichStatus === 'not_enriched' || !enrichStatus) && (
-                        <DropdownMenuItem onClick={(e) => {
-                          e.stopPropagation();
-                          updateEnrichmentStatus.mutate({ id: resource.id, enrichment_status: 'duplicate' });
-                          toast.success('Marked as duplicate');
-                        }}>
-                          <AlertTriangle className="h-3.5 w-3.5 mr-2" /> Mark Duplicate
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem onClick={(e) => {
-                        e.stopPropagation();
-                        setGenerateSourceId(resource.id);
-                        setGenerateInitialType(undefined);
-                        setShowAIGenerate(true);
-                      }}>
-                        <Target className="h-3.5 w-3.5 mr-2" /> Generate From This
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem className="text-destructive" onClick={(e) => { e.stopPropagation(); deleteResource.mutate(resource.id); }}>
-                        <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : currentFolders.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <FileText className="h-8 w-8 mx-auto mb-2 opacity-40" />
-          <p className="text-sm">No resources yet</p>
-          <p className="text-xs mt-1">Create a document, upload a file, or add a link</p>
-        </div>
-      ) : null}
+      {/* Resource Library Table */}
+      {(filteredResources.length > 0 || currentFolders.length === 0) && (
+        filteredResources.length > 0 ? (
+          <ResourceLibraryTable
+            resources={filteredResources}
+            selectedIds={selectedResourceIds}
+            onToggleSelect={(id) => setSelectedResourceIds(prev => {
+              const next = new Set(prev);
+              if (next.has(id)) next.delete(id);
+              else next.add(id);
+              return next;
+            })}
+            onToggleSelectAll={() => setSelectedResourceIds(prev => {
+              if (prev.size === filteredResources.length) return new Set();
+              return new Set(filteredResources.map(r => r.id));
+            })}
+            onResourceClick={handleResourceClick}
+            onAction={async (action, resource) => {
+              switch (action) {
+                case 'view':
+                  if (resource.file_url) setViewingResource(resource);
+                  else setEditingResource(resource);
+                  break;
+                case 'deep_enrich':
+                case 're_enrich':
+                  toast.info(action === 're_enrich' ? 'Re-enriching...' : 'Enriching...');
+                  try {
+                    const { data } = await trackedInvoke<any>('enrich-resource-content', {
+                      body: { resource_id: resource.id, force: action === 're_enrich' },
+                    });
+                    toast.success(`Content enriched${data?.chars ? ` (${(data.chars / 1000).toFixed(1)}K chars)` : ''}`);
+                  } catch {
+                    toast.error('Enrichment failed');
+                  }
+                  break;
+                case 'retry':
+                  updateEnrichmentStatus.mutate({ id: resource.id, enrichment_status: 'not_enriched', failure_reason: null });
+                  toast.success('Reset for retry');
+                  break;
+                case 'reset':
+                  updateEnrichmentStatus.mutate({ id: resource.id, enrichment_status: 'not_enriched', failure_reason: null });
+                  toast.success('Status reset');
+                  break;
+                case 'mark_duplicate':
+                  updateEnrichmentStatus.mutate({ id: resource.id, enrichment_status: 'duplicate' });
+                  toast.success('Marked as duplicate');
+                  break;
+                case 'delete':
+                  deleteResource.mutate(resource.id);
+                  break;
+              }
+            }}
+          />
+        ) : (
+          <div className="text-center py-12 text-muted-foreground">
+            <FileText className="h-8 w-8 mx-auto mb-2 opacity-40" />
+            <p className="text-sm">No resources yet</p>
+            <p className="text-xs mt-1">Create a document, upload a file, or add a link</p>
+          </div>
+        )
+      )}
 
       {/* New Folder Dialog */}
       <Dialog open={showNewFolder} onOpenChange={setShowNewFolder}>
