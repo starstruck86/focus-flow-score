@@ -14,9 +14,18 @@ import {
   computeUsefulnessScore,
   isClusterReadyForPlaybook,
   computeSnapshotHash,
+  computePlaybookOutcomeScore,
+  blendOutcomeIntoTrust,
+  determineOutcomeTrustAction,
+  scorePlaybookContextFit,
+  detectPlaybookFatigue,
+  computeFatigueDiscount,
+  rankPlaybooksForContext,
   type PlaybookModel,
   type PlaybookTrustScore,
   type ResourceCluster,
+  type PlaybookOutcomeEvent,
+  type DealContext,
 } from '@/lib/playbookLifecycle';
 
 // ── Helpers ────────────────────────────────────────────────
@@ -267,5 +276,174 @@ describe('Snapshot Hash', () => {
     const a = computeSnapshotHash({ problem_type: 'urgency', talk_tracks: ['a'], questions: ['b'], pressure_tactics: ['c'] });
     const b = computeSnapshotHash({ problem_type: 'pricing', talk_tracks: ['x'], questions: ['y'], pressure_tactics: ['z'] });
     expect(a).not.toBe(b);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// Outcome-Driven Learning Tests
+// ══════════════════════════════════════════════════════════════
+
+describe('Playbook Outcome Scoring', () => {
+  it('returns zero for empty events', () => {
+    const score = computePlaybookOutcomeScore([]);
+    expect(score.overall).toBe(0);
+    expect(score.confidence).toBe('insufficient');
+  });
+
+  it('scores stage progression events', () => {
+    const events: PlaybookOutcomeEvent[] = Array.from({ length: 5 }, (_, i) => ({
+      playbookId: 'pb-1',
+      eventType: 'stage_progressed',
+      timestamp: new Date(Date.now() - i * 86400000).toISOString(),
+    }));
+    const score = computePlaybookOutcomeScore(events);
+    expect(score.stageProgression).toBeGreaterThan(0);
+    expect(score.confidence).toBe('moderate');
+  });
+
+  it('recent events weigh more than old', () => {
+    const recent: PlaybookOutcomeEvent[] = [{ playbookId: 'pb-1', eventType: 'deal_won', timestamp: new Date().toISOString() }];
+    const old: PlaybookOutcomeEvent[] = [{ playbookId: 'pb-1', eventType: 'deal_won', timestamp: new Date(Date.now() - 120 * 86400000).toISOString() }];
+    const recentScore = computePlaybookOutcomeScore(recent);
+    const oldScore = computePlaybookOutcomeScore(old);
+    expect(recentScore.winCorrelation).toBeGreaterThan(oldScore.winCorrelation);
+  });
+
+  it('high confidence requires 10+ events', () => {
+    const events: PlaybookOutcomeEvent[] = Array.from({ length: 12 }, (_, i) => ({
+      playbookId: 'pb-1',
+      eventType: 'meeting_converted',
+      timestamp: new Date(Date.now() - i * 86400000).toISOString(),
+    }));
+    expect(computePlaybookOutcomeScore(events).confidence).toBe('high');
+  });
+});
+
+describe('Outcome-Weighted Trust Blending', () => {
+  it('boosts trust for high-outcome playbooks', () => {
+    const base = makeTrustScore(60);
+    const outcome = computePlaybookOutcomeScore(
+      Array.from({ length: 10 }, (_, i) => ({
+        playbookId: 'pb-1', eventType: 'stage_progressed' as const,
+        timestamp: new Date(Date.now() - i * 86400000).toISOString(),
+      }))
+    );
+    const blended = blendOutcomeIntoTrust(base, outcome);
+    expect(blended.overall).toBeGreaterThanOrEqual(base.overall);
+  });
+
+  it('does not change trust for insufficient data', () => {
+    const base = makeTrustScore(60);
+    const outcome = computePlaybookOutcomeScore([]);
+    const blended = blendOutcomeIntoTrust(base, outcome);
+    expect(blended.overall).toBe(base.overall);
+  });
+});
+
+describe('Outcome Trust Actions', () => {
+  it('promotes high-outcome playbooks', () => {
+    const outcome = { overall: 70, stageProgression: 15, stagnationReduction: 10, meetingConversion: 15, replyRate: 10, nextStepAdherence: 8, winCorrelation: 8, sampleSize: 10, confidence: 'high' as const };
+    expect(determineOutcomeTrustAction(outcome, 'limited')).toBe('promote');
+  });
+
+  it('monitors insufficient data', () => {
+    const outcome = { overall: 0, stageProgression: 0, stagnationReduction: 0, meetingConversion: 0, replyRate: 0, nextStepAdherence: 0, winCorrelation: 0, sampleSize: 0, confidence: 'insufficient' as const };
+    expect(determineOutcomeTrustAction(outcome, 'trusted')).toBe('monitor');
+  });
+
+  it('downgrades low-outcome playbooks', () => {
+    const outcome = { overall: 10, stageProgression: 5, stagnationReduction: 0, meetingConversion: 5, replyRate: 0, nextStepAdherence: 0, winCorrelation: 0, sampleSize: 8, confidence: 'high' as const };
+    expect(determineOutcomeTrustAction(outcome, 'trusted')).toBe('downgrade');
+  });
+
+  it('suggests split for zero-progression low-outcome', () => {
+    const outcome = { overall: 10, stageProgression: 0, stagnationReduction: 5, meetingConversion: 0, replyRate: 5, nextStepAdherence: 0, winCorrelation: 0, sampleSize: 6, confidence: 'moderate' as const };
+    expect(determineOutcomeTrustAction(outcome, 'trusted')).toBe('split_review');
+  });
+});
+
+describe('Context-Aware Playbook Matching', () => {
+  const context: DealContext = {
+    dealSize: 'large',
+    stage: 'Discovery',
+    persona: 'VP Sales',
+    urgency: 'high',
+    competitionPresent: true,
+    stakeholderCount: 4,
+    productComplexity: 'complex',
+  };
+
+  it('gives context bonus for stage affinity', () => {
+    const pb = makePlaybook({ derived_from_cluster_id: 'cluster_discovery_depth' });
+    const fit = scorePlaybookContextFit(pb, context, null, 0);
+    expect(fit.contextBonus).toBeGreaterThan(0);
+    expect(fit.contextReasons.some(r => r.includes('stage'))).toBe(true);
+  });
+
+  it('gives persona match bonus', () => {
+    const pb = makePlaybook({ target_personas: ['VP Sales'] });
+    const fit = scorePlaybookContextFit(pb, context, null, 0);
+    expect(fit.contextReasons.some(r => r.includes('Persona'))).toBe(true);
+  });
+
+  it('applies fatigue discount', () => {
+    const pb = makePlaybook();
+    const fresh = scorePlaybookContextFit(pb, context, null, 0);
+    const fatigued = scorePlaybookContextFit(pb, context, null, 5);
+    expect(fatigued.finalScore).toBeLessThan(fresh.finalScore);
+    expect(fatigued.fatigueDiscount).toBeGreaterThan(0);
+  });
+});
+
+describe('Fatigue Detection', () => {
+  it('detects same-deal fatigue at threshold', () => {
+    const usages = Array.from({ length: 4 }, () => ({ dealId: 'deal-1', timestamp: new Date().toISOString() }));
+    const signals = detectPlaybookFatigue('pb-1', usages);
+    const dealSignal = signals.find(s => s.dealId === 'deal-1');
+    expect(dealSignal?.isFatigued).toBe(true);
+    expect(dealSignal?.suggestion).toContain('different approach');
+  });
+
+  it('does not flag low usage', () => {
+    const usages = [{ dealId: 'deal-1', timestamp: new Date().toISOString() }];
+    const signals = detectPlaybookFatigue('pb-1', usages);
+    expect(signals.every(s => !s.isFatigued)).toBe(true);
+  });
+
+  it('detects global fatigue', () => {
+    const usages = Array.from({ length: 12 }, (_, i) => ({ dealId: `deal-${i}`, timestamp: new Date().toISOString() }));
+    const signals = detectPlaybookFatigue('pb-1', usages);
+    const global = signals.find(s => s.dealId === '__global__');
+    expect(global?.isFatigued).toBe(true);
+  });
+
+  it('fatigue discount scales with usage', () => {
+    expect(computeFatigueDiscount(0)).toBe(0);
+    expect(computeFatigueDiscount(1)).toBe(0);
+    expect(computeFatigueDiscount(3)).toBe(10);
+    expect(computeFatigueDiscount(6)).toBeGreaterThan(20);
+  });
+});
+
+describe('Playbook Ranking for Context', () => {
+  it('ranks eligible playbooks by final score', () => {
+    const pbs = [
+      makePlaybook({ id: 'pb-1', trust_score: makeTrustScore(80), derived_from_cluster_id: 'cluster_discovery_depth' }),
+      makePlaybook({ id: 'pb-2', trust_score: makeTrustScore(50), derived_from_cluster_id: 'cluster_pricing_pushback' }),
+    ];
+    const context: DealContext = { dealSize: 'medium', stage: 'Discovery', persona: 'Manager', urgency: 'medium', competitionPresent: false, stakeholderCount: 1, productComplexity: 'simple' };
+    const ranked = rankPlaybooksForContext(pbs, context, new Map(), new Map(), 'dave_suggestion');
+    expect(ranked.length).toBe(2);
+    expect(ranked[0].playbookId).toBe('pb-1');
+    expect(ranked[0].finalScore).toBeGreaterThan(ranked[1].finalScore);
+  });
+
+  it('filters out ineligible playbooks', () => {
+    const pbs = [
+      makePlaybook({ id: 'pb-1', trust_status: 'quarantined', status: 'quarantined' }),
+    ];
+    const context: DealContext = { dealSize: 'small', stage: 'Prospecting', persona: 'IC', urgency: 'low', competitionPresent: false, stakeholderCount: 1, productComplexity: 'simple' };
+    const ranked = rankPlaybooksForContext(pbs, context, new Map(), new Map(), 'dave_suggestion');
+    expect(ranked.length).toBe(0);
   });
 });
