@@ -538,6 +538,9 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
             else if (stage === 'needs_review') { reviewCount++; newState.reviewCount = reviewCount; successCount++; newState.successCount = successCount; }
             return { state: newState };
           });
+
+          // Progressive invalidation so UI updates per-item, not just at end
+          invalidateResourceQueries();
         } catch (err) {
           processedCount++;
           failedCount++;
