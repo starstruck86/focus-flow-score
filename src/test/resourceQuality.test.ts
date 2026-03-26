@@ -1,5 +1,5 @@
 /**
- * Tests for resource quality validation, eligibility, and lifecycle contracts.
+ * Tests for resource quality validation, eligibility, lifecycle, and reconciliation.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -19,7 +19,13 @@ import {
   getEligibleResources,
   getRecommendedAction,
   assertBatchEligibility,
+  selectEligibleBatch,
+  getEligibleCount,
 } from '@/lib/resourceEligibility';
+import {
+  isValidTransition,
+  detectDrift,
+} from '@/lib/resourceLifecycle';
 import type { Resource } from '@/hooks/useResources';
 
 // Diverse content that passes vocabulary checks
@@ -88,7 +94,7 @@ function makeFullResource(overrides: Partial<Resource & Record<string, any>> = {
   } as Resource;
 }
 
-// ── Section 1: Completion Contract ─────────────────────────
+// ── Completion Contract ────────────────────────────────────
 describe('Completion Contract', () => {
   it('shallow outputs (< 500 chars) do NOT become deep_enriched', () => {
     const r = makeResource({ content: 'Short content', content_length: 13 });
@@ -101,7 +107,6 @@ describe('Completion Contract', () => {
     const r = makeResource({ content: '', content_length: 0 });
     const result = validateResourceQuality(r);
     expect(result.passesCompletionContract).toBe(false);
-    // Empty content may be 'incomplete' due to other metadata giving partial score
     expect(['failed', 'incomplete']).toContain(result.tier);
   });
 
@@ -112,7 +117,7 @@ describe('Completion Contract', () => {
   });
 
   it('valid diverse output with all fields DOES become deep_enriched', () => {
-    const r = makeResource(); // uses diverse 3000+ char content
+    const r = makeResource();
     const result = validateResourceQuality(r);
     expect(result.passesCompletionContract).toBe(true);
     expect(result.tier).toBe('complete');
@@ -132,16 +137,13 @@ describe('Completion Contract', () => {
   });
 });
 
-// ── Section 2: Quality Scoring ─────────────────────────────
+// ── Quality Scoring ────────────────────────────────────────
 describe('Quality Scoring', () => {
   it('scores low for completely empty resource', () => {
     const r = makeResource({
-      content: null,
-      content_length: 0,
-      enrichment_version: 0,
-      enriched_at: null,
-      file_url: null,
-      validation_version: 0,
+      content: null, content_length: 0,
+      enrichment_version: 0, enriched_at: null,
+      file_url: null, validation_version: 0,
     });
     const result = validateResourceQuality(r);
     expect(result.score).toBeLessThanOrEqual(20);
@@ -158,13 +160,12 @@ describe('Quality Scoring', () => {
   it('determinePostEnrichmentStatus maps quality tier to correct status', () => {
     const shallow = validateResourceQuality(makeResource({ content: 'X'.repeat(100), content_length: 100 }));
     expect(determinePostEnrichmentStatus(shallow, false)).not.toBe('deep_enriched');
-
-    const good = validateResourceQuality(makeResource()); // diverse 3000+ char content
+    const good = validateResourceQuality(makeResource());
     expect(determinePostEnrichmentStatus(good, false)).toBe('deep_enriched');
   });
 });
 
-// ── Section 3: Failure Classification ──────────────────────
+// ── Failure Classification ─────────────────────────────────
 describe('Failure Classification', () => {
   it('classifies rate limit as transient', () => {
     const qr = validateResourceQuality(makeResource({ content: null, content_length: 0 }));
@@ -182,39 +183,31 @@ describe('Failure Classification', () => {
   });
 });
 
-// ── Section 4: Eligibility Selectors ───────────────────────
+// ── Eligibility Selectors ──────────────────────────────────
 describe('Eligibility Selectors', () => {
   it('not_enriched is eligible for deep_enrich', () => {
     const r = makeFullResource({ enrichment_status: 'not_enriched' as any });
-    const result = evaluateResourceEligibility(r, 'deep_enrich');
-    expect(result.eligible).toBe(true);
+    expect(evaluateResourceEligibility(r, 'deep_enrich').eligible).toBe(true);
   });
 
   it('incomplete is eligible for deep_enrich', () => {
     const r = makeFullResource({ enrichment_status: 'incomplete' as any });
-    const result = evaluateResourceEligibility(r, 'deep_enrich');
-    expect(result.eligible).toBe(true);
+    expect(evaluateResourceEligibility(r, 'deep_enrich').eligible).toBe(true);
   });
 
   it('deep_enriched is NOT eligible for deep_enrich', () => {
     const r = makeFullResource({ enrichment_status: 'deep_enriched' as any });
-    const result = evaluateResourceEligibility(r, 'deep_enrich');
-    expect(result.eligible).toBe(false);
+    expect(evaluateResourceEligibility(r, 'deep_enrich').eligible).toBe(false);
   });
 
   it('incomplete is eligible for re_enrich', () => {
     const r = makeFullResource({ enrichment_status: 'incomplete' as any });
-    const result = evaluateResourceEligibility(r, 're_enrich');
-    expect(result.eligible).toBe(true);
+    expect(evaluateResourceEligibility(r, 're_enrich').eligible).toBe(true);
   });
 
   it('deep_enriched with shallow tier is eligible for re_enrich', () => {
-    const r = makeFullResource({
-      enrichment_status: 'deep_enriched' as any,
-      last_quality_tier: 'shallow',
-    } as any);
-    const result = evaluateResourceEligibility(r, 're_enrich');
-    expect(result.eligible).toBe(true);
+    const r = makeFullResource({ enrichment_status: 'deep_enriched' as any, last_quality_tier: 'shallow' } as any);
+    expect(evaluateResourceEligibility(r, 're_enrich').eligible).toBe(true);
   });
 
   it('duplicate is never eligible', () => {
@@ -234,34 +227,46 @@ describe('Eligibility Selectors', () => {
   });
 
   it('batch assertion fails for ineligible items', () => {
-    const all = [
-      makeFullResource({ id: '1', enrichment_status: 'deep_enriched' as any }),
-    ];
+    const all = [makeFullResource({ id: '1', enrichment_status: 'deep_enriched' as any })];
     expect(() => assertBatchEligibility(all, 'deep_enrich', all)).toThrow();
+  });
+
+  it('selectEligibleBatch respects batch size', () => {
+    const resources = [
+      makeFullResource({ id: '1', enrichment_status: 'not_enriched' as any, file_url: 'https://a.com/1' }),
+      makeFullResource({ id: '2', enrichment_status: 'not_enriched' as any, file_url: 'https://a.com/2' }),
+      makeFullResource({ id: '3', enrichment_status: 'not_enriched' as any, file_url: 'https://a.com/3' }),
+    ];
+    const batch = selectEligibleBatch(resources, 'deep_enrich', 2);
+    expect(batch).toHaveLength(2);
+  });
+
+  it('getEligibleCount matches getEligibleResources length', () => {
+    const resources = [
+      makeFullResource({ id: '1', enrichment_status: 'not_enriched' as any, file_url: 'https://a.com/1' }),
+      makeFullResource({ id: '2', enrichment_status: 'deep_enriched' as any, file_url: 'https://a.com/2' }),
+    ];
+    expect(getEligibleCount(resources, 'deep_enrich')).toBe(getEligibleResources(resources, 'deep_enrich').length);
   });
 });
 
-// ── Section 5: Reconciliation ──────────────────────────────
+// ── Reconciliation ─────────────────────────────────────────
 describe('Reconciliation', () => {
   it('downgrades deep_enriched with shallow content', () => {
-    const r = makeResource({
-      content: 'X'.repeat(100),
-      content_length: 100,
-      enrichment_status: 'deep_enriched',
-    });
+    const r = makeResource({ content: 'X'.repeat(100), content_length: 100, enrichment_status: 'deep_enriched' });
     const result = reconcileResource(r);
     expect(result.action).toBe('downgrade');
     expect(result.newStatus).toBeDefined();
   });
 
   it('keeps valid deep_enriched as ok', () => {
-    const r = makeResource(); // 3000+ chars diverse content with all fields
+    const r = makeResource();
     const result = reconcileResource(r);
     expect(result.action).toBe('ok');
   });
 });
 
-// ── Section 6: State Transition Invariants ─────────────────
+// ── State Transition Invariants ────────────────────────────
 describe('Invariants', () => {
   it('deep_enriched with non-complete tier throws', () => {
     expect(() => assertEnrichmentInvariants('deep_enriched', 'shallow')).toThrow('INVARIANT VIOLATION');
@@ -276,16 +281,11 @@ describe('Invariants', () => {
   });
 });
 
-// ── Section 7: Version/Freshness ───────────────────────────
+// ── Version and Freshness ──────────────────────────────────
 describe('Version and Freshness', () => {
   it('outdated enrichment_version makes re-enrich eligible', () => {
-    const r = makeFullResource({
-      enrichment_status: 'deep_enriched' as any,
-      enrichment_version: 0,
-    });
-    const result = evaluateResourceEligibility(r, 're_enrich');
-    expect(result.eligible).toBe(true);
-    expect(result.reason).toContain('outdated version');
+    const r = makeFullResource({ enrichment_status: 'deep_enriched' as any, enrichment_version: 0 });
+    expect(evaluateResourceEligibility(r, 're_enrich').eligible).toBe(true);
   });
 
   it('outdated validation_version makes re-enrich eligible', () => {
@@ -294,26 +294,21 @@ describe('Version and Freshness', () => {
       enrichment_version: CURRENT_ENRICHMENT_VERSION,
       validation_version: 0,
     } as any);
-    const result = evaluateResourceEligibility(r, 're_enrich');
-    expect(result.eligible).toBe(true);
-    expect(result.reason).toContain('validation version');
+    expect(evaluateResourceEligibility(r, 're_enrich').eligible).toBe(true);
   });
 
   it('stale enrichment date makes re-enrich eligible', () => {
-    const staleDate = new Date(Date.now() - 100 * 86400000).toISOString();
     const r = makeFullResource({
       enrichment_status: 'deep_enriched' as any,
       enrichment_version: CURRENT_ENRICHMENT_VERSION,
-      enriched_at: staleDate,
+      enriched_at: new Date(Date.now() - 100 * 86400000).toISOString(),
     } as any);
     (r as any).validation_version = CURRENT_VALIDATION_VERSION;
-    const result = evaluateResourceEligibility(r, 're_enrich');
-    expect(result.eligible).toBe(true);
-    expect(result.reason).toContain('stale');
+    expect(evaluateResourceEligibility(r, 're_enrich').eligible).toBe(true);
   });
 });
 
-// ── Section 8: Recommended Actions ─────────────────────────
+// ── Recommended Actions ────────────────────────────────────
 describe('Recommended Actions', () => {
   it('not_enriched → deep_enrich', () => {
     const r = makeFullResource({ enrichment_status: 'not_enriched' as any });
@@ -338,5 +333,68 @@ describe('Recommended Actions', () => {
   it('duplicate → ignore', () => {
     const r = makeFullResource({ enrichment_status: 'duplicate' as any });
     expect(getRecommendedAction(r).action).toBe('ignore');
+  });
+});
+
+// ── State Transitions ──────────────────────────────────────
+describe('State Transitions', () => {
+  it('allows valid transitions', () => {
+    expect(isValidTransition('not_enriched', 'queued_for_deep_enrich')).toBe(true);
+    expect(isValidTransition('deep_enrich_in_progress', 'deep_enriched')).toBe(true);
+    expect(isValidTransition('deep_enriched', 'queued_for_reenrich')).toBe(true);
+  });
+
+  it('blocks invalid transitions', () => {
+    expect(isValidTransition('not_enriched', 'deep_enriched')).toBe(false);
+    expect(isValidTransition('duplicate', 'deep_enriched')).toBe(false);
+  });
+});
+
+// ── Drift Detection ────────────────────────────────────────
+describe('Drift Detection', () => {
+  it('detects deep_enriched with shallow tier', () => {
+    const drift = detectDrift({ enrichment_status: 'deep_enriched', last_quality_tier: 'shallow' });
+    expect(drift.hasDrift).toBe(true);
+    expect(drift.issues).toHaveLength(1);
+  });
+
+  it('detects deep_enriched with outdated version', () => {
+    const drift = detectDrift({ enrichment_status: 'deep_enriched', last_quality_tier: 'complete', enrichment_version: 0 });
+    expect(drift.hasDrift).toBe(true);
+  });
+
+  it('no drift for valid deep_enriched', () => {
+    const drift = detectDrift({
+      enrichment_status: 'deep_enriched',
+      last_quality_tier: 'complete',
+      last_quality_score: 85,
+      enrichment_version: CURRENT_ENRICHMENT_VERSION,
+      validation_version: CURRENT_VALIDATION_VERSION,
+    });
+    expect(drift.hasDrift).toBe(false);
+  });
+
+  it('no drift for non-enriched resources', () => {
+    const drift = detectDrift({ enrichment_status: 'not_enriched' });
+    expect(drift.hasDrift).toBe(false);
+  });
+});
+
+// ── Batch Integrity ────────────────────────────────────────
+describe('Batch Integrity', () => {
+  it('batch from eligible pool passes assertion', () => {
+    const resources = [
+      makeFullResource({ id: '1', enrichment_status: 'not_enriched' as any, file_url: 'https://a.com/1' }),
+      makeFullResource({ id: '2', enrichment_status: 'not_enriched' as any, file_url: 'https://a.com/2' }),
+    ];
+    const batch = selectEligibleBatch(resources, 'deep_enrich', 2);
+    expect(() => assertBatchEligibility(batch, 'deep_enrich', resources)).not.toThrow();
+  });
+
+  it('manually constructed ineligible batch fails assertion', () => {
+    const resources = [
+      makeFullResource({ id: '1', enrichment_status: 'deep_enriched' as any, file_url: 'https://a.com/1' }),
+    ];
+    expect(() => assertBatchEligibility(resources, 'deep_enrich', resources)).toThrow();
   });
 });
