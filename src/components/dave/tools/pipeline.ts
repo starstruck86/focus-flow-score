@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { trackedInvoke } from '@/lib/trackedInvoke';
+import { todayET, mondayOfWeekET } from '@/lib/timeFormat';
 import type { ToolContext, ToolMap } from '../toolTypes';
 import type {
   HygieneScanSummary,

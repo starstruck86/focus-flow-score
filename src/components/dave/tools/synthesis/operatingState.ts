@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { todayInAppTz, getCurrentMinutesET } from '@/lib/timeFormat';
+import { todayInAppTz, getCurrentMinutesET, daysAgoET } from '@/lib/timeFormat';
 import type { ToolContext } from '../../toolTypes';
 
 export async function operatingState(ctx: ToolContext): Promise<string> {

@@ -1,5 +1,6 @@
 import { NavigateFunction } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { todayET } from '@/lib/timeFormat';
 import type { AskCopilot, ToolContext } from './toolTypes';
 import { createNavigationTools } from './tools/navigation';
 import { createAccountTools } from './tools/accounts';
