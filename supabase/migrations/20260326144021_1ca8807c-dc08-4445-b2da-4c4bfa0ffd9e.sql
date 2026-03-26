@@ -1,0 +1,1 @@
+ALTER TABLE public.resources ADD COLUMN IF NOT EXISTS last_reconciled_at timestamp with time zone DEFAULT NULL;

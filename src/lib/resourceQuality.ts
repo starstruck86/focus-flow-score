@@ -13,6 +13,7 @@ const log = createLogger('ResourceQuality');
 // ── Version ────────────────────────────────────────────────
 export const CURRENT_VALIDATION_VERSION = 1;
 export const CURRENT_ENRICHMENT_VERSION = 1;
+export const CURRENT_QUALITY_VERSION = 1;
 
 // ── Quality Tiers ──────────────────────────────────────────
 export type QualityTier = 'complete' | 'shallow' | 'incomplete' | 'failed';
