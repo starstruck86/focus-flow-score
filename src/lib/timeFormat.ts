@@ -50,6 +50,41 @@ export function bostonNow(): Date {
 }
 
 /**
+ * Get today's date string (YYYY-MM-DD) in Boston time.
+ * Alias for todayInAppTz — preferred for brevity in tools/hooks.
+ */
+export function todayET(): string {
+  return todayInAppTz();
+}
+
+/** Get current day of week in Boston time (0=Sun, 6=Sat) */
+export function getDayOfWeekET(): number {
+  return bostonNow().getDay();
+}
+
+/** Check if current Boston time is within work hours (8 AM – 6 PM ET) */
+export function isWorkHoursET(): boolean {
+  const h = bostonNow().getHours();
+  return h >= 8 && h < 18;
+}
+
+/** Get a date N days ago as YYYY-MM-DD in Boston time */
+export function daysAgoET(n: number): string {
+  const d = bostonNow();
+  d.setDate(d.getDate() - n);
+  return format(d, 'yyyy-MM-dd');
+}
+
+/** Get the Monday of the current week as YYYY-MM-DD in Boston time */
+export function mondayOfWeekET(): string {
+  const now = bostonNow();
+  const day = now.getDay();
+  const diff = day === 0 ? 6 : day - 1;
+  now.setDate(now.getDate() - diff);
+  return format(now, 'yyyy-MM-dd');
+}
+
+/**
  * Format a time string like "14:30" into spoken form "2:30 PM".
  * Pure formatting — no timezone conversion (input is already ET).
  */
