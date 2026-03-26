@@ -657,6 +657,9 @@ function TrendsDashboard() {
       {/* Weekly Coaching Digest */}
       <WeeklyCoachingDigest />
 
+      {/* Playbook Practice Summary */}
+      <WeeklyPlaybookPracticeCard />
+
       {/* Coaching Streaks */}
       <CoachingStreaks />
 
