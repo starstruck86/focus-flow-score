@@ -322,12 +322,12 @@ describe('Playbook Outcome Scoring', () => {
 describe('Outcome-Weighted Trust Blending', () => {
   it('boosts trust for high-outcome playbooks', () => {
     const base = makeTrustScore(60);
-    const outcome = computePlaybookOutcomeScore(
-      Array.from({ length: 10 }, (_, i) => ({
-        playbookId: 'pb-1', eventType: 'stage_progressed' as const,
-        timestamp: new Date(Date.now() - i * 86400000).toISOString(),
-      }))
-    );
+    const events: PlaybookOutcomeEvent[] = [
+      ...Array.from({ length: 5 }, (_, i) => ({ playbookId: 'pb-1', eventType: 'stage_progressed' as const, timestamp: new Date(Date.now() - i * 86400000).toISOString() })),
+      ...Array.from({ length: 5 }, (_, i) => ({ playbookId: 'pb-1', eventType: 'deal_won' as const, timestamp: new Date(Date.now() - i * 86400000).toISOString() })),
+      ...Array.from({ length: 3 }, (_, i) => ({ playbookId: 'pb-1', eventType: 'meeting_converted' as const, timestamp: new Date(Date.now() - i * 86400000).toISOString() })),
+    ];
+    const outcome = computePlaybookOutcomeScore(events);
     const blended = blendOutcomeIntoTrust(base, outcome);
     expect(blended.overall).toBeGreaterThanOrEqual(base.overall);
   });
