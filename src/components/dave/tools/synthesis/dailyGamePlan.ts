@@ -93,7 +93,7 @@ interface QueueAccount { id: string; name: string; state: string; tier?: string 
 async function fetchTodayQueue(ctx: ToolContext): Promise<{ today: QueueAccount[]; weeklyTotal: number; weeklyResearched: number; weeklyAddedToCadence: number } | null> {
   const userId = await ctx.getUserId();
   if (!userId) return null;
-  const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+  const weekStart = mondayOfWeekET();
   const { data } = await supabase
     .from('weekly_research_queue' as any)
     .select('assignments')
