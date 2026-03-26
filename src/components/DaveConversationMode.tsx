@@ -363,13 +363,14 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
 
       setError(friendlyMessage);
       setNeedsTap(true);
+      if (currentRequestIdRef.current) failInteraction(currentRequestIdRef.current);
       toast.error('Dave startup failed', { description: friendlyMessage, duration: 6000 });
     } finally {
       releasePreflightStream();
       setIsConnecting(false);
       startingRef.current = false;
     }
-  }, [conversation, sessionData, logStatus, releasePreflightStream]);
+  }, [conversation, sessionData, logStatus, releasePreflightStream, beginInteraction, getConversationContext, failInteraction]);
 
   const sessionStartRef = useRef<number>(Date.now());
 
