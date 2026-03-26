@@ -91,8 +91,13 @@ function classifyError(
     return { category: 'AUTH_ERROR', retryable: false, code: 401 };
 
   // Rate limit
-  if (lower.includes('rate') && lower.includes('limit') || lower.includes('429') || lower.includes('concurrency'))
+  if ((lower.includes('rate') && lower.includes('limit')) || lower.includes('429') || lower.includes('concurrency'))
     return { category: 'RATE_LIMITED', retryable: true, code: 429 };
+
+  // Supabase SDK transport error — "Failed to send a request to the Edge Function"
+  // This is a transient network/connection issue, NOT an AI model error
+  if (lower.includes('failed to send a request to the edge function') || lower.includes('relay error'))
+    return { category: 'NETWORK_ERROR', retryable: true, code: 502 };
 
   // Network
   if (lower.includes('failed to fetch') || lower.includes('networkerror') || lower.includes('load failed'))
@@ -103,7 +108,7 @@ function classifyError(
     return { category: 'FUNCTION_TIMEOUT', retryable: true, code: 408 };
 
   // 404
-  if (lower.includes('404') || lower.includes('not found') && lower.includes('function'))
+  if (lower.includes('404') || (lower.includes('not found') && lower.includes('function')))
     return { category: 'FUNCTION_404', retryable: false, code: 404 };
 
   // 401 from function
@@ -111,15 +116,19 @@ function classifyError(
     return { category: 'FUNCTION_401', retryable: false, code: 401 };
 
   // DB write
-  if (lower.includes('insert') || lower.includes('update') || lower.includes('violates') || lower.includes('duplicate key'))
+  if (lower.includes('insert') || lower.includes('violates') || lower.includes('duplicate key'))
     return { category: 'DB_WRITE_FAILED', retryable: false, code: null };
 
-  // Validation
+  // Quality validation from enrichment (NOT a generic "invalid input" error)
+  if (lower.includes('quality validation failed') || lower.includes('quality gate'))
+    return { category: 'VALIDATION_ERROR', retryable: true, code: 422 };
+
+  // Generic validation
   if (lower.includes('invalid') || lower.includes('required') || lower.includes('validation'))
     return { category: 'VALIDATION_ERROR', retryable: false, code: 422 };
 
-  // Model
-  if (lower.includes('model') || lower.includes('completion') || lower.includes('ai'))
+  // Model (must be AFTER the more specific checks above)
+  if (lower.includes('model') || lower.includes('completion'))
     return { category: 'MODEL_RESPONSE_INVALID', retryable: true, code: 502 };
 
   // Extract HTTP status if present
