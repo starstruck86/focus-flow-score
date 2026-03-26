@@ -193,6 +193,73 @@ const EMPTY_TRANSCRIPT_THRESHOLD = 80;
 const MAX_BATCH_SIZE = 10;
 const DEFAULT_BATCH_SIZE = 5;
 const ENRICHMENT_TIMEOUT_MS = 120_000;
+const MAX_RETRY_PER_RESOURCE = 3;
+const RETRY_COOLDOWN_MS = 5_000;
+
+// ── Adaptive retry strategies per failure category ─────────
+interface RetryStrategy {
+  maxRetries: number;
+  shouldRetry: boolean;
+  delayMs: number;
+  adjustedTimeoutMs?: number;
+  fallbackMode?: 'lightweight' | 'metadata_only';
+}
+
+function getRetryStrategy(category: FailureCategory, attemptNumber: number): RetryStrategy {
+  switch (category) {
+    case 'failed_network_transport':
+    case 'failed_edge_unreachable':
+      return {
+        shouldRetry: attemptNumber < 3,
+        maxRetries: 3,
+        delayMs: Math.min(2000 * Math.pow(2, attemptNumber) + Math.random() * 1000, 15000),
+      };
+    case 'failed_timeout':
+      return {
+        shouldRetry: attemptNumber < 2,
+        maxRetries: 2,
+        delayMs: 3000,
+        adjustedTimeoutMs: ENRICHMENT_TIMEOUT_MS + 60_000, // extend timeout
+      };
+    case 'failed_request_too_large':
+      return {
+        shouldRetry: attemptNumber < 1,
+        maxRetries: 1,
+        delayMs: 1000,
+        fallbackMode: 'lightweight',
+      };
+    case 'failed_request':
+      return {
+        shouldRetry: attemptNumber < 2,
+        maxRetries: 2,
+        delayMs: Math.min(3000 * Math.pow(2, attemptNumber), 12000),
+      };
+    case 'failed_request_serialization':
+      return {
+        shouldRetry: attemptNumber < 1,
+        maxRetries: 1,
+        delayMs: 500,
+      };
+    case 'failed_unknown_transport':
+      return {
+        shouldRetry: attemptNumber < 1,
+        maxRetries: 1,
+        delayMs: 2000,
+      };
+    // Non-retryable categories
+    case 'failed_quality':
+    case 'failed_needs_auth':
+    case 'failed_unsupported':
+    case 'failed_preflight':
+    case 'failed_bad_route':
+    case 'failed_missing_auth':
+    case 'failed_verification':
+    case 'failed_write':
+      return { shouldRetry: false, maxRetries: 0, delayMs: 0 };
+    default:
+      return { shouldRetry: attemptNumber < 1, maxRetries: 1, delayMs: 2000 };
+  }
+}
 
 // ── Idempotency: track in-flight resource IDs ──────────────
 const inFlightResourceIds = new Set<string>();
@@ -274,11 +341,17 @@ function classifyError(err: unknown, context: string): string {
 function categorizeFailure(err: unknown): FailureCategory {
   const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
   if (msg.includes('preflight')) return 'failed_preflight';
-  if (msg.includes('quality') || msg.includes('score') || msg.includes('contract')) return 'failed_quality';
+  if (msg.includes('auth') && (msg.includes('gated') || msg.includes('login') || msg.includes('wall'))) return 'failed_needs_auth';
+  if (msg.includes('quality') || msg.includes('score') || msg.includes('contract') || msg.includes('too short') || msg.includes('low quality') || msg.includes('boilerplate')) return 'failed_quality';
   if (msg.includes('verification') || msg.includes('verify')) return 'failed_verification';
-  if (msg.includes('write') || msg.includes('save') || msg.includes('update')) return 'failed_write';
+  if (msg.includes('write') || msg.includes('save') || msg.includes('update') || msg.includes('insert')) return 'failed_write';
   if (msg.includes('timeout') || msg.includes('timed out') || msg.includes('aborted')) return 'failed_timeout';
-  if (msg.includes('429') || msg.includes('rate limit') || msg.includes('network') || msg.includes('fetch')) return 'failed_request';
+  if (msg.includes('too large') || msg.includes('413') || msg.includes('payload')) return 'failed_request_too_large';
+  if (msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('load failed')) return 'failed_network_transport';
+  if (msg.includes('failed to send') || msg.includes('relay error') || msg.includes('502') || msg.includes('503') || msg.includes('504')) return 'failed_edge_unreachable';
+  if (msg.includes('429') || msg.includes('rate limit')) return 'failed_request';
+  if (msg.includes('network') || msg.includes('fetch') || msg.includes('econnrefused')) return 'failed_network_transport';
+  if (msg.includes('unsupported')) return 'failed_unsupported';
   return 'failed_unknown';
 }
 
@@ -510,77 +583,135 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
       updateItem(item.id, { stage: 'preflight' });
       const preflight = await preflightCheck(resourceId);
       if (!preflight.pass) {
-        failItem(item.id, preflight.reason || 'Preflight failed', 'failed_preflight', true);
+        failItem(item.id, preflight.reason || 'Preflight failed', 'failed_preflight', false);
         throw new Error(preflight.reason);
       }
 
       // Register in-flight
       inFlightResourceIds.add(resourceId);
 
-      updateItem(item.id, { stage: 'enriching', existingResourceId: resourceId });
-      try {
-        const force = item.enrichMode === 're_enrich';
-        const result = await invokeEnrichResource<any>(
-          { resource_id: resourceId, force },
-          { componentName: 'DeepEnrich', timeoutMs: ENRICHMENT_TIMEOUT_MS },
-        );
+      // ── ADAPTIVE RETRY LOOP ──────────────────────────────
+      let lastCategory: FailureCategory = 'failed_unknown';
+      let lastError: Error | null = null;
+      const maxAttempts = MAX_RETRY_PER_RESOURCE;
 
-        if (result.error) {
-          updateItem(item.id, { recoveryHint: result.error.recoveryHint });
-          failItem(item.id, result.error.message, result.error.category as FailureCategory, result.error.retryable);
-          inFlightResourceIds.delete(resourceId);
-          throw new Error(result.error.exactError);
-        }
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if (attempt > 0) {
+          const strategy = getRetryStrategy(lastCategory, attempt);
+          if (!strategy.shouldRetry) break;
 
-        // Parse orchestrator output
-        const output = result.data;
-        const finalStatus = output?.final_status;
-        const orchestratorPatch: Partial<IngestionItem> = {
-          sourceType: output?.source_classification?.source_type,
-          platform: output?.source_classification?.platform,
-          finalStatus: finalStatus,
-          methodUsed: output?.method_used,
-          attemptCount: output?.attempt_count,
-          completenessScore: output?.completeness_score,
-          recoveryHint: output?.recovery_hint,
-        };
+          // Show retry status in UI
+          updateItem(item.id, {
+            stage: 'enriching',
+            error: undefined,
+            attemptCount: attempt + 1,
+            recoveryHint: `Retrying (${lastCategory.replace(/^failed_/, '').replace(/_/g, ' ')}) — attempt ${attempt + 1}`,
+          });
 
-        if (finalStatus === 'enriched') {
-          updateItem(item.id, { stage: 'complete', ...orchestratorPatch });
-          inFlightResourceIds.delete(resourceId);
-          return;
-        }
-        if (finalStatus === 'partial') {
-          updateItem(item.id, { stage: 'partial', ...orchestratorPatch, error: output?.failure_reason || 'Partially enriched' });
-          inFlightResourceIds.delete(resourceId);
-          return;
-        }
-        if (finalStatus === 'needs_auth') {
-          updateItem(item.id, { stage: 'needs_auth', ...orchestratorPatch, error: output?.failure_reason || 'Auth-gated source', failureCategory: 'failed_needs_auth', retryEligible: false });
-          inFlightResourceIds.delete(resourceId);
-          return;
-        }
-        if (finalStatus === 'unsupported') {
-          updateItem(item.id, { stage: 'unsupported', ...orchestratorPatch, error: output?.failure_reason || 'Unsupported source', failureCategory: 'failed_unsupported', retryEligible: false });
-          inFlightResourceIds.delete(resourceId);
-          return;
+          await new Promise(r => setTimeout(r, Math.max(strategy.delayMs, RETRY_COOLDOWN_MS)));
+        } else {
+          updateItem(item.id, { stage: 'enriching', existingResourceId: resourceId });
         }
 
-        // failed or unknown
-        const reason = output?.failure_reason || 'All extraction methods failed';
-        failItem(item.id, reason, 'failed_quality', true);
-        updateItem(item.id, orchestratorPatch);
-        inFlightResourceIds.delete(resourceId);
-        throw new Error(reason);
-      } catch (enrichErr) {
-        inFlightResourceIds.delete(resourceId);
+        try {
+          const force = item.enrichMode === 're_enrich';
+          const strategy = attempt > 0 ? getRetryStrategy(lastCategory, attempt) : null;
+          const timeoutMs = strategy?.adjustedTimeoutMs || ENRICHMENT_TIMEOUT_MS;
+
+          const result = await invokeEnrichResource<any>(
+            { resource_id: resourceId, force },
+            { componentName: 'DeepEnrich', timeoutMs },
+          );
+
+          if (result.error) {
+            lastCategory = result.error.category as FailureCategory;
+            lastError = new Error(result.error.exactError);
+            const retryStrategy = getRetryStrategy(lastCategory, attempt + 1);
+
+            // If not retryable, fail immediately
+            if (!retryStrategy.shouldRetry) {
+              updateItem(item.id, { recoveryHint: result.error.recoveryHint, attemptCount: attempt + 1 });
+              failItem(item.id, result.error.message, lastCategory, result.error.retryable);
+              inFlightResourceIds.delete(resourceId);
+              throw lastError;
+            }
+            continue; // try again
+          }
+
+          // Parse orchestrator output
+          const output = result.data;
+          const finalStatus = output?.final_status;
+          const orchestratorPatch: Partial<IngestionItem> = {
+            sourceType: output?.source_classification?.source_type,
+            platform: output?.source_classification?.platform,
+            finalStatus: finalStatus,
+            methodUsed: output?.method_used,
+            attemptCount: (attempt + 1) + (output?.attempt_count || 0),
+            completenessScore: output?.completeness_score,
+            recoveryHint: output?.recovery_hint,
+          };
+
+          if (finalStatus === 'enriched') {
+            updateItem(item.id, { stage: 'complete', ...orchestratorPatch });
+            inFlightResourceIds.delete(resourceId);
+            return;
+          }
+          if (finalStatus === 'partial') {
+            updateItem(item.id, { stage: 'partial', ...orchestratorPatch, error: output?.failure_reason || 'Partially enriched' });
+            inFlightResourceIds.delete(resourceId);
+            return;
+          }
+          if (finalStatus === 'needs_auth') {
+            updateItem(item.id, { stage: 'needs_auth', ...orchestratorPatch, error: output?.failure_reason || 'Auth-gated source', failureCategory: 'failed_needs_auth', retryEligible: false });
+            inFlightResourceIds.delete(resourceId);
+            return;
+          }
+          if (finalStatus === 'unsupported') {
+            updateItem(item.id, { stage: 'unsupported', ...orchestratorPatch, error: output?.failure_reason || 'Unsupported source', failureCategory: 'failed_unsupported', retryEligible: false });
+            inFlightResourceIds.delete(resourceId);
+            return;
+          }
+
+          // failed or unknown — set category from orchestrator output
+          const reason = output?.failure_reason || 'All extraction methods failed';
+          lastCategory = 'failed_quality';
+          lastError = new Error(reason);
+          updateItem(item.id, orchestratorPatch);
+
+          // Quality failures are not retryable at transport level
+          failItem(item.id, reason, 'failed_quality', false);
+          inFlightResourceIds.delete(resourceId);
+          throw lastError;
+        } catch (enrichErr) {
+          if (enrichErr === lastError) throw enrichErr; // already handled above
+
+          lastCategory = categorizeFailure(enrichErr);
+          lastError = enrichErr instanceof Error ? enrichErr : new Error(String(enrichErr));
+
+          const retryStrategy = getRetryStrategy(lastCategory, attempt + 1);
+          if (!retryStrategy.shouldRetry || attempt >= maxAttempts - 1) {
+            inFlightResourceIds.delete(resourceId);
+            const currentItem = get().state.items.find(i => i.id === item.id);
+            if (currentItem?.stage !== 'failed' && currentItem?.stage !== 'partial' && currentItem?.stage !== 'needs_auth' && currentItem?.stage !== 'unsupported') {
+              const enrichMsg = classifyError(enrichErr, 'Deep enrichment');
+              failItem(item.id, enrichMsg, lastCategory, lastCategory !== 'failed_preflight' && lastCategory !== 'failed_quality');
+              updateItem(item.id, { attemptCount: attempt + 1 });
+            }
+            throw enrichErr;
+          }
+          // Will retry in next loop iteration
+        }
+      }
+
+      // Exhausted all retries
+      inFlightResourceIds.delete(resourceId);
+      if (lastError) {
         const currentItem = get().state.items.find(i => i.id === item.id);
-        if (currentItem?.stage !== 'failed' && currentItem?.stage !== 'partial' && currentItem?.stage !== 'needs_auth' && currentItem?.stage !== 'unsupported') {
-          const enrichMsg = classifyError(enrichErr, 'Deep enrichment');
-          const category = categorizeFailure(enrichErr);
-          failItem(item.id, enrichMsg, category, category !== 'failed_preflight');
+        if (currentItem?.stage !== 'failed') {
+          failItem(item.id, `Failed after ${maxAttempts} attempts: ${lastError.message}`, lastCategory, false);
+          updateItem(item.id, { attemptCount: maxAttempts });
         }
-        throw enrichErr;
+        throw lastError;
       }
     }
 

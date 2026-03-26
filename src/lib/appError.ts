@@ -141,8 +141,8 @@ function classifyError(
 function friendlyMessage(category: ErrorCategory, raw: string): string {
   switch (category) {
     case 'AUTH_ERROR': return 'Authentication failed. Please sign in again.';
-    case 'NETWORK_ERROR': return 'Connection error — retrying automatically.';
-    case 'FUNCTION_TIMEOUT': return 'The request timed out. Try again in a moment.';
+    case 'NETWORK_ERROR': return 'Network issue — retrying automatically.';
+    case 'FUNCTION_TIMEOUT': return 'Request timed out — retrying with extended timeout.';
     case 'FUNCTION_404': return 'Service not found. This may need a redeployment.';
     case 'FUNCTION_401': return 'Not authorized. Please sign in again.';
     case 'RATE_LIMITED': return 'Too many requests — wait a moment and retry.';
