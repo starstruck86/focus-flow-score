@@ -6,6 +6,7 @@ import { readResource, searchResources, lookupTranscript, trendQuery } from './i
 import { bulkUpdate } from './intelligence/bulk';
 import { citeInsight, knowledgeTrends, insightReliability, recommendStrategy, recordStrategyOutcome, strategyPerformance, pipelineImpact, recordPipelineEvent, pipelineForecast } from './intelligence/knowledge';
 import { getPlaybookRecommendation } from './intelligence/playbooks';
+import { startPlaybookRoleplay, endPlaybookRoleplay } from './intelligence/playbookRoleplay';
 
 export function createIntelligenceTools(ctx: ToolContext): ToolMap {
   return {
@@ -32,5 +33,7 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
     record_pipeline_outcome: (params: { insightId: string; outcomeType: string; opportunityId?: string; dealValue?: number; fromStage?: string; toStage?: string }) => recordPipelineEvent(ctx, params),
     pipeline_forecast: () => pipelineForecast(ctx),
     get_playbook_recommendation: (params: { blockType?: string; dealStage?: string; dealStatus?: string; accountName?: string }) => getPlaybookRecommendation(ctx, params),
+    start_playbook_roleplay: (params: { playbookTitle?: string; accountName?: string; dealStage?: string; dealStatus?: string; objection?: string }) => startPlaybookRoleplay(ctx, params),
+    end_playbook_roleplay: () => endPlaybookRoleplay(ctx),
   };
 }
