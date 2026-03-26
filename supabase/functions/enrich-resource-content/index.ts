@@ -45,13 +45,17 @@ function detectSource(url: string): "youtube" | "podcast" | "generic" | "auth-ga
   return "generic";
 }
 
-async function scrapeUrl(url: string, apiKey: string): Promise<string | null> {
+async function scrapeUrl(url: string, apiKey: string): Promise<{ content: string | null; scrapeMs: number; errorType?: string }> {
   const source = detectSource(url);
-  if (source === "auth-gated") return null;
+  if (source === "auth-gated") return { content: null, scrapeMs: 0, errorType: 'auth_gated' };
 
   const waitFor = source === "youtube" ? 8000 : source === "podcast" ? 5000 : undefined;
+  const startMs = Date.now();
 
   try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 90_000); // 90s hard timeout for Firecrawl
+
     const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -61,19 +65,25 @@ async function scrapeUrl(url: string, apiKey: string): Promise<string | null> {
         onlyMainContent: true,
         ...(waitFor ? { waitFor } : {}),
       }),
+      signal: controller.signal,
     });
 
+    clearTimeout(timer);
+    const scrapeMs = Date.now() - startMs;
+
     if (!response.ok) {
-      console.error(`Firecrawl error for ${url}: ${response.status}`);
-      return null;
+      console.error(`Firecrawl error for ${url}: ${response.status} (${scrapeMs}ms)`);
+      return { content: null, scrapeMs, errorType: `firecrawl_${response.status}` };
     }
 
     const data = await response.json();
     const markdown = data.data?.markdown || data.markdown || "";
-    return markdown.slice(0, CONTENT_CAP) || null;
+    return { content: markdown.slice(0, CONTENT_CAP) || null, scrapeMs };
   } catch (e) {
-    console.error(`Scrape failed for ${url}:`, e);
-    return null;
+    const scrapeMs = Date.now() - startMs;
+    const errorType = e instanceof DOMException && e.name === 'AbortError' ? 'firecrawl_timeout' : 'firecrawl_network';
+    console.error(`Scrape failed for ${url} (${scrapeMs}ms):`, e);
+    return { content: null, scrapeMs, errorType };
   }
 }
 
