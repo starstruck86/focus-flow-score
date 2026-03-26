@@ -182,6 +182,9 @@ const DAVE_TOOLS: ToolDef[] = [
   // ── Playbook Roleplay ───────────────────────────────────────
   { name: "start_playbook_roleplay", description: "Start a playbook-driven roleplay where Dave acts as the buyer. Use when user says 'prep me', 'practice this', 'roleplay', 'be the CFO', 'help me handle this objection', or clicks 'Practice this' on a playbook. Auto-selects the best playbook from context if none specified.", parameters: { playbookTitle: str("Specific playbook title to practice — omit to auto-select"), accountName: str("Account for industry context"), dealStage: str("Current deal stage for scenario realism"), dealStatus: str("Deal status like 'stalled' for scenario flavor"), objection: str("Specific objection to practice handling") } },
   { name: "end_playbook_roleplay", description: "End the current roleplay session and get coaching feedback. Use when user says 'end roleplay', 'stop', 'done', or 'how did I do'.", parameters: {} },
+
+  // ── Personal Insights ───────────────────────────────────────
+  { name: "personal_insights", description: "Analyze the user's performance patterns, strengths, weaknesses, and improvement recommendations. Use when user asks 'where am I weak', 'what should I work on', 'what am I doing well', 'what patterns am I missing', or any self-assessment question.", parameters: { question: str("The user's specific question about their performance") } },
 ];
 
 serve(async (req) => {
