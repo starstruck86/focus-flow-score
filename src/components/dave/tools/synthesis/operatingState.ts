@@ -1,14 +1,13 @@
 import { supabase } from '@/integrations/supabase/client';
-import { todayInAppTz, getCurrentMinutesET } from '@/lib/timeFormat';
+import { todayInAppTz, getCurrentMinutesET, daysAgoET } from '@/lib/timeFormat';
 import type { ToolContext } from '../../toolTypes';
 
 export async function operatingState(ctx: ToolContext): Promise<string> {
   const userId = await ctx.getUserId();
   if (!userId) return 'Not authenticated';
 
-  const now = new Date();
   const todayStr = todayInAppTz();
-  const fourteenDaysAgo = new Date(now.getTime() - 14 * 86400000).toISOString().split('T')[0];
+  const fourteenDaysAgo = daysAgoET(14);
   const currentMinutes = getCurrentMinutesET();
 
   const [tasksRes, oppsRes, renewalsRes, journalRes, planRes] = await Promise.all([
@@ -35,7 +34,7 @@ export async function operatingState(ctx: ToolContext): Promise<string> {
   const noNextStep = opps.filter(o => !o.next_step && !o.next_step_date).length;
   const staleDeals = opps.filter(o => o.last_touch_date && o.last_touch_date < fourteenDaysAgo).length;
   const atRisk = renewals.filter(r => {
-    const days = Math.ceil((new Date(r.renewal_due).getTime() - now.getTime()) / 86400000);
+    const days = Math.ceil((new Date(r.renewal_due).getTime() - Date.now()) / 86400000);
     return days <= 30 && (r.churn_risk === 'high' || r.churn_risk === 'certain');
   }).length;
 

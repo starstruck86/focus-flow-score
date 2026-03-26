@@ -5,16 +5,11 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSyncCalendar } from './useCalendarEvents';
+import { isWorkHoursET } from '@/lib/timeFormat';
 
 const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
 const WORKDAY_POLL_MS = 15 * 60 * 1000; // 15 minutes during work hours
 const LAST_SYNC_KEY = 'calendar_last_sync';
-
-function isWorkHours(): boolean {
-  const now = new Date();
-  const h = now.getHours();
-  return h >= 8 && h < 18; // 8 AM – 6 PM (padded)
-}
 
 function getLastSyncMs(): number {
   return parseInt(localStorage.getItem(LAST_SYNC_KEY) || '0', 10);
@@ -83,7 +78,7 @@ export function useCalendarFreshness(): CalendarFreshness {
   // Periodic poll during work hours
   useEffect(() => {
     const interval = setInterval(() => {
-      if (isWorkHours() && isStale()) doSync();
+      if (isWorkHoursET() && isStale()) doSync();
       setLastSyncMs(getLastSyncMs()); // keep label fresh
     }, WORKDAY_POLL_MS);
     return () => clearInterval(interval);

@@ -6,8 +6,8 @@
  * Uses MVP block model for dial targets and capacity language.
  */
 import { supabase } from '@/integrations/supabase/client';
-import { todayInAppTz, getCurrentMinutesET } from '@/lib/timeFormat';
-import { startOfWeek, format } from 'date-fns';
+import { todayInAppTz, getCurrentMinutesET, getDayOfWeekET, mondayOfWeekET } from '@/lib/timeFormat';
+import { format } from 'date-fns';
 import { calculateDialCapacity, getActualDials, DAILY_DIALS_MIN, DAILY_DIALS_TARGET, BLOCK_MVPS } from '@/lib/mvpBlockModel';
 import type { ToolContext } from '../../toolTypes';
 
@@ -93,7 +93,7 @@ interface QueueAccount { id: string; name: string; state: string; tier?: string 
 async function fetchTodayQueue(ctx: ToolContext): Promise<{ today: QueueAccount[]; weeklyTotal: number; weeklyResearched: number; weeklyAddedToCadence: number } | null> {
   const userId = await ctx.getUserId();
   if (!userId) return null;
-  const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+  const weekStart = mondayOfWeekET();
   const { data } = await supabase
     .from('weekly_research_queue' as any)
     .select('assignments')
@@ -102,7 +102,7 @@ async function fetchTodayQueue(ctx: ToolContext): Promise<{ today: QueueAccount[
     .maybeSingle();
   if (!data) return null;
   const a = (data as any).assignments as Record<string, QueueAccount[]>;
-  const dayKey = DAY_KEYS_MAP[new Date().getDay()];
+  const dayKey = DAY_KEYS_MAP[getDayOfWeekET()];
   const today = dayKey ? (a[dayKey] || []) : [];
   const allAccounts = Object.values(a).flat();
   return {

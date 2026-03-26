@@ -4,6 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import { emitSaveStatus } from '@/components/SaveIndicator';
+import { todayET } from '@/lib/timeFormat';
 import type { TouchType } from '@/types';
 
 interface TouchLogButtonsProps {
@@ -22,7 +23,7 @@ export function TouchLogButtons({ accountId, compact }: TouchLogButtonsProps) {
   const { updateAccount, accounts } = useStore();
 
   const handleTouch = (touchType: TouchType) => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayET();
     const account = accounts.find(a => a.id === accountId);
     if (!account) return;
 

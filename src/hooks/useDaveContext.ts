@@ -86,7 +86,7 @@ export function useDaveContext() {
       throw new DaveSessionError('Not authenticated. Please sign in first.', 'auth_failed');
     }
 
-    const tzOffsetHours = new Date().getTimezoneOffset() / -60;
+    const tzOffsetHours = -5; // Boston ET nominal; edge function handles DST via America/New_York
 
     const requestBody = {
       tzOffsetHours,

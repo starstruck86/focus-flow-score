@@ -6,6 +6,7 @@ import { useMemo } from 'react';
 import { useStore } from '@/store/useStore';
 import { useStaleItems } from '@/hooks/useStaleItems';
 import { useMomentumEngine } from '@/hooks/useMomentumEngine';
+import { todayET } from '@/lib/timeFormat';
 
 export interface OperatingState {
   sentence: string;
@@ -22,7 +23,7 @@ export function useOperatingState(): OperatingState {
     const activeTasks = tasks.filter(t => t.status === 'next' || t.status === 'in-progress');
     const overdueTasks = activeTasks.filter(t => {
       if (!t.dueDate) return false;
-      return t.dueDate < new Date().toISOString().split('T')[0];
+      return t.dueDate < todayET();
     });
     const activeOpps = opportunities.filter(o => o.status === 'active');
     const highValueOpps = activeOpps.filter(o => (o.arr || 0) >= 50000);

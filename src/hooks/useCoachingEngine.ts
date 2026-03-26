@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { todayET, mondayOfWeekET } from '@/lib/timeFormat';
 
 // --- Conversion Benchmarks ---
 export function useConversionBenchmarks() {
@@ -92,7 +93,7 @@ export function usePipelineHygiene() {
   return useQuery({
     queryKey: ['pipeline-hygiene', user?.id],
     queryFn: async () => {
-      const today = new Date().toISOString().split('T')[0];
+      const today = todayET();
       // Try cached scan first
       const { data: cached } = await supabase
         .from('pipeline_hygiene_scans')
@@ -135,11 +136,7 @@ export function useWeeklyBattlePlan() {
     queryKey: ['weekly-battle-plan', user?.id],
     queryFn: async () => {
       // Get current week's Monday
-      const now = new Date();
-      const day = now.getDay();
-      const monday = new Date(now);
-      monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
-      const weekStart = monday.toISOString().split('T')[0];
+      const weekStart = mondayOfWeekET();
 
       const { data: cached } = await supabase
         .from('weekly_battle_plans')

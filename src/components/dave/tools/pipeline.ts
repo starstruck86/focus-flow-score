@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { trackedInvoke } from '@/lib/trackedInvoke';
+import { todayET, mondayOfWeekET } from '@/lib/timeFormat';
 import type { ToolContext, ToolMap } from '../toolTypes';
 import type {
   HygieneScanSummary,
@@ -133,7 +134,7 @@ export function createPipelineTools(ctx: ToolContext): ToolMap {
       const userId = await ctx.getUserId();
       if (!userId) return 'Not authenticated';
 
-      const today = new Date().toISOString().split('T')[0];
+      const today = todayET();
       const { data: recent } = await supabase
         .from('pipeline_hygiene_scans')
         .select('health_score, total_issues, critical_issues, summary, scan_date')
@@ -158,11 +159,7 @@ export function createPipelineTools(ctx: ToolContext): ToolMap {
       const userId = await ctx.getUserId();
       if (!userId) return 'Not authenticated';
 
-      const now = new Date();
-      const dayOfWeek = now.getDay();
-      const monday = new Date(now);
-      monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-      const weekStart = monday.toISOString().split('T')[0];
+      const weekStart = mondayOfWeekET();
 
       const { data: plans } = await supabase
         .from('weekly_battle_plans')
