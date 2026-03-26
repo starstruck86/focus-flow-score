@@ -45,7 +45,6 @@ export const PlaybookRecommendationChip = memo(function PlaybookRecommendationCh
       eventType: 'recommendation_accepted',
       blockType,
     });
-
     if (cta === 'prep') {
       window.dispatchEvent(new CustomEvent('dave-playbook-request', {
         detail: { playbookId: playbook.id, title: playbook.title },
@@ -63,13 +62,8 @@ export const PlaybookRecommendationChip = memo(function PlaybookRecommendationCh
       eventType: 'roleplay_started',
       blockType,
     });
-
     window.dispatchEvent(new CustomEvent('dave-playbook-request', {
-      detail: {
-        playbookId: playbook.id,
-        title: playbook.title,
-        mode: 'roleplay',
-      },
+      detail: { playbookId: playbook.id, title: playbook.title, mode: 'roleplay' },
     }));
   }, [recommendation, track, blockType]);
 
@@ -78,36 +72,6 @@ export const PlaybookRecommendationChip = memo(function PlaybookRecommendationCh
   const { playbook, reason, cta } = recommendation;
   const ctaConfig = CTA_CONFIG[cta];
   const CtaIcon = ctaConfig.icon;
-      playbookTitle: playbook.title,
-      playbookId: playbook.id,
-      eventType: 'recommendation_accepted',
-      blockType,
-    });
-
-    if (cta === 'prep') {
-      window.dispatchEvent(new CustomEvent('dave-playbook-request', {
-        detail: { playbookId: playbook.id, title: playbook.title },
-      }));
-    }
-    onAction?.(recommendation);
-  }, [playbook, cta, track, blockType, onAction, recommendation]);
-
-  const handleRoleplay = useCallback(() => {
-    track({
-      playbookTitle: playbook.title,
-      playbookId: playbook.id,
-      eventType: 'roleplay_started',
-      blockType,
-    });
-
-    window.dispatchEvent(new CustomEvent('dave-playbook-request', {
-      detail: {
-        playbookId: playbook.id,
-        title: playbook.title,
-        mode: 'roleplay',
-      },
-    }));
-  }, [playbook, track, blockType]);
 
   if (compact) {
     return (
