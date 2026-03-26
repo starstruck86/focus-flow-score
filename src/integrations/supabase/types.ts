@@ -2441,6 +2441,7 @@ export type Database = {
           enrichment_audit_log: Json
           enrichment_status: string
           enrichment_version: number
+          failure_count: number
           failure_reason: string | null
           file_url: string | null
           folder_id: string | null
@@ -2448,6 +2449,8 @@ export type Database = {
           is_screenshot_template: boolean | null
           is_template: boolean | null
           last_enrichment_attempt_at: string | null
+          last_quality_score: number | null
+          last_quality_tier: string | null
           last_status_change_at: string | null
           opportunity_id: string | null
           resource_type: string
@@ -2460,6 +2463,7 @@ export type Database = {
           title: string
           updated_at: string
           user_id: string
+          validation_version: number
         }
         Insert: {
           account_id?: string | null
@@ -2476,6 +2480,7 @@ export type Database = {
           enrichment_audit_log?: Json
           enrichment_status?: string
           enrichment_version?: number
+          failure_count?: number
           failure_reason?: string | null
           file_url?: string | null
           folder_id?: string | null
@@ -2483,6 +2488,8 @@ export type Database = {
           is_screenshot_template?: boolean | null
           is_template?: boolean | null
           last_enrichment_attempt_at?: string | null
+          last_quality_score?: number | null
+          last_quality_tier?: string | null
           last_status_change_at?: string | null
           opportunity_id?: string | null
           resource_type?: string
@@ -2495,6 +2502,7 @@ export type Database = {
           title: string
           updated_at?: string
           user_id: string
+          validation_version?: number
         }
         Update: {
           account_id?: string | null
@@ -2511,6 +2519,7 @@ export type Database = {
           enrichment_audit_log?: Json
           enrichment_status?: string
           enrichment_version?: number
+          failure_count?: number
           failure_reason?: string | null
           file_url?: string | null
           folder_id?: string | null
@@ -2518,6 +2527,8 @@ export type Database = {
           is_screenshot_template?: boolean | null
           is_template?: boolean | null
           last_enrichment_attempt_at?: string | null
+          last_quality_score?: number | null
+          last_quality_tier?: string | null
           last_status_change_at?: string | null
           opportunity_id?: string | null
           resource_type?: string
@@ -2530,6 +2541,7 @@ export type Database = {
           title?: string
           updated_at?: string
           user_id?: string
+          validation_version?: number
         }
         Relationships: [
           {
