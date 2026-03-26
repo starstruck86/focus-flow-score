@@ -758,6 +758,9 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
         failedCount: 0,
         skippedCount: priorSkipped,
         reviewCount: 0,
+        partialCount: 0,
+        needsAuthCount: 0,
+        unsupportedCount: 0,
       },
     }));
 
@@ -771,6 +774,9 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
     let failedCount = 0;
     let skippedCount = priorSkipped;
     let reviewCount = 0;
+    let partialCount = 0;
+    let needsAuthCount = 0;
+    let unsupportedCount = 0;
     let processedCount = priorSuccess + priorSkipped;
 
     for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
