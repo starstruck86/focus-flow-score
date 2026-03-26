@@ -59,20 +59,20 @@ export function ResourceIntelligenceDashboard() {
 
     try {
       const [resourcesRes, digestsRes] = await Promise.all([
-        supabase.from('resources').select('id, title, content_status, enriched_at, content_length').eq('user_id', user.id),
+        supabase.from('resources').select('id, title, enrichment_status, enriched_at, content_length, last_quality_tier').eq('user_id', user.id),
         supabase.from('resource_digests').select('resource_id, use_cases, takeaways').eq('user_id', user.id),
       ]);
 
       const resources = (resourcesRes.data || []) as any[];
       const digests = (digestsRes.data || []) as any[];
 
-      const enriched = resources.filter(r => r.content_status === 'enriched').length;
-      const placeholder = resources.filter(r => r.content_status === 'placeholder').length;
+      const enriched = resources.filter(r => r.enrichment_status === 'deep_enriched').length;
+      const placeholder = resources.filter(r => !r.enrichment_status || r.enrichment_status === 'not_enriched').length;
 
       const now = Date.now();
       const staleThreshold = STALE_DAYS * 86400000;
-      const shallow = resources.filter(r => r.content_status === 'enriched' && (r.content_length || 0) < SHALLOW_THRESHOLD).length;
-      const stale = resources.filter(r => r.content_status === 'enriched' && r.enriched_at && (now - new Date(r.enriched_at).getTime()) > staleThreshold).length;
+      const shallow = resources.filter(r => r.enrichment_status === 'deep_enriched' && r.last_quality_tier === 'shallow').length;
+      const stale = resources.filter(r => r.enrichment_status === 'deep_enriched' && r.enriched_at && (now - new Date(r.enriched_at).getTime()) > staleThreshold).length;
 
       setStats({
         total: resources.length,
@@ -158,7 +158,7 @@ export function ResourceIntelligenceDashboard() {
         .from('resources')
         .select('id, title')
         .eq('user_id', user.id)
-        .in('content_status', ['enriched', 'manual', 'file']);
+        .eq('enrichment_status', 'deep_enriched');
 
       const { data: digests } = await supabase
         .from('resource_digests')
@@ -204,8 +204,8 @@ export function ResourceIntelligenceDashboard() {
         .from('resources')
         .select('id')
         .eq('user_id', user.id)
-        .eq('content_status', 'enriched')
-        .lt('content_length', SHALLOW_THRESHOLD)
+        .eq('enrichment_status', 'deep_enriched')
+        .eq('last_quality_tier', 'shallow')
         .not('file_url', 'is', null)
         .limit(20);
 

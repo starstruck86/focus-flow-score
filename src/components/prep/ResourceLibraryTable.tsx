@@ -63,7 +63,7 @@ const SAVED_VIEWS: SavedView[] = [
   },
   {
     id: 'needs_reenrich', label: 'Needs Re-enrich', icon: <RefreshCw className="h-3 w-3" />,
-    filter: (r) => r.enrichment_status === 'queued_for_reenrich' || (r as any).last_quality_tier === 'shallow',
+    filter: (r) => r.enrichment_status === 'queued_for_reenrich' || r.enrichment_status === 'incomplete' || ((r as any).last_quality_tier === 'shallow' && r.enrichment_status === 'deep_enriched'),
   },
   {
     id: 'failed', label: 'Failed', icon: <XCircle className="h-3 w-3" />,
