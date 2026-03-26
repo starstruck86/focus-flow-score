@@ -435,11 +435,17 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
 
     updateItem(item.id, { stage: 'enriching', existingResourceId: savedResourceId });
     try {
-      await trackedInvoke<any>('enrich-resource-content', {
+      const enrichResult = await trackedInvoke<any>('enrich-resource-content', {
         body: { resource_id: savedResourceId, force: true },
         componentName: 'DeepEnrich',
         timeoutMs: 60_000,
       });
+      // Check for application-level errors (quality validation failures)
+      if (enrichResult.error) {
+        const enrichMsg = enrichResult.error.message || 'Enrichment failed';
+        updateItem(item.id, { stage: 'failed', error: enrichMsg, existingResourceId: savedResourceId });
+        throw new Error(enrichMsg);
+      }
     } catch (enrichErr) {
       const enrichMsg = classifyError(enrichErr, 'Deep enrichment');
       updateItem(item.id, { stage: 'needs_review', error: `Saved but enrichment failed: ${enrichMsg}` });
