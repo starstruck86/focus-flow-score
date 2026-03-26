@@ -21,14 +21,17 @@ const log = createLogger('ResourceLifecycle');
 
 // ── Valid state transitions ────────────────────────────────
 const VALID_TRANSITIONS: Record<string, string[]> = {
-  not_enriched: ['queued_for_deep_enrich', 'deep_enrich_in_progress', 'duplicate', 'superseded'],
-  queued_for_deep_enrich: ['deep_enrich_in_progress', 'not_enriched', 'duplicate', 'superseded'],
-  deep_enrich_in_progress: ['deep_enriched', 'incomplete', 'failed'],
-  deep_enriched: ['queued_for_reenrich', 'reenrich_in_progress', 'not_enriched', 'incomplete', 'duplicate', 'superseded'],
-  queued_for_reenrich: ['reenrich_in_progress', 'deep_enriched', 'not_enriched'],
-  reenrich_in_progress: ['deep_enriched', 'incomplete', 'failed'],
-  incomplete: ['queued_for_deep_enrich', 'deep_enrich_in_progress', 'queued_for_reenrich', 'reenrich_in_progress', 'not_enriched', 'duplicate', 'superseded'],
-  failed: ['queued_for_deep_enrich', 'deep_enrich_in_progress', 'not_enriched', 'duplicate', 'superseded'],
+  not_enriched: ['queued_for_deep_enrich', 'deep_enrich_in_progress', 'duplicate', 'superseded', 'quarantined'],
+  queued_for_deep_enrich: ['deep_enrich_in_progress', 'not_enriched', 'duplicate', 'superseded', 'quarantined'],
+  deep_enrich_in_progress: ['deep_enriched', 'incomplete', 'failed', 'quarantined'],
+  deep_enriched: ['queued_for_reenrich', 'reenrich_in_progress', 'not_enriched', 'incomplete', 'duplicate', 'superseded', 'stale', 'quarantined'],
+  queued_for_reenrich: ['reenrich_in_progress', 'deep_enriched', 'not_enriched', 'quarantined'],
+  reenrich_in_progress: ['deep_enriched', 'incomplete', 'failed', 'quarantined'],
+  incomplete: ['queued_for_deep_enrich', 'deep_enrich_in_progress', 'queued_for_reenrich', 'reenrich_in_progress', 'not_enriched', 'duplicate', 'superseded', 'retry_scheduled', 'quarantined'],
+  failed: ['queued_for_deep_enrich', 'deep_enrich_in_progress', 'not_enriched', 'duplicate', 'superseded', 'retry_scheduled', 'quarantined'],
+  retry_scheduled: ['queued_for_deep_enrich', 'deep_enrich_in_progress', 'not_enriched', 'quarantined'],
+  stale: ['queued_for_reenrich', 'reenrich_in_progress', 'not_enriched', 'quarantined'],
+  quarantined: ['not_enriched', 'queued_for_deep_enrich'],
   duplicate: ['not_enriched'],
   superseded: ['not_enriched'],
 };

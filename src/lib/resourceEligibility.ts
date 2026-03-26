@@ -31,6 +31,9 @@ export const ENRICHMENT_STATUSES = [
   'reenrich_in_progress',
   'incomplete',
   'failed',
+  'retry_scheduled',
+  'stale',
+  'quarantined',
   'duplicate',
   'superseded',
 ] as const;
@@ -87,7 +90,7 @@ export function evaluateResourceEligibility(resource: Resource, mode: EnrichMode
     return { eligible: false, reason: 'missing or non-http file_url', normalizedMode };
   }
 
-  if (status === 'duplicate' || status === 'superseded') {
+  if (status === 'duplicate' || status === 'superseded' || status === 'quarantined') {
     return { eligible: false, reason: `excluded: ${status}`, normalizedMode };
   }
 
@@ -381,6 +384,9 @@ export function getEnrichmentStatusLabel(status: EnrichmentStatus | string | und
     case 'reenrich_in_progress': return 'Re-enriching…';
     case 'incomplete': return 'Incomplete';
     case 'failed': return 'Failed';
+    case 'retry_scheduled': return 'Retry Scheduled';
+    case 'stale': return 'Stale';
+    case 'quarantined': return 'Quarantined';
     case 'duplicate': return 'Duplicate';
     case 'superseded': return 'Superseded';
     default: return 'Not Enriched';
@@ -396,6 +402,9 @@ export function getEnrichmentStatusColor(status: EnrichmentStatus | string | und
     case 'reenrich_in_progress': return 'bg-primary/20 text-primary';
     case 'incomplete': return 'bg-orange-500/20 text-orange-600';
     case 'failed': return 'bg-status-red/20 text-status-red';
+    case 'retry_scheduled': return 'bg-status-yellow/20 text-status-yellow';
+    case 'stale': return 'bg-muted text-muted-foreground';
+    case 'quarantined': return 'bg-status-red/20 text-status-red';
     case 'duplicate':
     case 'superseded': return 'bg-muted text-muted-foreground';
     default: return 'bg-status-yellow/20 text-status-yellow';
