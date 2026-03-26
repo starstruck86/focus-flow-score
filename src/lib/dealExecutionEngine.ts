@@ -661,7 +661,7 @@ export function computeEngineStats(actions: NextBestAction[]): ExecutionEngineSt
   let totalMemory = 0;
   try {
     const all = JSON.parse(localStorage.getItem(MEMORY_STORAGE_KEY) || '{}');
-    totalMemory = Object.values(all).reduce((s: number, m: any) => s + (m.entries?.length || 0), 0);
+    totalMemory = (Object.values(all) as any[]).reduce((s: number, m: any) => s + (m.entries?.length || 0), 0);
   } catch {}
 
   let activeSequences = 0;
