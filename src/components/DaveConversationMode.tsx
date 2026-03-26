@@ -301,6 +301,10 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
     setGreetingStatus('waiting');
     setTranscript([]);
 
+    // Begin tracking this interaction for recovery
+    const context = getConversationContext();
+    currentRequestIdRef.current = beginInteraction('voice_session', context);
+
     const contractError = assertSessionContract(sessionData);
     if (contractError) {
       logStatus(`🚫 CONTRACT FAIL: ${contractError}`);
