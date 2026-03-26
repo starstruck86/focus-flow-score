@@ -1887,3 +1887,24 @@ export function DailyTimeBlocks() {
     </Card>
   );
 }
+
+/** Inline playbook recommendation for the current time block */
+const BlockPlaybookRecommendation = memo(function BlockPlaybookRecommendation({
+  blockType,
+  linkedOpp,
+}: {
+  blockType: TimeBlock['type'];
+  linkedOpp?: { id: string; stage?: string; status?: string; lastTouchDate?: string } | null;
+}) {
+  const ctx: WorkflowContext = {
+    blockType,
+    opportunityId: linkedOpp?.id,
+    dealStage: linkedOpp?.stage ?? undefined,
+    dealStatus: linkedOpp?.status ?? undefined,
+    daysSinceTouch: linkedOpp?.lastTouchDate
+      ? Math.floor((Date.now() - new Date(linkedOpp.lastTouchDate).getTime()) / 86400000)
+      : null,
+  };
+  const rec = usePlaybookRecommendation(ctx);
+  return <PlaybookRecommendationChip recommendation={rec} compact className="mt-2" />;
+});
