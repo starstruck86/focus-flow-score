@@ -825,8 +825,10 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
             const stage = updated?.stage || 'complete';
             const newState = { ...s.state, processedCount };
             if (stage === 'complete') { successCount++; newState.successCount = successCount; }
+            else if (stage === 'partial') { partialCount++; newState.partialCount = partialCount; }
+            else if (stage === 'needs_auth') { needsAuthCount++; newState.needsAuthCount = needsAuthCount; }
+            else if (stage === 'unsupported') { unsupportedCount++; newState.unsupportedCount = unsupportedCount; }
             else if (stage === 'skipped') { skippedCount++; newState.skippedCount = skippedCount; }
-            // needs_review is NOT a success — count as failed
             else if (stage === 'needs_review') { reviewCount++; newState.reviewCount = reviewCount; failedCount++; newState.failedCount = failedCount; }
             else if (stage === 'failed') { failedCount++; newState.failedCount = failedCount; }
             return { state: newState };
