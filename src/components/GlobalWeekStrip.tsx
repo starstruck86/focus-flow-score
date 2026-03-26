@@ -1,7 +1,7 @@
-import { format } from 'date-fns';
 import { useWeekJournalEntries } from '@/hooks/useWeekJournalEntries';
 import { WeekStrip } from '@/components/journal/WeekStrip';
 import { useState } from 'react';
+import { todayET, bostonNow } from '@/lib/timeFormat';
 import { DailyScorecardModal } from '@/components/journal/DailyScorecardModal';
 
 export function GlobalWeekStrip() {
