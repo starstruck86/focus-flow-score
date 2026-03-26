@@ -99,6 +99,11 @@ export default function PrepHub() {
             <ResourceManager />
           </TabsContent>
 
+          {/* PLAYBOOKS TAB */}
+          <TabsContent value="playbooks" className="mt-3">
+            <PlaybooksPanel />
+          </TabsContent>
+
           {/* AI PREP TAB */}
           <TabsContent value="prep" className="space-y-3 mt-3">
             <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1 w-fit">
