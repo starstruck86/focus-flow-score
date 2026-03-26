@@ -154,6 +154,7 @@ Return ONLY the JSON array, no markdown.`;
       key_questions: p.key_questions || [],
       traps: p.traps || [],
       anti_patterns: p.anti_patterns || [],
+      success_criteria: p.success_criteria || "",
       confidence_score: Math.max(0, Math.min(100, p.confidence_score ?? 50)),
       source_resource_ids: (p.source_indices || [])
         .filter((i: number) => i >= 0 && i < resources.length)
