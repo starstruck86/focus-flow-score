@@ -1,12 +1,12 @@
 import { supabase } from '@/integrations/supabase/client';
+import { daysAgoET } from '@/lib/timeFormat';
 import type { ToolContext } from '../../toolTypes';
 
 export async function momentumCheck(ctx: ToolContext): Promise<string> {
   const userId = await ctx.getUserId();
   if (!userId) return 'Not authenticated';
 
-  const now = new Date();
-  const sevenDaysAgo = new Date(now.getTime() - 7 * 86400000).toISOString().split('T')[0];
+  const sevenDaysAgo = daysAgoET(7);
 
   const [oppsRes, tasksRes, journalRes] = await Promise.all([
     // HARD FILTER: only active opps

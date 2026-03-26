@@ -23,7 +23,7 @@ export function TouchLogButtons({ accountId, compact }: TouchLogButtonsProps) {
   const { updateAccount, accounts } = useStore();
 
   const handleTouch = (touchType: TouchType) => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayET();
     const account = accounts.find(a => a.id === accountId);
     if (!account) return;
 

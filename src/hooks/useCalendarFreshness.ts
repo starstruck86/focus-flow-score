@@ -78,7 +78,7 @@ export function useCalendarFreshness(): CalendarFreshness {
   // Periodic poll during work hours
   useEffect(() => {
     const interval = setInterval(() => {
-      if (isWorkHours() && isStale()) doSync();
+      if (isWorkHoursET() && isStale()) doSync();
       setLastSyncMs(getLastSyncMs()); // keep label fresh
     }, WORKDAY_POLL_MS);
     return () => clearInterval(interval);

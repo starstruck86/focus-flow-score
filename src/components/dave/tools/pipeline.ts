@@ -133,7 +133,7 @@ export function createPipelineTools(ctx: ToolContext): ToolMap {
       const userId = await ctx.getUserId();
       if (!userId) return 'Not authenticated';
 
-      const today = new Date().toISOString().split('T')[0];
+      const today = todayET();
       const { data: recent } = await supabase
         .from('pipeline_hygiene_scans')
         .select('health_score, total_issues, critical_issues, summary, scan_date')

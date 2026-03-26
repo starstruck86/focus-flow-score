@@ -38,7 +38,7 @@ export async function energyMatch(ctx: ToolContext): Promise<string> {
   const userId = await ctx.getUserId();
   if (!userId) return 'Not authenticated';
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayET();
   const { data: whoop } = await supabase.from('whoop_daily_metrics').select('recovery_score, sleep_score, strain_score').eq('user_id', userId).eq('date', today).limit(1);
   const { data: journal } = await supabase.from('daily_journal_entries').select('energy, focus_quality, stress').eq('user_id', userId).eq('date', today).limit(1);
 

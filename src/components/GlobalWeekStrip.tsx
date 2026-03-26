@@ -5,9 +5,9 @@ import { todayET, bostonNow } from '@/lib/timeFormat';
 import { DailyScorecardModal } from '@/components/journal/DailyScorecardModal';
 
 export function GlobalWeekStrip() {
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [selectedDate, setSelectedDate] = useState(todayET());
   const [showScorecard, setShowScorecard] = useState(false);
-  const { data: days } = useWeekJournalEntries(new Date());
+  const { data: days } = useWeekJournalEntries(bostonNow());
 
   if (!days || days.length === 0) return null;
 

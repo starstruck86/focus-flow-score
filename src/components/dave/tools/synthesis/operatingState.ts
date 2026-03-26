@@ -6,9 +6,8 @@ export async function operatingState(ctx: ToolContext): Promise<string> {
   const userId = await ctx.getUserId();
   if (!userId) return 'Not authenticated';
 
-  const now = new Date();
   const todayStr = todayInAppTz();
-  const fourteenDaysAgo = new Date(now.getTime() - 14 * 86400000).toISOString().split('T')[0];
+  const fourteenDaysAgo = daysAgoET(14);
   const currentMinutes = getCurrentMinutesET();
 
   const [tasksRes, oppsRes, renewalsRes, journalRes, planRes] = await Promise.all([

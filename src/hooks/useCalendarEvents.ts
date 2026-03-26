@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { useEffect, useRef } from 'react';
+import { bostonNow } from '@/lib/timeFormat';
 
 interface CalendarEvent {
   id: string;
@@ -23,7 +24,8 @@ export function useCalendarEvents() {
   return useQuery({
     queryKey: ['calendar-events'],
     queryFn: async () => {
-      const now = new Date();
+      // Use Boston midnight as the start boundary so events align with app timezone
+      const now = bostonNow();
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
       const { data, error } = await supabase
         .from('calendar_events')
