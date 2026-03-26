@@ -577,7 +577,8 @@ export function useBulkIngestion() {
     pauseRef.current = false;
     runningRef.current = false;
     setState(prev => ({
-      status: 'idle',
+      status: 'idle' as const,
+      mode: prev.mode,
       batchSize: prev.batchSize,
       reprocessMode: prev.reprocessMode,
       totalItems: 0,
@@ -589,6 +590,7 @@ export function useBulkIngestion() {
       skippedCount: 0,
       reviewCount: 0,
       items: [],
+      startedAt: null,
     }));
   }, []);
 
