@@ -1734,8 +1734,8 @@ export function DailyTimeBlocks() {
                     )}
                   </div>
 
-                  {/* Contextual action button */}
-                  {isCurrent && BLOCK_ACTIONS[block.type] && (
+                   {/* Contextual action button */}
+                   {isCurrent && BLOCK_ACTIONS[block.type] && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -1754,6 +1754,11 @@ export function DailyTimeBlocks() {
                       <ArrowRight className="h-3 w-3" />
                       {BLOCK_ACTIONS[block.type].label}
                     </Button>
+                  )}
+
+                  {/* Playbook recommendation for current block */}
+                  {isCurrent && (
+                    <BlockPlaybookRecommendation blockType={block.type} linkedOpp={linkedOpp} />
                   )}
                 </div>
               </div>

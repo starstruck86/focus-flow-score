@@ -204,6 +204,9 @@ export default function OpportunityDetail() {
           </CardContent>
         </Card>
 
+        {/* Playbook recommendation */}
+        <PlaybookRecommendationChip recommendation={useOppPlaybookRecommendation(id)} />
+
         {/* Quick Actions */}
         <div className="flex items-center gap-2 flex-wrap">
           <TouchLogButtons accountId={opp.accountId || ''} compact />
