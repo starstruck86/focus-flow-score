@@ -3,9 +3,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Zap, RefreshCw } from 'lucide-react';
-import { useBulkIngestion } from '@/hooks/useBulkIngestion';
 import { BulkIngestionPanel } from './BulkIngestionPanel';
 import { useQueryClient } from '@tanstack/react-query';
+import { useEnrichmentJobStore } from '@/store/useEnrichmentJobStore';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   getEligibleResources,
   getEligibleCount,
@@ -34,10 +35,12 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
   resources,
   selectedIds,
 }: DeepEnrichModalProps) {
-  const bulk = useBulkIngestion();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
-  const isProcessing = bulk.state.status === 'running' || bulk.state.status === 'paused';
-  const isDone = bulk.state.status === 'completed' || bulk.state.status === 'failed' || bulk.state.status === 'cancelled';
+  const store = useEnrichmentJobStore();
+  const { state } = store;
+  const isProcessing = state.status === 'running' || state.status === 'paused';
+  const isDone = state.status === 'completed' || state.status === 'failed' || state.status === 'cancelled';
   const [mode, setMode] = useState<EnrichMode>('deep_enrich');
 
   const scopedResources = useMemo(() => {
@@ -58,16 +61,18 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
       requestedItems: Array<{ resourceId?: string; url: string; title: string; enrichMode?: EnrichMode }>,
       opts?: { retryFailedOnly?: boolean },
     ) => {
+      if (!user) return;
+
       if (opts?.retryFailedOnly) {
-        bulk.start(requestedItems, opts);
+        store.start(user.id, requestedItems, opts);
         return;
       }
 
       const canonicalEligibleResources = getEligibleResources(scopedResources, mode);
-      const queueAllRequested = requestedItems.length === sourceItems.length && sourceItems.length > bulk.state.batchSize;
+      const queueAllRequested = requestedItems.length === sourceItems.length && sourceItems.length > state.batchSize;
       const selectedResources = queueAllRequested
         ? canonicalEligibleResources
-        : selectEligibleBatch(scopedResources, mode, bulk.state.batchSize);
+        : selectEligibleBatch(scopedResources, mode, state.batchSize);
 
       logEligibilitySnapshot(scopedResources, mode, 'pre-batch');
       logSelectedBatch(selectedResources, mode, 'pre-batch');
@@ -79,19 +84,20 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
         return;
       }
 
-      bulk.start(toEligibleResourceItems(selectedResources, mode), opts);
+      store.setMode(mode);
+      store.start(user.id, toEligibleResourceItems(selectedResources, mode), opts);
     },
-    [bulk, mode, scopedResources, sourceItems.length],
+    [store, mode, scopedResources, sourceItems.length, state.batchSize, user],
   );
 
+  // Closing the modal does NOT stop the job — this is the key change
   const handleClose = useCallback(() => {
-    if (isProcessing) return;
     if (isDone) {
-      bulk.reset();
+      store.reset();
       queryClient.invalidateQueries({ queryKey: ['resources'] });
     }
     onOpenChange(false);
-  }, [isProcessing, isDone, bulk, queryClient, onOpenChange]);
+  }, [isDone, store, queryClient, onOpenChange]);
 
   const handleModeChange = (value: string) => {
     if (isProcessing || isDone) return;
@@ -99,7 +105,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={isProcessing ? undefined : handleClose}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -146,14 +152,14 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
         )}
 
         <BulkIngestionPanel
-          state={bulk.state}
-          onSetBatchSize={bulk.setBatchSize}
+          state={state}
+          onSetBatchSize={store.setBatchSize}
           onStart={handleStart}
-          onPause={bulk.pause}
-          onResume={bulk.resume}
-          onCancel={bulk.cancel}
-          onReset={bulk.reset}
-          hasFailures={bulk.hasFailures}
+          onPause={store.pause}
+          onResume={store.resume}
+          onCancel={store.cancel}
+          onReset={store.reset}
+          hasFailures={store.hasFailures()}
           sourceItems={sourceItems}
           sourceLabel="resources"
           totalEligible={eligibleCount}
