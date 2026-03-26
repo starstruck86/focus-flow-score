@@ -554,6 +554,9 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
       state: { ...s.state, status: failedCount > 0 ? 'failed' : 'completed' },
       _running: false,
     }));
+
+    // Invalidate resource queries so the UI updates even if the modal is closed
+    invalidateResourceQueries();
   }
 
   return {
