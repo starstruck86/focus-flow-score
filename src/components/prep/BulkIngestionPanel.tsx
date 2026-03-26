@@ -78,6 +78,27 @@ const STAGE_LABELS: Record<string, string> = {
   needs_review: 'Needs review',
 };
 
+/** User-friendly failure labels keyed by FailureCategory */
+const FAILURE_LABELS: Record<string, string> = {
+  failed_network_transport: 'Network issue — retrying',
+  failed_edge_unreachable: 'Server unreachable — retrying',
+  failed_timeout: 'Timed out — retrying with extended timeout',
+  failed_request_too_large: 'Content too large — needs smaller payload',
+  failed_request: 'Request error — retrying',
+  failed_request_serialization: 'Serialization error',
+  failed_quality: 'Content too weak to enrich',
+  failed_needs_auth: 'Needs authentication',
+  failed_unsupported: 'Source type not supported',
+  failed_preflight: 'Preflight check failed',
+  failed_bad_route: 'Service route not found',
+  failed_missing_auth: 'Session expired — sign in again',
+  failed_verification: 'Post-write verification failed',
+  failed_write: 'Failed to save data',
+  failed_preflight_blocked: 'Blocked by preflight',
+  failed_unknown_transport: 'Transport error',
+  failed_unknown: 'Unexpected error',
+};
+
 const SKIP_REASON_LABELS: Record<string, string> = {
   already_enriched: 'Already enriched',
   duplicate_resource: 'Duplicate detected',
