@@ -204,8 +204,8 @@ export function ResourceIntelligenceDashboard() {
         .from('resources')
         .select('id')
         .eq('user_id', user.id)
-        .eq('content_status', 'enriched')
-        .lt('content_length', SHALLOW_THRESHOLD)
+        .eq('enrichment_status', 'deep_enriched')
+        .eq('last_quality_tier', 'shallow')
         .not('file_url', 'is', null)
         .limit(20);
 
