@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useOppPlaybookRecommendation } from '@/hooks/usePlaybookRecommendation';
+import { PlaybookRecommendationChip } from '@/components/PlaybookRecommendationChip';
 import { DealVelocityWidget } from '@/components/dashboard/DealVelocityWidget';
 import { useCopilot } from '@/contexts/CopilotContext';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -98,6 +100,7 @@ export default function OpportunityDetail() {
   const { debouncedUpdate, flush } = useDebouncedUpdate(updateOpportunity, id || '');
   useEffect(() => flush, [flush]);
   const [showSynopsis, setShowSynopsis] = useState(false);
+  const playbookRec = useOppPlaybookRecommendation(id);
 
   const oppTasks = useMemo(() =>
     tasks.filter(t => t.linkedOpportunityId === id && t.status !== 'done' && t.status !== 'dropped'),
@@ -201,6 +204,9 @@ export default function OpportunityDetail() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Playbook recommendation */}
+        <PlaybookRecommendationChip recommendation={playbookRec} />
 
         {/* Quick Actions */}
         <div className="flex items-center gap-2 flex-wrap">

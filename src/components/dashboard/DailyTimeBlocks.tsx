@@ -43,6 +43,8 @@ import { calculateDialCapacity, getActualDials, DAILY_DIALS_MIN, DAILY_DIALS_TAR
 import { ensureMinimumCallBlocks } from '@/lib/planCallBlockGuarantee';
 import { useCalendarFreshness } from '@/hooks/useCalendarFreshness';
 import { getCurrentMinutesET, todayInAppTz } from '@/lib/timeFormat';
+import { usePlaybookRecommendation, type WorkflowContext } from '@/hooks/usePlaybookRecommendation';
+import { PlaybookRecommendationChip } from '@/components/PlaybookRecommendationChip';
 
 /** Inline contact count for linked account pills */
 const LinkedAccountContactCount = memo(function LinkedAccountContactCount({ accountId }: { accountId: string }) {
@@ -1734,8 +1736,8 @@ export function DailyTimeBlocks() {
                     )}
                   </div>
 
-                  {/* Contextual action button */}
-                  {isCurrent && BLOCK_ACTIONS[block.type] && (
+                   {/* Contextual action button */}
+                   {isCurrent && BLOCK_ACTIONS[block.type] && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -1754,6 +1756,11 @@ export function DailyTimeBlocks() {
                       <ArrowRight className="h-3 w-3" />
                       {BLOCK_ACTIONS[block.type].label}
                     </Button>
+                  )}
+
+                  {/* Playbook recommendation for current block */}
+                  {isCurrent && (
+                    <BlockPlaybookRecommendation blockType={block.type} linkedOpp={linkedOpp} />
                   )}
                 </div>
               </div>
@@ -1878,3 +1885,24 @@ export function DailyTimeBlocks() {
     </Card>
   );
 }
+
+/** Inline playbook recommendation for the current time block */
+const BlockPlaybookRecommendation = memo(function BlockPlaybookRecommendation({
+  blockType,
+  linkedOpp,
+}: {
+  blockType: TimeBlock['type'];
+  linkedOpp?: { id: string; stage?: string; status?: string; lastTouchDate?: string } | null;
+}) {
+  const ctx: WorkflowContext = {
+    blockType,
+    opportunityId: linkedOpp?.id,
+    dealStage: linkedOpp?.stage ?? undefined,
+    dealStatus: linkedOpp?.status ?? undefined,
+    daysSinceTouch: linkedOpp?.lastTouchDate
+      ? Math.floor((Date.now() - new Date(linkedOpp.lastTouchDate).getTime()) / 86400000)
+      : null,
+  };
+  const rec = usePlaybookRecommendation(ctx);
+  return <PlaybookRecommendationChip recommendation={rec} compact className="mt-2" />;
+});
