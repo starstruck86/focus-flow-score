@@ -404,3 +404,27 @@ const PostMeetingCard = React.forwardRef<HTMLDivElement, {
 });
 
 PostMeetingCard.displayName = 'PostMeetingCard';
+
+/** Wrapper that resolves the playbook recommendation for a given opp and shows reflection */
+function PostMeetingPlaybookReflection({
+  oppId,
+  accountId,
+  onDismiss,
+}: {
+  oppId: string;
+  accountId: string;
+  onDismiss: () => void;
+}) {
+  const rec = useOppPlaybookRecommendation(oppId);
+  const [dismissed, setDismissed] = useState(false);
+  if (!rec || dismissed) return null;
+  return (
+    <PostCallPlaybookReflection
+      playbookTitle={rec.playbook.title}
+      playbookId={rec.playbook.id}
+      accountId={accountId}
+      opportunityId={oppId}
+      onDismiss={() => { setDismissed(true); onDismiss(); }}
+    />
+  );
+}
