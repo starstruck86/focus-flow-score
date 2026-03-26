@@ -20,6 +20,13 @@ export interface Playbook {
   anti_patterns: string[];
   confidence_score: number;
   source_resource_ids: string[];
+  success_criteria: string;
+  deal_impact: string;
+  pressure_tactics: string[];
+  failure_consequences: string[];
+  minimum_effective_version: string;
+  what_great_looks_like: string[];
+  common_mistakes: string[];
   created_at: string;
   updated_at: string;
 }
