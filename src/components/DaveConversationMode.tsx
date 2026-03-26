@@ -269,6 +269,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
       releasePreflightStream();
       const friendlyMessage = classifyDaveStartupError(err);
       setError(friendlyMessage);
+      if (currentRequestIdRef.current) failInteraction(currentRequestIdRef.current);
       toast.error('Dave connection error', { description: friendlyMessage });
     },
     onVadScore: (score: number) => {
