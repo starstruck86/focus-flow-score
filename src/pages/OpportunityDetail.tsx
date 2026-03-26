@@ -100,6 +100,7 @@ export default function OpportunityDetail() {
   const { debouncedUpdate, flush } = useDebouncedUpdate(updateOpportunity, id || '');
   useEffect(() => flush, [flush]);
   const [showSynopsis, setShowSynopsis] = useState(false);
+  const playbookRec = useOppPlaybookRecommendation(id);
 
   const oppTasks = useMemo(() =>
     tasks.filter(t => t.linkedOpportunityId === id && t.status !== 'done' && t.status !== 'dropped'),
