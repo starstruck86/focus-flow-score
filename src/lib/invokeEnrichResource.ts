@@ -15,6 +15,7 @@ export type EnrichInvokeFailureCategory =
   | 'failed_unknown_transport';
 
 export interface EnrichInvokeBody {
+  [key: string]: unknown;
   resource_id?: string;
   resource_ids?: string[];
   force?: boolean;
