@@ -5,6 +5,7 @@ import { lookupRenewal, updateRenewal } from './intelligence/renewals';
 import { readResource, searchResources, lookupTranscript, trendQuery } from './intelligence/resources';
 import { bulkUpdate } from './intelligence/bulk';
 import { citeInsight, knowledgeTrends, insightReliability, recommendStrategy, recordStrategyOutcome, strategyPerformance, pipelineImpact, recordPipelineEvent, pipelineForecast } from './intelligence/knowledge';
+import { getPlaybookRecommendation } from './intelligence/playbooks';
 
 export function createIntelligenceTools(ctx: ToolContext): ToolMap {
   return {
@@ -30,5 +31,6 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
     pipeline_impact: () => pipelineImpact(ctx),
     record_pipeline_outcome: (params: { insightId: string; outcomeType: string; opportunityId?: string; dealValue?: number; fromStage?: string; toStage?: string }) => recordPipelineEvent(ctx, params),
     pipeline_forecast: () => pipelineForecast(ctx),
+    get_playbook_recommendation: (params: { blockType?: string; dealStage?: string; dealStatus?: string; accountName?: string }) => getPlaybookRecommendation(ctx, params),
   };
 }
