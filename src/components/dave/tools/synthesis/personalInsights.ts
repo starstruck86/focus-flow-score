@@ -9,7 +9,7 @@ import { startOfWeek, endOfWeek, subWeeks, parseISO, isWithinInterval } from 'da
 const SCORE_CATEGORIES = ['structure', 'cotm', 'meddicc', 'discovery', 'presence', 'commercial', 'next_step'] as const;
 
 export async function personalInsights(ctx: ToolContext, params?: { question?: string }) {
-  const userId = ctx.user?.id;
+  const userId = await ctx.getUserId();
   if (!userId) return 'Not authenticated.';
 
   // Fetch recent grades
