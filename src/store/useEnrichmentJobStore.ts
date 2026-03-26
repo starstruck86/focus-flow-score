@@ -193,6 +193,73 @@ const EMPTY_TRANSCRIPT_THRESHOLD = 80;
 const MAX_BATCH_SIZE = 10;
 const DEFAULT_BATCH_SIZE = 5;
 const ENRICHMENT_TIMEOUT_MS = 120_000;
+const MAX_RETRY_PER_RESOURCE = 3;
+const RETRY_COOLDOWN_MS = 5_000;
+
+// ── Adaptive retry strategies per failure category ─────────
+interface RetryStrategy {
+  maxRetries: number;
+  shouldRetry: boolean;
+  delayMs: number;
+  adjustedTimeoutMs?: number;
+  fallbackMode?: 'lightweight' | 'metadata_only';
+}
+
+function getRetryStrategy(category: FailureCategory, attemptNumber: number): RetryStrategy {
+  switch (category) {
+    case 'failed_network_transport':
+    case 'failed_edge_unreachable':
+      return {
+        shouldRetry: attemptNumber < 3,
+        maxRetries: 3,
+        delayMs: Math.min(2000 * Math.pow(2, attemptNumber) + Math.random() * 1000, 15000),
+      };
+    case 'failed_timeout':
+      return {
+        shouldRetry: attemptNumber < 2,
+        maxRetries: 2,
+        delayMs: 3000,
+        adjustedTimeoutMs: ENRICHMENT_TIMEOUT_MS + 60_000, // extend timeout
+      };
+    case 'failed_request_too_large':
+      return {
+        shouldRetry: attemptNumber < 1,
+        maxRetries: 1,
+        delayMs: 1000,
+        fallbackMode: 'lightweight',
+      };
+    case 'failed_request':
+      return {
+        shouldRetry: attemptNumber < 2,
+        maxRetries: 2,
+        delayMs: Math.min(3000 * Math.pow(2, attemptNumber), 12000),
+      };
+    case 'failed_request_serialization':
+      return {
+        shouldRetry: attemptNumber < 1,
+        maxRetries: 1,
+        delayMs: 500,
+      };
+    case 'failed_unknown_transport':
+      return {
+        shouldRetry: attemptNumber < 1,
+        maxRetries: 1,
+        delayMs: 2000,
+      };
+    // Non-retryable categories
+    case 'failed_quality':
+    case 'failed_needs_auth':
+    case 'failed_unsupported':
+    case 'failed_preflight':
+    case 'failed_bad_route':
+    case 'failed_missing_auth':
+    case 'failed_verification':
+    case 'failed_write':
+      return { shouldRetry: false, maxRetries: 0, delayMs: 0 };
+    default:
+      return { shouldRetry: attemptNumber < 1, maxRetries: 1, delayMs: 2000 };
+  }
+}
 
 // ── Idempotency: track in-flight resource IDs ──────────────
 const inFlightResourceIds = new Set<string>();
