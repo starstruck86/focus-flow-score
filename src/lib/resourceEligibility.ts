@@ -90,7 +90,7 @@ export function evaluateResourceEligibility(resource: Resource, mode: EnrichMode
     return { eligible: false, reason: 'missing or non-http file_url', normalizedMode };
   }
 
-  if (status === 'duplicate' || status === 'superseded') {
+  if (status === 'duplicate' || status === 'superseded' || status === 'quarantined') {
     return { eligible: false, reason: `excluded: ${status}`, normalizedMode };
   }
 
