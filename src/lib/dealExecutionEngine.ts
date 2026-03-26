@@ -470,6 +470,226 @@ export interface LearnedWeights {
 }
 
 const META_STORAGE_KEY = 'deal-meta-learning';
+const EXPLORATION_STORAGE_KEY = 'deal-exploration-log';
+const CONTROL_STORAGE_KEY = 'deal-control-group';
+
+// ── Causal Guardrails ──────────────────────────────────────
+
+export interface LearningGuardrails {
+  maxWeightChangePerCycle: number;     // max 10% change per adjustment
+  minIndependentSignals: number;       // require multiple independent signals
+  minDealDiversity: number;            // minimum unique deals in sample
+  signalDecayHalfLifeDays: number;     // older signals decay
+  minVarianceThreshold: number;        // require sufficient variance in data
+}
+
+export const DEFAULT_GUARDRAILS: LearningGuardrails = {
+  maxWeightChangePerCycle: 0.10,
+  minIndependentSignals: 3,
+  minDealDiversity: 5,
+  signalDecayHalfLifeDays: 30,
+  minVarianceThreshold: 0.01,
+};
+
+/** Apply exponential time decay to a value based on age in days */
+export function applyTimeDecay(value: number, ageDays: number, halfLifeDays: number = 30): number {
+  return value * Math.pow(0.5, ageDays / halfLifeDays);
+}
+
+/** Compute variance of a numeric array */
+export function computeVariance(values: number[]): number {
+  if (values.length < 2) return 0;
+  const mean = values.reduce((s, v) => s + v, 0) / values.length;
+  return values.reduce((s, v) => s + (v - mean) ** 2, 0) / (values.length - 1);
+}
+
+/** Count unique deal IDs in outcome set */
+export function countDealDiversity(outcomes: Array<{ signals: DealSignals }>): number {
+  return new Set(outcomes.map(o => o.signals.dealId)).size;
+}
+
+/** Clamp weight change to max per-cycle limit */
+export function clampWeightChange(current: number, suggested: number, maxChange: number = 0.10): number {
+  const delta = suggested - current;
+  const clamped = Math.max(-maxChange, Math.min(maxChange, delta));
+  return Math.round((current + clamped) * 100) / 100;
+}
+
+// ── Exploration vs Exploitation ────────────────────────────
+
+export interface ExplorationDecision {
+  isExploration: boolean;
+  reason: string;
+  explorationRate: number;
+}
+
+export interface ExplorationRecord {
+  dealId: string;
+  timestamp: string;
+  baselinePlaybookId: string;
+  exploratoryPlaybookId: string;
+  outcome: 'pending' | 'positive' | 'negative' | 'neutral';
+}
+
+/** Decide whether to explore (try alternative) or exploit (use best known) */
+export function shouldExplore(explorationRate: number = 0.08): ExplorationDecision {
+  const roll = Math.random();
+  if (roll < explorationRate) {
+    return { isExploration: true, reason: 'Controlled exploration — testing alternative approach', explorationRate };
+  }
+  return { isExploration: false, reason: 'Exploiting best known strategy', explorationRate };
+}
+
+/** Deterministic version for testing */
+export function shouldExploreWithSeed(seed: number, explorationRate: number = 0.08): ExplorationDecision {
+  if (seed < explorationRate) {
+    return { isExploration: true, reason: 'Controlled exploration — testing alternative approach', explorationRate };
+  }
+  return { isExploration: false, reason: 'Exploiting best known strategy', explorationRate };
+}
+
+export function recordExploration(record: ExplorationRecord): void {
+  try {
+    const all: ExplorationRecord[] = JSON.parse(localStorage.getItem(EXPLORATION_STORAGE_KEY) || '[]');
+    all.push(record);
+    // Keep last 200
+    if (all.length > 200) all.splice(0, all.length - 200);
+    localStorage.setItem(EXPLORATION_STORAGE_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+export function loadExplorationLog(): ExplorationRecord[] {
+  try {
+    return JSON.parse(localStorage.getItem(EXPLORATION_STORAGE_KEY) || '[]');
+  } catch { return []; }
+}
+
+/** Compute exploration win rate vs baseline */
+export function computeExplorationPerformance(): { explorationWinRate: number; baselineWinRate: number; totalExplorations: number; promotable: string[] } {
+  const log = loadExplorationLog();
+  const resolved = log.filter(r => r.outcome !== 'pending');
+  if (resolved.length === 0) return { explorationWinRate: 0, baselineWinRate: 0, totalExplorations: 0, promotable: [] };
+
+  const explorationWins = resolved.filter(r => r.outcome === 'positive').length;
+  const explorationWinRate = explorationWins / resolved.length;
+
+  // Baseline comparison: non-exploration would be the baseline
+  // Track promotable playbooks (explored and outperformed)
+  const playbookResults: Record<string, { wins: number; total: number }> = {};
+  for (const r of resolved) {
+    if (!playbookResults[r.exploratoryPlaybookId]) playbookResults[r.exploratoryPlaybookId] = { wins: 0, total: 0 };
+    playbookResults[r.exploratoryPlaybookId].total++;
+    if (r.outcome === 'positive') playbookResults[r.exploratoryPlaybookId].wins++;
+  }
+
+  const promotable = Object.entries(playbookResults)
+    .filter(([_, v]) => v.total >= 3 && v.wins / v.total > 0.6)
+    .map(([k]) => k);
+
+  return { explorationWinRate, baselineWinRate: 1 - explorationWinRate, totalExplorations: resolved.length, promotable };
+}
+
+// ── Control Group ──────────────────────────────────────────
+
+export interface ControlGroupAssignment {
+  dealId: string;
+  isControl: boolean;
+  assignedAt: string;
+  outcome: 'pending' | 'positive' | 'negative' | 'neutral';
+}
+
+/** Assign a deal to control group (non-optimized) with ~10% probability */
+export function assignControlGroup(dealId: string, controlRate: number = 0.10): ControlGroupAssignment {
+  try {
+    const all: Record<string, ControlGroupAssignment> = JSON.parse(localStorage.getItem(CONTROL_STORAGE_KEY) || '{}');
+    if (all[dealId]) return all[dealId];
+
+    const assignment: ControlGroupAssignment = {
+      dealId,
+      isControl: Math.random() < controlRate,
+      assignedAt: new Date().toISOString(),
+      outcome: 'pending',
+    };
+    all[dealId] = assignment;
+    localStorage.setItem(CONTROL_STORAGE_KEY, JSON.stringify(all));
+    return assignment;
+  } catch {
+    return { dealId, isControl: false, assignedAt: new Date().toISOString(), outcome: 'pending' };
+  }
+}
+
+export function assignControlGroupWithSeed(dealId: string, seed: number, controlRate: number = 0.10): ControlGroupAssignment {
+  const assignment: ControlGroupAssignment = {
+    dealId,
+    isControl: seed < controlRate,
+    assignedAt: new Date().toISOString(),
+    outcome: 'pending',
+  };
+  try {
+    const all: Record<string, ControlGroupAssignment> = JSON.parse(localStorage.getItem(CONTROL_STORAGE_KEY) || '{}');
+    all[dealId] = assignment;
+    localStorage.setItem(CONTROL_STORAGE_KEY, JSON.stringify(all));
+  } catch {}
+  return assignment;
+}
+
+export function recordControlOutcome(dealId: string, outcome: 'positive' | 'negative' | 'neutral'): void {
+  try {
+    const all: Record<string, ControlGroupAssignment> = JSON.parse(localStorage.getItem(CONTROL_STORAGE_KEY) || '{}');
+    if (all[dealId]) {
+      all[dealId].outcome = outcome;
+      localStorage.setItem(CONTROL_STORAGE_KEY, JSON.stringify(all));
+    }
+  } catch {}
+}
+
+export function computeControlComparison(): { optimizedWinRate: number; controlWinRate: number; isLearningEffective: boolean; sampleSize: number } {
+  try {
+    const all: Record<string, ControlGroupAssignment> = JSON.parse(localStorage.getItem(CONTROL_STORAGE_KEY) || '{}');
+    const assignments = Object.values(all).filter(a => a.outcome !== 'pending');
+
+    const control = assignments.filter(a => a.isControl);
+    const optimized = assignments.filter(a => !a.isControl);
+
+    const controlWins = control.filter(a => a.outcome === 'positive').length;
+    const optimizedWins = optimized.filter(a => a.outcome === 'positive').length;
+
+    const controlWinRate = control.length > 0 ? controlWins / control.length : 0;
+    const optimizedWinRate = optimized.length > 0 ? optimizedWins / optimized.length : 0;
+
+    return {
+      optimizedWinRate,
+      controlWinRate,
+      isLearningEffective: optimizedWinRate > controlWinRate,
+      sampleSize: assignments.length,
+    };
+  } catch {
+    return { optimizedWinRate: 0, controlWinRate: 0, isLearningEffective: false, sampleSize: 0 };
+  }
+}
+
+// ── Memory Weighting (Decay) ───────────────────────────────
+
+/** Weight memory entries by recency using exponential decay */
+export function computeDecayedMemoryWeight(entryTimestamp: string, halfLifeDays: number = 30): number {
+  const ageDays = (Date.now() - new Date(entryTimestamp).getTime()) / 86400000;
+  return Math.pow(0.5, ageDays / halfLifeDays);
+}
+
+/** Get time-weighted success/failure ratio for a playbook on a deal */
+export function getDecayedPlaybookScore(dealId: string, playbookId: string, halfLifeDays: number = 30): number {
+  const memory = loadDealMemory(dealId);
+  let score = 0;
+
+  for (const e of memory.entries) {
+    if (e.playbookId !== playbookId) continue;
+    const weight = computeDecayedMemoryWeight(e.timestamp, halfLifeDays);
+    if (e.type === 'approach_succeeded') score += weight;
+    else if (e.type === 'approach_failed') score -= weight * 1.2; // failures weighted slightly more
+  }
+
+  return Math.round(score * 100) / 100;
+}
 
 export function loadLearnedWeights(): LearnedWeights {
   try {
