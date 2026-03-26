@@ -776,24 +776,37 @@ export function applyWeightAdjustments(
   correlations: OutcomeCorrelation[],
   minCorrelation: number = 0.15,
   minSampleSize: number = 15,
+  guardrails: LearningGuardrails = DEFAULT_GUARDRAILS,
 ): LearnedWeights {
   const learned = loadLearnedWeights();
   const now = new Date().toISOString();
 
+  // Guardrail: require minimum deal diversity
+  const uniqueSignalCount = correlations.filter(c => Math.abs(c.correlation) >= minCorrelation).length;
+  
   for (const c of correlations) {
     if (Math.abs(c.correlation) < minCorrelation) continue;
     if (c.sampleSize < minSampleSize) continue;
     if (Math.abs(c.suggestedWeight - c.currentWeight) < 0.01) continue;
 
+    // Guardrail: require multiple independent signals before adjustment
+    if (uniqueSignalCount < guardrails.minIndependentSignals) {
+      // Still allow if correlation is very strong (> 0.3)
+      if (Math.abs(c.correlation) <= 0.3) continue;
+    }
+
+    // Guardrail: clamp weight change per cycle to max 10%
+    const clampedNew = clampWeightChange(learned.weights[c.field], c.suggestedWeight, guardrails.maxWeightChangePerCycle);
+
     learned.adjustmentHistory.push({
       field: c.field,
       oldValue: learned.weights[c.field],
-      newValue: c.suggestedWeight,
-      reason: `correlation=${c.correlation}, n=${c.sampleSize}`,
+      newValue: clampedNew,
+      reason: `correlation=${c.correlation}, n=${c.sampleSize}, clamped=${clampedNew !== c.suggestedWeight}`,
       timestamp: now,
     });
 
-    learned.weights[c.field] = c.suggestedWeight;
+    learned.weights[c.field] = clampedNew;
   }
 
   // Normalize weights to sum to 1
