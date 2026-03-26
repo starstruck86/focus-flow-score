@@ -5,7 +5,22 @@
 import { create } from 'zustand';
 import { supabase } from '@/integrations/supabase/client';
 import { trackedInvoke } from '@/lib/trackedInvoke';
+import { QueryClient } from '@tanstack/react-query';
 import type { EnrichMode } from '@/lib/resourceEligibility';
+
+/**
+ * Invalidate resource-related queries globally.
+ * Called when the background job finishes so the UI updates
+ * even if the modal is already closed.
+ */
+function invalidateResourceQueries() {
+  // Access the singleton QueryClient mounted in main.tsx via window
+  const qc = (window as any).__QUERY_CLIENT__ as QueryClient | undefined;
+  if (!qc) return;
+  qc.invalidateQueries({ queryKey: ['resources'] });
+  qc.invalidateQueries({ queryKey: ['resource-digests'] });
+  qc.invalidateQueries({ queryKey: ['resource-jobs-active'] });
+}
 
 // ── Types ──────────────────────────────────────────────────
 export type IngestionItemStage =
@@ -290,11 +305,17 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
       updateItem(item.id, { stage: 'enriching', existingResourceId: resourceId });
       try {
         const force = item.enrichMode === 're_enrich';
-        await trackedInvoke<any>('enrich-resource-content', {
+        const result = await trackedInvoke<any>('enrich-resource-content', {
           body: { resource_id: resourceId, force },
           componentName: 'DeepEnrich',
           timeoutMs: 60_000,
         });
+        // Check for application-level errors (quality validation failures)
+        if (result.error) {
+          const enrichMsg = result.error.message || 'Enrichment failed';
+          updateItem(item.id, { stage: 'failed', error: enrichMsg, existingResourceId: resourceId });
+          throw new Error(enrichMsg);
+        }
         updateItem(item.id, { stage: 'complete' });
         return;
       } catch (enrichErr) {
@@ -533,6 +554,9 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
       state: { ...s.state, status: failedCount > 0 ? 'failed' : 'completed' },
       _running: false,
     }));
+
+    // Invalidate resource queries so the UI updates even if the modal is closed
+    invalidateResourceQueries();
   }
 
   return {
