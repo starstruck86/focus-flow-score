@@ -75,7 +75,12 @@ function classifyDaveStartupError(error: unknown): string {
 export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, minimized = false, onMinimize, preacquiredMicStream }: Props) {
   const navigate = useNavigate();
   const { ask: askCopilot } = useCopilot();
-  const { addUserMessage, addDaveResponse } = useDaveConversation();
+  const {
+    addUserMessage, addDaveResponse,
+    beginInteraction, appendPartialResponse, completeInteraction,
+    failInteraction, getRecoverableInteraction, incrementRetry, dismissRecovery,
+    getConversationContext,
+  } = useDaveConversation();
   const [isConnecting, setIsConnecting] = useState(false);
   const [needsTap, setNeedsTap] = useState(true);
   const [showTranscript, setShowTranscript] = useState(false);
