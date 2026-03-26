@@ -1748,6 +1748,63 @@ export type Database = {
         }
         Relationships: []
       }
+      playbook_usage_events: {
+        Row: {
+          context_account_id: string | null
+          context_block_type: string | null
+          context_deal_stage: string | null
+          context_opportunity_id: string | null
+          created_at: string
+          event_type: string
+          feedback_rating: number | null
+          feedback_used_approach: boolean | null
+          feedback_what_didnt: string | null
+          feedback_what_worked: string | null
+          id: string
+          metadata: Json | null
+          playbook_id: string | null
+          playbook_title: string
+          roleplay_duration_seconds: number | null
+          user_id: string
+        }
+        Insert: {
+          context_account_id?: string | null
+          context_block_type?: string | null
+          context_deal_stage?: string | null
+          context_opportunity_id?: string | null
+          created_at?: string
+          event_type?: string
+          feedback_rating?: number | null
+          feedback_used_approach?: boolean | null
+          feedback_what_didnt?: string | null
+          feedback_what_worked?: string | null
+          id?: string
+          metadata?: Json | null
+          playbook_id?: string | null
+          playbook_title: string
+          roleplay_duration_seconds?: number | null
+          user_id: string
+        }
+        Update: {
+          context_account_id?: string | null
+          context_block_type?: string | null
+          context_deal_stage?: string | null
+          context_opportunity_id?: string | null
+          created_at?: string
+          event_type?: string
+          feedback_rating?: number | null
+          feedback_used_approach?: boolean | null
+          feedback_what_didnt?: string | null
+          feedback_what_worked?: string | null
+          id?: string
+          metadata?: Json | null
+          playbook_id?: string | null
+          playbook_title?: string
+          roleplay_duration_seconds?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       playbooks: {
         Row: {
           anti_patterns: string[]
