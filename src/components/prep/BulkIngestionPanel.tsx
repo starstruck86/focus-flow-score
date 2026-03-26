@@ -17,7 +17,7 @@ import {
 import {
   Play, Pause, Square, RotateCcw, ChevronDown,
   CheckCircle2, XCircle, SkipForward, AlertTriangle,
-  Eye, Loader2, Zap,
+  Eye, Loader2, Zap, Lock, AlertOctagon, TriangleAlert,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type {
@@ -38,7 +38,6 @@ interface BulkIngestionPanelProps {
   hasFailures: boolean;
   sourceItems: Array<{ resourceId?: string; url: string; title: string; enrichMode?: 'deep_enrich' | 're_enrich'; videoId?: string; channel?: string; publishDate?: string; duration?: string }>;
   sourceLabel?: string;
-  /** Total eligible resources (pre-filtered). Used for remaining count after batch. */
   totalEligible?: number;
 }
 
@@ -62,13 +61,18 @@ const STATUS_COLORS: Record<IngestionJobStatus, string> = {
 
 const STAGE_LABELS: Record<string, string> = {
   queued: 'Queued',
+  preflight: 'Preflight…',
   preprocessing: 'Preprocessing…',
   checking_duplicate: 'Checking duplicates…',
   fetching: 'Fetching…',
   classifying: 'Classifying…',
   saving: 'Saving…',
   enriching: 'Deep enriching…',
-  complete: 'Complete',
+  verifying: 'Verifying…',
+  complete: 'Enriched',
+  partial: 'Partially Enriched',
+  needs_auth: 'Needs Auth',
+  unsupported: 'Unsupported',
   skipped: 'Skipped',
   failed: 'Failed',
   needs_review: 'Needs review',
@@ -81,6 +85,54 @@ const SKIP_REASON_LABELS: Record<string, string> = {
   invalid_url: 'Invalid URL',
   missing_data: 'Missing required data',
 };
+
+function ItemDetail({ item }: { item: IngestionItem }) {
+  const isRetryable = item.retryEligible !== false;
+  return (
+    <div className="flex items-start gap-2 text-[11px] bg-destructive/5 rounded px-2 py-1.5">
+      {item.stage === 'needs_auth' ? (
+        <Lock className="h-3 w-3 text-status-yellow mt-0.5 shrink-0" />
+      ) : item.stage === 'unsupported' ? (
+        <AlertOctagon className="h-3 w-3 text-muted-foreground mt-0.5 shrink-0" />
+      ) : item.stage === 'partial' ? (
+        <TriangleAlert className="h-3 w-3 text-status-yellow mt-0.5 shrink-0" />
+      ) : (
+        <XCircle className="h-3 w-3 text-status-red mt-0.5 shrink-0" />
+      )}
+      <div className="min-w-0 flex-1">
+        <span className="font-medium text-foreground truncate block">{item.title}</span>
+        {item.error && <p className="text-muted-foreground">{item.error}</p>}
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+          {item.sourceType && (
+            <Badge variant="outline" className="text-[9px] h-4 px-1 font-mono">
+              {item.sourceType}
+            </Badge>
+          )}
+          {item.platform && (
+            <Badge variant="outline" className="text-[9px] h-4 px-1">
+              {item.platform}
+            </Badge>
+          )}
+          {item.methodUsed && (
+            <span className="text-[10px] text-muted-foreground">via {item.methodUsed}</span>
+          )}
+          {item.attemptCount != null && item.attemptCount > 1 && (
+            <span className="text-[10px] text-muted-foreground">{item.attemptCount} attempts</span>
+          )}
+          {item.completenessScore != null && (
+            <span className="text-[10px] text-muted-foreground">score: {item.completenessScore}</span>
+          )}
+        </div>
+        {item.recoveryHint && (
+          <p className="text-[10px] text-primary/80 italic mt-0.5">{item.recoveryHint}</p>
+        )}
+        {!isRetryable && (
+          <p className="text-[10px] text-muted-foreground italic mt-0.5">Not retryable — fix source first</p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export const BulkIngestionPanel = memo(function BulkIngestionPanel({
   state,
@@ -100,16 +152,20 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
   const progressPct = state.totalItems > 0 ? Math.round((state.processedCount / state.totalItems) * 100) : 0;
   const [showFailed, setShowFailed] = useState(false);
   const [showSkipped, setShowSkipped] = useState(false);
+  const [showPartial, setShowPartial] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
 
   const failedItems = useMemo(() => state.items.filter(i => i.stage === 'failed'), [state.items]);
   const skippedItems = useMemo(() => state.items.filter(i => i.stage === 'skipped'), [state.items]);
-  const reviewItems = useMemo(() => state.items.filter(i => i.stage === 'needs_review'), [state.items]);
+  const partialItems = useMemo(() => state.items.filter(i => i.stage === 'partial'), [state.items]);
+  const authItems = useMemo(() => state.items.filter(i => i.stage === 'needs_auth' || i.stage === 'unsupported'), [state.items]);
   const currentItem = useMemo(
-    () => state.items.find(i => !['queued', 'complete', 'skipped', 'failed', 'needs_review'].includes(i.stage)),
+    () => state.items.find(i => !['queued', 'complete', 'partial', 'needs_auth', 'unsupported', 'skipped', 'failed', 'needs_review'].includes(i.stage)),
     [state.items]
   );
 
-  const allSkipped = isDone && state.skippedCount > 0 && state.successCount === 0 && state.failedCount === 0;
+  const allSkipped = isDone && state.skippedCount > 0 && state.successCount === 0 && state.failedCount === 0 && (state.partialCount || 0) === 0;
+  const retryableCount = failedItems.filter(i => i.retryEligible !== false).length;
 
   return (
     <div className="border border-border rounded-lg bg-card p-4 space-y-3">
@@ -133,8 +189,7 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
       {state.status === 'idle' && (
         <div className="space-y-2">
           <p className="text-[11px] text-muted-foreground">
-            Automatically normalizes, deduplicates, and deeply enriches selected {sourceLabel}.
-            Batch size capped for reliability.
+            Classifies source type, runs multi-method extraction with fallback, and validates quality before marking enriched.
           </p>
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-1.5">
@@ -208,6 +263,16 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
               <span className="flex items-center gap-0.5 text-status-green">
                 <CheckCircle2 className="h-3 w-3" /> {state.successCount}
               </span>
+              {(state.partialCount || 0) > 0 && (
+                <span className="flex items-center gap-0.5 text-status-yellow">
+                  <TriangleAlert className="h-3 w-3" /> {state.partialCount}
+                </span>
+              )}
+              {(state.needsAuthCount || 0) > 0 && (
+                <span className="flex items-center gap-0.5 text-status-yellow">
+                  <Lock className="h-3 w-3" /> {state.needsAuthCount}
+                </span>
+              )}
               {state.failedCount > 0 && (
                 <span className="flex items-center gap-0.5 text-status-red">
                   <XCircle className="h-3 w-3" /> {state.failedCount}
@@ -216,11 +281,6 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
               {state.skippedCount > 0 && (
                 <span className="flex items-center gap-0.5 text-muted-foreground">
                   <SkipForward className="h-3 w-3" /> {state.skippedCount}
-                </span>
-              )}
-              {state.reviewCount > 0 && (
-                <span className="flex items-center gap-0.5 text-status-yellow">
-                  <Eye className="h-3 w-3" /> {state.reviewCount}
                 </span>
               )}
             </div>
@@ -245,8 +305,7 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
           )}
 
           {/* Retry */}
-          {isDone && hasFailures && (
-            <div className="flex items-center gap-2">
+          {isDone && retryableCount > 0 && (
             <Button
               variant="outline"
               size="sm"
@@ -254,15 +313,14 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
               onClick={() => onStart(sourceItems, { retryFailedOnly: true })}
             >
               <RotateCcw className="h-3 w-3" />
-              Retry {failedItems.length} failed
+              Retry {retryableCount} failed
             </Button>
-            </div>
           )}
 
-          {/* Post-batch remaining count */}
+          {/* Post-batch remaining */}
           {isDone && (totalEligible != null ? totalEligible - state.successCount > 0 : sourceItems.length > state.processedCount) && (
             <div className="text-[11px] text-muted-foreground pt-1">
-              {state.successCount > 0 && <span className="text-status-green font-medium">{state.successCount} completed</span>}
+              {state.successCount > 0 && <span className="text-status-green font-medium">{state.successCount} enriched</span>}
               {' · '}
               {totalEligible != null
                 ? `${Math.max(0, totalEligible - state.successCount)} eligible ${sourceLabel} remaining`
@@ -276,18 +334,48 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
       {allSkipped && (
         <div className="bg-muted/50 rounded-md p-3 text-[11px] text-muted-foreground space-y-1">
           <p className="font-medium text-foreground">All {state.skippedCount} {sourceLabel} were skipped</p>
-          <p>Items were skipped because they were already enriched or are duplicates of existing resources. Expand skip details below to see per-item reasons.</p>
+          <p>Items were skipped because they were already enriched or are duplicates.</p>
         </div>
       )}
 
-      {/* Results summary */}
+      {/* Trust gate summary */}
       {isDone && !allSkipped && (
-        <div className="flex items-center gap-4 text-[11px] pt-1 border-t border-border">
+        <div className="flex items-center gap-4 text-[11px] pt-1 border-t border-border flex-wrap">
           <span className="text-status-green font-medium">{state.successCount} enriched</span>
+          {(state.partialCount || 0) > 0 && <span className="text-status-yellow">{state.partialCount} partial</span>}
+          {(state.needsAuthCount || 0) > 0 && <span className="text-status-yellow">{state.needsAuthCount} needs auth</span>}
+          {(state.unsupportedCount || 0) > 0 && <span className="text-muted-foreground">{state.unsupportedCount} unsupported</span>}
           <span className="text-muted-foreground">{state.skippedCount} skipped</span>
           {state.failedCount > 0 && <span className="text-status-red">{state.failedCount} failed</span>}
-          {state.reviewCount > 0 && <span className="text-status-yellow">{state.reviewCount} need review</span>}
         </div>
+      )}
+
+      {/* Partial details */}
+      {isDone && partialItems.length > 0 && (
+        <Collapsible open={showPartial} onOpenChange={setShowPartial}>
+          <CollapsibleTrigger className="flex items-center gap-1 text-xs text-status-yellow hover:underline">
+            <TriangleAlert className="h-3 w-3" />
+            {partialItems.length} partially enriched — view details
+            <ChevronDown className={cn("h-3 w-3 transition-transform", showPartial && "rotate-180")} />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2 space-y-1 max-h-48 overflow-y-auto">
+            {partialItems.map(item => <ItemDetail key={item.id} item={item} />)}
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
+      {/* Auth/unsupported details */}
+      {isDone && authItems.length > 0 && (
+        <Collapsible open={showAuth} onOpenChange={setShowAuth}>
+          <CollapsibleTrigger className="flex items-center gap-1 text-xs text-status-yellow hover:underline">
+            <Lock className="h-3 w-3" />
+            {authItems.length} need auth or unsupported — view details
+            <ChevronDown className={cn("h-3 w-3 transition-transform", showAuth && "rotate-180")} />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2 space-y-1 max-h-48 overflow-y-auto">
+            {authItems.map(item => <ItemDetail key={item.id} item={item} />)}
+          </CollapsibleContent>
+        </Collapsible>
       )}
 
       {/* Skip details */}
@@ -323,38 +411,7 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
             <ChevronDown className={cn("h-3 w-3 transition-transform", showFailed && "rotate-180")} />
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-2 space-y-1 max-h-48 overflow-y-auto">
-            {failedItems.map(item => {
-              const isTimeout = item.failureCategory === 'failed_timeout';
-              const isQuality = item.failureCategory === 'failed_quality';
-              const isNetwork = item.failureCategory === 'failed_request';
-              const retryHint = isTimeout
-                ? 'Retry will use extended timeout'
-                : isNetwork
-                ? 'Retry will attempt again'
-                : isQuality
-                ? 'Content source may not have enough extractable text'
-                : item.retryEligible
-                ? 'Retryable'
-                : 'Not retryable — fix source first';
-
-              return (
-                <div key={item.id} className="flex items-start gap-2 text-[11px] bg-destructive/5 rounded px-2 py-1">
-                  <XCircle className="h-3 w-3 text-status-red mt-0.5 shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <span className="font-medium text-foreground truncate block">{item.title}</span>
-                    {item.error && <p className="text-muted-foreground">{item.error}</p>}
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {item.failureCategory && (
-                        <Badge variant="outline" className="text-[9px] h-4 px-1 font-mono">
-                          {item.failureCategory.replace('failed_', '')}
-                        </Badge>
-                      )}
-                      <span className="text-[10px] text-muted-foreground italic">{retryHint}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {failedItems.map(item => <ItemDetail key={item.id} item={item} />)}
           </CollapsibleContent>
         </Collapsible>
       )}

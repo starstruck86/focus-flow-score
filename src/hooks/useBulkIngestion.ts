@@ -59,6 +59,9 @@ export interface IngestionState {
   failedCount: number;
   skippedCount: number;
   reviewCount: number;
+  partialCount: number;
+  needsAuthCount: number;
+  unsupportedCount: number;
   items: IngestionItem[];
   startedAt: number | null;
 }
@@ -175,6 +178,9 @@ export function useBulkIngestion() {
     failedCount: 0,
     skippedCount: 0,
     reviewCount: 0,
+    partialCount: 0,
+    needsAuthCount: 0,
+    unsupportedCount: 0,
     items: [],
     startedAt: null,
   });
@@ -589,6 +595,9 @@ export function useBulkIngestion() {
       failedCount: 0,
       skippedCount: 0,
       reviewCount: 0,
+      partialCount: 0,
+      needsAuthCount: 0,
+      unsupportedCount: 0,
       items: [],
       startedAt: null,
     }));
