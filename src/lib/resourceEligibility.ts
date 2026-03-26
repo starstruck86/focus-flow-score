@@ -31,6 +31,9 @@ export const ENRICHMENT_STATUSES = [
   'reenrich_in_progress',
   'incomplete',
   'failed',
+  'retry_scheduled',
+  'stale',
+  'quarantined',
   'duplicate',
   'superseded',
 ] as const;
