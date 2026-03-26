@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useOppPlaybookRecommendation } from '@/hooks/usePlaybookRecommendation';
+import { PlaybookRecommendationChip } from '@/components/PlaybookRecommendationChip';
 import { DealVelocityWidget } from '@/components/dashboard/DealVelocityWidget';
 import { useCopilot } from '@/contexts/CopilotContext';
 import { useParams, useNavigate } from 'react-router-dom';
