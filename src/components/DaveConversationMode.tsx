@@ -255,6 +255,10 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
         const text = message.agent_response_event.agent_response;
         setTranscript(prev => [...prev, { role: 'agent', text }]);
         addDaveResponse(text);
+        // Track partial response for recovery
+        if (currentRequestIdRef.current) {
+          appendPartialResponse(currentRequestIdRef.current, text);
+        }
       }
     },
     onError: (err: any) => {
