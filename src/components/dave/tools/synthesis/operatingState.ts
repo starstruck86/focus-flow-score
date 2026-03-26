@@ -34,7 +34,7 @@ export async function operatingState(ctx: ToolContext): Promise<string> {
   const noNextStep = opps.filter(o => !o.next_step && !o.next_step_date).length;
   const staleDeals = opps.filter(o => o.last_touch_date && o.last_touch_date < fourteenDaysAgo).length;
   const atRisk = renewals.filter(r => {
-    const days = Math.ceil((new Date(r.renewal_due).getTime() - now.getTime()) / 86400000);
+    const days = Math.ceil((new Date(r.renewal_due).getTime() - Date.now()) / 86400000);
     return days <= 30 && (r.churn_risk === 'high' || r.churn_risk === 'certain');
   }).length;
 
