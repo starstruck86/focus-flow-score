@@ -1748,6 +1748,66 @@ export type Database = {
         }
         Relationships: []
       }
+      playbooks: {
+        Row: {
+          anti_patterns: string[]
+          confidence_score: number
+          created_at: string
+          id: string
+          key_questions: string[]
+          persona_fit: string[]
+          problem_type: string
+          source_resource_ids: string[]
+          stage_fit: string[]
+          tactic_steps: string[]
+          talk_tracks: string[]
+          title: string
+          traps: string[]
+          updated_at: string
+          user_id: string
+          when_to_use: string
+          why_it_matters: string
+        }
+        Insert: {
+          anti_patterns?: string[]
+          confidence_score?: number
+          created_at?: string
+          id?: string
+          key_questions?: string[]
+          persona_fit?: string[]
+          problem_type?: string
+          source_resource_ids?: string[]
+          stage_fit?: string[]
+          tactic_steps?: string[]
+          talk_tracks?: string[]
+          title: string
+          traps?: string[]
+          updated_at?: string
+          user_id: string
+          when_to_use?: string
+          why_it_matters?: string
+        }
+        Update: {
+          anti_patterns?: string[]
+          confidence_score?: number
+          created_at?: string
+          id?: string
+          key_questions?: string[]
+          persona_fit?: string[]
+          problem_type?: string
+          source_resource_ids?: string[]
+          stage_fit?: string[]
+          tactic_steps?: string[]
+          talk_tracks?: string[]
+          title?: string
+          traps?: string[]
+          updated_at?: string
+          user_id?: string
+          when_to_use?: string
+          why_it_matters?: string
+        }
+        Relationships: []
+      }
       power_hour_sessions: {
         Row: {
           connects: number
