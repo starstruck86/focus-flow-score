@@ -141,13 +141,23 @@ function classifyError(
 function friendlyMessage(category: ErrorCategory, raw: string): string {
   switch (category) {
     case 'AUTH_ERROR': return 'Authentication failed. Please sign in again.';
-    case 'NETWORK_ERROR': return 'Network error — check your connection and retry.';
+    case 'NETWORK_ERROR': return 'Connection error — retrying automatically.';
     case 'FUNCTION_TIMEOUT': return 'The request timed out. Try again in a moment.';
     case 'FUNCTION_404': return 'Service not found. This may need a redeployment.';
     case 'FUNCTION_401': return 'Not authorized. Please sign in again.';
     case 'RATE_LIMITED': return 'Too many requests — wait a moment and retry.';
     case 'DB_WRITE_FAILED': return 'Failed to save data. Check for duplicates or missing fields.';
-    case 'VALIDATION_ERROR': return 'Invalid input. Please check your data and try again.';
+    case 'VALIDATION_ERROR': {
+      // Surface quality validation details instead of generic message
+      if (raw.toLowerCase().includes('quality validation failed')) {
+        const detail = raw.replace(/^Quality validation failed:\s*/i, '');
+        return `Content quality insufficient: ${detail.slice(0, 100)}`;
+      }
+      if (raw.toLowerCase().includes('quality gate')) {
+        return raw.slice(0, 120);
+      }
+      return 'Invalid input. Please check your data and try again.';
+    }
     case 'MODEL_RESPONSE_INVALID': return 'AI response was invalid. Try again.';
     default: return raw.length > 120 ? raw.slice(0, 117) + '…' : raw;
   }
