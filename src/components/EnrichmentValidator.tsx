@@ -109,8 +109,9 @@ export function EnrichmentValidator() {
       setProgress(Math.round((i / tests.length) * 100));
 
       try {
-        const { data, error: err } = await trackedInvoke('validate-enrichment', {
-          test_urls: batch,
+        const { data, error: err } = await trackedInvoke<{ results?: TestResult[] }>('validate-enrichment', {
+          body: { test_urls: batch },
+          timeoutMs: 120_000,
         });
 
         if (err) {
