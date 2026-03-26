@@ -10,7 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { 
   FileText, Sparkles, Mail, 
-  MessageSquare, Wand2
+  MessageSquare, Wand2, BookOpen
 } from 'lucide-react';
 import { VoiceCommandButton } from '@/components/VoiceCommandButton';
 import { ResourceManager } from '@/components/prep/ResourceManager';
