@@ -69,26 +69,33 @@ Content preview: ${(r.content || "").slice(0, 800)}`;
       .join("\n\n---\n\n");
 
     // 4. Call AI to generate playbooks
-    const systemPrompt = `You are a sales enablement expert. Analyze the following enriched sales resources and generate structured playbooks.
+    const systemPrompt = `You are an elite sales enablement strategist. Your job is to extract EXECUTION-READY playbooks from sales resources — not summaries.
 
-Each playbook should be a distinct, actionable strategy pattern found across the resources.
+CRITICAL RULES:
+1. DEDUPLICATE aggressively. If multiple resources teach overlapping tactics, MERGE them into ONE stronger playbook. Fewer, stronger playbooks always wins.
+2. Organize by COMMERCIAL PROBLEM, not by source document. Examples: "Create Urgency", "Run Discovery", "Handle Pricing Objection", "Multi-Thread an Account", "Recover a Stalled Deal", "Secure Next Step", "Improve Call Opener".
+3. Every playbook must be USABLE IN 30-60 SECONDS during a live call. No textbook summaries. No vague advice.
+4. Talk tracks must be SPECIFIC phrases a rep can say verbatim, not generic descriptions.
+5. Questions must be HIGH-IMPACT discovery/qualifying questions, not obvious ones.
+6. Anti-patterns must be CONCRETE mistakes, not generic warnings.
 
-Return a JSON array of playbooks. Each playbook object must have:
-- title: string (concise playbook name)
-- problem_type: string (what sales problem this solves)
-- when_to_use: string (specific situations)
-- why_it_matters: string (business impact)
-- stage_fit: string[] (sales stages: Prospecting, Discovery, Demo, Negotiation, Closing, Renewal)
-- persona_fit: string[] (buyer personas this works for)
-- tactic_steps: string[] (ordered execution steps)
-- talk_tracks: string[] (example phrases/scripts)
-- key_questions: string[] (discovery/qualifying questions)
-- traps: string[] (common mistakes)
-- anti_patterns: string[] (what NOT to do)
-- confidence_score: number (0-100 based on how well-supported by sources)
+Return a JSON array of playbooks. Each object must have:
+- title: string (verb-led, problem-focused, e.g. "Recover a Stalled Deal")
+- problem_type: string (the commercial problem this solves — use consistent categories across playbooks)
+- when_to_use: string (specific situation trigger, 1-2 sentences max)
+- why_it_matters: string (business impact in one sentence)
+- stage_fit: string[] (from: Prospecting, Discovery, Demo, Negotiation, Closing, Renewal)
+- persona_fit: string[] (buyer personas)
+- tactic_steps: string[] (3-6 concrete ordered steps — each actionable and specific)
+- talk_tracks: string[] (2-4 verbatim phrases a rep can use)
+- key_questions: string[] (3-5 high-impact questions)
+- traps: string[] (2-3 specific mistakes to avoid)
+- anti_patterns: string[] (2-3 concrete "do NOT do this" items)
+- success_criteria: string (what success looks like after executing this playbook)
+- confidence_score: number (0-100: 80+ = pattern appears in 3+ resources with clear evidence; 50-79 = appears in 2 resources; below 50 = single source or weak signal)
 - source_indices: number[] (0-based indices of source resources used)
 
-Generate 3-8 playbooks. Focus on quality over quantity. Merge overlapping patterns.
+Generate 3-6 playbooks MAX. Merge overlapping patterns ruthlessly. Every playbook must solve a DISTINCT commercial problem.
 Return ONLY the JSON array, no markdown.`;
 
     const aiResponse = await fetch("https://api.lovable.dev/v1/chat/completions", {
@@ -147,6 +154,7 @@ Return ONLY the JSON array, no markdown.`;
       key_questions: p.key_questions || [],
       traps: p.traps || [],
       anti_patterns: p.anti_patterns || [],
+      success_criteria: p.success_criteria || "",
       confidence_score: Math.max(0, Math.min(100, p.confidence_score ?? 50)),
       source_resource_ids: (p.source_indices || [])
         .filter((i: number) => i >= 0 && i < resources.length)
