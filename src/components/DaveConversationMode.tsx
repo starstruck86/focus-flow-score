@@ -75,7 +75,12 @@ function classifyDaveStartupError(error: unknown): string {
 export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, minimized = false, onMinimize, preacquiredMicStream }: Props) {
   const navigate = useNavigate();
   const { ask: askCopilot } = useCopilot();
-  const { addUserMessage, addDaveResponse } = useDaveConversation();
+  const {
+    addUserMessage, addDaveResponse,
+    beginInteraction, appendPartialResponse, completeInteraction,
+    failInteraction, getRecoverableInteraction, incrementRetry, dismissRecovery,
+    getConversationContext,
+  } = useDaveConversation();
   const [isConnecting, setIsConnecting] = useState(false);
   const [needsTap, setNeedsTap] = useState(true);
   const [showTranscript, setShowTranscript] = useState(false);
@@ -87,6 +92,8 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
   const orbRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number>(0);
   const startingRef = useRef(false);
+  const currentRequestIdRef = useRef<string | null>(null);
+  const autoRetryingRef = useRef(false);
   const messageReceivedRef = useRef(false);
   const messagesReceivedCountRef = useRef(0);
   const lastMessageTypeRef = useRef<string | null>(null);
@@ -201,6 +208,25 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
       if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
       if (greetingRetryRef.current) clearTimeout(greetingRetryRef.current);
 
+      // Detect unexpected disconnect — auto-retry once if we had an active interaction
+      const wasActive = uptime > 2000 && messagesReceivedCountRef.current > 0;
+      const reqId = currentRequestIdRef.current;
+      if (wasActive && reqId && !autoRetryingRef.current) {
+        failInteraction(reqId);
+        const recoverable = getRecoverableInteraction();
+        if (recoverable && recoverable.retryCount < 1) {
+          logStatus('🔄 Unexpected disconnect — auto-retrying...');
+          autoRetryingRef.current = true;
+          incrementRetry(reqId);
+          toast.info('Dave got interrupted — reconnecting...', { duration: 3000 });
+          setTimeout(() => {
+            autoRetryingRef.current = false;
+            onRetry();
+          }, 1500);
+          return;
+        }
+      }
+
       if (uptime > 0 && uptime < 2000 && isOpenRef.current) {
         logStatus('⚠️ Immediate disconnect — likely transport or auth issue');
         setNeedsTap(true);
@@ -229,6 +255,10 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
         const text = message.agent_response_event.agent_response;
         setTranscript(prev => [...prev, { role: 'agent', text }]);
         addDaveResponse(text);
+        // Track partial response for recovery
+        if (currentRequestIdRef.current) {
+          appendPartialResponse(currentRequestIdRef.current, text);
+        }
       }
     },
     onError: (err: any) => {
@@ -239,6 +269,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
       releasePreflightStream();
       const friendlyMessage = classifyDaveStartupError(err);
       setError(friendlyMessage);
+      if (currentRequestIdRef.current) failInteraction(currentRequestIdRef.current);
       toast.error('Dave connection error', { description: friendlyMessage });
     },
     onVadScore: (score: number) => {
@@ -270,6 +301,10 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
     setError(null);
     setGreetingStatus('waiting');
     setTranscript([]);
+
+    // Begin tracking this interaction for recovery
+    const context = getConversationContext();
+    currentRequestIdRef.current = beginInteraction('voice_session', context);
 
     const contractError = assertSessionContract(sessionData);
     if (contractError) {
@@ -329,19 +364,27 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
 
       setError(friendlyMessage);
       setNeedsTap(true);
+      if (currentRequestIdRef.current) failInteraction(currentRequestIdRef.current);
       toast.error('Dave startup failed', { description: friendlyMessage, duration: 6000 });
     } finally {
       releasePreflightStream();
       setIsConnecting(false);
       startingRef.current = false;
     }
-  }, [conversation, sessionData, logStatus, releasePreflightStream]);
+  }, [conversation, sessionData, logStatus, releasePreflightStream, beginInteraction, getConversationContext, failInteraction]);
 
   const sessionStartRef = useRef<number>(Date.now());
 
   const endConversation = useCallback(async () => {
     if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
     if (greetingRetryRef.current) clearTimeout(greetingRetryRef.current);
+
+    // Mark interaction as successfully completed
+    if (currentRequestIdRef.current) {
+      completeInteraction(currentRequestIdRef.current);
+      currentRequestIdRef.current = null;
+    }
+    dismissRecovery();
 
     const currentTranscript = transcriptRef.current;
     if (currentTranscript.length > 0) {
@@ -362,7 +405,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
 
     await conversation.endSession();
     onClose();
-  }, [conversation, onClose]);
+  }, [conversation, onClose, completeInteraction, dismissRecovery]);
 
   useLayoutEffect(() => {
     // Auto-start when mic permission was pre-acquired during the tap gesture (both desktop and mobile).
