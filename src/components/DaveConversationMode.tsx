@@ -92,6 +92,8 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
   const orbRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number>(0);
   const startingRef = useRef(false);
+  const currentRequestIdRef = useRef<string | null>(null);
+  const autoRetryingRef = useRef(false);
   const messageReceivedRef = useRef(false);
   const messagesReceivedCountRef = useRef(0);
   const lastMessageTypeRef = useRef<string | null>(null);
