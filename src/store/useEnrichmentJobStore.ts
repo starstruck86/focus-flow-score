@@ -169,6 +169,9 @@ export interface IngestionState {
   failedCount: number;
   skippedCount: number;
   reviewCount: number;
+  partialCount: number;
+  needsAuthCount: number;
+  unsupportedCount: number;
   items: IngestionItem[];
   startedAt: number | null;
 }
