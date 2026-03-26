@@ -10,13 +10,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { 
   FileText, Sparkles, Mail, 
-  MessageSquare, Wand2
+  MessageSquare, Wand2, BookOpen
 } from 'lucide-react';
 import { VoiceCommandButton } from '@/components/VoiceCommandButton';
 import { ResourceManager } from '@/components/prep/ResourceManager';
 import { TemplateManager } from '@/components/prep/TemplateManager';
 import { ContentBuilder } from '@/components/prep/ContentBuilder';
 import { CustomPromptsManager } from '@/components/prep/CustomPromptsManager';
+import { PlaybooksPanel } from '@/components/prep/PlaybooksPanel';
 
 const PREP_PROMPTS = [
   { label: 'Pre-Call Research Brief', prompt: 'Research and prep me for my upcoming call with {{account}}. Include company background, recent news, key stakeholders, potential pain points, and suggested discovery questions.', mode: 'meeting' as const },
@@ -61,7 +62,7 @@ export default function PrepHub() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full grid grid-cols-5">
+          <TabsList className="w-full grid grid-cols-6">
             <TabsTrigger value="content-builder" className="text-xs">
               <Wand2 className="h-3.5 w-3.5 mr-1" />
               Build
@@ -69,6 +70,10 @@ export default function PrepHub() {
             <TabsTrigger value="resources" className="text-xs">
               <FileText className="h-3.5 w-3.5 mr-1" />
               Library
+            </TabsTrigger>
+            <TabsTrigger value="playbooks" className="text-xs">
+              <BookOpen className="h-3.5 w-3.5 mr-1" />
+              Playbooks
             </TabsTrigger>
             <TabsTrigger value="prep" className="text-xs">
               <Sparkles className="h-3.5 w-3.5 mr-1" />
@@ -92,6 +97,11 @@ export default function PrepHub() {
           {/* RESOURCES TAB */}
           <TabsContent value="resources" className="mt-3">
             <ResourceManager />
+          </TabsContent>
+
+          {/* PLAYBOOKS TAB */}
+          <TabsContent value="playbooks" className="mt-3">
+            <PlaybooksPanel />
           </TabsContent>
 
           {/* AI PREP TAB */}
