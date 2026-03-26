@@ -10,6 +10,7 @@ import { dailyGamePlanSummary, dailyGamePlanDetailed, dailyGamePlanWalkthrough, 
 import { queryOpportunities, queryRenewals, queryTasks, queryQuota, queryPipeline, queryDashboard } from './synthesis/walkthroughs';
 import { compareTrends } from './synthesis/trendComparison';
 import { recastToday } from './synthesis/recastToday';
+import { personalInsights } from './synthesis/personalInsights';
 
 export function createSynthesisTools(ctx: ToolContext, allTools: Record<string, any>): ToolMap {
   return {
@@ -55,5 +56,8 @@ export function createSynthesisTools(ctx: ToolContext, allTools: Record<string, 
 
     // Recast engine
     recast_today: () => recastToday(ctx),
+
+    // Personal insights
+    personal_insights: (params?: { question?: string }) => personalInsights(ctx, params),
   };
 }

@@ -1,9 +1,10 @@
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowUp, ArrowDown, Minus, TrendingUp, AlertTriangle, CheckCircle2, Flame } from 'lucide-react';
+import { ArrowUp, ArrowDown, TrendingUp, AlertTriangle, Lightbulb, Target, BookOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAllTranscriptGrades, useBehavioralPatterns } from '@/hooks/useTranscriptGrades';
+import { useWeeklyPlaybookSummary } from '@/hooks/usePlaybookUsageTracking';
 import { startOfWeek, endOfWeek, parseISO, isWithinInterval, format } from 'date-fns';
 
 const GRADE_COLORS: Record<string, string> = {
@@ -16,6 +17,7 @@ const GRADE_COLORS: Record<string, string> = {
 export function WeeklyCoachingDigest() {
   const { data: allGrades } = useAllTranscriptGrades();
   const { patterns, weakestArea, trendSummary } = useBehavioralPatterns();
+  const { data: playbookSummary } = useWeeklyPlaybookSummary();
 
   const digest = useMemo(() => {
     if (!allGrades?.length) return null;
@@ -43,14 +45,32 @@ export function WeeklyCoachingDigest() {
       ? Math.round(lastWeek.reduce((s: number, g: any) => s + g.overall_score, 0) / lastWeek.length)
       : null;
 
-    // Improvements this week
     const improving = trendSummary.filter(t => t.direction === 'improving');
     const declining = trendSummary.filter(t => t.direction === 'declining');
 
-    // Top coaching issues this week
+    // Recurring coaching issues
     const issues = thisWeek
       .filter((g: any) => g.coaching_issue)
       .map((g: any) => g.coaching_issue);
+
+    // Repeated patterns — flags appearing in 50%+ of calls
+    const repeatedMisses = patterns.filter(p => p.pct >= 50).slice(0, 3);
+
+    // Repeated strengths — find most common strengths
+    const strengthCounts = new Map<string, number>();
+    allGrades.slice(0, 10).forEach((g: any) => {
+      (g.strengths || []).forEach((s: string) => {
+        strengthCounts.set(s, (strengthCounts.get(s) || 0) + 1);
+      });
+    });
+    const repeatedSuccesses = [...strengthCounts.entries()]
+      .filter(([, c]) => c >= 2)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .map(([s]) => s);
+
+    // Underused playbooks — recommended but never practiced
+    const underusedPlaybooks = playbookSummary && playbookSummary.recommendationsShown > 0 && playbookSummary.roleplaysCompleted === 0;
 
     return {
       callsThisWeek: thisWeek.length,
@@ -61,8 +81,51 @@ export function WeeklyCoachingDigest() {
       declining,
       issues: [...new Set(issues)],
       totalCalls: allGrades.length,
+      repeatedMisses,
+      repeatedSuccesses,
+      underusedPlaybooks,
     };
-  }, [allGrades, trendSummary]);
+  }, [allGrades, trendSummary, patterns, playbookSummary]);
+
+  // Build recommendations
+  const recommendations = useMemo(() => {
+    if (!digest || !weakestArea) return null;
+
+    const recs: { icon: typeof Target; label: string; detail: string }[] = [];
+
+    // 1-2 things to improve
+    if (digest.repeatedMisses.length > 0) {
+      recs.push({
+        icon: AlertTriangle,
+        label: 'Fix this pattern',
+        detail: digest.repeatedMisses[0].label,
+      });
+    }
+    if (weakestArea) {
+      recs.push({
+        icon: Target,
+        label: 'Focus area',
+        detail: `${weakestArea.category.replace(/_/g, ' ')} (${weakestArea.avg.toFixed(1)}/5)`,
+      });
+    }
+
+    // 1 playbook to focus on
+    if (playbookSummary?.topPlaybooks?.[0]) {
+      recs.push({
+        icon: BookOpen,
+        label: 'Keep practicing',
+        detail: playbookSummary.topPlaybooks[0].title,
+      });
+    } else if (digest.underusedPlaybooks) {
+      recs.push({
+        icon: BookOpen,
+        label: 'Try a roleplay',
+        detail: 'You have recommendations but haven\'t practiced yet',
+      });
+    }
+
+    return recs.length > 0 ? recs : null;
+  }, [digest, weakestArea, playbookSummary]);
 
   if (!digest || digest.totalCalls < 2) return null;
 
@@ -137,7 +200,26 @@ export function WeeklyCoachingDigest() {
           </div>
         )}
 
-        {/* Top issues */}
+        {/* Repeated patterns — misses & successes */}
+        {(digest.repeatedMisses.length > 0 || digest.repeatedSuccesses.length > 0) && (
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Patterns</p>
+            {digest.repeatedMisses.map((m) => (
+              <p key={m.flag} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                <AlertTriangle className="h-3 w-3 text-grade-average flex-shrink-0 mt-0.5" />
+                <span><span className="font-medium text-foreground">{m.label}</span> — {m.pct}% of calls</span>
+              </p>
+            ))}
+            {digest.repeatedSuccesses.map((s) => (
+              <p key={s} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                <ArrowUp className="h-3 w-3 text-grade-excellent flex-shrink-0 mt-0.5" />
+                <span className="text-foreground">{s}</span>
+              </p>
+            ))}
+          </div>
+        )}
+
+        {/* Recurring issues */}
         {digest.issues.length > 0 && (
           <div className="space-y-1">
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Recurring Issues</p>
@@ -150,13 +232,21 @@ export function WeeklyCoachingDigest() {
           </div>
         )}
 
-        {/* Weakest area callout */}
-        {weakestArea && (
-          <div className="text-xs rounded bg-muted/30 p-2">
-            <span className="font-semibold">🎯 Priority Focus:</span>{' '}
-            <span className="text-muted-foreground">
-              {weakestArea.category.replace(/_/g, ' ')} ({weakestArea.avg.toFixed(1)}/5 avg)
-            </span>
+        {/* Recommendations — the actionable part */}
+        {recommendations && (
+          <div className="space-y-1.5 pt-1 border-t border-border/50">
+            <p className="text-[10px] font-semibold text-primary uppercase tracking-wider flex items-center gap-1">
+              <Lightbulb className="h-3 w-3" /> Next Week Focus
+            </p>
+            {recommendations.map((rec, i) => (
+              <div key={i} className="flex items-start gap-1.5 text-xs">
+                <rec.icon className="h-3 w-3 text-primary flex-shrink-0 mt-0.5" />
+                <span>
+                  <span className="font-semibold text-foreground">{rec.label}:</span>{' '}
+                  <span className="text-muted-foreground">{rec.detail}</span>
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </CardContent>
