@@ -4,6 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useStore } from '@/store/useStore';
 import { toast } from 'sonner';
 import { emitSaveStatus } from '@/components/SaveIndicator';
+import { todayET } from '@/lib/timeFormat';
 import type { TouchType } from '@/types';
 
 interface TouchLogButtonsProps {
