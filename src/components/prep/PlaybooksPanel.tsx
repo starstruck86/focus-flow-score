@@ -197,12 +197,28 @@ function PlaybookDetail({ playbook: p, onDelete }: { playbook: Playbook; onDelet
         <Field label="Why it matters" value={p.why_it_matters} />
       </div>
 
+      {p.deal_impact && (
+        <div className="flex items-start gap-1.5 bg-primary/5 border border-primary/20 rounded px-2 py-1.5">
+          <span className="font-medium text-foreground shrink-0">Deal impact:</span>
+          <span className="text-muted-foreground">{p.deal_impact}</span>
+        </div>
+      )}
+
       {p.tactic_steps.length > 0 && (
         <div>
           <span className="font-medium text-foreground">Execution Steps</span>
           <ol className="list-decimal list-inside mt-1 text-muted-foreground space-y-0.5">
             {p.tactic_steps.map((s, i) => <li key={i}>{s}</li>)}
           </ol>
+        </div>
+      )}
+
+      {p.pressure_tactics?.length > 0 && (
+        <div>
+          <span className="font-medium text-foreground">Pressure Tactics</span>
+          <ul className="list-disc list-inside mt-1 text-muted-foreground space-y-0.5">
+            {p.pressure_tactics.map((t, i) => <li key={i}>{t}</li>)}
+          </ul>
         </div>
       )}
 
@@ -226,6 +242,13 @@ function PlaybookDetail({ playbook: p, onDelete }: { playbook: Playbook; onDelet
         </div>
       )}
 
+      {p.minimum_effective_version && (
+        <div className="bg-accent/10 border border-accent/20 rounded px-2 py-1.5">
+          <span className="font-medium text-foreground">⚡ Quick version (1-2 min)</span>
+          <p className="text-muted-foreground mt-0.5">{p.minimum_effective_version}</p>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {p.traps.length > 0 && (
           <div>
@@ -245,12 +268,42 @@ function PlaybookDetail({ playbook: p, onDelete }: { playbook: Playbook; onDelet
         )}
       </div>
 
-      {(p as any).success_criteria && (
+      {p.common_mistakes?.length > 0 && (
+        <div>
+          <span className="font-medium text-destructive">Common Mistakes</span>
+          <ul className="list-disc list-inside mt-1 text-muted-foreground space-y-0.5">
+            {p.common_mistakes.map((m, i) => <li key={i}>{m}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {p.failure_consequences?.length > 0 && (
+        <div className="bg-destructive/5 border border-destructive/20 rounded px-2 py-1.5">
+          <span className="font-medium text-destructive">If skipped or done poorly</span>
+          <ul className="list-disc list-inside mt-1 text-muted-foreground space-y-0.5">
+            {p.failure_consequences.map((f, i) => <li key={i}>{f}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {p.what_great_looks_like?.length > 0 && (
         <div className="flex items-start gap-1.5 bg-green-500/5 border border-green-500/20 rounded px-2 py-1.5">
           <CheckCircle2 className="h-3.5 w-3.5 text-green-600 mt-0.5 shrink-0" />
           <div>
-            <span className="font-medium text-foreground">Success looks like</span>
-            <p className="text-muted-foreground mt-0.5">{(p as any).success_criteria}</p>
+            <span className="font-medium text-foreground">What great looks like</span>
+            <ul className="list-disc list-inside mt-1 text-muted-foreground space-y-0.5">
+              {p.what_great_looks_like.map((w, i) => <li key={i}>{w}</li>)}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {p.success_criteria && (
+        <div className="flex items-start gap-1.5 bg-green-500/5 border border-green-500/20 rounded px-2 py-1.5">
+          <CheckCircle2 className="h-3.5 w-3.5 text-green-600 mt-0.5 shrink-0" />
+          <div>
+            <span className="font-medium text-foreground">Success criteria</span>
+            <p className="text-muted-foreground mt-0.5">{p.success_criteria}</p>
           </div>
         </div>
       )}
