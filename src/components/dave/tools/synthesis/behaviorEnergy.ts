@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { todayET } from '@/lib/timeFormat';
 import type { ToolContext } from '../../toolTypes';
 
 export function behaviorSummary(): string {
