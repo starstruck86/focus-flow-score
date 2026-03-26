@@ -297,16 +297,20 @@ describe('Meta-Learning', () => {
   it('applies adjustments only when thresholds met', () => {
     const correlations = [
       { field: 'revenueWeight' as const, currentWeight: 0.30, suggestedWeight: 0.35, correlation: 0.25, sampleSize: 20 },
-      { field: 'riskWeight' as const, currentWeight: 0.25, suggestedWeight: 0.26, correlation: 0.05, sampleSize: 20 }, // below min correlation
+      { field: 'riskWeight' as const, currentWeight: 0.25, suggestedWeight: 0.30, correlation: 0.20, sampleSize: 20 },
+      { field: 'momentumWeight' as const, currentWeight: 0.20, suggestedWeight: 0.25, correlation: 0.18, sampleSize: 20 },
+      { field: 'stalenessWeight' as const, currentWeight: 0.15, suggestedWeight: 0.16, correlation: 0.05, sampleSize: 20 }, // below min correlation
     ];
     const learned = applyWeightAdjustments(correlations);
-    expect(learned.adjustmentHistory.length).toBe(1);
+    expect(learned.adjustmentHistory.length).toBe(3);
     expect(learned.adjustmentHistory[0].field).toBe('revenueWeight');
   });
 
   it('normalizes weights to sum to ~1', () => {
     const correlations = [
       { field: 'revenueWeight' as const, currentWeight: 0.30, suggestedWeight: 0.50, correlation: 0.30, sampleSize: 20 },
+      { field: 'riskWeight' as const, currentWeight: 0.25, suggestedWeight: 0.30, correlation: 0.25, sampleSize: 20 },
+      { field: 'momentumWeight' as const, currentWeight: 0.20, suggestedWeight: 0.25, correlation: 0.20, sampleSize: 20 },
     ];
     const learned = applyWeightAdjustments(correlations);
     const sum = Object.values(learned.weights).reduce((a, b) => a + b, 0);
@@ -316,6 +320,8 @@ describe('Meta-Learning', () => {
   it('persists and loads learned weights', () => {
     const correlations = [
       { field: 'revenueWeight' as const, currentWeight: 0.30, suggestedWeight: 0.40, correlation: 0.20, sampleSize: 25 },
+      { field: 'riskWeight' as const, currentWeight: 0.25, suggestedWeight: 0.30, correlation: 0.22, sampleSize: 25 },
+      { field: 'momentumWeight' as const, currentWeight: 0.20, suggestedWeight: 0.25, correlation: 0.18, sampleSize: 25 },
     ];
     applyWeightAdjustments(correlations);
     const loaded = loadLearnedWeights();
