@@ -136,11 +136,7 @@ export function useWeeklyBattlePlan() {
     queryKey: ['weekly-battle-plan', user?.id],
     queryFn: async () => {
       // Get current week's Monday
-      const now = new Date();
-      const day = now.getDay();
-      const monday = new Date(now);
-      monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
-      const weekStart = monday.toISOString().split('T')[0];
+      const weekStart = mondayOfWeekET();
 
       const { data: cached } = await supabase
         .from('weekly_battle_plans')

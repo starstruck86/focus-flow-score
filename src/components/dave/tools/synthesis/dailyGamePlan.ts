@@ -102,7 +102,7 @@ async function fetchTodayQueue(ctx: ToolContext): Promise<{ today: QueueAccount[
     .maybeSingle();
   if (!data) return null;
   const a = (data as any).assignments as Record<string, QueueAccount[]>;
-  const dayKey = DAY_KEYS_MAP[new Date().getDay()];
+  const dayKey = DAY_KEYS_MAP[getDayOfWeekET()];
   const today = dayKey ? (a[dayKey] || []) : [];
   const allAccounts = Object.values(a).flat();
   return {
