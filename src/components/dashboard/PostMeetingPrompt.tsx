@@ -151,14 +151,22 @@ export function PostMeetingPrompt() {
         </div>
 
         {recentlyEndedMeetings.slice(0, 3).map(item => (
-          <PostMeetingCard
-            key={item.eventId}
-            item={item}
-            nextStep={nextSteps[item.eventId] || ''}
-            onNextStepChange={val => setNextSteps(prev => ({ ...prev, [item.eventId]: val }))}
-            onLogNextStep={() => handleLogNextStep(item)}
-            onDismiss={() => handleDismiss(item.eventId)}
-          />
+          <div key={item.eventId} className="space-y-2">
+            <PostMeetingCard
+              item={item}
+              nextStep={nextSteps[item.eventId] || ''}
+              onNextStepChange={val => setNextSteps(prev => ({ ...prev, [item.eventId]: val }))}
+              onLogNextStep={() => handleLogNextStep(item)}
+              onDismiss={() => handleDismiss(item.eventId)}
+            />
+            {item.primaryOppId && (
+              <PostMeetingPlaybookReflection
+                oppId={item.primaryOppId}
+                accountId={item.accountId}
+                onDismiss={() => {}}
+              />
+            )}
+          </div>
         ))}
       </motion.div>
     </AnimatePresence>
