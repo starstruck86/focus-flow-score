@@ -32,11 +32,6 @@ import { lazy, Suspense } from "react";
 const Diagnostics = lazy(() => import("./pages/Diagnostics"));
 
 const queryClient = new QueryClient({
-// Expose for background stores (enrichment job store) that need to invalidate queries
-(window as any).__QUERY_CLIENT__ = queryClient;
-
-// Original config follows on the existing object:
-Object.assign(queryClient, new QueryClient({
   defaultOptions: {
     queries: {
       retry: 2,
