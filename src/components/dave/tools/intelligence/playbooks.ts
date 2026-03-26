@@ -34,7 +34,7 @@ export async function getPlaybookRecommendation(
   };
 
   const rec = selectPlaybook(playbooks, workflowCtx);
-  if (!rec) return 'No matching playbook for this context.';
+  if (!rec) return 'No playbook recommendation meets the confidence threshold for this context. Need more signal (deal stage, stagnation, or active block type) to make a precise recommendation.';
 
   const p = rec.playbook;
 
