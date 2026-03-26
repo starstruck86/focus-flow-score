@@ -2589,6 +2589,7 @@ export type Database = {
           last_enrichment_attempt_at: string | null
           last_quality_score: number | null
           last_quality_tier: string | null
+          last_reconciled_at: string | null
           last_status_change_at: string | null
           opportunity_id: string | null
           resource_type: string
@@ -2628,6 +2629,7 @@ export type Database = {
           last_enrichment_attempt_at?: string | null
           last_quality_score?: number | null
           last_quality_tier?: string | null
+          last_reconciled_at?: string | null
           last_status_change_at?: string | null
           opportunity_id?: string | null
           resource_type?: string
@@ -2667,6 +2669,7 @@ export type Database = {
           last_enrichment_attempt_at?: string | null
           last_quality_score?: number | null
           last_quality_tier?: string | null
+          last_reconciled_at?: string | null
           last_status_change_at?: string | null
           opportunity_id?: string | null
           resource_type?: string
