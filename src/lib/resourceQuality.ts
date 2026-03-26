@@ -396,7 +396,8 @@ export function assertEnrichmentInvariants(
   }
 
   // Cannot be both deep_enriched and queued_for_deep_enrich
-  if (status === 'deep_enriched' && status === 'queued_for_deep_enrich') {
-    throw new Error('INVARIANT VIOLATION: cannot be both deep_enriched and queued_for_deep_enrich');
+  if (status === 'queued_for_deep_enrich' && tier === 'complete') {
+    // This is a logic mismatch — if tier is complete, status should be deep_enriched
+    log.warn('Status/tier mismatch: queued_for_deep_enrich with complete tier');
   }
 }
