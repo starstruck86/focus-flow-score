@@ -6,6 +6,7 @@ import { useMemo } from 'react';
 import { useStore } from '@/store/useStore';
 import { useStaleItems } from '@/hooks/useStaleItems';
 import { useMomentumEngine } from '@/hooks/useMomentumEngine';
+import { todayET } from '@/lib/timeFormat';
 
 export interface OperatingState {
   sentence: string;
