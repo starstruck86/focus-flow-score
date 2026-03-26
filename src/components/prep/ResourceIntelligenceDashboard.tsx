@@ -158,7 +158,7 @@ export function ResourceIntelligenceDashboard() {
         .from('resources')
         .select('id, title')
         .eq('user_id', user.id)
-        .in('content_status', ['enriched', 'manual', 'file']);
+        .eq('enrichment_status', 'deep_enriched');
 
       const { data: digests } = await supabase
         .from('resource_digests')
