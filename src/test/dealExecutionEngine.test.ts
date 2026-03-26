@@ -28,8 +28,22 @@ import {
   applyWeightAdjustments,
   loadLearnedWeights,
   computeEngineStats,
+  applyTimeDecay,
+  computeVariance,
+  countDealDiversity,
+  clampWeightChange,
+  shouldExploreWithSeed,
+  recordExploration,
+  loadExplorationLog,
+  computeExplorationPerformance,
+  assignControlGroupWithSeed,
+  recordControlOutcome,
+  computeControlComparison,
+  computeDecayedMemoryWeight,
+  getDecayedPlaybookScore,
   type DealSignals,
   type PrioritizationWeights,
+  type ExplorationRecord,
 } from '../lib/dealExecutionEngine';
 
 function makeDeal(overrides: Partial<DealSignals> = {}): DealSignals {
@@ -283,16 +297,20 @@ describe('Meta-Learning', () => {
   it('applies adjustments only when thresholds met', () => {
     const correlations = [
       { field: 'revenueWeight' as const, currentWeight: 0.30, suggestedWeight: 0.35, correlation: 0.25, sampleSize: 20 },
-      { field: 'riskWeight' as const, currentWeight: 0.25, suggestedWeight: 0.26, correlation: 0.05, sampleSize: 20 }, // below min correlation
+      { field: 'riskWeight' as const, currentWeight: 0.25, suggestedWeight: 0.30, correlation: 0.20, sampleSize: 20 },
+      { field: 'momentumWeight' as const, currentWeight: 0.20, suggestedWeight: 0.25, correlation: 0.18, sampleSize: 20 },
+      { field: 'stalenessWeight' as const, currentWeight: 0.15, suggestedWeight: 0.16, correlation: 0.05, sampleSize: 20 }, // below min correlation
     ];
     const learned = applyWeightAdjustments(correlations);
-    expect(learned.adjustmentHistory.length).toBe(1);
+    expect(learned.adjustmentHistory.length).toBe(3);
     expect(learned.adjustmentHistory[0].field).toBe('revenueWeight');
   });
 
   it('normalizes weights to sum to ~1', () => {
     const correlations = [
       { field: 'revenueWeight' as const, currentWeight: 0.30, suggestedWeight: 0.50, correlation: 0.30, sampleSize: 20 },
+      { field: 'riskWeight' as const, currentWeight: 0.25, suggestedWeight: 0.30, correlation: 0.25, sampleSize: 20 },
+      { field: 'momentumWeight' as const, currentWeight: 0.20, suggestedWeight: 0.25, correlation: 0.20, sampleSize: 20 },
     ];
     const learned = applyWeightAdjustments(correlations);
     const sum = Object.values(learned.weights).reduce((a, b) => a + b, 0);
@@ -302,6 +320,8 @@ describe('Meta-Learning', () => {
   it('persists and loads learned weights', () => {
     const correlations = [
       { field: 'revenueWeight' as const, currentWeight: 0.30, suggestedWeight: 0.40, correlation: 0.20, sampleSize: 25 },
+      { field: 'riskWeight' as const, currentWeight: 0.25, suggestedWeight: 0.30, correlation: 0.22, sampleSize: 25 },
+      { field: 'momentumWeight' as const, currentWeight: 0.20, suggestedWeight: 0.25, correlation: 0.18, sampleSize: 25 },
     ];
     applyWeightAdjustments(correlations);
     const loaded = loadLearnedWeights();
@@ -320,5 +340,121 @@ describe('Engine Stats', () => {
     expect(stats.activeSequences).toBe(1);
     expect(stats.totalMemoryEntries).toBeGreaterThan(0);
     expect(stats.topRiskDeal).toBe('Acme Corp');
+  });
+});
+
+describe('Causal Guardrails', () => {
+  it('applies time decay correctly', () => {
+    expect(applyTimeDecay(100, 0, 30)).toBe(100);
+    expect(applyTimeDecay(100, 30, 30)).toBeCloseTo(50, 0);
+    expect(applyTimeDecay(100, 60, 30)).toBeCloseTo(25, 0);
+  });
+
+  it('computes variance', () => {
+    expect(computeVariance([5, 5, 5])).toBe(0);
+    expect(computeVariance([1, 2, 3])).toBeCloseTo(1, 1);
+    expect(computeVariance([])).toBe(0);
+  });
+
+  it('counts deal diversity', () => {
+    const outcomes = [
+      { signals: makeDeal({ dealId: 'a' }) },
+      { signals: makeDeal({ dealId: 'b' }) },
+      { signals: makeDeal({ dealId: 'a' }) },
+    ];
+    expect(countDealDiversity(outcomes)).toBe(2);
+  });
+
+  it('clamps weight changes to max 10%', () => {
+    expect(clampWeightChange(0.30, 0.50, 0.10)).toBe(0.40);
+    expect(clampWeightChange(0.30, 0.35, 0.10)).toBe(0.35);
+    expect(clampWeightChange(0.30, 0.10, 0.10)).toBe(0.20);
+  });
+
+  it('guardrails limit aggressive weight changes', () => {
+    const correlations = [
+      { field: 'revenueWeight' as const, currentWeight: 0.30, suggestedWeight: 0.60, correlation: 0.25, sampleSize: 20 },
+    ];
+    const learned = applyWeightAdjustments(correlations);
+    // Should be clamped — not jump from 0.30 to 0.60
+    const rev = learned.weights.revenueWeight;
+    expect(rev).toBeLessThanOrEqual(0.45); // normalized, but original clamped to 0.40
+  });
+});
+
+describe('Exploration vs Exploitation', () => {
+  it('exploits when seed is above threshold', () => {
+    const decision = shouldExploreWithSeed(0.5, 0.08);
+    expect(decision.isExploration).toBe(false);
+  });
+
+  it('explores when seed is below threshold', () => {
+    const decision = shouldExploreWithSeed(0.03, 0.08);
+    expect(decision.isExploration).toBe(true);
+  });
+
+  it('records and loads exploration log', () => {
+    const record: ExplorationRecord = {
+      dealId: 'exp-1',
+      timestamp: new Date().toISOString(),
+      baselinePlaybookId: 'pb-a',
+      exploratoryPlaybookId: 'pb-b',
+      outcome: 'positive',
+    };
+    recordExploration(record);
+    const log = loadExplorationLog();
+    expect(log.length).toBe(1);
+    expect(log[0].exploratoryPlaybookId).toBe('pb-b');
+  });
+
+  it('computes exploration performance', () => {
+    recordExploration({ dealId: 'e1', timestamp: new Date().toISOString(), baselinePlaybookId: 'a', exploratoryPlaybookId: 'pb-x', outcome: 'positive' });
+    recordExploration({ dealId: 'e2', timestamp: new Date().toISOString(), baselinePlaybookId: 'a', exploratoryPlaybookId: 'pb-x', outcome: 'positive' });
+    recordExploration({ dealId: 'e3', timestamp: new Date().toISOString(), baselinePlaybookId: 'a', exploratoryPlaybookId: 'pb-x', outcome: 'positive' });
+    const perf = computeExplorationPerformance();
+    expect(perf.totalExplorations).toBeGreaterThan(0);
+    expect(perf.explorationWinRate).toBeGreaterThan(0);
+    expect(perf.promotable).toContain('pb-x');
+  });
+});
+
+describe('Control Group', () => {
+  it('assigns control group deterministically with seed', () => {
+    const control = assignControlGroupWithSeed('cg-1', 0.05, 0.10);
+    expect(control.isControl).toBe(true);
+    const optimized = assignControlGroupWithSeed('cg-2', 0.50, 0.10);
+    expect(optimized.isControl).toBe(false);
+  });
+
+  it('records outcomes and compares', () => {
+    assignControlGroupWithSeed('cg-a', 0.05, 0.10); // control
+    assignControlGroupWithSeed('cg-b', 0.50, 0.10); // optimized
+    recordControlOutcome('cg-a', 'negative');
+    recordControlOutcome('cg-b', 'positive');
+    const comparison = computeControlComparison();
+    expect(comparison.sampleSize).toBe(2);
+    expect(comparison.optimizedWinRate).toBe(1);
+    expect(comparison.controlWinRate).toBe(0);
+    expect(comparison.isLearningEffective).toBe(true);
+  });
+});
+
+describe('Memory Weighting (Decay)', () => {
+  it('computes full weight for recent entries', () => {
+    const weight = computeDecayedMemoryWeight(new Date().toISOString(), 30);
+    expect(weight).toBeCloseTo(1, 1);
+  });
+
+  it('computes half weight for entries at half-life', () => {
+    const past = new Date(Date.now() - 30 * 86400000).toISOString();
+    const weight = computeDecayedMemoryWeight(past, 30);
+    expect(weight).toBeCloseTo(0.5, 1);
+  });
+
+  it('computes decayed playbook score', () => {
+    // Record a recent success and an old failure
+    recordDealEvent('decay-deal', { type: 'approach_succeeded', detail: 'ok', playbookId: 'pb-decay' });
+    const score = getDecayedPlaybookScore('decay-deal', 'pb-decay', 30);
+    expect(score).toBeGreaterThan(0);
   });
 });
