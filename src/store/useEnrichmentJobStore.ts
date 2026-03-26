@@ -1,6 +1,9 @@
 /**
  * Global enrichment job store — persists job execution outside any modal/component lifecycle.
  * Jobs continue running even when the DeepEnrichModal is closed.
+ *
+ * HARDENED: preflight validation, post-write verification, failure categorization,
+ * stuck-job recovery, idempotency guards, and dev-only integrity assertions.
  */
 import { create } from 'zustand';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,10 +11,19 @@ import { trackedInvoke } from '@/lib/trackedInvoke';
 import { QueryClient } from '@tanstack/react-query';
 import type { EnrichMode } from '@/lib/resourceEligibility';
 
+// ── Failure categories ─────────────────────────────────────
+export type FailureCategory =
+  | 'failed_preflight'
+  | 'failed_request'
+  | 'failed_quality'
+  | 'failed_write'
+  | 'failed_verification'
+  | 'failed_timeout'
+  | 'failed_unknown';
+
 /**
  * Invalidate resource-related queries globally.
- * Called when the background job finishes so the UI updates
- * even if the modal is already closed.
+ * Called progressively during processing and after completion.
  */
 function invalidateResourceQueries() {
   const qc = (window as any).__QUERY_CLIENT__ as QueryClient | undefined;
@@ -56,6 +68,35 @@ async function runConsistencyCheck() {
     } else {
       console.info(`[EnrichmentConsistencyCheck] ✓ ${data.length} items confirmed deep_enriched in DB`);
     }
+
+    // Inverse check: failed items must NOT be deep_enriched
+    const failedItems = store.state.items.filter(i => i.stage === 'failed');
+    const failedIds = failedItems
+      .map(i => i.existingResourceId || i.resourceId)
+      .filter(Boolean) as string[];
+
+    if (failedIds.length > 0) {
+      const { data: failedData } = await supabase
+        .from('resources')
+        .select('id, enrichment_status')
+        .in('id', failedIds.slice(0, 50));
+
+      const falseSuccesses = failedData?.filter(r => r.enrichment_status === 'deep_enriched') || [];
+      if (falseSuccesses.length > 0) {
+        console.error(
+          `[EnrichmentConsistencyCheck] CRITICAL: ${falseSuccesses.length} failed items are deep_enriched in DB!`,
+          falseSuccesses.map(r => r.id),
+        );
+      }
+    }
+
+    // Count check: success count must match DB deep_enriched count
+    const dbEnrichedCount = data.filter(r => r.enrichment_status === 'deep_enriched').length;
+    if (dbEnrichedCount !== completedItems.length) {
+      console.warn(
+        `[EnrichmentConsistencyCheck] Count mismatch: UI says ${completedItems.length} complete, DB has ${dbEnrichedCount} deep_enriched`,
+      );
+    }
   } catch (e) {
     console.warn('[EnrichmentConsistencyCheck] Check failed:', e);
   }
@@ -64,12 +105,14 @@ async function runConsistencyCheck() {
 // ── Types ──────────────────────────────────────────────────
 export type IngestionItemStage =
   | 'queued'
+  | 'preflight'
   | 'preprocessing'
   | 'checking_duplicate'
   | 'fetching'
   | 'classifying'
   | 'saving'
   | 'enriching'
+  | 'verifying'
   | 'complete'
   | 'skipped'
   | 'failed'
@@ -85,6 +128,9 @@ export interface IngestionItem {
   title: string;
   stage: IngestionItemStage;
   error?: string;
+  failureCategory?: FailureCategory;
+  failureTimestamp?: string;
+  retryEligible?: boolean;
   videoId?: string;
   channel?: string;
   publishDate?: string;
@@ -118,6 +164,10 @@ const MIN_CONTENT_LENGTH = 200;
 const EMPTY_TRANSCRIPT_THRESHOLD = 80;
 const MAX_BATCH_SIZE = 10;
 const DEFAULT_BATCH_SIZE = 5;
+const ENRICHMENT_TIMEOUT_MS = 90_000;
+
+// ── Idempotency: track in-flight resource IDs ──────────────
+const inFlightResourceIds = new Set<string>();
 
 // ── Canonical identity ─────────────────────────────────────
 export type SourceType = 'youtube' | 'webpage' | 'file' | 'unknown';
@@ -193,6 +243,17 @@ function classifyError(err: unknown, context: string): string {
   return `${context}: ${msg.slice(0, 120)}`;
 }
 
+function categorizeFailure(err: unknown): FailureCategory {
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  if (msg.includes('preflight')) return 'failed_preflight';
+  if (msg.includes('quality') || msg.includes('score') || msg.includes('contract')) return 'failed_quality';
+  if (msg.includes('verification') || msg.includes('verify')) return 'failed_verification';
+  if (msg.includes('write') || msg.includes('save') || msg.includes('update')) return 'failed_write';
+  if (msg.includes('timeout') || msg.includes('timed out') || msg.includes('aborted')) return 'failed_timeout';
+  if (msg.includes('429') || msg.includes('rate limit') || msg.includes('network') || msg.includes('fetch')) return 'failed_request';
+  return 'failed_unknown';
+}
+
 function validateUrl(rawUrl: string): string | null {
   if (!rawUrl || !rawUrl.trim()) return 'missing_data';
   try {
@@ -202,6 +263,65 @@ function validateUrl(rawUrl: string): string | null {
   } catch {
     return 'invalid_url';
   }
+}
+
+// ── Preflight validation ───────────────────────────────────
+async function preflightCheck(resourceId: string): Promise<{ pass: boolean; reason?: string }> {
+  // Check resource exists and is in valid state
+  const { data: resource, error } = await supabase
+    .from('resources')
+    .select('id, enrichment_status, content, content_length, file_url')
+    .eq('id', resourceId)
+    .single();
+
+  if (error || !resource) {
+    return { pass: false, reason: 'Preflight: resource not found in database' };
+  }
+
+  // Check not already being processed (idempotency)
+  if (inFlightResourceIds.has(resourceId)) {
+    return { pass: false, reason: 'Preflight: resource already being processed' };
+  }
+
+  // Check resource is in a valid state for enrichment
+  const status = (resource as any).enrichment_status;
+  const invalidForEnrich = ['deep_enrich_in_progress', 'reenrich_in_progress'];
+  if (invalidForEnrich.includes(status)) {
+    return { pass: false, reason: `Preflight: resource in active state "${status}"` };
+  }
+
+  // Check has valid source URL
+  const url = (resource as any).file_url;
+  if (!url || !url.startsWith('http')) {
+    return { pass: false, reason: 'Preflight: missing or invalid source URL' };
+  }
+
+  return { pass: true };
+}
+
+// ── Post-write verification ────────────────────────────────
+async function verifyPostWrite(resourceId: string, expectedStatus: 'deep_enriched'): Promise<{ pass: boolean; actual?: string; reason?: string }> {
+  const { data, error } = await supabase
+    .from('resources')
+    .select('id, enrichment_status, last_quality_tier, last_quality_score')
+    .eq('id', resourceId)
+    .single();
+
+  if (error || !data) {
+    return { pass: false, reason: 'Verification: could not read resource after write' };
+  }
+
+  const actual = (data as any).enrichment_status;
+  if (actual === expectedStatus) {
+    return { pass: true, actual };
+  }
+
+  // It's okay if it's incomplete/failed — the edge function handled it correctly
+  if (actual === 'incomplete' || actual === 'failed') {
+    return { pass: false, actual, reason: `Verification: resource is "${actual}" (quality gate), not "${expectedStatus}"` };
+  }
+
+  return { pass: false, actual, reason: `Verification: expected "${expectedStatus}", got "${actual}"` };
 }
 
 // ── Preprocessing ──────────────────────────────────────────
@@ -218,6 +338,8 @@ function preprocessItems(
         title: item.title || 'Untitled',
         stage: 'skipped' as const,
         error: urlError,
+        failureCategory: 'failed_preflight' as FailureCategory,
+        retryEligible: false,
         videoId: item.videoId,
         channel: item.channel,
         publishDate: item.publishDate,
@@ -237,6 +359,8 @@ function preprocessItems(
         title: item.title || 'Untitled',
         stage: 'skipped' as const,
         error: 'duplicate_resource',
+        failureCategory: 'failed_preflight' as FailureCategory,
+        retryEligible: false,
         videoId: item.videoId || source.source_id || undefined,
         channel: item.channel,
         publishDate: item.publishDate,
@@ -253,6 +377,7 @@ function preprocessItems(
       url: item.url,
       title: item.title || 'Untitled',
       stage: 'queued' as const,
+      retryEligible: true,
       videoId: item.videoId || extractYouTubeVideoId(item.url) || undefined,
       channel: item.channel,
       publishDate: item.publishDate,
@@ -266,7 +391,6 @@ function preprocessItems(
 // ── Store ──────────────────────────────────────────────────
 interface EnrichmentJobStore {
   state: IngestionState;
-  // Control refs stored in closure — exposed via actions
   _cancelRequested: boolean;
   _pauseRequested: boolean;
   _running: boolean;
@@ -314,6 +438,16 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
     }));
   };
 
+  function failItem(id: string, error: string, category: FailureCategory, retryEligible = true) {
+    updateItem(id, {
+      stage: 'failed',
+      error,
+      failureCategory: category,
+      failureTimestamp: new Date().toISOString(),
+      retryEligible,
+    });
+  }
+
   async function checkDuplicate(userId: string, url: string): Promise<string | null> {
     const { canonical_url, source_id } = canonicalize(url);
     const { data } = await supabase
@@ -341,28 +475,74 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
     const resourceId = item.resourceId;
 
     if (isDirectResourceRun && resourceId) {
+      // ── PREFLIGHT ────────────────────────────────────────
+      updateItem(item.id, { stage: 'preflight' });
+      const preflight = await preflightCheck(resourceId);
+      if (!preflight.pass) {
+        failItem(item.id, preflight.reason || 'Preflight failed', 'failed_preflight', true);
+        throw new Error(preflight.reason);
+      }
+
+      // Register in-flight
+      inFlightResourceIds.add(resourceId);
+
       updateItem(item.id, { stage: 'enriching', existingResourceId: resourceId });
       try {
         const force = item.enrichMode === 're_enrich';
         const result = await trackedInvoke<any>('enrich-resource-content', {
           body: { resource_id: resourceId, force },
           componentName: 'DeepEnrich',
-          timeoutMs: 60_000,
+          timeoutMs: ENRICHMENT_TIMEOUT_MS,
         });
+
         // Check for application-level errors (quality validation failures)
         if (result.error) {
           const enrichMsg = result.error.message || 'Enrichment failed';
-          updateItem(item.id, { stage: 'failed', error: enrichMsg, existingResourceId: resourceId });
+          const isQualityFail = enrichMsg.toLowerCase().includes('quality') || enrichMsg.toLowerCase().includes('score');
+          failItem(item.id, enrichMsg, isQualityFail ? 'failed_quality' : 'failed_request', true);
+          inFlightResourceIds.delete(resourceId);
           throw new Error(enrichMsg);
         }
+
+        // ── POST-WRITE VERIFICATION ─────────────────────────
+        updateItem(item.id, { stage: 'verifying' });
+        const verification = await verifyPostWrite(resourceId, 'deep_enriched');
+
+        if (!verification.pass) {
+          // The edge function ran but quality gate rejected it — this is NOT a success
+          if (verification.actual === 'incomplete' || verification.actual === 'failed') {
+            failItem(
+              item.id,
+              `Quality gate: resource is "${verification.actual}" after enrichment`,
+              'failed_quality',
+              true,
+            );
+            inFlightResourceIds.delete(resourceId);
+            throw new Error(verification.reason);
+          }
+          // Unexpected state
+          failItem(item.id, verification.reason || 'Post-write verification failed', 'failed_verification', true);
+          inFlightResourceIds.delete(resourceId);
+          throw new Error(verification.reason);
+        }
+
         updateItem(item.id, { stage: 'complete' });
+        inFlightResourceIds.delete(resourceId);
         return;
       } catch (enrichErr) {
-        const enrichMsg = classifyError(enrichErr, 'Deep enrichment');
-        updateItem(item.id, { stage: 'failed', error: enrichMsg, existingResourceId: resourceId });
-        throw new Error(enrichMsg);
+        inFlightResourceIds.delete(resourceId);
+        // Only update if not already failed by inner logic
+        const currentItem = get().state.items.find(i => i.id === item.id);
+        if (currentItem?.stage !== 'failed') {
+          const enrichMsg = classifyError(enrichErr, 'Deep enrichment');
+          const category = categorizeFailure(enrichErr);
+          failItem(item.id, enrichMsg, category, category !== 'failed_preflight');
+        }
+        throw enrichErr;
       }
     }
+
+    // ── NEW RESOURCE PATH (ingest from URL) ────────────────
 
     // Step 1: Duplicate check
     updateItem(item.id, { stage: 'checking_duplicate' });
@@ -402,7 +582,7 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
     const contentStatus = contentToStore.startsWith('[External Link:') ? 'placeholder' : 'enriched';
 
     if (contentStatus === 'enriched' && contentToStore.length < EMPTY_TRANSCRIPT_THRESHOLD) {
-      updateItem(item.id, { stage: 'needs_review', error: 'Content too short — possible empty transcript' });
+      failItem(item.id, 'Content too short — possible empty transcript', 'failed_quality', true);
       return;
     }
 
@@ -468,26 +648,50 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
     }
 
     if (contentStatus === 'enriched' && contentToStore.length < MIN_CONTENT_LENGTH) {
-      updateItem(item.id, { stage: 'needs_review', error: `Content only ${contentToStore.length} chars — may be low quality` });
+      failItem(item.id, `Content only ${contentToStore.length} chars — may be low quality`, 'failed_quality', true);
       return;
     }
+
+    // Register in-flight
+    inFlightResourceIds.add(savedResourceId);
 
     updateItem(item.id, { stage: 'enriching', existingResourceId: savedResourceId });
     try {
       const enrichResult = await trackedInvoke<any>('enrich-resource-content', {
         body: { resource_id: savedResourceId, force: true },
         componentName: 'DeepEnrich',
-        timeoutMs: 60_000,
+        timeoutMs: ENRICHMENT_TIMEOUT_MS,
       });
-      // Check for application-level errors (quality validation failures)
+      // Check for application-level errors
       if (enrichResult.error) {
         const enrichMsg = enrichResult.error.message || 'Enrichment failed';
-        updateItem(item.id, { stage: 'failed', error: enrichMsg, existingResourceId: savedResourceId });
-        throw new Error(enrichMsg);
+        failItem(item.id, `Saved but enrichment failed: ${enrichMsg}`, 'failed_quality', true);
+        inFlightResourceIds.delete(savedResourceId);
+        return;
       }
     } catch (enrichErr) {
       const enrichMsg = classifyError(enrichErr, 'Deep enrichment');
-      updateItem(item.id, { stage: 'needs_review', error: `Saved but enrichment failed: ${enrichMsg}` });
+      failItem(item.id, `Saved but enrichment failed: ${enrichMsg}`, categorizeFailure(enrichErr), true);
+      inFlightResourceIds.delete(savedResourceId);
+      return;
+    }
+
+    // ── POST-WRITE VERIFICATION for new resources ─────────
+    updateItem(item.id, { stage: 'verifying' });
+    const verification = await verifyPostWrite(savedResourceId, 'deep_enriched');
+    inFlightResourceIds.delete(savedResourceId);
+
+    if (!verification.pass) {
+      if (verification.actual === 'incomplete' || verification.actual === 'failed') {
+        failItem(
+          item.id,
+          `Quality gate: resource is "${verification.actual}" after enrichment`,
+          'failed_quality',
+          true,
+        );
+      } else {
+        failItem(item.id, verification.reason || 'Post-write verification failed', 'failed_verification', true);
+      }
       return;
     }
 
@@ -534,6 +738,7 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
     for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
       if (get()._cancelRequested) {
         set(s => ({ state: { ...s.state, status: 'cancelled' }, _running: false }));
+        inFlightResourceIds.clear();
         return;
       }
 
@@ -542,6 +747,7 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
         await new Promise(r => setTimeout(r, 500));
         if (get()._cancelRequested) {
           set(s => ({ state: { ...s.state, status: 'cancelled' }, _running: false }));
+          inFlightResourceIds.clear();
           return;
         }
       }
@@ -554,12 +760,14 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
       for (const item of batch) {
         if (get()._cancelRequested) {
           set(s => ({ state: { ...s.state, status: 'cancelled' }, _running: false }));
+          inFlightResourceIds.clear();
           return;
         }
         while (get()._pauseRequested) {
           await new Promise(r => setTimeout(r, 500));
           if (get()._cancelRequested) {
             set(s => ({ state: { ...s.state, status: 'cancelled' }, _running: false }));
+            inFlightResourceIds.clear();
             return;
           }
         }
@@ -574,17 +782,23 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
             const newState = { ...s.state, processedCount };
             if (stage === 'complete') { successCount++; newState.successCount = successCount; }
             else if (stage === 'skipped') { skippedCount++; newState.skippedCount = skippedCount; }
-            else if (stage === 'needs_review') { reviewCount++; newState.reviewCount = reviewCount; successCount++; newState.successCount = successCount; }
+            // needs_review is NOT a success — count as failed
+            else if (stage === 'needs_review') { reviewCount++; newState.reviewCount = reviewCount; failedCount++; newState.failedCount = failedCount; }
+            else if (stage === 'failed') { failedCount++; newState.failedCount = failedCount; }
             return { state: newState };
           });
 
-          // Progressive invalidation so UI updates per-item, not just at end
+          // Progressive invalidation so UI updates per-item
           invalidateResourceQueries();
         } catch (err) {
           processedCount++;
+          // Only increment failedCount if not already handled inside processItem
+          const currentItem = get().state.items.find(i => i.id === item.id);
+          if (currentItem?.stage !== 'failed') {
+            const msg = classifyError(err, 'Deep enrichment');
+            failItem(item.id, msg, categorizeFailure(err));
+          }
           failedCount++;
-          const msg = classifyError(err, 'Deep enrichment');
-          updateItem(item.id, { stage: 'failed', error: msg });
           set(s => ({ state: { ...s.state, processedCount, failedCount } }));
         }
 
@@ -597,6 +811,9 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
         await new Promise(r => setTimeout(r, INTER_BATCH_DELAY));
       }
     }
+
+    // Clear in-flight tracking
+    inFlightResourceIds.clear();
 
     set(s => ({
       state: { ...s.state, status: failedCount > 0 ? 'failed' : 'completed' },
@@ -640,7 +857,7 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
       if (options?.retryFailedOnly) {
         ingestionItems = store.state.items.map(i =>
           i.stage === 'failed'
-            ? { ...i, stage: 'queued' as const, error: undefined }
+            ? { ...i, stage: 'queued' as const, error: undefined, failureCategory: undefined, failureTimestamp: undefined }
             : i
         );
       } else {
@@ -677,6 +894,7 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
     },
 
     reset: () => {
+      inFlightResourceIds.clear();
       set({
         _cancelRequested: false,
         _pauseRequested: false,
