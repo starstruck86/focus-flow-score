@@ -164,6 +164,7 @@ export function useBulkIngestion() {
 
   const [state, setState] = useState<IngestionState>({
     status: 'idle',
+    mode: 'deep_enrich',
     batchSize: DEFAULT_BATCH_SIZE,
     reprocessMode: 'skip_processed',
     totalItems: 0,
@@ -175,6 +176,7 @@ export function useBulkIngestion() {
     skippedCount: 0,
     reviewCount: 0,
     items: [],
+    startedAt: null,
   });
 
   const cancelRef = useRef(false);
