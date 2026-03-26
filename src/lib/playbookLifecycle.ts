@@ -685,3 +685,336 @@ export function computeSnapshotHash(playbook: Pick<PlaybookModel, 'talk_tracks' 
   }
   return Math.abs(hash).toString(36);
 }
+
+// ══════════════════════════════════════════════════════════════
+// SECTION: Outcome-Driven Learning
+// ══════════════════════════════════════════════════════════════
+
+// ── Outcome Tracking Model ────────────────────────────────
+
+export interface PlaybookOutcomeEvent {
+  playbookId: string;
+  eventType: PlaybookOutcomeEventType;
+  dealId?: string;
+  accountId?: string;
+  stage?: string;
+  timestamp: string;
+  metadata?: Record<string, unknown>;
+}
+
+export type PlaybookOutcomeEventType =
+  | 'stage_progressed'
+  | 'deal_stagnation_broken'
+  | 'meeting_converted'
+  | 'reply_received'
+  | 'next_step_adhered'
+  | 'deal_won'
+  | 'deal_lost';
+
+export interface PlaybookOutcomeScore {
+  overall: number;               // 0-100
+  stageProgression: number;      // 0-20: moved deals forward
+  stagnationReduction: number;   // 0-20: unstuck deals
+  meetingConversion: number;     // 0-20: meetings booked/converted
+  replyRate: number;             // 0-20: outbound replies
+  nextStepAdherence: number;     // 0-10: next steps followed
+  winCorrelation: number;        // 0-10: win/loss signal
+  sampleSize: number;            // raw count of outcome events
+  confidence: 'high' | 'moderate' | 'low' | 'insufficient';
+}
+
+const OUTCOME_WEIGHTS: Record<PlaybookOutcomeEventType, { dimension: keyof Omit<PlaybookOutcomeScore, 'overall' | 'sampleSize' | 'confidence'>; value: number }> = {
+  stage_progressed:        { dimension: 'stageProgression', value: 4 },
+  deal_stagnation_broken:  { dimension: 'stagnationReduction', value: 5 },
+  meeting_converted:       { dimension: 'meetingConversion', value: 4 },
+  reply_received:          { dimension: 'replyRate', value: 3 },
+  next_step_adhered:       { dimension: 'nextStepAdherence', value: 2 },
+  deal_won:                { dimension: 'winCorrelation', value: 5 },
+  deal_lost:               { dimension: 'winCorrelation', value: -3 },
+};
+
+export function computePlaybookOutcomeScore(events: PlaybookOutcomeEvent[]): PlaybookOutcomeScore {
+  const score: PlaybookOutcomeScore = {
+    overall: 0,
+    stageProgression: 0,
+    stagnationReduction: 0,
+    meetingConversion: 0,
+    replyRate: 0,
+    nextStepAdherence: 0,
+    winCorrelation: 0,
+    sampleSize: events.length,
+    confidence: 'insufficient',
+  };
+
+  if (events.length === 0) return score;
+
+  // Apply recency weighting (30-day half-life)
+  const now = Date.now();
+  const HALF_LIFE_MS = 30 * 86400000;
+
+  for (const event of events) {
+    const ageMs = now - new Date(event.timestamp).getTime();
+    const recencyWeight = Math.pow(0.5, ageMs / HALF_LIFE_MS);
+    const weight = OUTCOME_WEIGHTS[event.eventType];
+    if (!weight) continue;
+
+    const weighted = weight.value * recencyWeight;
+    score[weight.dimension] = Math.max(-10, Math.min(
+      weight.dimension === 'nextStepAdherence' || weight.dimension === 'winCorrelation' ? 10 : 20,
+      (score[weight.dimension] as number) + weighted
+    ));
+  }
+
+  // Clamp all dimensions to their max
+  score.stageProgression = Math.max(0, Math.min(20, score.stageProgression));
+  score.stagnationReduction = Math.max(0, Math.min(20, score.stagnationReduction));
+  score.meetingConversion = Math.max(0, Math.min(20, score.meetingConversion));
+  score.replyRate = Math.max(0, Math.min(20, score.replyRate));
+  score.nextStepAdherence = Math.max(0, Math.min(10, score.nextStepAdherence));
+  score.winCorrelation = Math.max(0, Math.min(10, score.winCorrelation));
+
+  score.overall = Math.round(
+    score.stageProgression + score.stagnationReduction +
+    score.meetingConversion + score.replyRate +
+    score.nextStepAdherence + score.winCorrelation
+  );
+
+  // Confidence based on sample size
+  if (events.length >= 10) score.confidence = 'high';
+  else if (events.length >= 5) score.confidence = 'moderate';
+  else if (events.length >= 2) score.confidence = 'low';
+  else score.confidence = 'insufficient';
+
+  return score;
+}
+
+// ── Outcome-Weighted Trust Blending ───────────────────────
+
+export function blendOutcomeIntoTrust(
+  baseTrust: PlaybookTrustScore,
+  outcomeScore: PlaybookOutcomeScore,
+): PlaybookTrustScore {
+  // Outcome influences usageSuccess dimension most heavily
+  // High outcome → boost; low outcome → drag down
+  if (outcomeScore.confidence === 'insufficient') return baseTrust;
+
+  const confidenceMultiplier =
+    outcomeScore.confidence === 'high' ? 1.0 :
+    outcomeScore.confidence === 'moderate' ? 0.6 : 0.3;
+
+  // Outcome score maps 0-100 to a ±8 adjustment on usageSuccess (max 25)
+  const outcomeAdjustment = ((outcomeScore.overall / 100) - 0.5) * 16 * confidenceMultiplier;
+  const newUsageSuccess = Math.max(0, Math.min(25, baseTrust.usageSuccess + outcomeAdjustment));
+
+  // Small stability bonus/penalty based on win correlation
+  const stabilityAdjustment = (outcomeScore.winCorrelation / 10 - 0.5) * 4 * confidenceMultiplier;
+  const newStability = Math.max(0, Math.min(25, baseTrust.stability + stabilityAdjustment));
+
+  const overall = Math.round(baseTrust.evidenceStrength + baseTrust.evidenceDiversity + newUsageSuccess + newStability);
+
+  return {
+    ...baseTrust,
+    usageSuccess: newUsageSuccess,
+    stability: newStability,
+    overall,
+  };
+}
+
+export type OutcomeTrustAction = 'promote' | 'monitor' | 'downgrade' | 'split_review';
+
+export function determineOutcomeTrustAction(
+  outcomeScore: PlaybookOutcomeScore,
+  currentTrust: PlaybookTrustStatus,
+): OutcomeTrustAction {
+  if (outcomeScore.confidence === 'insufficient') return 'monitor';
+
+  if (outcomeScore.overall >= 60 && outcomeScore.confidence !== 'low') return 'promote';
+  if (outcomeScore.overall <= 20 && outcomeScore.sampleSize >= 5) {
+    // Low outcome with enough data → consider split or downgrade
+    if (outcomeScore.stageProgression <= 2 && outcomeScore.meetingConversion <= 2) return 'split_review';
+    return 'downgrade';
+  }
+  return 'monitor';
+}
+
+// ── Context-Aware Playbook Matching ───────────────────────
+
+export interface DealContext {
+  dealSize: 'small' | 'medium' | 'large' | 'enterprise';
+  stage: string;
+  persona: string;
+  urgency: 'low' | 'medium' | 'high' | 'critical';
+  competitionPresent: boolean;
+  stakeholderCount: number;
+  productComplexity: 'simple' | 'moderate' | 'complex';
+}
+
+export interface PlaybookContextFit {
+  playbookId: string;
+  baseScore: number;        // from trust
+  contextBonus: number;     // from context match
+  fatigueDiscount: number;  // from overuse
+  finalScore: number;
+  contextReasons: string[];
+}
+
+const STAGE_THEME_AFFINITY: Record<string, string[]> = {
+  Prospecting: ['create_urgency', 'early_credibility', 'discovery_depth'],
+  Discovery: ['discovery_depth', 'champion_building', 'multithreading'],
+  Demo: ['demo_execution', 'competitor_defense', 'objection_handling'],
+  Proposal: ['pricing_pushback', 'negotiation_leverage', 'next_step_control'],
+  Negotiation: ['negotiation_leverage', 'pricing_pushback', 'closing_commitment', 'competitor_defense'],
+  Closing: ['closing_commitment', 'create_urgency', 'next_step_control'],
+  Renewal: ['renewal_expansion', 'champion_building'],
+};
+
+export function scorePlaybookContextFit(
+  playbook: PlaybookModel,
+  context: DealContext,
+  outcomeScore: PlaybookOutcomeScore | null,
+  fatigueCount: number,
+): PlaybookContextFit {
+  const baseScore = playbook.trust_score.overall;
+  let contextBonus = 0;
+  const reasons: string[] = [];
+
+  // Stage affinity
+  const affinityThemes = STAGE_THEME_AFFINITY[context.stage] ?? [];
+  const clusterTheme = playbook.derived_from_cluster_id?.replace('cluster_', '') ?? playbook.problem_type.replace(/ /g, '_');
+  if (affinityThemes.includes(clusterTheme)) {
+    contextBonus += 12;
+    reasons.push(`Strong stage fit for ${context.stage}`);
+  }
+
+  // Persona match
+  if (playbook.target_personas.some(p => context.persona.toLowerCase().includes(p.toLowerCase()))) {
+    contextBonus += 8;
+    reasons.push('Persona match');
+  }
+
+  // Urgency boost for urgency-related playbooks
+  if (context.urgency === 'critical' || context.urgency === 'high') {
+    if (clusterTheme.includes('urgency') || clusterTheme.includes('closing') || clusterTheme.includes('stall')) {
+      contextBonus += 10;
+      reasons.push('High urgency context match');
+    }
+  }
+
+  // Competition present → boost competitor defense
+  if (context.competitionPresent && clusterTheme.includes('competitor')) {
+    contextBonus += 10;
+    reasons.push('Active competition detected');
+  }
+
+  // Stakeholder complexity → multithreading/champion
+  if (context.stakeholderCount >= 3 && (clusterTheme.includes('multithread') || clusterTheme.includes('champion'))) {
+    contextBonus += 8;
+    reasons.push('Complex buying committee');
+  }
+
+  // Deal size → enterprise playbooks for large deals
+  if ((context.dealSize === 'large' || context.dealSize === 'enterprise') &&
+      (clusterTheme.includes('negotiation') || clusterTheme.includes('multithread'))) {
+    contextBonus += 6;
+    reasons.push('Enterprise deal complexity');
+  }
+
+  // Outcome bonus: proven playbooks get boosted
+  if (outcomeScore && outcomeScore.confidence !== 'insufficient' && outcomeScore.overall >= 50) {
+    const outcomeBonus = Math.round((outcomeScore.overall / 100) * 15);
+    contextBonus += outcomeBonus;
+    reasons.push(`Outcome-proven (+${outcomeBonus})`);
+  }
+
+  // Fatigue discount
+  const fatigueDiscount = computeFatigueDiscount(fatigueCount);
+
+  const finalScore = Math.max(0, Math.min(100, baseScore + contextBonus - fatigueDiscount));
+
+  return {
+    playbookId: playbook.id,
+    baseScore,
+    contextBonus,
+    fatigueDiscount,
+    finalScore,
+    contextReasons: reasons,
+  };
+}
+
+// ── Fatigue Detection ─────────────────────────────────────
+
+export interface FatigueSignal {
+  playbookId: string;
+  dealId: string;
+  usageCount: number;
+  isFatigued: boolean;
+  suggestion: string | null;
+}
+
+const FATIGUE_THRESHOLD_SAME_DEAL = 3;
+const FATIGUE_THRESHOLD_GLOBAL = 10; // across all deals in 14 days
+
+export function computeFatigueDiscount(usageCount: number): number {
+  if (usageCount <= 1) return 0;
+  if (usageCount <= FATIGUE_THRESHOLD_SAME_DEAL) return (usageCount - 1) * 5;
+  return Math.min(40, (usageCount - 1) * 8);
+}
+
+export function detectPlaybookFatigue(
+  playbookId: string,
+  recentUsages: { dealId: string; timestamp: string }[],
+): FatigueSignal[] {
+  // Group by deal
+  const byDeal = new Map<string, number>();
+  for (const u of recentUsages) {
+    byDeal.set(u.dealId, (byDeal.get(u.dealId) ?? 0) + 1);
+  }
+
+  const signals: FatigueSignal[] = [];
+
+  for (const [dealId, count] of byDeal) {
+    const isFatigued = count >= FATIGUE_THRESHOLD_SAME_DEAL;
+    signals.push({
+      playbookId,
+      dealId,
+      usageCount: count,
+      isFatigued,
+      suggestion: isFatigued
+        ? `Playbook used ${count}x on this deal — try a different approach`
+        : null,
+    });
+  }
+
+  // Global fatigue check
+  if (recentUsages.length >= FATIGUE_THRESHOLD_GLOBAL) {
+    signals.push({
+      playbookId,
+      dealId: '__global__',
+      usageCount: recentUsages.length,
+      isFatigued: true,
+      suggestion: `Playbook used ${recentUsages.length}x in the last 14 days — diversify tactics`,
+    });
+  }
+
+  return signals;
+}
+
+// ── Playbook Ranking with Outcomes ────────────────────────
+
+export function rankPlaybooksForContext(
+  playbooks: PlaybookModel[],
+  context: DealContext,
+  outcomeScores: Map<string, PlaybookOutcomeScore>,
+  fatigueCounts: Map<string, number>,
+  purpose: PlaybookPurpose,
+): PlaybookContextFit[] {
+  return playbooks
+    .filter(p => isPlaybookEligible(p, purpose))
+    .map(p => scorePlaybookContextFit(
+      p,
+      context,
+      outcomeScores.get(p.id) ?? null,
+      fatigueCounts.get(p.id) ?? 0,
+    ))
+    .sort((a, b) => b.finalScore - a.finalScore);
+}
