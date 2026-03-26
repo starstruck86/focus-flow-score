@@ -19,6 +19,7 @@ import { Zap, RefreshCw, RotateCcw,
   Star, Tag, Copy, Upload, Link2, Sparkles, Target, Shield,
   GraduationCap, MessageSquare, Loader2, Check, X, AlertTriangle, Globe, Radar, ListVideo, Podcast,
 } from 'lucide-react';
+import { ResourceLibraryTable } from './ResourceLibraryTable';
 import { cn } from '@/lib/utils';
 import {
   useResourceFolders, useResources, useCreateFolder, useCreateResource,
