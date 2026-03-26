@@ -178,6 +178,10 @@ const DAVE_TOOLS: ToolDef[] = [
 
   // ── Recast Engine ────────────────────────────────────────────
   { name: "recast_today", description: "Re-optimize the remaining blocks of today's Daily Game Plan based on current progress and time remaining. Use when the user says 'recast my day', 'what should I do now', 'I'm behind', or asks to reprioritize the rest of their day. Returns adjusted blocks, what was dropped/compressed, and the next suggested action.", parameters: {} },
+
+  // ── Playbook Roleplay ───────────────────────────────────────
+  { name: "start_playbook_roleplay", description: "Start a playbook-driven roleplay where Dave acts as the buyer. Use when user says 'prep me', 'practice this', 'roleplay', 'be the CFO', 'help me handle this objection', or clicks 'Practice this' on a playbook. Auto-selects the best playbook from context if none specified.", parameters: { playbookTitle: str("Specific playbook title to practice — omit to auto-select"), accountName: str("Account for industry context"), dealStage: str("Current deal stage for scenario realism"), dealStatus: str("Deal status like 'stalled' for scenario flavor"), objection: str("Specific objection to practice handling") } },
+  { name: "end_playbook_roleplay", description: "End the current roleplay session and get coaching feedback. Use when user says 'end roleplay', 'stop', 'done', or 'how did I do'.", parameters: {} },
 ];
 
 serve(async (req) => {
