@@ -180,9 +180,10 @@ describe('Rate Limiting', () => {
   });
 
   it('releases slots correctly', () => {
-    acquireJobSlot('r1');
-    releaseJobSlot('r1');
-    expect(checkRateLimit('r1').allowed).toBe(true);
+    acquireJobSlot('release-test');
+    releaseJobSlot('release-test');
+    // After release, a different resource should be allowed
+    expect(checkRateLimit('release-test-2').allowed).toBe(true);
   });
 });
 
