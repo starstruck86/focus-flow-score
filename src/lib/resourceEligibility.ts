@@ -8,8 +8,18 @@
  */
 import type { Resource } from '@/hooks/useResources';
 import { createLogger } from '@/lib/logger';
+import {
+  CURRENT_ENRICHMENT_VERSION,
+  CURRENT_VALIDATION_VERSION,
+  QUALITY_THRESHOLDS,
+  getRecommendedActionFromQuality,
+  type RecommendedAction as QualityRecommendedAction,
+} from '@/lib/resourceQuality';
 
 const log = createLogger('ResourceEligibility');
+
+// ── Re-export enrichment version from quality ──────────────
+export { CURRENT_ENRICHMENT_VERSION } from '@/lib/resourceQuality';
 
 // ── Canonical lifecycle statuses ───────────────────────────
 export const ENRICHMENT_STATUSES = [
@@ -19,6 +29,7 @@ export const ENRICHMENT_STATUSES = [
   'deep_enriched',
   'queued_for_reenrich',
   'reenrich_in_progress',
+  'incomplete',
   'failed',
   'duplicate',
   'superseded',
@@ -37,15 +48,12 @@ export interface EligibleResourceItem {
 }
 
 export interface RecommendedAction {
-  action: 'deep_enrich' | 're_enrich' | 'retry' | 'no_action' | 'ignore';
+  action: 'deep_enrich' | 're_enrich' | 'retry' | 'review_manually' | 'no_action' | 'ignore';
   reason: string;
 }
 
-// ── Current enrichment version ─────────────────────────────
-export const CURRENT_ENRICHMENT_VERSION = 1;
-
 // ── Freshness policy ───────────────────────────────────────
-const FRESHNESS_DAYS = 90; // re-enrich candidate after 90 days
+const FRESHNESS_DAYS = QUALITY_THRESHOLDS.FRESHNESS_DAYS;
 
 // ── Mode normalization ─────────────────────────────────────
 function normalizeMode(mode: EnrichModeInput): EnrichMode {
@@ -84,10 +92,18 @@ export function evaluateResourceEligibility(resource: Resource, mode: EnrichMode
   }
 
   if (normalizedMode === 'deep_enrich') {
+    // Eligible: not_enriched, queued_for_deep_enrich, incomplete, failed
     if (!status || status === 'not_enriched' || status === 'queued_for_deep_enrich') {
       return {
         eligible: true,
         reason: `deep eligible: enrichment_status="${status ?? 'not_enriched'}"`,
+        normalizedMode,
+      };
+    }
+    if (status === 'incomplete') {
+      return {
+        eligible: true,
+        reason: 'deep eligible: previously incomplete',
         normalizedMode,
       };
     }
@@ -114,7 +130,25 @@ export function evaluateResourceEligibility(resource: Resource, mode: EnrichMode
     };
   }
 
+  if (status === 'incomplete') {
+    return {
+      eligible: true,
+      reason: 're-enrich eligible: incomplete enrichment',
+      normalizedMode,
+    };
+  }
+
   if (status === 'deep_enriched') {
+    // Check quality tier — shallow deep_enriched items should be eligible
+    const qualityTier = (resource as any).last_quality_tier;
+    if (qualityTier === 'shallow') {
+      return {
+        eligible: true,
+        reason: 're-enrich eligible: quality tier is shallow',
+        normalizedMode,
+      };
+    }
+
     const version = (resource as any).enrichment_version ?? 0;
     const enrichedAt = (resource as any).enriched_at;
 
@@ -122,6 +156,15 @@ export function evaluateResourceEligibility(resource: Resource, mode: EnrichMode
       return {
         eligible: true,
         reason: `re-enrich eligible: outdated version (v${version} < v${CURRENT_ENRICHMENT_VERSION})`,
+        normalizedMode,
+      };
+    }
+
+    const validationVersion = (resource as any).validation_version ?? 0;
+    if (validationVersion < CURRENT_VALIDATION_VERSION) {
+      return {
+        eligible: true,
+        reason: `re-enrich eligible: outdated validation version (v${validationVersion} < v${CURRENT_VALIDATION_VERSION})`,
         normalizedMode,
       };
     }
@@ -163,47 +206,35 @@ export function isReenrichEligible(resource: Resource): boolean {
 // ── Recommended action per resource ────────────────────────
 export function getRecommendedAction(resource: Resource): RecommendedAction {
   const status = (resource as any).enrichment_status as EnrichmentStatus | undefined;
-
-  if (status === 'duplicate' || status === 'superseded') {
-    return { action: 'ignore', reason: `Resource is ${status}` };
-  }
+  const tier = (resource as any).last_quality_tier;
+  const failureReason = (resource as any).failure_reason;
+  const failureCount = (resource as any).failure_count ?? 0;
 
   if (!hasValidSource(resource)) {
     return { action: 'no_action', reason: 'No valid source URL' };
   }
 
-  if (status === 'failed') {
-    return { action: 'retry', reason: `Last attempt failed: ${(resource as any).failure_reason || 'unknown'}` };
-  }
+  const qa = getRecommendedActionFromQuality(status, tier, failureReason, failureCount);
 
-  if (!status || status === 'not_enriched' || status === 'queued_for_deep_enrich') {
-    return { action: 'deep_enrich', reason: 'Not yet enriched' };
-  }
+  const actionMap: Record<QualityRecommendedAction, RecommendedAction['action']> = {
+    deep_enrich: 'deep_enrich',
+    re_enrich: 're_enrich',
+    retry_failed: 'retry',
+    review_manually: 'review_manually',
+    no_action: 'no_action',
+    ignore: 'ignore',
+  };
 
-  if (status === 'queued_for_reenrich') {
-    return { action: 're_enrich', reason: 'Queued for re-enrichment' };
-  }
+  const reasonMap: Record<QualityRecommendedAction, string> = {
+    deep_enrich: 'Not yet enriched',
+    re_enrich: status === 'incomplete' ? 'Previous enrichment incomplete' : 'Queued for re-enrichment',
+    retry_failed: `Failed: ${failureReason || 'unknown'}`,
+    review_manually: `Failed ${failureCount} times — needs manual review`,
+    no_action: 'Fully enriched and fresh',
+    ignore: `Resource is ${status}`,
+  };
 
-  if (status === 'deep_enriched') {
-    const version = (resource as any).enrichment_version ?? 0;
-    if (version < CURRENT_ENRICHMENT_VERSION) {
-      return { action: 're_enrich', reason: `Outdated version (v${version})` };
-    }
-    const enrichedAt = (resource as any).enriched_at;
-    if (enrichedAt) {
-      const daysSince = Math.floor((Date.now() - new Date(enrichedAt).getTime()) / 86400000);
-      if (daysSince >= FRESHNESS_DAYS) {
-        return { action: 're_enrich', reason: `Stale (${daysSince} days old)` };
-      }
-    }
-    return { action: 'no_action', reason: 'Fully enriched and fresh' };
-  }
-
-  if (status === 'deep_enrich_in_progress' || status === 'reenrich_in_progress') {
-    return { action: 'no_action', reason: 'Enrichment in progress' };
-  }
-
-  return { action: 'no_action', reason: 'Unknown state' };
+  return { action: actionMap[qa], reason: reasonMap[qa] };
 }
 
 // ── ONE canonical selector ─────────────────────────────────
@@ -318,6 +349,7 @@ export function logEligibilitySnapshot(resources: Resource[], mode: EnrichModeIn
       id: r.id,
       title: r.title,
       enrichment_status: (r as any).enrichment_status,
+      last_quality_tier: (r as any).last_quality_tier,
       reason: evaluateResourceEligibility(r, normalizedMode).reason,
     })),
   });
@@ -332,6 +364,7 @@ export function logSelectedBatch(resources: Resource[], mode: EnrichModeInput, c
       id: r.id,
       title: r.title,
       enrichment_status: (r as any).enrichment_status,
+      last_quality_tier: (r as any).last_quality_tier,
       reason: evaluateResourceEligibility(r, normalizedMode).reason,
     })),
   });
@@ -346,6 +379,7 @@ export function getEnrichmentStatusLabel(status: EnrichmentStatus | string | und
     case 'deep_enriched': return 'Enriched';
     case 'queued_for_reenrich': return 'Re-enrich Queued';
     case 'reenrich_in_progress': return 'Re-enriching…';
+    case 'incomplete': return 'Incomplete';
     case 'failed': return 'Failed';
     case 'duplicate': return 'Duplicate';
     case 'superseded': return 'Superseded';
@@ -360,6 +394,7 @@ export function getEnrichmentStatusColor(status: EnrichmentStatus | string | und
     case 'queued_for_reenrich': return 'bg-primary/20 text-primary';
     case 'deep_enrich_in_progress':
     case 'reenrich_in_progress': return 'bg-primary/20 text-primary';
+    case 'incomplete': return 'bg-orange-500/20 text-orange-600';
     case 'failed': return 'bg-status-red/20 text-status-red';
     case 'duplicate':
     case 'superseded': return 'bg-muted text-muted-foreground';

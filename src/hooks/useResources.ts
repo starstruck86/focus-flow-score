@@ -44,7 +44,11 @@ export type Resource = {
   last_enrichment_attempt_at?: string | null;
   last_status_change_at?: string | null;
   enrichment_version: number;
+  validation_version: number;
   failure_reason?: string | null;
+  failure_count: number;
+  last_quality_score?: number | null;
+  last_quality_tier?: string | null;
   enrichment_audit_log?: any[];
 };
 
