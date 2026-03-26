@@ -119,6 +119,9 @@ export type IngestionItemStage =
   | 'enriching'
   | 'verifying'
   | 'complete'
+  | 'partial'
+  | 'needs_auth'
+  | 'unsupported'
   | 'skipped'
   | 'failed'
   | 'needs_review';
@@ -143,6 +146,14 @@ export interface IngestionItem {
   resourceId?: string;
   enrichMode?: EnrichMode;
   existingResourceId?: string;
+  // Orchestrator output fields
+  sourceType?: string;
+  platform?: string;
+  finalStatus?: EnrichmentFinalStatus;
+  methodUsed?: string;
+  attemptCount?: number;
+  completenessScore?: number;
+  recoveryHint?: string;
 }
 
 export interface IngestionState {
