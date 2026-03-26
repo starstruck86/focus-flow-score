@@ -93,7 +93,7 @@ export function usePipelineHygiene() {
   return useQuery({
     queryKey: ['pipeline-hygiene', user?.id],
     queryFn: async () => {
-      const today = new Date().toISOString().split('T')[0];
+      const today = todayET();
       // Try cached scan first
       const { data: cached } = await supabase
         .from('pipeline_hygiene_scans')
