@@ -517,62 +517,61 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
           timeoutMs: ENRICHMENT_TIMEOUT_MS,
         });
 
-        // Check for application-level errors (quality validation failures)
+        // Handle transport-level errors
         if (result.error) {
-          // Use rawMessage for actionable detail, not the generic friendly message
-          const rawMsg = result.error.rawMessage || result.error.message || 'Enrichment failed';
-          const friendlyMsg = result.error.message || rawMsg;
-          const isQualityFail = rawMsg.toLowerCase().includes('quality') || rawMsg.toLowerCase().includes('score');
           const isTimeout = result.error.category === 'FUNCTION_TIMEOUT';
           const isNetwork = result.error.category === 'NETWORK_ERROR';
-          
-          // Build a user-useful error with recovery hint
-          let displayMsg = rawMsg;
-          if (isTimeout) {
-            displayMsg = `Timed out after ${ENRICHMENT_TIMEOUT_MS / 1000}s — retry will use extended timeout`;
-          } else if (isNetwork) {
-            displayMsg = `Connection failed — retry will attempt again`;
-          } else if (isQualityFail) {
-            // Strip prefix for clarity
-            displayMsg = rawMsg.replace(/^Quality validation failed:\s*/i, 'Content quality: ');
-          }
-          
-          const category: FailureCategory = isTimeout ? 'failed_timeout' : isQualityFail ? 'failed_quality' : isNetwork ? 'failed_request' : 'failed_request';
-          failItem(item.id, displayMsg, category, true);
+          const rawMsg = result.error.rawMessage || result.error.message || 'Enrichment failed';
+          const category: FailureCategory = isTimeout ? 'failed_timeout' : isNetwork ? 'failed_request' : 'failed_request';
+          failItem(item.id, rawMsg, category, true);
           inFlightResourceIds.delete(resourceId);
-          throw new Error(displayMsg);
+          throw new Error(rawMsg);
         }
 
-        // ── POST-WRITE VERIFICATION ─────────────────────────
-        updateItem(item.id, { stage: 'verifying' });
-        const verification = await verifyPostWrite(resourceId, 'deep_enriched');
+        // Parse orchestrator output
+        const output = result.data;
+        const finalStatus = output?.final_status;
+        const orchestratorPatch: Partial<IngestionItem> = {
+          sourceType: output?.source_classification?.source_type,
+          platform: output?.source_classification?.platform,
+          finalStatus: finalStatus,
+          methodUsed: output?.method_used,
+          attemptCount: output?.attempt_count,
+          completenessScore: output?.completeness_score,
+          recoveryHint: output?.recovery_hint,
+        };
 
-        if (!verification.pass) {
-          // The edge function ran but quality gate rejected it — this is NOT a success
-          if (verification.actual === 'incomplete' || verification.actual === 'failed') {
-            failItem(
-              item.id,
-              `Quality gate: resource is "${verification.actual}" after enrichment`,
-              'failed_quality',
-              true,
-            );
-            inFlightResourceIds.delete(resourceId);
-            throw new Error(verification.reason);
-          }
-          // Unexpected state
-          failItem(item.id, verification.reason || 'Post-write verification failed', 'failed_verification', true);
+        if (finalStatus === 'enriched') {
+          updateItem(item.id, { stage: 'complete', ...orchestratorPatch });
           inFlightResourceIds.delete(resourceId);
-          throw new Error(verification.reason);
+          return;
+        }
+        if (finalStatus === 'partial') {
+          updateItem(item.id, { stage: 'partial', ...orchestratorPatch, error: output?.failure_reason || 'Partially enriched' });
+          inFlightResourceIds.delete(resourceId);
+          return;
+        }
+        if (finalStatus === 'needs_auth') {
+          updateItem(item.id, { stage: 'needs_auth', ...orchestratorPatch, error: output?.failure_reason || 'Auth-gated source', failureCategory: 'failed_needs_auth', retryEligible: false });
+          inFlightResourceIds.delete(resourceId);
+          return;
+        }
+        if (finalStatus === 'unsupported') {
+          updateItem(item.id, { stage: 'unsupported', ...orchestratorPatch, error: output?.failure_reason || 'Unsupported source', failureCategory: 'failed_unsupported', retryEligible: false });
+          inFlightResourceIds.delete(resourceId);
+          return;
         }
 
-        updateItem(item.id, { stage: 'complete' });
+        // failed or unknown
+        const reason = output?.failure_reason || 'All extraction methods failed';
+        failItem(item.id, reason, 'failed_quality', true);
+        updateItem(item.id, orchestratorPatch);
         inFlightResourceIds.delete(resourceId);
-        return;
+        throw new Error(reason);
       } catch (enrichErr) {
         inFlightResourceIds.delete(resourceId);
-        // Only update if not already failed by inner logic
         const currentItem = get().state.items.find(i => i.id === item.id);
-        if (currentItem?.stage !== 'failed') {
+        if (currentItem?.stage !== 'failed' && currentItem?.stage !== 'partial' && currentItem?.stage !== 'needs_auth' && currentItem?.stage !== 'unsupported') {
           const enrichMsg = classifyError(enrichErr, 'Deep enrichment');
           const category = categorizeFailure(enrichErr);
           failItem(item.id, enrichMsg, category, category !== 'failed_preflight');
