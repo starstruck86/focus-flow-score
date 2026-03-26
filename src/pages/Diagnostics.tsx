@@ -405,6 +405,9 @@ export default function Diagnostics() {
           <TabsContent value="jobs" className="mt-3 space-y-3">
             <JobsPanel />
           </TabsContent>
+          <TabsContent value="enrich-test" className="mt-3 space-y-3">
+            <EnrichmentValidator />
+          </TabsContent>
         </Tabs>
       </div>
     </Layout>
