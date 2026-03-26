@@ -377,6 +377,13 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
     if (greetingWatchdogRef.current) clearTimeout(greetingWatchdogRef.current);
     if (greetingRetryRef.current) clearTimeout(greetingRetryRef.current);
 
+    // Mark interaction as successfully completed
+    if (currentRequestIdRef.current) {
+      completeInteraction(currentRequestIdRef.current);
+      currentRequestIdRef.current = null;
+    }
+    dismissRecovery();
+
     const currentTranscript = transcriptRef.current;
     if (currentTranscript.length > 0) {
       const durationSeconds = Math.round((Date.now() - sessionStartRef.current) / 1000);
@@ -396,7 +403,7 @@ export function DaveConversationMode({ isOpen, onClose, onRetry, sessionData, mi
 
     await conversation.endSession();
     onClose();
-  }, [conversation, onClose]);
+  }, [conversation, onClose, completeInteraction, dismissRecovery]);
 
   useLayoutEffect(() => {
     // Auto-start when mic permission was pre-acquired during the tap gesture (both desktop and mobile).
