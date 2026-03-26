@@ -341,11 +341,17 @@ function classifyError(err: unknown, context: string): string {
 function categorizeFailure(err: unknown): FailureCategory {
   const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
   if (msg.includes('preflight')) return 'failed_preflight';
-  if (msg.includes('quality') || msg.includes('score') || msg.includes('contract')) return 'failed_quality';
+  if (msg.includes('auth') && (msg.includes('gated') || msg.includes('login') || msg.includes('wall'))) return 'failed_needs_auth';
+  if (msg.includes('quality') || msg.includes('score') || msg.includes('contract') || msg.includes('too short') || msg.includes('low quality') || msg.includes('boilerplate')) return 'failed_quality';
   if (msg.includes('verification') || msg.includes('verify')) return 'failed_verification';
-  if (msg.includes('write') || msg.includes('save') || msg.includes('update')) return 'failed_write';
+  if (msg.includes('write') || msg.includes('save') || msg.includes('update') || msg.includes('insert')) return 'failed_write';
   if (msg.includes('timeout') || msg.includes('timed out') || msg.includes('aborted')) return 'failed_timeout';
-  if (msg.includes('429') || msg.includes('rate limit') || msg.includes('network') || msg.includes('fetch')) return 'failed_request';
+  if (msg.includes('too large') || msg.includes('413') || msg.includes('payload')) return 'failed_request_too_large';
+  if (msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('load failed')) return 'failed_network_transport';
+  if (msg.includes('failed to send') || msg.includes('relay error') || msg.includes('502') || msg.includes('503') || msg.includes('504')) return 'failed_edge_unreachable';
+  if (msg.includes('429') || msg.includes('rate limit')) return 'failed_request';
+  if (msg.includes('network') || msg.includes('fetch') || msg.includes('econnrefused')) return 'failed_network_transport';
+  if (msg.includes('unsupported')) return 'failed_unsupported';
   return 'failed_unknown';
 }
 
