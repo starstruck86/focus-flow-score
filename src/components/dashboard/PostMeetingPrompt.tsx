@@ -1,5 +1,7 @@
 // Post-Meeting Prompt — surfaces after a calendar meeting ends to prompt next-step logging + transcript upload
 import React, { useState, useMemo, useRef } from 'react';
+import { PostCallPlaybookReflection } from '@/components/PostCallPlaybookReflection';
+import { useOppPlaybookRecommendation } from '@/hooks/usePlaybookRecommendation';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import type { ExtractedTask } from '@/types/dashboard';
 import { motion, AnimatePresence } from 'framer-motion';
