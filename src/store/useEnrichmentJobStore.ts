@@ -561,8 +561,13 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
       _running: false,
     }));
 
-    // Invalidate resource queries so the UI updates even if the modal is closed
+    // Final invalidation to ensure UI is fully up-to-date
     invalidateResourceQueries();
+
+    // Dev-only consistency assertion
+    if (import.meta.env.DEV) {
+      runConsistencyCheck();
+    }
   }
 
   return {
