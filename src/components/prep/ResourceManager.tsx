@@ -980,6 +980,9 @@ export function ResourceManager() {
         selectedIds={selectedResourceIds}
       />
 
+      {/* Floating enrichment job indicator */}
+      <EnrichmentJobIndicator onOpenModal={() => setShowDeepEnrich(true)} />
+
       {/* Bulk selection bar */}
       {selectedResourceIds.size > 0 && (
         <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-card border border-border rounded-xl px-4 py-2.5 shadow-lg">
