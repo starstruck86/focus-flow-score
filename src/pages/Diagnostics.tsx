@@ -20,6 +20,7 @@ import { useAllActiveJobs, useRetryJob } from '@/hooks/useResourceJobs';
 import { PIPELINE_STEPS } from '@/lib/resourcePipeline';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { EnrichmentValidator } from '@/components/EnrichmentValidator';
 
 function useErrorStore() {
   return useSyncExternalStore(
