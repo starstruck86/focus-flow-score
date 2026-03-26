@@ -1904,5 +1904,6 @@ const BlockPlaybookRecommendation = memo(function BlockPlaybookRecommendation({
       : null,
   };
   const rec = usePlaybookRecommendation(ctx);
-  return <PlaybookRecommendationChip recommendation={rec} compact className="mt-2" />;
+  const showRoleplayNudge = blockType === 'meeting' || blockType === 'prep' || blockType === 'prospecting';
+  return <PlaybookRecommendationChip recommendation={rec} compact showRoleplayNudge={showRoleplayNudge} blockType={blockType} className="mt-2" />;
 });
