@@ -595,6 +595,9 @@ export function useBulkIngestion() {
       failedCount: 0,
       skippedCount: 0,
       reviewCount: 0,
+      partialCount: 0,
+      needsAuthCount: 0,
+      unsupportedCount: 0,
       items: [],
       startedAt: null,
     }));
