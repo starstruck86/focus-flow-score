@@ -388,6 +388,10 @@ export default function Diagnostics() {
               <Layers className="h-3.5 w-3.5" />
               Jobs
             </TabsTrigger>
+            <TabsTrigger value="enrich-test" className="flex-1 gap-1.5">
+              <FlaskConical className="h-3.5 w-3.5" />
+              Enrich Test
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="session" className="mt-3 space-y-3">
