@@ -110,7 +110,7 @@ const SKIP_REASON_LABELS: Record<string, string> = {
 function ItemDetail({ item }: { item: IngestionItem }) {
   const isRetryable = item.retryEligible !== false;
   const failureLabel = item.failureCategory
-    ? item.failureCategory.replace(/^failed_/, '').replace(/_/g, ' ')
+    ? (FAILURE_LABELS[item.failureCategory] || item.failureCategory.replace(/^failed_/, '').replace(/_/g, ' '))
     : null;
   return (
     <div className="flex items-start gap-2 text-[11px] bg-destructive/5 rounded px-2 py-1.5">
