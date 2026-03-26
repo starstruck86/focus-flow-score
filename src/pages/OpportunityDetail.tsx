@@ -206,6 +206,9 @@ export default function OpportunityDetail() {
           </CardContent>
         </Card>
 
+        {/* Deal Intelligence */}
+        <DealIntelligenceCard opportunityId={opp.id} />
+
         {/* Playbook recommendation */}
         <PlaybookRecommendationChip recommendation={playbookRec} showRoleplayNudge />
 
