@@ -159,11 +159,7 @@ export function createPipelineTools(ctx: ToolContext): ToolMap {
       const userId = await ctx.getUserId();
       if (!userId) return 'Not authenticated';
 
-      const now = new Date();
-      const dayOfWeek = now.getDay();
-      const monday = new Date(now);
-      monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-      const weekStart = monday.toISOString().split('T')[0];
+      const weekStart = mondayOfWeekET();
 
       const { data: plans } = await supabase
         .from('weekly_battle_plans')
