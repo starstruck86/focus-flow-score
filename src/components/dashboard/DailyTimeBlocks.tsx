@@ -41,8 +41,6 @@ import { buildLocalFallbackPlan, getVisiblePlanBlocks, summarizePlanDelta, type 
 import { QUEUE_CHANGED_EVENT } from '@/hooks/useWeeklyResearchQueue';
 import { calculateDialCapacity, getActualDials, DAILY_DIALS_MIN, DAILY_DIALS_TARGET, BLOCK_MVPS, clampWorkBlocksToHours } from '@/lib/mvpBlockModel';
 import { ensureMinimumCallBlocks } from '@/lib/planCallBlockGuarantee';
-import { calculateDialCapacity, getActualDials, DAILY_DIALS_MIN, DAILY_DIALS_TARGET, BLOCK_MVPS, clampWorkBlocksToHours } from '@/lib/mvpBlockModel';
-import { ensureMinimumCallBlocks } from '@/lib/planCallBlockGuarantee';
 import { useCalendarFreshness } from '@/hooks/useCalendarFreshness';
 import { getCurrentMinutesET, todayInAppTz } from '@/lib/timeFormat';
 import { usePlaybookRecommendation, type WorkflowContext } from '@/hooks/usePlaybookRecommendation';
