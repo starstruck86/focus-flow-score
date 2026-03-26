@@ -45,6 +45,8 @@ const queryClient = new QueryClient({
     },
   },
 });
+// Expose for background stores (enrichment job store) that run outside React tree
+(window as any).__QUERY_CLIENT__ = queryClient;
 
 const ProtectedPage = ({ children, routeName }: { children: React.ReactNode; routeName: string }) => (
   <ProtectedRoute>
