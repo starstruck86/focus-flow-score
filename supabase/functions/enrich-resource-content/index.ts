@@ -7,8 +7,25 @@ const corsHeaders = {
 };
 
 const CONTENT_CAP = 60000;
-const MIN_CONTENT_LENGTH = 200;
 const ENRICHMENT_VERSION = 1;
+const VALIDATION_VERSION = 1;
+
+// ── Quality thresholds (must match src/lib/resourceQuality.ts) ──
+const MIN_CONTENT_CHARS = 500;
+const GOOD_CONTENT_CHARS = 2000;
+const MIN_UNIQUE_WORDS = 50;
+const COMPLETE_MIN_SCORE = 70;
+
+const BOILERPLATE_PATTERNS = [
+  /cookie\s*(policy|consent|notice)/i,
+  /privacy\s*policy/i,
+  /terms\s*(of\s*service|and\s*conditions)/i,
+  /subscribe\s*(to\s*our|now)/i,
+  /sign\s*up\s*for/i,
+  /all\s*rights\s*reserved/i,
+  /©\s*\d{4}/,
+  /skip\s*to\s*(main\s*)?content/i,
+];
 
 const AUTH_GATED_PATTERNS = [
   /drive\.google\.com/i, /docs\.google\.com/i, /sheets\.google\.com/i,
@@ -60,7 +77,81 @@ async function scrapeUrl(url: string, apiKey: string): Promise<string | null> {
   }
 }
 
-/** Update enrichment_status with audit trail */
+// ── Post-enrichment quality validator (CRITICAL GATE) ──────
+interface QualityValidation {
+  score: number;
+  tier: 'complete' | 'shallow' | 'incomplete' | 'failed';
+  violations: string[];
+  passes: boolean;
+}
+
+function validateContentQuality(content: string | null, enrichmentVersion: number): QualityValidation {
+  const violations: string[] = [];
+  const text = content || '';
+  const len = text.length;
+  let score = 0;
+
+  // Content depth (0-25)
+  if (len === 0) {
+    violations.push('No content extracted');
+  } else if (len < MIN_CONTENT_CHARS) {
+    violations.push(`Content too short: ${len} chars (min ${MIN_CONTENT_CHARS})`);
+    score += Math.round((len / MIN_CONTENT_CHARS) * 10);
+  } else if (len < GOOD_CONTENT_CHARS) {
+    score += 15;
+  } else {
+    score += 25;
+  }
+
+  // Structural (0-25) — content + version + timestamp assumed
+  if (len > 0) score += 8;
+  if (enrichmentVersion >= ENRICHMENT_VERSION) score += 7;
+  score += 10; // enriched_at and file_url always present at this point
+
+  // Semantic usefulness (0-25)
+  if (len > 0) {
+    if (text.startsWith('[External Link:') || text.startsWith('[Placeholder')) {
+      violations.push('Content is a placeholder stub');
+    } else {
+      const lines = text.split('\n').filter(l => l.trim().length > 0);
+      const boilerplateLines = lines.filter(line => BOILERPLATE_PATTERNS.some(p => p.test(line)));
+      const boilerplateRatio = lines.length > 0 ? boilerplateLines.length / lines.length : 0;
+      if (boilerplateRatio > 0.5) {
+        violations.push(`High boilerplate: ${Math.round(boilerplateRatio * 100)}%`);
+        score += 5;
+      } else {
+        score += 10;
+      }
+
+      const words = new Set(text.toLowerCase().match(/\b[a-z]{3,}\b/g) || []);
+      if (words.size < MIN_UNIQUE_WORDS) {
+        violations.push(`Low vocabulary: ${words.size} words`);
+        score += 3;
+      } else {
+        score += 10;
+      }
+      score += 5;
+    }
+  }
+
+  // Extraction confidence (0-15) — no failure flag at this point
+  score += 10;
+  if (len >= MIN_CONTENT_CHARS) score += 5;
+
+  // Freshness (0-10)
+  score += 10; // both versions current
+
+  // Determine tier
+  let tier: QualityValidation['tier'];
+  if (score >= COMPLETE_MIN_SCORE && violations.length === 0) tier = 'complete';
+  else if (score >= 40) tier = 'shallow';
+  else if (score >= 10) tier = 'incomplete';
+  else tier = 'failed';
+
+  return { score, tier, violations, passes: tier === 'complete' };
+}
+
+/** Update enrichment_status with audit trail and quality metadata */
 async function setEnrichmentStatus(
   supabase: any,
   resourceId: string,
@@ -78,10 +169,82 @@ async function setEnrichmentStatus(
   // Also keep legacy content_status in sync
   if (status === 'deep_enriched') update.content_status = 'enriched';
   else if (status === 'deep_enrich_in_progress' || status === 'reenrich_in_progress') update.content_status = 'enriching';
-  else if (status === 'failed') update.content_status = 'placeholder';
+  else if (status === 'failed' || status === 'incomplete') update.content_status = 'placeholder';
   else if (status === 'not_enriched') update.content_status = 'placeholder';
 
   await supabase.from("resources").update(update).eq("id", resourceId);
+}
+
+/** Process a single resource with quality validation gate */
+async function enrichSingleResource(
+  supabase: any,
+  resource: any,
+  apiKey: string,
+  force: boolean,
+): Promise<{ status: string; chars: number; quality_tier?: string; quality_score?: number; violations?: string[] }> {
+  const url = resource.file_url;
+  if (!url || !url.startsWith("http")) {
+    return { status: "skipped", chars: 0 };
+  }
+
+  const source = detectSource(url);
+  if (source === "auth-gated") {
+    return { status: "auth-gated", chars: 0 };
+  }
+
+  // Only allow re-enrichment when force=true
+  if (resource.enrichment_status === "deep_enriched" && !force) {
+    return { status: "already_enriched", chars: 0 };
+  }
+
+  const isReenrich = force && resource.enrichment_status === "deep_enriched";
+  const inProgressStatus = isReenrich ? "reenrich_in_progress" : "deep_enrich_in_progress";
+
+  await setEnrichmentStatus(supabase, resource.id, inProgressStatus);
+
+  const content = await scrapeUrl(url, apiKey);
+
+  // ── QUALITY VALIDATION GATE (CRITICAL) ──────────────────
+  const qv = validateContentQuality(content, ENRICHMENT_VERSION);
+
+  console.log(`[QualityGate] resource=${resource.id} score=${qv.score} tier=${qv.tier} violations=${qv.violations.join('; ')} chars=${content?.length || 0}`);
+
+  if (qv.passes) {
+    // Quality contract met → deep_enriched
+    await supabase.from("resources").update({ content }).eq("id", resource.id);
+    await setEnrichmentStatus(supabase, resource.id, "deep_enriched", {
+      enriched_at: new Date().toISOString(),
+      content_length: content!.length,
+      enrichment_version: ENRICHMENT_VERSION,
+      validation_version: VALIDATION_VERSION,
+      failure_reason: null,
+      last_quality_score: qv.score,
+      last_quality_tier: qv.tier,
+    });
+    await supabase.from("resource_digests").delete().eq("resource_id", resource.id);
+    return { status: "enriched", chars: content!.length, quality_tier: qv.tier, quality_score: qv.score };
+  }
+
+  // Quality contract NOT met
+  if (content && content.length > 0) {
+    // Save the content we got, but mark as incomplete/failed
+    await supabase.from("resources").update({ content, content_length: content.length }).eq("id", resource.id);
+  }
+
+  const newStatus = qv.tier === 'shallow' || qv.tier === 'incomplete' ? 'incomplete' : 'failed';
+
+  // On re-enrich failure, increment failure_count
+  const failureCount = (resource.failure_count || 0) + 1;
+
+  await setEnrichmentStatus(supabase, resource.id, isReenrich && resource.enrichment_status === 'deep_enriched' ? resource.enrichment_status : newStatus, {
+    failure_reason: qv.violations.join('; ') || (content ? `Quality too low (score ${qv.score})` : "Scrape returned no content"),
+    last_quality_score: qv.score,
+    last_quality_tier: qv.tier,
+    validation_version: VALIDATION_VERSION,
+    failure_count: failureCount,
+  });
+
+  return { status: newStatus, chars: content?.length || 0, quality_tier: qv.tier, quality_score: qv.score, violations: qv.violations };
 }
 
 Deno.serve(async (req) => {
@@ -116,45 +279,15 @@ Deno.serve(async (req) => {
     if (resource_ids && Array.isArray(resource_ids) && resource_ids.length > 0) {
       const { data: resources, error: qErr } = await supabase
         .from("resources")
-        .select("id, file_url, enrichment_status, content_status")
+        .select("id, file_url, enrichment_status, content_status, failure_count")
         .in("id", resource_ids.slice(0, 50));
 
       if (qErr) throw new Error("Query failed");
 
-      const results: { id: string; status: string; chars: number }[] = [];
+      const results: any[] = [];
       for (const resource of resources || []) {
-        const url = resource.file_url;
-        if (!url || !url.startsWith("http")) {
-          results.push({ id: resource.id, status: "skipped", chars: 0 });
-          continue;
-        }
-
-        const source = detectSource(url);
-        if (source === "auth-gated") {
-          results.push({ id: resource.id, status: "auth-gated", chars: 0 });
-          continue;
-        }
-
-        await setEnrichmentStatus(supabase, resource.id, "deep_enrich_in_progress");
-
-        const content = await scrapeUrl(url, FIRECRAWL_API_KEY);
-        if (content && content.length >= MIN_CONTENT_LENGTH) {
-          await setEnrichmentStatus(supabase, resource.id, "deep_enriched", {
-            enriched_at: new Date().toISOString(),
-            content_length: content.length,
-            enrichment_version: ENRICHMENT_VERSION,
-            failure_reason: null,
-          });
-          await supabase.from("resources").update({ content }).eq("id", resource.id);
-          await supabase.from("resource_digests").delete().eq("resource_id", resource.id);
-          results.push({ id: resource.id, status: "enriched", chars: content.length });
-        } else {
-          await setEnrichmentStatus(supabase, resource.id, "failed", {
-            failure_reason: content ? `Content too short (${content.length} chars)` : "Scrape returned no content",
-          });
-          results.push({ id: resource.id, status: "failed", chars: content?.length || 0 });
-        }
-
+        const result = await enrichSingleResource(supabase, resource, FIRECRAWL_API_KEY, !!force);
+        results.push({ id: resource.id, ...result });
         await new Promise(r => setTimeout(r, 1000));
       }
 
@@ -167,54 +300,37 @@ Deno.serve(async (req) => {
     if (resource_id && !batch) {
       const { data: resource, error: rErr } = await supabase
         .from("resources")
-        .select("id, file_url, content, enrichment_status, content_status")
+        .select("id, file_url, content, enrichment_status, content_status, failure_count")
         .eq("id", resource_id)
         .single();
       if (rErr || !resource) throw new Error("Resource not found");
 
-      const url = resource.file_url;
-      if (!url || !url.startsWith("http")) {
-        return new Response(JSON.stringify({ error: "Not a URL resource", skipped: true }), {
+      const result = await enrichSingleResource(supabase, resource, FIRECRAWL_API_KEY, !!force);
+
+      if (result.status === 'skipped' || result.status === 'already_enriched' || result.status === 'auth-gated') {
+        return new Response(JSON.stringify({ error: result.status === 'already_enriched' ? "Already enriched. Use force:true to re-enrich." : result.status, skipped: true }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Only allow re-enrichment when force=true
-      if (resource.enrichment_status === "deep_enriched" && !force) {
-        return new Response(JSON.stringify({ error: "Already enriched. Use force:true to re-enrich.", skipped: true }), {
+      if (result.status === 'failed' || result.status === 'incomplete') {
+        return new Response(JSON.stringify({
+          error: `Quality validation failed: ${result.violations?.join('; ') || 'unknown'}`,
+          skipped: true,
+          quality_tier: result.quality_tier,
+          quality_score: result.quality_score,
+        }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      const inProgressStatus = force && resource.enrichment_status === "deep_enriched"
-        ? "reenrich_in_progress"
-        : "deep_enrich_in_progress";
-
-      await setEnrichmentStatus(supabase, resource.id, inProgressStatus);
-
-      const content = await scrapeUrl(url, FIRECRAWL_API_KEY);
-      if (!content || content.length < MIN_CONTENT_LENGTH) {
-        // On failure, revert to previous state or mark failed
-        const revertStatus = resource.enrichment_status === "deep_enriched" ? "deep_enriched" : "failed";
-        await setEnrichmentStatus(supabase, resource.id, revertStatus, {
-          failure_reason: content ? `Content too short (${content.length} chars)` : "Scrape returned no content",
-        });
-        return new Response(JSON.stringify({ error: "Could not scrape URL", skipped: true }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      await supabase.from("resources").update({ content }).eq("id", resource_id);
-      await setEnrichmentStatus(supabase, resource.id, "deep_enriched", {
-        enriched_at: new Date().toISOString(),
-        content_length: content.length,
-        enrichment_version: ENRICHMENT_VERSION,
-        failure_reason: null,
-      });
-
-      await supabase.from("resource_digests").delete().eq("resource_id", resource_id);
-
-      return new Response(JSON.stringify({ success: true, resource_id, chars: content.length }), {
+      return new Response(JSON.stringify({
+        success: true,
+        resource_id,
+        chars: result.chars,
+        quality_tier: result.quality_tier,
+        quality_score: result.quality_score,
+      }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -224,42 +340,21 @@ Deno.serve(async (req) => {
       const batchLimit = Math.min(limit || 50, 50);
       const { data: placeholders, error: qErr } = await supabase
         .from("resources")
-        .select("id, file_url")
-        .eq("enrichment_status", "not_enriched")
+        .select("id, file_url, enrichment_status, failure_count")
+        .in("enrichment_status", ["not_enriched", "incomplete"])
         .like("file_url", "http%")
         .limit(batchLimit);
 
       if (qErr) throw new Error("Query failed");
 
-      const results = { enriched: 0, failed: 0, skipped: 0, total: placeholders?.length || 0 };
+      const results = { enriched: 0, failed: 0, skipped: 0, incomplete: 0, total: placeholders?.length || 0 };
 
       for (const resource of placeholders || []) {
-        const source = detectSource(resource.file_url || "");
-        if (source === "auth-gated") {
-          results.skipped++;
-          continue;
-        }
-
-        await setEnrichmentStatus(supabase, resource.id, "deep_enrich_in_progress");
-
-        const content = await scrapeUrl(resource.file_url!, FIRECRAWL_API_KEY);
-        if (content && content.length >= MIN_CONTENT_LENGTH) {
-          await supabase.from("resources").update({ content }).eq("id", resource.id);
-          await setEnrichmentStatus(supabase, resource.id, "deep_enriched", {
-            enriched_at: new Date().toISOString(),
-            content_length: content.length,
-            enrichment_version: ENRICHMENT_VERSION,
-            failure_reason: null,
-          });
-          await supabase.from("resource_digests").delete().eq("resource_id", resource.id);
-          results.enriched++;
-        } else {
-          await setEnrichmentStatus(supabase, resource.id, "failed", {
-            failure_reason: content ? `Content too short (${content.length} chars)` : "Scrape returned no content",
-          });
-          results.failed++;
-        }
-
+        const result = await enrichSingleResource(supabase, resource, FIRECRAWL_API_KEY, false);
+        if (result.status === 'enriched') results.enriched++;
+        else if (result.status === 'incomplete') results.incomplete++;
+        else if (result.status === 'failed') results.failed++;
+        else results.skipped++;
         await new Promise(r => setTimeout(r, 1000));
       }
 
