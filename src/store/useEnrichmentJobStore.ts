@@ -14,12 +14,51 @@ import type { EnrichMode } from '@/lib/resourceEligibility';
  * even if the modal is already closed.
  */
 function invalidateResourceQueries() {
-  // Access the singleton QueryClient mounted in main.tsx via window
   const qc = (window as any).__QUERY_CLIENT__ as QueryClient | undefined;
   if (!qc) return;
   qc.invalidateQueries({ queryKey: ['resources'] });
   qc.invalidateQueries({ queryKey: ['resource-digests'] });
   qc.invalidateQueries({ queryKey: ['resource-jobs-active'] });
+}
+
+/**
+ * Dev-only: after a batch completes, query DB counts and compare
+ * against the store's success/failed tallies. Logs warnings on mismatch.
+ */
+async function runConsistencyCheck() {
+  try {
+    const store = useEnrichmentJobStore.getState();
+    const completedItems = store.state.items.filter(i => i.stage === 'complete');
+    if (completedItems.length === 0) return;
+
+    const ids = completedItems
+      .map(i => i.existingResourceId || i.resourceId)
+      .filter(Boolean) as string[];
+
+    if (ids.length === 0) return;
+
+    const { data } = await supabase
+      .from('resources')
+      .select('id, enrichment_status, last_quality_tier')
+      .in('id', ids.slice(0, 50));
+
+    if (!data) return;
+
+    const notEnriched = data.filter(r =>
+      r.enrichment_status !== 'deep_enriched'
+    );
+
+    if (notEnriched.length > 0) {
+      console.warn(
+        `[EnrichmentConsistencyCheck] ${notEnriched.length}/${data.length} items marked complete in UI but NOT deep_enriched in DB:`,
+        notEnriched.map(r => ({ id: r.id, status: r.enrichment_status, tier: r.last_quality_tier })),
+      );
+    } else {
+      console.info(`[EnrichmentConsistencyCheck] ✓ ${data.length} items confirmed deep_enriched in DB`);
+    }
+  } catch (e) {
+    console.warn('[EnrichmentConsistencyCheck] Check failed:', e);
+  }
 }
 
 // ── Types ──────────────────────────────────────────────────
