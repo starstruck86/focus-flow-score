@@ -19,7 +19,12 @@ export type FailureCategory =
   | 'failed_write'
   | 'failed_verification'
   | 'failed_timeout'
+  | 'failed_needs_auth'
+  | 'failed_unsupported'
   | 'failed_unknown';
+
+// ── Enrichment final status (from orchestrator) ────────────
+export type EnrichmentFinalStatus = 'enriched' | 'partial' | 'needs_auth' | 'unsupported' | 'failed';
 
 /**
  * Invalidate resource-related queries globally.
