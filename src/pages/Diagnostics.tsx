@@ -15,11 +15,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2, RefreshCw, Copy, ChevronDown, ChevronUp, Activity, Shield, Wifi, AlertTriangle, Database, Layers, Search, FileText, X } from 'lucide-react';
+import { Trash2, RefreshCw, Copy, ChevronDown, ChevronUp, Activity, Shield, Wifi, AlertTriangle, Database, Layers, Search, FileText, X, FlaskConical } from 'lucide-react';
 import { useAllActiveJobs, useRetryJob } from '@/hooks/useResourceJobs';
 import { PIPELINE_STEPS } from '@/lib/resourcePipeline';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { EnrichmentValidator } from '@/components/EnrichmentValidator';
 
 function useErrorStore() {
   return useSyncExternalStore(
@@ -387,6 +388,10 @@ export default function Diagnostics() {
               <Layers className="h-3.5 w-3.5" />
               Jobs
             </TabsTrigger>
+            <TabsTrigger value="enrich-test" className="flex-1 gap-1.5">
+              <FlaskConical className="h-3.5 w-3.5" />
+              Enrich Test
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="session" className="mt-3 space-y-3">
@@ -399,6 +404,9 @@ export default function Diagnostics() {
           </TabsContent>
           <TabsContent value="jobs" className="mt-3 space-y-3">
             <JobsPanel />
+          </TabsContent>
+          <TabsContent value="enrich-test" className="mt-3 space-y-3">
+            <EnrichmentValidator />
           </TabsContent>
         </Tabs>
       </div>
