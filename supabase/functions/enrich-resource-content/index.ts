@@ -191,15 +191,21 @@ async function enrichSingleResource(
   resource: any,
   apiKey: string,
   force: boolean,
-): Promise<{ status: string; chars: number; quality_tier?: string; quality_score?: number; violations?: string[] }> {
+): Promise<{ status: string; chars: number; quality_tier?: string; quality_score?: number; violations?: string[]; scrapeMs?: number; errorType?: string }> {
+  const startMs = Date.now();
   const url = resource.file_url;
+  
+  console.log(`[Enrich] START resource=${resource.id} url=${url?.slice(0, 80)} force=${force}`);
+  
   if (!url || !url.startsWith("http")) {
-    return { status: "skipped", chars: 0 };
+    console.log(`[Enrich] SKIP resource=${resource.id} reason=no_valid_url`);
+    return { status: "skipped", chars: 0, errorType: 'no_valid_url' };
   }
 
   const source = detectSource(url);
   if (source === "auth-gated") {
-    return { status: "auth-gated", chars: 0 };
+    console.log(`[Enrich] SKIP resource=${resource.id} reason=auth_gated url=${url.slice(0, 60)}`);
+    return { status: "auth-gated", chars: 0, errorType: 'auth_gated' };
   }
 
   // Only allow re-enrichment when force=true
@@ -212,12 +218,16 @@ async function enrichSingleResource(
 
   await setEnrichmentStatus(supabase, resource.id, inProgressStatus);
 
-  const content = await scrapeUrl(url, apiKey);
+  const scrapeResult = await scrapeUrl(url, apiKey);
+  const content = scrapeResult.content;
+  const scrapeMs = scrapeResult.scrapeMs;
+
+  console.log(`[Enrich] SCRAPED resource=${resource.id} chars=${content?.length || 0} scrapeMs=${scrapeMs} errorType=${scrapeResult.errorType || 'none'}`);
 
   // ── QUALITY VALIDATION GATE (CRITICAL) ──────────────────
   const qv = validateContentQuality(content, ENRICHMENT_VERSION);
 
-  console.log(`[QualityGate] resource=${resource.id} score=${qv.score} tier=${qv.tier} violations=${qv.violations.join('; ')} chars=${content?.length || 0}`);
+  console.log(`[QualityGate] resource=${resource.id} score=${qv.score} tier=${qv.tier} violations=${qv.violations.join('; ')} chars=${content?.length || 0} totalMs=${Date.now() - startMs}`);
 
   if (qv.passes) {
     // Quality contract met → deep_enriched
@@ -232,7 +242,8 @@ async function enrichSingleResource(
       last_quality_tier: qv.tier,
     });
     await supabase.from("resource_digests").delete().eq("resource_id", resource.id);
-    return { status: "enriched", chars: content!.length, quality_tier: qv.tier, quality_score: qv.score };
+    console.log(`[Enrich] SUCCESS resource=${resource.id} chars=${content!.length} totalMs=${Date.now() - startMs}`);
+    return { status: "enriched", chars: content!.length, quality_tier: qv.tier, quality_score: qv.score, scrapeMs };
   }
 
   // Quality contract NOT met
@@ -246,15 +257,22 @@ async function enrichSingleResource(
   // On re-enrich failure, increment failure_count
   const failureCount = (resource.failure_count || 0) + 1;
 
+  // Build specific failure reason including scrape error if applicable
+  let failureReason = qv.violations.join('; ') || (content ? `Quality too low (score ${qv.score})` : "Scrape returned no content");
+  if (scrapeResult.errorType) {
+    failureReason = `${scrapeResult.errorType}: ${failureReason}`;
+  }
+
   await setEnrichmentStatus(supabase, resource.id, isReenrich && resource.enrichment_status === 'deep_enriched' ? resource.enrichment_status : newStatus, {
-    failure_reason: qv.violations.join('; ') || (content ? `Quality too low (score ${qv.score})` : "Scrape returned no content"),
+    failure_reason: failureReason,
     last_quality_score: qv.score,
     last_quality_tier: qv.tier,
     validation_version: VALIDATION_VERSION,
     failure_count: failureCount,
   });
 
-  return { status: newStatus, chars: content?.length || 0, quality_tier: qv.tier, quality_score: qv.score, violations: qv.violations };
+  console.log(`[Enrich] ${newStatus.toUpperCase()} resource=${resource.id} reason=${failureReason} totalMs=${Date.now() - startMs}`);
+  return { status: newStatus, chars: content?.length || 0, quality_tier: qv.tier, quality_score: qv.score, violations: qv.violations, scrapeMs, errorType: scrapeResult.errorType };
 }
 
 Deno.serve(async (req) => {
