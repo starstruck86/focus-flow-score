@@ -62,7 +62,7 @@ export default function PrepHub() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full grid grid-cols-5">
+          <TabsList className="w-full grid grid-cols-6">
             <TabsTrigger value="content-builder" className="text-xs">
               <Wand2 className="h-3.5 w-3.5 mr-1" />
               Build
@@ -70,6 +70,10 @@ export default function PrepHub() {
             <TabsTrigger value="resources" className="text-xs">
               <FileText className="h-3.5 w-3.5 mr-1" />
               Library
+            </TabsTrigger>
+            <TabsTrigger value="playbooks" className="text-xs">
+              <BookOpen className="h-3.5 w-3.5 mr-1" />
+              Playbooks
             </TabsTrigger>
             <TabsTrigger value="prep" className="text-xs">
               <Sparkles className="h-3.5 w-3.5 mr-1" />
