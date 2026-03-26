@@ -6,15 +6,16 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const CONTENT_CAP = 60000;
-const ENRICHMENT_VERSION = 1;
-const VALIDATION_VERSION = 1;
+const CONTENT_CAP = 60_000;
+const ENRICHMENT_VERSION = 2;
+const VALIDATION_VERSION = 2;
 
-// ── Quality thresholds (must match src/lib/resourceQuality.ts) ──
+// ── Quality thresholds ──
 const MIN_CONTENT_CHARS = 500;
 const GOOD_CONTENT_CHARS = 2000;
 const MIN_UNIQUE_WORDS = 50;
 const COMPLETE_MIN_SCORE = 70;
+const PARTIAL_MIN_SCORE = 35;
 
 const BOILERPLATE_PATTERNS = [
   /cookie\s*(policy|consent|notice)/i,
@@ -27,35 +28,142 @@ const BOILERPLATE_PATTERNS = [
   /skip\s*to\s*(main\s*)?content/i,
 ];
 
-const AUTH_GATED_PATTERNS = [
-  /drive\.google\.com/i, /docs\.google\.com/i, /sheets\.google\.com/i,
-  /slides\.google\.com/i, /\.zoom\.us\//i, /thinkific\.com/i, /udemy\.com/i,
-  /coursera\.org/i, /linkedin\.com\/learning/i, /loom\.com/i, /notion\.so/i,
-  /dropbox\.com/i, /onedrive\.live\.com/i, /sharepoint\.com/i,
-  /circle\.so/i, /teachable\.com/i, /kajabi\.com/i, /skool\.com/i,
+// ── Source classification ──────────────────────────────────
+type SourceType =
+  | 'webpage_static'
+  | 'webpage_js'
+  | 'pdf'
+  | 'youtube'
+  | 'google_doc'
+  | 'notion'
+  | 'auth_gated'
+  | 'social'
+  | 'podcast'
+  | 'unknown';
+
+interface SourceClassification {
+  source_type: SourceType;
+  platform: string;
+  auth_required: boolean;
+  transcript_available: boolean | null;
+  downloadable: boolean;
+  js_rendered: boolean;
+}
+
+const AUTH_GATED_DOMAINS: Array<{ pattern: RegExp; platform: string }> = [
+  { pattern: /circle\.so/i, platform: 'Circle' },
+  { pattern: /teachable\.com/i, platform: 'Teachable' },
+  { pattern: /kajabi\.com/i, platform: 'Kajabi' },
+  { pattern: /skool\.com/i, platform: 'Skool' },
+  { pattern: /thinkific\.com/i, platform: 'Thinkific' },
+  { pattern: /udemy\.com/i, platform: 'Udemy' },
+  { pattern: /coursera\.org/i, platform: 'Coursera' },
+  { pattern: /linkedin\.com\/learning/i, platform: 'LinkedIn Learning' },
+  { pattern: /loom\.com/i, platform: 'Loom' },
+  { pattern: /dropbox\.com/i, platform: 'Dropbox' },
+  { pattern: /onedrive\.live\.com/i, platform: 'OneDrive' },
+  { pattern: /sharepoint\.com/i, platform: 'SharePoint' },
+  { pattern: /\.zoom\.us\//i, platform: 'Zoom' },
 ];
 
-function isAuthGated(url: string): boolean {
-  return AUTH_GATED_PATTERNS.some(p => p.test(url));
+const GOOGLE_DOC_PATTERNS = [
+  /docs\.google\.com/i,
+  /drive\.google\.com/i,
+  /sheets\.google\.com/i,
+  /slides\.google\.com/i,
+];
+
+const JS_HEAVY_DOMAINS = [
+  /medium\.com/i,
+  /substack\.com/i,
+  /hashnode\.dev/i,
+  /dev\.to/i,
+  /notion\.site/i,
+  /webflow\.io/i,
+];
+
+function classifySource(url: string): SourceClassification {
+  try {
+    const u = new URL(url);
+    const host = u.hostname + u.pathname;
+
+    // Auth-gated
+    for (const ag of AUTH_GATED_DOMAINS) {
+      if (ag.pattern.test(host)) {
+        return { source_type: 'auth_gated', platform: ag.platform, auth_required: true, transcript_available: null, downloadable: false, js_rendered: false };
+      }
+    }
+
+    // Google Docs
+    if (GOOGLE_DOC_PATTERNS.some(p => p.test(host))) {
+      return { source_type: 'google_doc', platform: 'Google', auth_required: true, transcript_available: null, downloadable: false, js_rendered: false };
+    }
+
+    // Notion
+    if (/notion\.so/i.test(host)) {
+      return { source_type: 'notion', platform: 'Notion', auth_required: true, transcript_available: null, downloadable: false, js_rendered: true };
+    }
+
+    // YouTube
+    if (/youtube\.com|youtu\.be/i.test(host)) {
+      return { source_type: 'youtube', platform: 'YouTube', auth_required: false, transcript_available: true, downloadable: false, js_rendered: true };
+    }
+
+    // Podcast
+    if (/spotify\.com|podcasts\.apple\.com|anchor\.fm/i.test(host)) {
+      return { source_type: 'podcast', platform: 'Podcast', auth_required: false, transcript_available: null, downloadable: false, js_rendered: true };
+    }
+
+    // Social
+    if (/twitter\.com|x\.com|threads\.net|reddit\.com/i.test(host)) {
+      return { source_type: 'social', platform: 'Social', auth_required: false, transcript_available: null, downloadable: false, js_rendered: true };
+    }
+
+    // PDF
+    if (/\.pdf($|\?)/i.test(u.pathname)) {
+      return { source_type: 'pdf', platform: 'Web', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
+    }
+
+    // JS-heavy
+    if (JS_HEAVY_DOMAINS.some(p => p.test(host))) {
+      return { source_type: 'webpage_js', platform: u.hostname, auth_required: false, transcript_available: null, downloadable: false, js_rendered: true };
+    }
+
+    return { source_type: 'webpage_static', platform: u.hostname, auth_required: false, transcript_available: null, downloadable: false, js_rendered: false };
+  } catch {
+    return { source_type: 'unknown', platform: 'unknown', auth_required: false, transcript_available: null, downloadable: false, js_rendered: false };
+  }
 }
 
-function detectSource(url: string): "youtube" | "podcast" | "generic" | "auth-gated" {
-  if (isAuthGated(url)) return "auth-gated";
-  if (/youtube\.com|youtu\.be/i.test(url)) return "youtube";
-  if (/spotify\.com|podcasts\.apple\.com|anchor\.fm/i.test(url)) return "podcast";
-  return "generic";
+// ── Extraction methods ─────────────────────────────────────
+interface ExtractionAttempt {
+  method: string;
+  duration_ms: number;
+  chars_extracted: number;
+  timeout_hit: boolean;
+  auth_wall_detected: boolean;
+  http_status: number | null;
+  validation_result: 'pass' | 'fail' | 'partial';
+  error_category: string | null;
+  error_detail: string | null;
 }
 
-async function scrapeUrl(url: string, apiKey: string): Promise<{ content: string | null; scrapeMs: number; errorType?: string }> {
-  const source = detectSource(url);
-  if (source === "auth-gated") return { content: null, scrapeMs: 0, errorType: 'auth_gated' };
+interface ExtractionResult {
+  content: string | null;
+  attempt: ExtractionAttempt;
+}
 
-  const waitFor = source === "youtube" ? 8000 : source === "podcast" ? 5000 : undefined;
+/** Firecrawl scrape with main-content extraction */
+async function firecrawlScrape(
+  url: string, apiKey: string, opts: { waitFor?: number; timeout?: number } = {}
+): Promise<ExtractionResult> {
+  const method = 'firecrawl_main_content';
   const startMs = Date.now();
+  const hardTimeout = opts.timeout || 90_000;
 
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 90_000); // 90s hard timeout for Firecrawl
+    const timer = setTimeout(() => controller.abort(), hardTimeout);
 
     const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
       method: "POST",
@@ -64,65 +172,208 @@ async function scrapeUrl(url: string, apiKey: string): Promise<{ content: string
         url,
         formats: ["markdown"],
         onlyMainContent: true,
-        ...(waitFor ? { waitFor } : {}),
+        ...(opts.waitFor ? { waitFor: opts.waitFor } : {}),
       }),
       signal: controller.signal,
     });
 
     clearTimeout(timer);
-    const scrapeMs = Date.now() - startMs;
+    const durationMs = Date.now() - startMs;
 
     if (!response.ok) {
-      console.error(`Firecrawl error for ${url}: ${response.status} (${scrapeMs}ms)`);
-      return { content: null, scrapeMs, errorType: `firecrawl_${response.status}` };
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: false, http_status: response.status,
+          validation_result: 'fail', error_category: `http_${response.status}`,
+          error_detail: `Firecrawl returned ${response.status}`,
+        },
+      };
     }
 
     const data = await response.json();
-    const markdown = data.data?.markdown || data.markdown || "";
-    return { content: markdown.slice(0, CONTENT_CAP) || null, scrapeMs };
+    const markdown = (data.data?.markdown || data.markdown || "").slice(0, CONTENT_CAP);
+
+    // Detect auth walls in returned content
+    const authWall = /sign.?in|log.?in|create.?account|access.?denied/i.test(markdown.slice(0, 500))
+      && markdown.length < 1000;
+
+    return {
+      content: markdown || null,
+      attempt: {
+        method, duration_ms: durationMs, chars_extracted: markdown.length, timeout_hit: false,
+        auth_wall_detected: authWall, http_status: response.status,
+        validation_result: markdown.length > 0 ? (authWall ? 'fail' : 'partial') : 'fail',
+        error_category: authWall ? 'auth_wall' : null,
+        error_detail: authWall ? 'Login/signup wall detected in scraped content' : null,
+      },
+    };
   } catch (e) {
-    const scrapeMs = Date.now() - startMs;
-    const errorType = e instanceof DOMException && e.name === 'AbortError' ? 'firecrawl_timeout' : 'firecrawl_network';
-    console.error(`Scrape failed for ${url} (${scrapeMs}ms):`, e);
-    return { content: null, scrapeMs, errorType };
+    const durationMs = Date.now() - startMs;
+    const isTimeout = e instanceof DOMException && e.name === 'AbortError';
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: isTimeout,
+        auth_wall_detected: false, http_status: null,
+        validation_result: 'fail',
+        error_category: isTimeout ? 'timeout' : 'network',
+        error_detail: isTimeout ? `Timed out after ${hardTimeout}ms` : (e as Error).message?.slice(0, 200),
+      },
+    };
   }
 }
 
-// ── Post-enrichment quality validator (CRITICAL GATE) ──────
+/** Firecrawl full-page (no onlyMainContent) for JS-heavy sites */
+async function firecrawlFullPage(
+  url: string, apiKey: string, opts: { waitFor?: number; timeout?: number } = {}
+): Promise<ExtractionResult> {
+  const method = 'firecrawl_full_page';
+  const startMs = Date.now();
+  const hardTimeout = opts.timeout || 90_000;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), hardTimeout);
+
+    const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url,
+        formats: ["markdown"],
+        onlyMainContent: false,
+        ...(opts.waitFor ? { waitFor: opts.waitFor } : {}),
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timer);
+    const durationMs = Date.now() - startMs;
+
+    if (!response.ok) {
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: false, http_status: response.status,
+          validation_result: 'fail', error_category: `http_${response.status}`,
+          error_detail: `Full-page scrape returned ${response.status}`,
+        },
+      };
+    }
+
+    const data = await response.json();
+    const markdown = (data.data?.markdown || data.markdown || "").slice(0, CONTENT_CAP);
+
+    return {
+      content: markdown || null,
+      attempt: {
+        method, duration_ms: durationMs, chars_extracted: markdown.length, timeout_hit: false,
+        auth_wall_detected: false, http_status: response.status,
+        validation_result: markdown.length > 0 ? 'partial' : 'fail',
+        error_category: null, error_detail: null,
+      },
+    };
+  } catch (e) {
+    const durationMs = Date.now() - startMs;
+    const isTimeout = e instanceof DOMException && e.name === 'AbortError';
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: isTimeout,
+        auth_wall_detected: false, http_status: null,
+        validation_result: 'fail',
+        error_category: isTimeout ? 'timeout' : 'network',
+        error_detail: isTimeout ? `Timed out after ${hardTimeout}ms` : (e as Error).message?.slice(0, 200),
+      },
+    };
+  }
+}
+
+/** Firecrawl with extended wait for JS-rendered content */
+async function firecrawlJsRendered(url: string, apiKey: string): Promise<ExtractionResult> {
+  return firecrawlScrape(url, apiKey, { waitFor: 10000, timeout: 120_000 });
+}
+
+/** YouTube: Firecrawl with extended wait for transcript */
+async function firecrawlYouTube(url: string, apiKey: string): Promise<ExtractionResult> {
+  const result = await firecrawlScrape(url, apiKey, { waitFor: 8000, timeout: 60_000 });
+  // Re-label the method
+  result.attempt.method = 'firecrawl_youtube';
+  return result;
+}
+
+// ── Method chains per source type ──────────────────────────
+function getMethodChain(source: SourceClassification): Array<(url: string, apiKey: string) => Promise<ExtractionResult>> {
+  switch (source.source_type) {
+    case 'webpage_static':
+      return [firecrawlScrape, firecrawlFullPage];
+    case 'webpage_js':
+      return [firecrawlJsRendered, firecrawlFullPage, firecrawlScrape];
+    case 'youtube':
+      return [firecrawlYouTube, firecrawlFullPage];
+    case 'pdf':
+      return [firecrawlScrape, firecrawlFullPage];
+    case 'podcast':
+      return [
+        (u, k) => firecrawlScrape(u, k, { waitFor: 5000 }),
+        firecrawlFullPage,
+      ];
+    case 'social':
+      return [firecrawlScrape, firecrawlFullPage];
+    case 'auth_gated':
+    case 'google_doc':
+    case 'notion':
+      return []; // No methods — immediately classified
+    default:
+      return [firecrawlScrape];
+  }
+}
+
+// ── Quality validation ─────────────────────────────────────
 interface QualityValidation {
   score: number;
   tier: 'complete' | 'shallow' | 'incomplete' | 'failed';
   violations: string[];
   passes: boolean;
+  missing_fields: string[];
 }
 
-function validateContentQuality(content: string | null, enrichmentVersion: number): QualityValidation {
+function validateContentQuality(content: string | null): QualityValidation {
   const violations: string[] = [];
+  const missingFields: string[] = [];
   const text = content || '';
   const len = text.length;
   let score = 0;
 
-  // Content depth (0-25)
+  // Content depth (0-30)
   if (len === 0) {
     violations.push('No content extracted');
+    missingFields.push('body_content');
   } else if (len < MIN_CONTENT_CHARS) {
     violations.push(`Content too short: ${len} chars (min ${MIN_CONTENT_CHARS})`);
-    score += Math.round((len / MIN_CONTENT_CHARS) * 10);
+    score += Math.round((len / MIN_CONTENT_CHARS) * 15);
   } else if (len < GOOD_CONTENT_CHARS) {
-    score += 15;
+    score += 20;
   } else {
-    score += 25;
+    score += 30;
   }
 
-  // Structural (0-25) — content + version + timestamp assumed
-  if (len > 0) score += 8;
-  if (enrichmentVersion >= ENRICHMENT_VERSION) score += 7;
-  score += 10; // enriched_at and file_url always present at this point
+  // Structural (0-20)
+  if (len > 0) {
+    score += 10;
+    // Check for headings/structure
+    if (/^#{1,3}\s/m.test(text) || /\n\n/.test(text)) score += 10;
+    else score += 3;
+  }
 
-  // Semantic usefulness (0-25)
+  // Semantic usefulness (0-30)
   if (len > 0) {
     if (text.startsWith('[External Link:') || text.startsWith('[Placeholder')) {
       violations.push('Content is a placeholder stub');
+      missingFields.push('real_content');
     } else {
       const lines = text.split('\n').filter(l => l.trim().length > 0);
       const boilerplateLines = lines.filter(line => BOILERPLATE_PATTERNS.some(p => p.test(line)));
@@ -131,38 +382,54 @@ function validateContentQuality(content: string | null, enrichmentVersion: numbe
         violations.push(`High boilerplate: ${Math.round(boilerplateRatio * 100)}%`);
         score += 5;
       } else {
-        score += 10;
+        score += 15;
       }
 
       const words = new Set(text.toLowerCase().match(/\b[a-z]{3,}\b/g) || []);
       if (words.size < MIN_UNIQUE_WORDS) {
-        violations.push(`Low vocabulary: ${words.size} words`);
+        violations.push(`Low vocabulary: ${words.size} unique words`);
         score += 3;
       } else {
-        score += 10;
+        score += 15;
       }
-      score += 5;
     }
   }
 
-  // Extraction confidence (0-15) — no failure flag at this point
-  score += 10;
-  if (len >= MIN_CONTENT_CHARS) score += 5;
+  // Confidence (0-20)
+  if (len >= MIN_CONTENT_CHARS) score += 10;
+  if (len >= GOOD_CONTENT_CHARS) score += 10;
+  else if (len > 0) score += 5;
 
-  // Freshness (0-10)
-  score += 10; // both versions current
-
-  // Determine tier
+  // Tier
   let tier: QualityValidation['tier'];
   if (score >= COMPLETE_MIN_SCORE && violations.length === 0) tier = 'complete';
-  else if (score >= 40) tier = 'shallow';
+  else if (score >= PARTIAL_MIN_SCORE) tier = 'shallow';
   else if (score >= 10) tier = 'incomplete';
   else tier = 'failed';
 
-  return { score, tier, violations, passes: tier === 'complete' };
+  return { score, tier, violations, passes: tier === 'complete', missing_fields: missingFields };
 }
 
-/** Update enrichment_status with audit trail and quality metadata */
+// ── Normalized output contract ─────────────────────────────
+type FinalStatus = 'enriched' | 'partial' | 'needs_auth' | 'unsupported' | 'failed';
+
+interface EnrichmentOutput {
+  resource_id: string;
+  url: string;
+  source_classification: SourceClassification;
+  final_status: FinalStatus;
+  method_used: string | null;
+  methods_attempted: ExtractionAttempt[];
+  attempt_count: number;
+  extracted_text_length: number;
+  completeness_score: number;
+  confidence_score: number;
+  missing_fields: string[];
+  failure_reason: string | null;
+  recovery_hint: string | null;
+}
+
+/** Update enrichment_status with audit trail */
 async function setEnrichmentStatus(
   supabase: any,
   resourceId: string,
@@ -177,105 +444,240 @@ async function setEnrichmentStatus(
     ...extra,
   };
 
-  // Also keep legacy content_status in sync
   if (status === 'deep_enriched') update.content_status = 'enriched';
   else if (status === 'deep_enrich_in_progress' || status === 'reenrich_in_progress') update.content_status = 'enriching';
+  else if (status === 'partial') update.content_status = 'partial';
+  else if (status === 'needs_auth') update.content_status = 'needs_auth';
+  else if (status === 'unsupported') update.content_status = 'unsupported';
   else if (status === 'failed' || status === 'incomplete') update.content_status = 'placeholder';
   else if (status === 'not_enriched') update.content_status = 'placeholder';
 
   await supabase.from("resources").update(update).eq("id", resourceId);
 }
 
-/** Process a single resource with quality validation gate */
-async function enrichSingleResource(
+// ── Main orchestrator ──────────────────────────────────────
+async function orchestrateEnrichment(
   supabase: any,
   resource: any,
   apiKey: string,
   force: boolean,
-): Promise<{ status: string; chars: number; quality_tier?: string; quality_score?: number; violations?: string[]; scrapeMs?: number; errorType?: string }> {
-  const startMs = Date.now();
+): Promise<EnrichmentOutput> {
   const url = resource.file_url;
-  
-  console.log(`[Enrich] START resource=${resource.id} url=${url?.slice(0, 80)} force=${force}`);
-  
+  const resourceId = resource.id;
+  const attempts: ExtractionAttempt[] = [];
+
+  // 1. Source classification (MANDATORY FIRST STEP)
+  const source = classifySource(url || '');
+
+  console.log(`[Orchestrate] START id=${resourceId} url=${url?.slice(0, 80)} source_type=${source.source_type} platform=${source.platform}`);
+
+  // No URL
   if (!url || !url.startsWith("http")) {
-    console.log(`[Enrich] SKIP resource=${resource.id} reason=no_valid_url`);
-    return { status: "skipped", chars: 0, errorType: 'no_valid_url' };
+    return {
+      resource_id: resourceId, url: url || '', source_classification: source,
+      final_status: 'unsupported', method_used: null, methods_attempted: [],
+      attempt_count: 0, extracted_text_length: 0, completeness_score: 0,
+      confidence_score: 0, missing_fields: ['source_url'],
+      failure_reason: 'No valid source URL', recovery_hint: 'Add a valid HTTP URL to this resource',
+    };
   }
 
-  const source = detectSource(url);
-  if (source === "auth-gated") {
-    console.log(`[Enrich] SKIP resource=${resource.id} reason=auth_gated url=${url.slice(0, 60)}`);
-    return { status: "auth-gated", chars: 0, errorType: 'auth_gated' };
+  // Auth-gated — immediate classification
+  if (source.auth_required) {
+    await setEnrichmentStatus(supabase, resourceId, 'needs_auth', {
+      failure_reason: `Auth-gated source (${source.platform}) — requires login to access content`,
+    });
+
+    return {
+      resource_id: resourceId, url, source_classification: source,
+      final_status: 'needs_auth', method_used: null, methods_attempted: [],
+      attempt_count: 0, extracted_text_length: 0, completeness_score: 0,
+      confidence_score: 0, missing_fields: ['body_content'],
+      failure_reason: `Auth-gated source (${source.platform})`,
+      recovery_hint: `This content requires authentication on ${source.platform}. Paste the content manually or provide a public link.`,
+    };
   }
 
-  // Only allow re-enrichment when force=true
+  // Skip already enriched unless forced
   if (resource.enrichment_status === "deep_enriched" && !force) {
-    return { status: "already_enriched", chars: 0 };
+    return {
+      resource_id: resourceId, url, source_classification: source,
+      final_status: 'enriched', method_used: 'already_enriched', methods_attempted: [],
+      attempt_count: 0, extracted_text_length: resource.content_length || 0,
+      completeness_score: 100, confidence_score: 100, missing_fields: [],
+      failure_reason: null, recovery_hint: null,
+    };
   }
 
   const isReenrich = force && resource.enrichment_status === "deep_enriched";
   const inProgressStatus = isReenrich ? "reenrich_in_progress" : "deep_enrich_in_progress";
+  await setEnrichmentStatus(supabase, resourceId, inProgressStatus);
 
-  await setEnrichmentStatus(supabase, resource.id, inProgressStatus);
+  // 2. Execute method chain
+  const methodChain = getMethodChain(source);
 
-  const scrapeResult = await scrapeUrl(url, apiKey);
-  const content = scrapeResult.content;
-  const scrapeMs = scrapeResult.scrapeMs;
+  if (methodChain.length === 0) {
+    await setEnrichmentStatus(supabase, resourceId, 'unsupported', {
+      failure_reason: `No extraction methods available for ${source.source_type}`,
+    });
+    return {
+      resource_id: resourceId, url, source_classification: source,
+      final_status: 'unsupported', method_used: null, methods_attempted: [],
+      attempt_count: 0, extracted_text_length: 0, completeness_score: 0,
+      confidence_score: 0, missing_fields: ['body_content'],
+      failure_reason: `Source type "${source.source_type}" has no available extraction methods`,
+      recovery_hint: 'Paste content manually or provide an alternative public URL',
+    };
+  }
 
-  console.log(`[Enrich] SCRAPED resource=${resource.id} chars=${content?.length || 0} scrapeMs=${scrapeMs} errorType=${scrapeResult.errorType || 'none'}`);
+  let bestContent: string | null = null;
+  let bestQuality: QualityValidation | null = null;
+  let bestMethod: string | null = null;
 
-  // ── QUALITY VALIDATION GATE (CRITICAL) ──────────────────
-  const qv = validateContentQuality(content, ENRICHMENT_VERSION);
+  for (const extractionMethod of methodChain) {
+    console.log(`[Orchestrate] Trying method ${extractionMethod.name || 'anonymous'} for ${resourceId}`);
 
-  console.log(`[QualityGate] resource=${resource.id} score=${qv.score} tier=${qv.tier} violations=${qv.violations.join('; ')} chars=${content?.length || 0} totalMs=${Date.now() - startMs}`);
+    const result = await extractionMethod(url, apiKey);
+    attempts.push(result.attempt);
 
-  if (qv.passes) {
-    // Quality contract met → deep_enriched
-    await supabase.from("resources").update({ content }).eq("id", resource.id);
-    await setEnrichmentStatus(supabase, resource.id, "deep_enriched", {
+    // If auth wall detected, reclassify
+    if (result.attempt.auth_wall_detected) {
+      console.log(`[Orchestrate] Auth wall detected for ${resourceId}`);
+      await setEnrichmentStatus(supabase, resourceId, 'needs_auth', {
+        failure_reason: 'Login/signup wall detected during scraping',
+      });
+      return {
+        resource_id: resourceId, url, source_classification: { ...source, auth_required: true },
+        final_status: 'needs_auth', method_used: result.attempt.method, methods_attempted: attempts,
+        attempt_count: attempts.length, extracted_text_length: 0, completeness_score: 0,
+        confidence_score: 0, missing_fields: ['body_content'],
+        failure_reason: 'Auth wall detected — content requires login',
+        recovery_hint: 'Paste the content manually or provide a public link',
+      };
+    }
+
+    if (result.content && result.content.length > 0) {
+      const qv = validateContentQuality(result.content);
+      result.attempt.validation_result = qv.passes ? 'pass' : (qv.score >= PARTIAL_MIN_SCORE ? 'partial' : 'fail');
+
+      console.log(`[Orchestrate] Method ${result.attempt.method}: ${result.content.length} chars, score=${qv.score}, tier=${qv.tier}`);
+
+      // If quality passes, we're done
+      if (qv.passes) {
+        bestContent = result.content;
+        bestQuality = qv;
+        bestMethod = result.attempt.method;
+        break;
+      }
+
+      // Keep track of best partial result
+      if (!bestQuality || qv.score > bestQuality.score) {
+        bestContent = result.content;
+        bestQuality = qv;
+        bestMethod = result.attempt.method;
+      }
+    }
+
+    // Brief delay between attempts
+    if (methodChain.indexOf(extractionMethod) < methodChain.length - 1) {
+      await new Promise(r => setTimeout(r, 1500));
+    }
+  }
+
+  // 3. Evaluate best result
+  if (bestContent && bestQuality && bestQuality.passes) {
+    // FULL SUCCESS
+    await supabase.from("resources").update({ content: bestContent }).eq("id", resourceId);
+    await setEnrichmentStatus(supabase, resourceId, "deep_enriched", {
       enriched_at: new Date().toISOString(),
-      content_length: content!.length,
+      content_length: bestContent.length,
       enrichment_version: ENRICHMENT_VERSION,
       validation_version: VALIDATION_VERSION,
       failure_reason: null,
-      last_quality_score: qv.score,
-      last_quality_tier: qv.tier,
+      last_quality_score: bestQuality.score,
+      last_quality_tier: bestQuality.tier,
     });
-    await supabase.from("resource_digests").delete().eq("resource_id", resource.id);
-    console.log(`[Enrich] SUCCESS resource=${resource.id} chars=${content!.length} totalMs=${Date.now() - startMs}`);
-    return { status: "enriched", chars: content!.length, quality_tier: qv.tier, quality_score: qv.score, scrapeMs };
+    await supabase.from("resource_digests").delete().eq("resource_id", resourceId);
+
+    console.log(`[Orchestrate] SUCCESS id=${resourceId} chars=${bestContent.length} method=${bestMethod} attempts=${attempts.length}`);
+    return {
+      resource_id: resourceId, url, source_classification: source,
+      final_status: 'enriched', method_used: bestMethod, methods_attempted: attempts,
+      attempt_count: attempts.length, extracted_text_length: bestContent.length,
+      completeness_score: bestQuality.score, confidence_score: Math.min(100, bestQuality.score + 10),
+      missing_fields: [], failure_reason: null, recovery_hint: null,
+    };
   }
 
-  // Quality contract NOT met
-  if (content && content.length > 0) {
-    // Save the content we got, but mark as incomplete/failed
-    await supabase.from("resources").update({ content, content_length: content.length }).eq("id", resource.id);
+  if (bestContent && bestQuality && bestQuality.score >= PARTIAL_MIN_SCORE) {
+    // PARTIAL — save content but don't mark as fully enriched
+    await supabase.from("resources").update({ content: bestContent, content_length: bestContent.length }).eq("id", resourceId);
+
+    const failureReason = bestQuality.violations.join('; ') || `Quality score ${bestQuality.score} below threshold ${COMPLETE_MIN_SCORE}`;
+    const recoveryHint = bestQuality.violations.some(v => /short/i.test(v))
+      ? 'Source page may have limited content — try adding content manually'
+      : bestQuality.violations.some(v => /boilerplate/i.test(v))
+      ? 'Extracted content is mostly navigation/boilerplate — try a different URL'
+      : 'Content was partially extracted — review and supplement manually if needed';
+
+    await setEnrichmentStatus(supabase, resourceId, 'partial', {
+      failure_reason: failureReason,
+      last_quality_score: bestQuality.score,
+      last_quality_tier: bestQuality.tier,
+      validation_version: VALIDATION_VERSION,
+      content_length: bestContent.length,
+      failure_count: (resource.failure_count || 0) + 1,
+    });
+
+    console.log(`[Orchestrate] PARTIAL id=${resourceId} score=${bestQuality.score} method=${bestMethod} attempts=${attempts.length}`);
+    return {
+      resource_id: resourceId, url, source_classification: source,
+      final_status: 'partial', method_used: bestMethod, methods_attempted: attempts,
+      attempt_count: attempts.length, extracted_text_length: bestContent.length,
+      completeness_score: bestQuality.score, confidence_score: Math.round(bestQuality.score * 0.7),
+      missing_fields: bestQuality.missing_fields, failure_reason: failureReason,
+      recovery_hint: recoveryHint,
+    };
   }
 
-  const newStatus = qv.tier === 'shallow' || qv.tier === 'incomplete' ? 'incomplete' : 'failed';
-
-  // On re-enrich failure, increment failure_count
-  const failureCount = (resource.failure_count || 0) + 1;
-
-  // Build specific failure reason including scrape error if applicable
-  let failureReason = qv.violations.join('; ') || (content ? `Quality too low (score ${qv.score})` : "Scrape returned no content");
-  if (scrapeResult.errorType) {
-    failureReason = `${scrapeResult.errorType}: ${failureReason}`;
+  // FAILED — no usable content from any method
+  if (bestContent && bestContent.length > 0) {
+    await supabase.from("resources").update({ content: bestContent, content_length: bestContent.length }).eq("id", resourceId);
   }
 
-  await setEnrichmentStatus(supabase, resource.id, isReenrich && resource.enrichment_status === 'deep_enriched' ? resource.enrichment_status : newStatus, {
-    failure_reason: failureReason,
-    last_quality_score: qv.score,
-    last_quality_tier: qv.tier,
+  const failureReasons = attempts.map(a => a.error_detail || a.error_category).filter(Boolean);
+  const primaryReason = failureReasons[0] || 'All extraction methods failed to produce usable content';
+  const timeoutCount = attempts.filter(a => a.timeout_hit).length;
+
+  let recoveryHint = 'Paste content manually or try a different URL';
+  if (timeoutCount === attempts.length) {
+    recoveryHint = 'All attempts timed out — the source may be slow. Retry later or paste content manually';
+  } else if (attempts.some(a => a.http_status === 403 || a.http_status === 401)) {
+    recoveryHint = 'Source returned access denied — content may require authentication';
+  }
+
+  // On re-enrich failure, preserve the existing enriched state
+  const newStatus = isReenrich ? resource.enrichment_status : 'failed';
+  await setEnrichmentStatus(supabase, resourceId, newStatus, {
+    failure_reason: primaryReason,
+    last_quality_score: bestQuality?.score || 0,
+    last_quality_tier: bestQuality?.tier || 'failed',
     validation_version: VALIDATION_VERSION,
-    failure_count: failureCount,
+    failure_count: (resource.failure_count || 0) + 1,
   });
 
-  console.log(`[Enrich] ${newStatus.toUpperCase()} resource=${resource.id} reason=${failureReason} totalMs=${Date.now() - startMs}`);
-  return { status: newStatus, chars: content?.length || 0, quality_tier: qv.tier, quality_score: qv.score, violations: qv.violations, scrapeMs, errorType: scrapeResult.errorType };
+  console.log(`[Orchestrate] FAILED id=${resourceId} reason=${primaryReason} attempts=${attempts.length}`);
+  return {
+    resource_id: resourceId, url, source_classification: source,
+    final_status: 'failed', method_used: bestMethod, methods_attempted: attempts,
+    attempt_count: attempts.length, extracted_text_length: bestContent?.length || 0,
+    completeness_score: bestQuality?.score || 0, confidence_score: 0,
+    missing_fields: bestQuality?.missing_fields || ['body_content'],
+    failure_reason: primaryReason, recovery_hint: recoveryHint,
+  };
 }
 
+// ── HTTP handler ───────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -308,19 +710,31 @@ Deno.serve(async (req) => {
     if (resource_ids && Array.isArray(resource_ids) && resource_ids.length > 0) {
       const { data: resources, error: qErr } = await supabase
         .from("resources")
-        .select("id, file_url, enrichment_status, content_status, failure_count")
+        .select("id, file_url, enrichment_status, content_status, failure_count, content_length")
         .in("id", resource_ids.slice(0, 50));
 
       if (qErr) throw new Error("Query failed");
 
-      const results: any[] = [];
+      const results: EnrichmentOutput[] = [];
       for (const resource of resources || []) {
-        const result = await enrichSingleResource(supabase, resource, FIRECRAWL_API_KEY, !!force);
-        results.push({ id: resource.id, ...result });
+        const result = await orchestrateEnrichment(supabase, resource, FIRECRAWL_API_KEY, !!force);
+        results.push(result);
         await new Promise(r => setTimeout(r, 1000));
       }
 
-      return new Response(JSON.stringify({ success: true, results }), {
+      // Build trust gate summary
+      const summary = {
+        total: results.length,
+        enriched: results.filter(r => r.final_status === 'enriched').length,
+        partial: results.filter(r => r.final_status === 'partial').length,
+        needs_auth: results.filter(r => r.final_status === 'needs_auth').length,
+        unsupported: results.filter(r => r.final_status === 'unsupported').length,
+        failed: results.filter(r => r.final_status === 'failed').length,
+        fallback_rate: results.filter(r => r.attempt_count > 1).length / Math.max(results.length, 1),
+        avg_attempts: results.reduce((s, r) => s + r.attempt_count, 0) / Math.max(results.length, 1),
+      };
+
+      return new Response(JSON.stringify({ success: true, results, summary }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -329,65 +743,62 @@ Deno.serve(async (req) => {
     if (resource_id && !batch) {
       const { data: resource, error: rErr } = await supabase
         .from("resources")
-        .select("id, file_url, content, enrichment_status, content_status, failure_count")
+        .select("id, file_url, content, enrichment_status, content_status, failure_count, content_length")
         .eq("id", resource_id)
         .single();
       if (rErr || !resource) throw new Error("Resource not found");
 
-      const result = await enrichSingleResource(supabase, resource, FIRECRAWL_API_KEY, !!force);
+      const result = await orchestrateEnrichment(supabase, resource, FIRECRAWL_API_KEY, !!force);
 
-      if (result.status === 'skipped' || result.status === 'already_enriched' || result.status === 'auth-gated') {
-        return new Response(JSON.stringify({ error: result.status === 'already_enriched' ? "Already enriched. Use force:true to re-enrich." : result.status, skipped: true }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      if (result.status === 'failed' || result.status === 'incomplete') {
+      if (result.final_status === 'enriched') {
         return new Response(JSON.stringify({
-          error: `Quality validation failed: ${result.violations?.join('; ') || 'unknown'}`,
-          skipped: true,
-          quality_tier: result.quality_tier,
-          quality_score: result.quality_score,
+          success: true, ...result,
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
+      // Non-success statuses
       return new Response(JSON.stringify({
-        success: true,
-        resource_id,
-        chars: result.chars,
-        quality_tier: result.quality_tier,
-        quality_score: result.quality_score,
+        error: result.failure_reason || result.final_status,
+        ...result,
+        skipped: result.final_status === 'needs_auth' || result.final_status === 'unsupported',
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // ── Batch mode (all not_enriched) ──
+    // ── Batch mode (all eligible) ──
     if (batch) {
       const batchLimit = Math.min(limit || 50, 50);
       const { data: placeholders, error: qErr } = await supabase
         .from("resources")
-        .select("id, file_url, enrichment_status, failure_count")
-        .in("enrichment_status", ["not_enriched", "incomplete"])
+        .select("id, file_url, enrichment_status, failure_count, content_length")
+        .in("enrichment_status", ["not_enriched", "incomplete", "partial", "failed"])
         .like("file_url", "http%")
         .limit(batchLimit);
 
       if (qErr) throw new Error("Query failed");
 
-      const results = { enriched: 0, failed: 0, skipped: 0, incomplete: 0, total: placeholders?.length || 0 };
-
+      const results: EnrichmentOutput[] = [];
       for (const resource of placeholders || []) {
-        const result = await enrichSingleResource(supabase, resource, FIRECRAWL_API_KEY, false);
-        if (result.status === 'enriched') results.enriched++;
-        else if (result.status === 'incomplete') results.incomplete++;
-        else if (result.status === 'failed') results.failed++;
-        else results.skipped++;
+        const result = await orchestrateEnrichment(supabase, resource, FIRECRAWL_API_KEY, false);
+        results.push(result);
         await new Promise(r => setTimeout(r, 1000));
       }
 
-      return new Response(JSON.stringify({ success: true, results }), {
+      const summary = {
+        total: results.length,
+        enriched: results.filter(r => r.final_status === 'enriched').length,
+        partial: results.filter(r => r.final_status === 'partial').length,
+        needs_auth: results.filter(r => r.final_status === 'needs_auth').length,
+        unsupported: results.filter(r => r.final_status === 'unsupported').length,
+        failed: results.filter(r => r.final_status === 'failed').length,
+        fallback_rate: results.filter(r => r.attempt_count > 1).length / Math.max(results.length, 1),
+        avg_attempts: results.reduce((s, r) => s + r.attempt_count, 0) / Math.max(results.length, 1),
+      };
+
+      return new Response(JSON.stringify({ success: true, results, summary }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
