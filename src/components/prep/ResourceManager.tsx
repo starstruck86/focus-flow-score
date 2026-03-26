@@ -42,6 +42,7 @@ import { PlaylistImportModal } from './PlaylistImportModal';
 import { PodcastImportModal } from './PodcastImportModal';
 import { WebpageImportModal } from './WebpageImportModal';
 import { DeepEnrichModal } from './DeepEnrichModal';
+import { EnrichmentJobIndicator } from './EnrichmentJobIndicator';
 import { useResourceDuplicates } from '@/hooks/useResourceDuplicates';
 import { useConsolidateFolders } from '@/hooks/useConsolidateFolders';
 import { ResourceIntelligenceDashboard } from './ResourceIntelligenceDashboard';
@@ -978,6 +979,9 @@ export function ResourceManager() {
         resources={resources}
         selectedIds={selectedResourceIds}
       />
+
+      {/* Floating enrichment job indicator */}
+      <EnrichmentJobIndicator onOpenModal={() => setShowDeepEnrich(true)} />
 
       {/* Bulk selection bar */}
       {selectedResourceIds.size > 0 && (

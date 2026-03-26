@@ -1,17 +1,11 @@
 /**
- * Controlled bulk resource Deep Enrich engine with automatic preprocessing,
- * batching, progress, retry, pause/cancel, duplicate prevention, and quality guardrails.
- *
- * Single user-facing action: "Deep Enrich"
- * Batch cap: 5 or 10 (hard cap 10)
- * Automatic preprocessing: canonicalize → deduplicate → validate → classify → enrich
+ * Global enrichment job store — persists job execution outside any modal/component lifecycle.
+ * Jobs continue running even when the DeepEnrichModal is closed.
  */
-import { useState, useCallback, useRef } from 'react';
+import { create } from 'zustand';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
-import { useQueryClient } from '@tanstack/react-query';
 import { trackedInvoke } from '@/lib/trackedInvoke';
-import { toast } from 'sonner';
+import type { EnrichMode } from '@/lib/resourceEligibility';
 
 // ── Types ──────────────────────────────────────────────────
 export type IngestionItemStage =
@@ -42,13 +36,13 @@ export interface IngestionItem {
   publishDate?: string;
   duration?: string;
   resourceId?: string;
-  enrichMode?: 'deep_enrich' | 're_enrich';
+  enrichMode?: EnrichMode;
   existingResourceId?: string;
 }
 
 export interface IngestionState {
   status: IngestionJobStatus;
-  mode: 'deep_enrich' | 're_enrich';
+  mode: EnrichMode;
   batchSize: number;
   reprocessMode: ReprocessMode;
   totalItems: number;
@@ -145,7 +139,6 @@ function classifyError(err: unknown, context: string): string {
   return `${context}: ${msg.slice(0, 120)}`;
 }
 
-// ── Preprocessing: validate URL ────────────────────────────
 function validateUrl(rawUrl: string): string | null {
   if (!rawUrl || !rawUrl.trim()) return 'missing_data';
   try {
@@ -157,58 +150,122 @@ function validateUrl(rawUrl: string): string | null {
   }
 }
 
-// ── Hook ───────────────────────────────────────────────────
-export function useBulkIngestion() {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
+// ── Preprocessing ──────────────────────────────────────────
+function preprocessItems(
+  rawItems: Array<{ resourceId?: string; url: string; title: string; enrichMode?: EnrichMode; videoId?: string; channel?: string; publishDate?: string; duration?: string }>
+): IngestionItem[] {
+  const seenCanonicals = new Set<string>();
+  return rawItems.map((item, idx) => {
+    const urlError = validateUrl(item.url);
+    if (urlError) {
+      return {
+        id: item.resourceId ?? `ingest-${idx}-${Date.now()}`,
+        url: item.url,
+        title: item.title || 'Untitled',
+        stage: 'skipped' as const,
+        error: urlError,
+        videoId: item.videoId,
+        channel: item.channel,
+        publishDate: item.publishDate,
+        duration: item.duration,
+        resourceId: item.resourceId,
+        enrichMode: item.enrichMode,
+      };
+    }
 
-  const [state, setState] = useState<IngestionState>({
-    status: 'idle',
-    mode: 'deep_enrich',
-    batchSize: DEFAULT_BATCH_SIZE,
-    reprocessMode: 'skip_processed',
-    totalItems: 0,
-    currentBatch: 0,
-    totalBatches: 0,
-    processedCount: 0,
-    successCount: 0,
-    failedCount: 0,
-    skippedCount: 0,
-    reviewCount: 0,
-    items: [],
-    startedAt: null,
+    const source = canonicalize(item.url);
+    const canonicalKey = item.resourceId || source.source_id || source.canonical_url;
+
+    if (seenCanonicals.has(canonicalKey)) {
+      return {
+        id: item.resourceId ?? `ingest-${idx}-${Date.now()}`,
+        url: item.url,
+        title: item.title || 'Untitled',
+        stage: 'skipped' as const,
+        error: 'duplicate_resource',
+        videoId: item.videoId || source.source_id || undefined,
+        channel: item.channel,
+        publishDate: item.publishDate,
+        duration: item.duration,
+        resourceId: item.resourceId,
+        enrichMode: item.enrichMode,
+      };
+    }
+
+    seenCanonicals.add(canonicalKey);
+
+    return {
+      id: item.resourceId ?? `ingest-${idx}-${Date.now()}`,
+      url: item.url,
+      title: item.title || 'Untitled',
+      stage: 'queued' as const,
+      videoId: item.videoId || extractYouTubeVideoId(item.url) || undefined,
+      channel: item.channel,
+      publishDate: item.publishDate,
+      duration: item.duration,
+      resourceId: item.resourceId,
+      enrichMode: item.enrichMode,
+    };
   });
+}
 
-  const cancelRef = useRef(false);
-  const pauseRef = useRef(false);
-  const runningRef = useRef(false);
+// ── Store ──────────────────────────────────────────────────
+interface EnrichmentJobStore {
+  state: IngestionState;
+  // Control refs stored in closure — exposed via actions
+  _cancelRequested: boolean;
+  _pauseRequested: boolean;
+  _running: boolean;
 
-  const setBatchSize = useCallback((size: number) => {
-    // Hard cap at MAX_BATCH_SIZE
-    const capped = Math.min(Math.max(size, 1), MAX_BATCH_SIZE);
-    setState(prev => ({ ...prev, batchSize: capped }));
-  }, []);
+  setBatchSize: (size: number) => void;
+  setMode: (mode: EnrichMode) => void;
+  start: (
+    userId: string,
+    items: Array<{ resourceId?: string; url: string; title: string; enrichMode?: EnrichMode }>,
+    options?: { retryFailedOnly?: boolean },
+  ) => void;
+  pause: () => void;
+  resume: () => void;
+  cancel: () => void;
+  reset: () => void;
+  hasFailures: () => boolean;
+  isActive: () => boolean;
+}
 
-  const setReprocessMode = useCallback((mode: ReprocessMode) => {
-    setState(prev => ({ ...prev, reprocessMode: mode }));
-  }, []);
+const INITIAL_STATE: IngestionState = {
+  status: 'idle',
+  mode: 'deep_enrich',
+  batchSize: DEFAULT_BATCH_SIZE,
+  reprocessMode: 'skip_processed',
+  totalItems: 0,
+  currentBatch: 0,
+  totalBatches: 0,
+  processedCount: 0,
+  successCount: 0,
+  failedCount: 0,
+  skippedCount: 0,
+  reviewCount: 0,
+  items: [],
+  startedAt: null,
+};
 
+export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
+  // Internal helpers
   const updateItem = (id: string, patch: Partial<IngestionItem>) => {
-    setState(prev => ({
-      ...prev,
-      items: prev.items.map(i => (i.id === id ? { ...i, ...patch } : i)),
+    set(store => ({
+      state: {
+        ...store.state,
+        items: store.state.items.map(i => (i.id === id ? { ...i, ...patch } : i)),
+      },
     }));
   };
 
-  // ── Duplicate check using canonical identity ─────────
-  async function checkDuplicate(url: string): Promise<string | null> {
-    if (!user) return null;
+  async function checkDuplicate(userId: string, url: string): Promise<string | null> {
     const { canonical_url, source_id } = canonicalize(url);
-
     const { data } = await supabase
       .from('resources')
       .select('id')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('file_url', canonical_url)
       .limit(1);
     if (data?.length) return data[0].id;
@@ -217,78 +274,15 @@ export function useBulkIngestion() {
       const { data: ytMatch } = await supabase
         .from('resources')
         .select('id')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .ilike('file_url', `%${source_id}%`)
         .limit(1);
       if (ytMatch?.length) return ytMatch[0].id;
     }
-
     return null;
   }
 
-  // ── Preprocess: validate + deduplicate within batch ──
-  function preprocessItems(
-    rawItems: Array<{ resourceId?: string; url: string; title: string; enrichMode?: 'deep_enrich' | 're_enrich'; videoId?: string; channel?: string; publishDate?: string; duration?: string }>
-  ): IngestionItem[] {
-    const seenCanonicals = new Set<string>();
-    return rawItems.map((item, idx) => {
-      const urlError = validateUrl(item.url);
-      if (urlError) {
-        return {
-          id: item.resourceId ?? `ingest-${idx}-${Date.now()}`,
-          url: item.url,
-          title: item.title || 'Untitled',
-          stage: 'skipped' as const,
-          error: urlError,
-          videoId: item.videoId,
-          channel: item.channel,
-          publishDate: item.publishDate,
-          duration: item.duration,
-          resourceId: item.resourceId,
-          enrichMode: item.enrichMode,
-        };
-      }
-
-      const source = canonicalize(item.url);
-      const canonicalKey = item.resourceId || source.source_id || source.canonical_url;
-
-      if (seenCanonicals.has(canonicalKey)) {
-        return {
-          id: item.resourceId ?? `ingest-${idx}-${Date.now()}`,
-          url: item.url,
-          title: item.title || 'Untitled',
-          stage: 'skipped' as const,
-          error: 'duplicate_resource',
-          videoId: item.videoId || source.source_id || undefined,
-          channel: item.channel,
-          publishDate: item.publishDate,
-          duration: item.duration,
-          resourceId: item.resourceId,
-          enrichMode: item.enrichMode,
-        };
-      }
-
-      seenCanonicals.add(canonicalKey);
-
-      return {
-        id: item.resourceId ?? `ingest-${idx}-${Date.now()}`,
-        url: item.url,
-        title: item.title || 'Untitled',
-        stage: 'queued' as const,
-        videoId: item.videoId || extractYouTubeVideoId(item.url) || undefined,
-        channel: item.channel,
-        publishDate: item.publishDate,
-        duration: item.duration,
-        resourceId: item.resourceId,
-        enrichMode: item.enrichMode,
-      };
-    });
-  }
-
-  // ── Process single item (Deep Enrich) ──────────────────
-  async function processItem(item: IngestionItem, reprocessMode: ReprocessMode): Promise<void> {
-    if (!user) throw new Error('Not authenticated');
-
+  async function processItem(userId: string, item: IngestionItem, reprocessMode: ReprocessMode): Promise<void> {
     const isDirectResourceRun = !!item.resourceId;
     const resourceId = item.resourceId;
 
@@ -310,9 +304,9 @@ export function useBulkIngestion() {
       }
     }
 
-    // Step 1: Duplicate check against DB using canonical identity
+    // Step 1: Duplicate check
     updateItem(item.id, { stage: 'checking_duplicate' });
-    const existingId = await checkDuplicate(item.url);
+    const existingId = await checkDuplicate(userId, item.url);
 
     if (existingId) {
       if (reprocessMode === 'skip_processed') {
@@ -339,7 +333,7 @@ export function useBulkIngestion() {
       throw new Error(classifyError(err, 'Classification'));
     }
 
-    // Step 3: Save or update with canonical identity + provenance
+    // Step 3: Save or update
     updateItem(item.id, { stage: 'saving' });
     const source = canonicalize(item.url);
     const contentToStore = classification.scraped_content?.length > 50
@@ -377,7 +371,7 @@ export function useBulkIngestion() {
         const { data: folders } = await supabase
           .from('resource_folders')
           .select('id')
-          .eq('user_id', user.id)
+          .eq('user_id', userId)
           .is('parent_id', null)
           .ilike('name', classification.top_folder)
           .limit(1);
@@ -385,7 +379,7 @@ export function useBulkIngestion() {
         if (!folderId) {
           const { data: newF } = await supabase
             .from('resource_folders')
-            .insert({ name: classification.top_folder, user_id: user.id })
+            .insert({ name: classification.top_folder, user_id: userId })
             .select('id')
             .single();
           folderId = newF?.id || null;
@@ -395,7 +389,7 @@ export function useBulkIngestion() {
       const { data: resource, error } = await supabase
         .from('resources')
         .insert({
-          user_id: user.id,
+          user_id: userId,
           title: classification.title,
           description: classification.description
             ? `${classification.description}\n\n---\nSource: ${source.source_type}${source.source_id ? ` (${source.source_id})` : ''} · Ingested ${new Date().toISOString().split('T')[0]}`
@@ -434,53 +428,34 @@ export function useBulkIngestion() {
     updateItem(item.id, { stage: 'complete', existingResourceId: savedResourceId });
   }
 
-  // ── Main start ─────────────────────────────────────────
-  const start = useCallback(async (
-    items: Array<{ resourceId?: string; url: string; title: string; enrichMode?: 'deep_enrich' | 're_enrich'; videoId?: string; channel?: string; publishDate?: string; duration?: string }>,
-    options?: { retryFailedOnly?: boolean }
-  ) => {
-    if (runningRef.current || !user) return;
-    runningRef.current = true;
-    cancelRef.current = false;
-    pauseRef.current = false;
+  // Main execution loop — runs detached from any component
+  async function runLoop(userId: string) {
+    const store = get();
+    const { items, batchSize, reprocessMode } = store.state;
+    const queue = items.filter(i => i.stage === 'queued');
+    const cappedBatchSize = Math.min(batchSize, MAX_BATCH_SIZE);
+    const totalBatches = Math.max(1, Math.ceil(queue.length / cappedBatchSize));
 
-    let ingestionItems: IngestionItem[];
+    const priorSuccess = items.filter(i => i.stage === 'complete').length;
+    const priorSkipped = items.filter(i => i.stage === 'skipped').length;
 
-    if (options?.retryFailedOnly) {
-      ingestionItems = state.items.map(i =>
-        i.stage === 'failed'
-          ? { ...i, stage: 'queued' as const, error: undefined }
-          : i
-      );
-    } else {
-      // Automatic preprocessing: validate, canonicalize, deduplicate within input
-      ingestionItems = preprocessItems(items);
-    }
-
-    const queue = ingestionItems.filter(i => i.stage === 'queued');
-    const batchSize = Math.min(state.batchSize, MAX_BATCH_SIZE);
-    const totalBatches = Math.max(1, Math.ceil(queue.length / batchSize));
-    const priorSuccess = ingestionItems.filter(i => i.stage === 'complete').length;
-    const priorSkipped = ingestionItems.filter(i => i.stage === 'skipped').length;
-
-    setState(prev => ({
-      ...prev,
-      status: 'running',
-      totalItems: ingestionItems.length,
-      currentBatch: 0,
-      totalBatches,
-      processedCount: priorSuccess + priorSkipped,
-      successCount: priorSuccess,
-      failedCount: 0,
-      skippedCount: priorSkipped,
-      reviewCount: 0,
-      items: ingestionItems,
+    set(s => ({
+      state: {
+        ...s.state,
+        status: 'running',
+        totalBatches,
+        currentBatch: 0,
+        processedCount: priorSuccess + priorSkipped,
+        successCount: priorSuccess,
+        failedCount: 0,
+        skippedCount: priorSkipped,
+        reviewCount: 0,
+      },
     }));
 
-    // If all items were filtered during preprocessing
     if (queue.length === 0) {
-      setState(prev => ({ ...prev, status: 'completed' }));
-      runningRef.current = false;
+      set(s => ({ state: { ...s.state, status: 'completed' } }));
+      get()._running = false;
       return;
     }
 
@@ -491,61 +466,57 @@ export function useBulkIngestion() {
     let processedCount = priorSuccess + priorSkipped;
 
     for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
-      if (cancelRef.current) {
-        setState(prev => ({ ...prev, status: 'cancelled' }));
-        runningRef.current = false;
+      if (get()._cancelRequested) {
+        set(s => ({ state: { ...s.state, status: 'cancelled' }, _running: false }));
         return;
       }
 
-      while (pauseRef.current) {
-        setState(prev => ({ ...prev, status: 'paused' }));
+      while (get()._pauseRequested) {
+        set(s => ({ state: { ...s.state, status: 'paused' } }));
         await new Promise(r => setTimeout(r, 500));
-        if (cancelRef.current) {
-          setState(prev => ({ ...prev, status: 'cancelled' }));
-          runningRef.current = false;
+        if (get()._cancelRequested) {
+          set(s => ({ state: { ...s.state, status: 'cancelled' }, _running: false }));
           return;
         }
       }
 
-      const batchStart = batchIdx * batchSize;
-      const batch = queue.slice(batchStart, batchStart + batchSize);
+      const batchStart = batchIdx * cappedBatchSize;
+      const batch = queue.slice(batchStart, batchStart + cappedBatchSize);
 
-      setState(prev => ({ ...prev, status: 'running', currentBatch: batchIdx + 1 }));
+      set(s => ({ state: { ...s.state, status: 'running', currentBatch: batchIdx + 1 } }));
 
       for (const item of batch) {
-        if (cancelRef.current) {
-          setState(prev => ({ ...prev, status: 'cancelled' }));
-          runningRef.current = false;
+        if (get()._cancelRequested) {
+          set(s => ({ state: { ...s.state, status: 'cancelled' }, _running: false }));
           return;
         }
-        while (pauseRef.current) {
+        while (get()._pauseRequested) {
           await new Promise(r => setTimeout(r, 500));
-          if (cancelRef.current) {
-            setState(prev => ({ ...prev, status: 'cancelled' }));
-            runningRef.current = false;
+          if (get()._cancelRequested) {
+            set(s => ({ state: { ...s.state, status: 'cancelled' }, _running: false }));
             return;
           }
         }
 
         try {
-          await processItem(item, state.reprocessMode);
+          await processItem(userId, item, reprocessMode);
           processedCount++;
 
-          setState(prev => {
-            const updated = prev.items.find(i => i.id === item.id);
+          set(s => {
+            const updated = s.state.items.find(i => i.id === item.id);
             const stage = updated?.stage || 'complete';
-            const newState = { ...prev, processedCount };
+            const newState = { ...s.state, processedCount };
             if (stage === 'complete') { successCount++; newState.successCount = successCount; }
             else if (stage === 'skipped') { skippedCount++; newState.skippedCount = skippedCount; }
             else if (stage === 'needs_review') { reviewCount++; newState.reviewCount = reviewCount; successCount++; newState.successCount = successCount; }
-            return newState;
+            return { state: newState };
           });
         } catch (err) {
           processedCount++;
           failedCount++;
           const msg = classifyError(err, 'Deep enrichment');
           updateItem(item.id, { stage: 'failed', error: msg });
-          setState(prev => ({ ...prev, processedCount, failedCount }));
+          set(s => ({ state: { ...s.state, processedCount, failedCount } }));
         }
 
         if (batch.indexOf(item) < batch.length - 1) {
@@ -558,51 +529,89 @@ export function useBulkIngestion() {
       }
     }
 
-    queryClient.invalidateQueries({ queryKey: ['resources'] });
-    queryClient.invalidateQueries({ queryKey: ['resource-folders'] });
-
-    setState(prev => ({
-      ...prev,
-      status: failedCount > 0 ? 'failed' : 'completed',
+    set(s => ({
+      state: { ...s.state, status: failedCount > 0 ? 'failed' : 'completed' },
+      _running: false,
     }));
-    runningRef.current = false;
-  }, [user, state.batchSize, state.reprocessMode, state.items, queryClient]);
-
-  const pause = useCallback(() => { pauseRef.current = true; }, []);
-  const resume = useCallback(() => { pauseRef.current = false; }, []);
-  const cancel = useCallback(() => { cancelRef.current = true; }, []);
-
-  const reset = useCallback(() => {
-    cancelRef.current = false;
-    pauseRef.current = false;
-    runningRef.current = false;
-    setState(prev => ({
-      status: 'idle' as const,
-      mode: prev.mode,
-      batchSize: prev.batchSize,
-      reprocessMode: prev.reprocessMode,
-      totalItems: 0,
-      currentBatch: 0,
-      totalBatches: 0,
-      processedCount: 0,
-      successCount: 0,
-      failedCount: 0,
-      skippedCount: 0,
-      reviewCount: 0,
-      items: [],
-      startedAt: null,
-    }));
-  }, []);
+  }
 
   return {
-    state,
-    setBatchSize,
-    setReprocessMode,
-    start,
-    pause,
-    resume,
-    cancel,
-    reset,
-    hasFailures: state.items.some(i => i.stage === 'failed'),
+    state: { ...INITIAL_STATE },
+    _cancelRequested: false,
+    _pauseRequested: false,
+    _running: false,
+
+    setBatchSize: (size: number) => {
+      const capped = Math.min(Math.max(size, 1), MAX_BATCH_SIZE);
+      set(s => ({ state: { ...s.state, batchSize: capped } }));
+    },
+
+    setMode: (mode: EnrichMode) => {
+      set(s => ({ state: { ...s.state, mode } }));
+    },
+
+    start: (
+      userId: string,
+      items: Array<{ resourceId?: string; url: string; title: string; enrichMode?: EnrichMode }>,
+      options?: { retryFailedOnly?: boolean },
+    ) => {
+      const store = get();
+      if (store._running) return;
+
+      let ingestionItems: IngestionItem[];
+
+      if (options?.retryFailedOnly) {
+        ingestionItems = store.state.items.map(i =>
+          i.stage === 'failed'
+            ? { ...i, stage: 'queued' as const, error: undefined }
+            : i
+        );
+      } else {
+        ingestionItems = preprocessItems(items);
+      }
+
+      set({
+        _running: true,
+        _cancelRequested: false,
+        _pauseRequested: false,
+        state: {
+          ...store.state,
+          status: 'running',
+          totalItems: ingestionItems.length,
+          items: ingestionItems,
+          startedAt: Date.now(),
+        },
+      });
+
+      // Fire and forget — runs in background
+      runLoop(userId);
+    },
+
+    pause: () => {
+      set({ _pauseRequested: true });
+    },
+
+    resume: () => {
+      set({ _pauseRequested: false });
+    },
+
+    cancel: () => {
+      set({ _cancelRequested: true });
+    },
+
+    reset: () => {
+      set({
+        _cancelRequested: false,
+        _pauseRequested: false,
+        _running: false,
+        state: { ...INITIAL_STATE, batchSize: get().state.batchSize },
+      });
+    },
+
+    hasFailures: () => get().state.items.some(i => i.stage === 'failed'),
+    isActive: () => {
+      const s = get().state.status;
+      return s === 'running' || s === 'paused';
+    },
   };
-}
+});
