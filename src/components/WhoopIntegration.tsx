@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { trackedInvoke } from '@/lib/trackedInvoke';
+import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGroupDrift } from '@/hooks/useGroupDrift';
@@ -183,13 +184,19 @@ export function WhoopIntegration() {
     setConnection(null);
     setMetrics([]);
     try {
-      const response = await trackedInvoke<any>('whoop-auth', {
+      // Use authenticatedFetch (raw fetch) instead of trackedInvoke (SDK invoke)
+      // to bypass the Lovable preview fetch proxy that interferes with POST requests.
+      const resp = await authenticatedFetch({
+        functionName: 'whoop-auth',
         body: { redirectUri: window.location.origin },
+        componentName: 'WhoopIntegration',
+        retry: false, // OAuth initiation should not retry
       });
-      if (response.error) {
-        const msg = response.error.message || 'Unknown error';
-        console.error('WHOOP auth error:', msg, response.error);
-        // Surface specific failure reasons
+
+      if (!resp.ok) {
+        const errBody = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }));
+        const msg = errBody.error || errBody.detail || `HTTP ${resp.status}`;
+        console.error('WHOOP auth error:', msg, errBody);
         if (/drift|mismatch/i.test(msg)) {
           toast.error('WHOOP functions have a version mismatch', { description: msg, duration: 8000 });
         } else if (/WHOOP_CLIENT_ID|not configured/i.test(msg)) {
@@ -202,14 +209,16 @@ export function WhoopIntegration() {
         setConnecting(false);
         return;
       }
-      if (!response.data?.authUrl) {
-        console.error('WHOOP auth response missing authUrl:', response.data);
+
+      const data = await resp.json();
+      if (!data?.authUrl) {
+        console.error('WHOOP auth response missing authUrl:', data);
         toast.error('WHOOP connection failed', { description: 'No authorization URL returned. Check WHOOP API credentials.', duration: 6000 });
         setConnecting(false);
         return;
       }
       console.log('[WHOOP] Redirecting to OAuth URL');
-      window.location.href = response.data.authUrl;
+      window.location.href = data.authUrl;
     } catch (err: any) {
       console.error('Connect error:', err);
       toast.error('Failed to start WHOOP connection', { description: err?.message || 'Network error', duration: 6000 });
