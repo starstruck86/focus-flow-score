@@ -323,15 +323,38 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
             <ChevronDown className={cn("h-3 w-3 transition-transform", showFailed && "rotate-180")} />
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-2 space-y-1 max-h-48 overflow-y-auto">
-            {failedItems.map(item => (
-              <div key={item.id} className="flex items-start gap-2 text-[11px] bg-destructive/5 rounded px-2 py-1">
-                <XCircle className="h-3 w-3 text-status-red mt-0.5 shrink-0" />
-                <div className="min-w-0">
-                  <span className="font-medium text-foreground truncate block">{item.title}</span>
-                  {item.error && <p className="text-muted-foreground">{item.error}</p>}
+            {failedItems.map(item => {
+              const isTimeout = item.failureCategory === 'failed_timeout';
+              const isQuality = item.failureCategory === 'failed_quality';
+              const isNetwork = item.failureCategory === 'failed_request';
+              const retryHint = isTimeout
+                ? 'Retry will use extended timeout'
+                : isNetwork
+                ? 'Retry will attempt again'
+                : isQuality
+                ? 'Content source may not have enough extractable text'
+                : item.retryEligible
+                ? 'Retryable'
+                : 'Not retryable — fix source first';
+
+              return (
+                <div key={item.id} className="flex items-start gap-2 text-[11px] bg-destructive/5 rounded px-2 py-1">
+                  <XCircle className="h-3 w-3 text-status-red mt-0.5 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <span className="font-medium text-foreground truncate block">{item.title}</span>
+                    {item.error && <p className="text-muted-foreground">{item.error}</p>}
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {item.failureCategory && (
+                        <Badge variant="outline" className="text-[9px] h-4 px-1 font-mono">
+                          {item.failureCategory.replace('failed_', '')}
+                        </Badge>
+                      )}
+                      <span className="text-[10px] text-muted-foreground italic">{retryHint}</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </CollapsibleContent>
         </Collapsible>
       )}

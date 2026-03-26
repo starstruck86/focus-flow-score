@@ -91,8 +91,13 @@ function classifyError(
     return { category: 'AUTH_ERROR', retryable: false, code: 401 };
 
   // Rate limit
-  if (lower.includes('rate') && lower.includes('limit') || lower.includes('429') || lower.includes('concurrency'))
+  if ((lower.includes('rate') && lower.includes('limit')) || lower.includes('429') || lower.includes('concurrency'))
     return { category: 'RATE_LIMITED', retryable: true, code: 429 };
+
+  // Supabase SDK transport error — "Failed to send a request to the Edge Function"
+  // This is a transient network/connection issue, NOT an AI model error
+  if (lower.includes('failed to send a request to the edge function') || lower.includes('relay error'))
+    return { category: 'NETWORK_ERROR', retryable: true, code: 502 };
 
   // Network
   if (lower.includes('failed to fetch') || lower.includes('networkerror') || lower.includes('load failed'))
@@ -103,7 +108,7 @@ function classifyError(
     return { category: 'FUNCTION_TIMEOUT', retryable: true, code: 408 };
 
   // 404
-  if (lower.includes('404') || lower.includes('not found') && lower.includes('function'))
+  if (lower.includes('404') || (lower.includes('not found') && lower.includes('function')))
     return { category: 'FUNCTION_404', retryable: false, code: 404 };
 
   // 401 from function
@@ -111,15 +116,19 @@ function classifyError(
     return { category: 'FUNCTION_401', retryable: false, code: 401 };
 
   // DB write
-  if (lower.includes('insert') || lower.includes('update') || lower.includes('violates') || lower.includes('duplicate key'))
+  if (lower.includes('insert') || lower.includes('violates') || lower.includes('duplicate key'))
     return { category: 'DB_WRITE_FAILED', retryable: false, code: null };
 
-  // Validation
+  // Quality validation from enrichment (NOT a generic "invalid input" error)
+  if (lower.includes('quality validation failed') || lower.includes('quality gate'))
+    return { category: 'VALIDATION_ERROR', retryable: true, code: 422 };
+
+  // Generic validation
   if (lower.includes('invalid') || lower.includes('required') || lower.includes('validation'))
     return { category: 'VALIDATION_ERROR', retryable: false, code: 422 };
 
-  // Model
-  if (lower.includes('model') || lower.includes('completion') || lower.includes('ai'))
+  // Model (must be AFTER the more specific checks above)
+  if (lower.includes('model') || lower.includes('completion'))
     return { category: 'MODEL_RESPONSE_INVALID', retryable: true, code: 502 };
 
   // Extract HTTP status if present
@@ -132,13 +141,23 @@ function classifyError(
 function friendlyMessage(category: ErrorCategory, raw: string): string {
   switch (category) {
     case 'AUTH_ERROR': return 'Authentication failed. Please sign in again.';
-    case 'NETWORK_ERROR': return 'Network error — check your connection and retry.';
+    case 'NETWORK_ERROR': return 'Connection error — retrying automatically.';
     case 'FUNCTION_TIMEOUT': return 'The request timed out. Try again in a moment.';
     case 'FUNCTION_404': return 'Service not found. This may need a redeployment.';
     case 'FUNCTION_401': return 'Not authorized. Please sign in again.';
     case 'RATE_LIMITED': return 'Too many requests — wait a moment and retry.';
     case 'DB_WRITE_FAILED': return 'Failed to save data. Check for duplicates or missing fields.';
-    case 'VALIDATION_ERROR': return 'Invalid input. Please check your data and try again.';
+    case 'VALIDATION_ERROR': {
+      // Surface quality validation details instead of generic message
+      if (raw.toLowerCase().includes('quality validation failed')) {
+        const detail = raw.replace(/^Quality validation failed:\s*/i, '');
+        return `Content quality insufficient: ${detail.slice(0, 100)}`;
+      }
+      if (raw.toLowerCase().includes('quality gate')) {
+        return raw.slice(0, 120);
+      }
+      return 'Invalid input. Please check your data and try again.';
+    }
     case 'MODEL_RESPONSE_INVALID': return 'AI response was invalid. Try again.';
     default: return raw.length > 120 ? raw.slice(0, 117) + '…' : raw;
   }

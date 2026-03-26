@@ -32,6 +32,7 @@ const AUTH_GATED_PATTERNS = [
   /slides\.google\.com/i, /\.zoom\.us\//i, /thinkific\.com/i, /udemy\.com/i,
   /coursera\.org/i, /linkedin\.com\/learning/i, /loom\.com/i, /notion\.so/i,
   /dropbox\.com/i, /onedrive\.live\.com/i, /sharepoint\.com/i,
+  /circle\.so/i, /teachable\.com/i, /kajabi\.com/i, /skool\.com/i,
 ];
 
 function isAuthGated(url: string): boolean {
@@ -45,13 +46,17 @@ function detectSource(url: string): "youtube" | "podcast" | "generic" | "auth-ga
   return "generic";
 }
 
-async function scrapeUrl(url: string, apiKey: string): Promise<string | null> {
+async function scrapeUrl(url: string, apiKey: string): Promise<{ content: string | null; scrapeMs: number; errorType?: string }> {
   const source = detectSource(url);
-  if (source === "auth-gated") return null;
+  if (source === "auth-gated") return { content: null, scrapeMs: 0, errorType: 'auth_gated' };
 
   const waitFor = source === "youtube" ? 8000 : source === "podcast" ? 5000 : undefined;
+  const startMs = Date.now();
 
   try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 90_000); // 90s hard timeout for Firecrawl
+
     const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -61,19 +66,25 @@ async function scrapeUrl(url: string, apiKey: string): Promise<string | null> {
         onlyMainContent: true,
         ...(waitFor ? { waitFor } : {}),
       }),
+      signal: controller.signal,
     });
 
+    clearTimeout(timer);
+    const scrapeMs = Date.now() - startMs;
+
     if (!response.ok) {
-      console.error(`Firecrawl error for ${url}: ${response.status}`);
-      return null;
+      console.error(`Firecrawl error for ${url}: ${response.status} (${scrapeMs}ms)`);
+      return { content: null, scrapeMs, errorType: `firecrawl_${response.status}` };
     }
 
     const data = await response.json();
     const markdown = data.data?.markdown || data.markdown || "";
-    return markdown.slice(0, CONTENT_CAP) || null;
+    return { content: markdown.slice(0, CONTENT_CAP) || null, scrapeMs };
   } catch (e) {
-    console.error(`Scrape failed for ${url}:`, e);
-    return null;
+    const scrapeMs = Date.now() - startMs;
+    const errorType = e instanceof DOMException && e.name === 'AbortError' ? 'firecrawl_timeout' : 'firecrawl_network';
+    console.error(`Scrape failed for ${url} (${scrapeMs}ms):`, e);
+    return { content: null, scrapeMs, errorType };
   }
 }
 
@@ -181,15 +192,21 @@ async function enrichSingleResource(
   resource: any,
   apiKey: string,
   force: boolean,
-): Promise<{ status: string; chars: number; quality_tier?: string; quality_score?: number; violations?: string[] }> {
+): Promise<{ status: string; chars: number; quality_tier?: string; quality_score?: number; violations?: string[]; scrapeMs?: number; errorType?: string }> {
+  const startMs = Date.now();
   const url = resource.file_url;
+  
+  console.log(`[Enrich] START resource=${resource.id} url=${url?.slice(0, 80)} force=${force}`);
+  
   if (!url || !url.startsWith("http")) {
-    return { status: "skipped", chars: 0 };
+    console.log(`[Enrich] SKIP resource=${resource.id} reason=no_valid_url`);
+    return { status: "skipped", chars: 0, errorType: 'no_valid_url' };
   }
 
   const source = detectSource(url);
   if (source === "auth-gated") {
-    return { status: "auth-gated", chars: 0 };
+    console.log(`[Enrich] SKIP resource=${resource.id} reason=auth_gated url=${url.slice(0, 60)}`);
+    return { status: "auth-gated", chars: 0, errorType: 'auth_gated' };
   }
 
   // Only allow re-enrichment when force=true
@@ -202,12 +219,16 @@ async function enrichSingleResource(
 
   await setEnrichmentStatus(supabase, resource.id, inProgressStatus);
 
-  const content = await scrapeUrl(url, apiKey);
+  const scrapeResult = await scrapeUrl(url, apiKey);
+  const content = scrapeResult.content;
+  const scrapeMs = scrapeResult.scrapeMs;
+
+  console.log(`[Enrich] SCRAPED resource=${resource.id} chars=${content?.length || 0} scrapeMs=${scrapeMs} errorType=${scrapeResult.errorType || 'none'}`);
 
   // ── QUALITY VALIDATION GATE (CRITICAL) ──────────────────
   const qv = validateContentQuality(content, ENRICHMENT_VERSION);
 
-  console.log(`[QualityGate] resource=${resource.id} score=${qv.score} tier=${qv.tier} violations=${qv.violations.join('; ')} chars=${content?.length || 0}`);
+  console.log(`[QualityGate] resource=${resource.id} score=${qv.score} tier=${qv.tier} violations=${qv.violations.join('; ')} chars=${content?.length || 0} totalMs=${Date.now() - startMs}`);
 
   if (qv.passes) {
     // Quality contract met → deep_enriched
@@ -222,7 +243,8 @@ async function enrichSingleResource(
       last_quality_tier: qv.tier,
     });
     await supabase.from("resource_digests").delete().eq("resource_id", resource.id);
-    return { status: "enriched", chars: content!.length, quality_tier: qv.tier, quality_score: qv.score };
+    console.log(`[Enrich] SUCCESS resource=${resource.id} chars=${content!.length} totalMs=${Date.now() - startMs}`);
+    return { status: "enriched", chars: content!.length, quality_tier: qv.tier, quality_score: qv.score, scrapeMs };
   }
 
   // Quality contract NOT met
@@ -236,15 +258,22 @@ async function enrichSingleResource(
   // On re-enrich failure, increment failure_count
   const failureCount = (resource.failure_count || 0) + 1;
 
+  // Build specific failure reason including scrape error if applicable
+  let failureReason = qv.violations.join('; ') || (content ? `Quality too low (score ${qv.score})` : "Scrape returned no content");
+  if (scrapeResult.errorType) {
+    failureReason = `${scrapeResult.errorType}: ${failureReason}`;
+  }
+
   await setEnrichmentStatus(supabase, resource.id, isReenrich && resource.enrichment_status === 'deep_enriched' ? resource.enrichment_status : newStatus, {
-    failure_reason: qv.violations.join('; ') || (content ? `Quality too low (score ${qv.score})` : "Scrape returned no content"),
+    failure_reason: failureReason,
     last_quality_score: qv.score,
     last_quality_tier: qv.tier,
     validation_version: VALIDATION_VERSION,
     failure_count: failureCount,
   });
 
-  return { status: newStatus, chars: content?.length || 0, quality_tier: qv.tier, quality_score: qv.score, violations: qv.violations };
+  console.log(`[Enrich] ${newStatus.toUpperCase()} resource=${resource.id} reason=${failureReason} totalMs=${Date.now() - startMs}`);
+  return { status: newStatus, chars: content?.length || 0, quality_tier: qv.tier, quality_score: qv.score, violations: qv.violations, scrapeMs, errorType: scrapeResult.errorType };
 }
 
 Deno.serve(async (req) => {
