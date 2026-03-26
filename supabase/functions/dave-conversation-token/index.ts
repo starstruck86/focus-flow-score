@@ -7,7 +7,7 @@ const FUNCTION_GROUP_VERSION = "dave-v2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-trace-id",
   "Access-Control-Expose-Headers": "x-function-group-version",
   "x-function-group-version": FUNCTION_GROUP_VERSION,
 };
