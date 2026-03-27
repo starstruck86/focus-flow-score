@@ -143,6 +143,7 @@ export function defaultGovernance(status: GovernanceStatus = 'review_needed'): D
     duplicateCandidateIds: [],
     conflictFlag: 'none',
     conflictCandidateIds: [],
+    isLegacyHydrated: false,
   };
 }
 
