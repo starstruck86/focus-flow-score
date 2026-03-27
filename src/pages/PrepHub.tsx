@@ -67,32 +67,42 @@ export default function PrepHub() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full grid grid-cols-6">
-            <TabsTrigger value="content-builder" className="text-xs">
-              <Wand2 className="h-3.5 w-3.5 mr-1" />
-              Build
-            </TabsTrigger>
-            <TabsTrigger value="resources" className="text-xs">
-              <FileText className="h-3.5 w-3.5 mr-1" />
-              Library
-            </TabsTrigger>
-            <TabsTrigger value="playbooks" className="text-xs">
-              <BookOpen className="h-3.5 w-3.5 mr-1" />
-              Playbooks
-            </TabsTrigger>
-            <TabsTrigger value="prep" className="text-xs">
-              <Sparkles className="h-3.5 w-3.5 mr-1" />
-              AI Prep
-            </TabsTrigger>
-            <TabsTrigger value="templates" className="text-xs">
-              <Mail className="h-3.5 w-3.5 mr-1" />
-              Templates
-            </TabsTrigger>
-            <TabsTrigger value="prompts" className="text-xs">
-              <MessageSquare className="h-3.5 w-3.5 mr-1" />
-              Prompts
-            </TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto -mx-1 px-1">
+            <TabsList className="w-max flex gap-0.5">
+              <TabsTrigger value="content-builder" className="text-xs">
+                <Wand2 className="h-3.5 w-3.5 mr-1" />
+                Build
+              </TabsTrigger>
+              <TabsTrigger value="resources" className="text-xs">
+                <FileText className="h-3.5 w-3.5 mr-1" />
+                Library
+              </TabsTrigger>
+              <TabsTrigger value="playbooks" className="text-xs">
+                <BookOpen className="h-3.5 w-3.5 mr-1" />
+                Playbooks
+              </TabsTrigger>
+              <TabsTrigger value="sources" className="text-xs">
+                <Brain className="h-3.5 w-3.5 mr-1" />
+                Sources
+              </TabsTrigger>
+              <TabsTrigger value="incoming" className="text-xs">
+                <Inbox className="h-3.5 w-3.5 mr-1" />
+                Incoming
+              </TabsTrigger>
+              <TabsTrigger value="prep" className="text-xs">
+                <Sparkles className="h-3.5 w-3.5 mr-1" />
+                AI Prep
+              </TabsTrigger>
+              <TabsTrigger value="templates" className="text-xs">
+                <Mail className="h-3.5 w-3.5 mr-1" />
+                Templates
+              </TabsTrigger>
+              <TabsTrigger value="prompts" className="text-xs">
+                <MessageSquare className="h-3.5 w-3.5 mr-1" />
+                Prompts
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           {/* GOVERNANCE PANEL — collapsible, feature-flagged */}
           <GovernancePanel />
