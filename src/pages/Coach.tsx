@@ -46,6 +46,8 @@ import {
   MockCallSimulator,
   ObjectionDrillReps,
 } from '@/components/coach';
+import { WeeklyReviewPanel, SkillLabPanel, PatternDiagnosticsPanel, RecommendationAuditPanel } from '@/components/coach/PerformancePanels';
+import { isSystemOSEnabled } from '@/lib/featureFlags';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
