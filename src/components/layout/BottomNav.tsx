@@ -33,6 +33,7 @@ export const COLOR_VAR: Record<NavColor, string> = {
   trends: 'var(--nav-trends)',
   quota: 'var(--nav-quota)',
   settings: 'var(--nav-settings)',
+  cockpit: 'var(--nav-today)',
 };
 
 export const navRow1: NavItemDef[] = [
