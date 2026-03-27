@@ -22,7 +22,7 @@ export async function getPlaybookRecommendation(
     .select('*')
     .order('confidence_score', { ascending: false });
 
-  if (error || !rows?.length) return 'No playbooks available yet. Generate playbooks from the Prep Hub first.';
+  if (error || !rows?.length) return 'No playbooks available yet. Generate playbooks from the Sales Brain OS first.';
 
   const playbooks = rows as unknown as Playbook[];
 
