@@ -21,6 +21,8 @@ import { Zap, RefreshCw, RotateCcw,
   GraduationCap, MessageSquare, Loader2, Check, X, AlertTriangle, Globe, Radar, ListVideo, Podcast,
 } from 'lucide-react';
 import { ResourceLibraryTable } from './ResourceLibraryTable';
+import { ResourceAudioInspector } from './ResourceAudioInspector';
+import { ManualTranscriptAssist } from './ManualTranscriptAssist';
 import { cn } from '@/lib/utils';
 import {
   useResourceFolders, useResources, useCreateFolder, useCreateResource,
@@ -47,8 +49,12 @@ import { EnrichmentJobIndicator } from './EnrichmentJobIndicator';
 import { useResourceDuplicates } from '@/hooks/useResourceDuplicates';
 import { useConsolidateFolders } from '@/hooks/useConsolidateFolders';
 import { ResourceIntelligenceDashboard } from './ResourceIntelligenceDashboard';
+import { useAudioJobsMap } from '@/hooks/useAudioJobs';
+import { isAudioResource } from '@/lib/salesBrain/audioPipeline';
+import { processAudioResource, retryPlatformResolution, retryAudioJob } from '@/lib/salesBrain/audioOrchestrator';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
 
 type PendingItem = {
   id: string;
@@ -134,6 +140,8 @@ export function ResourceManager() {
   const [battlecardProgress, setBattlecardProgress] = useState('');
   const [selectedResourceIds, setSelectedResourceIds] = useState<Set<string>>(new Set());
   const [showDeepEnrich, setShowDeepEnrich] = useState(false);
+  const [inspectingAudioResource, setInspectingAudioResource] = useState<Resource | null>(null);
+  const [manualAssistResource, setManualAssistResource] = useState<Resource | null>(null);
 
   // AI Generate / Transform states
   const [showAIGenerate, setShowAIGenerate] = useState(false);
@@ -156,6 +164,8 @@ export function ResourceManager() {
   const operationalize = useOperationalizeResource();
   const updateEnrichmentStatus = useUpdateEnrichmentStatus();
   const { data: suggestions = [], refetch: refetchSuggestions, isLoading: suggestionsLoading } = useResourceSuggestions(resources.length > 0);
+  const { data: audioJobsMap } = useAudioJobsMap();
+  const queryClient = useQueryClient();
 
   const currentFolders = folders.filter(f => f.parent_id === currentFolderId);
   const filteredResources = searchQuery
@@ -706,6 +716,7 @@ export function ResourceManager() {
           <ResourceLibraryTable
             resources={filteredResources}
             selectedIds={selectedResourceIds}
+            audioJobsMap={audioJobsMap}
             onToggleSelect={(id) => setSelectedResourceIds(prev => {
               const next = new Set(prev);
               if (next.has(id)) next.delete(id);
@@ -724,7 +735,32 @@ export function ResourceManager() {
                   else setEditingResource(resource);
                   break;
                 case 'deep_enrich':
-                case 're_enrich':
+                case 're_enrich': {
+                  // Route audio resources through the audio orchestrator
+                  if (isAudioResource(resource.file_url, resource.resource_type) && resource.file_url) {
+                    toast.info('Processing audio resource...');
+                    try {
+                      const result = await processAudioResource(resource.id, resource.file_url);
+                      queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+                      if ('transcript' in result && result.success) {
+                        toast.success(`Audio transcribed (${result.totalWords} words)`);
+                      } else if ('finalStatus' in result) {
+                        if (result.finalStatus === 'metadata_only') {
+                          toast.info('Metadata captured — no direct audio available', { description: 'Use Manual Assist to paste transcript' });
+                        } else if (result.finalStatus === 'needs_manual_assist') {
+                          toast.info('Manual assist needed', { description: result.failureReason || 'Open Manual Assist to provide transcript' });
+                        } else if (result.finalStatus === 'completed') {
+                          toast.success('Audio processing complete');
+                        } else {
+                          toast.error(result.failureReason || 'Audio processing failed');
+                        }
+                      }
+                    } catch (error: any) {
+                      toast.error('Audio processing failed', { description: error?.message });
+                    }
+                    break;
+                  }
+                  // Standard enrichment for non-audio
                   toast.info(action === 're_enrich' ? 'Re-enriching...' : 'Enriching...');
                   try {
                     const result = await invokeEnrichResource<any>({ resource_id: resource.id, force: action === 're_enrich' });
@@ -739,6 +775,7 @@ export function ResourceManager() {
                     toast.error('Enrichment failed', { description: error?.message });
                   }
                   break;
+                }
                 case 'retry':
                   updateEnrichmentStatus.mutate({ id: resource.id, enrichment_status: 'not_enriched', failure_reason: null });
                   toast.success('Reset for retry');
@@ -757,6 +794,34 @@ export function ResourceManager() {
                 case 'bulk_enrich':
                   setShowDeepEnrich(true);
                   break;
+                case 'inspect_audio':
+                  setInspectingAudioResource(resource);
+                  break;
+                case 'manual_assist':
+                  setManualAssistResource(resource);
+                  break;
+                case 'retry_resolve': {
+                  const job = audioJobsMap?.get(resource.id);
+                  if (job) {
+                    toast.info('Retrying platform resolution...');
+                    const result = await retryPlatformResolution(job.id);
+                    queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+                    if (result?.finalStatus === 'audio_resolved') toast.success('Audio URL resolved!');
+                    else toast.info(result?.failureReason || 'Resolution complete');
+                  }
+                  break;
+                }
+                case 'retry_transcription': {
+                  const job = audioJobsMap?.get(resource.id);
+                  if (job) {
+                    toast.info('Retrying transcription...');
+                    const result = await retryAudioJob(job.id);
+                    queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+                    if (result.success) toast.success(`Transcribed (${result.totalWords} words)`);
+                    else toast.error(result.failureReason || 'Transcription failed');
+                  }
+                  break;
+                }
               }
             }}
           />
@@ -990,6 +1055,96 @@ export function ResourceManager() {
 
       {/* Floating enrichment job indicator */}
       <EnrichmentJobIndicator onOpenModal={() => setShowDeepEnrich(true)} />
+
+      {/* Audio Inspector Panel */}
+      {inspectingAudioResource && (
+        <div className="fixed bottom-4 right-4 z-50 w-[380px] max-h-[500px] shadow-xl">
+          <ResourceAudioInspector
+            resource={inspectingAudioResource}
+            audioJob={audioJobsMap?.get(inspectingAudioResource.id) || null}
+            onClose={() => setInspectingAudioResource(null)}
+            onRetryResolve={async () => {
+              const job = audioJobsMap?.get(inspectingAudioResource.id);
+              if (job) {
+                toast.info('Retrying resolution...');
+                await retryPlatformResolution(job.id);
+                queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+              }
+            }}
+            onRetryTranscription={async () => {
+              const job = audioJobsMap?.get(inspectingAudioResource.id);
+              if (job) {
+                toast.info('Retrying transcription...');
+                await retryAudioJob(job.id);
+                queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+              }
+            }}
+            onOpenManualAssist={() => {
+              setManualAssistResource(inspectingAudioResource);
+            }}
+          />
+        </div>
+      )}
+
+      {/* Manual Transcript Assist */}
+      <ManualTranscriptAssist
+        open={!!manualAssistResource}
+        onOpenChange={(open) => { if (!open) setManualAssistResource(null); }}
+        resourceId={manualAssistResource?.id || ''}
+        resourceTitle={manualAssistResource?.title || ''}
+        resourceUrl={manualAssistResource?.file_url || null}
+        onSubmit={async (data) => {
+          if (data.mode === 'paste_transcript' || data.mode === 'paste_notes') {
+            // Save content to resource
+            if (manualAssistResource) {
+              await supabase.from('resources').update({
+                content: data.content,
+                enrichment_status: 'not_enriched',
+              }).eq('id', manualAssistResource.id);
+              // Update audio job
+              const job = audioJobsMap?.get(manualAssistResource.id);
+              if (job) {
+                await supabase.from('audio_jobs').update({
+                  stage: 'completed',
+                  transcript_text: data.content,
+                  transcript_word_count: data.content.split(/\s+/).filter(Boolean).length,
+                  has_transcript: true,
+                  transcript_mode: data.mode === 'paste_transcript' ? 'direct_transcription' : 'manual_assist',
+                  final_resolution_status: 'completed',
+                  failure_code: null,
+                  failure_reason: null,
+                }).eq('id', job.id);
+              }
+              queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+              queryClient.invalidateQueries({ queryKey: ['resources'] });
+              toast.success('Content saved — ready for enrichment');
+            }
+          } else if (data.mode === 'provide_alt_url' || data.mode === 'provide_audio_url') {
+            if (manualAssistResource && data.content) {
+              toast.info('Processing provided URL...');
+              const result = await processAudioResource(manualAssistResource.id, data.content);
+              queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+              if ('success' in result && result.success) {
+                toast.success('Audio processed successfully');
+              } else {
+                toast.info('Resolution complete — check audio inspector for details');
+              }
+            }
+          } else if (data.mode === 'metadata_only') {
+            const job = audioJobsMap?.get(manualAssistResource?.id || '');
+            if (job) {
+              await supabase.from('audio_jobs').update({
+                stage: 'metadata_only_complete',
+                transcript_mode: 'metadata_only',
+                final_resolution_status: 'metadata_only',
+              }).eq('id', job.id);
+              queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+              toast.success('Marked as metadata-only');
+            }
+          }
+          setManualAssistResource(null);
+        }}
+      />
 
       {/* Bulk selection bar moved into ResourceLibraryTable */}
     </div>
