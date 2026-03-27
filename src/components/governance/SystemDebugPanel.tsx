@@ -218,6 +218,22 @@ export function SystemDebugPanel() {
           <Row label="→ Prep (actual)" value={String(actualUsage.prep)} />
           <Row label="→ Playbooks (actual)" value={String(actualUsage.playbooks)} />
 
+          {/* Audio Pipeline */}
+          <div className="border-t border-border/20 pt-1 mt-1" />
+          <span className="font-semibold text-muted-foreground uppercase tracking-wider text-[9px]">Audio Pipeline</span>
+          <Row label="Total audio" value={String(audioHealth.totalAudio)} />
+          <Row label="Queued" value={String(audioHealth.queued)} />
+          <Row label="Transcribed" value={String(audioHealth.transcribed)} />
+          <Row label="Shallow" value={String(audioHealth.shallow)} />
+          <Row label="Failed" value={String(audioHealth.failed)} />
+          <Row label="Manual assist" value={String(audioHealth.needsManualAssist)} />
+          <Row label="Retryable" value={String(audioHealth.retryableCount)} />
+          <Row label="Non-retryable" value={String(audioHealth.nonRetryableCount)} />
+          <Row label="Avg words" value={String(audioHealth.avgTranscriptWords)} />
+          {audioHealth.topFailureCodes.length > 0 && (
+            <Row label="Top failure" value={`${audioHealth.topFailureCodes[0].code} (${audioHealth.topFailureCodes[0].count})`} />
+          )}
+
           {/* Fallback matrix */}
           <div className="border-t border-border/20 pt-1 mt-1" />
           <span className="font-semibold text-muted-foreground uppercase tracking-wider text-[9px]">Fallback Matrix</span>
