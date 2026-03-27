@@ -72,6 +72,7 @@ export function useGeneratePlaybooks() {
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['playbooks'] });
+      // Playbook regeneration triggers scenario regen via usePlaybooks queryFn
       toast.success(`Generated ${data?.count ?? 0} playbook(s)`);
     },
     onError: (e: any) => toast.error(e.message || 'Playbook generation failed'),
