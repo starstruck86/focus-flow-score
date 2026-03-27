@@ -5,12 +5,13 @@ import { Button } from '@/components/ui/button';
 import { 
   Zap, Target, BookOpen, AlertTriangle, 
   Play, FileText, CheckCircle,
-  TrendingUp
+  TrendingUp, Mic
 } from 'lucide-react';
-import { isSystemOSEnabled } from '@/lib/featureFlags';
+import { isSystemOSEnabled, isVoiceOSEnabled } from '@/lib/featureFlags';
 import { getExecutionContext, type ExecutionDeal, type RiskSignal } from '@/lib/workflowOrchestrator';
 import { useLiveSystemSummary } from '@/hooks/useSystemState';
 import { useCopilot } from '@/contexts/CopilotContext';
+import { useVoiceOperatingContext } from '@/hooks/useVoiceOperatingContext';
 
 interface ExecutionWorkbenchProps {
   deals?: ExecutionDeal[];
