@@ -16,17 +16,8 @@ import { updateVoiceContext } from '@/lib/voiceContext';
 import { getConfirmationPolicy, type ConfirmationLevel } from '@/lib/voiceConfirmation';
 import { isVoiceOSEnabled } from '@/lib/featureFlags';
 import { recordFriction } from '@/lib/frictionSignals';
-import { createAccountTools } from './tools/accounts';
-import { createOpportunityTools } from './tools/opportunities';
-import { createTaskTools } from './tools/tasks';
-import { createJournalTools } from './tools/journal';
-import { createPipelineTools } from './tools/pipeline';
-import { createIntelligenceTools } from './tools/intelligence';
-import { createProspectingTools } from './tools/prospecting';
-import { createSynthesisTools } from './tools/synthesis';
-import { createIntegrationTools } from './tools/integrations';
-import { updateVoiceContext } from '@/lib/voiceContext';
-import { getConfirmationPolicy } from '@/lib/voiceConfirmation';
+
+
 
 async function getUserId(): Promise<string | null> {
   const { data: { user } } = await supabase.auth.getUser();
