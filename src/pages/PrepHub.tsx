@@ -1,67 +1,51 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { useCopilot } from '@/contexts/CopilotContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { toast } from 'sonner';
 import { 
-  FileText, Sparkles, Mail, 
-  MessageSquare, Wand2, BookOpen,
-  Brain, Inbox, Lightbulb,
+  Crosshair, GraduationCap, Download, FileText,
 } from 'lucide-react';
 import { VoiceCommandButton } from '@/components/VoiceCommandButton';
-import { ResourceManager } from '@/components/prep/ResourceManager';
-import { TemplateManager } from '@/components/prep/TemplateManager';
-import { ContentBuilder } from '@/components/prep/ContentBuilder';
-import { CustomPromptsManager } from '@/components/prep/CustomPromptsManager';
-import { PlaybooksPanel } from '@/components/prep/PlaybooksPanel';
+
+// Execute tab components
 import { ExecutionWorkbench } from '@/components/prep/ExecutionWorkbench';
-import { GovernancePanel } from '@/components/governance/GovernancePanel';
+import { ContentBuilder } from '@/components/prep/ContentBuilder';
+
+// Learn tab components
+import { SalesBrainDashboard } from '@/components/prep/SalesBrainDashboard';
+import { PlaybooksPanel } from '@/components/prep/PlaybooksPanel';
+
+// Ingest tab components
 import { SourceRegistryManager } from '@/components/prep/SourceRegistryManager';
 import { IncomingQueue } from '@/components/prep/IncomingQueue';
-import { SalesBrainDashboard } from '@/components/prep/SalesBrainDashboard';
 import { AudioTestHarness } from '@/components/prep/AudioTestHarness';
 
-const PREP_PROMPTS = [
-  { label: 'Pre-Call Research Brief', prompt: 'Research and prep me for my upcoming call with {{account}}. Include company background, recent news, key stakeholders, potential pain points, and suggested discovery questions.', mode: 'meeting' as const },
-  { label: 'Stakeholder Map', prompt: 'Map out the likely buying committee for {{account}}. Who are the economic buyer, champion, technical evaluator, and coach? What do I need from each?', mode: 'deal-strategy' as const },
-  { label: 'Objection Prep', prompt: 'What are the top 5 objections I should expect from {{account}} given their industry, size, and current tech stack? Give me rebuttals for each.', mode: 'deal-strategy' as const },
-  { label: 'Competitive Positioning', prompt: 'How should I position against {{competitor}} when talking to {{account}}? What are our key differentiators and where do we need to be careful?', mode: 'deal-strategy' as const },
-  { label: 'MEDDICC Gap Analysis', prompt: 'Run a MEDDICC analysis on my deal with {{account}}. Where are the gaps? What questions should I ask to fill them?', mode: 'deal-strategy' as const },
-  { label: 'Recap Email Draft', prompt: 'Draft a professional follow-up email after my call with {{account}}. Include key discussion points, agreed next steps, and relevant resources.', mode: 'recap-email' as const },
-  { label: 'QBR Prep', prompt: 'Help me prepare for a QBR with {{account}}. What metrics should I highlight? What expansion opportunities exist? What risks should I address proactively?', mode: 'meeting' as const },
-  { label: 'Executive Email', prompt: 'Draft an executive-level email to the VP/C-suite at {{account}} that positions our value at a strategic level, not feature-level.', mode: 'recap-email' as const },
-];
+// Library tab component
+import { ResourceManager } from '@/components/prep/ResourceManager';
+
+// Governance (feature-flagged overlay)
+import { GovernancePanel } from '@/components/governance/GovernancePanel';
 
 export default function PrepHub() {
-  const { ask: askCopilot } = useCopilot();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('content-builder');
-  const [promptAccount, setPromptAccount] = useState('');
+  const [activeTab, setActiveTab] = useState('execute');
 
   // Listen for Dave navigation event
   useEffect(() => {
-    const handler = () => setActiveTab('content-builder');
+    const handler = () => setActiveTab('execute');
     window.addEventListener('dave-open-content-builder', handler);
     return () => window.removeEventListener('dave-open-content-builder', handler);
   }, []);
 
-  const handleRunPrompt = useCallback((prompt: string, mode: string) => {
-    const filled = promptAccount ? prompt.replace(/\{\{account\}\}/g, promptAccount).replace(/\{\{competitor\}\}/g, 'the competitor') : prompt;
-    askCopilot(filled, mode as any);
-  }, [askCopilot, promptAccount]);
-
   return (
     <Layout>
-      <div data-testid="prephub-page" className="p-4 space-y-4 max-w-4xl mx-auto">
+      <div data-testid="prephub-page" className="p-4 space-y-4 max-w-5xl mx-auto">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-foreground">Prep Hub</h1>
-            <p className="text-xs text-muted-foreground">Content engine, call prep & AI-powered templates</p>
+            <h1 className="text-xl font-bold text-foreground">Sales Brain OS</h1>
+            <p className="text-xs text-muted-foreground">Execute · Learn · Ingest · Library</p>
           </div>
           <div className="flex items-center gap-2">
             <VoiceCommandButton />
@@ -69,127 +53,50 @@ export default function PrepHub() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <div className="overflow-x-auto -mx-1 px-1">
-            <TabsList className="w-max flex gap-0.5">
-              <TabsTrigger value="content-builder" className="text-xs">
-                <Wand2 className="h-3.5 w-3.5 mr-1" />
-                Build
-              </TabsTrigger>
-              <TabsTrigger value="resources" className="text-xs">
-                <FileText className="h-3.5 w-3.5 mr-1" />
-                Library
-              </TabsTrigger>
-              <TabsTrigger value="playbooks" className="text-xs">
-                <BookOpen className="h-3.5 w-3.5 mr-1" />
-                Playbooks
-              </TabsTrigger>
-              <TabsTrigger value="doctrine" className="text-xs">
-                <Lightbulb className="h-3.5 w-3.5 mr-1" />
-                Doctrine
-              </TabsTrigger>
-              <TabsTrigger value="sources" className="text-xs">
-                <Brain className="h-3.5 w-3.5 mr-1" />
-                Sources
-              </TabsTrigger>
-              <TabsTrigger value="incoming" className="text-xs">
-                <Inbox className="h-3.5 w-3.5 mr-1" />
-                Incoming
-              </TabsTrigger>
-              <TabsTrigger value="prep" className="text-xs">
-                <Sparkles className="h-3.5 w-3.5 mr-1" />
-                AI Prep
-              </TabsTrigger>
-              <TabsTrigger value="templates" className="text-xs">
-                <Mail className="h-3.5 w-3.5 mr-1" />
-                Templates
-              </TabsTrigger>
-              <TabsTrigger value="prompts" className="text-xs">
-                <MessageSquare className="h-3.5 w-3.5 mr-1" />
-                Prompts
-              </TabsTrigger>
-              <TabsTrigger value="audio-test" className="text-xs">
-                <Brain className="h-3.5 w-3.5 mr-1" />
-                Audio
-              </TabsTrigger>
-            </TabsList>
-          </div>
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="execute" className="text-xs gap-1.5">
+              <Crosshair className="h-3.5 w-3.5" />
+              Execute
+            </TabsTrigger>
+            <TabsTrigger value="learn" className="text-xs gap-1.5">
+              <GraduationCap className="h-3.5 w-3.5" />
+              Learn
+            </TabsTrigger>
+            <TabsTrigger value="ingest" className="text-xs gap-1.5">
+              <Download className="h-3.5 w-3.5" />
+              Ingest
+            </TabsTrigger>
+            <TabsTrigger value="library" className="text-xs gap-1.5">
+              <FileText className="h-3.5 w-3.5" />
+              Library
+            </TabsTrigger>
+          </TabsList>
 
           {/* GOVERNANCE PANEL — collapsible, feature-flagged */}
           <GovernancePanel />
 
-          {/* EXECUTION WORKBENCH — above all tabs, feature-flagged */}
-          <ExecutionWorkbench />
-
-          {/* CONTENT BUILDER TAB */}
-          <TabsContent value="content-builder" className="mt-3">
+          {/* ═══ EXECUTE ═══ */}
+          <TabsContent value="execute" className="mt-3 space-y-4">
+            <ExecutionWorkbench />
             <ContentBuilder />
           </TabsContent>
 
-          {/* RESOURCES TAB */}
-          <TabsContent value="resources" className="mt-3">
-            <ResourceManager />
-          </TabsContent>
-
-          {/* PLAYBOOKS TAB */}
-          <TabsContent value="playbooks" className="mt-3">
+          {/* ═══ LEARN ═══ */}
+          <TabsContent value="learn" className="mt-3 space-y-4">
+            <SalesBrainDashboard />
             <PlaybooksPanel />
           </TabsContent>
 
-          {/* SOURCES TAB */}
-          <TabsContent value="sources" className="mt-3">
+          {/* ═══ INGEST ═══ */}
+          <TabsContent value="ingest" className="mt-3 space-y-4">
             <SourceRegistryManager />
-          </TabsContent>
-
-          {/* INCOMING QUEUE TAB */}
-          <TabsContent value="incoming" className="mt-3">
             <IncomingQueue />
-          </TabsContent>
-
-          {/* DOCTRINE / SALES BRAIN TAB */}
-          <TabsContent value="doctrine" className="mt-3">
-            <SalesBrainDashboard />
-          </TabsContent>
-
-          {/* AI PREP TAB */}
-          <TabsContent value="prep" className="space-y-3 mt-3">
-            <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1 w-fit">
-              <span className="text-xs text-muted-foreground">Account:</span>
-              <Input
-                value={promptAccount}
-                onChange={e => setPromptAccount(e.target.value)}
-                placeholder="e.g. Acme Corp"
-                className="h-7 w-36 text-xs bg-transparent border-0 p-0 focus-visible:ring-0"
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {PREP_PROMPTS.map((p, i) => (
-                <Card key={i} className="cursor-pointer hover:border-primary/40 transition-colors group" onClick={() => handleRunPrompt(p.prompt, p.mode)}>
-                  <CardContent className="p-3 flex items-start gap-2">
-                    <Sparkles className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground">{p.label}</p>
-                      <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{p.prompt.replace(/\{\{account\}\}/g, promptAccount || '___')}</p>
-                    </div>
-                    <Badge variant="secondary" className="text-[10px] shrink-0">{p.mode}</Badge>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
-
-          {/* TEMPLATES TAB */}
-          <TabsContent value="templates" className="space-y-3 mt-3">
-            <TemplateManager />
-          </TabsContent>
-
-          {/* MY PROMPTS TAB */}
-          <TabsContent value="prompts" className="space-y-3 mt-3">
-            <CustomPromptsManager />
-          </TabsContent>
-
-          {/* AUDIO TEST HARNESS TAB */}
-          <TabsContent value="audio-test" className="space-y-3 mt-3">
             <AudioTestHarness />
+          </TabsContent>
+
+          {/* ═══ LIBRARY ═══ */}
+          <TabsContent value="library" className="mt-3">
+            <ResourceManager />
           </TabsContent>
         </Tabs>
       </div>

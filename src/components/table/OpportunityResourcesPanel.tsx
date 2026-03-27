@@ -155,7 +155,7 @@ export function OpportunityResourcesPanel({ opportunityId, opportunityName, acco
             className="h-6 text-[10px] gap-1 px-2"
             onClick={() => navigate('/prep')}
           >
-            <ExternalLink className="h-3 w-3" /> Prep Hub
+            <ExternalLink className="h-3 w-3" /> Sales Brain
           </Button>
         </div>
       </div>

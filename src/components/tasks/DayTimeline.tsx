@@ -500,7 +500,7 @@ export function DayTimeline() {
                   onClick={() => window.location.assign(selected.type === 'meeting' ? '/' : '/prep')}
                   className="rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground transition-colors hover:bg-accent"
                 >
-                  {selected.type === 'meeting' ? 'Open prep' : 'Open Prep Hub'}
+                  {selected.type === 'meeting' ? 'Open prep' : 'Open Sales Brain'}
                 </button>
               </div>
             </div>
