@@ -19,7 +19,8 @@ import {
   isSessionAutopilotEnabled,
   isExecutionMomentumEnabled,
 } from '@/lib/featureFlags';
-import { getDoctrineGovernanceStats } from '@/lib/salesBrain';
+import { getDoctrineGovernanceStats, getLegacyHydratedCount } from '@/lib/salesBrain';
+import { getActualUsageCounts } from '@/lib/salesBrain/doctrineUsage';
 import { loadMeasurementEvents } from '@/lib/accountPostAction';
 import {
   useExecutionSession,
