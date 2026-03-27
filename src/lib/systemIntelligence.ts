@@ -578,9 +578,296 @@ export function detectAnomalies(current: HealthSnapshot, history: HealthSnapshot
         threshold: Math.round(avg + stddev * 2),
         triggeredAt: current.timestamp,
         acknowledged: false,
+        state: 'active' as AlertState,
       });
     }
   }
 
   return anomalies;
+}
+
+// ── Section 5: Alert Lifecycle ─────────────────────────────
+
+const ALERT_STORE_KEY = 'system-alerts';
+const MAX_STORED_ALERTS = 200;
+const ESCALATION_TIMEOUT_MS = 4 * 60 * 60 * 1000; // 4 hours
+
+export function acknowledgeAlert(alertId: string, by?: string): SystemAlert | null {
+  const alerts = loadAlerts();
+  const alert = alerts.find(a => a.id === alertId);
+  if (!alert || alert.state !== 'active') return null;
+  alert.state = 'acknowledged';
+  alert.acknowledged = true;
+  alert.acknowledgedAt = new Date().toISOString();
+  if (by) alert.acknowledgedBy = by;
+  saveAlerts(alerts);
+  return alert;
+}
+
+export function resolveAlert(alertId: string, resolution: string): SystemAlert | null {
+  const alerts = loadAlerts();
+  const alert = alerts.find(a => a.id === alertId);
+  if (!alert || alert.state === 'resolved') return null;
+  alert.state = 'resolved';
+  alert.resolvedAt = new Date().toISOString();
+  alert.resolution = resolution;
+  saveAlerts(alerts);
+  return alert;
+}
+
+export function escalateAlert(alertId: string, reason: string): SystemAlert | null {
+  const alerts = loadAlerts();
+  const alert = alerts.find(a => a.id === alertId);
+  if (!alert || alert.state === 'resolved') return null;
+  alert.state = 'escalated';
+  alert.escalatedAt = new Date().toISOString();
+  alert.escalationReason = reason;
+  saveAlerts(alerts);
+  return alert;
+}
+
+export function autoEscalateStaleAlerts(nowMs: number = Date.now()): SystemAlert[] {
+  const alerts = loadAlerts();
+  const escalated: SystemAlert[] = [];
+  for (const a of alerts) {
+    if (a.state !== 'active') continue;
+    const age = nowMs - new Date(a.triggeredAt).getTime();
+    if (age > ESCALATION_TIMEOUT_MS) {
+      a.state = 'escalated';
+      a.escalatedAt = new Date(nowMs).toISOString();
+      a.escalationReason = `Unresolved for ${Math.round(age / 3600000)}h`;
+      escalated.push(a);
+    }
+  }
+  if (escalated.length > 0) saveAlerts(alerts);
+  return escalated;
+}
+
+export function persistAlerts(newAlerts: SystemAlert[]): void {
+  const existing = loadAlerts();
+  existing.push(...newAlerts);
+  if (existing.length > MAX_STORED_ALERTS) existing.splice(0, existing.length - MAX_STORED_ALERTS);
+  saveAlerts(existing);
+}
+
+export function loadAlerts(): SystemAlert[] {
+  try {
+    return JSON.parse(localStorage.getItem(ALERT_STORE_KEY) || '[]');
+  } catch { return []; }
+}
+
+function saveAlerts(alerts: SystemAlert[]): void {
+  try { localStorage.setItem(ALERT_STORE_KEY, JSON.stringify(alerts)); } catch {}
+}
+
+export function computeAlertResolutionStats(): { totalResolved: number; avgResolutionMs: number; escalationRate: number } {
+  const alerts = loadAlerts();
+  const resolved = alerts.filter(a => a.state === 'resolved' && a.resolvedAt && a.triggeredAt);
+  const escalated = alerts.filter(a => a.state === 'escalated');
+  const total = alerts.length || 1;
+  const durations = resolved.map(a => new Date(a.resolvedAt!).getTime() - new Date(a.triggeredAt).getTime());
+  const avgMs = durations.length > 0 ? durations.reduce((s, d) => s + d, 0) / durations.length : 0;
+  return { totalResolved: resolved.length, avgResolutionMs: avgMs, escalationRate: escalated.length / total };
+}
+
+// ── Section 6: System Confidence Score ─────────────────────
+
+export interface SystemConfidence {
+  score: number;             // 0-100
+  label: 'high' | 'moderate' | 'low' | 'critical';
+  components: { name: string; score: number; weight: number }[];
+  timestamp: string;
+}
+
+export function computeSystemConfidence(inputs: HealthInputs, anomalyCount: number): SystemConfidence {
+  const components: SystemConfidence['components'] = [
+    { name: 'enrichment_health', score: Math.max(0, 100 - inputs.enrichmentFailureRate * 2), weight: 0.25 },
+    { name: 'outcome_stability', score: Math.max(0, Math.min(100, 50 + inputs.outcomeScoreTrend)), weight: 0.25 },
+    { name: 'dave_reliability', score: Math.max(0, 100 - inputs.daveFailureRate * 2), weight: 0.15 },
+    { name: 'playbook_diversity', score: Math.max(0, 100 - inputs.singlePlaybookConcentration), weight: 0.15 },
+    { name: 'anomaly_frequency', score: Math.max(0, 100 - anomalyCount * 20), weight: 0.10 },
+    { name: 'trust_stability', score: Math.max(0, 100 - inputs.trustDegradationCount * 10), weight: 0.10 },
+  ];
+
+  const score = Math.round(components.reduce((s, c) => s + c.score * c.weight, 0));
+  const label: SystemConfidence['label'] =
+    score >= 80 ? 'high' : score >= 55 ? 'moderate' : score >= 30 ? 'low' : 'critical';
+
+  return { score, label, components, timestamp: new Date().toISOString() };
+}
+
+// ── Section 7: System Modes & Auto-Correction ──────────────
+
+export type SystemMode = 'normal' | 'degraded' | 'recovery' | 'exploration-heavy' | 'conservative';
+
+export interface SystemModeState {
+  mode: SystemMode;
+  enteredAt: string;
+  reason: string;
+  adjustments: ModeAdjustment[];
+}
+
+export interface ModeAdjustment {
+  parameter: string;
+  originalValue: number | string;
+  adjustedValue: number | string;
+  reason: string;
+}
+
+export interface AutoCorrectionAction {
+  trigger: string;
+  action: string;
+  parameter: string;
+  from: number | string;
+  to: number | string;
+  timestamp: string;
+}
+
+const MODE_STORAGE_KEY = 'system-mode-state';
+const CORRECTION_LOG_KEY = 'system-correction-log';
+const MAX_CORRECTIONS = 100;
+
+export const MODE_PROFILES: Record<SystemMode, {
+  aggressionMultiplier: number;
+  explorationRate: number;
+  maxConcurrency: number;
+  retryMultiplier: number;
+  playbookComplexityCap: 'low' | 'medium' | 'high';
+}> = {
+  normal:             { aggressionMultiplier: 1.0,  explorationRate: 0.07, maxConcurrency: 5, retryMultiplier: 1.0, playbookComplexityCap: 'high' },
+  degraded:           { aggressionMultiplier: 0.8,  explorationRate: 0.03, maxConcurrency: 2, retryMultiplier: 1.5, playbookComplexityCap: 'medium' },
+  recovery:           { aggressionMultiplier: 0.6,  explorationRate: 0.02, maxConcurrency: 1, retryMultiplier: 2.0, playbookComplexityCap: 'low' },
+  'exploration-heavy':{ aggressionMultiplier: 0.9,  explorationRate: 0.20, maxConcurrency: 5, retryMultiplier: 1.0, playbookComplexityCap: 'high' },
+  conservative:       { aggressionMultiplier: 0.7,  explorationRate: 0.03, maxConcurrency: 3, retryMultiplier: 1.0, playbookComplexityCap: 'medium' },
+};
+
+export function determineSystemMode(inputs: HealthInputs, anomalyCount: number, confidence: SystemConfidence): SystemModeState {
+  const adjustments: ModeAdjustment[] = [];
+  let mode: SystemMode = 'normal';
+  const reasons: string[] = [];
+
+  // Critical failures → recovery
+  if (inputs.enrichmentFailureRate > 50 || inputs.daveFailureRate > 40 || confidence.score < 30) {
+    mode = 'recovery';
+    reasons.push('Critical threshold breach');
+    adjustments.push(
+      { parameter: 'concurrency', originalValue: 5, adjustedValue: 1, reason: 'Reduce load under critical failure' },
+      { parameter: 'playbookComplexity', originalValue: 'high', adjustedValue: 'low', reason: 'Simplify operations' },
+    );
+  }
+  // Degraded state
+  else if (inputs.enrichmentFailureRate > 25 || inputs.daveFailureRate > 20 || confidence.score < 55) {
+    mode = 'degraded';
+    reasons.push('Elevated failure rates');
+    adjustments.push(
+      { parameter: 'concurrency', originalValue: 5, adjustedValue: 2, reason: 'Reduce concurrency under stress' },
+    );
+  }
+  // Declining outcomes → exploration-heavy
+  else if (inputs.outcomeScoreTrend < -15 && inputs.explorationWinRate > inputs.exploitationWinRate) {
+    mode = 'exploration-heavy';
+    reasons.push('Declining outcomes — exploratory playbooks outperforming');
+    adjustments.push(
+      { parameter: 'explorationRate', originalValue: 0.07, adjustedValue: 0.20, reason: 'Increase exploration to find better strategies' },
+    );
+  }
+  // High anomalies → conservative
+  else if (anomalyCount >= 3) {
+    mode = 'conservative';
+    reasons.push('Multiple anomalies detected');
+    adjustments.push(
+      { parameter: 'aggressionMultiplier', originalValue: 1.0, adjustedValue: 0.7, reason: 'Reduce aggression under anomalous conditions' },
+    );
+  }
+
+  const state: SystemModeState = {
+    mode,
+    enteredAt: new Date().toISOString(),
+    reason: reasons.join('; ') || 'All systems nominal',
+    adjustments,
+  };
+
+  saveSystemMode(state);
+  return state;
+}
+
+export function evaluateAutoCorrections(inputs: HealthInputs, currentMode: SystemMode): AutoCorrectionAction[] {
+  const actions: AutoCorrectionAction[] = [];
+  const now = new Date().toISOString();
+  const profile = MODE_PROFILES[currentMode];
+
+  // High enrichment failure → reduce concurrency + enable fallback
+  if (inputs.enrichmentFailureRate > 30 && profile.maxConcurrency > 2) {
+    actions.push({ trigger: `enrichmentFailureRate=${inputs.enrichmentFailureRate}`, action: 'reduce_concurrency', parameter: 'maxConcurrency', from: profile.maxConcurrency, to: 2, timestamp: now });
+  }
+
+  // Declining outcomes → increase exploration
+  if (inputs.outcomeScoreTrend < -20 && profile.explorationRate < 0.15) {
+    actions.push({ trigger: `outcomeScoreTrend=${inputs.outcomeScoreTrend}`, action: 'increase_exploration', parameter: 'explorationRate', from: profile.explorationRate, to: 0.15, timestamp: now });
+  }
+
+  // High Dave error → reduce complexity
+  if (inputs.daveFailureRate > 25 && profile.playbookComplexityCap !== 'low') {
+    actions.push({ trigger: `daveFailureRate=${inputs.daveFailureRate}`, action: 'reduce_complexity', parameter: 'playbookComplexityCap', from: profile.playbookComplexityCap, to: 'low', timestamp: now });
+  }
+
+  // Trust degradation spike → conservative aggression
+  if (inputs.trustDegradationCount > 5 && profile.aggressionMultiplier > 0.7) {
+    actions.push({ trigger: `trustDegradation=${inputs.trustDegradationCount}`, action: 'reduce_aggression', parameter: 'aggressionMultiplier', from: profile.aggressionMultiplier, to: 0.7, timestamp: now });
+  }
+
+  if (actions.length > 0) recordCorrections(actions);
+  return actions;
+}
+
+export function loadSystemMode(): SystemModeState {
+  try {
+    const stored = localStorage.getItem(MODE_STORAGE_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch {}
+  return { mode: 'normal', enteredAt: new Date().toISOString(), reason: 'Default', adjustments: [] };
+}
+
+function saveSystemMode(state: SystemModeState): void {
+  try { localStorage.setItem(MODE_STORAGE_KEY, JSON.stringify(state)); } catch {}
+}
+
+function recordCorrections(actions: AutoCorrectionAction[]): void {
+  try {
+    const existing: AutoCorrectionAction[] = JSON.parse(localStorage.getItem(CORRECTION_LOG_KEY) || '[]');
+    existing.push(...actions);
+    if (existing.length > MAX_CORRECTIONS) existing.splice(0, existing.length - MAX_CORRECTIONS);
+    localStorage.setItem(CORRECTION_LOG_KEY, JSON.stringify(existing));
+  } catch {}
+}
+
+export function loadCorrectionLog(): AutoCorrectionAction[] {
+  try { return JSON.parse(localStorage.getItem(CORRECTION_LOG_KEY) || '[]'); } catch { return []; }
+}
+
+/**
+ * Full system health evaluation — runs all layers in sequence and returns combined result
+ */
+export function evaluateFullSystemHealth(inputs: HealthInputs): {
+  snapshot: HealthSnapshot;
+  confidence: SystemConfidence;
+  mode: SystemModeState;
+  corrections: AutoCorrectionAction[];
+  anomalies: SystemAlert[];
+  escalated: SystemAlert[];
+} {
+  const snapshot = computeHealthSnapshot(inputs);
+  const history = loadHealthHistory();
+  const anomalies = detectAnomalies(snapshot, history);
+  recordHealthSnapshot(snapshot);
+  persistAlerts([...snapshot.alerts, ...anomalies]);
+
+  const confidence = computeSystemConfidence(inputs, anomalies.length);
+  const mode = determineSystemMode(inputs, anomalies.length, confidence);
+  const corrections = evaluateAutoCorrections(inputs, mode.mode);
+  const escalated = autoEscalateStaleAlerts();
+
+  log.info('Full system health evaluation', { status: snapshot.overallStatus, confidence: confidence.score, mode: mode.mode, corrections: corrections.length });
+
+  return { snapshot, confidence, mode, corrections, anomalies, escalated };
 }
