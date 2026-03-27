@@ -17,13 +17,22 @@ export function SystemDebugPanel() {
   const [open, setOpen] = useState(false);
 
   const refresh = useCallback(() => {
-    // Try to get plan context from the current day's plan in localStorage
     try {
       const today = new Date().toISOString().split('T')[0];
-      const planKey = `daily-plan-blocks-${today}`;
-      const raw = localStorage.getItem(planKey);
-      const planBlocks = raw ? JSON.parse(raw) : undefined;
-      setSnapshot(captureDebugSnapshot(planBlocks));
+      // Try react-query cache first for live plan data
+      let planBlocks: any[] | undefined;
+      let serverMeta: any[] | undefined;
+      try {
+        const planKey = `daily-plan-blocks-${today}`;
+        const raw = localStorage.getItem(planKey);
+        planBlocks = raw ? JSON.parse(raw) : undefined;
+      } catch {}
+      try {
+        const metaKey = `loop-server-meta-${today}`;
+        const raw = localStorage.getItem(metaKey);
+        serverMeta = raw ? JSON.parse(raw) : undefined;
+      } catch {}
+      setSnapshot(captureDebugSnapshot(planBlocks, serverMeta));
     } catch {
       setSnapshot(captureDebugSnapshot());
     }

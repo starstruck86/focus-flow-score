@@ -70,10 +70,18 @@ export function useGeneratePlaybooks() {
       if (data?.error) throw new Error(data.error);
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       qc.invalidateQueries({ queryKey: ['playbooks'] });
-      // Playbook regeneration triggers scenario regen via usePlaybooks queryFn
       toast.success(`Generated ${data?.count ?? 0} playbook(s)`);
+      // Eagerly trigger scenario regen after playbook generation
+      try {
+        const { isRoleplayGroundingEnabled } = await import('@/lib/featureFlags');
+        if (isRoleplayGroundingEnabled()) {
+          const { triggerScenarioRegenIfNeeded } = await import('@/lib/loopRuntime');
+          const { data: fresh } = await supabase.from('playbooks' as any).select('*').order('confidence_score', { ascending: false });
+          if (fresh?.length) triggerScenarioRegenIfNeeded(fresh as any);
+        }
+      } catch {}
     },
     onError: (e: any) => toast.error(e.message || 'Playbook generation failed'),
   });
@@ -86,9 +94,18 @@ export function useDeletePlaybook() {
       const { error } = await supabase.from('playbooks' as any).delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       qc.invalidateQueries({ queryKey: ['playbooks'] });
       toast.success('Playbook deleted');
+      // Trigger scenario regen after playbook deletion
+      try {
+        const { isRoleplayGroundingEnabled } = await import('@/lib/featureFlags');
+        if (isRoleplayGroundingEnabled()) {
+          const { triggerScenarioRegenIfNeeded } = await import('@/lib/loopRuntime');
+          const { data: fresh } = await supabase.from('playbooks' as any).select('*').order('confidence_score', { ascending: false });
+          triggerScenarioRegenIfNeeded((fresh || []) as any);
+        }
+      } catch {}
     },
   });
 }
