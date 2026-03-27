@@ -1,18 +1,32 @@
 /**
  * System Debug Panel — lightweight operator inspection surface
  *
- * Shown inside the GovernancePanel expanded view when ENABLE_SYSTEM_OS is on.
- * Shows loop state, roleplay state, scenario freshness, and suppression info.
- * No dashboard bloat — just a small inspection block.
+ * Shows full execution session state, flags, momentum, autopilot,
+ * strict mode, prep/action enforcement, and fallback matrix.
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Bug, RefreshCw } from 'lucide-react';
 import { captureDebugSnapshot, type SystemDebugSnapshot } from '@/lib/loopRuntime';
-import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled, isAccountExecutionModelEnabled, isAccountCentricExecutionEnabled, isExecutionSessionLayerEnabled } from '@/lib/featureFlags';
+import {
+  isLoopNativeSchedulerEnabled,
+  isRoleplayGroundingEnabled,
+  isAccountExecutionModelEnabled,
+  isAccountCentricExecutionEnabled,
+  isExecutionSessionLayerEnabled,
+  isStrictExecutionModeEnabled,
+  isSessionAutopilotEnabled,
+  isExecutionMomentumEnabled,
+} from '@/lib/featureFlags';
 import { loadMeasurementEvents } from '@/lib/accountPostAction';
-import { useExecutionSession, buildScorecard, getNextBestAccounts } from '@/lib/executionSession';
+import {
+  useExecutionSession,
+  buildScorecard,
+  getNextBestAccounts,
+  evaluatePrepActionEnforcement,
+  FALLBACK_MATRIX,
+} from '@/lib/executionSession';
 
 export function SystemDebugPanel() {
   const [snapshot, setSnapshot] = useState<SystemDebugSnapshot | null>(null);
@@ -21,7 +35,6 @@ export function SystemDebugPanel() {
   const refresh = useCallback(() => {
     try {
       const today = new Date().toISOString().split('T')[0];
-      // Try react-query cache first for live plan data
       let planBlocks: any[] | undefined;
       let serverMeta: any[] | undefined;
       try {
@@ -47,15 +60,19 @@ export function SystemDebugPanel() {
     });
   }, [refresh]);
 
-  // Flags summary for degraded-mode awareness
+  // Flags
   const loopEnabled = isLoopNativeSchedulerEnabled();
   const groundingEnabled = isRoleplayGroundingEnabled();
   const acctEnabled = isAccountExecutionModelEnabled();
   const acctCentricEnabled = isAccountCentricExecutionEnabled();
   const sessionEnabled = isExecutionSessionLayerEnabled();
+  const strictEnabled = isStrictExecutionModeEnabled();
+  const autopilotEnabled = isSessionAutopilotEnabled();
+  const momentumEnabled = isExecutionMomentumEnabled();
   const measurementCount = loadMeasurementEvents().length;
-  const { activeSession, mode, scorecard } = useExecutionSession();
+  const { activeSession, mode, disciplineMode, scorecard, momentum, autopilotLog, overrides } = useExecutionSession();
   const nextCandidates = sessionEnabled ? getNextBestAccounts() : [];
+  const enforcement = sessionEnabled ? evaluatePrepActionEnforcement() : null;
 
   return (
     <div>
@@ -82,6 +99,9 @@ export function SystemDebugPanel() {
           <Row label="Account model" value={acctEnabled ? 'on' : 'off'} />
           <Row label="Acct-centric" value={acctCentricEnabled ? 'on' : 'off'} />
           <Row label="Exec session" value={sessionEnabled ? 'on' : 'off'} />
+          <Row label="Strict mode flag" value={strictEnabled ? 'on' : 'off'} />
+          <Row label="Autopilot flag" value={autopilotEnabled ? 'on' : 'off'} />
+          <Row label="Momentum flag" value={momentumEnabled ? 'on' : 'off'} />
 
           {/* Loop state */}
           <div className="border-t border-border/20 pt-1 mt-1" />
@@ -112,6 +132,7 @@ export function SystemDebugPanel() {
             <>
               <div className="border-t border-border/20 pt-1 mt-1" />
               <Row label="Session mode" value={mode} />
+              <Row label="Discipline" value={disciplineMode} />
               <Row label="Active acct" value={activeSession?.accountName || 'none'} />
               <Row label="Last outcome" value={activeSession?.latestOutcome?.replace(/_/g, ' ') || 'none'} />
               <Row label="Post-action" value={activeSession?.postActionRecommendation?.decision?.replace(/_/g, ' ') || 'none'} />
@@ -121,8 +142,40 @@ export function SystemDebugPanel() {
               <Row label="Ready left" value={String(scorecard.readyRemaining)} />
               <Row label="Next-best" value={nextCandidates[0]?.accountName || 'none'} />
               <Row label="Routing src" value={nextCandidates[0] ? 'account_truth' : 'none'} />
+
+              {/* Prep/Action enforcement */}
+              {enforcement && (
+                <Row label="Prep/Action" value={enforcement.reason} />
+              )}
+
+              {/* Momentum */}
+              {momentumEnabled && (
+                <>
+                  <div className="border-t border-border/20 pt-1 mt-1" />
+                  <Row label="Pace" value={momentum.pace} />
+                  <Row label="Actions/block" value={String(momentum.actionsThisBlock)} />
+                  <Row label="Roleplay first" value={momentum.roleplayCompletedBeforeAction ? 'yes' : 'no'} />
+                  <Row label="Prep→1st attempt" value={momentum.prepToFirstAttemptMs ? `${Math.round(momentum.prepToFirstAttemptMs / 1000)}s` : 'n/a'} />
+                </>
+              )}
+
+              {/* Autopilot */}
+              {autopilotEnabled && autopilotLog.length > 0 && (
+                <>
+                  <div className="border-t border-border/20 pt-1 mt-1" />
+                  <Row label="Autopilot events" value={String(autopilotLog.length)} />
+                  <Row label="Last autopilot" value={`${autopilotLog[autopilotLog.length - 1].action}: ${autopilotLog[autopilotLog.length - 1].reason.slice(0, 40)}`} />
+                </>
+              )}
+
+              {/* Overrides */}
+              {overrides.length > 0 && (
+                <Row label="Overrides" value={String(overrides.length)} />
+              )}
             </>
           )}
+
+          {/* Roleplay */}
           <div className="border-t border-border/20 pt-1 mt-1" />
           <Row label="Roleplay today" value={snapshot.roleplayStatusToday || 'none'} />
           <Row label="Grounding" value={snapshot.roleplayGroundingSource || 'none'} />
@@ -137,6 +190,13 @@ export function SystemDebugPanel() {
             <Row label="Reason" value={snapshot.suppressionReason} />
           )}
 
+          {/* Fallback matrix */}
+          <div className="border-t border-border/20 pt-1 mt-1" />
+          <span className="font-semibold text-muted-foreground uppercase tracking-wider text-[9px]">Fallback Matrix</span>
+          {Object.entries(FALLBACK_MATRIX).map(([k, v]) => (
+            <Row key={k} label={k.replace(/_/g, ' ')} value={v} />
+          ))}
+
           <p className="text-[8px] text-muted-foreground pt-1">
             Snapshot: {new Date(snapshot.snapshotAt).toLocaleTimeString()}
           </p>
@@ -148,9 +208,9 @@ export function SystemDebugPanel() {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-mono text-foreground">{value}</span>
+    <div className="flex justify-between gap-2">
+      <span className="text-muted-foreground shrink-0">{label}</span>
+      <span className="font-mono text-foreground text-right truncate">{value}</span>
     </div>
   );
 }

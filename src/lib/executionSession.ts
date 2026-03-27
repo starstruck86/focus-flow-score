@@ -1,10 +1,8 @@
 /**
  * Execution Session Layer — Orchestrates active account focus,
  * next-best-account routing, post-action flow, mode suppression,
- * end-of-block cleanup, and lightweight scorekeeping.
- *
- * This is the unifying orchestration layer between account truth,
- * loop truth, and all operating surfaces.
+ * end-of-block cleanup, strict mode, autopilot, momentum tracking,
+ * and lightweight scorekeeping.
  *
  * Feature-flagged via ENABLE_EXECUTION_SESSION_LAYER.
  */
@@ -15,6 +13,7 @@ import {
   getAccountState,
   loadAccountStates,
   recordAccountOutcome,
+  getUnworkedPreppedAccounts,
   type AccountExecutionEntry,
   type OutcomeType,
   type AccountReadiness,
@@ -22,15 +21,66 @@ import {
 import { appendTimelineEvent, type AccountEventType } from '@/lib/accountTimeline';
 import {
   getPostActionRecommendation,
-  evaluateOpportunityEscalation,
   type PostActionRecommendation,
   type OpportunityEscalation,
 } from '@/lib/accountPostAction';
-import { isExecutionSessionLayerEnabled, isAccountExecutionModelEnabled } from '@/lib/featureFlags';
+import {
+  isExecutionSessionLayerEnabled,
+  isAccountExecutionModelEnabled,
+  loadFeatureFlags,
+} from '@/lib/featureFlags';
 
 // ── Execution Mode ─────────────────────────────────────────
 
 export type ExecutionMode = 'prep' | 'action' | 'follow_up' | 'roleplay' | 'idle';
+
+// ── Strict / Discipline Mode ──────────────────────────────
+
+export type DisciplineMode = 'guided' | 'strict';
+
+// ── Momentum State ────────────────────────────────────────
+
+export type MomentumPace = 'fast' | 'normal' | 'slow' | 'stalled';
+
+export interface MomentumState {
+  lastActionTimestamp: string | null;
+  actionsThisBlock: number;
+  blockStartTimestamp: string | null;
+  firstAttemptTimestamp: string | null;
+  prepToFirstAttemptMs: number | null;
+  roleplayCompletedBeforeAction: boolean;
+  pace: MomentumPace;
+}
+
+function derivePace(momentum: MomentumState): MomentumPace {
+  if (!momentum.lastActionTimestamp) return 'stalled';
+  const gap = Date.now() - new Date(momentum.lastActionTimestamp).getTime();
+  const mins = gap / 60_000;
+  if (mins < 3) return 'fast';
+  if (mins < 8) return 'normal';
+  if (mins < 20) return 'slow';
+  return 'stalled';
+}
+
+const INITIAL_MOMENTUM: MomentumState = {
+  lastActionTimestamp: null,
+  actionsThisBlock: 0,
+  blockStartTimestamp: null,
+  firstAttemptTimestamp: null,
+  prepToFirstAttemptMs: null,
+  roleplayCompletedBeforeAction: false,
+  pace: 'stalled',
+};
+
+// ── Autopilot ─────────────────────────────────────────────
+
+export interface AutopilotEvent {
+  timestamp: string;
+  action: 'auto_advanced' | 'paused_for_decision' | 'skipped_strict';
+  fromAccount: string;
+  toAccount: string | null;
+  reason: string;
+}
 
 // ── Active Account Session ─────────────────────────────────
 
@@ -101,6 +151,33 @@ export function isAllowedInMode(mode: ExecutionMode, signalType: string): boolea
   return true;
 }
 
+// ── Prep ↔ Action Enforcement ──────────────────────────────
+
+const MIN_READY_FOR_ACTION = 2;
+
+export interface PrepActionEnforcement {
+  shouldBeInPrep: boolean;
+  shouldBeInAction: boolean;
+  readyCount: number;
+  reason: string;
+}
+
+export function evaluatePrepActionEnforcement(date?: string): PrepActionEnforcement {
+  const today = date || todayInAppTz();
+  const states = loadAccountStates(today);
+  const readyCount = states.filter(
+    s => s.nextRecommendedAction === 'ready_to_call' || s.nextRecommendedAction === 'retry_later'
+  ).length;
+
+  if (readyCount === 0) {
+    return { shouldBeInPrep: true, shouldBeInAction: false, readyCount, reason: 'No ready accounts — back to prep.' };
+  }
+  if (readyCount >= MIN_READY_FOR_ACTION) {
+    return { shouldBeInPrep: false, shouldBeInAction: true, readyCount, reason: `${readyCount} ready accounts — go to action.` };
+  }
+  return { shouldBeInPrep: false, shouldBeInAction: false, readyCount, reason: `${readyCount} ready — continue current mode.` };
+}
+
 // ── Next-Best-Account Logic ────────────────────────────────
 
 export interface NextAccountCandidate {
@@ -129,11 +206,8 @@ export function getNextBestAccounts(date?: string): NextAccountCandidate[] {
     .filter(s => s.actionStatus !== 'completed')
     .map(s => {
       let score = READINESS_SCORE[s.nextRecommendedAction] || 0;
-      // Boost carry-forward accounts
       if (s.carryForward) score += 15;
-      // Boost prepped but unworked
       if (s.prepStatus === 'prepped' && s.actionStatus === 'not_worked') score += 25;
-      // Slight boost for retries (already attempted)
       if (s.actionStatus === 'attempted' && s.nextRecommendedAction === 'retry_later') score += 10;
 
       return {
@@ -188,7 +262,7 @@ export interface BlockCleanupResult {
   readyRemaining: number;
   carryForwardCount: number;
   needsOpportunityAction: number;
-  prioritizedForNext: string[]; // account IDs
+  prioritizedForNext: string[];
 }
 
 export function runEndOfBlockCleanup(date?: string): BlockCleanupResult {
@@ -203,7 +277,6 @@ export function runEndOfBlockCleanup(date?: string): BlockCleanupResult {
     (s.connectCount >= 2 && s.lastOutcomeType === 'connected')
   );
 
-  // Prioritize: carry-forward first, then prepped-unworked
   const prioritized = [
     ...carryFwd.map(s => s.accountId),
     ...states
@@ -239,38 +312,57 @@ export function buildScorecard(date?: string): SessionScorecard {
   };
 }
 
+// ── Fallback Matrix ────────────────────────────────────────
+
+export const FALLBACK_MATRIX = {
+  no_account_state: 'Use CRM data for readiness; show as heuristic source.',
+  no_loops: 'Run in flat-list mode from account truth; suppress loop UI.',
+  no_scenarios: 'Use default fallback roleplay scenario.',
+  no_roleplay_slot: 'Skip roleplay block; allow manual trigger via Dave.',
+  no_ready_accounts: 'Force prep mode until accounts are ready.',
+} as const;
+
 // ── Zustand Session Store ──────────────────────────────────
 
 interface ExecutionSessionStore {
-  // Active session
   activeSession: ActiveAccountSession | null;
   mode: ExecutionMode;
+  disciplineMode: DisciplineMode;
   scorecard: SessionScorecard;
   overrides: OverrideEntry[];
+  momentum: MomentumState;
+  autopilotLog: AutopilotEvent[];
 
   // Actions
   activateAccount: (accountId: string, accountName: string, mode: ExecutionMode, loopId: string | null) => void;
   logOutcome: (outcomeType: OutcomeType, notes: string | null, blockId: string | null) => void;
   completeAccount: () => void;
   advanceToNext: () => void;
+  maybeAutoAdvance: () => { advanced: boolean; reason: string };
   setMode: (mode: ExecutionMode) => void;
+  setDisciplineMode: (dm: DisciplineMode) => void;
   recordOverride: (systemSuggestion: string, userChoice: string, reason: string | null) => void;
   refreshScorecard: () => void;
   clearSession: () => void;
+  markRoleplayComplete: () => void;
 }
 
 export const useExecutionSession = create<ExecutionSessionStore>((set, get) => ({
   activeSession: null,
   mode: 'idle' as ExecutionMode,
+  disciplineMode: 'guided' as DisciplineMode,
   scorecard: { accountsWorked: 0, connects: 0, meetingsBooked: 0, readyRemaining: 0, carryForwardCreated: 0, attempts: 0 },
   overrides: [],
+  momentum: { ...INITIAL_MOMENTUM },
+  autopilotLog: [],
 
   activateAccount: (accountId, accountName, mode, loopId) => {
-    set({
+    const now = new Date().toISOString();
+    set(state => ({
       activeSession: {
         accountId,
         accountName,
-        startedAt: new Date().toISOString(),
+        startedAt: now,
         mode,
         loopId,
         latestOutcome: null,
@@ -280,14 +372,19 @@ export const useExecutionSession = create<ExecutionSessionStore>((set, get) => (
         daveAttached: false,
       },
       mode,
-    });
+      momentum: {
+        ...state.momentum,
+        blockStartTimestamp: state.momentum.blockStartTimestamp || now,
+      },
+    }));
   },
 
   logOutcome: (outcomeType, notes, blockId) => {
-    const { activeSession } = get();
+    const { activeSession, momentum } = get();
     if (!activeSession) return;
 
     const today = todayInAppTz();
+    const now = new Date().toISOString();
 
     // Write to account execution truth
     recordAccountOutcome(
@@ -321,22 +418,37 @@ export const useExecutionSession = create<ExecutionSessionStore>((set, get) => (
     // Compute post-action recommendation
     const execState = getAccountState(today, activeSession.accountId);
     let postAction: PostActionRecommendation | null = null;
-    let oppEscalation: OpportunityEscalation | null = null;
-
     if (execState) {
       postAction = getPostActionRecommendation(execState);
     }
+
+    // Update momentum
+    const newActionsThisBlock = momentum.actionsThisBlock + 1;
+    const isFirstAttempt = !momentum.firstAttemptTimestamp;
+    const firstAttemptTs = isFirstAttempt ? now : momentum.firstAttemptTimestamp;
+    const prepToFirst = isFirstAttempt && momentum.blockStartTimestamp
+      ? new Date(now).getTime() - new Date(momentum.blockStartTimestamp).getTime()
+      : momentum.prepToFirstAttemptMs;
+
+    const updatedMomentum: MomentumState = {
+      ...momentum,
+      lastActionTimestamp: now,
+      actionsThisBlock: newActionsThisBlock,
+      firstAttemptTimestamp: firstAttemptTs,
+      prepToFirstAttemptMs: prepToFirst,
+      pace: 'normal', // will be recomputed
+    };
+    updatedMomentum.pace = derivePace(updatedMomentum);
 
     set(state => ({
       activeSession: state.activeSession ? {
         ...state.activeSession,
         latestOutcome: outcomeType,
         postActionRecommendation: postAction,
-        opportunityEscalation: oppEscalation,
       } : null,
+      momentum: updatedMomentum,
     }));
 
-    // Refresh scorecard
     get().refreshScorecard();
   },
 
@@ -351,7 +463,6 @@ export const useExecutionSession = create<ExecutionSessionStore>((set, get) => (
     const { activeSession } = get();
     const currentId = activeSession?.accountId;
 
-    // Pick first candidate that isn't the current account
     const next = candidates.find(c => c.accountId !== currentId) || candidates[0];
 
     if (next) {
@@ -361,11 +472,79 @@ export const useExecutionSession = create<ExecutionSessionStore>((set, get) => (
     }
   },
 
+  maybeAutoAdvance: () => {
+    const flags = loadFeatureFlags();
+    if (!flags.ENABLE_SESSION_AUTOPILOT) return { advanced: false, reason: 'Autopilot disabled.' };
+
+    const { activeSession, disciplineMode } = get();
+    if (!activeSession) return { advanced: false, reason: 'No active session.' };
+
+    const postAction = activeSession.postActionRecommendation;
+    if (!postAction) return { advanced: false, reason: 'No post-action recommendation.' };
+
+    // Don't auto-advance if user decision is required
+    if (postAction.requiresUserAction) {
+      set(state => ({
+        autopilotLog: [...state.autopilotLog.slice(-49), {
+          timestamp: new Date().toISOString(),
+          action: 'paused_for_decision' as const,
+          fromAccount: activeSession.accountName,
+          toAccount: null,
+          reason: postAction.reason,
+        }],
+      }));
+      return { advanced: false, reason: `Decision needed: ${postAction.reason}` };
+    }
+
+    // In strict mode, don't auto-advance if account isn't marked complete
+    if (disciplineMode === 'strict' && !activeSession.isComplete) {
+      set(state => ({
+        autopilotLog: [...state.autopilotLog.slice(-49), {
+          timestamp: new Date().toISOString(),
+          action: 'skipped_strict' as const,
+          fromAccount: activeSession.accountName,
+          toAccount: null,
+          reason: 'Strict mode — complete account before advancing.',
+        }],
+      }));
+      return { advanced: false, reason: 'Strict mode — complete this account first.' };
+    }
+
+    // Safe to auto-advance
+    const candidates = getNextBestAccounts();
+    const next = candidates.find(c => c.accountId !== activeSession.accountId);
+
+    if (!next) {
+      return { advanced: false, reason: 'No more accounts ready.' };
+    }
+
+    const fromName = activeSession.accountName;
+
+    set(state => ({
+      autopilotLog: [...state.autopilotLog.slice(-49), {
+        timestamp: new Date().toISOString(),
+        action: 'auto_advanced' as const,
+        fromAccount: fromName,
+        toAccount: next.accountName,
+        reason: `Auto-advanced after ${postAction.decision.replace(/_/g, ' ')}.`,
+      }],
+    }));
+
+    get().activateAccount(next.accountId, next.accountName, 'action', activeSession.loopId);
+    get().refreshScorecard();
+
+    return { advanced: true, reason: `→ ${next.accountName}: ${next.reason}` };
+  },
+
   setMode: (mode) => {
     set(state => ({
       mode,
       activeSession: state.activeSession ? { ...state.activeSession, mode } : null,
     }));
+  },
+
+  setDisciplineMode: (dm) => {
+    set({ disciplineMode: dm });
   },
 
   recordOverride: (systemSuggestion, userChoice, reason) => {
@@ -389,6 +568,12 @@ export const useExecutionSession = create<ExecutionSessionStore>((set, get) => (
 
   clearSession: () => {
     set({ activeSession: null, mode: 'idle' });
+  },
+
+  markRoleplayComplete: () => {
+    set(state => ({
+      momentum: { ...state.momentum, roleplayCompletedBeforeAction: true },
+    }));
   },
 }));
 
@@ -417,22 +602,6 @@ export function buildTrustExplanation(
 
 // ── Shared System Contract ─────────────────────────────────
 
-/**
- * Precedence & ownership:
- *
- * 1. AccountExecutionState  — ground truth for prep/action/outcome per account/day
- * 2. ActiveAccountSession   — ephemeral focus state for the current working account
- * 3. AccountWorkingSummary   — read-only composite built from #1 + DB
- * 4. ExecutionSession store  — Zustand store coordinating #2 + scorecard + mode
- * 5. Loop truth             — structural scheduling, derived from account truth
- * 6. Block truth            — backward-compat heuristic, lowest precedence
- *
- * Reconciliation:
- * - Session reads from AccountExecutionState, never overwrites it
- * - AccountWorkingSummary is rebuilt on demand, never cached stale
- * - Scorecard recalculates from AccountExecutionState on each refresh
- * - Overrides are logged but do not mutate account truth — they guide next recommendation
- */
 export const SYSTEM_CONTRACT = {
   truthLayers: [
     { layer: 'AccountExecutionState', owner: 'accountExecutionState.ts', mutable: true, precedence: 1 },
@@ -448,5 +617,8 @@ export const SYSTEM_CONTRACT = {
     'Overrides are logged but do not mutate account truth',
     'Opportunity context is attached, never the primary key',
     'Timeline events are append-only, never rewritten',
+    'Strict mode prevents random account switching without override reason',
+    'Autopilot respects requiresUserAction and strict mode',
+    'Momentum tracks pace but does not block actions',
   ],
 } as const;
