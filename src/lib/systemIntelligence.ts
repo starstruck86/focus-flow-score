@@ -107,6 +107,8 @@ export interface SystemHealthMetric {
   sampleWindow: string; // e.g. '24h', '7d'
 }
 
+export type AlertState = 'active' | 'acknowledged' | 'resolved' | 'escalated';
+
 export interface SystemAlert {
   id: string;
   severity: 'info' | 'warning' | 'critical';
@@ -117,6 +119,13 @@ export interface SystemAlert {
   threshold: number;
   triggeredAt: string;
   acknowledged: boolean;
+  state: AlertState;
+  acknowledgedAt?: string;
+  acknowledgedBy?: string;
+  resolvedAt?: string;
+  resolution?: string;
+  escalatedAt?: string;
+  escalationReason?: string;
 }
 
 export interface HealthSnapshot {
