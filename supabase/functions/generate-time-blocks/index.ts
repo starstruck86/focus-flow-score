@@ -1452,6 +1452,100 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
       }
     }
 
+    // ── LOOP-NATIVE METADATA GENERATION ──
+    // Generate explicit prep→action loop metadata from the finalized blocks
+    const PREP_BLOCK_TYPES = new Set(['prep', 'research', 'build']);
+    const ACTION_BLOCK_TYPES = new Set(['prospecting', 'pipeline']);
+
+    interface LoopMetadata {
+      loopId: string;
+      date: string;
+      loopType: string;
+      prepBlockIndex: number | null;
+      actionBlockIndex: number | null;
+      prepTargetCount: number;
+      accountsAssigned: Array<{ id: string; name: string }>;
+      accountsPrepared: Array<{ id: string; name: string }>;
+      accountsWorked: Array<{ id: string; name: string }>;
+      status: string;
+      carryForwardToNextLoop: boolean;
+      blockedReason: string | null;
+    }
+
+    function generateLoopMetadata(blocks: any[], date: string): LoopMetadata[] {
+      const loops: LoopMetadata[] = [];
+      let loopIdx = 0;
+      const usedActionIndices = new Set<number>();
+
+      // Index blocks
+      const prepIndices: number[] = [];
+      const actionIndices: number[] = [];
+      blocks.forEach((b: any, i: number) => {
+        if (PREP_BLOCK_TYPES.has(b.type)) prepIndices.push(i);
+        if (ACTION_BLOCK_TYPES.has(b.type)) actionIndices.push(i);
+      });
+
+      // Pair each prep with its nearest subsequent action
+      for (const pi of prepIndices) {
+        const nextAction = actionIndices.find(ai => ai > pi && !usedActionIndices.has(ai));
+        const prepBlock = blocks[pi];
+        const actionBlock = nextAction !== undefined ? blocks[nextAction] : null;
+
+        const assignedAccounts: Array<{ id: string; name: string }> =
+          (prepBlock.linked_accounts || []).map((a: any) => ({ id: a.id, name: a.name }));
+
+        // Infer loop type
+        const ws = prepBlock.workstream || actionBlock?.workstream || 'new_logo';
+        const label = (prepBlock.label || actionBlock?.label || '').toLowerCase();
+        let loopType = 'new_logo';
+        if (ws === 'renewal') loopType = 'follow_up';
+        else if (label.includes('meeting') || label.includes('prep')) loopType = 'meeting_prep';
+
+        // Estimate prep target from block duration
+        const prepDur = toMinutes(prepBlock.end_time) - toMinutes(prepBlock.start_time);
+        const prepTargetCount = Math.max(assignedAccounts.length, Math.max(2, Math.min(5, Math.floor(prepDur / 10))));
+
+        loops.push({
+          loopId: `loop-${date}-${loopIdx++}`,
+          date,
+          loopType,
+          prepBlockIndex: pi,
+          actionBlockIndex: nextAction !== undefined ? nextAction : null,
+          prepTargetCount,
+          accountsAssigned: assignedAccounts,
+          accountsPrepared: [],
+          accountsWorked: [],
+          status: 'pending',
+          carryForwardToNextLoop: false,
+          blockedReason: null,
+        });
+
+        if (nextAction !== undefined) usedActionIndices.add(nextAction);
+      }
+
+      // Orphan action blocks (no matching prep)
+      for (const ai of actionIndices) {
+        if (usedActionIndices.has(ai)) continue;
+        const actionBlock = blocks[ai];
+        loops.push({
+          loopId: `loop-${date}-${loopIdx++}`,
+          date,
+          loopType: 'new_logo',
+          prepBlockIndex: null,
+          actionBlockIndex: ai,
+          prepTargetCount: 0,
+          accountsAssigned: (actionBlock.linked_accounts || []).map((a: any) => ({ id: a.id, name: a.name })),
+          accountsPrepared: [],
+          accountsWorked: [],
+          status: 'pending',
+          carryForwardToNextLoop: false,
+          blockedReason: !actionBlock.linked_accounts?.length ? 'No prepared accounts — prep needed' : null,
+        });
+      }
+
+      return loops;
+    }
+
     mergedBlocks = finalizePlanBlocks(mergedBlocks, requestSource);
 
     // ── FINAL INVARIANT CHECK: post-finalization calendar audit ──
