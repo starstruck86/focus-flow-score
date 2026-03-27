@@ -35,6 +35,7 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
     get_playbook_recommendation: (params: { blockType?: string; dealStage?: string; dealStatus?: string; accountName?: string }) => getPlaybookRecommendation(ctx, params),
     start_playbook_roleplay: (params: { playbookTitle?: string; accountName?: string; dealStage?: string; dealStatus?: string; objection?: string }) => startPlaybookRoleplay(ctx, params),
     end_playbook_roleplay: () => endPlaybookRoleplay(ctx),
+    ...createAccountExecutionTools(ctx),
     start_daily_roleplay: async (params: { scenarioType?: string; persona?: string; industry?: string }) => {
       const { getRoleplayBlockConfig, recordRoleplayBlockEvent, buildDaveConfirmationPrompt } = await import('@/lib/dailyRoleplayBlock');
       const { todayInAppTz } = await import('@/lib/timeFormat');
