@@ -1,10 +1,11 @@
 /**
  * Loop Readiness Layer
  *
- * Lightweight model that sits on top of the current block system
- * to determine whether an action block is actually ready.
- * Computes prep → action chaining without replacing the scheduler.
+ * When ENABLE_LOOP_NATIVE_SCHEDULER is on, uses explicit loop state
+ * from loopScheduler.ts. Otherwise falls back to heuristic readiness.
  */
+import { isLoopNativeSchedulerEnabled } from '@/lib/featureFlags';
+import { loadLoops, computeLoopReadinessFromLoops, type LoopReadinessState } from '@/lib/loopScheduler';
 
 export interface LoopReadiness {
   loopId: string;
