@@ -21,6 +21,8 @@ import { Zap, RefreshCw, RotateCcw,
   GraduationCap, MessageSquare, Loader2, Check, X, AlertTriangle, Globe, Radar, ListVideo, Podcast,
 } from 'lucide-react';
 import { ResourceLibraryTable } from './ResourceLibraryTable';
+import { ResourceAudioInspector } from './ResourceAudioInspector';
+import { ManualTranscriptAssist } from './ManualTranscriptAssist';
 import { cn } from '@/lib/utils';
 import {
   useResourceFolders, useResources, useCreateFolder, useCreateResource,
@@ -47,8 +49,12 @@ import { EnrichmentJobIndicator } from './EnrichmentJobIndicator';
 import { useResourceDuplicates } from '@/hooks/useResourceDuplicates';
 import { useConsolidateFolders } from '@/hooks/useConsolidateFolders';
 import { ResourceIntelligenceDashboard } from './ResourceIntelligenceDashboard';
+import { useAudioJobsMap } from '@/hooks/useAudioJobs';
+import { isAudioResource } from '@/lib/salesBrain/audioPipeline';
+import { processAudioResource, retryPlatformResolution, retryAudioJob } from '@/lib/salesBrain/audioOrchestrator';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
 
 type PendingItem = {
   id: string;
