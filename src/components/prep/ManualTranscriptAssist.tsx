@@ -2,6 +2,8 @@
  * Manual Transcript Assist Dialog
  * Allows operator to paste/upload transcript or notes for audio resources
  * that cannot be automatically transcribed.
+ *
+ * Uses DB-backed audioJob prop — no localStorage.
  */
 
 import { memo, useState, useCallback } from 'react';
@@ -14,16 +16,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { FileAudio, Upload, FileText, Bookmark } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
-  getAudioJobForResource,
   getAudioStageLabel,
   getAudioFailureDescription,
-  type AudioJobState,
   type AudioFailureCode,
+  type AudioPipelineStage,
 } from '@/lib/salesBrain/audioPipeline';
 import {
   detectAudioSubtype,
   getAudioStrategy,
 } from '@/lib/salesBrain/audioPipeline';
+import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 
 type ManualAssistMode = 'paste_transcript' | 'paste_notes' | 'provide_alt_url' | 'provide_audio_url' | 'metadata_only' | 'park_later';
 
@@ -33,6 +35,7 @@ interface ManualTranscriptAssistProps {
   resourceId: string;
   resourceTitle: string;
   resourceUrl: string | null;
+  audioJob?: AudioJobRecord | null;
   onSubmit: (data: { mode: ManualAssistMode; content: string }) => void;
 }
 
@@ -42,11 +45,11 @@ export const ManualTranscriptAssist = memo(function ManualTranscriptAssist({
   resourceId,
   resourceTitle,
   resourceUrl,
+  audioJob,
   onSubmit,
 }: ManualTranscriptAssistProps) {
   const [mode, setMode] = useState<ManualAssistMode>('paste_transcript');
   const [content, setContent] = useState('');
-  const audioJob = getAudioJobForResource(resourceId);
   const subtype = detectAudioSubtype(resourceUrl);
   const strategy = getAudioStrategy(subtype);
 
@@ -82,25 +85,25 @@ export const ManualTranscriptAssist = memo(function ManualTranscriptAssist({
           {audioJob && (
             <div className="flex items-center gap-2 flex-wrap">
               <Badge variant="outline" className="text-[9px]">
-                {getAudioStageLabel(audioJob.stage)}
+                {getAudioStageLabel(audioJob.stage as AudioPipelineStage)}
               </Badge>
-              {audioJob.failureCode && (
+              {audioJob.failure_code && (
                 <Badge variant="destructive" className="text-[9px]">
-                  {audioJob.failureCode}
+                  {audioJob.failure_code}
                 </Badge>
               )}
               <span className="text-[10px] text-muted-foreground">
-                {audioJob.attemptsCount} attempt{audioJob.attemptsCount !== 1 ? 's' : ''}
+                {audioJob.attempts_count} attempt{audioJob.attempts_count !== 1 ? 's' : ''}
               </span>
             </div>
           )}
 
-          {audioJob?.failureReason && (
+          {audioJob?.failure_reason && (
             <p className="text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1">
-              {audioJob.failureReason}
-              {audioJob.failureCode && (
+              {audioJob.failure_reason}
+              {audioJob.failure_code && (
                 <span className="block text-[10px] mt-0.5">
-                  → {getAudioFailureDescription(audioJob.failureCode).nextAction}
+                  → {getAudioFailureDescription(audioJob.failure_code as AudioFailureCode).nextAction}
                 </span>
               )}
             </p>

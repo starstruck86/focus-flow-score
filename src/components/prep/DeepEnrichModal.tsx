@@ -29,10 +29,10 @@ import {
   isAudioResource,
   detectAudioSubtype,
   getAudioStrategy,
-  getAudioJobForResource,
   getAudioStageLabel,
   getAudioFailureDescription,
 } from '@/lib/salesBrain/audioPipeline';
+import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import { createLogger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
 import type { Resource } from '@/hooks/useResources';
@@ -44,6 +44,7 @@ interface DeepEnrichModalProps {
   onOpenChange: (open: boolean) => void;
   resources: Resource[];
   selectedIds?: Set<string>;
+  audioJobsMap?: Map<string, AudioJobRecord>;
 }
 
 export const DeepEnrichModal = memo(function DeepEnrichModal({
@@ -51,6 +52,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
   onOpenChange,
   resources,
   selectedIds,
+  audioJobsMap,
 }: DeepEnrichModalProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -100,7 +102,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
     const items = audioResources.map(r => {
       const sub = detectAudioSubtype(r.file_url, r.resource_type);
       const strategy = getAudioStrategy(sub);
-      const job = getAudioJobForResource(r.id);
+      const job = audioJobsMap?.get(r.id) || null;
       return { resource: r, subtype: sub, strategy, job };
     });
     return {
@@ -110,7 +112,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
       needsManual: items.filter(i => i.job?.stage === 'needs_manual_assist' || i.strategy.manualAssistRequired).length,
       retryable: items.filter(i => i.job?.stage === 'failed' && i.job?.retryable).length,
     };
-  }, [scopedResources]);
+  }, [scopedResources, audioJobsMap]);
 
   const handleStart = useCallback(
     (
@@ -241,7 +243,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
                         )}
                       </div>
                       {audioBreakdown.items.slice(0, 8).map((item, i) => {
-                        const failDesc = item.job?.failureCode ? getAudioFailureDescription(item.job.failureCode) : null;
+                        const failDesc = item.job?.failure_code ? getAudioFailureDescription(item.job.failure_code as any) : null;
                         return (
                           <div key={i} className="pl-3 mb-0.5">
                             <p className="text-[10px] text-muted-foreground truncate">
@@ -250,10 +252,10 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
                             <p className="text-[9px] text-muted-foreground/70 pl-2">
                               {item.job ? (
                                 <>
-                                  {getAudioStageLabel(item.job.stage)}
-                                  {item.job.failureCode && ` · ${item.job.failureCode}`}
+                                  {getAudioStageLabel(item.job.stage as any)}
+                                  {item.job.failure_code && ` · ${item.job.failure_code}`}
                                   {failDesc && ` → ${failDesc.nextAction}`}
-                                  {item.job.attemptsCount > 0 && ` · ${item.job.attemptsCount} attempts`}
+                                  {item.job.attempts_count > 0 && ` · ${item.job.attempts_count} attempts`}
                                 </>
                               ) : (
                                 <>{item.strategy.operatorFailureReason}</>

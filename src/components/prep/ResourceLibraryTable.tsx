@@ -252,7 +252,7 @@ export function ResourceLibraryTable({
   }, []);
 
   return (
-    <div ref={shellRef} className="flex flex-col" style={{ height: 'calc(100vh - 220px)', minHeight: '300px' }}>
+    <div ref={shellRef} className="flex flex-col min-h-[300px]" style={{ maxHeight: 'calc(100vh - 280px)' }}>
       {/* Saved views — pinned top */}
       <div className="flex items-center gap-1 overflow-x-auto pb-1 shrink-0">
         {SAVED_VIEWS.map(view => (
