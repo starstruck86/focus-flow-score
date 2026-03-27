@@ -52,6 +52,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
   onOpenChange,
   resources,
   selectedIds,
+  audioJobsMap,
 }: DeepEnrichModalProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
