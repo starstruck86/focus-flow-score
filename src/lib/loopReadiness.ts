@@ -87,6 +87,7 @@ export function computeLoopReadiness(
 
 /**
  * Build the summary signal for cockpit / daily plan header.
+ * Uses explicit loop state when the loop-native scheduler is enabled.
  */
 export function buildPrepActionSignal(
   blocks: BlockLike[],
@@ -94,7 +95,26 @@ export function buildPrepActionSignal(
   currentBlockIndex: number,
   roleplayStatus: PrepActionSignal['roleplayStatus'],
   roleplayStreakDays: number,
+  date?: string,
 ): PrepActionSignal {
+  // Use explicit loop state when available
+  if (date && isLoopNativeSchedulerEnabled()) {
+    const loops = loadLoops(date);
+    if (loops.length > 0) {
+      const state = computeLoopReadinessFromLoops(loops);
+      return {
+        roleplayStatus,
+        roleplayStreakDays,
+        nextActionBlockLabel: state.currentLoop?.actionBlockId ? 'Call Block' : null,
+        nextActionBlockReady: state.isNextActionReady,
+        preparedAccountsWaiting: state.totalPrepared - state.totalWorked,
+        blockedReason: state.blockedReason,
+        carryForwardCount: state.carryForwardCount,
+        currentLoopStatus: state.currentLoop?.status || null,
+        nextLoopStatus: state.nextLoop?.status || null,
+      };
+    }
+  }
   const loops = computeLoopReadiness(blocks, completedGoals, currentBlockIndex);
 
   // Find next action block

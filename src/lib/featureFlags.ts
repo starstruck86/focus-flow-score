@@ -48,3 +48,11 @@ export function isVoiceOSEnabled(): boolean {
 export function isCapabilityAwarenessEnabled(): boolean {
   return loadFeatureFlags().ENABLE_CAPABILITY_AWARENESS;
 }
+
+export function isLoopNativeSchedulerEnabled(): boolean {
+  return loadFeatureFlags().ENABLE_LOOP_NATIVE_SCHEDULER;
+}
+
+export function isRoleplayGroundingEnabled(): boolean {
+  return loadFeatureFlags().ENABLE_ROLEPLAY_GROUNDING;
+}
