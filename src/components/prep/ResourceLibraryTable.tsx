@@ -386,6 +386,17 @@ export function ResourceLibraryTable({
                         <span className="text-xs text-muted-foreground capitalize">{resource.resource_type}</span>
                       </TableCell>
                       <TableCell>
+                        {(() => {
+                          const subtype = detectResourceSubtype(resource.file_url, resource.resource_type);
+                          const ea = classifyEnrichability(resource.file_url, resource.resource_type);
+                          return (
+                            <Badge className={cn('text-[8px]', getEnrichabilityColor(ea.enrichability))} title={ea.reason}>
+                              {getSubtypeLabel(subtype)}
+                            </Badge>
+                          );
+                        })()}
+                      </TableCell>
+                      <TableCell>
                         <Badge className={cn('text-[9px]', getEnrichmentStatusColor(resource.enrichment_status))}>
                           {getEnrichmentStatusLabel(resource.enrichment_status)}
                         </Badge>
