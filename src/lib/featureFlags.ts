@@ -12,8 +12,8 @@ export interface FeatureFlags {
 }
 
 const DEFAULTS: FeatureFlags = {
-  ENABLE_SYSTEM_OS: true,
-  ENABLE_VOICE_OS: true,
+  ENABLE_SYSTEM_OS: false,
+  ENABLE_VOICE_OS: false,
 };
 
 export function loadFeatureFlags(): FeatureFlags {
