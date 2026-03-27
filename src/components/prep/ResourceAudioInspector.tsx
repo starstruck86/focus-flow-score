@@ -63,7 +63,7 @@ export const ResourceAudioInspector = memo(function ResourceAudioInspector({
 
       <ScrollArea className="max-h-[350px]">
         <div className="space-y-0.5">
-          <Row label="Detected Subtype" value={getSubtypeLabel(detectedSubtype)} />
+          <Row label="Detected Subtype" value={detectedSubtype} />
           <Row label="DB Audio Job" value={audioJob ? 'Yes' : 'No'} />
 
           {audioJob && (
