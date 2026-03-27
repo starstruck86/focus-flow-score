@@ -13,3 +13,4 @@ export * from './strategy-outcomes';
 export * from './pipeline-impact';
 export * from './pipeline-forecast';
 export * from './comparison-engine';
+export * from './source-registry';

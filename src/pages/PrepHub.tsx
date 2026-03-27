@@ -10,7 +10,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { 
   FileText, Sparkles, Mail, 
-  MessageSquare, Wand2, BookOpen
+  MessageSquare, Wand2, BookOpen,
+  Brain, Inbox,
 } from 'lucide-react';
 import { VoiceCommandButton } from '@/components/VoiceCommandButton';
 import { ResourceManager } from '@/components/prep/ResourceManager';
@@ -20,6 +21,8 @@ import { CustomPromptsManager } from '@/components/prep/CustomPromptsManager';
 import { PlaybooksPanel } from '@/components/prep/PlaybooksPanel';
 import { ExecutionWorkbench } from '@/components/prep/ExecutionWorkbench';
 import { GovernancePanel } from '@/components/governance/GovernancePanel';
+import { SourceRegistryManager } from '@/components/prep/SourceRegistryManager';
+import { IncomingQueue } from '@/components/prep/IncomingQueue';
 
 const PREP_PROMPTS = [
   { label: 'Pre-Call Research Brief', prompt: 'Research and prep me for my upcoming call with {{account}}. Include company background, recent news, key stakeholders, potential pain points, and suggested discovery questions.', mode: 'meeting' as const },
@@ -64,32 +67,42 @@ export default function PrepHub() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full grid grid-cols-6">
-            <TabsTrigger value="content-builder" className="text-xs">
-              <Wand2 className="h-3.5 w-3.5 mr-1" />
-              Build
-            </TabsTrigger>
-            <TabsTrigger value="resources" className="text-xs">
-              <FileText className="h-3.5 w-3.5 mr-1" />
-              Library
-            </TabsTrigger>
-            <TabsTrigger value="playbooks" className="text-xs">
-              <BookOpen className="h-3.5 w-3.5 mr-1" />
-              Playbooks
-            </TabsTrigger>
-            <TabsTrigger value="prep" className="text-xs">
-              <Sparkles className="h-3.5 w-3.5 mr-1" />
-              AI Prep
-            </TabsTrigger>
-            <TabsTrigger value="templates" className="text-xs">
-              <Mail className="h-3.5 w-3.5 mr-1" />
-              Templates
-            </TabsTrigger>
-            <TabsTrigger value="prompts" className="text-xs">
-              <MessageSquare className="h-3.5 w-3.5 mr-1" />
-              Prompts
-            </TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto -mx-1 px-1">
+            <TabsList className="w-max flex gap-0.5">
+              <TabsTrigger value="content-builder" className="text-xs">
+                <Wand2 className="h-3.5 w-3.5 mr-1" />
+                Build
+              </TabsTrigger>
+              <TabsTrigger value="resources" className="text-xs">
+                <FileText className="h-3.5 w-3.5 mr-1" />
+                Library
+              </TabsTrigger>
+              <TabsTrigger value="playbooks" className="text-xs">
+                <BookOpen className="h-3.5 w-3.5 mr-1" />
+                Playbooks
+              </TabsTrigger>
+              <TabsTrigger value="sources" className="text-xs">
+                <Brain className="h-3.5 w-3.5 mr-1" />
+                Sources
+              </TabsTrigger>
+              <TabsTrigger value="incoming" className="text-xs">
+                <Inbox className="h-3.5 w-3.5 mr-1" />
+                Incoming
+              </TabsTrigger>
+              <TabsTrigger value="prep" className="text-xs">
+                <Sparkles className="h-3.5 w-3.5 mr-1" />
+                AI Prep
+              </TabsTrigger>
+              <TabsTrigger value="templates" className="text-xs">
+                <Mail className="h-3.5 w-3.5 mr-1" />
+                Templates
+              </TabsTrigger>
+              <TabsTrigger value="prompts" className="text-xs">
+                <MessageSquare className="h-3.5 w-3.5 mr-1" />
+                Prompts
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           {/* GOVERNANCE PANEL — collapsible, feature-flagged */}
           <GovernancePanel />
@@ -110,6 +123,16 @@ export default function PrepHub() {
           {/* PLAYBOOKS TAB */}
           <TabsContent value="playbooks" className="mt-3">
             <PlaybooksPanel />
+          </TabsContent>
+
+          {/* SOURCES TAB */}
+          <TabsContent value="sources" className="mt-3">
+            <SourceRegistryManager />
+          </TabsContent>
+
+          {/* INCOMING QUEUE TAB */}
+          <TabsContent value="incoming" className="mt-3">
+            <IncomingQueue />
           </TabsContent>
 
           {/* AI PREP TAB */}
