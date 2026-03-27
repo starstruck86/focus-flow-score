@@ -10,10 +10,17 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { toast } from 'sonner';
 import { ExplainabilityFooter, type ExplainabilityData } from '@/components/copilot/ExplainabilityFooter';
-import { detectDaveMode, buildDaveResponse } from '@/lib/daveModeDetector';
-import { isSystemOSEnabled } from '@/lib/featureFlags';
+import { detectDaveMode, classifyAndDetect, buildDaveResponse } from '@/lib/daveModeDetector';
+import { isSystemOSEnabled, isVoiceOSEnabled } from '@/lib/featureFlags';
 import { getSystemState } from '@/lib/systemGovernance';
 import { loadAlerts, loadCorrectionLog } from '@/lib/systemIntelligence';
+import { classifyVoiceIntent } from '@/lib/voiceIntent';
+import { resolveContextReference, getVoiceContext, updateVoiceContext } from '@/lib/voiceContext';
+import { getConfirmationPolicy } from '@/lib/voiceConfirmation';
+import { getVoiceSystemPrompt, handleVoiceMetaIntent, setVoiceVerbosity } from '@/lib/voiceResponse';
+import { parseChainedWorkflow, advanceChain, type ChainedWorkflow } from '@/lib/voiceWorkflows';
+import { recordWorkflow, beginWorkflowTimer, classifyWorkflow, type WorkflowType } from '@/lib/acceptanceHarness';
+import { recordFriction } from '@/lib/frictionSignals';
 
 const MODE_ICONS: Record<CopilotMode, typeof Zap> = {
   quick: Zap,
