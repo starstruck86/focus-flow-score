@@ -8,6 +8,7 @@ import { citeInsight, knowledgeTrends, insightReliability, recommendStrategy, re
 import { getPlaybookRecommendation } from './intelligence/playbooks';
 import { startPlaybookRoleplay, endPlaybookRoleplay } from './intelligence/playbookRoleplay';
 import { createAccountExecutionTools } from './intelligence/accountExecution';
+import { createAccountCentricTools } from './intelligence/accountCentric';
 export function createIntelligenceTools(ctx: ToolContext): ToolMap {
   return {
     search_crm: (params: { query: string }) => searchCrm(ctx, params),
