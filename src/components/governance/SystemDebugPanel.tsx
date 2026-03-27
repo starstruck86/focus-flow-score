@@ -98,6 +98,7 @@ export function SystemDebugPanel() {
               {snapshot.recentOutcomes.length > 0 && (
                 <Row label="Outcomes" value={snapshot.recentOutcomes.slice(0, 3).join(', ')} />
               )}
+              <Row label="Measurements" value={String(measurementCount)} />
             </>
           )}
 
