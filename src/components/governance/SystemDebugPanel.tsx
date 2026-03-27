@@ -72,6 +72,7 @@ export function SystemDebugPanel() {
           {/* Flags */}
           <Row label="Loop scheduler" value={loopEnabled ? 'on' : 'off'} />
           <Row label="Roleplay grounding" value={groundingEnabled ? 'on' : 'off'} />
+          <Row label="Account model" value={acctEnabled ? 'on' : 'off'} />
 
           {/* Loop state */}
           <div className="border-t border-border/20 pt-1 mt-1" />
