@@ -46,7 +46,9 @@ import { getCurrentMinutesET, todayInAppTz } from '@/lib/timeFormat';
 import { usePlaybookRecommendation, type WorkflowContext } from '@/hooks/usePlaybookRecommendation';
 import { PlaybookRecommendationChip } from '@/components/PlaybookRecommendationChip';
 import { RoleplayBlockCard } from '@/components/dashboard/RoleplayBlockCard';
-import { getRoleplayBlockConfig, findRoleplaySlot, createRoleplayBlock, getTodayRoleplayStatus } from '@/lib/dailyRoleplayBlock';
+import { ExecutionSignals } from '@/components/dashboard/ExecutionSignals';
+import { getRoleplayBlockConfig, findRoleplaySlot, createRoleplayBlock, getTodayRoleplayStatus, getRoleplayStreak, recordRoleplayBlockEvent } from '@/lib/dailyRoleplayBlock';
+import { buildPrepActionSignal, type PrepActionSignal } from '@/lib/loopReadiness';
 
 /** Inline contact count for linked account pills */
 const LinkedAccountContactCount = memo(function LinkedAccountContactCount({ accountId }: { accountId: string }) {
