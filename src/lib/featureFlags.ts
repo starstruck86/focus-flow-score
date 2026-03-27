@@ -40,3 +40,7 @@ export function isSystemOSEnabled(): boolean {
 export function isVoiceOSEnabled(): boolean {
   return loadFeatureFlags().ENABLE_VOICE_OS;
 }
+
+export function isCapabilityAwarenessEnabled(): boolean {
+  return loadFeatureFlags().ENABLE_CAPABILITY_AWARENESS;
+}
