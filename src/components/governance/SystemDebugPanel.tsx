@@ -21,6 +21,7 @@ import {
 } from '@/lib/featureFlags';
 import { getDoctrineGovernanceStats, getLegacyHydratedCount } from '@/lib/salesBrain';
 import { getActualUsageCounts } from '@/lib/salesBrain/doctrineUsage';
+import { getAudioPipelineHealth } from '@/lib/salesBrain/audioPipeline';
 import { loadMeasurementEvents } from '@/lib/accountPostAction';
 import {
   useExecutionSession,
