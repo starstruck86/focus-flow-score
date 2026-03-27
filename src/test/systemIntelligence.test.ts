@@ -344,7 +344,7 @@ describe('Time-Aware Strategy', () => {
   });
 
   it('reduces urgency outside business hours', () => {
-    const date = new Date(2026, 2, 24, 21); // Tuesday, 9 PM
+    const date = new Date(2026, 4, 5, 21); // Tuesday May 5, 9 PM (mid-Q2)
     const ctx = buildTemporalContext(date);
     const adj = computeTemporalAdjustment(ctx);
     expect(adj.urgencyModifier).toBeLessThan(0);
