@@ -52,7 +52,10 @@ export function SystemDebugPanel() {
   const groundingEnabled = isRoleplayGroundingEnabled();
   const acctEnabled = isAccountExecutionModelEnabled();
   const acctCentricEnabled = isAccountCentricExecutionEnabled();
+  const sessionEnabled = isExecutionSessionLayerEnabled();
   const measurementCount = loadMeasurementEvents().length;
+  const { activeSession, mode, scorecard } = useExecutionSession();
+  const nextCandidates = sessionEnabled ? getNextBestAccounts() : [];
 
   return (
     <div>
