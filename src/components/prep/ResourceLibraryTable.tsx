@@ -13,7 +13,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { ScrollArea } from '@/components/ui/scroll-area';
+// ScrollArea removed — using native scroll for proper table behavior
 import {
   Search, ArrowUpDown, ArrowUp, ArrowDown,
   MoreHorizontal, Zap, RefreshCw, RotateCcw, Trash2,

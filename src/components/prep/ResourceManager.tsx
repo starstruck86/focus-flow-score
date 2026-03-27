@@ -988,26 +988,7 @@ export function ResourceManager() {
       {/* Floating enrichment job indicator */}
       <EnrichmentJobIndicator onOpenModal={() => setShowDeepEnrich(true)} />
 
-      {/* Bulk selection bar */}
-      {selectedResourceIds.size > 0 && (
-        <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-card border border-border rounded-xl px-4 py-2.5 shadow-lg">
-          <span className="text-sm font-medium">{selectedResourceIds.size} selected</span>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs gap-1"
-            onClick={() => {
-              setShowDeepEnrich(true);
-            }}
-          >
-            <Zap className="h-3 w-3" />
-            Deep Enrich Selected
-          </Button>
-          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSelectedResourceIds(new Set())}>
-            <X className="h-3 w-3 mr-1" /> Clear
-          </Button>
-        </div>
-      )}
+      {/* Bulk selection bar moved into ResourceLibraryTable */}
     </div>
   );
 }
