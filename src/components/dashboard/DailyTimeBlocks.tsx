@@ -670,7 +670,8 @@ export function DailyTimeBlocks() {
     // Wire loop runtime state transitions when completing goals
     if (isCompleting && isLoopNativeSchedulerEnabled()) {
       try {
-        const block = blocks[blockIdx];
+        const rawBlocks = (plan.blocks || []) as TimeBlock[];
+        const block = rawBlocks[blockIdx];
         if (!block) return;
         const PREP_TYPES = new Set(['prep', 'research', 'build']);
         const ACTION_TYPES = new Set(['prospecting', 'pipeline']);
@@ -688,7 +689,7 @@ export function DailyTimeBlocks() {
         }
       } catch {}
     }
-  }, [plan, todayStr, queryClient, blocks]);
+  }, [plan, todayStr, queryClient]);
 
   // Per-block thumbs feedback
   const thumbsBlock = useCallback(async (blockIdx: number, thumbs: 'up' | 'down') => {
