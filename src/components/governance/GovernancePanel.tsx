@@ -19,6 +19,7 @@ import { isSystemOSEnabled } from '@/lib/featureFlags';
 import { toggleKillSwitch, type KillSwitches } from '@/lib/systemGovernance';
 import { cn } from '@/lib/utils';
 import { useLiveSystemState, useLiveKillSwitches } from '@/hooks/useSystemState';
+import { SystemDebugPanel } from '@/components/governance/SystemDebugPanel';
 
 const KILL_SWITCH_LABELS: Record<keyof KillSwitches, string> = {
   ENRICHMENT_ENABLED: 'Enrichment',
@@ -149,6 +150,11 @@ export function GovernancePanel() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Debug Panel — operator inspection */}
+          <div className="border-t border-border/20 pt-2">
+            <SystemDebugPanel />
           </div>
         </CardContent>
       )}
