@@ -96,6 +96,17 @@ export const RoleplayBlockCard = memo(function RoleplayBlockCard({ blockStartTim
     );
   }
 
+  if (localStatus === 'missed_no_slot') {
+    return (
+      <div className="mt-2 py-2 px-3 rounded-md bg-muted/30 border border-border/30">
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <Clock className="h-3.5 w-3.5" />
+          <span>No morning slot available for roleplay today</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-2 py-2.5 px-3 rounded-md bg-orange-500/5 border border-orange-500/20">
       <div className="flex items-center gap-2 mb-1.5">
