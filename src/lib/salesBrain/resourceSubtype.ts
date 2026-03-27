@@ -280,6 +280,7 @@ export function getSubtypeLabel(subtype: ResourceSubtype): string {
     google_drive_file: 'Google Drive File',
     zoom_recording: 'Zoom Recording',
     spotify_episode: 'Spotify Episode',
+    apple_podcast_episode: 'Apple Podcast',
     podcast_episode: 'Podcast Episode',
     audio_file: 'Audio File',
     web_article: 'Web Article',
