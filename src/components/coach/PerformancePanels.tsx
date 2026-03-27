@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
-  Target, AlertTriangle, Play,
+  Target, AlertTriangle, Play, Sparkles,
   CheckCircle, BarChart3, Lightbulb, Shield
 } from 'lucide-react';
 import { isSystemOSEnabled } from '@/lib/featureFlags';
