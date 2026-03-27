@@ -151,6 +151,11 @@ export function GovernancePanel() {
               ))}
             </div>
           </div>
+
+          {/* Debug Panel — operator inspection */}
+          <div className="border-t border-border/20 pt-2">
+            <SystemDebugPanel />
+          </div>
         </CardContent>
       )}
     </Card>
