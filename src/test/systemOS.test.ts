@@ -171,8 +171,8 @@ describe('interventionGuard', () => {
   it('allows after cooldown expires', () => {
     const now = Date.now();
     recordIntervention('major_nudge', undefined, now);
-    // 4h + 1ms later
-    expect(shouldSuppressIntervention('major_nudge', undefined, now + 4 * 3600 * 1000 + 1)).toBe(false);
+    // 6h + 1ms later (matches tuned cooldown)
+    expect(shouldSuppressIntervention('major_nudge', undefined, now + 6 * 3600 * 1000 + 1)).toBe(false);
   });
 
   it('suppresses low-confidence for eligible types', () => {
