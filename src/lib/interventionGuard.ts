@@ -105,6 +105,39 @@ export function clearInterventionLog(): void {
   try { localStorage.removeItem(INTERVENTION_LOG_KEY); } catch {}
 }
 
+// ── Contextual Suppression ─────────────────────────────────
+
+export interface SuppressionContext {
+  onCall?: boolean;
+  isMobile?: boolean;
+  afterHours?: boolean;
+  focusBlock?: boolean;
+  degradedMode?: boolean;
+}
+
+/**
+ * Contextual suppression — returns true if interventions should be suppressed
+ * based on the user's current operating context.
+ */
+export function shouldSuppressByContext(ctx: SuppressionContext, type: InterventionType): boolean {
+  // On a call → suppress everything except risk alerts
+  if (ctx.onCall && type !== 'risk_alert') return true;
+
+  // Focus block → suppress nudges and coaching
+  if (ctx.focusBlock && (type === 'coach_nudge' || type === 'major_nudge' || type === 'playbook_suggestion')) return true;
+
+  // After hours → suppress all non-critical
+  if (ctx.afterHours && type !== 'risk_alert') return true;
+
+  // Mobile → suppress verbose interventions (coaching, playbook)
+  if (ctx.isMobile && (type === 'coach_nudge' || type === 'playbook_suggestion')) return true;
+
+  // Degraded mode → only risk alerts pass through
+  if (ctx.degradedMode && type !== 'risk_alert' && type !== 'major_nudge') return true;
+
+  return false;
+}
+
 // ── Storage ────────────────────────────────────────────────
 
 function loadInterventionLog(): InterventionRecord[] {

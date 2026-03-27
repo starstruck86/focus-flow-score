@@ -5,12 +5,13 @@ import { Button } from '@/components/ui/button';
 import { 
   Zap, Target, BookOpen, AlertTriangle, 
   Play, FileText, CheckCircle,
-  TrendingUp
+  TrendingUp, Mic
 } from 'lucide-react';
-import { isSystemOSEnabled } from '@/lib/featureFlags';
+import { isSystemOSEnabled, isVoiceOSEnabled } from '@/lib/featureFlags';
 import { getExecutionContext, type ExecutionDeal, type RiskSignal } from '@/lib/workflowOrchestrator';
 import { useLiveSystemSummary } from '@/hooks/useSystemState';
 import { useCopilot } from '@/contexts/CopilotContext';
+import { useVoiceOperatingContext } from '@/hooks/useVoiceOperatingContext';
 
 interface ExecutionWorkbenchProps {
   deals?: ExecutionDeal[];
@@ -22,6 +23,8 @@ export function ExecutionWorkbench({ deals = [], playbooks = [], riskSignals = [
   const { ask: askCopilot } = useCopilot();
   const context = useMemo(() => getExecutionContext(deals, playbooks, riskSignals), [deals, playbooks, riskSignals]);
   const systemSummary = useLiveSystemSummary();
+  const voiceOS = isVoiceOSEnabled();
+  const { context: voiceCtx } = useVoiceOperatingContext();
 
   if (!isSystemOSEnabled()) return null;
 
@@ -44,7 +47,26 @@ export function ExecutionWorkbench({ deals = [], playbooks = [], riskSignals = [
         </div>
       )}
 
-      {/* Right Now — Top Deals */}
+      {/* Voice OS Context — UI safety net */}
+      {voiceOS && (voiceCtx.currentDeal || voiceCtx.pendingAction || voiceCtx.chainedWorkflow) && (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/5 rounded-lg border border-primary/10">
+          <Mic className="h-3 w-3 text-primary" />
+          <div className="flex-1 flex items-center gap-2 text-[10px] text-muted-foreground overflow-hidden">
+            {voiceCtx.currentDeal && (
+              <span className="truncate">Deal: <span className="text-foreground font-medium">{voiceCtx.currentDeal.name}</span></span>
+            )}
+            {voiceCtx.pendingAction && (
+              <Badge variant="outline" className="text-[9px] shrink-0">Pending: {voiceCtx.pendingAction.tool.replace(/_/g, ' ')}</Badge>
+            )}
+            {voiceCtx.chainedWorkflow && (
+              <Badge variant="outline" className="text-[9px] shrink-0">
+                Chain {voiceCtx.chainedWorkflow.currentStep + 1}/{voiceCtx.chainedWorkflow.steps.length}
+              </Badge>
+            )}
+          </div>
+        </div>
+      )}
+
       {context.topDeals.length > 0 && (
         <Card>
           <CardHeader className="pb-2 pt-3 px-3">
