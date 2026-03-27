@@ -1,8 +1,9 @@
 /**
  * Audio Transcription Orchestrator
  * 
- * Drives the real audio pipeline: creates DB job, calls edge function,
+ * Drives the real audio pipeline: creates DB job, calls edge functions,
  * persists results, handles retry from last successful stage.
+ * Supports direct audio, Spotify episodes, Apple Podcast episodes.
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -33,6 +34,18 @@ export interface AudioJobRecord {
   quality_result: TranscriptQualityResult | null;
   last_successful_stage: string | null;
   provider_used: string | null;
+  // Platform resolution fields
+  platform_source_type: string | null;
+  source_episode_id: string | null;
+  source_show_id: string | null;
+  canonical_episode_url: string | null;
+  rss_feed_url: string | null;
+  transcript_source_url: string | null;
+  metadata_json: any;
+  resolver_attempts: number;
+  last_resolution_stage: string | null;
+  transcript_mode: string | null;
+  final_resolution_status: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -53,6 +66,32 @@ export interface TranscribeDirectResult {
   persisted: boolean;
 }
 
+export interface PlatformResolveResult {
+  success: boolean;
+  jobId: string;
+  subtype: string;
+  metadata: {
+    title: string | null;
+    showName: string | null;
+    description: string | null;
+    durationMs: number | null;
+    artworkUrl: string | null;
+    episodeUrl: string | null;
+    publishDate: string | null;
+  };
+  resolution: {
+    rssFeedUrl: string | null;
+    audioEnclosureUrl: string | null;
+    transcriptSourceUrl: string | null;
+    canonicalPageUrl: string | null;
+  };
+  finalStatus: string;
+  failureCode: string | null;
+  failureReason: string | null;
+  resolverStages: Array<{ stage: string; status: string; detail?: string }>;
+  transcriptionResult?: TranscribeDirectResult;
+}
+
 /**
  * Create or get existing audio job for a resource
  */
@@ -64,7 +103,6 @@ export async function getOrCreateAudioJob(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
-  // Check for existing job
   const { data: existing } = await supabase
     .from('audio_jobs')
     .select('*')
@@ -77,7 +115,6 @@ export async function getOrCreateAudioJob(
     return existing[0] as unknown as AudioJobRecord;
   }
 
-  // Create new job
   const subtype = detectAudioSubtype(sourceUrl, resourceType);
   const { data, error } = await supabase
     .from('audio_jobs')
@@ -101,8 +138,137 @@ export async function getOrCreateAudioJob(
 }
 
 /**
+ * Resolve a Spotify/Apple Podcast episode — extract metadata, find audio URL
+ */
+export async function resolvePodcastEpisode(
+  resourceId: string,
+  sourceUrl: string,
+): Promise<PlatformResolveResult> {
+  const job = await getOrCreateAudioJob(resourceId, sourceUrl);
+  if (!job) {
+    return {
+      success: false, jobId: '', subtype: 'unsupported_audio',
+      metadata: { title: null, showName: null, description: null, durationMs: null, artworkUrl: null, episodeUrl: null, publishDate: null },
+      resolution: { rssFeedUrl: null, audioEnclosureUrl: null, transcriptSourceUrl: null, canonicalPageUrl: null },
+      finalStatus: 'failed', failureCode: 'SOURCE_RESOLUTION_FAILED',
+      failureReason: 'Could not create job (not authenticated?)',
+      resolverStages: [],
+    };
+  }
+
+  await updateJobStage(job.id, 'resolving_platform_metadata' as AudioPipelineStage);
+
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+
+    const resp = await fetch(`${supabaseUrl}/functions/v1/resolve-podcast-episode`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`,
+        'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: JSON.stringify({ url: sourceUrl }),
+    });
+
+    const result = await resp.json();
+
+    // Persist resolution results to DB
+    const updatePayload: Record<string, any> = {
+      audio_subtype: result.subtype || job.audio_subtype,
+      platform_source_type: result.subtype || null,
+      metadata_json: result.metadata || {},
+      resolver_attempts: (job.resolver_attempts || 0) + 1,
+      last_resolution_stage: result.resolverStages?.[result.resolverStages.length - 1]?.stage || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (result.resolution) {
+      if (result.resolution.rssFeedUrl) updatePayload.rss_feed_url = result.resolution.rssFeedUrl;
+      if (result.resolution.audioEnclosureUrl) updatePayload.resolved_audio_url = result.resolution.audioEnclosureUrl;
+      if (result.resolution.transcriptSourceUrl) updatePayload.transcript_source_url = result.resolution.transcriptSourceUrl;
+      if (result.resolution.canonicalPageUrl) updatePayload.canonical_episode_url = result.resolution.canonicalPageUrl;
+    }
+
+    if (result.metadata) {
+      // Extract episode/show IDs
+      const spotifyMatch = sourceUrl.match(/episode\/([a-zA-Z0-9]+)/);
+      const appleShowMatch = sourceUrl.match(/\/id(\d+)/);
+      const appleEpMatch = sourceUrl.match(/[?&]i=(\d+)/);
+      if (spotifyMatch) updatePayload.source_episode_id = spotifyMatch[1];
+      if (appleShowMatch) updatePayload.source_show_id = appleShowMatch[1];
+      if (appleEpMatch) updatePayload.source_episode_id = appleEpMatch[1];
+    }
+
+    // Determine final state
+    if (result.finalStatus === 'audio_resolved' && result.resolution?.audioEnclosureUrl) {
+      // Audio URL found — route to transcription
+      updatePayload.stage = 'resolving_source';
+      updatePayload.transcript_mode = 'direct_transcription';
+      updatePayload.final_resolution_status = 'audio_resolved';
+      await supabase.from('audio_jobs').update(updatePayload).eq('id', job.id);
+
+      // Auto-continue to transcription
+      const transcriptionResult = await transcribeDirectAudio(resourceId, result.resolution.audioEnclosureUrl);
+      return {
+        success: transcriptionResult.success,
+        jobId: job.id,
+        subtype: result.subtype,
+        metadata: result.metadata,
+        resolution: result.resolution,
+        finalStatus: transcriptionResult.success ? 'completed' : 'failed',
+        failureCode: transcriptionResult.failureCode,
+        failureReason: transcriptionResult.failureReason,
+        resolverStages: result.resolverStages || [],
+        transcriptionResult,
+      };
+    } else if (result.finalStatus === 'metadata_only') {
+      updatePayload.stage = 'metadata_only_complete';
+      updatePayload.transcript_mode = 'metadata_only';
+      updatePayload.final_resolution_status = 'metadata_only';
+      updatePayload.failure_code = result.failureCode;
+      updatePayload.failure_reason = result.failureReason;
+      updatePayload.retryable = false;
+      updatePayload.recommended_action = result.failureReason;
+      await supabase.from('audio_jobs').update(updatePayload).eq('id', job.id);
+    } else {
+      updatePayload.stage = 'needs_manual_assist';
+      updatePayload.transcript_mode = 'manual_assist';
+      updatePayload.final_resolution_status = 'needs_manual_assist';
+      updatePayload.failure_code = result.failureCode || 'MANUAL_ASSIST_RECOMMENDED';
+      updatePayload.failure_reason = result.failureReason || 'Automatic resolution exhausted';
+      updatePayload.retryable = false;
+      updatePayload.recommended_action = 'Open manual assist to provide transcript or notes';
+      await supabase.from('audio_jobs').update(updatePayload).eq('id', job.id);
+    }
+
+    return {
+      success: true,
+      jobId: job.id,
+      subtype: result.subtype,
+      metadata: result.metadata,
+      resolution: result.resolution,
+      finalStatus: result.finalStatus,
+      failureCode: result.failureCode,
+      failureReason: result.failureReason,
+      resolverStages: result.resolverStages || [],
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await updateJobFailure(job.id, 'SOURCE_RESOLUTION_FAILED', msg, 'resolving_platform_metadata');
+    return {
+      success: false, jobId: job.id, subtype: job.audio_subtype,
+      metadata: { title: null, showName: null, description: null, durationMs: null, artworkUrl: null, episodeUrl: null, publishDate: null },
+      resolution: { rssFeedUrl: null, audioEnclosureUrl: null, transcriptSourceUrl: null, canonicalPageUrl: null },
+      finalStatus: 'failed', failureCode: 'SOURCE_RESOLUTION_FAILED', failureReason: msg,
+      resolverStages: [],
+    };
+  }
+}
+
+/**
  * Run the full transcription pipeline for a direct audio URL.
- * This is the REAL execution engine.
  */
 export async function transcribeDirectAudio(
   resourceId: string,
@@ -110,7 +276,6 @@ export async function transcribeDirectAudio(
 ): Promise<TranscribeDirectResult> {
   const startMs = Date.now();
 
-  // 1. Get or create job
   const job = await getOrCreateAudioJob(resourceId, audioUrl);
   if (!job) {
     return {
@@ -121,10 +286,8 @@ export async function transcribeDirectAudio(
     };
   }
 
-  // 2. Update stage to resolving
   await updateJobStage(job.id, 'resolving_source');
 
-  // 3. Call the edge function
   try {
     const { data: { session } } = await supabase.auth.getSession();
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -146,7 +309,6 @@ export async function transcribeDirectAudio(
     const result = await resp.json();
 
     if (!result.success) {
-      // Update job with failure
       await updateJobFailure(job.id, result.failureCode, result.failureReason, result.stage);
       return {
         success: false, jobId: job.id, transcript: null, totalWords: 0, quality: null,
@@ -157,10 +319,8 @@ export async function transcribeDirectAudio(
       };
     }
 
-    // 4. Score quality
     const quality = scoreTranscriptQuality(result.transcript || '', undefined);
 
-    // 5. Update job with success
     await supabase.from('audio_jobs').update({
       stage: quality.quality === 'failed' ? 'needs_manual_assist' : 'completed',
       transcript_text: result.transcript,
@@ -172,6 +332,8 @@ export async function transcribeDirectAudio(
       provider_used: result.provider,
       chunk_metadata: result.segments?.map((s: any) => ({ index: s.chunkIndex, startByte: s.startByte, endByte: s.endByte })) || [],
       last_successful_stage: 'transcribing',
+      transcript_mode: 'direct_transcription',
+      final_resolution_status: quality.quality === 'failed' ? 'needs_manual_assist' : 'completed',
       attempts_count: (job.attempts_count || 0) + 1,
       failure_code: null,
       failure_reason: null,
@@ -193,6 +355,32 @@ export async function transcribeDirectAudio(
       stage: 'failed', chunksTotal: 0, chunksCompleted: 0, provider: null,
       durationMs: Date.now() - startMs, persisted: false,
     };
+  }
+}
+
+/**
+ * Smart orchestrator — routes by subtype automatically
+ */
+export async function processAudioResource(
+  resourceId: string,
+  sourceUrl: string,
+): Promise<TranscribeDirectResult | PlatformResolveResult> {
+  const subtype = detectAudioSubtype(sourceUrl);
+
+  switch (subtype) {
+    case 'direct_audio_file':
+    case 'podcast_episode_rss_backed':
+      return transcribeDirectAudio(resourceId, sourceUrl);
+
+    case 'spotify_episode':
+    case 'spotify_show':
+    case 'apple_podcast_episode':
+    case 'apple_podcast_show':
+    case 'podcast_episode_page_only':
+      return resolvePodcastEpisode(resourceId, sourceUrl);
+
+    default:
+      return transcribeDirectAudio(resourceId, sourceUrl);
   }
 }
 
@@ -220,7 +408,6 @@ export async function retryAudioJob(jobId: string): Promise<TranscribeDirectResu
     };
   }
 
-  // If we already have a transcript, just re-run quality check
   if (job.last_successful_stage === 'transcribing' && job.transcript_text) {
     const quality = scoreTranscriptQuality(job.transcript_text);
     await supabase.from('audio_jobs').update({
@@ -239,8 +426,22 @@ export async function retryAudioJob(jobId: string): Promise<TranscribeDirectResu
     };
   }
 
-  // Otherwise re-run full pipeline
+  // If resolved audio URL exists, go straight to transcription
+  if (job.resolved_audio_url) {
+    return transcribeDirectAudio(job.resource_id, job.resolved_audio_url);
+  }
+
   return transcribeDirectAudio(job.resource_id, job.source_url);
+}
+
+/**
+ * Re-run platform resolution only (for Spotify/Apple jobs)
+ */
+export async function retryPlatformResolution(jobId: string): Promise<PlatformResolveResult | null> {
+  const { data } = await supabase.from('audio_jobs').select('*').eq('id', jobId).single();
+  if (!data || !data.source_url) return null;
+  const job = data as unknown as AudioJobRecord;
+  return resolvePodcastEpisode(job.resource_id, job.source_url);
 }
 
 /**
