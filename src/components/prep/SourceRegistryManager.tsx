@@ -130,7 +130,7 @@ export function SourceRegistryManager() {
                       status: s.status === 'active' ? 'paused' : 'active',
                     })}
                   >
-                    {s.status === 'active' ? <RadioOff className="h-3 w-3" /> : <Radio className="h-3 w-3" />}
+                    {s.status === 'active' ? <CircleOff className="h-3 w-3" /> : <Radio className="h-3 w-3" />}
                   </Button>
                   <Button
                     size="icon"

@@ -127,7 +127,7 @@ export function IncomingQueue() {
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-7 w-7 text-green-600"
+                        className="h-7 w-7 text-primary"
                         title="Promote"
                         onClick={() => updateStatus.mutate({ id: item.id, status: 'promoted' })}
                       >
