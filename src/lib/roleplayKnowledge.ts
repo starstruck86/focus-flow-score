@@ -23,6 +23,8 @@ export interface RoleplayScenario {
   successCriteria: string[];
   confidence: number;
   generatedAt: string;
+  refreshedAt?: string;
+  freshnessState?: 'fresh' | 'stale' | 'expired';
 }
 
 // ── Roleplay Outcome Tracking ──────────────────────────────

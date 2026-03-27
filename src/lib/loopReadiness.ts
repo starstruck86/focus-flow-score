@@ -93,6 +93,7 @@ export function computeLoopReadiness(
 /**
  * Build the summary signal for cockpit / daily plan header.
  * Uses explicit loop state when the loop-native scheduler is enabled.
+ * Also reads server-side loop_metadata from plan payload when available.
  */
 export function buildPrepActionSignal(
   blocks: BlockLike[],
@@ -101,8 +102,42 @@ export function buildPrepActionSignal(
   roleplayStatus: PrepActionSignal['roleplayStatus'],
   roleplayStreakDays: number,
   date?: string,
+  serverLoopMetadata?: any[],
+  roleplayGroundingSource?: 'playbook' | 'default' | null,
 ): PrepActionSignal {
-  // Use explicit loop state when available
+  // Use server-side loop metadata if present (source of truth)
+  if (serverLoopMetadata && serverLoopMetadata.length > 0) {
+    const pending = serverLoopMetadata.filter((l: any) => l.status !== 'complete');
+    const current = pending.find((l: any) => l.status === 'in_progress') || pending[0] || null;
+    const next = current ? pending.find((l: any) => l.loopId !== current.loopId) || null : null;
+    const totalPrepared = serverLoopMetadata.reduce((s: number, l: any) => s + (l.accountsPrepared?.length || 0), 0);
+    const totalWorked = serverLoopMetadata.reduce((s: number, l: any) => s + (l.accountsWorked?.length || 0), 0);
+    const carryForward = serverLoopMetadata
+      .filter((l: any) => l.carryForwardToNextLoop)
+      .reduce((s: number, l: any) => s + (l.accountsPrepared?.length || 0) - (l.accountsWorked?.length || 0), 0);
+
+    const nextActionLoop = pending.find((l: any) => l.actionBlockIndex !== null);
+    const isReady = nextActionLoop
+      ? nextActionLoop.status === 'action_ready' || (nextActionLoop.accountsPrepared?.length || 0) > 0
+      : true;
+
+    return {
+      roleplayStatus,
+      roleplayStreakDays,
+      roleplayGroundingSource,
+      nextActionBlockLabel: nextActionLoop ? 'Call Block' : null,
+      nextActionBlockReady: isReady,
+      preparedAccountsWaiting: Math.max(0, totalPrepared - totalWorked),
+      blockedReason: nextActionLoop?.blockedReason || null,
+      carryForwardCount: Math.max(0, carryForward),
+      currentLoopStatus: current?.status || null,
+      nextLoopStatus: next?.status || null,
+      currentLoopType: current?.loopType || null,
+      serverLoopCount: serverLoopMetadata.length,
+    };
+  }
+
+  // Use explicit loop state when available (client-side)
   if (date && isLoopNativeSchedulerEnabled()) {
     const loops = loadLoops(date);
     if (loops.length > 0) {
@@ -110,6 +145,7 @@ export function buildPrepActionSignal(
       return {
         roleplayStatus,
         roleplayStreakDays,
+        roleplayGroundingSource,
         nextActionBlockLabel: state.currentLoop?.actionBlockId ? 'Call Block' : null,
         nextActionBlockReady: state.isNextActionReady,
         preparedAccountsWaiting: state.totalPrepared - state.totalWorked,
@@ -152,6 +188,7 @@ export function buildPrepActionSignal(
   return {
     roleplayStatus,
     roleplayStreakDays,
+    roleplayGroundingSource,
     nextActionBlockLabel: nextAction ? (nextAction as any).label || 'Call Block' : null,
     nextActionBlockReady: nextLoop?.actionReady ?? true,
     preparedAccountsWaiting: allPreppedIds.size,

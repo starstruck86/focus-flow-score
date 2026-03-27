@@ -44,14 +44,27 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
       const persona = params.persona || config.defaultPersona;
       const industry = params.industry || config.defaultIndustry;
 
-      // Try grounded scenario selection when enabled
+      // Try grounded scenario selection with history-aware logic when enabled
       let groundedPrompt: string | null = null;
+      let groundingSource: 'playbook' | 'default' = 'default';
       if (isRoleplayGroundingEnabled()) {
-        const { loadCachedScenarios, selectBestScenario, buildGroundedRoleplayPrompt, getDefaultFallbackScenario } = await import('@/lib/roleplayKnowledge');
-        const scenarios = loadCachedScenarios();
-        const best = selectBestScenario(scenarios, scenario, persona, industry);
-        const selected = best || getDefaultFallbackScenario({ scenarioType: scenario, persona, industry });
-        groundedPrompt = buildGroundedRoleplayPrompt(selected, industry);
+        try {
+          const { selectScenarioWithHistory } = await import('@/lib/roleplayScenarioManager');
+          const { loadCachedScenarios, buildGroundedRoleplayPrompt, getDefaultFallbackScenario } = await import('@/lib/roleplayKnowledge');
+          const scenarios = loadCachedScenarios();
+          const recommendation = selectScenarioWithHistory(scenarios, scenario, persona, industry);
+          if (recommendation && recommendation.isGrounded) {
+            groundedPrompt = buildGroundedRoleplayPrompt(recommendation.scenario, industry);
+            groundingSource = 'playbook';
+          } else {
+            const fallback = getDefaultFallbackScenario({ scenarioType: scenario, persona, industry });
+            groundedPrompt = buildGroundedRoleplayPrompt(fallback, industry);
+            groundingSource = 'default';
+          }
+        } catch {
+          const { getDefaultFallbackScenario, buildGroundedRoleplayPrompt } = await import('@/lib/roleplayKnowledge');
+          groundedPrompt = buildGroundedRoleplayPrompt(getDefaultFallbackScenario({ scenarioType: scenario, persona, industry }), industry);
+        }
       }
 
       recordRoleplayBlockEvent({
@@ -61,12 +74,16 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
         persona,
         industry,
         startedAt: new Date().toISOString(),
+        groundingSource,
       });
 
       // Return grounded prompt if available, otherwise conversational confirmation
       const confirmationPrompt = buildDaveConfirmationPrompt({ ...config, defaultScenarioType: scenario, defaultPersona: persona, defaultIndustry: industry });
+      const groundingNote = groundingSource === 'playbook'
+        ? '\n\n⚡ This roleplay is grounded in your trusted playbook evidence.'
+        : '';
       return groundedPrompt
-        ? `${confirmationPrompt}\n\n--- GROUNDED SCENARIO CONTEXT (use this to shape buyer behavior) ---\n${groundedPrompt}`
+        ? `${confirmationPrompt}${groundingNote}\n\n--- GROUNDED SCENARIO CONTEXT (use this to shape buyer behavior) ---\n${groundedPrompt}`
         : confirmationPrompt;
     },
     complete_daily_roleplay: async (params: { durationUsed?: number }) => {

@@ -1588,6 +1588,22 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
       usedFallback: isFallback,
     });
 
+    // Generate loop metadata from finalized blocks
+    const loopMetadata = generateLoopMetadata(mergedBlocks, targetDate);
+    logStage("loop_metadata_generated", `Generated ${loopMetadata.length} execution loops`, { loopCount: loopMetadata.length });
+
+    // Enrich blocks with explicit loop linkage
+    for (const loop of loopMetadata) {
+      if (loop.prepBlockIndex !== null && mergedBlocks[loop.prepBlockIndex]) {
+        mergedBlocks[loop.prepBlockIndex].loopId = loop.loopId;
+        mergedBlocks[loop.prepBlockIndex].linkedActionBlockIndex = loop.actionBlockIndex;
+      }
+      if (loop.actionBlockIndex !== null && mergedBlocks[loop.actionBlockIndex]) {
+        mergedBlocks[loop.actionBlockIndex].loopId = loop.loopId;
+        mergedBlocks[loop.actionBlockIndex].linkedPrepBlockIndex = loop.prepBlockIndex;
+      }
+    }
+
     // Upsert the plan with all data persisted — reset dismissals on rebuild
     logStage("plan_persist_started", "writing rebuilt plan to database");
     const { data: saved, error: saveError } = await supabase
@@ -1599,7 +1615,7 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
         meeting_load_hours: meetingHours,
         focus_hours_available: focusHoursAvailable,
         ai_reasoning: (isFallback ? '[FALLBACK] ' : '') + (plan.day_strategy || ''),
-        key_metric_targets: finalMetricTargets,
+        key_metric_targets: { ...finalMetricTargets, loop_metadata: loopMetadata },
         completed_goals: [],
         block_feedback: [],
         dismissed_block_indices: [],

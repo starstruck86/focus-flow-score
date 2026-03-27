@@ -3,10 +3,10 @@
  *
  * Lightweight status strip rendered below the Daily Game Plan header.
  * Shows roleplay status + prep→action readiness at a glance.
+ * Now supports server-side loop metadata and grounded roleplay indicators.
  */
 import { memo } from 'react';
-import { Mic, Phone, AlertTriangle, CheckCircle2, ArrowRight } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { Mic, Phone, AlertTriangle, CheckCircle2, ArrowRight, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { PrepActionSignal } from '@/lib/loopReadiness';
 
@@ -22,6 +22,9 @@ export const ExecutionSignals = memo(function ExecutionSignals({ signal }: Execu
     items.push(
       <span key="rp" className="inline-flex items-center gap-1 text-primary">
         <Mic className="h-3 w-3" /> Roleplay done
+        {signal.roleplayGroundingSource === 'playbook' && (
+          <Sparkles className="h-2.5 w-2.5 text-accent" />
+        )}
         {signal.roleplayStreakDays > 0 && <span className="text-[9px]">🔥{signal.roleplayStreakDays + 1}</span>}
       </span>
     );
@@ -71,17 +74,26 @@ export const ExecutionSignals = memo(function ExecutionSignals({ signal }: Execu
     );
   }
 
-  // Loop status (when loop-native scheduler is active)
-  if (signal.currentLoopStatus && signal.currentLoopStatus !== 'complete') {
-    const loopLabel = signal.currentLoopStatus === 'action_ready' ? 'Action ready'
-      : signal.currentLoopStatus === 'prep_ready' ? 'Prep done'
-      : signal.currentLoopStatus === 'in_progress' ? 'In progress'
-      : signal.currentLoopStatus === 'carry_forward' ? 'Carry forward'
+  // Loop status (when loop-native scheduler or server loops active)
+  const loopStatus = signal.currentLoopStatus;
+  if (loopStatus && loopStatus !== 'complete') {
+    const loopLabel = loopStatus === 'action_ready' ? 'Action ready'
+      : loopStatus === 'prep_ready' ? 'Prep done'
+      : loopStatus === 'in_progress' ? 'In progress'
+      : loopStatus === 'carry_forward' ? 'Carry forward'
+      : loopStatus === 'pending' ? 'Pending'
       : null;
     if (loopLabel) {
       items.push(
         <span key="loop" className="inline-flex items-center gap-1 text-muted-foreground">
-          <CheckCircle2 className="h-3 w-3" /> Loop: {loopLabel}
+          <CheckCircle2 className="h-3 w-3" />
+          Loop: {loopLabel}
+          {signal.currentLoopType && (
+            <span className="text-[9px]">({signal.currentLoopType.replace(/_/g, ' ')})</span>
+          )}
+          {signal.serverLoopCount && signal.serverLoopCount > 1 && (
+            <span className="text-[9px]">· {signal.serverLoopCount} loops today</span>
+          )}
         </span>
       );
     }
