@@ -137,7 +137,7 @@ const DAVE_TOOLS: ToolDef[] = [
   // SYNTHESIS TOOLS — Cross-entity intelligence layer
   // ═══════════════════════════════════════════════════════════════
   { name: "add_opportunity_note", description: "Add a note to an opportunity/deal record (not an account)", parameters: { opportunityName: str("The opportunity name"), note: str("The note content to add") }, required: ["opportunityName", "note"] },
-  { name: "read_resource", description: "Read the content of a resource from the prep hub library by title match. Returns up to 3000 chars.", parameters: { title: str("The resource title or partial match") }, required: ["title"] },
+  { name: "read_resource", description: "Read the content of a resource from the Sales Brain library by title match. Returns up to 3000 chars.", parameters: { title: str("The resource title or partial match") }, required: ["title"] },
   { name: "methodology_gaps", description: "Analyze MEDDICC gaps across ALL active deals. Returns ranked list of unconfirmed elements weighted by ARR and close date urgency.", parameters: {} },
   { name: "next_action", description: "Synthesize the single highest-impact thing the user should do right now, considering overdue tasks, upcoming meetings, stale deals, methodology gaps, and journal status.", parameters: {} },
   { name: "contact_timeline", description: "Get engagement history for a specific contact — cross-references call transcripts, calendar events, and touch dates to show when and how you last engaged.", parameters: { contactName: str("The contact's name to look up") }, required: ["contactName"] },
