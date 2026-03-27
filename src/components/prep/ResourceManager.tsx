@@ -716,6 +716,7 @@ export function ResourceManager() {
           <ResourceLibraryTable
             resources={filteredResources}
             selectedIds={selectedResourceIds}
+            audioJobsMap={audioJobsMap}
             onToggleSelect={(id) => setSelectedResourceIds(prev => {
               const next = new Set(prev);
               if (next.has(id)) next.delete(id);
@@ -734,7 +735,32 @@ export function ResourceManager() {
                   else setEditingResource(resource);
                   break;
                 case 'deep_enrich':
-                case 're_enrich':
+                case 're_enrich': {
+                  // Route audio resources through the audio orchestrator
+                  if (isAudioResource(resource.file_url, resource.resource_type) && resource.file_url) {
+                    toast.info('Processing audio resource...');
+                    try {
+                      const result = await processAudioResource(resource.id, resource.file_url);
+                      queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+                      if ('transcript' in result && result.success) {
+                        toast.success(`Audio transcribed (${result.totalWords} words)`);
+                      } else if ('finalStatus' in result) {
+                        if (result.finalStatus === 'metadata_only') {
+                          toast.info('Metadata captured — no direct audio available', { description: 'Use Manual Assist to paste transcript' });
+                        } else if (result.finalStatus === 'needs_manual_assist') {
+                          toast.info('Manual assist needed', { description: result.failureReason || 'Open Manual Assist to provide transcript' });
+                        } else if (result.finalStatus === 'completed') {
+                          toast.success('Audio processing complete');
+                        } else {
+                          toast.error(result.failureReason || 'Audio processing failed');
+                        }
+                      }
+                    } catch (error: any) {
+                      toast.error('Audio processing failed', { description: error?.message });
+                    }
+                    break;
+                  }
+                  // Standard enrichment for non-audio
                   toast.info(action === 're_enrich' ? 'Re-enriching...' : 'Enriching...');
                   try {
                     const result = await invokeEnrichResource<any>({ resource_id: resource.id, force: action === 're_enrich' });
@@ -749,6 +775,7 @@ export function ResourceManager() {
                     toast.error('Enrichment failed', { description: error?.message });
                   }
                   break;
+                }
                 case 'retry':
                   updateEnrichmentStatus.mutate({ id: resource.id, enrichment_status: 'not_enriched', failure_reason: null });
                   toast.success('Reset for retry');
@@ -767,6 +794,34 @@ export function ResourceManager() {
                 case 'bulk_enrich':
                   setShowDeepEnrich(true);
                   break;
+                case 'inspect_audio':
+                  setInspectingAudioResource(resource);
+                  break;
+                case 'manual_assist':
+                  setManualAssistResource(resource);
+                  break;
+                case 'retry_resolve': {
+                  const job = audioJobsMap?.get(resource.id);
+                  if (job) {
+                    toast.info('Retrying platform resolution...');
+                    const result = await retryPlatformResolution(job.id);
+                    queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+                    if (result?.finalStatus === 'audio_resolved') toast.success('Audio URL resolved!');
+                    else toast.info(result?.failureReason || 'Resolution complete');
+                  }
+                  break;
+                }
+                case 'retry_transcription': {
+                  const job = audioJobsMap?.get(resource.id);
+                  if (job) {
+                    toast.info('Retrying transcription...');
+                    const result = await retryAudioJob(job.id);
+                    queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+                    if (result.success) toast.success(`Transcribed (${result.totalWords} words)`);
+                    else toast.error(result.failureReason || 'Transcription failed');
+                  }
+                  break;
+                }
               }
             }}
           />
