@@ -10,6 +10,7 @@ export const RESOURCE_SUBTYPES = [
   'youtube_video',
   'google_doc',
   'google_sheet',
+  'google_drive_file',
   'zoom_recording',
   'spotify_episode',
   'podcast_episode',
@@ -18,6 +19,7 @@ export const RESOURCE_SUBTYPES = [
   'pdf',
   'manual_note',
   'competitor_page',
+  'auth_gated_community_page',
   'unknown_url',
   'no_url',
 ] as const;
@@ -47,7 +49,7 @@ export interface EnrichabilityResult {
 
 // ── Auth-gated domains ─────────────────────────────────────
 const AUTH_GATED_DOMAINS = [
-  'circle.so', 'teachable.com', 'thinkific.com', 'kajabi.com',
+  'teachable.com', 'thinkific.com', 'kajabi.com',
   'podia.com', 'skool.com', 'mighty.co', 'patreon.com',
   'memberstack.com', 'memberships.io',
 ];
@@ -63,9 +65,13 @@ export function detectResourceSubtype(url: string | null, resourceType?: string)
     return 'youtube_video';
   }
 
-  // Google Docs
+  // Google Docs / Drive
   if (lower.includes('docs.google.com/document')) return 'google_doc';
   if (lower.includes('docs.google.com/spreadsheets') || lower.includes('sheets.google.com')) return 'google_sheet';
+  if (lower.includes('drive.google.com/file/')) return 'google_drive_file';
+
+  // Auth-gated community pages
+  if (/\.circle\.so\b/i.test(lower)) return 'auth_gated_community_page';
 
   // Zoom
   if (lower.includes('zoom.us/rec') || lower.includes('zoom.us/share')) return 'zoom_recording';
@@ -146,6 +152,24 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
         reason: 'Google Sheet — table extraction, partial enrichment',
         canFetchText: true,
         canFetchMetadata: true,
+      };
+
+    case 'google_drive_file':
+      return {
+        ...base,
+        enrichability: 'needs_auth',
+        reason: 'Google Drive file — may require auth or direct download link',
+        canFetchMetadata: true,
+        requiresAuth: true,
+      };
+
+    case 'auth_gated_community_page':
+      return {
+        ...base,
+        enrichability: 'manual_input_needed',
+        reason: 'Auth-gated community page — requires login, paste content manually',
+        requiresAuth: true,
+        canFetchMetadata: false,
       };
 
     case 'zoom_recording':
@@ -241,6 +265,7 @@ export function getSubtypeLabel(subtype: ResourceSubtype): string {
     youtube_video: 'YouTube Video',
     google_doc: 'Google Doc',
     google_sheet: 'Google Sheet',
+    google_drive_file: 'Google Drive File',
     zoom_recording: 'Zoom Recording',
     spotify_episode: 'Spotify Episode',
     podcast_episode: 'Podcast Episode',
@@ -249,6 +274,7 @@ export function getSubtypeLabel(subtype: ResourceSubtype): string {
     pdf: 'PDF',
     manual_note: 'Manual Note',
     competitor_page: 'Competitor Page',
+    auth_gated_community_page: 'Auth-Gated Page',
     unknown_url: 'Unknown URL',
     no_url: 'No URL',
   };

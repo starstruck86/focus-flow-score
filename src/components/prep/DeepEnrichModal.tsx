@@ -161,17 +161,16 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
     setMode(value as EnrichMode);
   };
 
+  const modeLabel = mode === 'deep_enrich' ? 'Deep Enrich' : 'Re-enrich';
+  const ModeIcon = mode === 'deep_enrich' ? Zap : RefreshCw;
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {mode === 'deep_enrich' ? (
-              <Zap className="h-5 w-5 text-primary" />
-            ) : (
-              <RefreshCw className="h-5 w-5 text-primary" />
-            )}
-            {mode === 'deep_enrich' ? 'Deep Enrich Resources' : 'Re-enrich Resources'}
+            <ModeIcon className="h-5 w-5 text-primary" />
+            {modeLabel} Resources
           </DialogTitle>
         </DialogHeader>
 
@@ -197,7 +196,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
                 <span className="font-medium text-foreground">{scopedResources.length}</span> total resources
                 {selectedIds && selectedIds.size > 0 && ' (selected)'}
                 {' · '}
-                <span className="font-medium text-foreground">{eligibleCount}</span> eligible
+                <span className="font-medium text-foreground">{eligibleCount}</span> eligible for {modeLabel.toLowerCase()}
                 {blockedCount > 0 && (
                   <>
                     {' · '}
@@ -221,8 +220,8 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
             {eligibleCount === 0 && (
               <p className="text-status-yellow">
                 {mode === 'deep_enrich'
-                  ? 'All resources are already enriched. Switch to Re-enrich to reprocess.'
-                  : 'No previously enriched resources to reprocess.'}
+                  ? 'All resources are already enriched or ineligible. Switch to Re-enrich to reprocess.'
+                  : 'No previously enriched resources available to reprocess.'}
               </p>
             )}
 
