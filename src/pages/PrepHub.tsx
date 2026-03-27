@@ -24,6 +24,7 @@ import { GovernancePanel } from '@/components/governance/GovernancePanel';
 import { SourceRegistryManager } from '@/components/prep/SourceRegistryManager';
 import { IncomingQueue } from '@/components/prep/IncomingQueue';
 import { SalesBrainDashboard } from '@/components/prep/SalesBrainDashboard';
+import { AudioTestHarness } from '@/components/prep/AudioTestHarness';
 
 const PREP_PROMPTS = [
   { label: 'Pre-Call Research Brief', prompt: 'Research and prep me for my upcoming call with {{account}}. Include company background, recent news, key stakeholders, potential pain points, and suggested discovery questions.', mode: 'meeting' as const },
@@ -106,6 +107,10 @@ export default function PrepHub() {
                 <MessageSquare className="h-3.5 w-3.5 mr-1" />
                 Prompts
               </TabsTrigger>
+              <TabsTrigger value="audio-test" className="text-xs">
+                <Brain className="h-3.5 w-3.5 mr-1" />
+                Audio
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -180,6 +185,11 @@ export default function PrepHub() {
           {/* MY PROMPTS TAB */}
           <TabsContent value="prompts" className="space-y-3 mt-3">
             <CustomPromptsManager />
+          </TabsContent>
+
+          {/* AUDIO TEST HARNESS TAB */}
+          <TabsContent value="audio-test" className="space-y-3 mt-3">
+            <AudioTestHarness />
           </TabsContent>
         </Tabs>
       </div>

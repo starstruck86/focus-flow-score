@@ -166,3 +166,14 @@ export {
   type IngestionItem,
   type IncomingResource,
 } from './ingestion';
+
+// Audio Orchestrator (real execution engine)
+export {
+  transcribeDirectAudio,
+  retryAudioJob,
+  getOrCreateAudioJob,
+  loadUserAudioJobs,
+  getAudioJobForResourceDb,
+  type AudioJobRecord,
+  type TranscribeDirectResult,
+} from './audioOrchestrator';
