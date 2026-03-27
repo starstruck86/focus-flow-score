@@ -18,6 +18,7 @@ import { TemplateManager } from '@/components/prep/TemplateManager';
 import { ContentBuilder } from '@/components/prep/ContentBuilder';
 import { CustomPromptsManager } from '@/components/prep/CustomPromptsManager';
 import { PlaybooksPanel } from '@/components/prep/PlaybooksPanel';
+import { ExecutionWorkbench } from '@/components/prep/ExecutionWorkbench';
 
 const PREP_PROMPTS = [
   { label: 'Pre-Call Research Brief', prompt: 'Research and prep me for my upcoming call with {{account}}. Include company background, recent news, key stakeholders, potential pain points, and suggested discovery questions.', mode: 'meeting' as const },
@@ -88,6 +89,9 @@ export default function PrepHub() {
               Prompts
             </TabsTrigger>
           </TabsList>
+
+          {/* EXECUTION WORKBENCH — above all tabs, feature-flagged */}
+          <ExecutionWorkbench />
 
           {/* CONTENT BUILDER TAB */}
           <TabsContent value="content-builder" className="mt-3">
