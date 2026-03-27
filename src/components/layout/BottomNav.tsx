@@ -45,7 +45,7 @@ export const navRow1: NavItemDef[] = [
 ];
 
 export const navRow2: NavItemDef[] = [
-  { to: '/prep', label: 'Prep Hub', icon: FileText, color: 'prep' },
+  { to: '/prep', label: 'Sales Brain', icon: FileText, color: 'prep' },
   { to: '/coach', label: 'Coach', icon: Compass, color: 'coach' },
   { to: '/trends', label: 'Trends', icon: TrendingUp, color: 'trends' },
   { to: '/quota', label: 'Quota', icon: DollarSign, color: 'quota' },

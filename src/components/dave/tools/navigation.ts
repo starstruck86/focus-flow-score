@@ -93,8 +93,8 @@ export function createNavigationTools(ctx: ToolContext): ToolMap {
           },
         }));
       }, 500);
-      toast.info('Opening Prep Hub', { description: params.contentType || 'Content builder' });
-      return `Opened Prep Hub content builder${params.accountName ? ` for ${params.accountName}` : ''}`;
+      toast.info('Opening Sales Brain OS', { description: params.contentType || 'Content builder' });
+      return `Opened Sales Brain OS${params.accountName ? ` for ${params.accountName}` : ''}`;
     },
   };
 }

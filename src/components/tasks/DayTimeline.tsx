@@ -493,14 +493,14 @@ export function DayTimeline() {
                   <p className="text-[10px] text-muted-foreground">
                     {selected.type === 'meeting'
                       ? 'Jump to your meeting prep workflow from this block.'
-                      : 'Open Prep Hub and work the linked accounts for this block.'}
+                      : 'Open Sales Brain OS and work the linked accounts for this block.'}
                   </p>
                 </div>
                 <button
                   onClick={() => window.location.assign(selected.type === 'meeting' ? '/' : '/prep')}
                   className="rounded-md border border-border bg-background px-2 py-1 text-[10px] font-medium text-foreground transition-colors hover:bg-accent"
                 >
-                  {selected.type === 'meeting' ? 'Open prep' : 'Open Prep Hub'}
+                  {selected.type === 'meeting' ? 'Open prep' : 'Open Sales Brain'}
                 </button>
               </div>
             </div>

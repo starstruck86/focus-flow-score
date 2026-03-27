@@ -145,7 +145,7 @@ export async function startPlaybookRoleplay(
     .select('*')
     .order('confidence_score', { ascending: false });
 
-  if (error || !rows?.length) return 'No playbooks available. Generate playbooks from the Prep Hub first.';
+  if (error || !rows?.length) return 'No playbooks available. Generate playbooks from the Sales Brain OS first.';
 
   const playbooks = rows as unknown as Playbook[];
   let playbook: Playbook | undefined;
