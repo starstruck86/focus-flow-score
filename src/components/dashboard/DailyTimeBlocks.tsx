@@ -58,7 +58,7 @@ interface TimeBlock {
   start_time: string;
   end_time: string;
   label: string;
-  type: 'prospecting' | 'meeting' | 'research' | 'admin' | 'break' | 'pipeline' | 'prep' | 'build';
+  type: 'prospecting' | 'meeting' | 'research' | 'admin' | 'break' | 'pipeline' | 'prep' | 'build' | 'roleplay';
   workstream?: 'new_logo' | 'renewal' | 'general';
   goals: string[];
   reasoning: string;
