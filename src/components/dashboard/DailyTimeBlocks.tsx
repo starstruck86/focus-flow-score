@@ -46,6 +46,7 @@ import { getCurrentMinutesET, todayInAppTz } from '@/lib/timeFormat';
 import { usePlaybookRecommendation, type WorkflowContext } from '@/hooks/usePlaybookRecommendation';
 import { PlaybookRecommendationChip } from '@/components/PlaybookRecommendationChip';
 import { RoleplayBlockCard } from '@/components/dashboard/RoleplayBlockCard';
+import { getRoleplayBlockConfig, findRoleplaySlot, createRoleplayBlock, getTodayRoleplayStatus } from '@/lib/dailyRoleplayBlock';
 
 /** Inline contact count for linked account pills */
 const LinkedAccountContactCount = memo(function LinkedAccountContactCount({ accountId }: { accountId: string }) {
@@ -839,8 +840,33 @@ export function DailyTimeBlocks() {
 
   const hasChanges = dismissedBlocks.size > 0 || blockOppLinks.size > 0;
 
+  // Auto-inject morning roleplay block if not already present
+  const blocks = useMemo(() => {
+    const raw = (plan?.blocks || []) as TimeBlock[];
+    const config = getRoleplayBlockConfig();
+    if (!config.enabled) return raw;
+    // Already has a roleplay block?
+    if (raw.some(b => b.type === 'roleplay')) return raw;
+    // Already completed/skipped today?
+    const status = getTodayRoleplayStatus(todayStr);
+    if (status && (status.status === 'completed' || status.status === 'skipped')) return raw;
+    // Find a morning slot
+    const slot = findRoleplaySlot(raw.map(b => ({ start_time: b.start_time, end_time: b.end_time, type: b.type })), config);
+    if (!slot) return raw;
+    const roleplayBlock: TimeBlock = {
+      ...slot,
+      ...createRoleplayBlock(config),
+      type: 'roleplay',
+    };
+    // Insert in time-sorted position
+    const merged = [...raw];
+    const insertIdx = merged.findIndex(b => b.start_time > slot.start_time);
+    if (insertIdx === -1) merged.push(roleplayBlock);
+    else merged.splice(insertIdx, 0, roleplayBlock);
+    return merged;
+  }, [plan?.blocks, todayStr]);
+
   // Calculate progress
-  const blocks = (plan?.blocks || []) as TimeBlock[];
   const totalGoals = blocks.reduce((s, b) => s + b.goals.length, 0);
   const completedGoals = ((plan?.completed_goals || []) as string[]).length;
   const progressPct = totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0;
