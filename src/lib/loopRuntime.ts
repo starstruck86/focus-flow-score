@@ -125,6 +125,7 @@ export function onActionComplete(
   if (isAccountExecutionModelEnabled()) {
     for (const acct of workedAccounts) {
       markAccountWorkedGeneric(date, acct.id, acct.name, targetLoop.loopId, blockId);
+      appendTimelineEvent(acct.id, acct.name, 'attempted', { date, loopId: targetLoop.loopId, blockId });
     }
   }
 }
