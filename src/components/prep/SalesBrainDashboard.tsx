@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Brain, BookOpen, TrendingUp, AlertTriangle, Zap, Shield, ClipboardCheck, History } from 'lucide-react';
+import { Brain, BookOpen, TrendingUp, AlertTriangle, Zap, Shield, ClipboardCheck, History, Tag } from 'lucide-react';
 import {
   DOCTRINE_CHAPTERS,
   getChapterLabel,
@@ -15,16 +15,22 @@ import {
   getGovernanceLabel,
   getDoctrineGovernanceStats,
   isDoctrineEligibleForPropagation,
+  getLegacyHydratedCount,
   type DoctrineChapter,
 } from '@/lib/salesBrain';
 import { cn } from '@/lib/utils';
 import { DoctrineReviewQueue } from './DoctrineReviewQueue';
 import { DoctrineChangeDigest } from './DoctrineChangeDigest';
 import { DoctrineRecoveryTools } from './DoctrineRecoveryTools';
+import { DoctrineDetailDrawer } from './DoctrineDetailDrawer';
 
 export const SalesBrainDashboard = memo(function SalesBrainDashboard() {
-  const health = useMemo(() => getBrainHealth(), []);
-  const stats = useMemo(() => getDoctrineGovernanceStats(), []);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const health = useMemo(() => getBrainHealth(), [refreshKey]);
+  const stats = useMemo(() => getDoctrineGovernanceStats(), [refreshKey]);
+  const legacyCount = useMemo(() => getLegacyHydratedCount(), [refreshKey]);
+  const [selectedDoctrineId, setSelectedDoctrineId] = useState<string | null>(null);
+  const refresh = useCallback(() => setRefreshKey(k => k + 1), []);
 
   return (
     <div className="space-y-4">
@@ -38,6 +44,11 @@ export const SalesBrainDashboard = memo(function SalesBrainDashboard() {
           color={stats.stale > 0 ? 'text-status-yellow' : undefined} />
         <StatCard label="Propagating" value={stats.propagationEnabled} icon={<TrendingUp className="h-3.5 w-3.5" />} />
       </div>
+      {legacyCount > 0 && (
+        <div className="flex items-center gap-1.5 text-[10px] text-status-yellow bg-status-yellow/10 rounded px-2 py-1">
+          <Tag className="h-3 w-3" /> {legacyCount} legacy-hydrated doctrine entries (consider reviewing)
+        </div>
+      )}
 
       {/* Sub-tabs */}
       <Tabs defaultValue="chapters">
@@ -66,7 +77,7 @@ export const SalesBrainDashboard = memo(function SalesBrainDashboard() {
               <ScrollArea className="max-h-[400px]">
                 <div className="space-y-3">
                   {DOCTRINE_CHAPTERS.map(chapter => (
-                    <ChapterSection key={chapter} chapter={chapter} />
+                    <ChapterSection key={chapter} chapter={chapter} onSelect={setSelectedDoctrineId} />
                   ))}
                 </div>
               </ScrollArea>
@@ -76,7 +87,7 @@ export const SalesBrainDashboard = memo(function SalesBrainDashboard() {
 
         {/* Review queue */}
         <TabsContent value="review" className="mt-3">
-          <DoctrineReviewQueue />
+          <DoctrineReviewQueue onSelectDoctrine={setSelectedDoctrineId} />
         </TabsContent>
 
         {/* Changes */}
@@ -102,15 +113,20 @@ export const SalesBrainDashboard = memo(function SalesBrainDashboard() {
           </CardContent>
         </Card>
       )}
+
+      {/* Detail drawer */}
+      <DoctrineDetailDrawer
+        doctrineId={selectedDoctrineId}
+        open={!!selectedDoctrineId}
+        onOpenChange={open => { if (!open) setSelectedDoctrineId(null); }}
+        onRefresh={refresh}
+      />
     </div>
   );
 });
 
 function StatCard({ label, value, icon, color }: {
-  label: string;
-  value: number;
-  icon: React.ReactNode;
-  color?: string;
+  label: string; value: number; icon: React.ReactNode; color?: string;
 }) {
   return (
     <Card>
@@ -125,7 +141,7 @@ function StatCard({ label, value, icon, color }: {
   );
 }
 
-function ChapterSection({ chapter }: { chapter: DoctrineChapter }) {
+function ChapterSection({ chapter, onSelect }: { chapter: DoctrineChapter; onSelect: (id: string) => void }) {
   const entries = useMemo(() => getDoctrineByChapter(chapter), [chapter]);
 
   if (entries.length === 0) {
@@ -144,7 +160,8 @@ function ChapterSection({ chapter }: { chapter: DoctrineChapter }) {
       </p>
       <div className="space-y-1 pl-2 border-l-2 border-border">
         {entries.map(entry => (
-          <div key={entry.id} className="flex items-start gap-1.5">
+          <button key={entry.id} onClick={() => onSelect(entry.id)}
+            className="flex items-start gap-1.5 w-full text-left hover:bg-muted/30 rounded px-1 py-0.5 transition-colors">
             <Badge className={cn('text-[8px] shrink-0 mt-0.5', getGovernanceColor(entry.governance.status))}>
               {getGovernanceLabel(entry.governance.status)}
             </Badge>
@@ -156,6 +173,9 @@ function ChapterSection({ chapter }: { chapter: DoctrineChapter }) {
                 propagating
               </Badge>
             )}
+            {entry.governance.isLegacyHydrated && (
+              <Badge variant="outline" className="text-[8px] shrink-0 mt-0.5 border-status-yellow text-status-yellow">legacy</Badge>
+            )}
             {entry.governance.duplicateFlag !== 'none' && (
               <Badge variant="outline" className="text-[7px] shrink-0 mt-0.5 border-status-yellow text-status-yellow">dup</Badge>
             )}
@@ -166,7 +186,7 @@ function ChapterSection({ chapter }: { chapter: DoctrineChapter }) {
             <span className="text-[10px] text-muted-foreground shrink-0 ml-auto">
               {(entry.confidence * 100).toFixed(0)}%
             </span>
-          </div>
+          </button>
         ))}
       </div>
     </div>

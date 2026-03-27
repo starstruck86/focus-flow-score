@@ -5,12 +5,13 @@
 import { memo, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { RefreshCw, Shield, Eye, Search, Zap } from 'lucide-react';
+import { RefreshCw, Shield, Eye, Search, Zap, Tag } from 'lucide-react';
 import {
   recomputeAllFreshness,
   disableStalePropagation,
   reEnableApprovedPropagation,
   detectDuplicatesAndConflicts,
+  queueLegacyDoctrineForReview,
 } from '@/lib/salesBrain';
 import { toast } from 'sonner';
 
@@ -60,6 +61,13 @@ export const DoctrineRecoveryTools = memo(function DoctrineRecoveryTools() {
               return `${n} entries re-enabled`;
             })}>
             <Zap className="h-3 w-3" /> Re-enable Approved
+          </Button>
+          <Button variant="outline" size="sm" className="text-[10px] h-7 gap-1 justify-start col-span-2"
+            onClick={() => runAction('Legacy review queued', () => {
+              const n = queueLegacyDoctrineForReview();
+              return `${n} legacy entries queued`;
+            })}>
+            <Tag className="h-3 w-3" /> Queue Legacy for Review
           </Button>
         </div>
         {lastResult && (
