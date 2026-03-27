@@ -429,6 +429,8 @@ export function ResourceLibraryTable({
                   const recommended = getRecommendedAction(resource);
                   const drift = detectDrift(resource);
                   const isSelected = selectedIds.has(resource.id);
+                  const isAudio = isAudioResource(resource.file_url, resource.resource_type);
+                  const audioJob = audioJobsMap?.get(resource.id) || null;
 
                   return (
                     <tr
@@ -455,6 +457,34 @@ export function ResourceLibraryTable({
                               <AlertTriangle className="h-2.5 w-2.5" />
                               Drift: {drift.issues[0]}
                             </p>
+                          )}
+                          {/* Audio status inline */}
+                          {isAudio && audioJob && (
+                            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                              <Badge variant="outline" className="text-[8px] h-4 px-1">
+                                {getAudioStageLabel(audioJob.stage as AudioPipelineStage)}
+                              </Badge>
+                              {audioJob.transcript_mode && audioJob.transcript_mode !== 'direct_transcription' && (
+                                <Badge variant="outline" className="text-[8px] h-4 px-1">
+                                  {audioJob.transcript_mode === 'metadata_only' ? 'Metadata Only' :
+                                   audioJob.transcript_mode === 'manual_assist' ? 'Manual Assist' :
+                                   audioJob.transcript_mode}
+                                </Badge>
+                              )}
+                              {audioJob.failure_code && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge variant="destructive" className="text-[8px] h-4 px-1 cursor-help">
+                                      {audioJob.failure_code.replace(/_/g, ' ').toLowerCase()}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="bottom" className="text-xs max-w-[250px]">
+                                    {getAudioFailureDescription(audioJob.failure_code as AudioFailureCode).explanation}
+                                    <br />→ {getAudioFailureDescription(audioJob.failure_code as AudioFailureCode).nextAction}
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                            </div>
                           )}
                         </div>
                       </td>
@@ -524,6 +554,11 @@ export function ResourceLibraryTable({
                             <DropdownMenuItem onClick={() => onAction('view', resource)}>
                               <Eye className="h-3.5 w-3.5 mr-2" /> Inspect
                             </DropdownMenuItem>
+                            {isAudio && (
+                              <DropdownMenuItem onClick={() => onAction('inspect_audio', resource)}>
+                                <Info className="h-3.5 w-3.5 mr-2" /> Audio Inspector
+                              </DropdownMenuItem>
+                            )}
                             {resource.file_url?.startsWith('http') && (
                               <>
                                 <DropdownMenuItem onClick={() => onAction('deep_enrich', resource)}>
@@ -534,6 +569,23 @@ export function ResourceLibraryTable({
                                 </DropdownMenuItem>
                               </>
                             )}
+                            {isAudio && audioJob?.retryable && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => onAction('retry_resolve', resource)}>
+                                  <RefreshCw className="h-3.5 w-3.5 mr-2" /> Retry Resolve
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onAction('retry_transcription', resource)}>
+                                  <RefreshCw className="h-3.5 w-3.5 mr-2" /> Retry Transcription
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                            {isAudio && (
+                              <DropdownMenuItem onClick={() => onAction('manual_assist', resource)}>
+                                <HelpCircle className="h-3.5 w-3.5 mr-2" /> Manual Assist
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => onAction('reset', resource)}>
                               <RotateCcw className="h-3.5 w-3.5 mr-2" /> Reset Status
                             </DropdownMenuItem>
