@@ -1,10 +1,11 @@
 /**
  * Loop Readiness Layer
  *
- * Lightweight model that sits on top of the current block system
- * to determine whether an action block is actually ready.
- * Computes prep → action chaining without replacing the scheduler.
+ * When ENABLE_LOOP_NATIVE_SCHEDULER is on, uses explicit loop state
+ * from loopScheduler.ts. Otherwise falls back to heuristic readiness.
  */
+import { isLoopNativeSchedulerEnabled } from '@/lib/featureFlags';
+import { loadLoops, computeLoopReadinessFromLoops, type LoopReadinessState } from '@/lib/loopScheduler';
 
 export interface LoopReadiness {
   loopId: string;
@@ -24,6 +25,8 @@ export interface PrepActionSignal {
   preparedAccountsWaiting: number;
   blockedReason: string | null;
   carryForwardCount: number;
+  currentLoopStatus?: string | null;
+  nextLoopStatus?: string | null;
 }
 
 // ── Heuristic: count "prepared" accounts ─────────────────────
@@ -86,6 +89,7 @@ export function computeLoopReadiness(
 
 /**
  * Build the summary signal for cockpit / daily plan header.
+ * Uses explicit loop state when the loop-native scheduler is enabled.
  */
 export function buildPrepActionSignal(
   blocks: BlockLike[],
@@ -93,7 +97,26 @@ export function buildPrepActionSignal(
   currentBlockIndex: number,
   roleplayStatus: PrepActionSignal['roleplayStatus'],
   roleplayStreakDays: number,
+  date?: string,
 ): PrepActionSignal {
+  // Use explicit loop state when available
+  if (date && isLoopNativeSchedulerEnabled()) {
+    const loops = loadLoops(date);
+    if (loops.length > 0) {
+      const state = computeLoopReadinessFromLoops(loops);
+      return {
+        roleplayStatus,
+        roleplayStreakDays,
+        nextActionBlockLabel: state.currentLoop?.actionBlockId ? 'Call Block' : null,
+        nextActionBlockReady: state.isNextActionReady,
+        preparedAccountsWaiting: state.totalPrepared - state.totalWorked,
+        blockedReason: state.blockedReason,
+        carryForwardCount: state.carryForwardCount,
+        currentLoopStatus: state.currentLoop?.status || null,
+        nextLoopStatus: state.nextLoop?.status || null,
+      };
+    }
+  }
   const loops = computeLoopReadiness(blocks, completedGoals, currentBlockIndex);
 
   // Find next action block

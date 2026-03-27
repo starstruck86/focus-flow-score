@@ -10,12 +10,16 @@ export interface FeatureFlags {
   ENABLE_SYSTEM_OS: boolean;
   ENABLE_VOICE_OS: boolean;
   ENABLE_CAPABILITY_AWARENESS: boolean;
+  ENABLE_LOOP_NATIVE_SCHEDULER: boolean;
+  ENABLE_ROLEPLAY_GROUNDING: boolean;
 }
 
 const DEFAULTS: FeatureFlags = {
   ENABLE_SYSTEM_OS: false,
   ENABLE_VOICE_OS: false,
   ENABLE_CAPABILITY_AWARENESS: false,
+  ENABLE_LOOP_NATIVE_SCHEDULER: false,
+  ENABLE_ROLEPLAY_GROUNDING: false,
 };
 
 export function loadFeatureFlags(): FeatureFlags {
@@ -43,4 +47,12 @@ export function isVoiceOSEnabled(): boolean {
 
 export function isCapabilityAwarenessEnabled(): boolean {
   return loadFeatureFlags().ENABLE_CAPABILITY_AWARENESS;
+}
+
+export function isLoopNativeSchedulerEnabled(): boolean {
+  return loadFeatureFlags().ENABLE_LOOP_NATIVE_SCHEDULER;
+}
+
+export function isRoleplayGroundingEnabled(): boolean {
+  return loadFeatureFlags().ENABLE_ROLEPLAY_GROUNDING;
 }

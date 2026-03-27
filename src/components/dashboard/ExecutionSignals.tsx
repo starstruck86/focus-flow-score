@@ -71,6 +71,22 @@ export const ExecutionSignals = memo(function ExecutionSignals({ signal }: Execu
     );
   }
 
+  // Loop status (when loop-native scheduler is active)
+  if (signal.currentLoopStatus && signal.currentLoopStatus !== 'complete') {
+    const loopLabel = signal.currentLoopStatus === 'action_ready' ? 'Action ready'
+      : signal.currentLoopStatus === 'prep_ready' ? 'Prep done'
+      : signal.currentLoopStatus === 'in_progress' ? 'In progress'
+      : signal.currentLoopStatus === 'carry_forward' ? 'Carry forward'
+      : null;
+    if (loopLabel) {
+      items.push(
+        <span key="loop" className="inline-flex items-center gap-1 text-muted-foreground">
+          <CheckCircle2 className="h-3 w-3" /> Loop: {loopLabel}
+        </span>
+      );
+    }
+  }
+
   if (items.length === 0) return null;
 
   return (
