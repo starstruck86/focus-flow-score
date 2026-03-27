@@ -132,6 +132,7 @@ const TYPE_CONFIG: Record<string, { icon: typeof Clock; color: string; bg: strin
   pipeline: { icon: Target, color: 'text-red-500', bg: 'bg-red-500/10 border-red-500/20' },
   prep: { icon: Lightbulb, color: 'text-cyan-500', bg: 'bg-cyan-500/10 border-cyan-500/20' },
   build: { icon: Hammer, color: 'text-orange-500', bg: 'bg-orange-500/10 border-orange-500/20' },
+  roleplay: { icon: Mic, color: 'text-orange-500', bg: 'bg-orange-500/10 border-orange-500/20' },
 };
 
 function formatTime(t: string) {
