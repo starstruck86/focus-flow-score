@@ -252,7 +252,7 @@ export function computeHealthSnapshot(inputs: HealthInputs): HealthSnapshot {
       id: `alert-dave-${Date.now()}`, severity: daveStatus === 'critical' ? 'critical' : 'warning',
       category: 'dave', message: `Dave failure rate at ${inputs.daveFailureRate}%`,
       metric: 'dave_failure_rate', currentValue: inputs.daveFailureRate,
-      threshold: HEALTH_THRESHOLDS.daveFailureRate.warning, triggeredAt: now, acknowledged: false,
+      threshold: HEALTH_THRESHOLDS.daveFailureRate.warning, triggeredAt: now, acknowledged: false, state: 'active' as AlertState,
     });
   }
 
