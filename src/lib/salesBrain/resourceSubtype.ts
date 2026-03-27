@@ -13,6 +13,7 @@ export const RESOURCE_SUBTYPES = [
   'google_drive_file',
   'zoom_recording',
   'spotify_episode',
+  'apple_podcast_episode',
   'podcast_episode',
   'audio_file',
   'web_article',
@@ -79,6 +80,8 @@ export function detectResourceSubtype(url: string | null, resourceType?: string)
   // Spotify
   if (lower.includes('open.spotify.com/episode') || lower.includes('open.spotify.com/show')) return 'spotify_episode';
 
+  // Apple Podcasts
+  if (lower.includes('podcasts.apple.com/') && (lower.includes('/podcast/') || lower.includes('/id'))) return 'apple_podcast_episode';
   // Audio files
   if (/\.(mp3|m4a|wav|ogg|aac|flac)(\?|$)/i.test(lower)) return 'audio_file';
 
@@ -186,8 +189,17 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
       return {
         ...base,
         enrichability: 'metadata_only',
-        reason: 'Spotify — metadata available, transcript requires external source',
+        reason: 'Spotify — metadata available, transcript requires external source or manual paste',
         canFetchMetadata: true,
+      };
+
+    case 'apple_podcast_episode':
+      return {
+        ...base,
+        enrichability: 'partially_enrichable',
+        reason: 'Apple Podcasts — metadata + RSS audio resolution attempted',
+        canFetchMetadata: true,
+        canFetchTranscript: true,
       };
 
     case 'audio_file':
@@ -268,6 +280,7 @@ export function getSubtypeLabel(subtype: ResourceSubtype): string {
     google_drive_file: 'Google Drive File',
     zoom_recording: 'Zoom Recording',
     spotify_episode: 'Spotify Episode',
+    apple_podcast_episode: 'Apple Podcast',
     podcast_episode: 'Podcast Episode',
     audio_file: 'Audio File',
     web_article: 'Web Article',

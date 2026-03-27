@@ -131,7 +131,7 @@ export function createIntegrationTools(ctx: ToolContext): ToolMap {
 
       if (!digests?.length) {
         const titles = resources.map(r => r.title).join(', ');
-        return `Found resources (${titles}) but none have been operationalized yet. Use "Operationalize" in the Prep Hub to extract intelligence.`;
+        return `Found resources (${titles}) but none have been operationalized yet. Use "Operationalize" in the Sales Brain OS Library to extract intelligence.`;
       }
 
       const d = digests[0];

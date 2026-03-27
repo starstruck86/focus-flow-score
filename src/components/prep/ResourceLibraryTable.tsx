@@ -252,7 +252,7 @@ export function ResourceLibraryTable({
   }, []);
 
   return (
-    <div ref={shellRef} className="flex flex-col" style={{ height: 'calc(100vh - 260px)', minHeight: '350px' }}>
+    <div ref={shellRef} className="flex flex-col" style={{ height: 'calc(100vh - 240px)', minHeight: '400px' }}>
       {/* Saved views — pinned top */}
       <div className="flex items-center gap-1 overflow-x-auto pb-1 shrink-0">
         {SAVED_VIEWS.map(view => (
@@ -350,7 +350,7 @@ export function ResourceLibraryTable({
         <div
           ref={scrollBodyRef}
           className="flex-1 min-h-0 overflow-y-auto overflow-x-auto"
-          style={{ paddingBottom: hasSelection ? '56px' : '0' }}
+          style={{ paddingBottom: hasSelection ? '64px' : '8px' }}
         >
           <table className="w-full caption-bottom text-sm">
             {/* Sticky header */}
