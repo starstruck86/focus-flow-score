@@ -271,7 +271,7 @@ export function computeHealthSnapshot(inputs: HealthInputs): HealthSnapshot {
       id: `alert-conc-${Date.now()}`, severity: concStatus === 'critical' ? 'critical' : 'warning',
       category: 'playbook', message: `Over-reliance: ${inputs.singlePlaybookConcentration}% usage from single playbook`,
       metric: 'single_playbook_concentration', currentValue: inputs.singlePlaybookConcentration,
-      threshold: HEALTH_THRESHOLDS.singlePlaybookConcentration.warning, triggeredAt: now, acknowledged: false,
+      threshold: HEALTH_THRESHOLDS.singlePlaybookConcentration.warning, triggeredAt: now, acknowledged: false, state: 'active' as AlertState,
     });
   }
 
