@@ -98,6 +98,34 @@ describe('voiceOS context resolution', () => {
   it('returns null when no context', () => {
     expect(resolveContextReference('practice it', emptyVoiceCtx())).toBeNull();
   });
+
+  it('resolves "do that again" to last roleplay', () => {
+    const ctx = emptyVoiceCtx();
+    ctx.lastRoleplay = { callType: 'negotiation', difficulty: 7 };
+    const r = resolveContextReference('do that again', ctx);
+    expect(r).toEqual({ call_type: 'negotiation', difficulty: '7' });
+  });
+
+  it('resolves "send that" to current playbook', () => {
+    const ctx = emptyVoiceCtx();
+    ctx.currentPlaybook = { id: 'p2', title: 'Objection Handling' };
+    const r = resolveContextReference('send that', ctx);
+    expect(r).toEqual({ playbookId: 'p2', playbookTitle: 'Objection Handling' });
+  });
+
+  it('resolves "that deal" same as "this deal"', () => {
+    const ctx = emptyVoiceCtx();
+    ctx.currentDeal = { id: 'd2', name: 'Globex', accountName: 'Globex Inc' };
+    const r = resolveContextReference('that deal', ctx);
+    expect(r).toEqual({ dealId: 'd2', dealName: 'Globex', accountName: 'Globex Inc' });
+  });
+
+  it('resolves "prep for it" to current deal', () => {
+    const ctx = emptyVoiceCtx();
+    ctx.currentDeal = { id: 'd3', name: 'Initech', accountName: 'Initech LLC' };
+    const r = resolveContextReference('prep me for it', ctx);
+    expect(r).toEqual({ accountName: 'Initech LLC' });
+  });
 });
 
 // ── SECTION 3: Confirmation Policy ─────────────────────
@@ -141,11 +169,14 @@ describe('voiceOS chained workflows', () => {
     expect(parseChainedWorkflow('prep me for my call')).toBeNull();
   });
 
-  it('advances chain correctly', () => {
-    parseChainedWorkflow('prep me for call then roleplay the CFO');
+  it('advances chain with natural descriptions', () => {
+    parseChainedWorkflow('prep me for my call then roleplay the CFO');
     const next = advanceChain();
     expect(next).not.toBeNull();
     expect(next!.action).toBe('start_roleplay');
+    // Should use original description, not generic "Step 2"
+    expect(next!.description).toContain('roleplay');
+    expect(next!.description).not.toBe('Step 2');
     const done = advanceChain();
     expect(done).toBeNull();
   });

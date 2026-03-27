@@ -14,6 +14,8 @@ import { createSynthesisTools } from './tools/synthesis';
 import { createIntegrationTools } from './tools/integrations';
 import { updateVoiceContext } from '@/lib/voiceContext';
 import { getConfirmationPolicy } from '@/lib/voiceConfirmation';
+import { isVoiceOSEnabled } from '@/lib/featureFlags';
+
 
 async function getUserId(): Promise<string | null> {
   const { data: { user } } = await supabase.auth.getUser();
@@ -38,7 +40,7 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
   // Synthesis tools need access to allTools for execution_brief composition
   Object.assign(allTools, createSynthesisTools(ctx, allTools));
 
-  // ── Wrap DB-writing tools with activity log ────────────────────
+  // ── Wrap DB-writing tools with activity log + confirmation gate ──
   const DB_WRITE_TOOLS = [
     'create_task', 'update_account', 'update_opportunity', 'update_methodology',
     'log_touch', 'move_deal', 'debrief', 'add_note', 'update_daily_metrics',
@@ -47,14 +49,48 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
     'complete_action', 'defer_action',
   ];
 
+  // Track pending confirmations for the confirmation gate
+  const pendingConfirmations = new Map<string, { tool: string; args: any[]; resolve: (v: any) => void }>();
+  (allTools as any).__pendingConfirmations = pendingConfirmations;
+
+  // Confirmation response handler — called when user says "yes"/"confirm"
+  (allTools as any).__confirmPending = async (toolName: string) => {
+    const pending = pendingConfirmations.get(toolName);
+    if (!pending) return 'Nothing pending to confirm.';
+    pendingConfirmations.delete(toolName);
+    const original = (allTools as any)[`__original_${toolName}`];
+    if (original) {
+      return await original(...pending.args);
+    }
+    return 'Confirmed but could not find the original tool.';
+  };
+
   const today = todayET();
   const logKey = `dave-activity-${today}`;
 
   for (const toolName of DB_WRITE_TOOLS) {
     if (toolName in allTools) {
       const original = (allTools as any)[toolName];
+      // Store original for confirmation gate
+      (allTools as any)[`__original_${toolName}`] = original;
       (allTools as any)[toolName] = async (...args: any[]) => {
+        // ── Confirmation gate (Voice OS only) ──────────────
+        if (isVoiceOSEnabled()) {
+          const policy = getConfirmationPolicy(toolName);
+          if (policy.level === 'strong') {
+            // Block execution — require explicit confirmation
+            updateVoiceContext({ pendingAction: { tool: toolName, description: policy.prompt || 'Confirm?', params: args[0] } });
+            return `⚠️ **Confirmation required:** ${policy.prompt}\n\nSay **"yes"** or **"confirm"** to proceed.`;
+          }
+          if (policy.level === 'light') {
+            // Light: inform but proceed (the AI-side tool call already implies intent)
+            updateVoiceContext({ pendingAction: { tool: toolName, description: policy.prompt || 'Proceeding...' } });
+          }
+        }
+
         const result = await original(...args);
+        // Clear pending after successful execution
+        updateVoiceContext({ pendingAction: null });
         try {
           const existing = JSON.parse(localStorage.getItem(logKey) || '[]');
           existing.push({ tool: toolName, result: typeof result === 'string' ? result.slice(0, 200) : '', ts: Date.now() });
