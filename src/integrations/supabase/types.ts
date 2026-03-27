@@ -2567,6 +2567,7 @@ export type Database = {
         Row: {
           account_id: string | null
           author_or_speaker: string | null
+          brain_status: string
           content: string | null
           content_length: number | null
           content_status: string
@@ -2574,11 +2575,14 @@ export type Database = {
           current_version: number | null
           date_confidence: string | null
           date_source: string | null
+          dedupe_hash: string | null
           description: string | null
+          discovered_at: string | null
           enriched_at: string | null
           enrichment_audit_log: Json
           enrichment_status: string
           enrichment_version: number
+          external_id: string | null
           failure_count: number
           failure_reason: string | null
           file_url: string | null
@@ -2596,6 +2600,7 @@ export type Database = {
           screenshot_structure: string | null
           source_created_at: string | null
           source_published_at: string | null
+          source_registry_id: string | null
           source_resource_id: string | null
           tags: string[] | null
           template_category: string | null
@@ -2607,6 +2612,7 @@ export type Database = {
         Insert: {
           account_id?: string | null
           author_or_speaker?: string | null
+          brain_status?: string
           content?: string | null
           content_length?: number | null
           content_status?: string
@@ -2614,11 +2620,14 @@ export type Database = {
           current_version?: number | null
           date_confidence?: string | null
           date_source?: string | null
+          dedupe_hash?: string | null
           description?: string | null
+          discovered_at?: string | null
           enriched_at?: string | null
           enrichment_audit_log?: Json
           enrichment_status?: string
           enrichment_version?: number
+          external_id?: string | null
           failure_count?: number
           failure_reason?: string | null
           file_url?: string | null
@@ -2636,6 +2645,7 @@ export type Database = {
           screenshot_structure?: string | null
           source_created_at?: string | null
           source_published_at?: string | null
+          source_registry_id?: string | null
           source_resource_id?: string | null
           tags?: string[] | null
           template_category?: string | null
@@ -2647,6 +2657,7 @@ export type Database = {
         Update: {
           account_id?: string | null
           author_or_speaker?: string | null
+          brain_status?: string
           content?: string | null
           content_length?: number | null
           content_status?: string
@@ -2654,11 +2665,14 @@ export type Database = {
           current_version?: number | null
           date_confidence?: string | null
           date_source?: string | null
+          dedupe_hash?: string | null
           description?: string | null
+          discovered_at?: string | null
           enriched_at?: string | null
           enrichment_audit_log?: Json
           enrichment_status?: string
           enrichment_version?: number
+          external_id?: string | null
           failure_count?: number
           failure_reason?: string | null
           file_url?: string | null
@@ -2676,6 +2690,7 @@ export type Database = {
           screenshot_structure?: string | null
           source_created_at?: string | null
           source_published_at?: string | null
+          source_registry_id?: string | null
           source_resource_id?: string | null
           tags?: string[] | null
           template_category?: string | null
@@ -2704,6 +2719,13 @@ export type Database = {
             columns: ["opportunity_id"]
             isOneToOne: false
             referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resources_source_registry_id_fkey"
+            columns: ["source_registry_id"]
+            isOneToOne: false
+            referencedRelation: "source_registry"
             referencedColumns: ["id"]
           },
           {
@@ -2802,6 +2824,60 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
           week_ending?: string
+        }
+        Relationships: []
+      }
+      source_registry: {
+        Row: {
+          created_at: string
+          external_id: string | null
+          id: string
+          last_checked_at: string | null
+          last_successful_sync_at: string | null
+          metadata: Json | null
+          name: string
+          poll_interval_hours: number
+          polling_enabled: boolean
+          source_type: string
+          status: string
+          trust_weight: number
+          updated_at: string
+          url: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          external_id?: string | null
+          id?: string
+          last_checked_at?: string | null
+          last_successful_sync_at?: string | null
+          metadata?: Json | null
+          name: string
+          poll_interval_hours?: number
+          polling_enabled?: boolean
+          source_type?: string
+          status?: string
+          trust_weight?: number
+          updated_at?: string
+          url?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          external_id?: string | null
+          id?: string
+          last_checked_at?: string | null
+          last_successful_sync_at?: string | null
+          metadata?: Json | null
+          name?: string
+          poll_interval_hours?: number
+          polling_enabled?: boolean
+          source_type?: string
+          status?: string
+          trust_weight?: number
+          updated_at?: string
+          url?: string | null
+          user_id?: string
         }
         Relationships: []
       }
