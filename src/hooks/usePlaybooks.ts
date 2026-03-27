@@ -41,7 +41,18 @@ export function usePlaybooks() {
         .select('*')
         .order('confidence_score', { ascending: false });
       if (error) throw error;
-      return (data || []) as unknown as Playbook[];
+      const playbooks = (data || []) as unknown as Playbook[];
+
+      // Trigger scenario regeneration when playbooks are loaded (lazy, deduped)
+      try {
+        const { isRoleplayGroundingEnabled } = await import('@/lib/featureFlags');
+        if (isRoleplayGroundingEnabled() && playbooks.length > 0) {
+          const { triggerScenarioRegenIfNeeded } = await import('@/lib/loopRuntime');
+          triggerScenarioRegenIfNeeded(playbooks);
+        }
+      } catch {}
+
+      return playbooks;
     },
     enabled: !!user,
   });
