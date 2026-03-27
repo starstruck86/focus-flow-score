@@ -19,6 +19,7 @@ import {
   reclassifyAudioFailures,
   retryRetryableAudioJobs,
   moveNonRetryableToManualAssist,
+  getAudioStageLabel,
 } from '../audioPipeline';
 
 beforeEach(() => {
@@ -33,6 +34,11 @@ describe('Audio resource detection', () => {
 
   it('detects Spotify episodes', () => {
     expect(isAudioResource('https://open.spotify.com/episode/abc123')).toBe(true);
+  });
+
+  it('detects Apple Podcasts', () => {
+    expect(isAudioResource('https://podcasts.apple.com/us/podcast/some-show/id123?i=456')).toBe(true);
+    expect(isAudioResource('https://podcasts.apple.com/gr/podcast/show/id1502265369')).toBe(true);
   });
 
   it('detects podcast CDN domains', () => {
@@ -54,8 +60,14 @@ describe('Audio subtype detection', () => {
     expect(detectAudioSubtype('https://d3ctxlq1ktw2nl.cloudfront.net/staging/2024/file.mp3')).toBe('direct_audio_file');
   });
 
-  it('classifies Spotify episodes', () => {
+  it('classifies Spotify episodes vs shows', () => {
     expect(detectAudioSubtype('https://open.spotify.com/episode/abc')).toBe('spotify_episode');
+    expect(detectAudioSubtype('https://open.spotify.com/show/abc')).toBe('spotify_show');
+  });
+
+  it('classifies Apple Podcast episodes vs shows', () => {
+    expect(detectAudioSubtype('https://podcasts.apple.com/us/podcast/show/id123?i=456')).toBe('apple_podcast_episode');
+    expect(detectAudioSubtype('https://podcasts.apple.com/us/podcast/show/id123')).toBe('apple_podcast_show');
   });
 
   it('classifies YouTube', () => {
@@ -78,16 +90,37 @@ describe('Audio strategy', () => {
     expect(s.manualAssistRequired).toBe(false);
   });
 
-  it('Spotify is manual-only retry with metadata acceptable', () => {
+  it('Spotify episode is manual-only retry with metadata acceptable', () => {
     const s = getAudioStrategy('spotify_episode');
     expect(s.retryMode).toBe('manual_only');
     expect(s.metadataOnlyAcceptable).toBe(true);
     expect(s.manualAssistRequired).toBe(true);
   });
 
+  it('Spotify show is manual-only', () => {
+    const s = getAudioStrategy('spotify_show');
+    expect(s.retryMode).toBe('manual_only');
+  });
+
+  it('Apple podcast episode is automatic', () => {
+    const s = getAudioStrategy('apple_podcast_episode');
+    expect(s.retryMode).toBe('automatic');
+    expect(s.metadataOnlyAcceptable).toBe(true);
+  });
+
+  it('Apple podcast show is manual-only', () => {
+    const s = getAudioStrategy('apple_podcast_show');
+    expect(s.retryMode).toBe('manual_only');
+  });
+
   it('auth-gated is blocked', () => {
     const s = getAudioStrategy('auth_gated_audio');
     expect(s.retryMode).toBe('blocked');
+  });
+
+  it('podcast_episode_page_only is automatic', () => {
+    const s = getAudioStrategy('podcast_episode_page_only');
+    expect(s.retryMode).toBe('automatic');
   });
 });
 
@@ -133,12 +166,49 @@ describe('Failure descriptions', () => {
     expect(d.retryable).toBe(false);
   });
 
+  it('SPOTIFY_NO_DIRECT_AUDIO is not retryable', () => {
+    const d = getAudioFailureDescription('SPOTIFY_NO_DIRECT_AUDIO');
+    expect(d.retryable).toBe(false);
+    expect(d.explanation).toContain('Spotify');
+  });
+
+  it('APPLE_ENCLOSURE_NOT_FOUND is retryable', () => {
+    const d = getAudioFailureDescription('APPLE_ENCLOSURE_NOT_FOUND');
+    expect(d.retryable).toBe(true);
+  });
+
+  it('APPLE_FEED_NOT_RESOLVED is retryable', () => {
+    const d = getAudioFailureDescription('APPLE_FEED_NOT_RESOLVED');
+    expect(d.retryable).toBe(true);
+  });
+
   it('all codes have descriptions', () => {
-    const codes = ['AUDIO_UNREACHABLE', 'INVALID_CONTENT_TYPE', 'TRANSCRIPT_TOO_SHORT', 'AUTH_REQUIRED', 'MANUAL_TRANSCRIPT_REQUIRED'] as const;
+    const codes = [
+      'AUDIO_UNREACHABLE', 'INVALID_CONTENT_TYPE', 'TRANSCRIPT_TOO_SHORT', 'AUTH_REQUIRED',
+      'MANUAL_TRANSCRIPT_REQUIRED', 'SPOTIFY_NO_DIRECT_AUDIO', 'SPOTIFY_METADATA_ONLY',
+      'APPLE_PAGE_PARSED_NO_FEED', 'APPLE_FEED_NOT_RESOLVED', 'APPLE_ENCLOSURE_NOT_FOUND',
+      'TRANSCRIPT_SOURCE_NOT_FOUND', 'CANONICAL_PAGE_NOT_FOUND', 'METADATA_CAPTURED_NO_TRANSCRIPT',
+      'PLATFORM_RATE_LIMITED', 'PLATFORM_BLOCKED', 'MANUAL_ASSIST_RECOMMENDED',
+    ] as const;
     for (const c of codes) {
       const d = getAudioFailureDescription(c);
       expect(d.explanation.length).toBeGreaterThan(0);
       expect(d.nextAction.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('Stage labels', () => {
+  it('all pipeline stages have labels', () => {
+    const stages = [
+      'queued', 'detecting_source_type', 'resolving_platform_metadata',
+      'resolving_canonical_episode_page', 'resolving_rss_feed', 'resolving_audio_enclosure',
+      'searching_transcript_source', 'resolving_source', 'downloading_audio', 'transcribing',
+      'assembling_transcript', 'quality_check', 'enriching', 'completed', 'failed',
+      'needs_manual_assist', 'metadata_only_complete',
+    ] as const;
+    for (const s of stages) {
+      expect(getAudioStageLabel(s).length).toBeGreaterThan(0);
     }
   });
 });
@@ -149,6 +219,16 @@ describe('Audio job lifecycle', () => {
     expect(job.audioSubtype).toBe('direct_audio_file');
     expect(job.stage).toBe('queued');
     expect(getAudioJobForResource('res-1')).toBeTruthy();
+  });
+
+  it('creates job for Spotify episode', () => {
+    const job = createAudioJob('res-s1', 'https://open.spotify.com/episode/abc123');
+    expect(job.audioSubtype).toBe('spotify_episode');
+  });
+
+  it('creates job for Apple podcast episode', () => {
+    const job = createAudioJob('res-a1', 'https://podcasts.apple.com/us/podcast/show/id123?i=456');
+    expect(job.audioSubtype).toBe('apple_podcast_episode');
   });
 
   it('fails audio job with correct state', () => {
@@ -162,6 +242,13 @@ describe('Audio job lifecycle', () => {
   it('auth-required goes to needs_manual_assist', () => {
     createAudioJob('res-3', 'https://example.com/file.mp3');
     const failed = failAudioJob('res-3', 'AUTH_REQUIRED', 'resolving_source');
+    expect(failed?.stage).toBe('needs_manual_assist');
+    expect(failed?.retryable).toBe(false);
+  });
+
+  it('spotify failure goes to needs_manual_assist', () => {
+    createAudioJob('res-sp', 'https://open.spotify.com/episode/abc');
+    const failed = failAudioJob('res-sp', 'SPOTIFY_NO_DIRECT_AUDIO', 'resolving_platform_metadata');
     expect(failed?.stage).toBe('needs_manual_assist');
     expect(failed?.retryable).toBe(false);
   });
@@ -202,13 +289,11 @@ describe('Recovery tools', () => {
   it('moveNonRetryableToManualAssist moves blocked failures', () => {
     createAudioJob('r2', 'https://example.com/1.mp3');
     failAudioJob('r2', 'AUTH_REQUIRED', 'resolving_source');
-    // AUTH_REQUIRED is non-retryable so stage is already needs_manual_assist
-    // Let's test with a forced scenario
     const jobs = loadAudioJobs();
     const j = jobs.find(x => x.resourceId === 'r2');
     if (j) { j.stage = 'failed'; j.retryable = false; }
     saveAudioJobs(jobs);
-    
+
     const count = moveNonRetryableToManualAssist();
     expect(count).toBe(1);
     expect(getAudioJobForResource('r2')?.stage).toBe('needs_manual_assist');
