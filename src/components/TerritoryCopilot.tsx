@@ -96,8 +96,8 @@ function CopilotDialog() {
   const processedQuestionRef = useRef<string | null>(null);
   const streamingRef = useRef(false);
   const voice = useVoiceMode();
-
-  
+  const activeChainRef = useRef<ChainedWorkflow | null>(null);
+  const workflowTimerRef = useRef<(() => number) | null>(null);
 
   useEffect(() => {
     if (state.open) {
