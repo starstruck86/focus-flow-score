@@ -10,8 +10,9 @@ import { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Bug, RefreshCw } from 'lucide-react';
 import { captureDebugSnapshot, type SystemDebugSnapshot } from '@/lib/loopRuntime';
-import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled, isAccountExecutionModelEnabled, isAccountCentricExecutionEnabled } from '@/lib/featureFlags';
+import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled, isAccountExecutionModelEnabled, isAccountCentricExecutionEnabled, isExecutionSessionLayerEnabled } from '@/lib/featureFlags';
 import { loadMeasurementEvents } from '@/lib/accountPostAction';
+import { useExecutionSession, buildScorecard, getNextBestAccounts } from '@/lib/executionSession';
 
 export function SystemDebugPanel() {
   const [snapshot, setSnapshot] = useState<SystemDebugSnapshot | null>(null);
