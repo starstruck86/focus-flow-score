@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Zap, RefreshCw, AlertTriangle, Info } from 'lucide-react';
+import { Zap, RefreshCw, AlertTriangle, Info, FileAudio } from 'lucide-react';
 import { BulkIngestionPanel } from './BulkIngestionPanel';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEnrichmentJobStore } from '@/store/useEnrichmentJobStore';
@@ -25,6 +25,14 @@ import {
   getEnrichabilityLabel,
   getEnrichabilityColor,
 } from '@/lib/salesBrain/resourceSubtype';
+import {
+  isAudioResource,
+  detectAudioSubtype,
+  getAudioStrategy,
+  getAudioJobForResource,
+  getAudioStageLabel,
+  getAudioFailureDescription,
+} from '@/lib/salesBrain/audioPipeline';
 import { createLogger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
 import type { Resource } from '@/hooks/useResources';
