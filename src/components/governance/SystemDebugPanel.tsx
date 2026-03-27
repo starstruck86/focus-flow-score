@@ -48,6 +48,7 @@ export function SystemDebugPanel() {
   // Flags summary for degraded-mode awareness
   const loopEnabled = isLoopNativeSchedulerEnabled();
   const groundingEnabled = isRoleplayGroundingEnabled();
+  const acctEnabled = isAccountExecutionModelEnabled();
 
   return (
     <div>
