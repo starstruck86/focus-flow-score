@@ -501,9 +501,22 @@ export function ResourceLibraryTable({
                         })()}
                       </td>
                       <td className="px-3 align-middle">
-                        <Badge className={cn('text-[9px]', getEnrichmentStatusColor(resource.enrichment_status))}>
-                          {getEnrichmentStatusLabel(resource.enrichment_status)}
-                        </Badge>
+                        {(() => {
+                          const ps = deriveProcessingState(resource, audioJob);
+                          return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge className={cn('text-[9px] cursor-help', getProcessingStateColor(ps.state))}>
+                                  {ps.label}
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent side="bottom" className="text-xs max-w-[250px]">
+                                <p>{ps.description}</p>
+                                {ps.nextAction && <p className="mt-1 text-primary">→ {ps.nextAction}</p>}
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                        })()}
                       </td>
                       <td className="px-3 align-middle">
                         {(resource as any).last_quality_tier ? (
