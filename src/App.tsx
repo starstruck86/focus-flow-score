@@ -30,6 +30,7 @@ import NotFound from "./pages/NotFound";
 import { lazy, Suspense } from "react";
 
 const Diagnostics = lazy(() => import("./pages/Diagnostics"));
+const Cockpit = lazy(() => import("./pages/Cockpit"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
