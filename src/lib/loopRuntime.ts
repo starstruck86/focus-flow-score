@@ -142,6 +142,27 @@ export function onAccountWorked(
     loop.accountsWorked.push({ ...account, workedAt: new Date().toISOString() });
     saveLoops(date, loops);
   }
+
+  // Write account-level truth
+  if (isAccountExecutionModelEnabled()) {
+    markAccountWorkedGeneric(date, account.id, account.name, loopId, null);
+  }
+}
+
+/**
+ * Record a specific account outcome (for Dave or detailed tracking).
+ */
+export function onAccountOutcome(
+  date: string,
+  accountId: string,
+  accountName: string,
+  loopId: string | null,
+  blockId: string | null,
+  outcomeType: OutcomeType,
+  notes: string | null = null,
+): AccountExecutionEntry | null {
+  if (!isAccountExecutionModelEnabled()) return null;
+  return recordAccountOutcome(date, accountId, accountName, loopId, blockId, outcomeType, notes);
 }
 
 /**
