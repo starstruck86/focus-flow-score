@@ -38,10 +38,22 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
     start_daily_roleplay: async (params: { scenarioType?: string; persona?: string; industry?: string }) => {
       const { getRoleplayBlockConfig, recordRoleplayBlockEvent, buildDaveConfirmationPrompt } = await import('@/lib/dailyRoleplayBlock');
       const { todayInAppTz } = await import('@/lib/timeFormat');
+      const { isRoleplayGroundingEnabled } = await import('@/lib/featureFlags');
       const config = getRoleplayBlockConfig();
       const scenario = params.scenarioType || config.defaultScenarioType;
       const persona = params.persona || config.defaultPersona;
       const industry = params.industry || config.defaultIndustry;
+
+      // Try grounded scenario selection when enabled
+      let groundedPrompt: string | null = null;
+      if (isRoleplayGroundingEnabled()) {
+        const { loadCachedScenarios, selectBestScenario, buildGroundedRoleplayPrompt, getDefaultFallbackScenario } = await import('@/lib/roleplayKnowledge');
+        const scenarios = loadCachedScenarios();
+        const best = selectBestScenario(scenarios, scenario, persona, industry);
+        const selected = best || getDefaultFallbackScenario({ scenarioType: scenario, persona, industry });
+        groundedPrompt = buildGroundedRoleplayPrompt(selected, industry);
+      }
+
       recordRoleplayBlockEvent({
         date: todayInAppTz(),
         status: 'started',
@@ -50,8 +62,12 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
         industry,
         startedAt: new Date().toISOString(),
       });
-      // Return conversational prompt — Dave will confirm then immediately roleplay
-      return buildDaveConfirmationPrompt({ ...config, defaultScenarioType: scenario, defaultPersona: persona, defaultIndustry: industry });
+
+      // Return grounded prompt if available, otherwise conversational confirmation
+      const confirmationPrompt = buildDaveConfirmationPrompt({ ...config, defaultScenarioType: scenario, defaultPersona: persona, defaultIndustry: industry });
+      return groundedPrompt
+        ? `${confirmationPrompt}\n\n--- GROUNDED SCENARIO CONTEXT (use this to shape buyer behavior) ---\n${groundedPrompt}`
+        : confirmationPrompt;
     },
     complete_daily_roleplay: async (params: { durationUsed?: number }) => {
       const { getRoleplayBlockConfig, recordRoleplayBlockEvent, classifyCompletionTiming } = await import('@/lib/dailyRoleplayBlock');
