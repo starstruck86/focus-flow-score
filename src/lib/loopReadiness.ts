@@ -3,9 +3,12 @@
  *
  * When ENABLE_LOOP_NATIVE_SCHEDULER is on, uses explicit loop state
  * from loopScheduler.ts. Otherwise falls back to heuristic readiness.
+ * When ENABLE_ACCOUNT_EXECUTION_MODEL is on, enriches signals with
+ * account-level truth.
  */
-import { isLoopNativeSchedulerEnabled } from '@/lib/featureFlags';
+import { isLoopNativeSchedulerEnabled, isAccountExecutionModelEnabled } from '@/lib/featureFlags';
 import { loadLoops, computeLoopReadinessFromLoops, type LoopReadinessState } from '@/lib/loopScheduler';
+import { buildExecutionSummary, type AccountExecutionSummary } from '@/lib/accountExecutionState';
 
 export interface LoopReadiness {
   loopId: string;
