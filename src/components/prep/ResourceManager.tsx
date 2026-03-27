@@ -164,6 +164,8 @@ export function ResourceManager() {
   const operationalize = useOperationalizeResource();
   const updateEnrichmentStatus = useUpdateEnrichmentStatus();
   const { data: suggestions = [], refetch: refetchSuggestions, isLoading: suggestionsLoading } = useResourceSuggestions(resources.length > 0);
+  const { data: audioJobsMap } = useAudioJobsMap();
+  const queryClient = useQueryClient();
 
   const currentFolders = folders.filter(f => f.parent_id === currentFolderId);
   const filteredResources = searchQuery
