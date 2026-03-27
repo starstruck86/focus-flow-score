@@ -38,6 +38,9 @@ import {
   isAudioResource, detectAudioSubtype, getAudioStageLabel,
   getAudioFailureDescription,
 } from '@/lib/salesBrain/audioPipeline';
+import {
+  deriveProcessingState, getProcessingStateColor,
+} from '@/lib/processingState';
 import type { AudioFailureCode, AudioPipelineStage } from '@/lib/salesBrain/audioPipeline';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import type { Resource } from '@/hooks/useResources';
