@@ -410,6 +410,12 @@ export function getAudioFailureDescription(code: AudioFailureCode): { explanatio
 export function getAudioStageLabel(stage: AudioPipelineStage): string {
   const labels: Record<AudioPipelineStage, string> = {
     queued: 'Queued',
+    detecting_source_type: 'Detecting Source',
+    resolving_platform_metadata: 'Resolving Metadata',
+    resolving_canonical_episode_page: 'Resolving Episode Page',
+    resolving_rss_feed: 'Resolving RSS Feed',
+    resolving_audio_enclosure: 'Resolving Audio',
+    searching_transcript_source: 'Searching Transcript',
     resolving_source: 'Resolving Source',
     downloading_audio: 'Downloading',
     transcribing: 'Transcribing',
@@ -419,6 +425,7 @@ export function getAudioStageLabel(stage: AudioPipelineStage): string {
     completed: 'Completed',
     failed: 'Failed',
     needs_manual_assist: 'Manual Assist',
+    metadata_only_complete: 'Metadata Only',
   };
   return labels[stage] || stage;
 }
