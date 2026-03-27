@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import {
   getIncomingResources,
   updateBrainStatus,
@@ -7,6 +8,7 @@ import {
   manualIngestUrl,
   type BrainStatus,
 } from '@/lib/salesBrain/ingestion';
+import { processPromotedResource } from '@/lib/salesBrain/transformationPipeline';
 import { toast } from 'sonner';
 
 export function useIncomingQueue(status: BrainStatus = 'pending') {
@@ -21,8 +23,36 @@ export function useIncomingQueue(status: BrainStatus = 'pending') {
 export function useUpdateBrainStatus() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: BrainStatus }) =>
-      updateBrainStatus(id, status),
+    mutationFn: async ({ id, status }: { id: string; status: BrainStatus }) => {
+      await updateBrainStatus(id, status);
+
+      // When promoted → trigger transformation pipeline
+      if (status === 'promoted') {
+        try {
+          const { data: resource } = await (supabase as any)
+            .from('resources')
+            .select('id, title, content, description, tags')
+            .eq('id', id)
+            .single();
+
+          if (resource) {
+            const result = processPromotedResource({
+              resourceId: resource.id,
+              title: resource.title,
+              content: resource.content,
+              description: resource.description,
+              tags: resource.tags || [],
+            });
+
+            if (result.doctrineUpdates.length > 0) {
+              toast.info(`${result.insights.length} insights extracted, ${result.doctrineUpdates.length} doctrine updates`);
+            }
+          }
+        } catch {
+          // Non-critical — pipeline failure doesn't block promote
+        }
+      }
+    },
     onSuccess: (_, { status }) => {
       qc.invalidateQueries({ queryKey: ['incoming-queue'] });
       qc.invalidateQueries({ queryKey: ['resources'] });
