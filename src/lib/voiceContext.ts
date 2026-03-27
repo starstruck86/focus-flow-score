@@ -26,7 +26,7 @@ export interface VoiceOperatingContext {
   /** Last response snippet for "repeat that" */
   lastResponse: string | null;
   /** Chained workflow state */
-  chainedWorkflow: { steps: string[]; currentStep: number } | null;
+  chainedWorkflow: { steps: string[]; descriptions?: string[]; currentStep: number } | null;
   /** Timestamp */
   updatedAt: number;
 }
