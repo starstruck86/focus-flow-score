@@ -23,6 +23,8 @@ export function ExecutionWorkbench({ deals = [], playbooks = [], riskSignals = [
   const { ask: askCopilot } = useCopilot();
   const context = useMemo(() => getExecutionContext(deals, playbooks, riskSignals), [deals, playbooks, riskSignals]);
   const systemSummary = useLiveSystemSummary();
+  const voiceOS = isVoiceOSEnabled();
+  const { context: voiceCtx } = useVoiceOperatingContext();
 
   if (!isSystemOSEnabled()) return null;
 
