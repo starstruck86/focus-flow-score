@@ -44,6 +44,7 @@ interface DeepEnrichModalProps {
   onOpenChange: (open: boolean) => void;
   resources: Resource[];
   selectedIds?: Set<string>;
+  audioJobsMap?: Map<string, AudioJobRecord>;
 }
 
 export const DeepEnrichModal = memo(function DeepEnrichModal({
