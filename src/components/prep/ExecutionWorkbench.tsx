@@ -12,6 +12,8 @@ import { getExecutionContext, type ExecutionDeal, type RiskSignal } from '@/lib/
 import { useLiveSystemSummary } from '@/hooks/useSystemState';
 import { useCopilot } from '@/contexts/CopilotContext';
 import { useVoiceOperatingContext } from '@/hooks/useVoiceOperatingContext';
+import { CapabilityPromptCard } from './CapabilityPromptCard';
+import type { CapabilityContext } from '@/lib/capabilityEngine';
 
 interface ExecutionWorkbenchProps {
   deals?: ExecutionDeal[];
