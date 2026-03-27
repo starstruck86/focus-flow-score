@@ -703,3 +703,85 @@ export function getDoctrineGovernanceStats(): DoctrineGovernanceStats {
 
   return stats;
 }
+
+// ── Supersede helper ──────────────────────────────────────
+export function supersedeDoctrine(sourceId: string, replacementId: string, reason: string): void {
+  const all = loadDoctrine();
+  const source = all.find(d => d.id === sourceId);
+  if (!source) return;
+  source.governance.status = 'superseded';
+  source.governance.supersededById = replacementId;
+  source.governance.propagationEnabled = false;
+  source.governance.reason = `Superseded: ${reason}`;
+  saveDoctrine(all);
+  appendChangelog({
+    id: generateId(),
+    eventType: 'doctrine_superseded',
+    chapter: source.chapter,
+    resourceId: null, insightId: null, doctrineId: sourceId,
+    description: `Superseded by ${replacementId}: ${reason}`,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+// ── Legacy review queue ───────────────────────────────────
+export function queueLegacyDoctrineForReview(): number {
+  const all = loadDoctrine();
+  let queued = 0;
+  // Only import usage check lazily to avoid circular deps
+  let usageCheck: ((id: string) => number) | null = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getDoctrineUsageForId } = require('./doctrineUsage');
+    usageCheck = (id: string) => getDoctrineUsageForId(id).length;
+  } catch { /* no usage module */ }
+
+  for (const d of all) {
+    if (!d.governance.isLegacyHydrated) continue;
+    if (d.governance.status !== 'approved') continue;
+    // Only re-queue if unused downstream
+    const usages = usageCheck ? usageCheck(d.id) : 0;
+    if (usages > 0) continue;
+    d.governance.status = 'review_needed';
+    d.governance.reason = 'Legacy doctrine queued for review';
+    d.governance.reviewNotes = d.governance.reviewNotes
+      ? `${d.governance.reviewNotes}\n[Auto] Queued for legacy review.`
+      : '[Auto] Queued for legacy review.';
+    d.governance.propagationEnabled = false;
+    queued++;
+  }
+  saveDoctrine(all);
+  if (queued > 0) {
+    appendChangelog({
+      id: generateId(),
+      eventType: 'doctrine_updated',
+      chapter: null, resourceId: null, insightId: null, doctrineId: null,
+      description: `${queued} legacy doctrine entries queued for review`,
+      timestamp: new Date().toISOString(),
+    });
+  }
+  return queued;
+}
+
+// ── Propagation block reason ──────────────────────────────
+export function getPropagationBlockReason(
+  entry: DoctrineEntry,
+  target: keyof PropagationTargets,
+): string | null {
+  const g = entry.governance;
+  if (g.status === 'rejected') return 'Rejected';
+  if (g.status === 'archived') return 'Archived';
+  if (g.status === 'superseded') return 'Superseded';
+  if (g.status !== 'approved') return `Status: ${g.status}`;
+  if (!g.propagationEnabled) return 'Propagation disabled';
+  if (entry.freshnessState === 'stale') return 'Stale';
+  if (!g.propagateTargets[target]) return `${target} target disabled`;
+  const floor = Math.max(g.propagationConfidenceFloor, PROPAGATION_CONFIDENCE_FLOORS[target] || 0);
+  if (entry.confidence < floor) return `Below confidence floor (${(floor * 100).toFixed(0)}%)`;
+  return null; // eligible
+}
+
+// ── Legacy count helper ───────────────────────────────────
+export function getLegacyHydratedCount(): number {
+  return loadDoctrine().filter(d => d.governance.isLegacyHydrated).length;
+}
