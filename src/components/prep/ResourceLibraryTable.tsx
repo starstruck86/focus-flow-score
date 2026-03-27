@@ -73,32 +73,27 @@ const SAVED_VIEWS: SavedView[] = [
     filter: () => true,
   },
   {
-    id: 'needs_deep', label: 'Needs Deep Enrich', icon: <Zap className="h-3 w-3" />,
-    filter: (r) => !r.enrichment_status || r.enrichment_status === 'not_enriched' || r.enrichment_status === 'incomplete',
+    id: 'needs_action', label: 'Needs Action', icon: <Zap className="h-3 w-3" />,
+    filter: (r) => !r.enrichment_status || r.enrichment_status === 'not_enriched' || r.enrichment_status === 'incomplete' || r.enrichment_status === 'failed',
   },
   {
-    id: 'needs_reenrich', label: 'Needs Re-enrich', icon: <RefreshCw className="h-3 w-3" />,
-    filter: (r) => r.enrichment_status === 'queued_for_reenrich' || r.enrichment_status === 'incomplete' || ((r as any).last_quality_tier === 'shallow' && r.enrichment_status === 'deep_enriched'),
+    id: 'retryable', label: 'Retryable', icon: <RefreshCw className="h-3 w-3" />,
+    filter: (r) => r.enrichment_status === 'failed' || r.enrichment_status === 'incomplete' || r.enrichment_status === 'queued_for_reenrich' || ((r as any).last_quality_tier === 'shallow' && r.enrichment_status === 'deep_enriched'),
   },
   {
-    id: 'failed', label: 'Failed', icon: <XCircle className="h-3 w-3" />,
-    filter: (r) => r.enrichment_status === 'failed',
+    id: 'manual', label: 'Manual Required', icon: <HelpCircle className="h-3 w-3" />,
+    filter: (r) => {
+      const ea = classifyEnrichability(r.file_url, r.resource_type);
+      return ea.enrichability === 'manual_input_needed' || ea.enrichability === 'needs_auth' || ea.enrichability === 'metadata_only';
+    },
   },
   {
     id: 'recent', label: 'Recently Added', icon: <FileText className="h-3 w-3" />,
     filter: (r) => Date.now() - new Date(r.created_at).getTime() < 7 * 86400000,
   },
   {
-    id: 'enriched', label: 'Enriched Recently', icon: <CheckCircle2 className="h-3 w-3" />,
-    filter: (r) => r.enrichment_status === 'deep_enriched' && !!r.enriched_at && Date.now() - new Date(r.enriched_at).getTime() < 7 * 86400000,
-  },
-  {
-    id: 'shallow', label: 'Low Quality', icon: <AlertTriangle className="h-3 w-3" />,
-    filter: (r) => (r as any).last_quality_tier === 'shallow' || (r as any).last_quality_tier === 'incomplete',
-  },
-  {
-    id: 'high_quality', label: 'High Quality', icon: <CheckCircle2 className="h-3 w-3" />,
-    filter: (r) => (r as any).last_quality_tier === 'complete',
+    id: 'completed', label: 'Completed', icon: <CheckCircle2 className="h-3 w-3" />,
+    filter: (r) => r.enrichment_status === 'deep_enriched',
   },
   {
     id: 'audio', label: 'Audio', icon: <FileAudio className="h-3 w-3" />,
