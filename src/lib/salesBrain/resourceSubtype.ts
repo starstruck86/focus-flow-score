@@ -10,6 +10,7 @@ export const RESOURCE_SUBTYPES = [
   'youtube_video',
   'google_doc',
   'google_sheet',
+  'google_drive_file',
   'zoom_recording',
   'spotify_episode',
   'podcast_episode',
@@ -18,6 +19,7 @@ export const RESOURCE_SUBTYPES = [
   'pdf',
   'manual_note',
   'competitor_page',
+  'auth_gated_community_page',
   'unknown_url',
   'no_url',
 ] as const;
