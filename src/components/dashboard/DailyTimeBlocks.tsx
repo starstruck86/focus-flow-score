@@ -651,9 +651,10 @@ export function DailyTimeBlocks() {
     if (!plan) return;
     const goalKey = `${blockIdx}-${goalIdx}`;
     const current = (plan.completed_goals || []) as string[];
-    const updated = current.includes(goalKey)
-      ? current.filter(g => g !== goalKey)
-      : [...current, goalKey];
+    const isCompleting = !current.includes(goalKey);
+    const updated = isCompleting
+      ? [...current, goalKey]
+      : current.filter(g => g !== goalKey);
 
     // Optimistic update
     queryClient.setQueryData(['daily-time-blocks', todayStr], {
@@ -665,7 +666,29 @@ export function DailyTimeBlocks() {
       .from('daily_time_blocks' as 'daily_time_blocks')
       .update({ completed_goals: updated })
       .eq('id', plan.id);
-  }, [plan, todayStr, queryClient]);
+
+    // Wire loop runtime state transitions when completing goals
+    if (isCompleting && isLoopNativeSchedulerEnabled()) {
+      try {
+        const block = blocks[blockIdx];
+        if (!block) return;
+        const PREP_TYPES = new Set(['prep', 'research', 'build']);
+        const ACTION_TYPES = new Set(['prospecting', 'pipeline']);
+        const linkedAccounts = (block.linked_accounts || []).map((a: any) => ({ id: a.id, name: a.name }));
+
+        // Check if ALL goals for this block are now done
+        const allGoals = block.goals || [];
+        const updatedSet = new Set(updated);
+        const allDone = allGoals.length > 0 && allGoals.every((_: any, gi: number) => updatedSet.has(`${blockIdx}-${gi}`));
+
+        if (allDone && PREP_TYPES.has(block.type)) {
+          onPrepComplete(todayStr, blockIdx, linkedAccounts);
+        } else if (allDone && ACTION_TYPES.has(block.type)) {
+          onActionComplete(todayStr, blockIdx, linkedAccounts);
+        }
+      } catch {}
+    }
+  }, [plan, todayStr, queryClient, blocks]);
 
   // Per-block thumbs feedback
   const thumbsBlock = useCallback(async (blockIdx: number, thumbs: 'up' | 'down') => {
