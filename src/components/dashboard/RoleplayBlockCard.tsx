@@ -44,7 +44,7 @@ export const RoleplayBlockCard = memo(function RoleplayBlockCard({ blockStartTim
 
     // Launch Dave with the confirmation prompt
     const prompt = buildDaveConfirmationPrompt(config);
-    askCopilot(prompt, 'roleplay');
+    askCopilot(prompt, 'deal-strategy');
   }, [today, config, askCopilot]);
 
   const handleSkip = useCallback(() => {
