@@ -65,5 +65,46 @@ export function createClientTools(navigate: NavigateFunction, askCopilot: AskCop
     }
   }
 
+  // ── Wrap context-updating tools for voice operating memory ─────
+  const CONTEXT_TRACKERS: Record<string, (args: any[], result: any) => void> = {
+    query_opportunities: (_args, result) => {
+      // Try to extract first deal mentioned
+      const match = typeof result === 'string' ? result.match(/\*\*(.+?)\*\*.*?—\s*(.+?)[\n|]/) : null;
+      if (match) updateVoiceContext({ currentDeal: { id: '', name: match[1], accountName: match[2] } });
+    },
+    primary_action: (_args, result) => {
+      if (typeof result === 'string') {
+        updateVoiceContext({ pendingAction: { tool: 'primary_action', description: result.slice(0, 200) } });
+      }
+    },
+    start_roleplay: (args) => {
+      const p = args[0] || {};
+      updateVoiceContext({ lastRoleplay: { callType: p.call_type || 'discovery', persona: p.persona, difficulty: p.difficulty } });
+    },
+    prep_meeting: (args) => {
+      const p = args[0] || {};
+      if (p.accountName) updateVoiceContext({ currentAccount: { id: '', name: p.accountName } });
+    },
+    create_task: (_args, result) => {
+      if (typeof result === 'string') {
+        updateVoiceContext({ currentTask: { id: '', title: result.slice(0, 100) } });
+      }
+    },
+  };
+
+  for (const [toolName, tracker] of Object.entries(CONTEXT_TRACKERS)) {
+    if (toolName in allTools) {
+      const original = (allTools as any)[toolName];
+      (allTools as any)[toolName] = async (...args: any[]) => {
+        const result = await original(...args);
+        try { tracker(args, result); } catch {}
+        return result;
+      };
+    }
+  }
+
+  // ── Attach confirmation policy lookup ─────────────────────────
+  (allTools as any).__getConfirmationPolicy = getConfirmationPolicy;
+
   return allTools;
 }
