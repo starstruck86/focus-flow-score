@@ -9,7 +9,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { X, RefreshCw, HelpCircle, FileAudio } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getAudioStageLabel, getAudioFailureDescription, detectAudioSubtype } from '@/lib/salesBrain/audioPipeline';
-import { getSubtypeLabel } from '@/lib/salesBrain/resourceSubtype';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import type { AudioFailureCode } from '@/lib/salesBrain/audioPipeline';
 import type { Resource } from '@/hooks/useResources';
