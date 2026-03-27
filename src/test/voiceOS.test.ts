@@ -169,11 +169,14 @@ describe('voiceOS chained workflows', () => {
     expect(parseChainedWorkflow('prep me for my call')).toBeNull();
   });
 
-  it('advances chain correctly', () => {
-    parseChainedWorkflow('prep me for call then roleplay the CFO');
+  it('advances chain with natural descriptions', () => {
+    parseChainedWorkflow('prep me for my call then roleplay the CFO');
     const next = advanceChain();
     expect(next).not.toBeNull();
     expect(next!.action).toBe('start_roleplay');
+    // Should use original description, not generic "Step 2"
+    expect(next!.description).toContain('roleplay');
+    expect(next!.description).not.toBe('Step 2');
     const done = advanceChain();
     expect(done).toBeNull();
   });
