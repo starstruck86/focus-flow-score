@@ -151,9 +151,13 @@ export function defaultGovernance(status: GovernanceStatus = 'review_needed'): D
 function hydrateGovernance(entry: any): DoctrineEntry {
   if (!entry.governance) {
     // Legacy entry — infer governance from existing fields
-    const gov = defaultGovernance('approved'); // legacy entries treated as approved
+    const gov = defaultGovernance('approved');
     gov.reason = 'Migrated from pre-governance system';
+    gov.isLegacyHydrated = true;
+    gov.reviewNotes = '[Auto] Legacy entry hydrated with approved status during migration.';
     entry.governance = gov;
+  } else if (entry.governance.isLegacyHydrated === undefined) {
+    entry.governance.isLegacyHydrated = false;
   }
   return entry as DoctrineEntry;
 }
