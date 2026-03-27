@@ -142,6 +142,9 @@ export interface LoopPrecedenceResult {
  * 1. Server loop metadata (from plan payload)
  * 2. Client persisted loop state
  * 3. Heuristic fallback (generated from blocks)
+ *
+ * Also reconciles: if server and client diverge, server wins
+ * but completed client state is preserved.
  */
 export function resolveLoops(
   date: string,
@@ -150,6 +153,22 @@ export function resolveLoops(
 ): LoopPrecedenceResult {
   // 1. Server loop metadata
   if (serverLoopMetadata && Array.isArray(serverLoopMetadata) && serverLoopMetadata.length > 0) {
+    // Reconcile: merge completed state from client into server truth
+    if (isLoopNativeSchedulerEnabled()) {
+      const clientLoops = loadLoops(date);
+      if (clientLoops.length > 0) {
+        const completedIds = new Set(clientLoops.filter(l => l.status === 'complete').map(l => l.loopId));
+        const reconciled = (serverLoopMetadata as ExecutionLoop[]).map(sl => {
+          if (completedIds.has(sl.loopId)) {
+            const cl = clientLoops.find(c => c.loopId === sl.loopId);
+            if (cl) return { ...sl, status: cl.status, accountsPrepared: cl.accountsPrepared, accountsWorked: cl.accountsWorked };
+          }
+          return sl;
+        });
+        saveLoops(date, reconciled);
+        return { source: 'server', loops: reconciled, reason: 'Server metadata (reconciled with client completed state)' };
+      }
+    }
     return { source: 'server', loops: serverLoopMetadata as ExecutionLoop[], reason: 'Server-generated loop metadata' };
   }
 
