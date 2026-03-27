@@ -12,6 +12,8 @@ import { createIntelligenceTools } from './tools/intelligence';
 import { createProspectingTools } from './tools/prospecting';
 import { createSynthesisTools } from './tools/synthesis';
 import { createIntegrationTools } from './tools/integrations';
+import { updateVoiceContext } from '@/lib/voiceContext';
+import { getConfirmationPolicy } from '@/lib/voiceConfirmation';
 
 async function getUserId(): Promise<string | null> {
   const { data: { user } } = await supabase.auth.getUser();
