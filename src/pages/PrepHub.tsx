@@ -91,6 +91,9 @@ export default function PrepHub() {
             </TabsTrigger>
           </TabsList>
 
+          {/* GOVERNANCE PANEL — collapsible, feature-flagged */}
+          <GovernancePanel />
+
           {/* EXECUTION WORKBENCH — above all tabs, feature-flagged */}
           <ExecutionWorkbench />
 
