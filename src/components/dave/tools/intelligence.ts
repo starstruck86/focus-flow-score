@@ -54,9 +54,25 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
       return buildDaveConfirmationPrompt({ ...config, defaultScenarioType: scenario, defaultPersona: persona, defaultIndustry: industry });
     },
     complete_daily_roleplay: async (params: { durationUsed?: number }) => {
-      const { getRoleplayBlockConfig, recordRoleplayBlockEvent } = await import('@/lib/dailyRoleplayBlock');
+      const { getRoleplayBlockConfig, recordRoleplayBlockEvent, classifyCompletionTiming } = await import('@/lib/dailyRoleplayBlock');
       const { todayInAppTz } = await import('@/lib/timeFormat');
       const config = getRoleplayBlockConfig();
+      const completedAt = new Date().toISOString();
+
+      // Determine timing relative to first action block from today's plan
+      let completionTiming: import('@/lib/dailyRoleplayBlock').RoleplayCompletionTiming = 'completed_before_first_action';
+      try {
+        const { supabase } = await import('@/integrations/supabase/client');
+        const { data: plan } = await supabase
+          .from('daily_time_blocks')
+          .select('blocks')
+          .eq('plan_date', todayInAppTz())
+          .maybeSingle();
+        if (plan?.blocks && Array.isArray(plan.blocks)) {
+          completionTiming = classifyCompletionTiming(completedAt, plan.blocks as any[]);
+        }
+      } catch {}
+
       recordRoleplayBlockEvent({
         date: todayInAppTz(),
         status: 'completed',
@@ -64,9 +80,10 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
         persona: config.defaultPersona,
         industry: config.defaultIndustry,
         durationUsed: params.durationUsed,
-        completedAt: new Date().toISOString(),
+        completedAt,
+        completionTiming,
       });
-      return 'Daily roleplay completed. Nice work — that\'s one more rep in the bank.';
+      return `Daily roleplay completed (${completionTiming.replace(/_/g, ' ')}). Nice work — that's one more rep in the bank.`;
     },
   };
 }
