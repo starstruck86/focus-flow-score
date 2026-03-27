@@ -1,45 +1,18 @@
 /**
  * System Telemetry Panel — replaces/augments Trends page
  * Feature-flagged behind ENABLE_SYSTEM_OS
+ * REACTIVE: polls live state every 5 s
  */
 
-import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
-  Activity, Shield, AlertTriangle, TrendingUp, 
-  Gauge, Brain, Zap, CheckCircle, BarChart3
+  Activity, Shield, AlertTriangle, 
+  Gauge, Brain, Zap, BarChart3
 } from 'lucide-react';
 import { isSystemOSEnabled } from '@/lib/featureFlags';
-import {
-  loadHealthHistory,
-  loadAlerts,
-  loadCorrectionLog,
-  loadSystemMode,
-  computeSystemConfidence,
-  type HealthSnapshot,
-  type SystemAlert,
-  type SystemModeState,
-  type SystemConfidence,
-  type AutoCorrectionAction,
-  type HealthInputs,
-} from '@/lib/systemIntelligence';
-import { getSystemSummary } from '@/lib/systemGovernance';
 import { cn } from '@/lib/utils';
-
-// Default inputs for display when no real data
-const DEFAULT_INPUTS: HealthInputs = {
-  enrichmentSuccessRate: 85,
-  enrichmentFailureRate: 15,
-  playbookRegenerationCount: 2,
-  trustDegradationCount: 1,
-  outcomeScoreTrend: 5,
-  explorationWinRate: 30,
-  exploitationWinRate: 40,
-  daveFailureRate: 5,
-  daveRetryRate: 3,
-  singlePlaybookConcentration: 25,
-};
+import { useLiveTelemetry } from '@/hooks/useSystemState';
 
 function modeColor(mode: string) {
   switch (mode) {
@@ -63,12 +36,7 @@ function confidenceColor(label: string) {
 }
 
 export function SystemTelemetryPanel() {
-  const summary = useMemo(() => getSystemSummary(), []);
-  const modeState = useMemo(() => loadSystemMode(), []);
-  const confidence = useMemo(() => computeSystemConfidence(DEFAULT_INPUTS, 0), []);
-  const alerts = useMemo(() => loadAlerts().filter(a => a.state === 'active' || a.state === 'escalated').slice(0, 10), []);
-  const corrections = useMemo(() => loadCorrectionLog().slice(-5), []);
-  const healthHistory = useMemo(() => loadHealthHistory().slice(-10), []);
+  const { summary, modeState, confidence, alerts, corrections, healthHistory } = useLiveTelemetry();
 
   if (!isSystemOSEnabled()) return null;
 

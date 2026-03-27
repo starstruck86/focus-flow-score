@@ -1,15 +1,15 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
   Zap, Target, BookOpen, AlertTriangle, 
-  Play, FileText, CheckCircle, Shield,
-  TrendingUp, Clock
+  Play, FileText, CheckCircle,
+  TrendingUp
 } from 'lucide-react';
 import { isSystemOSEnabled } from '@/lib/featureFlags';
-import { getExecutionContext, type ExecutionContext, type ExecutionDeal, type RiskSignal } from '@/lib/workflowOrchestrator';
-import { getSystemSummary, type SystemSummary } from '@/lib/systemGovernance';
+import { getExecutionContext, type ExecutionDeal, type RiskSignal } from '@/lib/workflowOrchestrator';
+import { useLiveSystemSummary } from '@/hooks/useSystemState';
 import { useCopilot } from '@/contexts/CopilotContext';
 
 interface ExecutionWorkbenchProps {
@@ -20,17 +20,16 @@ interface ExecutionWorkbenchProps {
 
 export function ExecutionWorkbench({ deals = [], playbooks = [], riskSignals = [] }: ExecutionWorkbenchProps) {
   const { ask: askCopilot } = useCopilot();
-
   const context = useMemo(() => getExecutionContext(deals, playbooks, riskSignals), [deals, playbooks, riskSignals]);
-  const systemSummary = useMemo(() => getSystemSummary(), []);
+  const systemSummary = useLiveSystemSummary();
 
   if (!isSystemOSEnabled()) return null;
 
   const healthDotColor = systemSummary.health === 'healthy' 
-    ? 'bg-green-500' 
+    ? 'bg-primary' 
     : systemSummary.health === 'degraded' 
-    ? 'bg-yellow-500' 
-    : 'bg-red-500';
+    ? 'bg-amber-500' 
+    : 'bg-destructive';
 
   return (
     <div data-testid="execution-workbench" className="space-y-3">
@@ -151,7 +150,7 @@ export function ExecutionWorkbench({ deals = [], playbooks = [], riskSignals = [
             {context.riskSignals.map((signal, i) => (
               <div key={i} className="flex items-center gap-2 text-[11px]">
                 <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${
-                  signal.severity === 'high' ? 'bg-destructive' : signal.severity === 'medium' ? 'bg-yellow-500' : 'bg-muted-foreground'
+                  signal.severity === 'high' ? 'bg-destructive' : signal.severity === 'medium' ? 'bg-amber-500' : 'bg-muted-foreground'
                 }`} />
                 <span className="text-muted-foreground">{signal.message}</span>
               </div>

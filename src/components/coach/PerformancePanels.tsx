@@ -1,26 +1,25 @@
 /**
  * Coach Performance Panels — 4 new modes for Coach page
  * Feature-flagged behind ENABLE_SYSTEM_OS
+ * REACTIVE: uses polling hooks for live data
  */
 
-import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
   TrendingUp, Target, BookOpen, AlertTriangle, Play,
-  CheckCircle, BarChart3, Lightbulb, ArrowRight, Shield
+  CheckCircle, BarChart3, Lightbulb, Shield
 } from 'lucide-react';
 import { isSystemOSEnabled } from '@/lib/featureFlags';
-import { computePersonalProfile, computeAggregateRegret, type PersonalProfile } from '@/lib/systemIntelligence';
-import { computeRecommendationAudit, type RecommendationAudit } from '@/lib/systemGovernance';
+import { useLivePersonalProfile, useLiveRecommendationAudit } from '@/hooks/useSystemState';
 import { useCopilot } from '@/contexts/CopilotContext';
 
 // ── Weekly Review Panel ────────────────────────────────────
 
 export function WeeklyReviewPanel() {
   const { ask: askCopilot } = useCopilot();
-  const profile = useMemo(() => computePersonalProfile(), []);
+  const { profile } = useLivePersonalProfile();
 
   if (!isSystemOSEnabled()) return null;
 
@@ -29,7 +28,6 @@ export function WeeklyReviewPanel() {
 
   return (
     <div data-testid="weekly-review-panel" className="space-y-3">
-      {/* Wins */}
       {strongSignals.length > 0 && (
         <Card className="border-primary/20 bg-primary/5">
           <CardHeader className="pb-2 pt-3 px-3">
@@ -49,7 +47,6 @@ export function WeeklyReviewPanel() {
         </Card>
       )}
 
-      {/* Misses */}
       {weakSignals.length > 0 && (
         <Card>
           <CardHeader className="pb-2 pt-3 px-3">
@@ -69,7 +66,6 @@ export function WeeklyReviewPanel() {
         </Card>
       )}
 
-      {/* Recommended Focus */}
       {profile.topPlaybooks.length > 0 && (
         <Card>
           <CardHeader className="pb-2 pt-3 px-3">
@@ -110,7 +106,7 @@ export function WeeklyReviewPanel() {
 
 export function SkillLabPanel() {
   const { ask: askCopilot } = useCopilot();
-  const profile = useMemo(() => computePersonalProfile(), []);
+  const { profile } = useLivePersonalProfile();
 
   if (!isSystemOSEnabled()) return null;
 
@@ -167,15 +163,13 @@ export function SkillLabPanel() {
 // ── Pattern Diagnostics Panel ──────────────────────────────
 
 export function PatternDiagnosticsPanel() {
-  const profile = useMemo(() => computePersonalProfile(), []);
-  const regret = useMemo(() => computeAggregateRegret(), []);
+  const { profile, regret } = useLivePersonalProfile();
   const { ask: askCopilot } = useCopilot();
 
   if (!isSystemOSEnabled()) return null;
 
   return (
     <div data-testid="pattern-diagnostics-panel" className="space-y-3">
-      {/* Recurring Patterns */}
       <Card>
         <CardHeader className="pb-2 pt-3 px-3">
           <CardTitle className="text-sm flex items-center gap-1.5">
@@ -205,7 +199,6 @@ export function PatternDiagnosticsPanel() {
         </CardContent>
       </Card>
 
-      {/* High Regret Playbooks */}
       {regret.highRegretPlaybooks.length > 0 && (
         <Card className="border-destructive/20">
           <CardHeader className="pb-2 pt-3 px-3">
@@ -238,7 +231,7 @@ export function PatternDiagnosticsPanel() {
 // ── Recommendation Audit Panel ─────────────────────────────
 
 export function RecommendationAuditPanel() {
-  const audit = useMemo(() => computeRecommendationAudit(), []);
+  const audit = useLiveRecommendationAudit();
 
   if (!isSystemOSEnabled()) return null;
 
