@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Zap, RefreshCw, AlertTriangle, Info } from 'lucide-react';
+import { Zap, RefreshCw, AlertTriangle, Info, FileAudio } from 'lucide-react';
 import { BulkIngestionPanel } from './BulkIngestionPanel';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEnrichmentJobStore } from '@/store/useEnrichmentJobStore';
@@ -25,6 +25,14 @@ import {
   getEnrichabilityLabel,
   getEnrichabilityColor,
 } from '@/lib/salesBrain/resourceSubtype';
+import {
+  isAudioResource,
+  detectAudioSubtype,
+  getAudioStrategy,
+  getAudioJobForResource,
+  getAudioStageLabel,
+  getAudioFailureDescription,
+} from '@/lib/salesBrain/audioPipeline';
 import { createLogger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
 import type { Resource } from '@/hooks/useResources';
@@ -85,6 +93,24 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
   const blockedCount = useMemo(() => {
     return scopedResources.length - eligibleCount;
   }, [scopedResources.length, eligibleCount]);
+
+  // Audio-specific breakdown
+  const audioBreakdown = useMemo(() => {
+    const audioResources = scopedResources.filter(r => isAudioResource(r.file_url, r.resource_type));
+    const items = audioResources.map(r => {
+      const sub = detectAudioSubtype(r.file_url, r.resource_type);
+      const strategy = getAudioStrategy(sub);
+      const job = getAudioJobForResource(r.id);
+      return { resource: r, subtype: sub, strategy, job };
+    });
+    return {
+      total: audioResources.length,
+      items,
+      failed: items.filter(i => i.job?.stage === 'failed').length,
+      needsManual: items.filter(i => i.job?.stage === 'needs_manual_assist' || i.strategy.manualAssistRequired).length,
+      retryable: items.filter(i => i.job?.stage === 'failed' && i.job?.retryable).length,
+    };
+  }, [scopedResources]);
 
   const handleStart = useCallback(
     (
@@ -199,8 +225,50 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
             )}
 
             {showReasons && (
-              <ScrollArea className="max-h-[180px] border border-border rounded-md p-2">
+              <ScrollArea className="max-h-[240px] border border-border rounded-md p-2">
                 <div className="space-y-1.5">
+                  {/* Audio failures section */}
+                  {audioBreakdown.total > 0 && (
+                    <div className="mb-2">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <FileAudio className="h-3 w-3 text-primary" />
+                        <span className="text-[10px] font-medium text-foreground">Audio Resources ({audioBreakdown.total})</span>
+                        {audioBreakdown.failed > 0 && (
+                          <Badge variant="destructive" className="text-[8px]">{audioBreakdown.failed} failed</Badge>
+                        )}
+                        {audioBreakdown.needsManual > 0 && (
+                          <Badge className="text-[8px] bg-primary/20 text-primary">{audioBreakdown.needsManual} need assist</Badge>
+                        )}
+                      </div>
+                      {audioBreakdown.items.slice(0, 8).map((item, i) => {
+                        const failDesc = item.job?.failureCode ? getAudioFailureDescription(item.job.failureCode) : null;
+                        return (
+                          <div key={i} className="pl-3 mb-0.5">
+                            <p className="text-[10px] text-muted-foreground truncate">
+                              {item.resource.title}
+                            </p>
+                            <p className="text-[9px] text-muted-foreground/70 pl-2">
+                              {item.job ? (
+                                <>
+                                  {getAudioStageLabel(item.job.stage)}
+                                  {item.job.failureCode && ` · ${item.job.failureCode}`}
+                                  {failDesc && ` → ${failDesc.nextAction}`}
+                                  {item.job.attemptsCount > 0 && ` · ${item.job.attemptsCount} attempts`}
+                                </>
+                              ) : (
+                                <>{item.strategy.operatorFailureReason}</>
+                              )}
+                            </p>
+                          </div>
+                        );
+                      })}
+                      {audioBreakdown.items.length > 8 && (
+                        <p className="text-[10px] text-muted-foreground pl-3">+{audioBreakdown.items.length - 8} more</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* General enrichability breakdown */}
                   {Object.entries(enrichabilityBreakdown).map(([state, data]) => (
                     <div key={state}>
                       <div className="flex items-center gap-1.5 mb-0.5">
