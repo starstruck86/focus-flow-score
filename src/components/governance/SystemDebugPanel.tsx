@@ -19,6 +19,7 @@ import {
   isSessionAutopilotEnabled,
   isExecutionMomentumEnabled,
 } from '@/lib/featureFlags';
+import { getDoctrineGovernanceStats } from '@/lib/salesBrain';
 import { loadMeasurementEvents } from '@/lib/accountPostAction';
 import {
   useExecutionSession,
