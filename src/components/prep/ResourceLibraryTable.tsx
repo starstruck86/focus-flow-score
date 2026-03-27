@@ -18,7 +18,7 @@ import {
   Search, ArrowUpDown, ArrowUp, ArrowDown,
   MoreHorizontal, Zap, RefreshCw, RotateCcw, Trash2,
   Eye, AlertTriangle, CheckCircle2, XCircle, FileText,
-  Filter, X,
+  Filter, X, FileAudio, HelpCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -33,6 +33,9 @@ import {
   detectResourceSubtype, getSubtypeLabel, classifyEnrichability,
   getEnrichabilityLabel, getEnrichabilityColor,
 } from '@/lib/salesBrain/resourceSubtype';
+import {
+  isAudioResource, getAudioJobForResource, getAudioStageLabel,
+} from '@/lib/salesBrain/audioPipeline';
 import type { Resource } from '@/hooks/useResources';
 
 // ── Types ──────────────────────────────────────────────────
