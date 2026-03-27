@@ -56,7 +56,7 @@ export function deriveProcessingState(
   if (audioJob) {
     const stage = audioJob.stage;
 
-    if (stage === 'completed' || stage === 'quality_checked') {
+    if (stage === 'completed' || stage === 'quality_checked' || stage === 'metadata_only_complete') {
       if (audioJob.transcript_mode === 'metadata_only' || stage === 'metadata_only_complete') {
         return {
           state: 'METADATA_ONLY',
