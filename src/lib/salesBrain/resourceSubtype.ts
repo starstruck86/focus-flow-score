@@ -154,6 +154,24 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
         canFetchMetadata: true,
       };
 
+    case 'google_drive_file':
+      return {
+        ...base,
+        enrichability: 'needs_auth',
+        reason: 'Google Drive file — may require auth or direct download link',
+        canFetchMetadata: true,
+        requiresAuth: true,
+      };
+
+    case 'auth_gated_community_page':
+      return {
+        ...base,
+        enrichability: 'manual_input_needed',
+        reason: 'Auth-gated community page — requires login, paste content manually',
+        requiresAuth: true,
+        canFetchMetadata: false,
+      };
+
     case 'zoom_recording':
       return {
         ...base,
