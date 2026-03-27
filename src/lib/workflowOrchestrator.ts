@@ -1,7 +1,7 @@
 /**
  * Workflow Orchestrator
  *
- * Unifies Prep Hub, Coach, and Dave by providing a single API to get
+ * Unifies Sales Brain OS, Coach, and Dave by providing a single API to get
  * execution context, coaching nudges, and post-action prompts.
  *
  * Enforces single-recommendation-per-moment rule.

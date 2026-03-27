@@ -350,7 +350,7 @@ export function ResourceLibraryTable({
         <div
           ref={scrollBodyRef}
           className="flex-1 min-h-0 overflow-y-auto overflow-x-auto"
-          style={{ paddingBottom: hasSelection ? '56px' : '0' }}
+          style={{ paddingBottom: hasSelection ? '64px' : '8px' }}
         >
           <table className="w-full caption-bottom text-sm">
             {/* Sticky header */}

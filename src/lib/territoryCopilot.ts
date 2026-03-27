@@ -155,7 +155,7 @@ export const PAGE_PLACEHOLDERS: Record<string, string> = {
   renewals: "Which renewals need attention?",
   quota: "Am I on pace to hit quota?",
   tasks: "What should I prioritize?",
-  'prep-hub': "What should I prep for?",
+  'prep-hub': "What should I work on?",
   trends: "What trends matter most?",
   'account-detail': "Ask about this account...",
   'opportunity-detail': "Ask about this deal...",

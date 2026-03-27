@@ -242,7 +242,7 @@ export const SURFACE_RESPONSIBILITY = {
     shows: ['any field on demand', 'outcome logging', 'post-action recommendation'],
     suppresses: ['nothing — Dave has full access'],
   },
-  prepHub: {
+  salesBrainOS: {
     primary: 'Prep depth + capability relevance for the account',
     shows: ['prep status', 'account context', 'recommended playbook'],
     suppresses: ['action outcomes', 'loop position'],
