@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { useActionMemory } from '@/hooks/useActionMemory';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
-import { AppLayout } from '@/components/layout/AppLayout';
+import { Layout } from '@/components/Layout';
 
 // ── Section Components ─────────────────────────────────────
 
