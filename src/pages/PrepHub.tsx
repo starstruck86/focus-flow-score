@@ -136,6 +136,11 @@ export default function PrepHub() {
             <IncomingQueue />
           </TabsContent>
 
+          {/* DOCTRINE / SALES BRAIN TAB */}
+          <TabsContent value="doctrine" className="mt-3">
+            <SalesBrainDashboard />
+          </TabsContent>
+
           {/* AI PREP TAB */}
           <TabsContent value="prep" className="space-y-3 mt-3">
             <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1 w-fit">
