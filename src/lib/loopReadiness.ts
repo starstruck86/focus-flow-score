@@ -25,6 +25,8 @@ export interface PrepActionSignal {
   preparedAccountsWaiting: number;
   blockedReason: string | null;
   carryForwardCount: number;
+  currentLoopStatus?: string | null;
+  nextLoopStatus?: string | null;
 }
 
 // ── Heuristic: count "prepared" accounts ─────────────────────
