@@ -90,6 +90,9 @@ export default function PrepHub() {
             </TabsTrigger>
           </TabsList>
 
+          {/* EXECUTION WORKBENCH — above all tabs, feature-flagged */}
+          <ExecutionWorkbench />
+
           {/* CONTENT BUILDER TAB */}
           <TabsContent value="content-builder" className="mt-3">
             <ContentBuilder />
