@@ -1056,6 +1056,96 @@ export function ResourceManager() {
       {/* Floating enrichment job indicator */}
       <EnrichmentJobIndicator onOpenModal={() => setShowDeepEnrich(true)} />
 
+      {/* Audio Inspector Panel */}
+      {inspectingAudioResource && (
+        <div className="fixed bottom-4 right-4 z-50 w-[380px] max-h-[500px] shadow-xl">
+          <ResourceAudioInspector
+            resource={inspectingAudioResource}
+            audioJob={audioJobsMap?.get(inspectingAudioResource.id) || null}
+            onClose={() => setInspectingAudioResource(null)}
+            onRetryResolve={async () => {
+              const job = audioJobsMap?.get(inspectingAudioResource.id);
+              if (job) {
+                toast.info('Retrying resolution...');
+                await retryPlatformResolution(job.id);
+                queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+              }
+            }}
+            onRetryTranscription={async () => {
+              const job = audioJobsMap?.get(inspectingAudioResource.id);
+              if (job) {
+                toast.info('Retrying transcription...');
+                await retryAudioJob(job.id);
+                queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+              }
+            }}
+            onOpenManualAssist={() => {
+              setManualAssistResource(inspectingAudioResource);
+            }}
+          />
+        </div>
+      )}
+
+      {/* Manual Transcript Assist */}
+      <ManualTranscriptAssist
+        open={!!manualAssistResource}
+        onOpenChange={(open) => { if (!open) setManualAssistResource(null); }}
+        resourceId={manualAssistResource?.id || ''}
+        resourceTitle={manualAssistResource?.title || ''}
+        resourceUrl={manualAssistResource?.file_url || null}
+        onSubmit={async (data) => {
+          if (data.mode === 'paste_transcript' || data.mode === 'paste_notes') {
+            // Save content to resource
+            if (manualAssistResource) {
+              await supabase.from('resources').update({
+                content: data.content,
+                enrichment_status: 'not_enriched',
+              }).eq('id', manualAssistResource.id);
+              // Update audio job
+              const job = audioJobsMap?.get(manualAssistResource.id);
+              if (job) {
+                await supabase.from('audio_jobs').update({
+                  stage: 'completed',
+                  transcript_text: data.content,
+                  transcript_word_count: data.content.split(/\s+/).filter(Boolean).length,
+                  has_transcript: true,
+                  transcript_mode: data.mode === 'paste_transcript' ? 'direct_transcription' : 'manual_assist',
+                  final_resolution_status: 'completed',
+                  failure_code: null,
+                  failure_reason: null,
+                }).eq('id', job.id);
+              }
+              queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+              queryClient.invalidateQueries({ queryKey: ['resources'] });
+              toast.success('Content saved — ready for enrichment');
+            }
+          } else if (data.mode === 'provide_alt_url' || data.mode === 'provide_audio_url') {
+            if (manualAssistResource && data.content) {
+              toast.info('Processing provided URL...');
+              const result = await processAudioResource(manualAssistResource.id, data.content);
+              queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+              if ('success' in result && result.success) {
+                toast.success('Audio processed successfully');
+              } else {
+                toast.info('Resolution complete — check audio inspector for details');
+              }
+            }
+          } else if (data.mode === 'metadata_only') {
+            const job = audioJobsMap?.get(manualAssistResource?.id || '');
+            if (job) {
+              await supabase.from('audio_jobs').update({
+                stage: 'metadata_only_complete',
+                transcript_mode: 'metadata_only',
+                final_resolution_status: 'metadata_only',
+              }).eq('id', job.id);
+              queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+              toast.success('Marked as metadata-only');
+            }
+          }
+          setManualAssistResource(null);
+        }}
+      />
+
       {/* Bulk selection bar moved into ResourceLibraryTable */}
     </div>
   );
