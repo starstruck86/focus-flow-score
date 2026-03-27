@@ -265,6 +265,7 @@ export function getSubtypeLabel(subtype: ResourceSubtype): string {
     youtube_video: 'YouTube Video',
     google_doc: 'Google Doc',
     google_sheet: 'Google Sheet',
+    google_drive_file: 'Google Drive File',
     zoom_recording: 'Zoom Recording',
     spotify_episode: 'Spotify Episode',
     podcast_episode: 'Podcast Episode',
@@ -273,6 +274,7 @@ export function getSubtypeLabel(subtype: ResourceSubtype): string {
     pdf: 'PDF',
     manual_note: 'Manual Note',
     competitor_page: 'Competitor Page',
+    auth_gated_community_page: 'Auth-Gated Page',
     unknown_url: 'Unknown URL',
     no_url: 'No URL',
   };
