@@ -101,21 +101,6 @@ const SAVED_VIEWS: SavedView[] = [
     id: 'audio', label: 'Audio', icon: <FileAudio className="h-3 w-3" />,
     filter: (r) => isAudioResource(r.file_url, r.resource_type),
   },
-  {
-    id: 'audio_failed', label: 'Audio Failed', icon: <AlertTriangle className="h-3 w-3" />,
-    filter: (r) => {
-      if (!isAudioResource(r.file_url, r.resource_type)) return false;
-      const job = getAudioJobForResource(r.id);
-      return job?.stage === 'failed' || job?.stage === 'needs_manual_assist' || false;
-    },
-  },
-  {
-    id: 'manual_assist', label: 'Needs Assist', icon: <HelpCircle className="h-3 w-3" />,
-    filter: (r) => {
-      const job = getAudioJobForResource(r.id);
-      return job?.stage === 'needs_manual_assist' || false;
-    },
-  },
 ];
 
 // ── Recommended action helpers ─────────────────────────────
