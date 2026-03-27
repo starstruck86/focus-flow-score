@@ -13,12 +13,13 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 // ScrollArea removed — using native scroll for proper table behavior
 import {
   Search, ArrowUpDown, ArrowUp, ArrowDown,
   MoreHorizontal, Zap, RefreshCw, RotateCcw, Trash2,
   Eye, AlertTriangle, CheckCircle2, XCircle, FileText,
-  Filter, X, FileAudio, HelpCircle,
+  Filter, X, FileAudio, HelpCircle, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -34,8 +35,11 @@ import {
   getEnrichabilityLabel, getEnrichabilityColor,
 } from '@/lib/salesBrain/resourceSubtype';
 import {
-  isAudioResource, getAudioJobForResource, getAudioStageLabel,
+  isAudioResource, detectAudioSubtype, getAudioStageLabel,
+  getAudioFailureDescription,
 } from '@/lib/salesBrain/audioPipeline';
+import type { AudioFailureCode, AudioPipelineStage } from '@/lib/salesBrain/audioPipeline';
+import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import type { Resource } from '@/hooks/useResources';
 
 // ── Types ──────────────────────────────────────────────────
