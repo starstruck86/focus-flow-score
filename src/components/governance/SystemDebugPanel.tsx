@@ -19,7 +19,8 @@ import {
   isSessionAutopilotEnabled,
   isExecutionMomentumEnabled,
 } from '@/lib/featureFlags';
-import { getDoctrineGovernanceStats } from '@/lib/salesBrain';
+import { getDoctrineGovernanceStats, getLegacyHydratedCount } from '@/lib/salesBrain';
+import { getActualUsageCounts } from '@/lib/salesBrain/doctrineUsage';
 import { loadMeasurementEvents } from '@/lib/accountPostAction';
 import {
   useExecutionSession,
@@ -72,6 +73,8 @@ export function SystemDebugPanel() {
   const momentumEnabled = isExecutionMomentumEnabled();
   const measurementCount = loadMeasurementEvents().length;
   const brainStats = getDoctrineGovernanceStats();
+  const legacyCount = getLegacyHydratedCount();
+  const actualUsage = getActualUsageCounts();
   const { activeSession, mode, disciplineMode, scorecard, momentum, autopilotLog, overrides } = useExecutionSession();
   const nextCandidates = sessionEnabled ? getNextBestAccounts() : [];
   const enforcement = sessionEnabled ? evaluatePrepActionEnforcement() : null;
@@ -198,15 +201,20 @@ export function SystemDebugPanel() {
           <Row label="Total doctrine" value={String(brainStats.total)} />
           <Row label="Approved" value={String(brainStats.approved)} />
           <Row label="Review needed" value={String(brainStats.reviewNeeded)} />
+          <Row label="Legacy hydrated" value={String(legacyCount)} />
           <Row label="Rejected" value={String(brainStats.rejected)} />
           <Row label="Stale" value={String(brainStats.stale)} />
           <Row label="Duplicates" value={String(brainStats.duplicateCandidates)} />
           <Row label="Conflicts" value={String(brainStats.conflictCandidates)} />
           <Row label="Propagating" value={String(brainStats.propagationEnabled)} />
-          <Row label="→ Dave" value={String(brainStats.usedByDave)} />
-          <Row label="→ Roleplay" value={String(brainStats.usedByRoleplay)} />
-          <Row label="→ Prep" value={String(brainStats.usedByPrep)} />
-          <Row label="→ Playbooks" value={String(brainStats.usedByPlaybooks)} />
+          <Row label="→ Dave (eligible)" value={String(brainStats.usedByDave)} />
+          <Row label="→ Roleplay (eligible)" value={String(brainStats.usedByRoleplay)} />
+          <Row label="→ Prep (eligible)" value={String(brainStats.usedByPrep)} />
+          <Row label="→ Playbooks (eligible)" value={String(brainStats.usedByPlaybooks)} />
+          <Row label="→ Dave (actual)" value={String(actualUsage.dave)} />
+          <Row label="→ Roleplay (actual)" value={String(actualUsage.roleplay)} />
+          <Row label="→ Prep (actual)" value={String(actualUsage.prep)} />
+          <Row label="→ Playbooks (actual)" value={String(actualUsage.playbooks)} />
 
           {/* Fallback matrix */}
           <div className="border-t border-border/20 pt-1 mt-1" />

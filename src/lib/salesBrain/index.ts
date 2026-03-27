@@ -40,6 +40,7 @@ export {
   rejectDoctrine,
   archiveDoctrine,
   mergeDoctrine,
+  supersedeDoctrine,
   adjustDoctrineConfidence,
   togglePropagation,
   togglePropagationTarget,
@@ -50,6 +51,10 @@ export {
   recomputeAllFreshness,
   disableStalePropagation,
   reEnableApprovedPropagation,
+  // Legacy
+  queueLegacyDoctrineForReview,
+  getLegacyHydratedCount,
+  getPropagationBlockReason,
   // Review queue
   getDoctrineReviewQueue,
   getDoctrineGovernanceStats,
@@ -95,6 +100,31 @@ export {
   type PrepRecommendation,
   type DoctrineUsageMap,
 } from './propagation';
+
+// Doctrine usage logging
+export {
+  logDoctrineUsage,
+  logDoctrineUsageBatch,
+  loadDoctrineUsage,
+  getDoctrineUsageForId,
+  getDoctrineUsageSummary,
+  getRecentDoctrineUsage,
+  getActualUsageCounts,
+  type DoctrineUsageTarget,
+  type DoctrineUsageEvent,
+  type DoctrineUsageSummary,
+} from './doctrineUsage';
+
+// Traceability
+export {
+  getDoctrineTrace,
+  getResourceTrace,
+  getInsightTrace,
+  getDoctrineCountForResource,
+  type DoctrineTrace,
+  type ResourceTrace,
+  type InsightTrace,
+} from './traceability';
 
 // Ingestion (existing)
 export {

@@ -3,6 +3,7 @@
  *
  * Pushes doctrine updates into downstream systems.
  * GOVERNED: Only approved, propagation-eligible doctrine propagates.
+ * LOGGED: Every actual use is recorded via doctrineUsage.
  *
  * Targets: Dave, Roleplay, Playbooks, Prep
  */
@@ -18,6 +19,7 @@ import {
   loadDoctrine,
   isDoctrineEligibleForPropagation,
 } from './doctrine';
+import { logDoctrineUsageBatch } from './doctrineUsage';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('SalesBrainPropagation');
@@ -42,6 +44,15 @@ export function getDaveDoctrineContext(
 
   if (doctrine.length === 0) return '';
 
+  // Log actual usage
+  logDoctrineUsageBatch(
+    doctrine.map(d => d.id),
+    'dave',
+    'dave_context',
+    null,
+    'Injected into Dave system prompt',
+  );
+
   const lines = doctrine.map(d =>
     `• [${d.chapter}] ${d.statement} (confidence: ${(d.confidence * 100).toFixed(0)}%)`
   );
@@ -64,6 +75,17 @@ export function getRoleplayGrounding(chapter?: DoctrineChapter): RoleplayDoctrin
     : ['cold_calling', 'discovery', 'objection_handling', 'negotiation'];
 
   const doctrine = getPropagationEligibleDoctrine('roleplay', chapters);
+
+  // Log actual usage
+  if (doctrine.length > 0) {
+    logDoctrineUsageBatch(
+      doctrine.map(d => d.id),
+      'roleplay',
+      'roleplay_grounding',
+      null,
+      'Used for roleplay scenario grounding',
+    );
+  }
 
   return {
     objectionThemes: doctrine
@@ -109,7 +131,15 @@ export function getPlaybookSuggestions(): PlaybookSuggestion[] {
     }
   }
 
-  return suggestions.slice(0, 5);
+  const result = suggestions.slice(0, 5);
+
+  // Log actual usage
+  const ids = result.flatMap(s => s.sourceDoctrineIds);
+  if (ids.length > 0) {
+    logDoctrineUsageBatch(ids, 'playbooks', 'playbook_suggestion', null, 'Generated playbook suggestion');
+  }
+
+  return result;
 }
 
 // ── Prep recommendations ──────────────────────────────────
@@ -141,12 +171,20 @@ export function getPrepRecommendations(
   }
 
   const doctrine = getPropagationEligibleDoctrine('prep', chapters);
-  return doctrine.slice(0, 5).map(d => ({
+  const result = doctrine.slice(0, 5).map(d => ({
     chapter: d.chapter,
     recommendation: d.tacticalImplication || d.statement,
     confidence: d.confidence,
     sourceDoctrineIds: [d.id],
   }));
+
+  // Log actual usage
+  const ids = result.flatMap(r => r.sourceDoctrineIds);
+  if (ids.length > 0) {
+    logDoctrineUsageBatch(ids, 'prep', 'prep_recommendation', null, 'Generated prep recommendation');
+  }
+
+  return result;
 }
 
 // ── Downstream traceability ───────────────────────────────
