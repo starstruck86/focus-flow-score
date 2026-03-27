@@ -181,6 +181,8 @@ export default function Dashboard() {
         return <ProspectingEngine />;
       case 'daily-time-blocks':
         return <DailyTimeBlocks />;
+      case 'account-work-panel':
+        return <AccountWorkPanel />;
       case 'post-meeting':
         return <PostMeetingPrompt />;
       case 'meeting-prep':
