@@ -489,6 +489,16 @@ export interface SystemDebugSnapshot {
   currentLoopStatus: string | null;
   carryForwardCount: number;
 
+  // Account execution state
+  accountTruthEnabled: boolean;
+  accountPreppedCount: number;
+  accountWorkedCount: number;
+  accountUnworkedPreppedCount: number;
+  accountCarryForwardCount: number;
+  accountReadyToCallCount: number;
+  accountSourceOfTruth: 'account_state' | 'heuristic';
+  recentOutcomes: string[];
+
   // Roleplay state
   roleplayStatusToday: RoleplayBlockStatus | null;
   roleplayGroundingSource: 'playbook' | 'default' | null;
@@ -533,11 +543,29 @@ export function captureDebugSnapshot(
 
   const currentLoop = loopResult.loops.find(l => l.status !== 'complete') || null;
 
+  // Account execution truth
+  const acctEnabled = isAccountExecutionModelEnabled();
+  const acctSummary = acctEnabled ? buildExecutionSummary(today) : null;
+  const recentOutcomes: string[] = [];
+  if (acctSummary) {
+    for (const [type, count] of Object.entries(acctSummary.outcomeCounts)) {
+      recentOutcomes.push(`${type}:${count}`);
+    }
+  }
+
   return {
     loopSource: loopResult.source,
     loopCount: loopResult.loops.length,
     currentLoopStatus: currentLoop?.status || null,
     carryForwardCount: carryForward,
+    accountTruthEnabled: acctEnabled,
+    accountPreppedCount: acctSummary?.preppedCount ?? 0,
+    accountWorkedCount: acctSummary?.workedCount ?? 0,
+    accountUnworkedPreppedCount: acctSummary?.unworkedPreppedCount ?? 0,
+    accountCarryForwardCount: acctSummary?.carryForwardCount ?? 0,
+    accountReadyToCallCount: acctSummary?.readyToCallCount ?? 0,
+    accountSourceOfTruth: acctSummary?.sourceOfTruth ?? 'heuristic',
+    recentOutcomes,
     roleplayStatusToday: roleplayResult.status,
     roleplayGroundingSource: provenance?.groundingSource || null,
     selectedScenarioId: provenance?.selectedScenarioId || null,
