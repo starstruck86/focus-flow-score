@@ -13,7 +13,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { 
-  Shield, ChevronDown, ChevronUp
+  ChevronDown, ChevronUp
 } from 'lucide-react';
 import { isSystemOSEnabled } from '@/lib/featureFlags';
 import { toggleKillSwitch, type KillSwitches } from '@/lib/systemGovernance';
@@ -50,12 +50,10 @@ export function GovernancePanel() {
     <Card data-testid="governance-panel" className="border-border/50">
       {/* Compact Header — always visible, this IS the primary governance surface */}
       <div
-        className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/30 transition-colors"
+        className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-muted/30 transition-colors"
         onClick={() => setExpanded(v => !v)}
       >
         <div className={cn('h-2 w-2 rounded-full', healthDot)} />
-        <Shield className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="text-xs font-medium">System</span>
         <Badge variant="outline" className={cn('text-[9px]', healthColor)}>
           {state.systemConfidence}%
         </Badge>

@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
-  TrendingUp, Target, BookOpen, AlertTriangle, Play,
+  Target, AlertTriangle, Play,
   CheckCircle, BarChart3, Lightbulb, Shield
 } from 'lucide-react';
 import { isSystemOSEnabled } from '@/lib/featureFlags';
@@ -93,9 +93,8 @@ export function WeeklyReviewPanel() {
       </Button>
 
       {profile.totalRecords === 0 && (
-        <div className="text-center py-8 text-muted-foreground">
-          <BarChart3 className="h-8 w-8 mx-auto mb-2 opacity-40" />
-          <p className="text-xs">No performance data yet. Complete some deals to see your weekly review.</p>
+        <div className="text-center py-4 text-muted-foreground">
+          <p className="text-xs">No performance data yet.</p>
         </div>
       )}
     </div>

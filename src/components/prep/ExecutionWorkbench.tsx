@@ -33,14 +33,16 @@ export function ExecutionWorkbench({ deals = [], playbooks = [], riskSignals = [
 
   return (
     <div data-testid="execution-workbench" className="space-y-3">
-      {/* System Status Bar */}
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/40 rounded-lg">
-        <div className={`h-2 w-2 rounded-full ${healthDotColor}`} />
-        <span className="text-xs text-muted-foreground">{systemSummary.recommendation}</span>
-        <Badge variant="outline" className="text-[10px] ml-auto">
-          {systemSummary.mode} · {systemSummary.confidence}%
-        </Badge>
-      </div>
+      {/* System Status Bar — only when NOT healthy */}
+      {systemSummary.health !== 'healthy' && (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/40 rounded-lg">
+          <div className={`h-2 w-2 rounded-full ${healthDotColor}`} />
+          <span className="text-xs text-muted-foreground">{systemSummary.recommendation}</span>
+          <Badge variant="outline" className="text-[10px] ml-auto">
+            {systemSummary.mode} · {systemSummary.confidence}%
+          </Badge>
+        </div>
+      )}
 
       {/* Right Now — Top Deals */}
       {context.topDeals.length > 0 && (

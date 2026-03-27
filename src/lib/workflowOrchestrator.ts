@@ -157,14 +157,8 @@ export function getCoachingNudge(): CoachNudge | null {
     }
   }
 
-  if (!nudge && profile.topPlaybooks.length > 0) {
-    nudge = {
-      message: 'Keep leveraging your strongest playbooks — consistency drives results.',
-      skillFocus: 'execution_consistency',
-      practiceCTA: null,
-      source: 'personal_performance',
-    };
-  }
+  // Suppress generic fallback — only nudge when there's a specific weakness
+  // "Keep leveraging your strongest playbooks" was consistently ignored in real usage
 
   if (nudge) {
     recordIntervention('coach_nudge');
