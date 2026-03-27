@@ -120,6 +120,12 @@ export const ManualTranscriptAssist = memo(function ManualTranscriptAssist({
                 <SelectItem value="paste_notes">
                   <span className="flex items-center gap-1"><FileText className="h-3 w-3" /> Paste notes / summary</span>
                 </SelectItem>
+                <SelectItem value="provide_alt_url">
+                  <span className="flex items-center gap-1"><FileText className="h-3 w-3" /> Provide alternate episode URL</span>
+                </SelectItem>
+                <SelectItem value="provide_audio_url">
+                  <span className="flex items-center gap-1"><FileAudio className="h-3 w-3" /> Provide direct audio URL</span>
+                </SelectItem>
                 <SelectItem value="metadata_only">
                   <span className="flex items-center gap-1"><Bookmark className="h-3 w-3" /> Mark metadata-only</span>
                 </SelectItem>
