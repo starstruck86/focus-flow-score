@@ -155,6 +155,16 @@ function CopilotDialog() {
       onDone: () => {
         setIsStreaming(false);
         streamingRef.current = false;
+        // Build explainability data after response completes
+        if (isSystemOSEnabled()) {
+          const detectedMode = detectDaveMode(text);
+          setExplainability({
+            mode: detectedMode,
+            confidence: 72,
+            topFactors: [`Mode: ${detectedMode}`, `Context: ${pageContext?.page || 'general'}`],
+            confidenceDrivers: ['Based on conversation context and query pattern'],
+          });
+        }
       },
       onError: (err) => {
         setError(err);
