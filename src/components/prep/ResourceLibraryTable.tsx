@@ -170,6 +170,13 @@ function formatDate(d: string | null | undefined): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+type Density = 'compact' | 'comfortable' | 'expanded';
+const DENSITY_ROW_CLASS: Record<Density, string> = {
+  compact: '[&>td]:py-1',
+  comfortable: '[&>td]:py-2',
+  expanded: '[&>td]:py-3',
+};
+
 // ── Component ──────────────────────────────────────────────
 export function ResourceLibraryTable({
   resources,
@@ -185,6 +192,11 @@ export function ResourceLibraryTable({
   const [activeView, setActiveView] = useState('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [density, setDensity] = useState<Density>('comfortable');
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  const scrollBodyRef = useRef<HTMLDivElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
 
   const handleSort = useCallback((key: SortKey) => {
     if (sortKey === key) {
