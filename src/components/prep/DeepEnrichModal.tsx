@@ -94,6 +94,24 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
     return scopedResources.length - eligibleCount;
   }, [scopedResources.length, eligibleCount]);
 
+  // Audio-specific breakdown
+  const audioBreakdown = useMemo(() => {
+    const audioResources = scopedResources.filter(r => isAudioResource(r.file_url, r.resource_type));
+    const items = audioResources.map(r => {
+      const sub = detectAudioSubtype(r.file_url, r.resource_type);
+      const strategy = getAudioStrategy(sub);
+      const job = getAudioJobForResource(r.id);
+      return { resource: r, subtype: sub, strategy, job };
+    });
+    return {
+      total: audioResources.length,
+      items,
+      failed: items.filter(i => i.job?.stage === 'failed').length,
+      needsManual: items.filter(i => i.job?.stage === 'needs_manual_assist' || i.strategy.manualAssistRequired).length,
+      retryable: items.filter(i => i.job?.stage === 'failed' && i.job?.retryable).length,
+    };
+  }, [scopedResources]);
+
   const handleStart = useCallback(
     (
       requestedItems: Array<{ resourceId?: string; url: string; title: string; enrichMode?: EnrichMode }>,
