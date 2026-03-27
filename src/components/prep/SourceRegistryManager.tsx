@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSources, useAddSource, useDeleteSource, useToggleSourceStatus, type SourceType } from '@/hooks/useSources';
-import { Plus, Trash2, Radio, RadioOff, Globe, Youtube, Podcast, FileText, Swords, StickyNote } from 'lucide-react';
+import { Plus, Trash2, Radio, CircleOff, Globe, Youtube, Podcast, FileText, Swords, StickyNote } from 'lucide-react';
 
 const SOURCE_TYPES: { value: SourceType; label: string; icon: React.ReactNode }[] = [
   { value: 'youtube_playlist', label: 'YouTube Playlist', icon: <Youtube className="h-3.5 w-3.5" /> },
