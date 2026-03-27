@@ -307,6 +307,12 @@ export function ResourceLibraryTable({
                   <div className="flex items-center gap-1">Type <SortIcon col="resource_type" /></div>
                 </TableHead>
                 <TableHead
+                  className="cursor-pointer select-none hover:bg-muted/50 transition-colors w-[100px]"
+                  onClick={() => handleSort('subtype')}
+                >
+                  <div className="flex items-center gap-1">Subtype <SortIcon col="subtype" /></div>
+                </TableHead>
+                <TableHead
                   className="cursor-pointer select-none hover:bg-muted/50 transition-colors w-[110px]"
                   onClick={() => handleSort('enrichment_status')}
                 >
