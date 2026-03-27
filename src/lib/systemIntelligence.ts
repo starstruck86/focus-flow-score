@@ -871,3 +871,439 @@ export function evaluateFullSystemHealth(inputs: HealthInputs): {
 
   return { snapshot, confidence, mode, corrections, anomalies, escalated };
 }
+
+// ── Section 8: Baseline Drift Detection ────────────────────
+
+export interface BaselineSnapshot {
+  timestamp: string;
+  playbookWeights: Record<string, number>;
+  trustDistribution: Record<string, number>; // e.g. { trusted: 60, limited: 30, experimental: 10 }
+  outcomeRates: Record<string, number>;       // e.g. { winRate: 35, stageProgressionRate: 50 }
+}
+
+export interface DriftResult {
+  field: string;
+  baselineValue: number;
+  currentValue: number;
+  driftPercent: number;
+  severity: 'none' | 'minor' | 'significant' | 'critical';
+}
+
+export interface DriftReport {
+  baselineTimestamp: string;
+  currentTimestamp: string;
+  drifts: DriftResult[];
+  overallDrift: number;
+  alertTriggered: boolean;
+}
+
+const BASELINE_STORAGE_KEY = 'system-baseline-snapshots';
+const MAX_BASELINES = 12; // ~3 months of weekly snapshots
+const DRIFT_THRESHOLD_MINOR = 10;
+const DRIFT_THRESHOLD_SIGNIFICANT = 25;
+const DRIFT_THRESHOLD_CRITICAL = 40;
+
+export function recordBaseline(snapshot: BaselineSnapshot): void {
+  try {
+    const baselines: BaselineSnapshot[] = JSON.parse(localStorage.getItem(BASELINE_STORAGE_KEY) || '[]');
+    baselines.push(snapshot);
+    if (baselines.length > MAX_BASELINES) baselines.splice(0, baselines.length - MAX_BASELINES);
+    localStorage.setItem(BASELINE_STORAGE_KEY, JSON.stringify(baselines));
+  } catch {}
+}
+
+export function loadBaselines(): BaselineSnapshot[] {
+  try {
+    return JSON.parse(localStorage.getItem(BASELINE_STORAGE_KEY) || '[]');
+  } catch { return []; }
+}
+
+function classifyDrift(pct: number): DriftResult['severity'] {
+  if (pct >= DRIFT_THRESHOLD_CRITICAL) return 'critical';
+  if (pct >= DRIFT_THRESHOLD_SIGNIFICANT) return 'significant';
+  if (pct >= DRIFT_THRESHOLD_MINOR) return 'minor';
+  return 'none';
+}
+
+export function computeDrift(baseline: BaselineSnapshot, current: BaselineSnapshot): DriftReport {
+  const drifts: DriftResult[] = [];
+
+  const allKeys = new Set([
+    ...Object.keys(baseline.playbookWeights),
+    ...Object.keys(current.playbookWeights),
+    ...Object.keys(baseline.trustDistribution),
+    ...Object.keys(current.trustDistribution),
+    ...Object.keys(baseline.outcomeRates),
+    ...Object.keys(current.outcomeRates),
+  ]);
+
+  const check = (field: string, bv: number | undefined, cv: number | undefined) => {
+    const b = bv ?? 0;
+    const c = cv ?? 0;
+    const denom = Math.max(Math.abs(b), 1);
+    const driftPct = Math.abs(c - b) / denom * 100;
+    drifts.push({ field, baselineValue: b, currentValue: c, driftPercent: Math.round(driftPct), severity: classifyDrift(driftPct) });
+  };
+
+  for (const k of Object.keys(baseline.playbookWeights)) {
+    check(`weight:${k}`, baseline.playbookWeights[k], current.playbookWeights[k]);
+  }
+  for (const k of Object.keys(baseline.trustDistribution)) {
+    check(`trust:${k}`, baseline.trustDistribution[k], current.trustDistribution[k]);
+  }
+  for (const k of Object.keys(baseline.outcomeRates)) {
+    check(`outcome:${k}`, baseline.outcomeRates[k], current.outcomeRates[k]);
+  }
+
+  const overallDrift = drifts.length > 0
+    ? Math.round(drifts.reduce((s, d) => s + d.driftPercent, 0) / drifts.length)
+    : 0;
+
+  const alertTriggered = drifts.some(d => d.severity === 'significant' || d.severity === 'critical');
+
+  return { baselineTimestamp: baseline.timestamp, currentTimestamp: current.timestamp, drifts, overallDrift, alertTriggered };
+}
+
+export function detectBaselineDrift(current: BaselineSnapshot): DriftReport | null {
+  const baselines = loadBaselines();
+  if (baselines.length === 0) return null;
+  const latest = baselines[baselines.length - 1];
+  const report = computeDrift(latest, current);
+
+  if (report.alertTriggered) {
+    const critDrifts = report.drifts.filter(d => d.severity === 'significant' || d.severity === 'critical');
+    persistAlerts([{
+      id: `drift-${Date.now()}`,
+      severity: critDrifts.some(d => d.severity === 'critical') ? 'critical' : 'warning',
+      category: 'system',
+      message: `Baseline drift detected: ${critDrifts.map(d => d.field).join(', ')}`,
+      metric: 'baseline_drift',
+      currentValue: report.overallDrift,
+      threshold: DRIFT_THRESHOLD_SIGNIFICANT,
+      triggeredAt: new Date().toISOString(),
+      acknowledged: false,
+      state: 'active' as AlertState,
+    }]);
+  }
+
+  return report;
+}
+
+// ── Section 9: Counterfactual Validation ───────────────────
+
+export interface CounterfactualRecord {
+  dealId: string;
+  timestamp: string;
+  chosenPlaybookId: string;
+  alternativePlaybookIds: string[];
+  chosenOutcome: 'positive' | 'negative' | 'neutral' | 'pending';
+  alternativeEstimatedScores: Record<string, number>; // playbookId → estimated score
+}
+
+export interface RegretScore {
+  dealId: string;
+  chosenPlaybookId: string;
+  chosenScore: number;
+  bestAlternativeId: string;
+  bestAlternativeScore: number;
+  regret: number; // bestAlt - chosen (0 = no regret, >0 = missed opportunity)
+}
+
+const COUNTERFACTUAL_STORAGE_KEY = 'system-counterfactuals';
+const MAX_COUNTERFACTUALS = 200;
+
+export function recordCounterfactual(record: CounterfactualRecord): void {
+  try {
+    const records: CounterfactualRecord[] = JSON.parse(localStorage.getItem(COUNTERFACTUAL_STORAGE_KEY) || '[]');
+    records.push(record);
+    if (records.length > MAX_COUNTERFACTUALS) records.splice(0, records.length - MAX_COUNTERFACTUALS);
+    localStorage.setItem(COUNTERFACTUAL_STORAGE_KEY, JSON.stringify(records));
+  } catch {}
+}
+
+export function loadCounterfactuals(): CounterfactualRecord[] {
+  try {
+    return JSON.parse(localStorage.getItem(COUNTERFACTUAL_STORAGE_KEY) || '[]');
+  } catch { return []; }
+}
+
+export function computeRegretScore(record: CounterfactualRecord): RegretScore {
+  const outcomeScore = record.chosenOutcome === 'positive' ? 1 : record.chosenOutcome === 'negative' ? -1 : 0;
+  const altEntries = Object.entries(record.alternativeEstimatedScores);
+  let bestAltId = record.chosenPlaybookId;
+  let bestAltScore = outcomeScore;
+
+  for (const [pbId, score] of altEntries) {
+    if (score > bestAltScore) {
+      bestAltId = pbId;
+      bestAltScore = score;
+    }
+  }
+
+  return {
+    dealId: record.dealId,
+    chosenPlaybookId: record.chosenPlaybookId,
+    chosenScore: outcomeScore,
+    bestAlternativeId: bestAltId,
+    bestAlternativeScore: bestAltScore,
+    regret: Math.max(0, bestAltScore - outcomeScore),
+  };
+}
+
+export function computeAggregateRegret(): { totalRegret: number; avgRegret: number; highRegretPlaybooks: string[]; count: number } {
+  const records = loadCounterfactuals().filter(r => r.chosenOutcome !== 'pending');
+  if (records.length === 0) return { totalRegret: 0, avgRegret: 0, highRegretPlaybooks: [], count: 0 };
+
+  const regrets = records.map(computeRegretScore);
+  const total = regrets.reduce((s, r) => s + r.regret, 0);
+  const avg = total / regrets.length;
+
+  // Find playbooks that frequently cause regret
+  const regretByPlaybook: Record<string, number[]> = {};
+  for (const r of regrets) {
+    if (r.regret > 0) {
+      (regretByPlaybook[r.chosenPlaybookId] ??= []).push(r.regret);
+    }
+  }
+
+  const highRegretPlaybooks = Object.entries(regretByPlaybook)
+    .filter(([, rs]) => rs.length >= 2 && rs.reduce((a, b) => a + b, 0) / rs.length > 0.3)
+    .map(([id]) => id);
+
+  return { totalRegret: total, avgRegret: avg, highRegretPlaybooks, count: records.length };
+}
+
+// ── Section 10: System Authority Guardrails ────────────────
+
+export interface RolloutStage {
+  strategyId: string;
+  stage: 'canary' | 'partial' | 'full';
+  percentage: number; // 10, 50, or 100
+  startedAt: string;
+  promotedAt?: string;
+  metrics: { attempts: number; successes: number; failures: number };
+}
+
+const ROLLOUT_STORAGE_KEY = 'system-rollout-stages';
+const PROTECTED_PLAYBOOK_KEY = 'system-protected-playbooks';
+
+export function startRollout(strategyId: string): RolloutStage {
+  const stage: RolloutStage = {
+    strategyId,
+    stage: 'canary',
+    percentage: 10,
+    startedAt: new Date().toISOString(),
+    metrics: { attempts: 0, successes: 0, failures: 0 },
+  };
+  const rollouts = loadRollouts();
+  rollouts[strategyId] = stage;
+  saveRollouts(rollouts);
+  return stage;
+}
+
+export function promoteRollout(strategyId: string): RolloutStage | null {
+  const rollouts = loadRollouts();
+  const stage = rollouts[strategyId];
+  if (!stage) return null;
+
+  const successRate = stage.metrics.attempts > 0 ? stage.metrics.successes / stage.metrics.attempts : 0;
+  const minAttempts = stage.stage === 'canary' ? 3 : 5;
+
+  if (stage.metrics.attempts < minAttempts || successRate < 0.5) return stage; // not ready
+
+  if (stage.stage === 'canary') {
+    stage.stage = 'partial';
+    stage.percentage = 50;
+    stage.promotedAt = new Date().toISOString();
+  } else if (stage.stage === 'partial') {
+    stage.stage = 'full';
+    stage.percentage = 100;
+    stage.promotedAt = new Date().toISOString();
+  }
+
+  rollouts[strategyId] = stage;
+  saveRollouts(rollouts);
+  return stage;
+}
+
+export function recordRolloutOutcome(strategyId: string, success: boolean): void {
+  const rollouts = loadRollouts();
+  const stage = rollouts[strategyId];
+  if (!stage) return;
+  stage.metrics.attempts++;
+  if (success) stage.metrics.successes++;
+  else stage.metrics.failures++;
+  rollouts[strategyId] = stage;
+  saveRollouts(rollouts);
+}
+
+export function getRolloutStage(strategyId: string): RolloutStage | null {
+  return loadRollouts()[strategyId] ?? null;
+}
+
+export function shouldApplyStrategy(strategyId: string, seed: number): boolean {
+  const stage = getRolloutStage(strategyId);
+  if (!stage) return true; // no rollout = fully available
+  return seed * 100 < stage.percentage;
+}
+
+function loadRollouts(): Record<string, RolloutStage> {
+  try { return JSON.parse(localStorage.getItem(ROLLOUT_STORAGE_KEY) || '{}'); } catch { return {}; }
+}
+
+function saveRollouts(r: Record<string, RolloutStage>): void {
+  try { localStorage.setItem(ROLLOUT_STORAGE_KEY, JSON.stringify(r)); } catch {}
+}
+
+// Protected playbooks
+export function protectPlaybook(playbookId: string): void {
+  const protected_ = loadProtectedPlaybooks();
+  if (!protected_.includes(playbookId)) {
+    protected_.push(playbookId);
+    try { localStorage.setItem(PROTECTED_PLAYBOOK_KEY, JSON.stringify(protected_)); } catch {}
+  }
+}
+
+export function unprotectPlaybook(playbookId: string): void {
+  const protected_ = loadProtectedPlaybooks().filter(id => id !== playbookId);
+  try { localStorage.setItem(PROTECTED_PLAYBOOK_KEY, JSON.stringify(protected_)); } catch {}
+}
+
+export function loadProtectedPlaybooks(): string[] {
+  try { return JSON.parse(localStorage.getItem(PROTECTED_PLAYBOOK_KEY) || '[]'); } catch { return []; }
+}
+
+export function isPlaybookProtected(playbookId: string): boolean {
+  return loadProtectedPlaybooks().includes(playbookId);
+}
+
+export function guardWeightChange(currentWeight: number, proposedWeight: number, maxChangePct: number = 0.10): number {
+  const maxDelta = currentWeight * maxChangePct;
+  const delta = proposedWeight - currentWeight;
+  const clampedDelta = Math.max(-maxDelta, Math.min(maxDelta, delta));
+  return currentWeight + clampedDelta;
+}
+
+// ── Section 11: Personal Performance Layer ─────────────────
+
+export interface PersonalPerformanceRecord {
+  playbookId: string;
+  outcome: 'positive' | 'negative' | 'neutral';
+  timestamp: string;
+  dealStage?: string;
+  hourOfDay?: number;
+  dayOfWeek?: number;
+}
+
+export interface PersonalProfile {
+  totalRecords: number;
+  playbookWinRates: Record<string, { wins: number; total: number; rate: number }>;
+  bestTimeOfDay: number | null;     // hour with highest win rate
+  bestDayOfWeek: number | null;     // day with highest win rate
+  topPlaybooks: string[];           // top 3 by win rate (min 3 attempts)
+  conversionSignals: { signal: string; strength: number }[];
+}
+
+const PERSONAL_PERF_KEY = 'system-personal-performance';
+const MAX_PERSONAL_RECORDS = 500;
+
+export function recordPersonalOutcome(record: PersonalPerformanceRecord): void {
+  try {
+    const records: PersonalPerformanceRecord[] = JSON.parse(localStorage.getItem(PERSONAL_PERF_KEY) || '[]');
+    records.push(record);
+    if (records.length > MAX_PERSONAL_RECORDS) records.splice(0, records.length - MAX_PERSONAL_RECORDS);
+    localStorage.setItem(PERSONAL_PERF_KEY, JSON.stringify(records));
+  } catch {}
+}
+
+export function loadPersonalRecords(): PersonalPerformanceRecord[] {
+  try { return JSON.parse(localStorage.getItem(PERSONAL_PERF_KEY) || '[]'); } catch { return []; }
+}
+
+export function computePersonalProfile(): PersonalProfile {
+  const records = loadPersonalRecords();
+  if (records.length === 0) {
+    return { totalRecords: 0, playbookWinRates: {}, bestTimeOfDay: null, bestDayOfWeek: null, topPlaybooks: [], conversionSignals: [] };
+  }
+
+  // Playbook win rates
+  const byPlaybook: Record<string, { wins: number; total: number }> = {};
+  for (const r of records) {
+    const entry = byPlaybook[r.playbookId] ??= { wins: 0, total: 0 };
+    entry.total++;
+    if (r.outcome === 'positive') entry.wins++;
+  }
+  const playbookWinRates: PersonalProfile['playbookWinRates'] = {};
+  for (const [id, stats] of Object.entries(byPlaybook)) {
+    playbookWinRates[id] = { ...stats, rate: stats.total > 0 ? stats.wins / stats.total : 0 };
+  }
+
+  // Top playbooks (min 3 attempts)
+  const topPlaybooks = Object.entries(playbookWinRates)
+    .filter(([, s]) => s.total >= 3)
+    .sort((a, b) => b[1].rate - a[1].rate)
+    .slice(0, 3)
+    .map(([id]) => id);
+
+  // Best time of day
+  const hourBuckets: Record<number, { wins: number; total: number }> = {};
+  for (const r of records) {
+    if (r.hourOfDay != null) {
+      const b = hourBuckets[r.hourOfDay] ??= { wins: 0, total: 0 };
+      b.total++;
+      if (r.outcome === 'positive') b.wins++;
+    }
+  }
+  let bestTimeOfDay: number | null = null;
+  let bestTimeRate = 0;
+  for (const [hour, s] of Object.entries(hourBuckets)) {
+    if (s.total >= 3) {
+      const rate = s.wins / s.total;
+      if (rate > bestTimeRate) { bestTimeRate = rate; bestTimeOfDay = Number(hour); }
+    }
+  }
+
+  // Best day of week
+  const dayBuckets: Record<number, { wins: number; total: number }> = {};
+  for (const r of records) {
+    if (r.dayOfWeek != null) {
+      const b = dayBuckets[r.dayOfWeek] ??= { wins: 0, total: 0 };
+      b.total++;
+      if (r.outcome === 'positive') b.wins++;
+    }
+  }
+  let bestDayOfWeek: number | null = null;
+  let bestDayRate = 0;
+  for (const [day, s] of Object.entries(dayBuckets)) {
+    if (s.total >= 3) {
+      const rate = s.wins / s.total;
+      if (rate > bestDayRate) { bestDayRate = rate; bestDayOfWeek = Number(day); }
+    }
+  }
+
+  // Conversion signals from stage data
+  const stageBuckets: Record<string, { wins: number; total: number }> = {};
+  for (const r of records) {
+    if (r.dealStage) {
+      const b = stageBuckets[r.dealStage] ??= { wins: 0, total: 0 };
+      b.total++;
+      if (r.outcome === 'positive') b.wins++;
+    }
+  }
+  const conversionSignals = Object.entries(stageBuckets)
+    .filter(([, s]) => s.total >= 2)
+    .map(([signal, s]) => ({ signal, strength: s.wins / s.total }))
+    .sort((a, b) => b.strength - a.strength);
+
+  return { totalRecords: records.length, playbookWinRates, bestTimeOfDay, bestDayOfWeek, topPlaybooks, conversionSignals };
+}
+
+export function applyPersonalBoost(baseScore: number, playbookId: string, profile: PersonalProfile): number {
+  const pbStats = profile.playbookWinRates[playbookId];
+  if (!pbStats || pbStats.total < 3) return baseScore; // not enough data
+
+  // Boost high-performing personal playbooks, penalize poor ones
+  const avgRate = 0.5;
+  const delta = (pbStats.rate - avgRate) * 15; // max ±7.5 boost
+  return Math.max(0, Math.min(100, baseScore + delta));
+}
