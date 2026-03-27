@@ -65,9 +65,13 @@ export function detectResourceSubtype(url: string | null, resourceType?: string)
     return 'youtube_video';
   }
 
-  // Google Docs
+  // Google Docs / Drive
   if (lower.includes('docs.google.com/document')) return 'google_doc';
   if (lower.includes('docs.google.com/spreadsheets') || lower.includes('sheets.google.com')) return 'google_sheet';
+  if (lower.includes('drive.google.com/file/')) return 'google_drive_file';
+
+  // Auth-gated community pages
+  if (/\.circle\.so\b/i.test(lower)) return 'auth_gated_community_page';
 
   // Zoom
   if (lower.includes('zoom.us/rec') || lower.includes('zoom.us/share')) return 'zoom_recording';
