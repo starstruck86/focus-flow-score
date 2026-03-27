@@ -24,8 +24,19 @@ import {
   type RoleplayBlockStatus,
   type RoleplayBlockEvent,
 } from '@/lib/dailyRoleplayBlock';
-import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled } from '@/lib/featureFlags';
+import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled, isAccountExecutionModelEnabled } from '@/lib/featureFlags';
 import { todayInAppTz } from '@/lib/timeFormat';
+import {
+  markAccountPrepped,
+  recordAccountOutcome,
+  markAccountWorkedGeneric,
+  buildCarryForward as buildAccountCarryForward,
+  buildExecutionSummary,
+  getLoopAccountReadiness,
+  reconcileOnPlanChange,
+  type OutcomeType,
+  type AccountExecutionEntry,
+} from '@/lib/accountExecutionState';
 
 // ── Provenance Model ───────────────────────────────────────
 
