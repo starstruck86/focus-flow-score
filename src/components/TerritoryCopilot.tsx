@@ -10,8 +10,10 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { toast } from 'sonner';
 import { ExplainabilityFooter, type ExplainabilityData } from '@/components/copilot/ExplainabilityFooter';
-import { detectDaveMode } from '@/lib/daveModeDetector';
+import { detectDaveMode, buildDaveResponse } from '@/lib/daveModeDetector';
 import { isSystemOSEnabled } from '@/lib/featureFlags';
+import { getSystemState } from '@/lib/systemGovernance';
+import { loadAlerts, loadCorrectionLog } from '@/lib/systemIntelligence';
 
 const MODE_ICONS: Record<CopilotMode, typeof Zap> = {
   quick: Zap,
