@@ -54,6 +54,12 @@ export type AudioFailureCode = typeof AUDIO_FAILURE_CODES[number];
 // ── Pipeline Stages ────────────────────────────────────────
 export const AUDIO_PIPELINE_STAGES = [
   'queued',
+  'detecting_source_type',
+  'resolving_platform_metadata',
+  'resolving_canonical_episode_page',
+  'resolving_rss_feed',
+  'resolving_audio_enclosure',
+  'searching_transcript_source',
   'resolving_source',
   'downloading_audio',
   'transcribing',
@@ -63,6 +69,7 @@ export const AUDIO_PIPELINE_STAGES = [
   'completed',
   'failed',
   'needs_manual_assist',
+  'metadata_only_complete',
 ] as const;
 
 export type AudioPipelineStage = typeof AUDIO_PIPELINE_STAGES[number];
