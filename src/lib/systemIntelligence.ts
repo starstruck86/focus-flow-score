@@ -233,7 +233,7 @@ export function computeHealthSnapshot(inputs: HealthInputs): HealthSnapshot {
       id: `alert-outcome-${Date.now()}`, severity: outcomeStatus === 'critical' ? 'critical' : 'warning',
       category: 'outcome', message: `Outcome score trending down: ${inputs.outcomeScoreTrend}`,
       metric: 'outcome_score_trend', currentValue: inputs.outcomeScoreTrend,
-      threshold: HEALTH_THRESHOLDS.outcomeScoreTrend.warning, triggeredAt: now, acknowledged: false,
+      threshold: HEALTH_THRESHOLDS.outcomeScoreTrend.warning, triggeredAt: now, acknowledged: false, state: 'active' as AlertState,
     });
   }
 
