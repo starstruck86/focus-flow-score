@@ -13,6 +13,7 @@ export const RESOURCE_SUBTYPES = [
   'google_drive_file',
   'zoom_recording',
   'spotify_episode',
+  'apple_podcast_episode',
   'podcast_episode',
   'audio_file',
   'web_article',
