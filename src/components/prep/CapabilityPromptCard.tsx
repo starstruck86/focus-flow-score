@@ -33,7 +33,7 @@ export function CapabilityPromptCard({ context }: CapabilityPromptCardProps) {
 
   const handleDismiss = useCallback(() => {
     if (prompt) {
-      recordCapabilityEvent({ promptId: prompt.id, eventType: 'ignored', contextType: context.recommendedPlaybookType, stage: context.dealStage });
+      recordCapabilityEvent({ promptId: prompt.suppressionKey, eventType: 'ignored', contextType: context.recommendedPlaybookType, stage: context.dealStage });
     }
     setDismissed(true);
   }, [prompt, context]);
