@@ -167,49 +167,29 @@ function CopilotDialog() {
             accountName: pageContext?.accountName,
           });
 
-          // Build real factors from system state
-          const activeAlerts = state.activeAlerts;
-          const recentCorrections = state.recentCorrections.slice(-3);
-          const guardrails = state.activeGuardrails;
-
+          // Concise, decisive factors — no filler
           const topFactors: string[] = [];
-          topFactors.push(`Detected mode: ${detectedMode} from input patterns`);
-          if (pageContext?.page) topFactors.push(`Route context: ${pageContext.page}`);
-          if (pageContext?.accountName) topFactors.push(`Account context: ${pageContext.accountName}`);
-          if (state.systemMode !== 'normal') topFactors.push(`System in ${state.systemMode} mode`);
+          if (pageContext?.accountName) topFactors.push(`Account: ${pageContext.accountName}`);
+          if (pageContext?.page) topFactors.push(`Page: ${pageContext.page}`);
+          if (state.systemMode !== 'normal') topFactors.push(`System ${state.systemMode}`);
+          if (topFactors.length === 0) topFactors.push(`${detectedMode} mode matched`);
 
-          const suppressedAlternatives: string[] = [];
-          const allModes = ['EXECUTE', 'PREP', 'COACH', 'ROLEPLAY', 'DIAGNOSE', 'RECOVERY'] as const;
-          allModes.filter(m => m !== detectedMode).slice(0, 2).forEach(m => {
-            suppressedAlternatives.push(`${m} mode — lower pattern match`);
-          });
-
+          // Only surface changes if something actually changed
           const recentChanges: string[] = [];
-          if (activeAlerts.length > 0) recentChanges.push(`${activeAlerts.length} active alert(s)`);
-          recentCorrections.forEach(c => recentChanges.push(`Auto-correction: ${c.action.replace(/_/g, ' ')}`));
+          if (state.activeAlerts.length > 0) recentChanges.push(`${state.activeAlerts.length} alert${state.activeAlerts.length > 1 ? 's' : ''} active`);
+          const lastCorrection = state.recentCorrections[state.recentCorrections.length - 1];
+          if (lastCorrection) recentChanges.push(lastCorrection.action.replace(/_/g, ' '));
 
-          const confidenceDrivers: string[] = [];
-          if (state.systemConfidence >= 75) confidenceDrivers.push('System confidence high');
-          else if (state.systemConfidence >= 55) confidenceDrivers.push('System confidence moderate');
-          else confidenceDrivers.push('System confidence low — limited data');
-          if (guardrails.length > 0) confidenceDrivers.push(`${guardrails.length} guardrail(s) active`);
-
-          const sourcesUsed: string[] = ['system_state', 'mode_detector'];
-          if (pageContext?.page) sourcesUsed.push('page_context');
-          if (pageContext?.accountName) sourcesUsed.push('account_context');
-
-          const sourcesIgnored: string[] = [];
-          if (!pageContext?.accountName) sourcesIgnored.push('account_context (unavailable)');
+          // Sources — only list if there are multiple
+          const sourcesUsed: string[] = ['system state', 'mode detector'];
+          if (pageContext?.accountName) sourcesUsed.push('account context');
 
           setExplainability({
             mode: detectedMode,
             confidence: state.systemConfidence,
             topFactors,
-            suppressedAlternatives,
             recentChanges: recentChanges.length > 0 ? recentChanges : undefined,
-            confidenceDrivers,
-            sourcesUsed,
-            sourcesIgnored: sourcesIgnored.length > 0 ? sourcesIgnored : undefined,
+            sourcesUsed: sourcesUsed.length > 2 ? sourcesUsed : undefined,
           });
         }
       },

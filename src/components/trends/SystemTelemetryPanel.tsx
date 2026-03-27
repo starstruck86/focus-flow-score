@@ -1,18 +1,31 @@
 /**
- * System Telemetry Panel — replaces/augments Trends page
+ * System Telemetry Panel — Trends system health surface
  * Feature-flagged behind ENABLE_SYSTEM_OS
- * REACTIVE: polls live state every 5 s
+ *
+ * TUNED: Removed redundant summary card (already in GovernancePanel header).
+ * Confidence breakdown is the hero. Alerts/corrections only when present.
+ * Health history bar chart kept but sized down.
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
-  Activity, Shield, AlertTriangle, 
+  Activity, AlertTriangle, 
   Gauge, Brain, Zap, BarChart3
 } from 'lucide-react';
 import { isSystemOSEnabled } from '@/lib/featureFlags';
 import { cn } from '@/lib/utils';
 import { useLiveTelemetry } from '@/hooks/useSystemState';
+
+function confidenceColor(label: string) {
+  switch (label) {
+    case 'high': return 'text-primary';
+    case 'moderate': return 'text-amber-600';
+    case 'low': return 'text-orange-500';
+    case 'critical': return 'text-destructive';
+    default: return 'text-foreground';
+  }
+}
 
 function modeColor(mode: string) {
   switch (mode) {
@@ -25,60 +38,26 @@ function modeColor(mode: string) {
   }
 }
 
-function confidenceColor(label: string) {
-  switch (label) {
-    case 'high': return 'text-primary';
-    case 'moderate': return 'text-amber-600';
-    case 'low': return 'text-orange-500';
-    case 'critical': return 'text-destructive';
-    default: return 'text-foreground';
-  }
-}
-
 export function SystemTelemetryPanel() {
-  const { summary, modeState, confidence, alerts, corrections, healthHistory } = useLiveTelemetry();
+  const { modeState, confidence, alerts, corrections, healthHistory } = useLiveTelemetry();
 
   if (!isSystemOSEnabled()) return null;
 
   return (
     <div data-testid="system-telemetry" className="space-y-4">
-      {/* System Health Summary */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card>
-          <CardContent className="p-3 text-center">
-            <Gauge className="h-4 w-4 mx-auto mb-1 text-primary" />
-            <p className={cn('text-2xl font-bold', confidenceColor(confidence.label))}>{confidence.score}</p>
-            <p className="text-[10px] text-muted-foreground">Confidence</p>
-            <Badge variant="outline" className={cn('text-[9px] mt-1', confidenceColor(confidence.label))}>{confidence.label}</Badge>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-3 text-center">
-            <Activity className="h-4 w-4 mx-auto mb-1" />
-            <Badge className={cn('text-xs px-2 py-0.5', modeColor(modeState.mode))}>{modeState.mode}</Badge>
-            <p className="text-[10px] text-muted-foreground mt-1">System Mode</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-3 text-center">
-            <AlertTriangle className="h-4 w-4 mx-auto mb-1 text-destructive" />
-            <p className="text-2xl font-bold">{alerts.length}</p>
-            <p className="text-[10px] text-muted-foreground">Active Alerts</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-3 text-center">
-            <Shield className="h-4 w-4 mx-auto mb-1" />
-            <p className="text-2xl font-bold">{corrections.length}</p>
-            <p className="text-[10px] text-muted-foreground">Recent Corrections</p>
-          </CardContent>
-        </Card>
+      {/* Hero: Confidence + Mode in a compact strip */}
+      <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/40">
+        <Gauge className="h-4 w-4 text-primary shrink-0" />
+        <span className={cn('text-lg font-bold', confidenceColor(confidence.label))}>{confidence.score}</span>
+        <span className="text-[10px] text-muted-foreground">confidence</span>
+        <div className="flex-1" />
+        <Badge className={cn('text-[10px]', modeColor(modeState.mode))}>{modeState.mode}</Badge>
+        {alerts.length > 0 && (
+          <Badge variant="destructive" className="text-[9px]">{alerts.length} alert{alerts.length !== 1 ? 's' : ''}</Badge>
+        )}
       </div>
 
-      {/* Confidence Components */}
+      {/* Confidence Breakdown — the primary telemetry view */}
       <Card>
         <CardHeader className="pb-2 pt-3 px-3">
           <CardTitle className="text-sm flex items-center gap-1.5">
@@ -104,7 +83,7 @@ export function SystemTelemetryPanel() {
         </CardContent>
       </Card>
 
-      {/* Active Alerts */}
+      {/* Alerts — only when present */}
       {alerts.length > 0 && (
         <Card>
           <CardHeader className="pb-2 pt-3 px-3">
@@ -125,10 +104,7 @@ export function SystemTelemetryPanel() {
                 )} />
                 <div className="flex-1 min-w-0">
                   <p className="font-medium">{a.message}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <Badge variant="outline" className="text-[8px]">{a.category}</Badge>
-                    <Badge variant="outline" className="text-[8px]">{a.state}</Badge>
-                  </div>
+                  <Badge variant="outline" className="text-[8px] mt-0.5">{a.state}</Badge>
                 </div>
               </div>
             ))}
@@ -136,13 +112,13 @@ export function SystemTelemetryPanel() {
         </Card>
       )}
 
-      {/* Recent Auto-Corrections */}
+      {/* Corrections — only when present */}
       {corrections.length > 0 && (
         <Card>
           <CardHeader className="pb-2 pt-3 px-3">
             <CardTitle className="text-sm flex items-center gap-1.5">
               <Zap className="h-3.5 w-3.5 text-primary" />
-              Recent Auto-Corrections
+              Recent Corrections
             </CardTitle>
           </CardHeader>
           <CardContent className="px-3 pb-3 space-y-1.5">
@@ -156,35 +132,34 @@ export function SystemTelemetryPanel() {
         </Card>
       )}
 
-      {/* Health History */}
-      {healthHistory.length > 0 && (
+      {/* Health History — compact sparkline */}
+      {healthHistory.length > 2 && (
         <Card>
           <CardHeader className="pb-2 pt-3 px-3">
             <CardTitle className="text-sm flex items-center gap-1.5">
               <BarChart3 className="h-3.5 w-3.5 text-primary" />
-              Health History
+              Health Trend
             </CardTitle>
           </CardHeader>
           <CardContent className="px-3 pb-3">
-            <div className="flex items-end gap-1 h-12">
+            <div className="flex items-end gap-0.5 h-8">
               {healthHistory.map((h, i) => {
                 const alertCount = h.alerts.length;
-                const height = Math.max(4, Math.min(48, (1 - alertCount / 5) * 48));
+                const height = Math.max(3, Math.min(32, (1 - alertCount / 5) * 32));
                 return (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+                  <div key={i} className="flex-1">
                     <div
                       className={cn(
-                        'w-full rounded-sm transition-all',
+                        'w-full rounded-sm',
                         h.overallStatus === 'healthy' ? 'bg-primary' : h.overallStatus === 'degraded' ? 'bg-amber-500' : 'bg-destructive'
                       )}
                       style={{ height: `${height}px` }}
-                      title={`${h.overallStatus} - ${h.alerts.length} alerts`}
+                      title={`${h.overallStatus} · ${h.alerts.length} alerts`}
                     />
                   </div>
                 );
               })}
             </div>
-            <p className="text-[9px] text-muted-foreground text-center mt-1">Recent snapshots</p>
           </CardContent>
         </Card>
       )}
