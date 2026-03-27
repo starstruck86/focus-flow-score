@@ -58,3 +58,7 @@ export function isLoopNativeSchedulerEnabled(): boolean {
 export function isRoleplayGroundingEnabled(): boolean {
   return loadFeatureFlags().ENABLE_ROLEPLAY_GROUNDING;
 }
+
+export function isAccountExecutionModelEnabled(): boolean {
+  return loadFeatureFlags().ENABLE_ACCOUNT_EXECUTION_MODEL;
+}
