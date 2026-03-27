@@ -40,7 +40,7 @@ export function CapabilityPromptCard({ context }: CapabilityPromptCardProps) {
 
   const handlePractice = useCallback(() => {
     if (!prompt) return;
-    recordCapabilityEvent({ promptId: prompt.id, eventType: 'accepted', contextType: context.recommendedPlaybookType, stage: context.dealStage });
+    recordCapabilityEvent({ promptId: prompt.suppressionKey, eventType: 'accepted', contextType: context.recommendedPlaybookType, stage: context.dealStage });
     askCopilot(`Practice ${prompt.skillFocus} scenarios for ${context.dealName || 'my current deal'}`, 'deal-strategy');
   }, [prompt, context, askCopilot]);
 
