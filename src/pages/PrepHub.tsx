@@ -24,6 +24,7 @@ import { GovernancePanel } from '@/components/governance/GovernancePanel';
 import { SourceRegistryManager } from '@/components/prep/SourceRegistryManager';
 import { IncomingQueue } from '@/components/prep/IncomingQueue';
 import { SalesBrainDashboard } from '@/components/prep/SalesBrainDashboard';
+import { AudioTestHarness } from '@/components/prep/AudioTestHarness';
 
 const PREP_PROMPTS = [
   { label: 'Pre-Call Research Brief', prompt: 'Research and prep me for my upcoming call with {{account}}. Include company background, recent news, key stakeholders, potential pain points, and suggested discovery questions.', mode: 'meeting' as const },
