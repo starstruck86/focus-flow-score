@@ -3,16 +3,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Play, RotateCcw, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
-import { detectAudioSubtype, getAudioStrategy, scoreTranscriptQuality } from '@/lib/salesBrain/audioPipeline';
-import { transcribeDirectAudio, retryAudioJob, getAudioJobForResourceDb } from '@/lib/salesBrain/audioOrchestrator';
-import type { TranscribeDirectResult } from '@/lib/salesBrain/audioOrchestrator';
+import { Loader2, Play, CheckCircle2, XCircle, AlertTriangle, Music, Podcast } from 'lucide-react';
+import { detectAudioSubtype, getAudioStrategy } from '@/lib/salesBrain/audioPipeline';
+import { processAudioResource } from '@/lib/salesBrain/audioOrchestrator';
+import type { TranscribeDirectResult, PlatformResolveResult } from '@/lib/salesBrain/audioOrchestrator';
 
 interface StageEntry {
   stage: string;
   status: 'pending' | 'running' | 'done' | 'failed';
   detail?: string;
-  timestamp?: number;
 }
 
 export function AudioTestHarness() {
@@ -20,14 +19,15 @@ export function AudioTestHarness() {
   const [running, setRunning] = useState(false);
   const [headResult, setHeadResult] = useState<any>(null);
   const [subtypeInfo, setSubtypeInfo] = useState<any>(null);
-  const [result, setResult] = useState<TranscribeDirectResult | null>(null);
+  const [directResult, setDirectResult] = useState<TranscribeDirectResult | null>(null);
+  const [platformResult, setPlatformResult] = useState<PlatformResolveResult | null>(null);
   const [stages, setStages] = useState<StageEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const addStage = (stage: string, status: StageEntry['status'], detail?: string) => {
     setStages(prev => {
       const existing = prev.findIndex(s => s.stage === stage);
-      const entry: StageEntry = { stage, status, detail, timestamp: Date.now() };
+      const entry: StageEntry = { stage, status, detail };
       if (existing >= 0) {
         const copy = [...prev];
         copy[existing] = entry;
@@ -40,7 +40,8 @@ export function AudioTestHarness() {
   const runPipeline = async () => {
     if (!url.trim()) return;
     setRunning(true);
-    setResult(null);
+    setDirectResult(null);
+    setPlatformResult(null);
     setHeadResult(null);
     setError(null);
     setStages([]);
@@ -53,41 +54,67 @@ export function AudioTestHarness() {
       setSubtypeInfo({ subtype, strategy });
       addStage('Detect subtype', 'done', subtype);
 
-      // Step 2: HEAD check (via edge function — it does this internally)
-      addStage('HEAD check', 'running');
-      try {
-        const headResp = await fetch(url, { method: 'HEAD' });
-        const hd = {
-          status: headResp.status,
-          contentType: headResp.headers.get('content-type'),
-          contentLength: headResp.headers.get('content-length'),
-          reachable: headResp.ok,
-        };
-        setHeadResult(hd);
-        addStage('HEAD check', hd.reachable ? 'done' : 'failed', `${hd.status} ${hd.contentType}`);
-      } catch (e) {
-        // HEAD may be blocked by CORS from browser — that's OK, edge function will do it
-        setHeadResult({ status: 'CORS blocked', note: 'Edge function will perform HEAD check' });
-        addStage('HEAD check', 'done', 'CORS — delegated to edge function');
+      const isPlatform = ['spotify_episode', 'spotify_show', 'apple_podcast_episode', 'apple_podcast_show', 'podcast_episode_page_only'].includes(subtype);
+
+      // Step 2: HEAD check for direct audio
+      if (!isPlatform) {
+        addStage('HEAD check', 'running');
+        try {
+          const headResp = await fetch(url, { method: 'HEAD' });
+          const hd = {
+            status: headResp.status,
+            contentType: headResp.headers.get('content-type'),
+            contentLength: headResp.headers.get('content-length'),
+            reachable: headResp.ok,
+          };
+          setHeadResult(hd);
+          addStage('HEAD check', hd.reachable ? 'done' : 'failed', `${hd.status} ${hd.contentType}`);
+        } catch {
+          setHeadResult({ status: 'CORS blocked', note: 'Edge function will perform HEAD check' });
+          addStage('HEAD check', 'done', 'CORS — delegated to edge function');
+        }
       }
 
-      // Step 3: Transcribe via edge function
-      addStage('Transcribe (edge fn)', 'running');
-      // Use a pseudo resource ID for testing
+      // Step 3: Process via smart orchestrator
+      const actionLabel = isPlatform ? 'Platform resolve' : 'Transcribe (edge fn)';
+      addStage(actionLabel, 'running');
       const testResourceId = `test-${Date.now()}`;
-      const transcribeResult = await transcribeDirectAudio(testResourceId, url);
-      setResult(transcribeResult);
+      const result = await processAudioResource(testResourceId, url);
 
-      if (transcribeResult.success) {
-        addStage('Transcribe (edge fn)', 'done',
-          `${transcribeResult.totalWords} words, ${transcribeResult.chunksCompleted}/${transcribeResult.chunksTotal} chunks, ${transcribeResult.durationMs}ms`);
+      // Determine result type
+      if ('metadata' in result && 'resolution' in result) {
+        // PlatformResolveResult
+        const pr = result as PlatformResolveResult;
+        setPlatformResult(pr);
 
-        // Step 4: Quality check (already done in orchestrator)
-        if (transcribeResult.quality) {
-          addStage('Quality check', 'done', `${transcribeResult.quality.quality} — ${transcribeResult.quality.reason}`);
+        // Add resolver stages
+        for (const rs of pr.resolverStages) {
+          addStage(rs.stage, rs.status === 'done' ? 'done' : rs.status === 'failed' ? 'failed' : 'running', rs.detail);
         }
+
+        if (pr.transcriptionResult) {
+          setDirectResult(pr.transcriptionResult);
+          addStage('Transcription', pr.transcriptionResult.success ? 'done' : 'failed',
+            pr.transcriptionResult.success
+              ? `${pr.transcriptionResult.totalWords} words`
+              : pr.transcriptionResult.failureReason || 'Failed');
+        }
+
+        addStage(actionLabel, pr.success ? 'done' : 'failed',
+          `${pr.finalStatus}${pr.failureCode ? ` (${pr.failureCode})` : ''}`);
       } else {
-        addStage('Transcribe (edge fn)', 'failed', `${transcribeResult.failureCode}: ${transcribeResult.failureReason}`);
+        // TranscribeDirectResult
+        const tr = result as TranscribeDirectResult;
+        setDirectResult(tr);
+        if (tr.success) {
+          addStage(actionLabel, 'done',
+            `${tr.totalWords} words, ${tr.chunksCompleted}/${tr.chunksTotal} chunks, ${tr.durationMs}ms`);
+          if (tr.quality) {
+            addStage('Quality check', 'done', `${tr.quality.quality} — ${tr.quality.reason}`);
+          }
+        } else {
+          addStage(actionLabel, 'failed', `${tr.failureCode}: ${tr.failureReason}`);
+        }
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -107,6 +134,19 @@ export function AudioTestHarness() {
     }
   };
 
+  const subtypeBadgeVariant = (subtype: string) => {
+    if (subtype.includes('spotify')) return 'default';
+    if (subtype.includes('apple')) return 'secondary';
+    if (subtype === 'direct_audio_file') return 'outline';
+    return 'destructive';
+  };
+
+  const subtypeIcon = (subtype: string) => {
+    if (subtype.includes('spotify')) return <Music className="h-3 w-3" />;
+    if (subtype.includes('apple') || subtype.includes('podcast')) return <Podcast className="h-3 w-3" />;
+    return null;
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -117,13 +157,26 @@ export function AudioTestHarness() {
           <Input
             value={url}
             onChange={e => setUrl(e.target.value)}
-            placeholder="Paste audio URL (MP3, podcast, etc.)"
+            placeholder="Paste URL: MP3, Spotify episode, Apple Podcasts episode..."
             className="flex-1"
           />
           <Button onClick={runPipeline} disabled={running || !url.trim()}>
             {running ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Play className="h-4 w-4 mr-1" />}
             Run
           </Button>
+        </div>
+
+        {/* Quick test URLs */}
+        <div className="flex flex-wrap gap-1">
+          {[
+            { label: 'Spotify ep', url: 'https://open.spotify.com/episode/3LsHTsCRkxEqllND7f3PCL' },
+            { label: 'Apple ep', url: 'https://podcasts.apple.com/gr/podcast/sales-enablement-masterclass-with-nate-vogel/id1502265369?i=1000756968305' },
+          ].map(t => (
+            <Button key={t.label} variant="outline" size="sm" className="text-xs h-6 px-2"
+              onClick={() => setUrl(t.url)}>
+              {t.label}
+            </Button>
+          ))}
         </div>
 
         {/* Stages timeline */}
@@ -133,7 +186,7 @@ export function AudioTestHarness() {
             {stages.map((s, i) => (
               <div key={i} className="flex items-center gap-2 text-sm">
                 {stageIcon(s)}
-                <span className="font-medium min-w-[140px]">{s.stage}</span>
+                <span className="font-medium min-w-[180px]">{s.stage}</span>
                 {s.detail && <span className="text-muted-foreground text-xs truncate">{s.detail}</span>}
               </div>
             ))}
@@ -144,13 +197,19 @@ export function AudioTestHarness() {
         {subtypeInfo && (
           <div className="border rounded-lg p-3 space-y-1">
             <div className="text-xs font-medium text-muted-foreground">Detection</div>
-            <div className="flex gap-2 flex-wrap">
-              <Badge variant="outline">{subtypeInfo.subtype}</Badge>
+            <div className="flex gap-2 flex-wrap items-center">
+              <Badge variant={subtypeBadgeVariant(subtypeInfo.subtype)} className="gap-1">
+                {subtypeIcon(subtypeInfo.subtype)}
+                {subtypeInfo.subtype}
+              </Badge>
               <Badge variant={subtypeInfo.strategy.retryMode === 'automatic' ? 'default' : 'secondary'}>
                 {subtypeInfo.strategy.retryMode}
               </Badge>
               {subtypeInfo.strategy.manualAssistRequired && (
                 <Badge variant="destructive">Manual assist required</Badge>
+              )}
+              {subtypeInfo.strategy.metadataOnlyAcceptable && (
+                <Badge variant="outline">Metadata-only OK</Badge>
               )}
             </div>
             <div className="text-xs text-muted-foreground mt-1">
@@ -170,50 +229,99 @@ export function AudioTestHarness() {
           </div>
         )}
 
-        {/* Result */}
-        {result && (
-          <div className={`border rounded-lg p-3 space-y-2 ${result.success ? 'border-green-500/30 bg-green-500/5' : 'border-destructive/30 bg-destructive/5'}`}>
+        {/* Platform Resolution Result */}
+        {platformResult && (
+          <div className={`border rounded-lg p-3 space-y-2 ${platformResult.finalStatus === 'audio_resolved' || platformResult.finalStatus === 'completed' ? 'border-green-500/30 bg-green-500/5' : platformResult.finalStatus === 'metadata_only' ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-destructive/30 bg-destructive/5'}`}>
             <div className="flex items-center gap-2">
-              {result.success
+              {platformResult.finalStatus === 'completed' || platformResult.finalStatus === 'audio_resolved'
                 ? <CheckCircle2 className="h-5 w-5 text-green-500" />
-                : <XCircle className="h-5 w-5 text-destructive" />}
-              <span className="font-medium text-sm">{result.success ? 'Transcription Complete' : 'Failed'}</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-              <div className="text-muted-foreground">Words:</div>
-              <div>{result.totalWords}</div>
-              <div className="text-muted-foreground">Chunks:</div>
-              <div>{result.chunksCompleted}/{result.chunksTotal}</div>
-              <div className="text-muted-foreground">Provider:</div>
-              <div>{result.provider || 'n/a'}</div>
-              <div className="text-muted-foreground">Duration:</div>
-              <div>{result.durationMs}ms</div>
-              <div className="text-muted-foreground">Quality:</div>
-              <div>
-                {result.quality ? (
-                  <Badge variant={result.quality.quality === 'high_quality' ? 'default' : result.quality.quality === 'usable' ? 'secondary' : 'destructive'}>
-                    {result.quality.quality}
-                  </Badge>
-                ) : 'n/a'}
-              </div>
-              <div className="text-muted-foreground">Persisted:</div>
-              <div>{result.persisted ? '✅ Yes' : '❌ No'}</div>
-              {result.failureCode && (
-                <>
-                  <div className="text-muted-foreground">Failure:</div>
-                  <div className="text-destructive">{result.failureCode}: {result.failureReason}</div>
-                </>
+                : platformResult.finalStatus === 'metadata_only'
+                  ? <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                  : <XCircle className="h-5 w-5 text-destructive" />}
+              <span className="font-medium text-sm">
+                {platformResult.finalStatus === 'completed' ? 'Resolved + Transcribed' :
+                  platformResult.finalStatus === 'audio_resolved' ? 'Audio Resolved' :
+                    platformResult.finalStatus === 'metadata_only' ? 'Metadata Only' : 'Needs Manual Assist'}
+              </span>
+              {platformResult.failureCode && (
+                <Badge variant="outline" className="text-xs">{platformResult.failureCode}</Badge>
               )}
             </div>
 
-            {/* Transcript preview */}
-            {result.transcript && (
+            {/* Metadata */}
+            {platformResult.metadata && (
+              <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+                {platformResult.metadata.title && <>
+                  <div className="text-muted-foreground">Title:</div>
+                  <div className="truncate">{platformResult.metadata.title}</div>
+                </>}
+                {platformResult.metadata.showName && <>
+                  <div className="text-muted-foreground">Show:</div>
+                  <div>{platformResult.metadata.showName}</div>
+                </>}
+                {platformResult.metadata.description && <>
+                  <div className="text-muted-foreground">Description:</div>
+                  <div className="text-xs truncate max-w-md">{platformResult.metadata.description.substring(0, 200)}</div>
+                </>}
+              </div>
+            )}
+
+            {/* Resolution */}
+            {platformResult.resolution && (
+              <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
+                <div className="text-muted-foreground">RSS Feed:</div>
+                <div>{platformResult.resolution.rssFeedUrl ? '✅ Found' : '❌ Not found'}</div>
+                <div className="text-muted-foreground">Audio URL:</div>
+                <div>{platformResult.resolution.audioEnclosureUrl ? '✅ Resolved' : '❌ Not found'}</div>
+                <div className="text-muted-foreground">Transcript Source:</div>
+                <div>{platformResult.resolution.transcriptSourceUrl ? '✅ Found' : '❌ Not found'}</div>
+              </div>
+            )}
+
+            {platformResult.failureReason && (
+              <div className="text-xs text-muted-foreground bg-background rounded p-2 border">
+                {platformResult.failureReason}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Direct transcription result */}
+        {directResult && (
+          <div className={`border rounded-lg p-3 space-y-2 ${directResult.success ? 'border-green-500/30 bg-green-500/5' : 'border-destructive/30 bg-destructive/5'}`}>
+            <div className="flex items-center gap-2">
+              {directResult.success
+                ? <CheckCircle2 className="h-5 w-5 text-green-500" />
+                : <XCircle className="h-5 w-5 text-destructive" />}
+              <span className="font-medium text-sm">{directResult.success ? 'Transcription Complete' : 'Transcription Failed'}</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+              <div className="text-muted-foreground">Words:</div><div>{directResult.totalWords}</div>
+              <div className="text-muted-foreground">Chunks:</div><div>{directResult.chunksCompleted}/{directResult.chunksTotal}</div>
+              <div className="text-muted-foreground">Provider:</div><div>{directResult.provider || 'n/a'}</div>
+              <div className="text-muted-foreground">Duration:</div><div>{directResult.durationMs}ms</div>
+              <div className="text-muted-foreground">Quality:</div>
+              <div>
+                {directResult.quality ? (
+                  <Badge variant={directResult.quality.quality === 'high_quality' ? 'default' : directResult.quality.quality === 'usable' ? 'secondary' : 'destructive'}>
+                    {directResult.quality.quality}
+                  </Badge>
+                ) : 'n/a'}
+              </div>
+              <div className="text-muted-foreground">Persisted:</div><div>{directResult.persisted ? '✅' : '❌'}</div>
+              {directResult.failureCode && <>
+                <div className="text-muted-foreground">Failure:</div>
+                <div className="text-destructive">{directResult.failureCode}: {directResult.failureReason}</div>
+              </>}
+            </div>
+
+            {directResult.transcript && (
               <div className="mt-2">
                 <div className="text-xs font-medium text-muted-foreground mb-1">Transcript Preview (first 500 chars)</div>
                 <div className="text-xs bg-background rounded p-2 border max-h-40 overflow-y-auto font-mono whitespace-pre-wrap">
-                  {result.transcript.substring(0, 500)}
-                  {result.transcript.length > 500 && '...'}
+                  {directResult.transcript.substring(0, 500)}
+                  {directResult.transcript.length > 500 && '...'}
                 </div>
               </div>
             )}

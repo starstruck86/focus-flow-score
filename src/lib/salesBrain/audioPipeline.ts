@@ -10,6 +10,10 @@ export const AUDIO_SUBTYPES = [
   'direct_audio_file',
   'podcast_episode_rss_backed',
   'spotify_episode',
+  'spotify_show',
+  'apple_podcast_episode',
+  'apple_podcast_show',
+  'podcast_episode_page_only',
   'youtube_audio_or_video',
   'auth_gated_audio',
   'transcript_page_available',
@@ -32,6 +36,17 @@ export const AUDIO_FAILURE_CODES = [
   'DOWNLOAD_FAILED',
   'CHUNK_ASSEMBLY_FAILED',
   'QUALITY_CHECK_FAILED',
+  'SPOTIFY_NO_DIRECT_AUDIO',
+  'SPOTIFY_METADATA_ONLY',
+  'APPLE_PAGE_PARSED_NO_FEED',
+  'APPLE_FEED_NOT_RESOLVED',
+  'APPLE_ENCLOSURE_NOT_FOUND',
+  'TRANSCRIPT_SOURCE_NOT_FOUND',
+  'CANONICAL_PAGE_NOT_FOUND',
+  'METADATA_CAPTURED_NO_TRANSCRIPT',
+  'PLATFORM_RATE_LIMITED',
+  'PLATFORM_BLOCKED',
+  'MANUAL_ASSIST_RECOMMENDED',
 ] as const;
 
 export type AudioFailureCode = typeof AUDIO_FAILURE_CODES[number];
@@ -39,6 +54,12 @@ export type AudioFailureCode = typeof AUDIO_FAILURE_CODES[number];
 // ── Pipeline Stages ────────────────────────────────────────
 export const AUDIO_PIPELINE_STAGES = [
   'queued',
+  'detecting_source_type',
+  'resolving_platform_metadata',
+  'resolving_canonical_episode_page',
+  'resolving_rss_feed',
+  'resolving_audio_enclosure',
+  'searching_transcript_source',
   'resolving_source',
   'downloading_audio',
   'transcribing',
@@ -48,6 +69,7 @@ export const AUDIO_PIPELINE_STAGES = [
   'completed',
   'failed',
   'needs_manual_assist',
+  'metadata_only_complete',
 ] as const;
 
 export type AudioPipelineStage = typeof AUDIO_PIPELINE_STAGES[number];
@@ -120,6 +142,7 @@ export function isAudioResource(url: string | null, resourceType?: string): bool
     if (PODCAST_DOMAINS.some(d => host.includes(d))) return true;
   } catch {}
   if (lower.includes('open.spotify.com/episode') || lower.includes('open.spotify.com/show')) return true;
+  if (lower.includes('podcasts.apple.com/')) return true;
   return false;
 }
 
@@ -132,9 +155,15 @@ export function detectAudioSubtype(url: string | null, resourceType?: string): A
     return 'youtube_audio_or_video';
   }
 
-  // Spotify
-  if (lower.includes('open.spotify.com/episode') || lower.includes('open.spotify.com/show')) {
-    return 'spotify_episode';
+  // Spotify - distinguish episode vs show
+  if (lower.includes('open.spotify.com/show')) return 'spotify_show';
+  if (lower.includes('open.spotify.com/episode')) return 'spotify_episode';
+
+  // Apple Podcasts - distinguish episode vs show
+  if (lower.includes('podcasts.apple.com/')) {
+    // ?i= param means specific episode
+    if (/[?&]i=\d+/.test(lower)) return 'apple_podcast_episode';
+    if (/\/id\d+/.test(lower)) return 'apple_podcast_show';
   }
 
   // Direct audio file
@@ -204,6 +233,55 @@ export function getAudioStrategy(subtype: AudioSubtype): AudioStrategy {
         retryMode: 'manual_only',
         operatorFailureReason: 'Spotify — no direct audio access. Metadata extracted, manual transcript needed for full enrichment',
       };
+
+    case 'spotify_show':
+      return {
+        subtype,
+        primaryPath: { method: 'spotify_metadata', description: 'Extract Spotify show metadata' },
+        secondaryPath: { method: 'detect_transcript_source', description: 'Search for linked transcript sources' },
+        tertiaryPath: { method: 'manual_transcript', description: 'Request manual transcript/notes' },
+        metadataOnlyAcceptable: true,
+        manualAssistRequired: true,
+        retryMode: 'manual_only',
+        operatorFailureReason: 'Spotify show — no direct audio. Import specific episodes or paste transcript',
+      };
+
+    case 'apple_podcast_episode':
+      return {
+        subtype,
+        primaryPath: { method: 'resolve_apple_episode', description: 'Resolve via iTunes API + RSS feed' },
+        secondaryPath: { method: 'transcribe_direct', description: 'Transcribe resolved audio enclosure' },
+        tertiaryPath: { method: 'manual_transcript', description: 'Request manual transcript/notes' },
+        metadataOnlyAcceptable: true,
+        manualAssistRequired: false,
+        retryMode: 'automatic',
+        operatorFailureReason: 'Apple Podcast episode — resolving RSS feed + audio enclosure',
+      };
+
+    case 'apple_podcast_show':
+      return {
+        subtype,
+        primaryPath: { method: 'resolve_apple_show', description: 'Resolve show via iTunes API' },
+        secondaryPath: { method: 'manual_transcript', description: 'Import specific episodes or paste transcript' },
+        tertiaryPath: null,
+        metadataOnlyAcceptable: true,
+        manualAssistRequired: true,
+        retryMode: 'manual_only',
+        operatorFailureReason: 'Apple Podcast show — import specific episodes for transcription',
+      };
+
+    case 'podcast_episode_page_only':
+      return {
+        subtype,
+        primaryPath: { method: 'scrape_episode_page', description: 'Scrape episode page for metadata + audio' },
+        secondaryPath: { method: 'detect_transcript_source', description: 'Search for transcript on page' },
+        tertiaryPath: { method: 'manual_transcript', description: 'Request manual transcript/notes' },
+        metadataOnlyAcceptable: true,
+        manualAssistRequired: false,
+        retryMode: 'automatic',
+        operatorFailureReason: 'Podcast page — attempting to extract audio or transcript from page',
+      };
+
 
     case 'youtube_audio_or_video':
       return {
@@ -326,6 +404,17 @@ export function getAudioFailureDescription(code: AudioFailureCode): { explanatio
     DOWNLOAD_FAILED: { explanation: 'Audio download failed mid-stream.', retryable: true, nextAction: 'Retry download' },
     CHUNK_ASSEMBLY_FAILED: { explanation: 'Failed to assemble transcript chunks.', retryable: true, nextAction: 'Retry assembly' },
     QUALITY_CHECK_FAILED: { explanation: 'Transcript failed quality checks.', retryable: false, nextAction: 'Review and paste better transcript' },
+    SPOTIFY_NO_DIRECT_AUDIO: { explanation: 'Spotify does not provide direct audio access.', retryable: false, nextAction: 'Paste transcript, notes, or provide alternate URL' },
+    SPOTIFY_METADATA_ONLY: { explanation: 'Spotify metadata captured but no transcript available.', retryable: false, nextAction: 'Paste transcript or provide alternate episode source' },
+    APPLE_PAGE_PARSED_NO_FEED: { explanation: 'Apple Podcasts page parsed but no RSS feed found.', retryable: true, nextAction: 'Retry resolution or paste transcript' },
+    APPLE_FEED_NOT_RESOLVED: { explanation: 'Could not resolve RSS feed for this podcast.', retryable: true, nextAction: 'Retry or provide direct audio URL' },
+    APPLE_ENCLOSURE_NOT_FOUND: { explanation: 'RSS feed found but episode audio enclosure not matched.', retryable: true, nextAction: 'Retry or provide direct audio URL' },
+    TRANSCRIPT_SOURCE_NOT_FOUND: { explanation: 'No transcript source found for this episode.', retryable: false, nextAction: 'Paste transcript manually' },
+    CANONICAL_PAGE_NOT_FOUND: { explanation: 'No canonical episode page found.', retryable: false, nextAction: 'Provide episode URL or paste transcript' },
+    METADATA_CAPTURED_NO_TRANSCRIPT: { explanation: 'Metadata captured but no transcript available.', retryable: false, nextAction: 'Paste transcript or mark metadata-only' },
+    PLATFORM_RATE_LIMITED: { explanation: 'Platform rate limited the request.', retryable: true, nextAction: 'Wait and retry' },
+    PLATFORM_BLOCKED: { explanation: 'Platform blocked the request.', retryable: false, nextAction: 'Use alternate source or paste transcript' },
+    MANUAL_ASSIST_RECOMMENDED: { explanation: 'Automatic resolution exhausted.', retryable: false, nextAction: 'Open manual assist to provide transcript or notes' },
   };
   return map[code] || { explanation: 'Unknown audio failure.', retryable: false, nextAction: 'Review manually' };
 }
@@ -333,6 +422,12 @@ export function getAudioFailureDescription(code: AudioFailureCode): { explanatio
 export function getAudioStageLabel(stage: AudioPipelineStage): string {
   const labels: Record<AudioPipelineStage, string> = {
     queued: 'Queued',
+    detecting_source_type: 'Detecting Source',
+    resolving_platform_metadata: 'Resolving Metadata',
+    resolving_canonical_episode_page: 'Resolving Episode Page',
+    resolving_rss_feed: 'Resolving RSS Feed',
+    resolving_audio_enclosure: 'Resolving Audio',
+    searching_transcript_source: 'Searching Transcript',
     resolving_source: 'Resolving Source',
     downloading_audio: 'Downloading',
     transcribing: 'Transcribing',
@@ -342,6 +437,7 @@ export function getAudioStageLabel(stage: AudioPipelineStage): string {
     completed: 'Completed',
     failed: 'Failed',
     needs_manual_assist: 'Manual Assist',
+    metadata_only_complete: 'Metadata Only',
   };
   return labels[stage] || stage;
 }

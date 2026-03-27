@@ -174,6 +174,10 @@ export {
   getOrCreateAudioJob,
   loadUserAudioJobs,
   getAudioJobForResourceDb,
+  resolvePodcastEpisode,
+  retryPlatformResolution,
+  processAudioResource,
   type AudioJobRecord,
   type TranscribeDirectResult,
+  type PlatformResolveResult,
 } from './audioOrchestrator';

@@ -25,7 +25,7 @@ import {
   getAudioStrategy,
 } from '@/lib/salesBrain/audioPipeline';
 
-type ManualAssistMode = 'paste_transcript' | 'paste_notes' | 'metadata_only' | 'park_later';
+type ManualAssistMode = 'paste_transcript' | 'paste_notes' | 'provide_alt_url' | 'provide_audio_url' | 'metadata_only' | 'park_later';
 
 interface ManualTranscriptAssistProps {
   open: boolean;
@@ -120,6 +120,12 @@ export const ManualTranscriptAssist = memo(function ManualTranscriptAssist({
                 <SelectItem value="paste_notes">
                   <span className="flex items-center gap-1"><FileText className="h-3 w-3" /> Paste notes / summary</span>
                 </SelectItem>
+                <SelectItem value="provide_alt_url">
+                  <span className="flex items-center gap-1"><FileText className="h-3 w-3" /> Provide alternate episode URL</span>
+                </SelectItem>
+                <SelectItem value="provide_audio_url">
+                  <span className="flex items-center gap-1"><FileAudio className="h-3 w-3" /> Provide direct audio URL</span>
+                </SelectItem>
                 <SelectItem value="metadata_only">
                   <span className="flex items-center gap-1"><Bookmark className="h-3 w-3" /> Mark metadata-only</span>
                 </SelectItem>
@@ -134,14 +140,19 @@ export const ManualTranscriptAssist = memo(function ManualTranscriptAssist({
           {mode !== 'park_later' && mode !== 'metadata_only' && (
             <div className="space-y-1">
               <Label className="text-xs">
-                {mode === 'paste_transcript' ? 'Paste transcript' : 'Paste notes / summary'}
+                {mode === 'paste_transcript' ? 'Paste transcript' :
+                  mode === 'provide_alt_url' ? 'Episode page URL' :
+                    mode === 'provide_audio_url' ? 'Direct audio URL (MP3, etc.)' :
+                      'Paste notes / summary'}
               </Label>
               <Textarea
                 value={content}
                 onChange={e => setContent(e.target.value)}
-                placeholder={mode === 'paste_transcript'
-                  ? 'Paste the full transcript here...'
-                  : 'Paste key notes, takeaways, or summary...'}
+                placeholder={
+                  mode === 'paste_transcript' ? 'Paste the full transcript here...' :
+                    mode === 'provide_alt_url' ? 'https://...' :
+                      mode === 'provide_audio_url' ? 'https://...file.mp3' :
+                        'Paste key notes, takeaways, or summary...'}
                 className="text-xs min-h-[120px]"
               />
               {content && (
