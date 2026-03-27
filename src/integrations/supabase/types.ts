@@ -264,25 +264,36 @@ export type Database = {
         Row: {
           attempts_count: number
           audio_subtype: string
+          canonical_episode_url: string | null
           chunk_metadata: Json | null
           created_at: string
           failure_code: string | null
           failure_reason: string | null
+          final_resolution_status: string | null
           has_transcript: boolean
           id: string
           last_attempted_stage: string | null
+          last_resolution_stage: string | null
           last_successful_stage: string | null
+          metadata_json: Json | null
+          platform_source_type: string | null
           provider_job_ids: Json | null
           provider_used: string | null
           quality_result: Json | null
           recommended_action: string | null
           resolved_audio_url: string | null
+          resolver_attempts: number | null
           resource_id: string
           retryable: boolean
+          rss_feed_url: string | null
+          source_episode_id: string | null
+          source_show_id: string | null
           source_url: string | null
           stage: string
+          transcript_mode: string | null
           transcript_quality: string | null
           transcript_segments: Json | null
+          transcript_source_url: string | null
           transcript_text: string | null
           transcript_word_count: number | null
           updated_at: string
@@ -291,25 +302,36 @@ export type Database = {
         Insert: {
           attempts_count?: number
           audio_subtype?: string
+          canonical_episode_url?: string | null
           chunk_metadata?: Json | null
           created_at?: string
           failure_code?: string | null
           failure_reason?: string | null
+          final_resolution_status?: string | null
           has_transcript?: boolean
           id?: string
           last_attempted_stage?: string | null
+          last_resolution_stage?: string | null
           last_successful_stage?: string | null
+          metadata_json?: Json | null
+          platform_source_type?: string | null
           provider_job_ids?: Json | null
           provider_used?: string | null
           quality_result?: Json | null
           recommended_action?: string | null
           resolved_audio_url?: string | null
+          resolver_attempts?: number | null
           resource_id: string
           retryable?: boolean
+          rss_feed_url?: string | null
+          source_episode_id?: string | null
+          source_show_id?: string | null
           source_url?: string | null
           stage?: string
+          transcript_mode?: string | null
           transcript_quality?: string | null
           transcript_segments?: Json | null
+          transcript_source_url?: string | null
           transcript_text?: string | null
           transcript_word_count?: number | null
           updated_at?: string
@@ -318,25 +340,36 @@ export type Database = {
         Update: {
           attempts_count?: number
           audio_subtype?: string
+          canonical_episode_url?: string | null
           chunk_metadata?: Json | null
           created_at?: string
           failure_code?: string | null
           failure_reason?: string | null
+          final_resolution_status?: string | null
           has_transcript?: boolean
           id?: string
           last_attempted_stage?: string | null
+          last_resolution_stage?: string | null
           last_successful_stage?: string | null
+          metadata_json?: Json | null
+          platform_source_type?: string | null
           provider_job_ids?: Json | null
           provider_used?: string | null
           quality_result?: Json | null
           recommended_action?: string | null
           resolved_audio_url?: string | null
+          resolver_attempts?: number | null
           resource_id?: string
           retryable?: boolean
+          rss_feed_url?: string | null
+          source_episode_id?: string | null
+          source_show_id?: string | null
           source_url?: string | null
           stage?: string
+          transcript_mode?: string | null
           transcript_quality?: string | null
           transcript_segments?: Json | null
+          transcript_source_url?: string | null
           transcript_text?: string | null
           transcript_word_count?: number | null
           updated_at?: string
