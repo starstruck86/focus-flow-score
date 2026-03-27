@@ -189,8 +189,17 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
       return {
         ...base,
         enrichability: 'metadata_only',
-        reason: 'Spotify — metadata available, transcript requires external source',
+        reason: 'Spotify — metadata available, transcript requires external source or manual paste',
         canFetchMetadata: true,
+      };
+
+    case 'apple_podcast_episode':
+      return {
+        ...base,
+        enrichability: 'partially_enrichable',
+        reason: 'Apple Podcasts — metadata + RSS audio resolution attempted',
+        canFetchMetadata: true,
+        canFetchTranscript: true,
       };
 
     case 'audio_file':
