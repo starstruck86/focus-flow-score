@@ -110,7 +110,7 @@ const DAVE_TOOLS: ToolDef[] = [
   // ── Search & Intel ───────────────────────────────────────────
   { name: "search_crm", description: "Search across accounts, deals, contacts, and transcripts", parameters: { query: str("Search query — matches names, notes, content across all entities") }, required: ["query"] },
   { name: "stakeholder_query", description: "Query stakeholders and org chart at an account, optionally filtered by role", parameters: { accountName: str("The account name"), role: str("Filter by buyer role or title keyword like 'VP', 'champion', 'economic buyer'") }, required: ["accountName"] },
-  { name: "search_resources", description: "Search the prep hub for resources, templates, and training materials", parameters: { query: str("Search query for resource title or content") }, required: ["query"] },
+  { name: "search_resources", description: "Search Sales Brain OS for resources, templates, and training materials", parameters: { query: str("Search query for resource title or content") }, required: ["query"] },
 
   // ── Strategy & Analytics ─────────────────────────────────────
   { name: "weekly_battle_plan", description: "Get or generate this week's battle plan with prioritized moves", parameters: {} },
