@@ -129,11 +129,69 @@ function CopilotDialog() {
   const sendMessage = useCallback(async (text: string, overrideMode?: CopilotMode) => {
     if (!text.trim() || streamingRef.current) return;
 
+    const voiceOSActive = isVoiceOSEnabled();
+    let processedText = text.trim();
+    let workflowType: WorkflowType = 'generic';
+
+    // ── Voice OS: meta-intent interception ──────────────────
+    if (voiceOSActive) {
+      const { meta } = classifyVoiceIntent(processedText);
+      if (meta) {
+        const ack = handleVoiceMetaIntent(meta);
+        if (meta === 'stop') {
+          abortRef.current?.abort();
+          setIsStreaming(false);
+          streamingRef.current = false;
+          if (ack) setMessages(prev => [...prev, { role: 'assistant', content: ack }]);
+          return;
+        }
+        if (meta === 'repeat') {
+          const ctx = getVoiceContext();
+          if (ctx.lastResponse) {
+            setMessages(prev => [...prev, { role: 'user', content: processedText }, { role: 'assistant', content: ctx.lastResponse! }]);
+            return;
+          }
+        }
+        if (meta === 'resume' || meta === 'continue') {
+          const nextStep = advanceChain();
+          if (nextStep) {
+            processedText = nextStep.description;
+          }
+        }
+        // shorter/more-detail are handled by setVoiceVerbosity inside handleVoiceMetaIntent
+        if (ack && (meta === 'shorter' || meta === 'more-detail' || meta === 'pause')) {
+          setMessages(prev => [...prev, { role: 'user', content: processedText }, { role: 'assistant', content: ack }]);
+          if (meta === 'pause') return;
+        }
+      }
+
+      // ── Context resolution ────────────────────────────────
+      const voiceCtx = getVoiceContext();
+      const resolved = resolveContextReference(processedText, voiceCtx);
+      if (resolved) {
+        // Enrich text with resolved context for the AI
+        const contextHint = Object.entries(resolved).map(([k, v]) => `${k}: ${v}`).join(', ');
+        processedText = `${processedText} [context: ${contextHint}]`;
+      }
+
+      // ── Chained workflow detection ────────────────────────
+      const chain = parseChainedWorkflow(processedText);
+      if (chain) {
+        activeChainRef.current = chain;
+        processedText = chain.steps[0].description;
+        workflowType = 'chained_command';
+      } else {
+        workflowType = classifyWorkflow(processedText);
+      }
+
+      // Start acceptance timer
+      workflowTimerRef.current = beginWorkflowTimer();
+    }
+
     const activeMode = overrideMode || mode;
     setError(null);
     const userMsg: CopilotMsg = { role: 'user', content: text.trim() };
 
-    // Add user message first, then start streaming separately (no side effects in setState)
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsStreaming(true);
@@ -143,7 +201,7 @@ function CopilotDialog() {
     abortRef.current = abort;
 
     let assistantText = '';
-    const allMessages = [...messages, userMsg]; // capture current + new
+    const allMessages = [...messages, userMsg];
 
     streamCopilot({
       messages: allMessages,
@@ -152,7 +210,7 @@ function CopilotDialog() {
       pageContext,
       onDelta: (chunk) => {
         assistantText += chunk;
-        const content = assistantText; // capture for closure
+        const content = assistantText;
         setMessages(p => {
           const last = p[p.length - 1];
           if (last?.role === 'assistant') {
@@ -164,36 +222,70 @@ function CopilotDialog() {
       onDone: () => {
         setIsStreaming(false);
         streamingRef.current = false;
+
+        // ── Voice OS: post-response wiring ──────────────────
+        if (voiceOSActive) {
+          // Store last response for "repeat that"
+          updateVoiceContext({ lastResponse: assistantText.slice(0, 500) });
+
+          // Record acceptance harness
+          if (workflowTimerRef.current) {
+            const latency = workflowTimerRef.current();
+            recordWorkflow({
+              workflowType,
+              success: true,
+              latencyMs: latency,
+              userAccepted: true,
+              userAbandoned: false,
+              timestamp: Date.now(),
+            });
+            workflowTimerRef.current = null;
+          }
+
+          // Advance chain if active
+          if (activeChainRef.current) {
+            const nextStep = advanceChain();
+            if (nextStep) {
+              setTimeout(() => sendMessage(nextStep.description), 800);
+            } else {
+              activeChainRef.current = null;
+            }
+          }
+        }
+
         // Build explainability data after response completes
         if (isSystemOSEnabled()) {
-          const state = getSystemState();
-          const detectedMode = detectDaveMode(text, {
+          const sysState = getSystemState();
+          const modeCtx = {
             currentRoute: pageContext?.page,
-            hasRecentError: state.activeAlerts.some(a => a.severity === 'critical'),
-            systemMode: state.systemMode,
+            hasRecentError: sysState.activeAlerts.some(a => a.severity === 'critical'),
+            systemMode: sysState.systemMode,
             accountName: pageContext?.accountName,
-          });
+          };
 
-          // Concise, decisive factors — no filler
+          // Use classifyAndDetect when voice OS is active
+          const detectedMode = voiceOSActive
+            ? classifyAndDetect(text, modeCtx).daveMode
+            : detectDaveMode(text, modeCtx);
+
           const topFactors: string[] = [];
           if (pageContext?.accountName) topFactors.push(`Account: ${pageContext.accountName}`);
           if (pageContext?.page) topFactors.push(`Page: ${pageContext.page}`);
-          if (state.systemMode !== 'normal') topFactors.push(`System ${state.systemMode}`);
+          if (sysState.systemMode !== 'normal') topFactors.push(`System ${sysState.systemMode}`);
           if (topFactors.length === 0) topFactors.push(`${detectedMode} mode matched`);
 
-          // Only surface changes if something actually changed
           const recentChanges: string[] = [];
-          if (state.activeAlerts.length > 0) recentChanges.push(`${state.activeAlerts.length} alert${state.activeAlerts.length > 1 ? 's' : ''} active`);
-          const lastCorrection = state.recentCorrections[state.recentCorrections.length - 1];
+          if (sysState.activeAlerts.length > 0) recentChanges.push(`${sysState.activeAlerts.length} alert${sysState.activeAlerts.length > 1 ? 's' : ''} active`);
+          const lastCorrection = sysState.recentCorrections[sysState.recentCorrections.length - 1];
           if (lastCorrection) recentChanges.push(lastCorrection.action.replace(/_/g, ' '));
 
-          // Sources — only list if there are multiple
           const sourcesUsed: string[] = ['system state', 'mode detector'];
           if (pageContext?.accountName) sourcesUsed.push('account context');
+          if (voiceOSActive) sourcesUsed.push('voice intent');
 
           setExplainability({
             mode: detectedMode,
-            confidence: state.systemConfidence,
+            confidence: sysState.systemConfidence,
             topFactors,
             recentChanges: recentChanges.length > 0 ? recentChanges : undefined,
             sourcesUsed: sourcesUsed.length > 2 ? sourcesUsed : undefined,
@@ -204,6 +296,21 @@ function CopilotDialog() {
         setError(err);
         setIsStreaming(false);
         streamingRef.current = false;
+
+        // Record failure in acceptance harness
+        if (voiceOSActive && workflowTimerRef.current) {
+          const latency = workflowTimerRef.current();
+          recordWorkflow({
+            workflowType,
+            success: false,
+            latencyMs: latency,
+            userAccepted: false,
+            userAbandoned: false,
+            failureReason: err,
+            timestamp: Date.now(),
+          });
+          workflowTimerRef.current = null;
+        }
       },
       onAccountUpdated: () => {
         toast.success('Account data updated by AI research', {
