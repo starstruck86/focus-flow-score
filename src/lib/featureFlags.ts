@@ -94,3 +94,7 @@ export function isSessionAutopilotEnabled(): boolean {
 export function isExecutionMomentumEnabled(): boolean {
   return loadFeatureFlags().ENABLE_EXECUTION_MOMENTUM;
 }
+
+export function isSalesBrainEnabled(): boolean {
+  return loadFeatureFlags().ENABLE_SALES_BRAIN;
+}
