@@ -142,6 +142,18 @@ export function ExecutionWorkbench({ deals = [], playbooks = [], riskSignals = [
         </Card>
       )}
 
+      {/* Capability Awareness — between Strategy and Action */}
+      {(() => {
+        const capCtx: CapabilityContext = {
+          dealStage: context.topDeals[0]?.stage,
+          dealName: context.topDeals[0]?.name,
+          dealRisk: context.riskSignals.some(r => r.severity === 'high') ? 'high' : context.riskSignals.length > 0 ? 'medium' : 'low',
+          recommendedPlaybookTitle: context.recommendedPlaybook?.playbookTitle,
+          recommendedPlaybookType: context.recommendedPlaybook?.playbookTitle,
+        };
+        return <CapabilityPromptCard context={capCtx} />;
+      })()}
+
       {/* Coach Nudge */}
       {context.coachNudge && (
         <Card className="bg-accent/5 border-accent/30">
