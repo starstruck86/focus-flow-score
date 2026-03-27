@@ -24,8 +24,10 @@ import {
   type RoleplayBlockStatus,
   type RoleplayBlockEvent,
 } from '@/lib/dailyRoleplayBlock';
-import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled, isAccountExecutionModelEnabled } from '@/lib/featureFlags';
+import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled, isAccountExecutionModelEnabled, isAccountCentricExecutionEnabled } from '@/lib/featureFlags';
 import { todayInAppTz } from '@/lib/timeFormat';
+import { appendTimelineEvent } from '@/lib/accountTimeline';
+import { recordPrepToAttempt, recordAttemptToConnect } from '@/lib/accountPostAction';
 import {
   markAccountPrepped,
   recordAccountOutcome,
