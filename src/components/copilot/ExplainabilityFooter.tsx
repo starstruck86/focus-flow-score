@@ -34,8 +34,10 @@ export const ExplainabilityFooter = memo(function ExplainabilityFooter({ data }:
   const [expanded, setExpanded] = useState(false);
 
   if (!isSystemOSEnabled()) return null;
-  // Gate: only show if there's something meaningful
   if (!data.topFactors?.length && data.confidence === undefined) return null;
+  // Suppress when system is healthy and nothing changed — no news is good news
+  const hasChanges = (data.recentChanges?.length ?? 0) > 0;
+  if ((data.confidence ?? 0) >= 75 && !hasChanges) return null;
 
   const conf = data.confidence ?? 0;
   const confColor = conf >= 75 ? 'text-primary' : conf >= 55 ? 'text-amber-600' : 'text-destructive';
