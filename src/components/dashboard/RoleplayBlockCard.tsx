@@ -24,13 +24,15 @@ interface RoleplayBlockCardProps {
   isMissedNoSlot?: boolean;
 }
 
-export const RoleplayBlockCard = memo(function RoleplayBlockCard({ blockStartTime, blockEndTime }: RoleplayBlockCardProps) {
+export const RoleplayBlockCard = memo(function RoleplayBlockCard({ blockStartTime, blockEndTime, isMissedNoSlot }: RoleplayBlockCardProps) {
   const today = todayInAppTz();
   const config = getRoleplayBlockConfig();
   const todayStatus = getTodayRoleplayStatus(today);
   const streak = getRoleplayStreak();
   const { ask: askCopilot } = useCopilot();
-  const [localStatus, setLocalStatus] = useState(todayStatus?.status || 'scheduled');
+  const [localStatus, setLocalStatus] = useState(
+    isMissedNoSlot ? 'missed_no_slot' : (todayStatus?.status || 'scheduled')
+  );
 
   const handleStart = useCallback(() => {
     recordRoleplayBlockEvent({

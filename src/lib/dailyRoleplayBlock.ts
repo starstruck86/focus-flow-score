@@ -47,7 +47,7 @@ export function updateRoleplayBlockConfig(patch: Partial<RoleplayBlockConfig>): 
 
 // ── Tracking ───────────────────────────────────────────────
 
-export type RoleplayBlockStatus = 'scheduled' | 'started' | 'completed' | 'skipped' | 'rescheduled' | 'missed';
+export type RoleplayBlockStatus = 'scheduled' | 'started' | 'completed' | 'skipped' | 'rescheduled' | 'missed' | 'missed_no_slot';
 
 export type RoleplayCompletionTiming =
   | 'completed_before_first_action'
