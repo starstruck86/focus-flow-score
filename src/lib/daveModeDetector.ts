@@ -115,6 +115,26 @@ export function detectDaveMode(input: string, context: DaveModeContext = {}): Da
   return 'EXECUTE';
 }
 
+/**
+ * Combined voice intent + Dave mode detection.
+ * Use this as the single entry point for voice-first routing.
+ */
+export function classifyAndDetect(input: string, context: DaveModeContext = {}) {
+  const voiceIntent = classifyVoiceIntent(input);
+  const daveMode = detectDaveMode(input, context);
+
+  // Voice intent can override Dave mode when confidence is high
+  if (voiceIntent.confidence >= 70) {
+    const voiceMode = VOICE_TO_DAVE[voiceIntent.intent];
+    // Only override if voice classification is more specific
+    if (voiceMode !== 'EXECUTE' || daveMode === 'EXECUTE') {
+      return { voiceIntent, daveMode: voiceMode };
+    }
+  }
+
+  return { voiceIntent, daveMode };
+}
+
 // ── Response Builder ───────────────────────────────────────
 
 export function buildDaveResponse(opts: {
