@@ -80,6 +80,7 @@ function CopilotDialog() {
   const [mode, setMode] = useState<CopilotMode>('quick');
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [explainability, setExplainability] = useState<ExplainabilityData | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
