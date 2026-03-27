@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
-  Target, AlertTriangle, Play,
+  Target, AlertTriangle, Play, Sparkles,
   CheckCircle, BarChart3, Lightbulb, Shield
 } from 'lucide-react';
 import { isSystemOSEnabled } from '@/lib/featureFlags';
@@ -109,18 +109,86 @@ export function SkillLabPanel() {
 
   if (!isSystemOSEnabled()) return null;
 
+  // Get grounded scenario families when roleplay grounding is enabled
+  let scenarioFamilies: Array<{
+    scenarioType: string;
+    displayName: string;
+    practiceCount: number;
+    isUnderPracticed: boolean;
+    weaknessCount: number;
+    bestScenario: any;
+  }> = [];
+
+  try {
+    const { isRoleplayGroundingEnabled } = require('@/lib/featureFlags');
+    if (isRoleplayGroundingEnabled()) {
+      const { getScenarioFamilySummaries } = require('@/lib/roleplayScenarioManager');
+      scenarioFamilies = getScenarioFamilySummaries();
+    }
+  } catch {}
+
   const weakAreas = profile.conversionSignals
     .filter(s => s.strength < 0.5)
     .sort((a, b) => a.strength - b.strength)
     .slice(0, 3);
 
+  const hasGroundedScenarios = scenarioFamilies.length > 0;
+  const underPracticed = scenarioFamilies.filter(f => f.isUnderPracticed).slice(0, 3);
+  const withWeakness = scenarioFamilies.filter(f => f.weaknessCount >= 2).slice(0, 2);
+
   return (
     <div data-testid="skill-lab-panel" className="space-y-3">
+      {/* Grounded Scenario Families */}
+      {hasGroundedScenarios && underPracticed.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2 pt-3 px-3">
+            <CardTitle className="text-sm flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5 text-accent" />
+              Grounded Scenarios
+              <Badge variant="secondary" className="text-[8px] ml-1">from playbooks</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-3 pb-3 space-y-2">
+            {underPracticed.map((family, i) => (
+              <div key={i} className="flex items-center justify-between p-2 rounded-md bg-muted/30">
+                <div>
+                  <p className="text-xs font-medium">{family.displayName}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {family.practiceCount === 0 ? 'Never practiced' : `${family.practiceCount} session${family.practiceCount !== 1 ? 's' : ''}`}
+                    {family.weaknessCount > 0 && ` · ${family.weaknessCount} weak`}
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" className="h-6 text-[10px]"
+                  onClick={() => askCopilot(`Start a grounded ${family.displayName} roleplay. Use the most relevant playbook scenario.`, 'deal-strategy')}>
+                  <Play className="h-3 w-3 mr-1" /> Practice
+                </Button>
+              </div>
+            ))}
+            {withWeakness.length > 0 && withWeakness.some(w => !underPracticed.some(u => u.scenarioType === w.scenarioType)) && (
+              <div className="pt-1 border-t border-border/30">
+                <p className="text-[10px] text-muted-foreground mb-1">Repeated weaknesses:</p>
+                {withWeakness.filter(w => !underPracticed.some(u => u.scenarioType === w.scenarioType)).map((family, i) => (
+                  <div key={i} className="flex items-center justify-between p-1.5 rounded bg-destructive/5">
+                    <span className="text-[10px]">{family.displayName} · {family.weaknessCount} weak sessions</span>
+                    <Button size="sm" variant="ghost" className="h-5 text-[9px] px-2"
+                      onClick={() => askCopilot(`Start a ${family.displayName} roleplay focused on my weak areas.`, 'deal-strategy')}>
+                      Drill
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Conversion-Based Training */}
       <Card>
         <CardHeader className="pb-2 pt-3 px-3">
           <CardTitle className="text-sm flex items-center gap-1.5">
             <Play className="h-3.5 w-3.5 text-primary" />
             Targeted Training
+            {!hasGroundedScenarios && <Badge variant="outline" className="text-[8px] ml-1">generic</Badge>}
           </CardTitle>
         </CardHeader>
         <CardContent className="px-3 pb-3 space-y-2">

@@ -65,6 +65,7 @@ export interface RoleplayBlockEvent {
   startedAt?: string;
   completedAt?: string;
   completionTiming?: RoleplayCompletionTiming;
+  groundingSource?: 'playbook' | 'default';
   timestamp: number;
 }
 
