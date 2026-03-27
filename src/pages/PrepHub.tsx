@@ -125,6 +125,16 @@ export default function PrepHub() {
             <PlaybooksPanel />
           </TabsContent>
 
+          {/* SOURCES TAB */}
+          <TabsContent value="sources" className="mt-3">
+            <SourceRegistryManager />
+          </TabsContent>
+
+          {/* INCOMING QUEUE TAB */}
+          <TabsContent value="incoming" className="mt-3">
+            <IncomingQueue />
+          </TabsContent>
+
           {/* AI PREP TAB */}
           <TabsContent value="prep" className="space-y-3 mt-3">
             <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1 w-fit">
