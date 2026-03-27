@@ -89,6 +89,9 @@ export default function Trends() {
           </div>
         </div>
 
+        {/* System Telemetry — shown above performance when enabled */}
+        <SystemTelemetryPanel />
+
         {!hasData && !isLoading ? (
           <Card className="text-center py-16 border-dashed">
             <CardContent>
