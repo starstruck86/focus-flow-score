@@ -350,7 +350,7 @@ export function ResourceLibraryTable({
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={12} className="text-center py-12 text-muted-foreground">
                     <FileText className="h-6 w-6 mx-auto mb-2 opacity-40" />
                     <p className="text-sm">No resources match filters</p>
                   </TableCell>
