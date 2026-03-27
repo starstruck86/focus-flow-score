@@ -99,6 +99,7 @@ export function onPrepComplete(
   if (isAccountExecutionModelEnabled()) {
     for (const acct of preparedAccounts) {
       markAccountPrepped(date, acct.id, acct.name, targetLoop.loopId, blockId);
+      appendTimelineEvent(acct.id, acct.name, 'prepped', { date, loopId: targetLoop.loopId, blockId });
     }
   }
 }
