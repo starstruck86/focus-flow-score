@@ -913,13 +913,27 @@ export function DailyTimeBlocks() {
     return merged;
   }, [plan?.blocks, todayStr]);
 
+  // Rebuild loops if plan changed + wire scenario regen on mount
+  useEffect(() => {
+    if (plan && isLoopNativeSchedulerEnabled()) {
+      const planBlocks = (plan.blocks || []) as any[];
+      const serverMeta = (plan.key_metric_targets as any)?.loop_metadata;
+      rebuildLoopsIfNeeded(todayStr, planBlocks, serverMeta);
+    }
+  }, [plan, todayStr]);
+
+  useEffect(() => {
+    checkScenarioFreshnessOnLoad();
+  }, []);
+
   // Execution signals: prep→action readiness
   const executionSignal = useMemo(() => {
     const completedSet = new Set((plan?.completed_goals || []) as string[]);
     const rpStatus = roleplayDailyStatus;
     const streak = getRoleplayStreak();
-    return buildPrepActionSignal(blocks, completedSet, currentIdx, rpStatus, streak);
-  }, [blocks, plan?.completed_goals, currentIdx, roleplayDailyStatus]);
+    const serverMeta = (plan?.key_metric_targets as any)?.loop_metadata;
+    return buildPrepActionSignal(blocks, completedSet, currentIdx, rpStatus, streak, todayStr, serverMeta);
+  }, [blocks, plan?.completed_goals, currentIdx, roleplayDailyStatus, todayStr, plan?.key_metric_targets]);
 
   // Calculate progress
   const totalGoals = blocks.reduce((s, b) => s + b.goals.length, 0);
