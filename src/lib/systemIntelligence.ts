@@ -214,7 +214,7 @@ export function computeHealthSnapshot(inputs: HealthInputs): HealthSnapshot {
       id: `alert-trust-${Date.now()}`, severity: trustStatus === 'critical' ? 'critical' : 'warning',
       category: 'trust', message: `${inputs.trustDegradationCount} trust degradation events in 7d`,
       metric: 'trust_degradation_count', currentValue: inputs.trustDegradationCount,
-      threshold: HEALTH_THRESHOLDS.trustDegradationRate.warning, triggeredAt: now, acknowledged: false,
+      threshold: HEALTH_THRESHOLDS.trustDegradationRate.warning, triggeredAt: now, acknowledged: false, state: 'active' as AlertState,
     });
   }
 
