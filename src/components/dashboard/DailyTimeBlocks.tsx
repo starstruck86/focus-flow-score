@@ -1114,6 +1114,9 @@ export function DailyTimeBlocks() {
         </div>
       )}
 
+      {/* Execution signals: roleplay + prep→action readiness */}
+      {expanded && <ExecutionSignals signal={executionSignal} />}
+
       {rebuildStatus && (
         <div className="px-4 py-2 border-b border-border/30 bg-muted/20 text-[11px] text-muted-foreground flex items-center justify-between gap-3" data-testid="rebuild-plan-status">
           <span>
