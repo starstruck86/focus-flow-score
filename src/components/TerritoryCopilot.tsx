@@ -321,6 +321,11 @@ function CopilotDialog() {
           {error && (
             <div className="text-xs text-destructive bg-destructive/10 rounded-lg p-3">{error}</div>
           )}
+
+          {/* Explainability — shows after response completes */}
+          {explainability && !isStreaming && messages.length > 0 && (
+            <ExplainabilityFooter data={explainability} />
+          )}
         </div>
 
         {/* Input */}
