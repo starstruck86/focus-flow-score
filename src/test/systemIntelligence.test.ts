@@ -421,3 +421,234 @@ describe('Fully Adjusted Urgency', () => {
     expect(urgency).toBeGreaterThanOrEqual(0);
   });
 });
+
+// ── Healthy defaults for reuse ─────────────────────────────
+
+const healthyInputs: HealthInputs = {
+  enrichmentSuccessRate: 95,
+  enrichmentFailureRate: 5,
+  playbookRegenerationCount: 2,
+  trustDegradationCount: 1,
+  outcomeScoreTrend: 10,
+  explorationWinRate: 25,
+  exploitationWinRate: 30,
+  daveFailureRate: 3,
+  daveRetryRate: 5,
+  singlePlaybookConcentration: 30,
+};
+
+// ── Alert Lifecycle ────────────────────────────────────────
+
+describe('Alert Lifecycle', () => {
+  function makeAlert(overrides?: Partial<SystemAlert>): SystemAlert {
+    return {
+      id: `alert-test-${Date.now()}`,
+      severity: 'warning',
+      category: 'enrichment',
+      message: 'Test alert',
+      metric: 'test',
+      currentValue: 50,
+      threshold: 20,
+      triggeredAt: new Date().toISOString(),
+      acknowledged: false,
+      state: 'active' as AlertState,
+      ...overrides,
+    };
+  }
+
+  it('acknowledges an active alert', () => {
+    const a = makeAlert({ id: 'ack-1' });
+    persistAlerts([a]);
+    const result = acknowledgeAlert('ack-1', 'admin');
+    expect(result).not.toBeNull();
+    expect(result!.state).toBe('acknowledged');
+    expect(result!.acknowledgedBy).toBe('admin');
+    expect(result!.acknowledgedAt).toBeDefined();
+  });
+
+  it('resolves an alert with resolution text', () => {
+    const a = makeAlert({ id: 'res-1' });
+    persistAlerts([a]);
+    acknowledgeAlert('res-1');
+    const result = resolveAlert('res-1', 'Fixed enrichment pipeline');
+    expect(result!.state).toBe('resolved');
+    expect(result!.resolution).toBe('Fixed enrichment pipeline');
+  });
+
+  it('cannot resolve an already-resolved alert', () => {
+    const a = makeAlert({ id: 'res-2' });
+    persistAlerts([a]);
+    resolveAlert('res-2', 'First fix');
+    const second = resolveAlert('res-2', 'Second fix');
+    expect(second).toBeNull();
+  });
+
+  it('escalates an active alert', () => {
+    const a = makeAlert({ id: 'esc-1' });
+    persistAlerts([a]);
+    const result = escalateAlert('esc-1', 'Too critical');
+    expect(result!.state).toBe('escalated');
+    expect(result!.escalationReason).toBe('Too critical');
+  });
+
+  it('auto-escalates stale unresolved alerts', () => {
+    const staleTime = new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(); // 5h ago
+    const a = makeAlert({ id: 'stale-1', triggeredAt: staleTime });
+    persistAlerts([a]);
+    const escalated = autoEscalateStaleAlerts();
+    expect(escalated.length).toBe(1);
+    expect(escalated[0].state).toBe('escalated');
+  });
+
+  it('computes resolution stats', () => {
+    localStorage.clear();
+    const a1 = makeAlert({ id: 'stat-1', triggeredAt: new Date(Date.now() - 60000).toISOString() });
+    persistAlerts([a1]);
+    resolveAlert('stat-1', 'done');
+    const stats = computeAlertResolutionStats();
+    expect(stats.totalResolved).toBe(1);
+    expect(stats.avgResolutionMs).toBeGreaterThan(0);
+  });
+
+  it('alerts from computeHealthSnapshot have active state', () => {
+    const snap = computeHealthSnapshot({ ...healthyInputs, enrichmentFailureRate: 30 });
+    expect(snap.alerts.length).toBeGreaterThan(0);
+    expect(snap.alerts[0].state).toBe('active');
+  });
+});
+
+// ── System Confidence ──────────────────────────────────────
+
+describe('System Confidence', () => {
+  it('computes high confidence when all metrics healthy', () => {
+    const conf = computeSystemConfidence(healthyInputs, 0);
+    expect(conf.score).toBeGreaterThanOrEqual(70);
+    expect(conf.label).toBe('high');
+    expect(conf.components.length).toBe(6);
+  });
+
+  it('drops confidence with high failure rates', () => {
+    const bad = { ...healthyInputs, enrichmentFailureRate: 60, daveFailureRate: 50 };
+    const conf = computeSystemConfidence(bad, 3);
+    expect(conf.score).toBeLessThan(50);
+    expect(['low', 'critical']).toContain(conf.label);
+  });
+
+  it('anomalies reduce confidence', () => {
+    const noAnomaly = computeSystemConfidence(healthyInputs, 0);
+    const withAnomaly = computeSystemConfidence(healthyInputs, 4);
+    expect(withAnomaly.score).toBeLessThan(noAnomaly.score);
+  });
+});
+
+// ── System Modes ───────────────────────────────────────────
+
+describe('System Modes', () => {
+  it('enters recovery on critical thresholds', () => {
+    const conf = computeSystemConfidence({ ...healthyInputs, enrichmentFailureRate: 55 }, 0);
+    const mode = determineSystemMode({ ...healthyInputs, enrichmentFailureRate: 55 }, 0, conf);
+    expect(mode.mode).toBe('recovery');
+    expect(mode.adjustments.length).toBeGreaterThan(0);
+  });
+
+  it('enters degraded on elevated failures', () => {
+    const inputs = { ...healthyInputs, enrichmentFailureRate: 30 };
+    const conf = computeSystemConfidence(inputs, 0);
+    const mode = determineSystemMode(inputs, 0, conf);
+    expect(mode.mode).toBe('degraded');
+  });
+
+  it('enters exploration-heavy on declining outcomes with exploration outperforming', () => {
+    const inputs = { ...healthyInputs, outcomeScoreTrend: -20, explorationWinRate: 40, exploitationWinRate: 20 };
+    const conf = computeSystemConfidence(inputs, 0);
+    const mode = determineSystemMode(inputs, 0, conf);
+    expect(mode.mode).toBe('exploration-heavy');
+  });
+
+  it('enters conservative on high anomaly count', () => {
+    const conf = computeSystemConfidence(healthyInputs, 4);
+    const mode = determineSystemMode(healthyInputs, 4, conf);
+    expect(mode.mode).toBe('conservative');
+  });
+
+  it('stays normal when everything healthy', () => {
+    const conf = computeSystemConfidence(healthyInputs, 0);
+    const mode = determineSystemMode(healthyInputs, 0, conf);
+    expect(mode.mode).toBe('normal');
+  });
+
+  it('MODE_PROFILES have valid values for all modes', () => {
+    for (const [name, profile] of Object.entries(MODE_PROFILES)) {
+      expect(profile.maxConcurrency).toBeGreaterThan(0);
+      expect(profile.explorationRate).toBeGreaterThanOrEqual(0);
+      expect(profile.explorationRate).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('persists and loads system mode', () => {
+    const inputs = { ...healthyInputs, enrichmentFailureRate: 30 };
+    const conf = computeSystemConfidence(inputs, 0);
+    determineSystemMode(inputs, 0, conf);
+    const loaded = loadSystemMode();
+    expect(loaded.mode).toBe('degraded');
+  });
+});
+
+// ── Auto-Correction ────────────────────────────────────────
+
+describe('Auto-Correction', () => {
+  it('reduces concurrency on high enrichment failure', () => {
+    const actions = evaluateAutoCorrections({ ...healthyInputs, enrichmentFailureRate: 35 }, 'normal');
+    const conc = actions.find(a => a.action === 'reduce_concurrency');
+    expect(conc).toBeDefined();
+    expect(conc!.to).toBe(2);
+  });
+
+  it('increases exploration on declining outcomes', () => {
+    const actions = evaluateAutoCorrections({ ...healthyInputs, outcomeScoreTrend: -25 }, 'normal');
+    expect(actions.find(a => a.action === 'increase_exploration')).toBeDefined();
+  });
+
+  it('reduces complexity on high Dave failure', () => {
+    const actions = evaluateAutoCorrections({ ...healthyInputs, daveFailureRate: 30 }, 'normal');
+    expect(actions.find(a => a.action === 'reduce_complexity')).toBeDefined();
+  });
+
+  it('reduces aggression on trust degradation spike', () => {
+    const actions = evaluateAutoCorrections({ ...healthyInputs, trustDegradationCount: 7 }, 'normal');
+    expect(actions.find(a => a.action === 'reduce_aggression')).toBeDefined();
+  });
+
+  it('logs corrections persistently', () => {
+    localStorage.clear();
+    evaluateAutoCorrections({ ...healthyInputs, daveFailureRate: 30 }, 'normal');
+    const log = loadCorrectionLog();
+    expect(log.length).toBeGreaterThan(0);
+  });
+
+  it('does not trigger corrections when healthy', () => {
+    const actions = evaluateAutoCorrections(healthyInputs, 'normal');
+    expect(actions).toHaveLength(0);
+  });
+});
+
+// ── Full System Health Evaluation ──────────────────────────
+
+describe('Full System Health Evaluation', () => {
+  it('returns all layers in a single call', () => {
+    const result = evaluateFullSystemHealth(healthyInputs);
+    expect(result.snapshot).toBeDefined();
+    expect(result.confidence).toBeDefined();
+    expect(result.mode).toBeDefined();
+    expect(result.corrections).toBeDefined();
+    expect(result.anomalies).toBeDefined();
+    expect(result.escalated).toBeDefined();
+  });
+
+  it('triggers corrections in degraded scenario', () => {
+    const result = evaluateFullSystemHealth({ ...healthyInputs, enrichmentFailureRate: 55, daveFailureRate: 45 });
+    expect(result.mode.mode).toBe('recovery');
+    expect(result.confidence.score).toBeLessThan(50);
+    expect(result.corrections.length).toBeGreaterThan(0);
+  });
+});
