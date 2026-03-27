@@ -222,17 +222,54 @@ export function getAudioStrategy(subtype: AudioSubtype): AudioStrategy {
         operatorFailureReason: 'Podcast — attempting to resolve audio source from page',
       };
 
-    case 'spotify_episode':
+    case 'spotify_show':
       return {
         subtype,
-        primaryPath: { method: 'spotify_metadata', description: 'Extract Spotify metadata + show notes' },
-        secondaryPath: { method: 'detect_transcript_source', description: 'Search for linked transcript' },
+        primaryPath: { method: 'spotify_metadata', description: 'Extract Spotify show metadata' },
+        secondaryPath: { method: 'detect_transcript_source', description: 'Search for linked transcript sources' },
         tertiaryPath: { method: 'manual_transcript', description: 'Request manual transcript/notes' },
         metadataOnlyAcceptable: true,
         manualAssistRequired: true,
         retryMode: 'manual_only',
-        operatorFailureReason: 'Spotify — no direct audio access. Metadata extracted, manual transcript needed for full enrichment',
+        operatorFailureReason: 'Spotify show — no direct audio. Import specific episodes or paste transcript',
       };
+
+    case 'apple_podcast_episode':
+      return {
+        subtype,
+        primaryPath: { method: 'resolve_apple_episode', description: 'Resolve via iTunes API + RSS feed' },
+        secondaryPath: { method: 'transcribe_direct', description: 'Transcribe resolved audio enclosure' },
+        tertiaryPath: { method: 'manual_transcript', description: 'Request manual transcript/notes' },
+        metadataOnlyAcceptable: true,
+        manualAssistRequired: false,
+        retryMode: 'automatic',
+        operatorFailureReason: 'Apple Podcast episode — resolving RSS feed + audio enclosure',
+      };
+
+    case 'apple_podcast_show':
+      return {
+        subtype,
+        primaryPath: { method: 'resolve_apple_show', description: 'Resolve show via iTunes API' },
+        secondaryPath: { method: 'manual_transcript', description: 'Import specific episodes or paste transcript' },
+        tertiaryPath: null,
+        metadataOnlyAcceptable: true,
+        manualAssistRequired: true,
+        retryMode: 'manual_only',
+        operatorFailureReason: 'Apple Podcast show — import specific episodes for transcription',
+      };
+
+    case 'podcast_episode_page_only':
+      return {
+        subtype,
+        primaryPath: { method: 'scrape_episode_page', description: 'Scrape episode page for metadata + audio' },
+        secondaryPath: { method: 'detect_transcript_source', description: 'Search for transcript on page' },
+        tertiaryPath: { method: 'manual_transcript', description: 'Request manual transcript/notes' },
+        metadataOnlyAcceptable: true,
+        manualAssistRequired: false,
+        retryMode: 'automatic',
+        operatorFailureReason: 'Podcast page — attempting to extract audio or transcript from page',
+      };
+
 
     case 'youtube_audio_or_video':
       return {
