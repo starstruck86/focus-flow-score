@@ -1,24 +1,22 @@
 /**
  * System Governance Panel — visible operator controls
  * Feature-flagged behind ENABLE_SYSTEM_OS
+ * REACTIVE: polls live system state every 5 s
  */
 
-import { useState, useMemo, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useCallback } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { 
-  Shield, Activity, AlertTriangle, Gauge, Settings,
-  ChevronDown, ChevronUp, Eye, Zap
+  Shield, AlertTriangle,
+  ChevronDown, ChevronUp
 } from 'lucide-react';
 import { isSystemOSEnabled } from '@/lib/featureFlags';
-import { 
-  getSystemState, loadKillSwitches, toggleKillSwitch, 
-  type KillSwitches, type SystemState 
-} from '@/lib/systemGovernance';
-import { loadSteeringBias, type SteeringBias } from '@/lib/systemIntelligence';
+import { toggleKillSwitch, type KillSwitches } from '@/lib/systemGovernance';
 import { cn } from '@/lib/utils';
+import { useState } from 'react';
+import { useLiveSystemState, useLiveKillSwitches } from '@/hooks/useSystemState';
 
 const KILL_SWITCH_LABELS: Record<keyof KillSwitches, string> = {
   ENRICHMENT_ENABLED: 'Enrichment',
@@ -30,13 +28,13 @@ const KILL_SWITCH_LABELS: Record<keyof KillSwitches, string> = {
 
 export function GovernancePanel() {
   const [expanded, setExpanded] = useState(false);
-  const [switches, setSwitches] = useState(loadKillSwitches);
-  const state = useMemo(() => getSystemState(), []);
+  const state = useLiveSystemState();
+  const [switches, setSwitches] = useLiveKillSwitches();
 
   const handleToggle = useCallback((key: keyof KillSwitches) => {
     const updated = toggleKillSwitch(key, !switches[key]);
     setSwitches(updated);
-  }, [switches]);
+  }, [switches, setSwitches]);
 
   if (!isSystemOSEnabled()) return null;
 
