@@ -184,6 +184,7 @@ function CopilotDialog() {
   const handleClear = useCallback(() => {
     setMessages([]);
     setError(null);
+    setExplainability(null);
     abortRef.current?.abort();
     setIsStreaming(false);
     streamingRef.current = false;
