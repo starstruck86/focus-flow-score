@@ -73,6 +73,8 @@ export function SystemDebugPanel() {
   const momentumEnabled = isExecutionMomentumEnabled();
   const measurementCount = loadMeasurementEvents().length;
   const brainStats = getDoctrineGovernanceStats();
+  const legacyCount = getLegacyHydratedCount();
+  const actualUsage = getActualUsageCounts();
   const { activeSession, mode, disciplineMode, scorecard, momentum, autopilotLog, overrides } = useExecutionSession();
   const nextCandidates = sessionEnabled ? getNextBestAccounts() : [];
   const enforcement = sessionEnabled ? evaluatePrepActionEnforcement() : null;
