@@ -33,6 +33,14 @@ export interface PrepActionSignal {
   nextLoopStatus?: string | null;
   currentLoopType?: string | null;
   serverLoopCount?: number;
+
+  // Account execution truth (when enabled)
+  accountTruthAvailable?: boolean;
+  accountPreppedCount?: number;
+  accountWorkedCount?: number;
+  accountReadyToCallCount?: number;
+  accountCarryForwardCount?: number;
+  accountOutcomeSummary?: string[];
 }
 
 // ── Heuristic: count "prepared" accounts ─────────────────────
