@@ -159,12 +159,57 @@ function CopilotDialog() {
         streamingRef.current = false;
         // Build explainability data after response completes
         if (isSystemOSEnabled()) {
-          const detectedMode = detectDaveMode(text);
+          const state = getSystemState();
+          const detectedMode = detectDaveMode(text, {
+            currentRoute: pageContext?.page,
+            hasRecentError: state.activeAlerts.some(a => a.severity === 'critical'),
+            systemMode: state.systemMode,
+            accountName: pageContext?.accountName,
+          });
+
+          // Build real factors from system state
+          const activeAlerts = state.activeAlerts;
+          const recentCorrections = state.recentCorrections.slice(-3);
+          const guardrails = state.activeGuardrails;
+
+          const topFactors: string[] = [];
+          topFactors.push(`Detected mode: ${detectedMode} from input patterns`);
+          if (pageContext?.page) topFactors.push(`Route context: ${pageContext.page}`);
+          if (pageContext?.accountName) topFactors.push(`Account context: ${pageContext.accountName}`);
+          if (state.systemMode !== 'normal') topFactors.push(`System in ${state.systemMode} mode`);
+
+          const suppressedAlternatives: string[] = [];
+          const allModes = ['EXECUTE', 'PREP', 'COACH', 'ROLEPLAY', 'DIAGNOSE', 'RECOVERY'] as const;
+          allModes.filter(m => m !== detectedMode).slice(0, 2).forEach(m => {
+            suppressedAlternatives.push(`${m} mode — lower pattern match`);
+          });
+
+          const recentChanges: string[] = [];
+          if (activeAlerts.length > 0) recentChanges.push(`${activeAlerts.length} active alert(s)`);
+          recentCorrections.forEach(c => recentChanges.push(`Auto-correction: ${c.action.replace(/_/g, ' ')}`));
+
+          const confidenceDrivers: string[] = [];
+          if (state.systemConfidence >= 75) confidenceDrivers.push('System confidence high');
+          else if (state.systemConfidence >= 55) confidenceDrivers.push('System confidence moderate');
+          else confidenceDrivers.push('System confidence low — limited data');
+          if (guardrails.length > 0) confidenceDrivers.push(`${guardrails.length} guardrail(s) active`);
+
+          const sourcesUsed: string[] = ['system_state', 'mode_detector'];
+          if (pageContext?.page) sourcesUsed.push('page_context');
+          if (pageContext?.accountName) sourcesUsed.push('account_context');
+
+          const sourcesIgnored: string[] = [];
+          if (!pageContext?.accountName) sourcesIgnored.push('account_context (unavailable)');
+
           setExplainability({
             mode: detectedMode,
-            confidence: 72,
-            topFactors: [`Mode: ${detectedMode}`, `Context: ${pageContext?.page || 'general'}`],
-            confidenceDrivers: ['Based on conversation context and query pattern'],
+            confidence: state.systemConfidence,
+            topFactors,
+            suppressedAlternatives,
+            recentChanges: recentChanges.length > 0 ? recentChanges : undefined,
+            confidenceDrivers,
+            sourcesUsed,
+            sourcesIgnored: sourcesIgnored.length > 0 ? sourcesIgnored : undefined,
           });
         }
       },
