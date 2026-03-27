@@ -81,7 +81,22 @@ export function SystemDebugPanel() {
           <Row label="Current loop" value={snapshot.currentLoopStatus || 'none'} />
           <Row label="Carry-forward" value={String(snapshot.carryForwardCount)} />
 
-          {/* Roleplay state */}
+          {/* Account execution truth */}
+          {snapshot.accountTruthEnabled && (
+            <>
+              <div className="border-t border-border/20 pt-1 mt-1" />
+              <Row label="Acct prepped" value={String(snapshot.accountPreppedCount)} />
+              <Row label="Acct worked" value={String(snapshot.accountWorkedCount)} />
+              <Row label="Acct ready" value={String(snapshot.accountReadyToCallCount)} />
+              <Row label="Acct unworked" value={String(snapshot.accountUnworkedPreppedCount)} />
+              <Row label="Acct carry-fwd" value={String(snapshot.accountCarryForwardCount)} />
+              <Row label="Acct source" value={snapshot.accountSourceOfTruth} />
+              {snapshot.recentOutcomes.length > 0 && (
+                <Row label="Outcomes" value={snapshot.recentOutcomes.slice(0, 3).join(', ')} />
+              )}
+            </>
+          )}
+
           <div className="border-t border-border/20 pt-1 mt-1" />
           <Row label="Roleplay today" value={snapshot.roleplayStatusToday || 'none'} />
           <Row label="Grounding" value={snapshot.roleplayGroundingSource || 'none'} />
