@@ -166,7 +166,21 @@ export function onAccountOutcome(
   notes: string | null = null,
 ): AccountExecutionEntry | null {
   if (!isAccountExecutionModelEnabled()) return null;
-  return recordAccountOutcome(date, accountId, accountName, loopId, blockId, outcomeType, notes);
+  const entry = recordAccountOutcome(date, accountId, accountName, loopId, blockId, outcomeType, notes);
+
+  // Write timeline event
+  const eventType = outcomeType || 'attempted';
+  appendTimelineEvent(accountId, accountName, eventType as any, { date, loopId, blockId, notes });
+
+  // Measurement hooks
+  if (outcomeType === 'connected' || outcomeType === 'meeting_booked') {
+    recordAttemptToConnect(accountId, entry.callAttemptCount);
+  }
+  if (entry.prepCompletedAt) {
+    recordPrepToAttempt(accountId, entry.prepCompletedAt, new Date().toISOString());
+  }
+
+  return entry;
 }
 
 /**
