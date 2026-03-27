@@ -142,6 +142,7 @@ export function isAudioResource(url: string | null, resourceType?: string): bool
     if (PODCAST_DOMAINS.some(d => host.includes(d))) return true;
   } catch {}
   if (lower.includes('open.spotify.com/episode') || lower.includes('open.spotify.com/show')) return true;
+  if (lower.includes('podcasts.apple.com/')) return true;
   return false;
 }
 
