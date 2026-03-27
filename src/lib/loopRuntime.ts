@@ -117,6 +117,13 @@ export function onActionComplete(
   if (!targetLoop) return;
   const updated = markActionComplete(loops, targetLoop.loopId, workedAccounts);
   saveLoops(date, updated);
+
+  // Write account-level truth
+  if (isAccountExecutionModelEnabled()) {
+    for (const acct of workedAccounts) {
+      markAccountWorkedGeneric(date, acct.id, acct.name, targetLoop.loopId, blockId);
+    }
+  }
 }
 
 /**
