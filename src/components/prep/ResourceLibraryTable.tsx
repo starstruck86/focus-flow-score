@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from '@/components/ui/table';
@@ -13,7 +13,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { ScrollArea } from '@/components/ui/scroll-area';
+// ScrollArea removed — using native scroll for proper table behavior
 import {
   Search, ArrowUpDown, ArrowUp, ArrowDown,
   MoreHorizontal, Zap, RefreshCw, RotateCcw, Trash2,
@@ -170,6 +170,13 @@ function formatDate(d: string | null | undefined): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+type Density = 'compact' | 'comfortable' | 'expanded';
+const DENSITY_ROW_CLASS: Record<Density, string> = {
+  compact: '[&>td]:py-1',
+  comfortable: '[&>td]:py-2',
+  expanded: '[&>td]:py-3',
+};
+
 // ── Component ──────────────────────────────────────────────
 export function ResourceLibraryTable({
   resources,
@@ -185,6 +192,11 @@ export function ResourceLibraryTable({
   const [activeView, setActiveView] = useState('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [density, setDensity] = useState<Density>('comfortable');
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  const scrollBodyRef = useRef<HTMLDivElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
 
   const handleSort = useCallback((key: SortKey) => {
     if (sortKey === key) {
@@ -227,10 +239,31 @@ export function ResourceLibraryTable({
     return Array.from(types).sort();
   }, [resources]);
 
+  const hasSelection = selectedIds.size > 0;
+
+  // Track scroll position for scroll-to-top button
+  const handleScroll = useCallback(() => {
+    const el = scrollBodyRef.current;
+    if (el) {
+      setShowScrollTop(el.scrollTop > 300);
+    }
+  }, []);
+
+  useEffect(() => {
+    const el = scrollBodyRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
+
+  const scrollToTop = useCallback(() => {
+    scrollBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
   return (
-    <div className="space-y-2">
-      {/* Saved views */}
-      <div className="flex items-center gap-1 overflow-x-auto pb-1">
+    <div ref={shellRef} className="flex flex-col" style={{ height: 'calc(100vh - 220px)', minHeight: '300px' }}>
+      {/* Saved views — pinned top */}
+      <div className="flex items-center gap-1 overflow-x-auto pb-1 shrink-0">
         {SAVED_VIEWS.map(view => (
           <Button
             key={view.id}
@@ -250,8 +283,8 @@ export function ResourceLibraryTable({
         ))}
       </div>
 
-      {/* Search + filters */}
-      <div className="flex items-center gap-2 flex-wrap">
+      {/* Search + filters + density — pinned top */}
+      <div className="flex items-center gap-2 flex-wrap py-1.5 shrink-0">
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
@@ -298,85 +331,108 @@ export function ResourceLibraryTable({
             <X className="h-3 w-3" /> Clear
           </Button>
         )}
-        <span className="text-xs text-muted-foreground ml-auto">
+
+        {/* Density toggle */}
+        <div className="flex items-center border border-border rounded-md overflow-hidden ml-auto">
+          {(['compact', 'comfortable', 'expanded'] as Density[]).map(d => (
+            <button
+              key={d}
+              className={cn(
+                'px-2 py-1 text-[10px] transition-colors',
+                density === d ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
+              )}
+              onClick={() => setDensity(d)}
+            >
+              {d.charAt(0).toUpperCase() + d.slice(1, 4)}
+            </button>
+          ))}
+        </div>
+
+        <span className="text-xs text-muted-foreground">
           {filtered.length} of {resources.length}
         </span>
       </div>
 
-      {/* Table */}
-      <div className="border border-border rounded-lg overflow-hidden">
-        <ScrollArea className="max-h-[calc(100vh-320px)]">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-10">
+      {/* Table shell — flex-1 takes remaining height, min-h-0 allows shrinking */}
+      <div className="flex-1 min-h-0 border border-border rounded-lg flex flex-col overflow-hidden relative">
+        {/* Scrollable region — THIS is the sole vertical scroll owner */}
+        <div
+          ref={scrollBodyRef}
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-auto"
+          style={{ paddingBottom: hasSelection ? '56px' : '0' }}
+        >
+          <table className="w-full caption-bottom text-sm">
+            {/* Sticky header */}
+            <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm border-b border-border">
+              <tr>
+                <th className="h-9 px-3 text-left align-middle font-medium text-muted-foreground w-10">
                   <Checkbox
                     checked={allSelected}
                     onCheckedChange={onToggleSelectAll}
                     aria-label="Select all"
                   />
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer select-none hover:bg-muted/50 transition-colors min-w-[200px]"
+                </th>
+                <th
+                  className="h-9 px-3 text-left align-middle font-medium text-muted-foreground cursor-pointer select-none hover:bg-muted/70 transition-colors min-w-[200px] text-xs"
                   onClick={() => handleSort('title')}
                 >
                   <div className="flex items-center gap-1">Title <SortIcon col="title" /></div>
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer select-none hover:bg-muted/50 transition-colors w-[90px]"
+                </th>
+                <th
+                  className="h-9 px-3 text-left align-middle font-medium text-muted-foreground cursor-pointer select-none hover:bg-muted/70 transition-colors w-[90px] text-xs"
                   onClick={() => handleSort('resource_type')}
                 >
                   <div className="flex items-center gap-1">Type <SortIcon col="resource_type" /></div>
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer select-none hover:bg-muted/50 transition-colors w-[100px]"
+                </th>
+                <th
+                  className="h-9 px-3 text-left align-middle font-medium text-muted-foreground cursor-pointer select-none hover:bg-muted/70 transition-colors w-[100px] text-xs"
                   onClick={() => handleSort('subtype')}
                 >
                   <div className="flex items-center gap-1">Subtype <SortIcon col="subtype" /></div>
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer select-none hover:bg-muted/50 transition-colors w-[110px]"
+                </th>
+                <th
+                  className="h-9 px-3 text-left align-middle font-medium text-muted-foreground cursor-pointer select-none hover:bg-muted/70 transition-colors w-[110px] text-xs"
                   onClick={() => handleSort('enrichment_status')}
                 >
                   <div className="flex items-center gap-1">Status <SortIcon col="enrichment_status" /></div>
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer select-none hover:bg-muted/50 transition-colors w-[90px]"
+                </th>
+                <th
+                  className="h-9 px-3 text-left align-middle font-medium text-muted-foreground cursor-pointer select-none hover:bg-muted/70 transition-colors w-[90px] text-xs"
                   onClick={() => handleSort('last_quality_tier')}
                 >
                   <div className="flex items-center gap-1">Quality <SortIcon col="last_quality_tier" /></div>
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer select-none hover:bg-muted/50 transition-colors w-[60px]"
+                </th>
+                <th
+                  className="h-9 px-3 text-left align-middle font-medium text-muted-foreground cursor-pointer select-none hover:bg-muted/70 transition-colors w-[60px] text-xs"
                   onClick={() => handleSort('last_quality_score')}
                 >
                   <div className="flex items-center gap-1">Score <SortIcon col="last_quality_score" /></div>
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer select-none hover:bg-muted/50 transition-colors w-[80px]"
+                </th>
+                <th
+                  className="h-9 px-3 text-left align-middle font-medium text-muted-foreground cursor-pointer select-none hover:bg-muted/70 transition-colors w-[80px] text-xs"
                   onClick={() => handleSort('created_at')}
                 >
                   <div className="flex items-center gap-1">Added <SortIcon col="created_at" /></div>
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer select-none hover:bg-muted/50 transition-colors w-[80px]"
+                </th>
+                <th
+                  className="h-9 px-3 text-left align-middle font-medium text-muted-foreground cursor-pointer select-none hover:bg-muted/70 transition-colors w-[80px] text-xs"
                   onClick={() => handleSort('enriched_at')}
                 >
                   <div className="flex items-center gap-1">Enriched <SortIcon col="enriched_at" /></div>
-                </TableHead>
-                <TableHead className="w-[50px]">Ver</TableHead>
-                <TableHead className="w-[90px]">Action</TableHead>
-                <TableHead className="w-[40px]" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+                </th>
+                <th className="h-9 px-3 text-left align-middle font-medium text-muted-foreground w-[50px] text-xs">Ver</th>
+                <th className="h-9 px-3 text-left align-middle font-medium text-muted-foreground w-[90px] text-xs">Action</th>
+                <th className="h-9 px-3 text-left align-middle font-medium text-muted-foreground w-[40px]" />
+              </tr>
+            </thead>
+            <tbody>
               {filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={12} className="text-center py-12 text-muted-foreground">
+                <tr>
+                  <td colSpan={12} className="text-center py-12 text-muted-foreground">
                     <FileText className="h-6 w-6 mx-auto mb-2 opacity-40" />
                     <p className="text-sm">No resources match filters</p>
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : (
                 filtered.map(resource => {
                   const recommended = getRecommendedAction(resource);
@@ -384,22 +440,23 @@ export function ResourceLibraryTable({
                   const isSelected = selectedIds.has(resource.id);
 
                   return (
-                    <TableRow
+                    <tr
                       key={resource.id}
                       className={cn(
-                        'cursor-pointer',
+                        'cursor-pointer border-b border-border transition-colors hover:bg-muted/50',
+                        DENSITY_ROW_CLASS[density],
                         isSelected && 'bg-primary/5',
                         drift.hasDrift && 'border-l-2 border-l-status-yellow',
                       )}
                       onClick={() => onResourceClick(resource)}
                     >
-                      <TableCell onClick={e => e.stopPropagation()}>
+                      <td className="px-3 align-middle" onClick={e => e.stopPropagation()}>
                         <Checkbox
                           checked={isSelected}
                           onCheckedChange={() => onToggleSelect(resource.id)}
                         />
-                      </TableCell>
-                      <TableCell>
+                      </td>
+                      <td className="px-3 align-middle">
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-foreground truncate max-w-[280px]">{resource.title}</p>
                           {drift.hasDrift && (
@@ -409,11 +466,11 @@ export function ResourceLibraryTable({
                             </p>
                           )}
                         </div>
-                      </TableCell>
-                      <TableCell>
+                      </td>
+                      <td className="px-3 align-middle">
                         <span className="text-xs text-muted-foreground capitalize">{resource.resource_type}</span>
-                      </TableCell>
-                      <TableCell>
+                      </td>
+                      <td className="px-3 align-middle">
                         {(() => {
                           const subtype = detectResourceSubtype(resource.file_url, resource.resource_type);
                           const ea = classifyEnrichability(resource.file_url, resource.resource_type);
@@ -423,13 +480,13 @@ export function ResourceLibraryTable({
                             </Badge>
                           );
                         })()}
-                      </TableCell>
-                      <TableCell>
+                      </td>
+                      <td className="px-3 align-middle">
                         <Badge className={cn('text-[9px]', getEnrichmentStatusColor(resource.enrichment_status))}>
                           {getEnrichmentStatusLabel(resource.enrichment_status)}
                         </Badge>
-                      </TableCell>
-                      <TableCell>
+                      </td>
+                      <td className="px-3 align-middle">
                         {(resource as any).last_quality_tier ? (
                           <Badge className={cn('text-[9px]', getQualityTierColor((resource as any).last_quality_tier))}>
                             {getQualityTierLabel((resource as any).last_quality_tier)}
@@ -437,24 +494,24 @@ export function ResourceLibraryTable({
                         ) : (
                           <span className="text-[10px] text-muted-foreground">—</span>
                         )}
-                      </TableCell>
-                      <TableCell>
+                      </td>
+                      <td className="px-3 align-middle">
                         <span className="text-xs text-muted-foreground">
                           {(resource as any).last_quality_score != null
                             ? Math.round((resource as any).last_quality_score)
                             : '—'}
                         </span>
-                      </TableCell>
-                      <TableCell>
+                      </td>
+                      <td className="px-3 align-middle">
                         <span className="text-[11px] text-muted-foreground">{formatDate(resource.created_at)}</span>
-                      </TableCell>
-                      <TableCell>
+                      </td>
+                      <td className="px-3 align-middle">
                         <span className="text-[11px] text-muted-foreground">{formatDate(resource.enriched_at)}</span>
-                      </TableCell>
-                      <TableCell>
+                      </td>
+                      <td className="px-3 align-middle">
                         <span className="text-[11px] text-muted-foreground">v{resource.enrichment_version ?? 0}</span>
-                      </TableCell>
-                      <TableCell>
+                      </td>
+                      <td className="px-3 align-middle">
                         {recommended.action !== 'no_action' ? (
                           <Badge className={cn('text-[9px] cursor-pointer', getActionColor(recommended.action))}
                             onClick={e => { e.stopPropagation(); onAction(recommended.action, resource); }}
@@ -464,8 +521,8 @@ export function ResourceLibraryTable({
                         ) : (
                           <span className="text-[10px] text-muted-foreground">—</span>
                         )}
-                      </TableCell>
-                      <TableCell onClick={e => e.stopPropagation()}>
+                      </td>
+                      <td className="px-3 align-middle" onClick={e => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-7 w-7">
@@ -498,14 +555,45 @@ export function ResourceLibraryTable({
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
+                      </td>
+                    </tr>
                   );
                 })
               )}
-            </TableBody>
-          </Table>
-        </ScrollArea>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Scroll to top */}
+        {showScrollTop && (
+          <button
+            onClick={scrollToTop}
+            className="absolute bottom-2 right-3 z-20 h-8 w-8 rounded-full bg-primary text-primary-foreground shadow-md flex items-center justify-center hover:bg-primary/90 transition-colors"
+            style={{ bottom: hasSelection ? '60px' : '8px' }}
+            aria-label="Scroll to top"
+          >
+            <ArrowUp className="h-4 w-4" />
+          </button>
+        )}
+
+        {/* Sticky bulk action bar — inside the table shell at the bottom */}
+        {hasSelection && (
+          <div className="absolute bottom-0 left-0 right-0 z-20 flex items-center gap-3 bg-card/95 backdrop-blur-sm border-t border-border px-4 py-2">
+            <span className="text-sm font-medium">{selectedIds.size} selected</span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={() => onAction('bulk_enrich', { id: '' } as Resource)}
+            >
+              <Zap className="h-3 w-3" />
+              Deep Enrich Selected
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onToggleSelectAll}>
+              <X className="h-3 w-3 mr-1" /> Clear
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
