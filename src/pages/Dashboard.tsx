@@ -304,6 +304,8 @@ export default function Dashboard() {
           
           {/* Live Activity Pulse */}
           <ActivityPulse entry={todayJournalEntry} />
+          {/* Execution HUD */}
+          <ExecutionHUD />
         </div>
 
         {/* Weekly Review Banner — only when needed */}

@@ -107,6 +107,22 @@ export function SystemDebugPanel() {
             </>
           )}
 
+          {/* Execution session */}
+          {sessionEnabled && (
+            <>
+              <div className="border-t border-border/20 pt-1 mt-1" />
+              <Row label="Session mode" value={mode} />
+              <Row label="Active acct" value={activeSession?.accountName || 'none'} />
+              <Row label="Last outcome" value={activeSession?.latestOutcome?.replace(/_/g, ' ') || 'none'} />
+              <Row label="Post-action" value={activeSession?.postActionRecommendation?.decision?.replace(/_/g, ' ') || 'none'} />
+              <Row label="Worked" value={String(scorecard.accountsWorked)} />
+              <Row label="Connects" value={String(scorecard.connects)} />
+              <Row label="Meetings" value={String(scorecard.meetingsBooked)} />
+              <Row label="Ready left" value={String(scorecard.readyRemaining)} />
+              <Row label="Next-best" value={nextCandidates[0]?.accountName || 'none'} />
+              <Row label="Routing src" value={nextCandidates[0] ? 'account_truth' : 'none'} />
+            </>
+          )}
           <div className="border-t border-border/20 pt-1 mt-1" />
           <Row label="Roleplay today" value={snapshot.roleplayStatusToday || 'none'} />
           <Row label="Grounding" value={snapshot.roleplayGroundingSource || 'none'} />
