@@ -27,7 +27,7 @@ export function CapabilityPromptCard({ context }: CapabilityPromptCardProps) {
     setPrompt(p);
     setDismissed(false);
     if (p) {
-      recordCapabilityEvent({ promptId: p.id, eventType: 'shown', contextType: context.recommendedPlaybookType, stage: context.dealStage });
+      recordCapabilityEvent({ promptId: p.suppressionKey, eventType: 'shown', contextType: context.recommendedPlaybookType, stage: context.dealStage });
     }
   }, [context.dealStage, context.dealName, context.recommendedPlaybookTitle]);
 
