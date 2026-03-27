@@ -96,6 +96,7 @@ export interface DoctrineGovernance {
   duplicateCandidateIds: string[];
   conflictFlag: ConflictFlag;
   conflictCandidateIds: string[];
+  isLegacyHydrated: boolean;
 }
 
 // ── Doctrine Model ─────────────────────────────────────────
