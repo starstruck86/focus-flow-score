@@ -10,7 +10,8 @@ import { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Bug, RefreshCw } from 'lucide-react';
 import { captureDebugSnapshot, type SystemDebugSnapshot } from '@/lib/loopRuntime';
-import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled, isAccountExecutionModelEnabled } from '@/lib/featureFlags';
+import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled, isAccountExecutionModelEnabled, isAccountCentricExecutionEnabled } from '@/lib/featureFlags';
+import { loadMeasurementEvents } from '@/lib/accountPostAction';
 
 export function SystemDebugPanel() {
   const [snapshot, setSnapshot] = useState<SystemDebugSnapshot | null>(null);
@@ -49,6 +50,8 @@ export function SystemDebugPanel() {
   const loopEnabled = isLoopNativeSchedulerEnabled();
   const groundingEnabled = isRoleplayGroundingEnabled();
   const acctEnabled = isAccountExecutionModelEnabled();
+  const acctCentricEnabled = isAccountCentricExecutionEnabled();
+  const measurementCount = loadMeasurementEvents().length;
 
   return (
     <div>
@@ -73,6 +76,7 @@ export function SystemDebugPanel() {
           <Row label="Loop scheduler" value={loopEnabled ? 'on' : 'off'} />
           <Row label="Roleplay grounding" value={groundingEnabled ? 'on' : 'off'} />
           <Row label="Account model" value={acctEnabled ? 'on' : 'off'} />
+          <Row label="Acct-centric" value={acctCentricEnabled ? 'on' : 'off'} />
 
           {/* Loop state */}
           <div className="border-t border-border/20 pt-1 mt-1" />
@@ -94,6 +98,7 @@ export function SystemDebugPanel() {
               {snapshot.recentOutcomes.length > 0 && (
                 <Row label="Outcomes" value={snapshot.recentOutcomes.slice(0, 3).join(', ')} />
               )}
+              <Row label="Measurements" value={String(measurementCount)} />
             </>
           )}
 

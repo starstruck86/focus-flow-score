@@ -13,6 +13,7 @@ export interface FeatureFlags {
   ENABLE_LOOP_NATIVE_SCHEDULER: boolean;
   ENABLE_ROLEPLAY_GROUNDING: boolean;
   ENABLE_ACCOUNT_EXECUTION_MODEL: boolean;
+  ENABLE_ACCOUNT_CENTRIC_EXECUTION: boolean;
 }
 
 const DEFAULTS: FeatureFlags = {
@@ -22,6 +23,7 @@ const DEFAULTS: FeatureFlags = {
   ENABLE_LOOP_NATIVE_SCHEDULER: false,
   ENABLE_ROLEPLAY_GROUNDING: false,
   ENABLE_ACCOUNT_EXECUTION_MODEL: false,
+  ENABLE_ACCOUNT_CENTRIC_EXECUTION: false,
 };
 
 export function loadFeatureFlags(): FeatureFlags {
@@ -61,4 +63,8 @@ export function isRoleplayGroundingEnabled(): boolean {
 
 export function isAccountExecutionModelEnabled(): boolean {
   return loadFeatureFlags().ENABLE_ACCOUNT_EXECUTION_MODEL;
+}
+
+export function isAccountCentricExecutionEnabled(): boolean {
+  return loadFeatureFlags().ENABLE_ACCOUNT_CENTRIC_EXECUTION;
 }

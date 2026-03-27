@@ -8,6 +8,7 @@ import { citeInsight, knowledgeTrends, insightReliability, recommendStrategy, re
 import { getPlaybookRecommendation } from './intelligence/playbooks';
 import { startPlaybookRoleplay, endPlaybookRoleplay } from './intelligence/playbookRoleplay';
 import { createAccountExecutionTools } from './intelligence/accountExecution';
+import { createAccountCentricTools } from './intelligence/accountCentric';
 export function createIntelligenceTools(ctx: ToolContext): ToolMap {
   return {
     search_crm: (params: { query: string }) => searchCrm(ctx, params),
@@ -36,6 +37,7 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
     start_playbook_roleplay: (params: { playbookTitle?: string; accountName?: string; dealStage?: string; dealStatus?: string; objection?: string }) => startPlaybookRoleplay(ctx, params),
     end_playbook_roleplay: () => endPlaybookRoleplay(ctx),
     ...createAccountExecutionTools(ctx),
+    ...createAccountCentricTools(ctx),
     start_daily_roleplay: async (params: { scenarioType?: string; persona?: string; industry?: string }) => {
       const { getRoleplayBlockConfig, recordRoleplayBlockEvent, buildDaveConfirmationPrompt } = await import('@/lib/dailyRoleplayBlock');
       const { todayInAppTz } = await import('@/lib/timeFormat');

@@ -24,8 +24,10 @@ import {
   type RoleplayBlockStatus,
   type RoleplayBlockEvent,
 } from '@/lib/dailyRoleplayBlock';
-import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled, isAccountExecutionModelEnabled } from '@/lib/featureFlags';
+import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled, isAccountExecutionModelEnabled, isAccountCentricExecutionEnabled } from '@/lib/featureFlags';
 import { todayInAppTz } from '@/lib/timeFormat';
+import { appendTimelineEvent } from '@/lib/accountTimeline';
+import { recordPrepToAttempt, recordAttemptToConnect } from '@/lib/accountPostAction';
 import {
   markAccountPrepped,
   recordAccountOutcome,
@@ -97,6 +99,7 @@ export function onPrepComplete(
   if (isAccountExecutionModelEnabled()) {
     for (const acct of preparedAccounts) {
       markAccountPrepped(date, acct.id, acct.name, targetLoop.loopId, blockId);
+      appendTimelineEvent(acct.id, acct.name, 'prepped', { date, loopId: targetLoop.loopId, blockId });
     }
   }
 }
@@ -122,6 +125,7 @@ export function onActionComplete(
   if (isAccountExecutionModelEnabled()) {
     for (const acct of workedAccounts) {
       markAccountWorkedGeneric(date, acct.id, acct.name, targetLoop.loopId, blockId);
+      appendTimelineEvent(acct.id, acct.name, 'attempted', { date, loopId: targetLoop.loopId, blockId });
     }
   }
 }
@@ -162,7 +166,21 @@ export function onAccountOutcome(
   notes: string | null = null,
 ): AccountExecutionEntry | null {
   if (!isAccountExecutionModelEnabled()) return null;
-  return recordAccountOutcome(date, accountId, accountName, loopId, blockId, outcomeType, notes);
+  const entry = recordAccountOutcome(date, accountId, accountName, loopId, blockId, outcomeType, notes);
+
+  // Write timeline event
+  const eventType = outcomeType || 'attempted';
+  appendTimelineEvent(accountId, accountName, eventType as any, { date, loopId, blockId, notes });
+
+  // Measurement hooks
+  if (outcomeType === 'connected' || outcomeType === 'meeting_booked') {
+    recordAttemptToConnect(accountId, entry.callAttemptCount);
+  }
+  if (entry.prepCompletedAt) {
+    recordPrepToAttempt(accountId, entry.prepCompletedAt, new Date().toISOString());
+  }
+
+  return entry;
 }
 
 /**
