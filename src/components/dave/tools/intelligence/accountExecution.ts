@@ -53,9 +53,16 @@ export function createAccountExecutionTools(ctx: ToolContext): ToolMap {
     }) => {
       if (!isAccountExecutionModelEnabled()) return 'Account execution model is not enabled yet.';
       const today = todayInAppTz();
-      const account = ctx.accounts?.find(
-        a => a.name.toLowerCase() === params.accountName.toLowerCase(),
-      );
+      const userId = await ctx.getUserId();
+      if (!userId) return 'Not authenticated.';
+      const { supabase } = await import('@/integrations/supabase/client');
+      const { data: accounts } = await supabase
+        .from('accounts')
+        .select('id, name')
+        .eq('user_id', userId)
+        .ilike('name', params.accountName)
+        .limit(1);
+      const account = accounts?.[0];
       if (!account) return `Could not find account "${params.accountName}".`;
 
       const validOutcomes: OutcomeType[] = [
