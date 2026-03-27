@@ -2,6 +2,8 @@
  * Manual Transcript Assist Dialog
  * Allows operator to paste/upload transcript or notes for audio resources
  * that cannot be automatically transcribed.
+ *
+ * Uses DB-backed audioJob prop — no localStorage.
  */
 
 import { memo, useState, useCallback } from 'react';
@@ -14,16 +16,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { FileAudio, Upload, FileText, Bookmark } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
-  getAudioJobForResource,
   getAudioStageLabel,
   getAudioFailureDescription,
-  type AudioJobState,
   type AudioFailureCode,
+  type AudioPipelineStage,
 } from '@/lib/salesBrain/audioPipeline';
 import {
   detectAudioSubtype,
   getAudioStrategy,
 } from '@/lib/salesBrain/audioPipeline';
+import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 
 type ManualAssistMode = 'paste_transcript' | 'paste_notes' | 'provide_alt_url' | 'provide_audio_url' | 'metadata_only' | 'park_later';
 
@@ -33,6 +35,7 @@ interface ManualTranscriptAssistProps {
   resourceId: string;
   resourceTitle: string;
   resourceUrl: string | null;
+  audioJob?: AudioJobRecord | null;
   onSubmit: (data: { mode: ManualAssistMode; content: string }) => void;
 }
 
@@ -42,11 +45,11 @@ export const ManualTranscriptAssist = memo(function ManualTranscriptAssist({
   resourceId,
   resourceTitle,
   resourceUrl,
+  audioJob,
   onSubmit,
 }: ManualTranscriptAssistProps) {
   const [mode, setMode] = useState<ManualAssistMode>('paste_transcript');
   const [content, setContent] = useState('');
-  const audioJob = getAudioJobForResource(resourceId);
   const subtype = detectAudioSubtype(resourceUrl);
   const strategy = getAudioStrategy(subtype);
 
