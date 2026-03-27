@@ -186,6 +186,11 @@ export default function PrepHub() {
           <TabsContent value="prompts" className="space-y-3 mt-3">
             <CustomPromptsManager />
           </TabsContent>
+
+          {/* AUDIO TEST HARNESS TAB */}
+          <TabsContent value="audio-test" className="space-y-3 mt-3">
+            <AudioTestHarness />
+          </TabsContent>
         </Tabs>
       </div>
     </Layout>
