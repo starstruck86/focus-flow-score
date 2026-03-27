@@ -155,9 +155,15 @@ export function detectAudioSubtype(url: string | null, resourceType?: string): A
     return 'youtube_audio_or_video';
   }
 
-  // Spotify
-  if (lower.includes('open.spotify.com/episode') || lower.includes('open.spotify.com/show')) {
-    return 'spotify_episode';
+  // Spotify - distinguish episode vs show
+  if (lower.includes('open.spotify.com/show')) return 'spotify_show';
+  if (lower.includes('open.spotify.com/episode')) return 'spotify_episode';
+
+  // Apple Podcasts - distinguish episode vs show
+  if (lower.includes('podcasts.apple.com/')) {
+    // ?i= param means specific episode
+    if (/[?&]i=\d+/.test(lower)) return 'apple_podcast_episode';
+    if (/\/id\d+/.test(lower)) return 'apple_podcast_show';
   }
 
   // Direct audio file
