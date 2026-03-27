@@ -29,10 +29,10 @@ import {
   isAudioResource,
   detectAudioSubtype,
   getAudioStrategy,
-  getAudioJobForResource,
   getAudioStageLabel,
   getAudioFailureDescription,
 } from '@/lib/salesBrain/audioPipeline';
+import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import { createLogger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
 import type { Resource } from '@/hooks/useResources';
