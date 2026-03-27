@@ -6,7 +6,7 @@
  * Now supports server-side loop metadata and grounded roleplay indicators.
  */
 import { memo } from 'react';
-import { Mic, Phone, AlertTriangle, CheckCircle2, ArrowRight, Sparkles } from 'lucide-react';
+import { Mic, Phone, AlertTriangle, CheckCircle2, ArrowRight, Sparkles, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { PrepActionSignal } from '@/lib/loopReadiness';
 
