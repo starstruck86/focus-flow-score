@@ -85,25 +85,25 @@ export const ManualTranscriptAssist = memo(function ManualTranscriptAssist({
           {audioJob && (
             <div className="flex items-center gap-2 flex-wrap">
               <Badge variant="outline" className="text-[9px]">
-                {getAudioStageLabel(audioJob.stage)}
+                {getAudioStageLabel(audioJob.stage as AudioPipelineStage)}
               </Badge>
-              {audioJob.failureCode && (
+              {audioJob.failure_code && (
                 <Badge variant="destructive" className="text-[9px]">
-                  {audioJob.failureCode}
+                  {audioJob.failure_code}
                 </Badge>
               )}
               <span className="text-[10px] text-muted-foreground">
-                {audioJob.attemptsCount} attempt{audioJob.attemptsCount !== 1 ? 's' : ''}
+                {audioJob.attempts_count} attempt{audioJob.attempts_count !== 1 ? 's' : ''}
               </span>
             </div>
           )}
 
-          {audioJob?.failureReason && (
+          {audioJob?.failure_reason && (
             <p className="text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1">
-              {audioJob.failureReason}
-              {audioJob.failureCode && (
+              {audioJob.failure_reason}
+              {audioJob.failure_code && (
                 <span className="block text-[10px] mt-0.5">
-                  → {getAudioFailureDescription(audioJob.failureCode).nextAction}
+                  → {getAudioFailureDescription(audioJob.failure_code as AudioFailureCode).nextAction}
                 </span>
               )}
             </p>

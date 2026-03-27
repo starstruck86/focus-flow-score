@@ -102,7 +102,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
     const items = audioResources.map(r => {
       const sub = detectAudioSubtype(r.file_url, r.resource_type);
       const strategy = getAudioStrategy(sub);
-      const job = getAudioJobForResource(r.id);
+      const job = audioJobsMap?.get(r.id) || null;
       return { resource: r, subtype: sub, strategy, job };
     });
     return {
@@ -112,7 +112,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
       needsManual: items.filter(i => i.job?.stage === 'needs_manual_assist' || i.strategy.manualAssistRequired).length,
       retryable: items.filter(i => i.job?.stage === 'failed' && i.job?.retryable).length,
     };
-  }, [scopedResources]);
+  }, [scopedResources, audioJobsMap]);
 
   const handleStart = useCallback(
     (

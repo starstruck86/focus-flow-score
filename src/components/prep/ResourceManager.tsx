@@ -1094,6 +1094,7 @@ export function ResourceManager() {
         resourceId={manualAssistResource?.id || ''}
         resourceTitle={manualAssistResource?.title || ''}
         resourceUrl={manualAssistResource?.file_url || null}
+        audioJob={manualAssistResource ? (audioJobsMap?.get(manualAssistResource.id) || null) : null}
         onSubmit={async (data) => {
           if (data.mode === 'paste_transcript' || data.mode === 'paste_notes') {
             // Save content to resource
