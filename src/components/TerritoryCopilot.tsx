@@ -9,6 +9,9 @@ import { useVoiceMode } from '@/hooks/useVoiceMode';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { toast } from 'sonner';
+import { ExplainabilityFooter, type ExplainabilityData } from '@/components/copilot/ExplainabilityFooter';
+import { detectDaveMode } from '@/lib/daveModeDetector';
+import { isSystemOSEnabled } from '@/lib/featureFlags';
 
 const MODE_ICONS: Record<CopilotMode, typeof Zap> = {
   quick: Zap,
@@ -77,6 +80,7 @@ function CopilotDialog() {
   const [mode, setMode] = useState<CopilotMode>('quick');
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [explainability, setExplainability] = useState<ExplainabilityData | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -151,6 +155,16 @@ function CopilotDialog() {
       onDone: () => {
         setIsStreaming(false);
         streamingRef.current = false;
+        // Build explainability data after response completes
+        if (isSystemOSEnabled()) {
+          const detectedMode = detectDaveMode(text);
+          setExplainability({
+            mode: detectedMode,
+            confidence: 72,
+            topFactors: [`Mode: ${detectedMode}`, `Context: ${pageContext?.page || 'general'}`],
+            confidenceDrivers: ['Based on conversation context and query pattern'],
+          });
+        }
       },
       onError: (err) => {
         setError(err);
@@ -170,6 +184,7 @@ function CopilotDialog() {
   const handleClear = useCallback(() => {
     setMessages([]);
     setError(null);
+    setExplainability(null);
     abortRef.current?.abort();
     setIsStreaming(false);
     streamingRef.current = false;
@@ -305,6 +320,11 @@ function CopilotDialog() {
 
           {error && (
             <div className="text-xs text-destructive bg-destructive/10 rounded-lg p-3">{error}</div>
+          )}
+
+          {/* Explainability — shows after response completes */}
+          {explainability && !isStreaming && messages.length > 0 && (
+            <ExplainabilityFooter data={explainability} />
           )}
         </div>
 

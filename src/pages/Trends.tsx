@@ -2,6 +2,8 @@ import { useState, useCallback } from 'react';
 import { Reorder } from 'framer-motion';
 import { AIInsightsNarrator } from '@/components/dashboard/AIInsightsNarrator';
 import { Layout } from '@/components/Layout';
+import { SystemTelemetryPanel } from '@/components/trends/SystemTelemetryPanel';
+import { isSystemOSEnabled } from '@/lib/featureFlags';
 import {
   TrendingUp, BarChart3, Activity, Zap, Target, Brain,
   ArrowUpRight, ArrowDownRight, Minus, Phone, Users, Calendar,
@@ -86,6 +88,9 @@ export default function Trends() {
             </Tabs>
           </div>
         </div>
+
+        {/* System Telemetry — shown above performance when enabled */}
+        <SystemTelemetryPanel />
 
         {!hasData && !isLoading ? (
           <Card className="text-center py-16 border-dashed">
