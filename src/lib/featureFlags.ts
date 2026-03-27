@@ -14,6 +14,7 @@ export interface FeatureFlags {
   ENABLE_ROLEPLAY_GROUNDING: boolean;
   ENABLE_ACCOUNT_EXECUTION_MODEL: boolean;
   ENABLE_ACCOUNT_CENTRIC_EXECUTION: boolean;
+  ENABLE_EXECUTION_SESSION_LAYER: boolean;
 }
 
 const DEFAULTS: FeatureFlags = {
@@ -24,6 +25,7 @@ const DEFAULTS: FeatureFlags = {
   ENABLE_ROLEPLAY_GROUNDING: false,
   ENABLE_ACCOUNT_EXECUTION_MODEL: false,
   ENABLE_ACCOUNT_CENTRIC_EXECUTION: false,
+  ENABLE_EXECUTION_SESSION_LAYER: false,
 };
 
 export function loadFeatureFlags(): FeatureFlags {
@@ -67,4 +69,8 @@ export function isAccountExecutionModelEnabled(): boolean {
 
 export function isAccountCentricExecutionEnabled(): boolean {
   return loadFeatureFlags().ENABLE_ACCOUNT_CENTRIC_EXECUTION;
+}
+
+export function isExecutionSessionLayerEnabled(): boolean {
+  return loadFeatureFlags().ENABLE_EXECUTION_SESSION_LAYER;
 }

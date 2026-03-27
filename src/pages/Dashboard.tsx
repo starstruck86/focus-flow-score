@@ -44,6 +44,7 @@ import {
   ProspectingEngine,
 } from '@/components/dashboard';
 import { AccountWorkPanel } from '@/components/dashboard/AccountWorkPanel';
+import { ExecutionHUD } from '@/components/execution/ExecutionHUD';
 import { WidgetErrorBoundary } from '@/components/dashboard/WidgetErrorBoundary';
 import { WidgetCustomizer } from '@/components/dashboard/WidgetCustomizer';
 import { useWidgetLayout, type WidgetConfig } from '@/hooks/useWidgetLayout';
@@ -303,6 +304,8 @@ export default function Dashboard() {
           
           {/* Live Activity Pulse */}
           <ActivityPulse entry={todayJournalEntry} />
+          {/* Execution HUD */}
+          <ExecutionHUD />
         </div>
 
         {/* Weekly Review Banner — only when needed */}

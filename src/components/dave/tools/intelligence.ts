@@ -9,6 +9,7 @@ import { getPlaybookRecommendation } from './intelligence/playbooks';
 import { startPlaybookRoleplay, endPlaybookRoleplay } from './intelligence/playbookRoleplay';
 import { createAccountExecutionTools } from './intelligence/accountExecution';
 import { createAccountCentricTools } from './intelligence/accountCentric';
+import { createExecutionSessionTools } from './intelligence/executionSession';
 export function createIntelligenceTools(ctx: ToolContext): ToolMap {
   return {
     search_crm: (params: { query: string }) => searchCrm(ctx, params),
@@ -38,6 +39,7 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
     end_playbook_roleplay: () => endPlaybookRoleplay(ctx),
     ...createAccountExecutionTools(ctx),
     ...createAccountCentricTools(ctx),
+    ...createExecutionSessionTools(ctx),
     start_daily_roleplay: async (params: { scenarioType?: string; persona?: string; industry?: string }) => {
       const { getRoleplayBlockConfig, recordRoleplayBlockEvent, buildDaveConfirmationPrompt } = await import('@/lib/dailyRoleplayBlock');
       const { todayInAppTz } = await import('@/lib/timeFormat');

@@ -10,8 +10,9 @@ import { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Bug, RefreshCw } from 'lucide-react';
 import { captureDebugSnapshot, type SystemDebugSnapshot } from '@/lib/loopRuntime';
-import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled, isAccountExecutionModelEnabled, isAccountCentricExecutionEnabled } from '@/lib/featureFlags';
+import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled, isAccountExecutionModelEnabled, isAccountCentricExecutionEnabled, isExecutionSessionLayerEnabled } from '@/lib/featureFlags';
 import { loadMeasurementEvents } from '@/lib/accountPostAction';
+import { useExecutionSession, buildScorecard, getNextBestAccounts } from '@/lib/executionSession';
 
 export function SystemDebugPanel() {
   const [snapshot, setSnapshot] = useState<SystemDebugSnapshot | null>(null);
@@ -51,7 +52,10 @@ export function SystemDebugPanel() {
   const groundingEnabled = isRoleplayGroundingEnabled();
   const acctEnabled = isAccountExecutionModelEnabled();
   const acctCentricEnabled = isAccountCentricExecutionEnabled();
+  const sessionEnabled = isExecutionSessionLayerEnabled();
   const measurementCount = loadMeasurementEvents().length;
+  const { activeSession, mode, scorecard } = useExecutionSession();
+  const nextCandidates = sessionEnabled ? getNextBestAccounts() : [];
 
   return (
     <div>
@@ -77,6 +81,7 @@ export function SystemDebugPanel() {
           <Row label="Roleplay grounding" value={groundingEnabled ? 'on' : 'off'} />
           <Row label="Account model" value={acctEnabled ? 'on' : 'off'} />
           <Row label="Acct-centric" value={acctCentricEnabled ? 'on' : 'off'} />
+          <Row label="Exec session" value={sessionEnabled ? 'on' : 'off'} />
 
           {/* Loop state */}
           <div className="border-t border-border/20 pt-1 mt-1" />
@@ -102,6 +107,22 @@ export function SystemDebugPanel() {
             </>
           )}
 
+          {/* Execution session */}
+          {sessionEnabled && (
+            <>
+              <div className="border-t border-border/20 pt-1 mt-1" />
+              <Row label="Session mode" value={mode} />
+              <Row label="Active acct" value={activeSession?.accountName || 'none'} />
+              <Row label="Last outcome" value={activeSession?.latestOutcome?.replace(/_/g, ' ') || 'none'} />
+              <Row label="Post-action" value={activeSession?.postActionRecommendation?.decision?.replace(/_/g, ' ') || 'none'} />
+              <Row label="Worked" value={String(scorecard.accountsWorked)} />
+              <Row label="Connects" value={String(scorecard.connects)} />
+              <Row label="Meetings" value={String(scorecard.meetingsBooked)} />
+              <Row label="Ready left" value={String(scorecard.readyRemaining)} />
+              <Row label="Next-best" value={nextCandidates[0]?.accountName || 'none'} />
+              <Row label="Routing src" value={nextCandidates[0] ? 'account_truth' : 'none'} />
+            </>
+          )}
           <div className="border-t border-border/20 pt-1 mt-1" />
           <Row label="Roleplay today" value={snapshot.roleplayStatusToday || 'none'} />
           <Row label="Grounding" value={snapshot.roleplayGroundingSource || 'none'} />
