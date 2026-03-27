@@ -35,13 +35,13 @@ const SUPPRESSION_RULES: Record<InterventionType, {
   cooldownMs: number;        // minimum gap between same-type interventions
   suppressLowConfidence: boolean;
 }> = {
-  major_nudge:         { maxPerBlock: 1, cooldownMs: 4 * 3600 * 1000, suppressLowConfidence: true },
+  major_nudge:         { maxPerBlock: 1, cooldownMs: 6 * 3600 * 1000, suppressLowConfidence: true },
   pre_call_nudge:      { maxPerBlock: 1, cooldownMs: 4 * 3600 * 1000, suppressLowConfidence: false },
   post_call_reflection:{ maxPerBlock: 1, cooldownMs: 4 * 3600 * 1000, suppressLowConfidence: false },
-  coach_nudge:         { maxPerBlock: 1, cooldownMs: 4 * 3600 * 1000, suppressLowConfidence: true },
-  post_action:         { maxPerBlock: 2, cooldownMs: 1 * 3600 * 1000, suppressLowConfidence: false },
-  risk_alert:          { maxPerBlock: 2, cooldownMs: 2 * 3600 * 1000, suppressLowConfidence: true },
-  playbook_suggestion: { maxPerBlock: 1, cooldownMs: 4 * 3600 * 1000, suppressLowConfidence: true },
+  coach_nudge:         { maxPerBlock: 1, cooldownMs: 6 * 3600 * 1000, suppressLowConfidence: true },
+  post_action:         { maxPerBlock: 1, cooldownMs: 2 * 3600 * 1000, suppressLowConfidence: false },
+  risk_alert:          { maxPerBlock: 2, cooldownMs: 3 * 3600 * 1000, suppressLowConfidence: true },
+  playbook_suggestion: { maxPerBlock: 1, cooldownMs: 6 * 3600 * 1000, suppressLowConfidence: true },
 };
 
 const INTERVENTION_LOG_KEY = 'system-intervention-log';
