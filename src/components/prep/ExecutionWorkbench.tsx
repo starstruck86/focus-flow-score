@@ -12,6 +12,8 @@ import { getExecutionContext, type ExecutionDeal, type RiskSignal } from '@/lib/
 import { useLiveSystemSummary } from '@/hooks/useSystemState';
 import { useCopilot } from '@/contexts/CopilotContext';
 import { useVoiceOperatingContext } from '@/hooks/useVoiceOperatingContext';
+import { CapabilityPromptCard } from './CapabilityPromptCard';
+import type { CapabilityContext } from '@/lib/capabilityEngine';
 
 interface ExecutionWorkbenchProps {
   deals?: ExecutionDeal[];
@@ -139,6 +141,18 @@ export function ExecutionWorkbench({ deals = [], playbooks = [], riskSignals = [
           </CardContent>
         </Card>
       )}
+
+      {/* Capability Awareness — between Strategy and Action */}
+      {(() => {
+        const capCtx: CapabilityContext = {
+          dealStage: context.topDeals[0]?.stage,
+          dealName: context.topDeals[0]?.name,
+          dealRisk: context.riskSignals.some(r => r.severity === 'high') ? 'high' : context.riskSignals.length > 0 ? 'medium' : 'low',
+          recommendedPlaybookTitle: context.recommendedPlaybook?.playbookTitle,
+          recommendedPlaybookType: context.recommendedPlaybook?.playbookTitle,
+        };
+        return <CapabilityPromptCard context={capCtx} />;
+      })()}
 
       {/* Coach Nudge */}
       {context.coachNudge && (
