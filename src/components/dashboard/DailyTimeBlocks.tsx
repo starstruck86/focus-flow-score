@@ -687,6 +687,16 @@ export function DailyTimeBlocks() {
         } else if (allDone && ACTION_TYPES.has(block.type)) {
           onActionComplete(todayStr, blockIdx, linkedAccounts);
         }
+
+        // Individual account-level tracking on action blocks
+        if (!allDone && ACTION_TYPES.has(block.type) && linkedAccounts.length > 0) {
+          // Map goal index to account if possible (1:1 when goals match accounts)
+          if (goalIdx < linkedAccounts.length) {
+            const { onAccountWorked } = await import('@/lib/loopRuntime');
+            const loopId = (block as any).loopId || `block-${blockIdx}`;
+            onAccountWorked(todayStr, loopId, linkedAccounts[goalIdx]);
+          }
+        }
       } catch {}
     }
   }, [plan, todayStr, queryClient]);

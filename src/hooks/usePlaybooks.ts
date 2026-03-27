@@ -94,9 +94,18 @@ export function useDeletePlaybook() {
       const { error } = await supabase.from('playbooks' as any).delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       qc.invalidateQueries({ queryKey: ['playbooks'] });
       toast.success('Playbook deleted');
+      // Trigger scenario regen after playbook deletion
+      try {
+        const { isRoleplayGroundingEnabled } = await import('@/lib/featureFlags');
+        if (isRoleplayGroundingEnabled()) {
+          const { triggerScenarioRegenIfNeeded } = await import('@/lib/loopRuntime');
+          const { data: fresh } = await supabase.from('playbooks' as any).select('*').order('confidence_score', { ascending: false });
+          triggerScenarioRegenIfNeeded((fresh || []) as any);
+        }
+      } catch {}
     },
   });
 }
