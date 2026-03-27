@@ -1051,6 +1051,7 @@ export function ResourceManager() {
         onOpenChange={setShowDeepEnrich}
         resources={resources}
         selectedIds={selectedResourceIds}
+        audioJobsMap={audioJobsMap}
       />
 
       {/* Floating enrichment job indicator */}
