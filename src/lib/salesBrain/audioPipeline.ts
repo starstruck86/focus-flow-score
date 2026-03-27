@@ -222,6 +222,18 @@ export function getAudioStrategy(subtype: AudioSubtype): AudioStrategy {
         operatorFailureReason: 'Podcast — attempting to resolve audio source from page',
       };
 
+    case 'spotify_episode':
+      return {
+        subtype,
+        primaryPath: { method: 'spotify_metadata', description: 'Extract Spotify metadata + show notes' },
+        secondaryPath: { method: 'detect_transcript_source', description: 'Search for linked transcript' },
+        tertiaryPath: { method: 'manual_transcript', description: 'Request manual transcript/notes' },
+        metadataOnlyAcceptable: true,
+        manualAssistRequired: true,
+        retryMode: 'manual_only',
+        operatorFailureReason: 'Spotify — no direct audio access. Metadata extracted, manual transcript needed for full enrichment',
+      };
+
     case 'spotify_show':
       return {
         subtype,
