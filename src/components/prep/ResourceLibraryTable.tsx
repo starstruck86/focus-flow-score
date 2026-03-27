@@ -175,6 +175,7 @@ export function ResourceLibraryTable({
   onToggleSelectAll,
   onResourceClick,
   onAction,
+  audioJobsMap,
 }: ResourceLibraryTableProps) {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
