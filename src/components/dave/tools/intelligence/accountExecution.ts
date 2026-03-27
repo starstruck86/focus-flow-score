@@ -29,10 +29,17 @@ export function createAccountExecutionTools(ctx: ToolContext): ToolMap {
     mark_account_prepped: async (params: { accountName: string }) => {
       if (!isAccountExecutionModelEnabled()) return 'Account execution model is not enabled yet.';
       const today = todayInAppTz();
+      const userId = await ctx.getUserId();
+      if (!userId) return 'Not authenticated.';
       // Find account by name
-      const account = ctx.accounts?.find(
-        a => a.name.toLowerCase() === params.accountName.toLowerCase(),
-      );
+      const { supabase } = await import('@/integrations/supabase/client');
+      const { data: accounts } = await supabase
+        .from('accounts')
+        .select('id, name')
+        .eq('user_id', userId)
+        .ilike('name', params.accountName)
+        .limit(1);
+      const account = accounts?.[0];
       if (!account) return `Could not find account "${params.accountName}" in your book.`;
 
       markAccountPrepped(today, account.id, account.name, null, null);
