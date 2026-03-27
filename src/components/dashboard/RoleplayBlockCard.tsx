@@ -21,6 +21,7 @@ import { useCopilot } from '@/contexts/CopilotContext';
 interface RoleplayBlockCardProps {
   blockStartTime: string;
   blockEndTime: string;
+  isMissedNoSlot?: boolean;
 }
 
 export const RoleplayBlockCard = memo(function RoleplayBlockCard({ blockStartTime, blockEndTime }: RoleplayBlockCardProps) {
