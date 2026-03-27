@@ -13,7 +13,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { 
-  Shield, ChevronDown, ChevronUp
+  ChevronDown, ChevronUp
 } from 'lucide-react';
 import { isSystemOSEnabled } from '@/lib/featureFlags';
 import { toggleKillSwitch, type KillSwitches } from '@/lib/systemGovernance';
