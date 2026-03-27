@@ -98,6 +98,34 @@ describe('voiceOS context resolution', () => {
   it('returns null when no context', () => {
     expect(resolveContextReference('practice it', emptyVoiceCtx())).toBeNull();
   });
+
+  it('resolves "do that again" to last roleplay', () => {
+    const ctx = emptyVoiceCtx();
+    ctx.lastRoleplay = { callType: 'negotiation', difficulty: 7 };
+    const r = resolveContextReference('do that again', ctx);
+    expect(r).toEqual({ call_type: 'negotiation', difficulty: '7' });
+  });
+
+  it('resolves "send that" to current playbook', () => {
+    const ctx = emptyVoiceCtx();
+    ctx.currentPlaybook = { id: 'p2', title: 'Objection Handling' };
+    const r = resolveContextReference('send that', ctx);
+    expect(r).toEqual({ playbookId: 'p2', playbookTitle: 'Objection Handling' });
+  });
+
+  it('resolves "that deal" same as "this deal"', () => {
+    const ctx = emptyVoiceCtx();
+    ctx.currentDeal = { id: 'd2', name: 'Globex', accountName: 'Globex Inc' };
+    const r = resolveContextReference('that deal', ctx);
+    expect(r).toEqual({ dealId: 'd2', dealName: 'Globex', accountName: 'Globex Inc' });
+  });
+
+  it('resolves "prep for it" to current deal', () => {
+    const ctx = emptyVoiceCtx();
+    ctx.currentDeal = { id: 'd3', name: 'Initech', accountName: 'Initech LLC' };
+    const r = resolveContextReference('prep me for it', ctx);
+    expect(r).toEqual({ accountName: 'Initech LLC' });
+  });
 });
 
 // ── SECTION 3: Confirmation Policy ─────────────────────
