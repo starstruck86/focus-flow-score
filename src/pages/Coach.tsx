@@ -1121,7 +1121,7 @@ export default function Coach() {
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="w-full grid grid-cols-5">
+          <TabsList className={cn("w-full", isSystemOSEnabled() ? "grid grid-cols-9" : "grid grid-cols-5")}>
             <TabsTrigger value="simulate" className="gap-1">
               <Swords className="h-3.5 w-3.5" /> Simulate
             </TabsTrigger>
@@ -1131,6 +1131,14 @@ export default function Coach() {
             <TabsTrigger value="scorecard">Scorecard</TabsTrigger>
             <TabsTrigger value="history">History</TabsTrigger>
             <TabsTrigger value="trends">Trends</TabsTrigger>
+            {isSystemOSEnabled() && (
+              <>
+                <TabsTrigger value="weekly-review" className="text-[10px]">Review</TabsTrigger>
+                <TabsTrigger value="skill-lab" className="text-[10px]">Skill Lab</TabsTrigger>
+                <TabsTrigger value="patterns" className="text-[10px]">Patterns</TabsTrigger>
+                <TabsTrigger value="audit" className="text-[10px]">Audit</TabsTrigger>
+              </>
+            )}
           </TabsList>
 
           {/* ── SIMULATE TAB ── */}
