@@ -76,6 +76,7 @@ export function SystemDebugPanel() {
   const brainStats = getDoctrineGovernanceStats();
   const legacyCount = getLegacyHydratedCount();
   const actualUsage = getActualUsageCounts();
+  const audioHealth = getAudioPipelineHealth();
   const { activeSession, mode, disciplineMode, scorecard, momentum, autopilotLog, overrides } = useExecutionSession();
   const nextCandidates = sessionEnabled ? getNextBestAccounts() : [];
   const enforcement = sessionEnabled ? evaluatePrepActionEnforcement() : null;
