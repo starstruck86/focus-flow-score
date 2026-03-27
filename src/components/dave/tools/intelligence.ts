@@ -9,6 +9,7 @@ import { getPlaybookRecommendation } from './intelligence/playbooks';
 import { startPlaybookRoleplay, endPlaybookRoleplay } from './intelligence/playbookRoleplay';
 import { createAccountExecutionTools } from './intelligence/accountExecution';
 import { createAccountCentricTools } from './intelligence/accountCentric';
+import { createExecutionSessionTools } from './intelligence/executionSession';
 export function createIntelligenceTools(ctx: ToolContext): ToolMap {
   return {
     search_crm: (params: { query: string }) => searchCrm(ctx, params),
