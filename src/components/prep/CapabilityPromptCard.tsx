@@ -27,26 +27,26 @@ export function CapabilityPromptCard({ context }: CapabilityPromptCardProps) {
     setPrompt(p);
     setDismissed(false);
     if (p) {
-      recordCapabilityEvent({ promptId: p.id, eventType: 'shown', contextType: context.recommendedPlaybookType, stage: context.dealStage });
+      recordCapabilityEvent({ promptId: p.suppressionKey, eventType: 'shown', contextType: context.recommendedPlaybookType, stage: context.dealStage });
     }
   }, [context.dealStage, context.dealName, context.recommendedPlaybookTitle]);
 
   const handleDismiss = useCallback(() => {
     if (prompt) {
-      recordCapabilityEvent({ promptId: prompt.id, eventType: 'ignored', contextType: context.recommendedPlaybookType, stage: context.dealStage });
+      recordCapabilityEvent({ promptId: prompt.suppressionKey, eventType: 'ignored', contextType: context.recommendedPlaybookType, stage: context.dealStage });
     }
     setDismissed(true);
   }, [prompt, context]);
 
   const handlePractice = useCallback(() => {
     if (!prompt) return;
-    recordCapabilityEvent({ promptId: prompt.id, eventType: 'accepted', contextType: context.recommendedPlaybookType, stage: context.dealStage });
+    recordCapabilityEvent({ promptId: prompt.suppressionKey, eventType: 'accepted', contextType: context.recommendedPlaybookType, stage: context.dealStage });
     askCopilot(`Practice ${prompt.skillFocus} scenarios for ${context.dealName || 'my current deal'}`, 'deal-strategy');
   }, [prompt, context, askCopilot]);
 
   const handleApply = useCallback(() => {
     if (!prompt) return;
-    recordCapabilityEvent({ promptId: prompt.id, eventType: 'used', contextType: context.recommendedPlaybookType, stage: context.dealStage });
+    recordCapabilityEvent({ promptId: prompt.suppressionKey, eventType: 'used', contextType: context.recommendedPlaybookType, stage: context.dealStage });
     askCopilot(`Apply ${prompt.skillFocus} to ${context.dealName || 'my current deal'}`, 'deal-strategy');
   }, [prompt, context, askCopilot]);
 

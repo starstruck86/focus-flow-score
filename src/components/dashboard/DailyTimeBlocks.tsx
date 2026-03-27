@@ -24,7 +24,7 @@ import {
   ThumbsUp, ThumbsDown, RotateCcw, CheckCircle2,
   ArrowRight, ExternalLink, Pencil, Check, X, GripVertical,
   Rocket, Shield, MoreVertical, EyeOff, Link2, Building2,
-  Settings2, Hammer, AlertTriangle, TrendingUp,
+  Settings2, Hammer, AlertTriangle, TrendingUp, Mic,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -45,6 +45,7 @@ import { useCalendarFreshness } from '@/hooks/useCalendarFreshness';
 import { getCurrentMinutesET, todayInAppTz } from '@/lib/timeFormat';
 import { usePlaybookRecommendation, type WorkflowContext } from '@/hooks/usePlaybookRecommendation';
 import { PlaybookRecommendationChip } from '@/components/PlaybookRecommendationChip';
+import { RoleplayBlockCard } from '@/components/dashboard/RoleplayBlockCard';
 
 /** Inline contact count for linked account pills */
 const LinkedAccountContactCount = memo(function LinkedAccountContactCount({ accountId }: { accountId: string }) {
@@ -58,7 +59,7 @@ interface TimeBlock {
   start_time: string;
   end_time: string;
   label: string;
-  type: 'prospecting' | 'meeting' | 'research' | 'admin' | 'break' | 'pipeline' | 'prep' | 'build';
+  type: 'prospecting' | 'meeting' | 'research' | 'admin' | 'break' | 'pipeline' | 'prep' | 'build' | 'roleplay';
   workstream?: 'new_logo' | 'renewal' | 'general';
   goals: string[];
   reasoning: string;
@@ -132,6 +133,7 @@ const TYPE_CONFIG: Record<string, { icon: typeof Clock; color: string; bg: strin
   pipeline: { icon: Target, color: 'text-red-500', bg: 'bg-red-500/10 border-red-500/20' },
   prep: { icon: Lightbulb, color: 'text-cyan-500', bg: 'bg-cyan-500/10 border-cyan-500/20' },
   build: { icon: Hammer, color: 'text-orange-500', bg: 'bg-orange-500/10 border-orange-500/20' },
+  roleplay: { icon: Mic, color: 'text-orange-500', bg: 'bg-orange-500/10 border-orange-500/20' },
 };
 
 function formatTime(t: string) {
@@ -1391,6 +1393,11 @@ export function DailyTimeBlocks() {
                   {/* Rust Buster quick links */}
                   {editingBlock !== i && block.type === 'prospecting' && isRustBusterBlock(block.label) && (
                     <RustBusterQuickLinks />
+                  )}
+
+                  {/* Dave Roleplay block card */}
+                  {editingBlock !== i && block.type === 'roleplay' && (
+                    <RoleplayBlockCard blockStartTime={block.start_time} blockEndTime={block.end_time} />
                   )}
 
                   {/* Account picker for prep blocks */}

@@ -35,5 +35,38 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
     get_playbook_recommendation: (params: { blockType?: string; dealStage?: string; dealStatus?: string; accountName?: string }) => getPlaybookRecommendation(ctx, params),
     start_playbook_roleplay: (params: { playbookTitle?: string; accountName?: string; dealStage?: string; dealStatus?: string; objection?: string }) => startPlaybookRoleplay(ctx, params),
     end_playbook_roleplay: () => endPlaybookRoleplay(ctx),
+    start_daily_roleplay: async (params: { scenarioType?: string; persona?: string; industry?: string }) => {
+      const { getRoleplayBlockConfig, recordRoleplayBlockEvent, buildDaveConfirmationPrompt } = await import('@/lib/dailyRoleplayBlock');
+      const { todayInAppTz } = await import('@/lib/timeFormat');
+      const config = getRoleplayBlockConfig();
+      const scenario = params.scenarioType || config.defaultScenarioType;
+      const persona = params.persona || config.defaultPersona;
+      const industry = params.industry || config.defaultIndustry;
+      recordRoleplayBlockEvent({
+        date: todayInAppTz(),
+        status: 'started',
+        scenarioType: scenario,
+        persona,
+        industry,
+        startedAt: new Date().toISOString(),
+      });
+      // Return confirmation prompt for Dave to speak
+      return buildDaveConfirmationPrompt({ ...config, defaultScenarioType: scenario, defaultPersona: persona, defaultIndustry: industry });
+    },
+    complete_daily_roleplay: async (params: { durationUsed?: number }) => {
+      const { getRoleplayBlockConfig, recordRoleplayBlockEvent } = await import('@/lib/dailyRoleplayBlock');
+      const { todayInAppTz } = await import('@/lib/timeFormat');
+      const config = getRoleplayBlockConfig();
+      recordRoleplayBlockEvent({
+        date: todayInAppTz(),
+        status: 'completed',
+        scenarioType: config.defaultScenarioType,
+        persona: config.defaultPersona,
+        industry: config.defaultIndustry,
+        durationUsed: params.durationUsed,
+        completedAt: new Date().toISOString(),
+      });
+      return 'Daily roleplay completed. Nice work — that\'s one more rep in the bank.';
+    },
   };
 }
