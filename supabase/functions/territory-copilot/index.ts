@@ -406,7 +406,7 @@ ${toolInstructions}`,
       'trends': `The user is on the TRENDS page. Focus on performance patterns, week-over-week changes, and what's driving improvement or decline.`,
       'account-detail': `The user is viewing a SPECIFIC ACCOUNT. Focus ALL answers on this account. Be deeply specific — reference their contacts, opportunities, touch history, and next steps.`,
       'opportunity-detail': `The user is viewing a SPECIFIC OPPORTUNITY. Focus ALL answers on this deal. Score it, identify gaps, and recommend specific next moves.`,
-      'prep-hub': `The user is on the PREP HUB. Focus on meeting preparation, call review, and research for upcoming interactions.`,
+      'prep-hub': `The user is on SALES BRAIN OS. Focus on meeting preparation, call review, resource management, and research for upcoming interactions.`,
     };
     const specific = pageSpecific[pageContext.page] || '';
     pageCtxPrompt = `\n\n## CURRENT PAGE CONTEXT

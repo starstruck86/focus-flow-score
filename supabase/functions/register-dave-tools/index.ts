@@ -110,7 +110,7 @@ const DAVE_TOOLS: ToolDef[] = [
   // ── Search & Intel ───────────────────────────────────────────
   { name: "search_crm", description: "Search across accounts, deals, contacts, and transcripts", parameters: { query: str("Search query — matches names, notes, content across all entities") }, required: ["query"] },
   { name: "stakeholder_query", description: "Query stakeholders and org chart at an account, optionally filtered by role", parameters: { accountName: str("The account name"), role: str("Filter by buyer role or title keyword like 'VP', 'champion', 'economic buyer'") }, required: ["accountName"] },
-  { name: "search_resources", description: "Search the prep hub for resources, templates, and training materials", parameters: { query: str("Search query for resource title or content") }, required: ["query"] },
+  { name: "search_resources", description: "Search Sales Brain OS for resources, templates, and training materials", parameters: { query: str("Search query for resource title or content") }, required: ["query"] },
 
   // ── Strategy & Analytics ─────────────────────────────────────
   { name: "weekly_battle_plan", description: "Get or generate this week's battle plan with prioritized moves", parameters: {} },
@@ -137,7 +137,7 @@ const DAVE_TOOLS: ToolDef[] = [
   // SYNTHESIS TOOLS — Cross-entity intelligence layer
   // ═══════════════════════════════════════════════════════════════
   { name: "add_opportunity_note", description: "Add a note to an opportunity/deal record (not an account)", parameters: { opportunityName: str("The opportunity name"), note: str("The note content to add") }, required: ["opportunityName", "note"] },
-  { name: "read_resource", description: "Read the content of a resource from the prep hub library by title match. Returns up to 3000 chars.", parameters: { title: str("The resource title or partial match") }, required: ["title"] },
+  { name: "read_resource", description: "Read the content of a resource from the Sales Brain library by title match. Returns up to 3000 chars.", parameters: { title: str("The resource title or partial match") }, required: ["title"] },
   { name: "methodology_gaps", description: "Analyze MEDDICC gaps across ALL active deals. Returns ranked list of unconfirmed elements weighted by ARR and close date urgency.", parameters: {} },
   { name: "next_action", description: "Synthesize the single highest-impact thing the user should do right now, considering overdue tasks, upcoming meetings, stale deals, methodology gaps, and journal status.", parameters: {} },
   { name: "contact_timeline", description: "Get engagement history for a specific contact — cross-references call transcripts, calendar events, and touch dates to show when and how you last engaged.", parameters: { contactName: str("The contact's name to look up") }, required: ["contactName"] },
@@ -147,7 +147,7 @@ const DAVE_TOOLS: ToolDef[] = [
   // PHASE 4: Advanced Synthesis & Workflow Tools
   // ═══════════════════════════════════════════════════════════════
   { name: "generate_content", description: "Generate AI content (email, business case, ROI analysis, etc.) using full deal context — transcripts, MEDDICC, contacts. Copies result to clipboard.", parameters: { contentType: str("Type of content to generate", ["email", "business_case", "roi", "follow_up", "qbr_prep", "proposal", "executive_summary"]), accountName: str("Account name for context"), opportunityName: str("Opportunity name for deal context"), contactName: str("Contact name to personalize to"), customInstructions: str("Additional instructions or specifics for the content") }, required: ["contentType"] },
-  { name: "open_content_builder", description: "Open the Prep Hub content builder with pre-filled context for complex content creation that needs user refinement.", parameters: { accountName: str("Account name to pre-fill"), opportunityName: str("Opportunity to pre-fill"), contentType: str("Content type to pre-select"), customInstructions: str("Instructions to pre-fill") } },
+  { name: "open_content_builder", description: "Open the Sales Brain OS content builder with pre-filled context for complex content creation that needs user refinement.", parameters: { accountName: str("Account name to pre-fill"), opportunityName: str("Opportunity to pre-fill"), contentType: str("Content type to pre-select"), customInstructions: str("Instructions to pre-fill") } },
   { name: "assess_deal_risk", description: "Deep AI risk assessment on one deal or across the full portfolio. Analyzes staleness, MEDDICC gaps, close date proximity, and activity cadence.", parameters: { opportunityName: str("Specific deal to assess — omit for portfolio-wide analysis") } },
   { name: "competitive_intel", description: "Search across all transcripts, account notes, and deal notes for mentions of a competitor or topic. Shows where and when it came up.", parameters: { query: str("Competitor name or topic to search for") }, required: ["query"] },
   { name: "create_methodology_tasks", description: "Convert unconfirmed MEDDICC gaps on a deal into specific, actionable tasks with talk tracks and due dates based on close date.", parameters: { opportunityName: str("The opportunity to create MEDDICC tasks for") }, required: ["opportunityName"] },

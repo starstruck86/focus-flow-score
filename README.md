@@ -9,7 +9,7 @@ A **standalone sales coaching and decision-support app** for individual contribu
 - **Prospecting guidance** — ICP scoring, account prioritization, and outreach planning
 - **Call coaching** — mock calls, objection drills, and transcript grading
 - **Journal & accountability** — daily check-ins, streak tracking, and performance trends
-- **Prep Hub** — meeting prep, content building, and resource management
+- **Sales Brain OS** — meeting prep, content building, and resource management
 
 ## Integration status
 
