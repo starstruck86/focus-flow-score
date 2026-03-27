@@ -8,10 +8,20 @@
  */
 
 import { createLogger } from './logger';
+import { classifyVoiceIntent, type VoiceIntent } from './voiceIntent';
 
 const log = createLogger('DaveModeDetector');
 
-// ── Modes ──────────────────────────────────────────────────
+// ── Voice intent → Dave mode mapping ──────────────────────
+
+const VOICE_TO_DAVE: Record<VoiceIntent, DaveMode> = {
+  ask: 'EXECUTE',
+  explain: 'COACH',
+  act: 'EXECUTE',
+  diagnose: 'DIAGNOSE',
+  recover: 'RECOVERY',
+  'confirm-required': 'EXECUTE',
+};
 
 export type DaveMode = 'EXECUTE' | 'PREP' | 'COACH' | 'ROLEPLAY' | 'DIAGNOSE' | 'RECOVERY';
 
