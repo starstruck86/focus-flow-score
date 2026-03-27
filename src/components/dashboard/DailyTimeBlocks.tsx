@@ -46,7 +46,9 @@ import { getCurrentMinutesET, todayInAppTz } from '@/lib/timeFormat';
 import { usePlaybookRecommendation, type WorkflowContext } from '@/hooks/usePlaybookRecommendation';
 import { PlaybookRecommendationChip } from '@/components/PlaybookRecommendationChip';
 import { RoleplayBlockCard } from '@/components/dashboard/RoleplayBlockCard';
-import { getRoleplayBlockConfig, findRoleplaySlot, createRoleplayBlock, getTodayRoleplayStatus } from '@/lib/dailyRoleplayBlock';
+import { ExecutionSignals } from '@/components/dashboard/ExecutionSignals';
+import { getRoleplayBlockConfig, findRoleplaySlot, createRoleplayBlock, getTodayRoleplayStatus, getRoleplayStreak, recordRoleplayBlockEvent } from '@/lib/dailyRoleplayBlock';
+import { buildPrepActionSignal, type PrepActionSignal } from '@/lib/loopReadiness';
 
 /** Inline contact count for linked account pills */
 const LinkedAccountContactCount = memo(function LinkedAccountContactCount({ accountId }: { accountId: string }) {
@@ -840,19 +842,39 @@ export function DailyTimeBlocks() {
 
   const hasChanges = dismissedBlocks.size > 0 || blockOppLinks.size > 0;
 
-  // Auto-inject morning roleplay block if not already present
+  // Auto-inject morning roleplay block if not already present; record missed_no_slot
+  const roleplayDailyStatus = useMemo(() => {
+    const status = getTodayRoleplayStatus(todayStr);
+    if (status) return status.status as PrepActionSignal['roleplayStatus'];
+    return null;
+  }, [todayStr]);
+
   const blocks = useMemo(() => {
     const raw = (plan?.blocks || []) as TimeBlock[];
     const config = getRoleplayBlockConfig();
-    if (!config.enabled) return raw;
+    const dayOfWeek = new Date().getDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    if (!config.enabled || isWeekend) return raw;
     // Already has a roleplay block?
     if (raw.some(b => b.type === 'roleplay')) return raw;
-    // Already completed/skipped today?
+    // Already completed/skipped/missed today?
     const status = getTodayRoleplayStatus(todayStr);
-    if (status && (status.status === 'completed' || status.status === 'skipped')) return raw;
+    if (status && (status.status === 'completed' || status.status === 'skipped' || status.status === 'missed_no_slot')) return raw;
     // Find a morning slot
     const slot = findRoleplaySlot(raw.map(b => ({ start_time: b.start_time, end_time: b.end_time, type: b.type })), config);
-    if (!slot) return raw;
+    if (!slot) {
+      // Record missed_no_slot once
+      if (!status) {
+        recordRoleplayBlockEvent({
+          date: todayStr,
+          status: 'missed_no_slot',
+          scenarioType: config.defaultScenarioType,
+          persona: config.defaultPersona,
+          industry: config.defaultIndustry,
+        });
+      }
+      return raw;
+    }
     const roleplayBlock: TimeBlock = {
       ...slot,
       ...createRoleplayBlock(config),
@@ -865,6 +887,14 @@ export function DailyTimeBlocks() {
     else merged.splice(insertIdx, 0, roleplayBlock);
     return merged;
   }, [plan?.blocks, todayStr]);
+
+  // Execution signals: prep→action readiness
+  const executionSignal = useMemo(() => {
+    const completedSet = new Set((plan?.completed_goals || []) as string[]);
+    const rpStatus = roleplayDailyStatus;
+    const streak = getRoleplayStreak();
+    return buildPrepActionSignal(blocks, completedSet, currentIdx, rpStatus, streak);
+  }, [blocks, plan?.completed_goals, currentIdx, roleplayDailyStatus]);
 
   // Calculate progress
   const totalGoals = blocks.reduce((s, b) => s + b.goals.length, 0);
@@ -1083,6 +1113,9 @@ export function DailyTimeBlocks() {
           💡 {plan.ai_reasoning}
         </div>
       )}
+
+      {/* Execution signals: roleplay + prep→action readiness */}
+      {expanded && <ExecutionSignals signal={executionSignal} />}
 
       {rebuildStatus && (
         <div className="px-4 py-2 border-b border-border/30 bg-muted/20 text-[11px] text-muted-foreground flex items-center justify-between gap-3" data-testid="rebuild-plan-status">

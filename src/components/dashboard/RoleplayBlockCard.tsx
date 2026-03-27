@@ -21,15 +21,18 @@ import { useCopilot } from '@/contexts/CopilotContext';
 interface RoleplayBlockCardProps {
   blockStartTime: string;
   blockEndTime: string;
+  isMissedNoSlot?: boolean;
 }
 
-export const RoleplayBlockCard = memo(function RoleplayBlockCard({ blockStartTime, blockEndTime }: RoleplayBlockCardProps) {
+export const RoleplayBlockCard = memo(function RoleplayBlockCard({ blockStartTime, blockEndTime, isMissedNoSlot }: RoleplayBlockCardProps) {
   const today = todayInAppTz();
   const config = getRoleplayBlockConfig();
   const todayStatus = getTodayRoleplayStatus(today);
   const streak = getRoleplayStreak();
   const { ask: askCopilot } = useCopilot();
-  const [localStatus, setLocalStatus] = useState(todayStatus?.status || 'scheduled');
+  const [localStatus, setLocalStatus] = useState(
+    isMissedNoSlot ? 'missed_no_slot' : (todayStatus?.status || 'scheduled')
+  );
 
   const handleStart = useCallback(() => {
     recordRoleplayBlockEvent({
@@ -88,6 +91,17 @@ export const RoleplayBlockCard = memo(function RoleplayBlockCard({ blockStartTim
           >
             Undo
           </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (localStatus === 'missed_no_slot') {
+    return (
+      <div className="mt-2 py-2 px-3 rounded-md bg-muted/30 border border-border/30">
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <Clock className="h-3.5 w-3.5" />
+          <span>No morning slot available for roleplay today</span>
         </div>
       </div>
     );
