@@ -8,10 +8,12 @@ const FLAG_STORAGE_KEY = 'system-feature-flags';
 
 export interface FeatureFlags {
   ENABLE_SYSTEM_OS: boolean;
+  ENABLE_VOICE_OS: boolean;
 }
 
 const DEFAULTS: FeatureFlags = {
   ENABLE_SYSTEM_OS: false,
+  ENABLE_VOICE_OS: false,
 };
 
 export function loadFeatureFlags(): FeatureFlags {
@@ -31,4 +33,8 @@ export function setFeatureFlag(key: keyof FeatureFlags, value: boolean): Feature
 
 export function isSystemOSEnabled(): boolean {
   return loadFeatureFlags().ENABLE_SYSTEM_OS;
+}
+
+export function isVoiceOSEnabled(): boolean {
+  return loadFeatureFlags().ENABLE_VOICE_OS;
 }
