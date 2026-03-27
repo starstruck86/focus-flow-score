@@ -90,8 +90,8 @@ export function resolveContextReference(
 ): Record<string, string> | null {
   const lower = input.toLowerCase();
 
-  // "practice it" / "roleplay that" → last roleplay or current playbook
-  if (/\b(practice|roleplay)\s+(it|that|again)\b/i.test(lower)) {
+  // "practice it" / "roleplay that" / "do that again" / "try it again" → last roleplay or current playbook
+  if (/\b(practice|roleplay|do|try)\s+(it|that|again)\b/i.test(lower) || /\bthat\s+again\b/i.test(lower)) {
     if (ctx.lastRoleplay) {
       return { call_type: ctx.lastRoleplay.callType, difficulty: String(ctx.lastRoleplay.difficulty ?? 5) };
     }
@@ -100,7 +100,7 @@ export function resolveContextReference(
     }
   }
 
-  // "log that" / "log it" → pending action or current deal
+  // "log that" / "log it" / "log this" → pending action or current deal
   if (/\b(log)\s+(that|it|this)\b/i.test(lower)) {
     if (ctx.currentDeal) {
       return { accountName: ctx.currentDeal.accountName, dealName: ctx.currentDeal.name };
@@ -110,19 +110,32 @@ export function resolveContextReference(
     }
   }
 
-  // "use that" / "use this" → current playbook
-  if (/\b(use)\s+(that|this|it)\b/i.test(lower)) {
+  // "use that" / "use this" / "send that" / "send it" → current playbook or pending action
+  if (/\b(use|send)\s+(that|this|it)\b/i.test(lower)) {
     if (ctx.currentPlaybook) {
       return { playbookId: ctx.currentPlaybook.id, playbookTitle: ctx.currentPlaybook.title };
     }
+    if (ctx.pendingAction) {
+      return { tool: ctx.pendingAction.tool, description: ctx.pendingAction.description };
+    }
   }
 
-  // Generic "this deal" / "this account"
-  if (/\bthis\s+(deal|opportunity)\b/i.test(lower) && ctx.currentDeal) {
-    return { dealId: ctx.currentDeal.id, dealName: ctx.currentDeal.name };
+  // Generic "this deal" / "this account" / "that deal" / "that account"
+  if (/\b(this|that)\s+(deal|opportunity)\b/i.test(lower) && ctx.currentDeal) {
+    return { dealId: ctx.currentDeal.id, dealName: ctx.currentDeal.name, accountName: ctx.currentDeal.accountName };
   }
-  if (/\bthis\s+account\b/i.test(lower) && ctx.currentAccount) {
+  if (/\b(this|that)\s+account\b/i.test(lower) && ctx.currentAccount) {
     return { accountId: ctx.currentAccount.id, accountName: ctx.currentAccount.name };
+  }
+
+  // "prep for it" / "prep for that" → current deal or account
+  if (/\bprep\s+(?:me\s+)?for\s+(it|that|this)\b/i.test(lower)) {
+    if (ctx.currentDeal) {
+      return { accountName: ctx.currentDeal.accountName };
+    }
+    if (ctx.currentAccount) {
+      return { accountName: ctx.currentAccount.name };
+    }
   }
 
   return null;

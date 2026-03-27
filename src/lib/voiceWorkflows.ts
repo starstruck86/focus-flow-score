@@ -91,10 +91,11 @@ export function parseChainedWorkflow(input: string): ChainedWorkflow | null {
     originalInput: input,
   };
 
-  // Persist to context
+  // Persist to context — include descriptions for smooth transitions
   updateVoiceContext({
     chainedWorkflow: {
       steps: steps.map(s => s.action),
+      descriptions: steps.map(s => s.description),
       currentStep: 0,
     },
   });
@@ -123,9 +124,11 @@ export function advanceChain(): WorkflowStep | null {
     },
   });
 
-  // Return a minimal step descriptor
+  // Use the original description for natural transitions
+  const description = ctx.chainedWorkflow.descriptions?.[nextIdx] || `Step ${nextIdx + 1}`;
+
   return {
     action: ctx.chainedWorkflow.steps[nextIdx],
-    description: `Step ${nextIdx + 1}`,
+    description,
   };
 }
