@@ -20,6 +20,7 @@ export interface LoopReadiness {
 export interface PrepActionSignal {
   roleplayStatus: 'completed' | 'skipped' | 'scheduled' | 'missed_no_slot' | null;
   roleplayStreakDays: number;
+  roleplayGroundingSource?: 'playbook' | 'default' | null;
   nextActionBlockLabel: string | null;
   nextActionBlockReady: boolean;
   preparedAccountsWaiting: number;
@@ -27,6 +28,8 @@ export interface PrepActionSignal {
   carryForwardCount: number;
   currentLoopStatus?: string | null;
   nextLoopStatus?: string | null;
+  currentLoopType?: string | null;
+  serverLoopCount?: number;
 }
 
 // ── Heuristic: count "prepared" accounts ─────────────────────
