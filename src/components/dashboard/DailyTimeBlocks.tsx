@@ -1394,6 +1394,11 @@ export function DailyTimeBlocks() {
                     <RustBusterQuickLinks />
                   )}
 
+                  {/* Dave Roleplay block card */}
+                  {editingBlock !== i && block.type === 'roleplay' && (
+                    <RoleplayBlockCard blockStartTime={block.start_time} blockEndTime={block.end_time} />
+                  )}
+
                   {/* Account picker for prep blocks */}
                   {editingBlock !== i && block.type === 'prep' && block.workstream !== 'new_logo' && (
                     <div className="mt-2 py-1.5 px-2.5 rounded-md bg-muted/40 border border-border/30">

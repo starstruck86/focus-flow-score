@@ -11,7 +11,7 @@ import { usePlaybooks, type Playbook } from './usePlaybooks';
 import { useStore } from '@/store/useStore';
 
 export interface WorkflowContext {
-  blockType?: 'prospecting' | 'meeting' | 'research' | 'admin' | 'break' | 'pipeline' | 'prep' | 'build';
+  blockType?: 'prospecting' | 'meeting' | 'research' | 'admin' | 'break' | 'pipeline' | 'prep' | 'build' | 'roleplay';
   accountId?: string;
   opportunityId?: string;
   dealStage?: string;
