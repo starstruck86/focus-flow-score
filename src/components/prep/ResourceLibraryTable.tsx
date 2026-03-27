@@ -60,6 +60,7 @@ interface ResourceLibraryTableProps {
   onToggleSelectAll: () => void;
   onResourceClick: (resource: Resource) => void;
   onAction: (action: string, resource: Resource) => void;
+  audioJobsMap?: Map<string, AudioJobRecord>;
 }
 
 // ── Saved views ────────────────────────────────────────────
