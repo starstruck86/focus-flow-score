@@ -29,10 +29,14 @@ import {
   getQualityTierLabel, getQualityTierColor,
 } from '@/lib/resourceQuality';
 import { detectDrift } from '@/lib/resourceLifecycle';
+import {
+  detectResourceSubtype, getSubtypeLabel, classifyEnrichability,
+  getEnrichabilityLabel, getEnrichabilityColor,
+} from '@/lib/salesBrain/resourceSubtype';
 import type { Resource } from '@/hooks/useResources';
 
 // ── Types ──────────────────────────────────────────────────
-type SortKey = 'title' | 'resource_type' | 'enrichment_status' | 'last_quality_tier' | 'last_quality_score' | 'created_at' | 'enriched_at' | 'enrichment_version';
+type SortKey = 'title' | 'resource_type' | 'enrichment_status' | 'last_quality_tier' | 'last_quality_score' | 'created_at' | 'enriched_at' | 'enrichment_version' | 'subtype';
 type SortDir = 'asc' | 'desc';
 
 export interface SavedView {
