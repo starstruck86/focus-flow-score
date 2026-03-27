@@ -9,6 +9,9 @@ import { useVoiceMode } from '@/hooks/useVoiceMode';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { toast } from 'sonner';
+import { ExplainabilityFooter, type ExplainabilityData } from '@/components/copilot/ExplainabilityFooter';
+import { detectDaveMode } from '@/lib/daveModeDetector';
+import { isSystemOSEnabled } from '@/lib/featureFlags';
 
 const MODE_ICONS: Record<CopilotMode, typeof Zap> = {
   quick: Zap,
