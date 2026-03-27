@@ -15,6 +15,9 @@ export interface FeatureFlags {
   ENABLE_ACCOUNT_EXECUTION_MODEL: boolean;
   ENABLE_ACCOUNT_CENTRIC_EXECUTION: boolean;
   ENABLE_EXECUTION_SESSION_LAYER: boolean;
+  ENABLE_STRICT_EXECUTION_MODE: boolean;
+  ENABLE_SESSION_AUTOPILOT: boolean;
+  ENABLE_EXECUTION_MOMENTUM: boolean;
 }
 
 const DEFAULTS: FeatureFlags = {
@@ -26,6 +29,9 @@ const DEFAULTS: FeatureFlags = {
   ENABLE_ACCOUNT_EXECUTION_MODEL: false,
   ENABLE_ACCOUNT_CENTRIC_EXECUTION: false,
   ENABLE_EXECUTION_SESSION_LAYER: false,
+  ENABLE_STRICT_EXECUTION_MODE: false,
+  ENABLE_SESSION_AUTOPILOT: false,
+  ENABLE_EXECUTION_MOMENTUM: false,
 };
 
 export function loadFeatureFlags(): FeatureFlags {
@@ -73,4 +79,16 @@ export function isAccountCentricExecutionEnabled(): boolean {
 
 export function isExecutionSessionLayerEnabled(): boolean {
   return loadFeatureFlags().ENABLE_EXECUTION_SESSION_LAYER;
+}
+
+export function isStrictExecutionModeEnabled(): boolean {
+  return loadFeatureFlags().ENABLE_STRICT_EXECUTION_MODE;
+}
+
+export function isSessionAutopilotEnabled(): boolean {
+  return loadFeatureFlags().ENABLE_SESSION_AUTOPILOT;
+}
+
+export function isExecutionMomentumEnabled(): boolean {
+  return loadFeatureFlags().ENABLE_EXECUTION_MOMENTUM;
 }
