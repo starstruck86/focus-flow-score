@@ -50,6 +50,8 @@ export function SystemDebugPanel() {
   const loopEnabled = isLoopNativeSchedulerEnabled();
   const groundingEnabled = isRoleplayGroundingEnabled();
   const acctEnabled = isAccountExecutionModelEnabled();
+  const acctCentricEnabled = isAccountCentricExecutionEnabled();
+  const measurementCount = loadMeasurementEvents().length;
 
   return (
     <div>
