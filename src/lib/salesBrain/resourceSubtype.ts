@@ -80,6 +80,8 @@ export function detectResourceSubtype(url: string | null, resourceType?: string)
   // Spotify
   if (lower.includes('open.spotify.com/episode') || lower.includes('open.spotify.com/show')) return 'spotify_episode';
 
+  // Apple Podcasts
+  if (lower.includes('podcasts.apple.com/') && (lower.includes('/podcast/') || lower.includes('/id'))) return 'apple_podcast_episode';
   // Audio files
   if (/\.(mp3|m4a|wav|ogg|aac|flac)(\?|$)/i.test(lower)) return 'audio_file';
 
