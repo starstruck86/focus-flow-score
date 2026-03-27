@@ -9,11 +9,13 @@ const FLAG_STORAGE_KEY = 'system-feature-flags';
 export interface FeatureFlags {
   ENABLE_SYSTEM_OS: boolean;
   ENABLE_VOICE_OS: boolean;
+  ENABLE_CAPABILITY_AWARENESS: boolean;
 }
 
 const DEFAULTS: FeatureFlags = {
   ENABLE_SYSTEM_OS: false,
   ENABLE_VOICE_OS: false,
+  ENABLE_CAPABILITY_AWARENESS: false,
 };
 
 export function loadFeatureFlags(): FeatureFlags {
