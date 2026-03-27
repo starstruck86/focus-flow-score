@@ -392,6 +392,17 @@ export function getAudioFailureDescription(code: AudioFailureCode): { explanatio
     DOWNLOAD_FAILED: { explanation: 'Audio download failed mid-stream.', retryable: true, nextAction: 'Retry download' },
     CHUNK_ASSEMBLY_FAILED: { explanation: 'Failed to assemble transcript chunks.', retryable: true, nextAction: 'Retry assembly' },
     QUALITY_CHECK_FAILED: { explanation: 'Transcript failed quality checks.', retryable: false, nextAction: 'Review and paste better transcript' },
+    SPOTIFY_NO_DIRECT_AUDIO: { explanation: 'Spotify does not provide direct audio access.', retryable: false, nextAction: 'Paste transcript, notes, or provide alternate URL' },
+    SPOTIFY_METADATA_ONLY: { explanation: 'Spotify metadata captured but no transcript available.', retryable: false, nextAction: 'Paste transcript or provide alternate episode source' },
+    APPLE_PAGE_PARSED_NO_FEED: { explanation: 'Apple Podcasts page parsed but no RSS feed found.', retryable: true, nextAction: 'Retry resolution or paste transcript' },
+    APPLE_FEED_NOT_RESOLVED: { explanation: 'Could not resolve RSS feed for this podcast.', retryable: true, nextAction: 'Retry or provide direct audio URL' },
+    APPLE_ENCLOSURE_NOT_FOUND: { explanation: 'RSS feed found but episode audio enclosure not matched.', retryable: true, nextAction: 'Retry or provide direct audio URL' },
+    TRANSCRIPT_SOURCE_NOT_FOUND: { explanation: 'No transcript source found for this episode.', retryable: false, nextAction: 'Paste transcript manually' },
+    CANONICAL_PAGE_NOT_FOUND: { explanation: 'No canonical episode page found.', retryable: false, nextAction: 'Provide episode URL or paste transcript' },
+    METADATA_CAPTURED_NO_TRANSCRIPT: { explanation: 'Metadata captured but no transcript available.', retryable: false, nextAction: 'Paste transcript or mark metadata-only' },
+    PLATFORM_RATE_LIMITED: { explanation: 'Platform rate limited the request.', retryable: true, nextAction: 'Wait and retry' },
+    PLATFORM_BLOCKED: { explanation: 'Platform blocked the request.', retryable: false, nextAction: 'Use alternate source or paste transcript' },
+    MANUAL_ASSIST_RECOMMENDED: { explanation: 'Automatic resolution exhausted.', retryable: false, nextAction: 'Open manual assist to provide transcript or notes' },
   };
   return map[code] || { explanation: 'Unknown audio failure.', retryable: false, nextAction: 'Review manually' };
 }
