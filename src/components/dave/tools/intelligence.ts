@@ -7,7 +7,7 @@ import { bulkUpdate } from './intelligence/bulk';
 import { citeInsight, knowledgeTrends, insightReliability, recommendStrategy, recordStrategyOutcome, strategyPerformance, pipelineImpact, recordPipelineEvent, pipelineForecast } from './intelligence/knowledge';
 import { getPlaybookRecommendation } from './intelligence/playbooks';
 import { startPlaybookRoleplay, endPlaybookRoleplay } from './intelligence/playbookRoleplay';
-
+import { createAccountExecutionTools } from './intelligence/accountExecution';
 export function createIntelligenceTools(ctx: ToolContext): ToolMap {
   return {
     search_crm: (params: { query: string }) => searchCrm(ctx, params),
