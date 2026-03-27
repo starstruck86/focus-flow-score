@@ -25,7 +25,7 @@ import {
   getAudioStrategy,
 } from '@/lib/salesBrain/audioPipeline';
 
-type ManualAssistMode = 'paste_transcript' | 'paste_notes' | 'metadata_only' | 'park_later';
+type ManualAssistMode = 'paste_transcript' | 'paste_notes' | 'provide_alt_url' | 'provide_audio_url' | 'metadata_only' | 'park_later';
 
 interface ManualTranscriptAssistProps {
   open: boolean;
