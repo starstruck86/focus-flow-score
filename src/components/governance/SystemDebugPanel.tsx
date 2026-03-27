@@ -6,18 +6,27 @@
  * No dashboard bloat — just a small inspection block.
  */
 
-import { useState, useCallback } from 'react';
-import { Badge } from '@/components/ui/badge';
+import { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Bug, RefreshCw } from 'lucide-react';
 import { captureDebugSnapshot, type SystemDebugSnapshot } from '@/lib/loopRuntime';
+import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled } from '@/lib/featureFlags';
 
 export function SystemDebugPanel() {
   const [snapshot, setSnapshot] = useState<SystemDebugSnapshot | null>(null);
   const [open, setOpen] = useState(false);
 
   const refresh = useCallback(() => {
-    setSnapshot(captureDebugSnapshot());
+    // Try to get plan context from the current day's plan in localStorage
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const planKey = `daily-plan-blocks-${today}`;
+      const raw = localStorage.getItem(planKey);
+      const planBlocks = raw ? JSON.parse(raw) : undefined;
+      setSnapshot(captureDebugSnapshot(planBlocks));
+    } catch {
+      setSnapshot(captureDebugSnapshot());
+    }
   }, []);
 
   const toggle = useCallback(() => {
@@ -26,6 +35,10 @@ export function SystemDebugPanel() {
       return !v;
     });
   }, [refresh]);
+
+  // Flags summary for degraded-mode awareness
+  const loopEnabled = isLoopNativeSchedulerEnabled();
+  const groundingEnabled = isRoleplayGroundingEnabled();
 
   return (
     <div>
@@ -46,7 +59,12 @@ export function SystemDebugPanel() {
             </Button>
           </div>
 
+          {/* Flags */}
+          <Row label="Loop scheduler" value={loopEnabled ? 'on' : 'off'} />
+          <Row label="Roleplay grounding" value={groundingEnabled ? 'on' : 'off'} />
+
           {/* Loop state */}
+          <div className="border-t border-border/20 pt-1 mt-1" />
           <Row label="Loop source" value={snapshot.loopSource} />
           <Row label="Loop count" value={String(snapshot.loopCount)} />
           <Row label="Current loop" value={snapshot.currentLoopStatus || 'none'} />
