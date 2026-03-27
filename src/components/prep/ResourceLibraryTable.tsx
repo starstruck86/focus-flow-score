@@ -38,6 +38,9 @@ import {
   isAudioResource, detectAudioSubtype, getAudioStageLabel,
   getAudioFailureDescription,
 } from '@/lib/salesBrain/audioPipeline';
+import {
+  deriveProcessingState, getProcessingStateColor,
+} from '@/lib/processingState';
 import type { AudioFailureCode, AudioPipelineStage } from '@/lib/salesBrain/audioPipeline';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import type { Resource } from '@/hooks/useResources';
@@ -70,32 +73,27 @@ const SAVED_VIEWS: SavedView[] = [
     filter: () => true,
   },
   {
-    id: 'needs_deep', label: 'Needs Deep Enrich', icon: <Zap className="h-3 w-3" />,
-    filter: (r) => !r.enrichment_status || r.enrichment_status === 'not_enriched' || r.enrichment_status === 'incomplete',
+    id: 'needs_action', label: 'Needs Action', icon: <Zap className="h-3 w-3" />,
+    filter: (r) => !r.enrichment_status || r.enrichment_status === 'not_enriched' || r.enrichment_status === 'incomplete' || r.enrichment_status === 'failed',
   },
   {
-    id: 'needs_reenrich', label: 'Needs Re-enrich', icon: <RefreshCw className="h-3 w-3" />,
-    filter: (r) => r.enrichment_status === 'queued_for_reenrich' || r.enrichment_status === 'incomplete' || ((r as any).last_quality_tier === 'shallow' && r.enrichment_status === 'deep_enriched'),
+    id: 'retryable', label: 'Retryable', icon: <RefreshCw className="h-3 w-3" />,
+    filter: (r) => r.enrichment_status === 'failed' || r.enrichment_status === 'incomplete' || r.enrichment_status === 'queued_for_reenrich' || ((r as any).last_quality_tier === 'shallow' && r.enrichment_status === 'deep_enriched'),
   },
   {
-    id: 'failed', label: 'Failed', icon: <XCircle className="h-3 w-3" />,
-    filter: (r) => r.enrichment_status === 'failed',
+    id: 'manual', label: 'Manual Required', icon: <HelpCircle className="h-3 w-3" />,
+    filter: (r) => {
+      const ea = classifyEnrichability(r.file_url, r.resource_type);
+      return ea.enrichability === 'manual_input_needed' || ea.enrichability === 'needs_auth' || ea.enrichability === 'metadata_only';
+    },
   },
   {
     id: 'recent', label: 'Recently Added', icon: <FileText className="h-3 w-3" />,
     filter: (r) => Date.now() - new Date(r.created_at).getTime() < 7 * 86400000,
   },
   {
-    id: 'enriched', label: 'Enriched Recently', icon: <CheckCircle2 className="h-3 w-3" />,
-    filter: (r) => r.enrichment_status === 'deep_enriched' && !!r.enriched_at && Date.now() - new Date(r.enriched_at).getTime() < 7 * 86400000,
-  },
-  {
-    id: 'shallow', label: 'Low Quality', icon: <AlertTriangle className="h-3 w-3" />,
-    filter: (r) => (r as any).last_quality_tier === 'shallow' || (r as any).last_quality_tier === 'incomplete',
-  },
-  {
-    id: 'high_quality', label: 'High Quality', icon: <CheckCircle2 className="h-3 w-3" />,
-    filter: (r) => (r as any).last_quality_tier === 'complete',
+    id: 'completed', label: 'Completed', icon: <CheckCircle2 className="h-3 w-3" />,
+    filter: (r) => r.enrichment_status === 'deep_enriched',
   },
   {
     id: 'audio', label: 'Audio', icon: <FileAudio className="h-3 w-3" />,
@@ -252,7 +250,7 @@ export function ResourceLibraryTable({
   }, []);
 
   return (
-    <div ref={shellRef} className="flex flex-col" style={{ height: 'calc(100vh - 200px)', minHeight: '420px' }}>
+    <div ref={shellRef} className="flex flex-col" style={{ height: 'calc(100vh - 180px)', minHeight: '450px' }}>
       {/* Saved views — pinned top */}
       <div className="flex items-center gap-1 overflow-x-auto pb-1 shrink-0">
         {SAVED_VIEWS.map(view => (
@@ -350,7 +348,7 @@ export function ResourceLibraryTable({
         <div
           ref={scrollBodyRef}
           className="flex-1 min-h-0 overflow-y-auto overflow-x-auto"
-          style={{ paddingBottom: hasSelection ? '64px' : '8px' }}
+          style={{ paddingBottom: hasSelection ? '72px' : '8px' }}
         >
           <table className="w-full caption-bottom text-sm">
             {/* Sticky header */}
@@ -503,9 +501,22 @@ export function ResourceLibraryTable({
                         })()}
                       </td>
                       <td className="px-3 align-middle">
-                        <Badge className={cn('text-[9px]', getEnrichmentStatusColor(resource.enrichment_status))}>
-                          {getEnrichmentStatusLabel(resource.enrichment_status)}
-                        </Badge>
+                        {(() => {
+                          const ps = deriveProcessingState(resource, audioJob);
+                          return (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge className={cn('text-[9px] cursor-help', getProcessingStateColor(ps.state))}>
+                                  {ps.label}
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent side="bottom" className="text-xs max-w-[250px]">
+                                <p>{ps.description}</p>
+                                {ps.nextAction && <p className="mt-1 text-primary">→ {ps.nextAction}</p>}
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                        })()}
                       </td>
                       <td className="px-3 align-middle">
                         {(resource as any).last_quality_tier ? (
