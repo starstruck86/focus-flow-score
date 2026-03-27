@@ -46,15 +46,15 @@ describe('capabilityEngine', () => {
     expect(prompt === null || typeof prompt.id === 'string').toBe(true);
   });
 
-  it('suppresses after max ignores', () => {
+  it('suppresses after max ignores using suppressionKey', () => {
     setFeatureFlag('ENABLE_CAPABILITY_AWARENESS', true);
     const ctx: CapabilityContext = { dealStage: 'proposal', dealName: 'Test', dealRisk: 'high' };
 
-    // Get prompt to find its ID
+    // Get prompt to find its suppressionKey
     const prompt = getCapabilityPrompt(ctx);
     if (!prompt) return; // skip if no prompt generated
 
-    // Record 3 ignores
+    // Record 3 ignores using suppressionKey (same key the UI now uses)
     for (let i = 0; i < 3; i++) {
       recordCapabilityEvent({ promptId: prompt.suppressionKey, eventType: 'ignored' });
     }
@@ -64,7 +64,7 @@ describe('capabilityEngine', () => {
     
     const after = getCapabilityPrompt(ctx);
     // Should be suppressed or return a different prompt
-    expect(after === null || after.id !== prompt.id).toBe(true);
+    expect(after === null || after.suppressionKey !== prompt.suppressionKey).toBe(true);
   });
 });
 
