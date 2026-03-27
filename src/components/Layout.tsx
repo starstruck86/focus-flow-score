@@ -35,6 +35,7 @@ import { BottomNav, useActiveTabColor, COLOR_VAR } from '@/components/layout/Bot
 
 const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
   '/': { page: 'dashboard', description: 'Today / Dashboard — daily plan, agenda, and key metrics' },
+  '/cockpit': { page: 'dashboard', description: 'Cockpit — primary operating view for daily execution' },
   '/tasks': { page: 'tasks', description: 'Tasks — action items, follow-ups, and to-dos' },
   '/outreach': { page: 'outreach', description: 'New Logo Outreach — prospecting accounts and pipeline building' },
   '/renewals': { page: 'renewals', description: 'Renewals — existing customer renewals and retention' },

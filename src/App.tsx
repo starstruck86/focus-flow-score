@@ -30,6 +30,7 @@ import NotFound from "./pages/NotFound";
 import { lazy, Suspense } from "react";
 
 const Diagnostics = lazy(() => import("./pages/Diagnostics"));
+const Cockpit = lazy(() => import("./pages/Cockpit"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -83,6 +84,13 @@ const App = () => (
                   <Route path="/coach" element={<ProtectedPage routeName="Coach"><Coach /></ProtectedPage>} />
                   <Route path="/prep" element={<ProtectedPage routeName="Prep Hub"><PrepHub /></ProtectedPage>} />
                   <Route path="/settings" element={<ProtectedPage routeName="Settings"><Settings /></ProtectedPage>} />
+                  <Route path="/cockpit" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading…</p></div>}>
+                        <Cockpit />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
                   <Route path="/ops" element={
                     <ProtectedRoute>
                       <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading diagnostics…</p></div>}>

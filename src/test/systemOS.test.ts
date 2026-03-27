@@ -13,8 +13,8 @@ import { loadFeatureFlags, setFeatureFlag, isSystemOSEnabled } from '@/lib/featu
 describe('featureFlags', () => {
   beforeEach(() => localStorage.clear());
 
-  it('defaults ENABLE_SYSTEM_OS to false', () => {
-    expect(isSystemOSEnabled()).toBe(false);
+  it('defaults ENABLE_SYSTEM_OS to true (operator-enabled)', () => {
+    expect(isSystemOSEnabled()).toBe(true);
   });
 
   it('sets and reads flags', () => {

@@ -9,11 +9,12 @@ import {
   Settings,
   Compass,
   FileText,
+  Crosshair,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
-export type NavColor = 'today' | 'tasks' | 'outreach' | 'renewals' | 'prep' | 'coach' | 'trends' | 'quota' | 'settings';
+export type NavColor = 'today' | 'tasks' | 'outreach' | 'renewals' | 'prep' | 'coach' | 'trends' | 'quota' | 'settings' | 'cockpit';
 
 export interface NavItemDef {
   to: string;
@@ -32,9 +33,11 @@ export const COLOR_VAR: Record<NavColor, string> = {
   trends: 'var(--nav-trends)',
   quota: 'var(--nav-quota)',
   settings: 'var(--nav-settings)',
+  cockpit: 'var(--nav-today)',
 };
 
 export const navRow1: NavItemDef[] = [
+  { to: '/cockpit', label: 'Cockpit', icon: Crosshair, color: 'cockpit' },
   { to: '/', label: 'Today', icon: LayoutDashboard, color: 'today' },
   { to: '/tasks', label: 'Tasks', icon: CheckSquare, color: 'tasks' },
   { to: '/outreach', label: 'New Logo', icon: Users, color: 'outreach' },
