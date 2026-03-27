@@ -92,6 +92,13 @@ export function onPrepComplete(
   if (!targetLoop) return;
   const updated = markPrepComplete(loops, targetLoop.loopId, preparedAccounts);
   saveLoops(date, updated);
+
+  // Write account-level truth
+  if (isAccountExecutionModelEnabled()) {
+    for (const acct of preparedAccounts) {
+      markAccountPrepped(date, acct.id, acct.name, targetLoop.loopId, blockId);
+    }
+  }
 }
 
 /**
