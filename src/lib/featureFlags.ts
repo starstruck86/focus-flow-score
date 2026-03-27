@@ -64,3 +64,7 @@ export function isRoleplayGroundingEnabled(): boolean {
 export function isAccountExecutionModelEnabled(): boolean {
   return loadFeatureFlags().ENABLE_ACCOUNT_EXECUTION_MODEL;
 }
+
+export function isAccountCentricExecutionEnabled(): boolean {
+  return loadFeatureFlags().ENABLE_ACCOUNT_CENTRIC_EXECUTION;
+}
