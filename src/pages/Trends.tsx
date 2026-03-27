@@ -2,6 +2,8 @@ import { useState, useCallback } from 'react';
 import { Reorder } from 'framer-motion';
 import { AIInsightsNarrator } from '@/components/dashboard/AIInsightsNarrator';
 import { Layout } from '@/components/Layout';
+import { SystemTelemetryPanel } from '@/components/trends/SystemTelemetryPanel';
+import { isSystemOSEnabled } from '@/lib/featureFlags';
 import {
   TrendingUp, BarChart3, Activity, Zap, Target, Brain,
   ArrowUpRight, ArrowDownRight, Minus, Phone, Users, Calendar,
