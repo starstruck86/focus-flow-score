@@ -493,7 +493,7 @@ export function DayTimeline() {
                   <p className="text-[10px] text-muted-foreground">
                     {selected.type === 'meeting'
                       ? 'Jump to your meeting prep workflow from this block.'
-                      : 'Open Prep Hub and work the linked accounts for this block.'}
+                      : 'Open Sales Brain OS and work the linked accounts for this block.'}
                   </p>
                 </div>
                 <button
