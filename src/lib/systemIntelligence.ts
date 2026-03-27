@@ -195,7 +195,7 @@ export function computeHealthSnapshot(inputs: HealthInputs): HealthSnapshot {
       id: `alert-enrich-${Date.now()}`, severity: enrichStatus === 'critical' ? 'critical' : 'warning',
       category: 'enrichment', message: `Enrichment failure rate at ${inputs.enrichmentFailureRate}%`,
       metric: 'enrichment_failure_rate', currentValue: inputs.enrichmentFailureRate,
-      threshold: HEALTH_THRESHOLDS.enrichmentFailureRate.warning, triggeredAt: now, acknowledged: false,
+      threshold: HEALTH_THRESHOLDS.enrichmentFailureRate.warning, triggeredAt: now, acknowledged: false, state: 'active' as AlertState,
     });
   }
 
