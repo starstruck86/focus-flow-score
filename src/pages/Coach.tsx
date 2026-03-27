@@ -1304,6 +1304,20 @@ export default function Coach() {
           <TabsContent value="trends" className="mt-4">
             <TrendsDashboard />
           </TabsContent>
+
+          {/* ── SYSTEM OS TABS ── */}
+          <TabsContent value="weekly-review" className="mt-4">
+            <WeeklyReviewPanel />
+          </TabsContent>
+          <TabsContent value="skill-lab" className="mt-4">
+            <SkillLabPanel />
+          </TabsContent>
+          <TabsContent value="patterns" className="mt-4">
+            <PatternDiagnosticsPanel />
+          </TabsContent>
+          <TabsContent value="audit" className="mt-4">
+            <RecommendationAuditPanel />
+          </TabsContent>
         </Tabs>
       </div>
     </Layout>
