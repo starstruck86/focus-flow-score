@@ -930,6 +930,11 @@ export function DailyTimeBlocks() {
       const planBlocks = (plan.blocks || []) as any[];
       const serverMeta = (plan.key_metric_targets as any)?.loop_metadata;
       rebuildLoopsIfNeeded(todayStr, planBlocks, serverMeta);
+      // Persist server meta for debug panel access
+      try {
+        if (serverMeta) localStorage.setItem(`loop-server-meta-${todayStr}`, JSON.stringify(serverMeta));
+        localStorage.setItem(`daily-plan-blocks-${todayStr}`, JSON.stringify(planBlocks));
+      } catch {}
     }
   }, [plan, todayStr]);
 
