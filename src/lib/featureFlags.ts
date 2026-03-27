@@ -70,3 +70,7 @@ export function isAccountExecutionModelEnabled(): boolean {
 export function isAccountCentricExecutionEnabled(): boolean {
   return loadFeatureFlags().ENABLE_ACCOUNT_CENTRIC_EXECUTION;
 }
+
+export function isExecutionSessionLayerEnabled(): boolean {
+  return loadFeatureFlags().ENABLE_EXECUTION_SESSION_LAYER;
+}

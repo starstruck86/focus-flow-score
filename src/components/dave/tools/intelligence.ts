@@ -39,6 +39,7 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
     end_playbook_roleplay: () => endPlaybookRoleplay(ctx),
     ...createAccountExecutionTools(ctx),
     ...createAccountCentricTools(ctx),
+    ...createExecutionSessionTools(ctx),
     start_daily_roleplay: async (params: { scenarioType?: string; persona?: string; industry?: string }) => {
       const { getRoleplayBlockConfig, recordRoleplayBlockEvent, buildDaveConfirmationPrompt } = await import('@/lib/dailyRoleplayBlock');
       const { todayInAppTz } = await import('@/lib/timeFormat');
