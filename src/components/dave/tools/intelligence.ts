@@ -47,20 +47,45 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
       // Try grounded scenario selection with history-aware logic when enabled
       let groundedPrompt: string | null = null;
       let groundingSource: 'playbook' | 'default' = 'default';
+      let selectedScenarioId = 'default-fallback';
+      let scenarioFreshnessState: string = 'unknown';
+      let selectionReason = 'Default fallback';
+      let sourcePlaybookIds: string[] = [];
+      let sourceResourceIds: string[] = [];
+
       if (isRoleplayGroundingEnabled()) {
         try {
           const { selectScenarioWithHistory } = await import('@/lib/roleplayScenarioManager');
           const { loadCachedScenarios, buildGroundedRoleplayPrompt, getDefaultFallbackScenario } = await import('@/lib/roleplayKnowledge');
+          const { logProvenance } = await import('@/lib/loopRuntime');
           const scenarios = loadCachedScenarios();
           const recommendation = selectScenarioWithHistory(scenarios, scenario, persona, industry);
           if (recommendation && recommendation.isGrounded) {
             groundedPrompt = buildGroundedRoleplayPrompt(recommendation.scenario, industry);
             groundingSource = 'playbook';
+            selectedScenarioId = recommendation.scenario.roleplayScenarioId;
+            scenarioFreshnessState = recommendation.scenario.freshnessState || 'fresh';
+            selectionReason = recommendation.reason;
+            sourcePlaybookIds = recommendation.scenario.sourcePlaybookIds;
+            sourceResourceIds = recommendation.scenario.sourceResourceIds;
           } else {
             const fallback = getDefaultFallbackScenario({ scenarioType: scenario, persona, industry });
             groundedPrompt = buildGroundedRoleplayPrompt(fallback, industry);
             groundingSource = 'default';
+            selectionReason = 'No high-confidence grounded scenario available';
           }
+
+          // Log provenance
+          logProvenance({
+            selectedScenarioId,
+            scenarioType: scenario,
+            sourcePlaybookIds,
+            sourceResourceIds,
+            groundingSource,
+            freshnessState: scenarioFreshnessState as any,
+            selectionReason,
+            timestamp: new Date().toISOString(),
+          });
         } catch {
           const { getDefaultFallbackScenario, buildGroundedRoleplayPrompt } = await import('@/lib/roleplayKnowledge');
           groundedPrompt = buildGroundedRoleplayPrompt(getDefaultFallbackScenario({ scenarioType: scenario, persona, industry }), industry);
