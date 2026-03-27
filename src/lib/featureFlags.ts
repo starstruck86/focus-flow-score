@@ -18,6 +18,7 @@ export interface FeatureFlags {
   ENABLE_STRICT_EXECUTION_MODE: boolean;
   ENABLE_SESSION_AUTOPILOT: boolean;
   ENABLE_EXECUTION_MOMENTUM: boolean;
+  ENABLE_SALES_BRAIN: boolean;
 }
 
 const DEFAULTS: FeatureFlags = {
@@ -32,6 +33,7 @@ const DEFAULTS: FeatureFlags = {
   ENABLE_STRICT_EXECUTION_MODE: false,
   ENABLE_SESSION_AUTOPILOT: false,
   ENABLE_EXECUTION_MOMENTUM: false,
+  ENABLE_SALES_BRAIN: false,
 };
 
 export function loadFeatureFlags(): FeatureFlags {
@@ -91,4 +93,8 @@ export function isSessionAutopilotEnabled(): boolean {
 
 export function isExecutionMomentumEnabled(): boolean {
   return loadFeatureFlags().ENABLE_EXECUTION_MOMENTUM;
+}
+
+export function isSalesBrainEnabled(): boolean {
+  return loadFeatureFlags().ENABLE_SALES_BRAIN;
 }

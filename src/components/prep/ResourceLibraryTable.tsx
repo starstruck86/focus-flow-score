@@ -29,10 +29,14 @@ import {
   getQualityTierLabel, getQualityTierColor,
 } from '@/lib/resourceQuality';
 import { detectDrift } from '@/lib/resourceLifecycle';
+import {
+  detectResourceSubtype, getSubtypeLabel, classifyEnrichability,
+  getEnrichabilityLabel, getEnrichabilityColor,
+} from '@/lib/salesBrain/resourceSubtype';
 import type { Resource } from '@/hooks/useResources';
 
 // ── Types ──────────────────────────────────────────────────
-type SortKey = 'title' | 'resource_type' | 'enrichment_status' | 'last_quality_tier' | 'last_quality_score' | 'created_at' | 'enriched_at' | 'enrichment_version';
+type SortKey = 'title' | 'resource_type' | 'enrichment_status' | 'last_quality_tier' | 'last_quality_score' | 'created_at' | 'enriched_at' | 'enrichment_version' | 'subtype';
 type SortDir = 'asc' | 'desc';
 
 export interface SavedView {
@@ -303,6 +307,12 @@ export function ResourceLibraryTable({
                   <div className="flex items-center gap-1">Type <SortIcon col="resource_type" /></div>
                 </TableHead>
                 <TableHead
+                  className="cursor-pointer select-none hover:bg-muted/50 transition-colors w-[100px]"
+                  onClick={() => handleSort('subtype')}
+                >
+                  <div className="flex items-center gap-1">Subtype <SortIcon col="subtype" /></div>
+                </TableHead>
+                <TableHead
                   className="cursor-pointer select-none hover:bg-muted/50 transition-colors w-[110px]"
                   onClick={() => handleSort('enrichment_status')}
                 >
@@ -340,7 +350,7 @@ export function ResourceLibraryTable({
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={12} className="text-center py-12 text-muted-foreground">
                     <FileText className="h-6 w-6 mx-auto mb-2 opacity-40" />
                     <p className="text-sm">No resources match filters</p>
                   </TableCell>
@@ -380,6 +390,17 @@ export function ResourceLibraryTable({
                       </TableCell>
                       <TableCell>
                         <span className="text-xs text-muted-foreground capitalize">{resource.resource_type}</span>
+                      </TableCell>
+                      <TableCell>
+                        {(() => {
+                          const subtype = detectResourceSubtype(resource.file_url, resource.resource_type);
+                          const ea = classifyEnrichability(resource.file_url, resource.resource_type);
+                          return (
+                            <Badge className={cn('text-[8px]', getEnrichabilityColor(ea.enrichability))} title={ea.reason}>
+                              {getSubtypeLabel(subtype)}
+                            </Badge>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>
                         <Badge className={cn('text-[9px]', getEnrichmentStatusColor(resource.enrichment_status))}>

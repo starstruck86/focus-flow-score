@@ -2,7 +2,9 @@ import { memo, useMemo, useState, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Zap, RefreshCw } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Zap, RefreshCw, AlertTriangle, Info } from 'lucide-react';
 import { BulkIngestionPanel } from './BulkIngestionPanel';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEnrichmentJobStore } from '@/store/useEnrichmentJobStore';
@@ -17,7 +19,14 @@ import {
   logSelectedBatch,
   type EnrichMode,
 } from '@/lib/resourceEligibility';
+import {
+  classifyEnrichability,
+  getSubtypeLabel,
+  getEnrichabilityLabel,
+  getEnrichabilityColor,
+} from '@/lib/salesBrain/resourceSubtype';
 import { createLogger } from '@/lib/logger';
+import { cn } from '@/lib/utils';
 import type { Resource } from '@/hooks/useResources';
 
 const log = createLogger('DeepEnrichModal');
@@ -42,6 +51,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
   const isProcessing = state.status === 'running' || state.status === 'paused';
   const isDone = state.status === 'completed' || state.status === 'failed' || state.status === 'cancelled';
   const [mode, setMode] = useState<EnrichMode>('deep_enrich');
+  const [showReasons, setShowReasons] = useState(false);
 
   const scopedResources = useMemo(() => {
     if (selectedIds && selectedIds.size > 0) {
@@ -55,6 +65,26 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
   const activeEligibleResources = mode === 'deep_enrich' ? deepEligibleResources : reEnrichEligibleResources;
   const sourceItems = useMemo(() => toEligibleResourceItems(activeEligibleResources, mode), [activeEligibleResources, mode]);
   const eligibleCount = useMemo(() => getEligibleCount(scopedResources, mode), [scopedResources, mode]);
+
+  // Per-resource enrichability breakdown
+  const enrichabilityBreakdown = useMemo(() => {
+    const breakdown: Record<string, { count: number; resources: Array<{ title: string; reason: string }> }> = {};
+    for (const r of scopedResources) {
+      const result = classifyEnrichability(r.file_url, r.resource_type);
+      const key = result.enrichability;
+      if (!breakdown[key]) breakdown[key] = { count: 0, resources: [] };
+      breakdown[key].count++;
+      breakdown[key].resources.push({
+        title: r.title,
+        reason: `${getSubtypeLabel(result.subtype)} — ${result.reason}`,
+      });
+    }
+    return breakdown;
+  }, [scopedResources]);
+
+  const blockedCount = useMemo(() => {
+    return scopedResources.length - eligibleCount;
+  }, [scopedResources.length, eligibleCount]);
 
   const handleStart = useCallback(
     (
@@ -90,7 +120,6 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
     [store, mode, scopedResources, sourceItems.length, state.batchSize, user],
   );
 
-  // Closing the modal does NOT stop the job — this is the key change
   const handleClose = useCallback(() => {
     if (isDone) {
       store.reset();
@@ -134,19 +163,66 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
         )}
 
         {!isProcessing && !isDone && (
-          <div className="space-y-1 text-xs text-muted-foreground">
-            <p>
-              <span className="font-medium text-foreground">{scopedResources.length}</span> total resources
-              {selectedIds && selectedIds.size > 0 && ' (selected)'}
-              {' · '}
-              <span className="font-medium text-foreground">{eligibleCount}</span> eligible for {mode === 'deep_enrich' ? 'deep enrichment' : 're-enrichment'}
-            </p>
+          <div className="space-y-2 text-xs text-muted-foreground">
+            <div className="flex items-center justify-between">
+              <p>
+                <span className="font-medium text-foreground">{scopedResources.length}</span> total resources
+                {selectedIds && selectedIds.size > 0 && ' (selected)'}
+                {' · '}
+                <span className="font-medium text-foreground">{eligibleCount}</span> eligible
+                {blockedCount > 0 && (
+                  <>
+                    {' · '}
+                    <span className="font-medium text-status-yellow">{blockedCount}</span> blocked
+                  </>
+                )}
+              </p>
+              {blockedCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-[10px] gap-1"
+                  onClick={() => setShowReasons(!showReasons)}
+                >
+                  <Info className="h-3 w-3" />
+                  {showReasons ? 'Hide' : 'Show'} reasons
+                </Button>
+              )}
+            </div>
+
             {eligibleCount === 0 && (
               <p className="text-status-yellow">
                 {mode === 'deep_enrich'
                   ? 'All resources are already enriched. Switch to Re-enrich to reprocess.'
                   : 'No previously enriched resources to reprocess.'}
               </p>
+            )}
+
+            {showReasons && (
+              <ScrollArea className="max-h-[180px] border border-border rounded-md p-2">
+                <div className="space-y-1.5">
+                  {Object.entries(enrichabilityBreakdown).map(([state, data]) => (
+                    <div key={state}>
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <Badge className={cn('text-[8px]', getEnrichabilityColor(state as any))}>
+                          {getEnrichabilityLabel(state as any)}
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground">({data.count})</span>
+                      </div>
+                      {data.resources.slice(0, 5).map((r, i) => (
+                        <p key={i} className="text-[10px] text-muted-foreground pl-3 truncate">
+                          {r.title} — {r.reason}
+                        </p>
+                      ))}
+                      {data.resources.length > 5 && (
+                        <p className="text-[10px] text-muted-foreground pl-3">
+                          +{data.resources.length - 5} more
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
             )}
           </div>
         )}
