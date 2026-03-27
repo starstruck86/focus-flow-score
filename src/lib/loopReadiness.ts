@@ -3,9 +3,12 @@
  *
  * When ENABLE_LOOP_NATIVE_SCHEDULER is on, uses explicit loop state
  * from loopScheduler.ts. Otherwise falls back to heuristic readiness.
+ * When ENABLE_ACCOUNT_EXECUTION_MODEL is on, enriches signals with
+ * account-level truth.
  */
-import { isLoopNativeSchedulerEnabled } from '@/lib/featureFlags';
+import { isLoopNativeSchedulerEnabled, isAccountExecutionModelEnabled } from '@/lib/featureFlags';
 import { loadLoops, computeLoopReadinessFromLoops, type LoopReadinessState } from '@/lib/loopScheduler';
+import { buildExecutionSummary, type AccountExecutionSummary } from '@/lib/accountExecutionState';
 
 export interface LoopReadiness {
   loopId: string;
@@ -30,6 +33,14 @@ export interface PrepActionSignal {
   nextLoopStatus?: string | null;
   currentLoopType?: string | null;
   serverLoopCount?: number;
+
+  // Account execution truth (when enabled)
+  accountTruthAvailable?: boolean;
+  accountPreppedCount?: number;
+  accountWorkedCount?: number;
+  accountReadyToCallCount?: number;
+  accountCarryForwardCount?: number;
+  accountOutcomeSummary?: string[];
 }
 
 // ── Heuristic: count "prepared" accounts ─────────────────────
@@ -91,6 +102,34 @@ export function computeLoopReadiness(
 }
 
 /**
+ * Enrich a signal with account-level truth when available.
+ */
+function enrichWithAccountTruth(signal: PrepActionSignal, date?: string): PrepActionSignal {
+  if (!date || !isAccountExecutionModelEnabled()) return signal;
+  const summary = buildExecutionSummary(date);
+  if (summary.sourceOfTruth === 'heuristic' && summary.totalAccounts === 0) return signal;
+
+  const outcomeSummary: string[] = [];
+  for (const [type, count] of Object.entries(summary.outcomeCounts)) {
+    outcomeSummary.push(`${type.replace(/_/g, ' ')}: ${count}`);
+  }
+
+  return {
+    ...signal,
+    // Account truth overrides generic counts when richer
+    preparedAccountsWaiting: summary.unworkedPreppedCount > 0 ? summary.unworkedPreppedCount : signal.preparedAccountsWaiting,
+    carryForwardCount: summary.carryForwardCount > 0 ? summary.carryForwardCount : signal.carryForwardCount,
+    nextActionBlockReady: summary.readyToCallCount > 0 ? true : signal.nextActionBlockReady,
+    accountTruthAvailable: true,
+    accountPreppedCount: summary.preppedCount,
+    accountWorkedCount: summary.workedCount,
+    accountReadyToCallCount: summary.readyToCallCount,
+    accountCarryForwardCount: summary.carryForwardCount,
+    accountOutcomeSummary: outcomeSummary,
+  };
+}
+
+/**
  * Build the summary signal for cockpit / daily plan header.
  * Uses explicit loop state when the loop-native scheduler is enabled.
  * Also reads server-side loop_metadata from plan payload when available.
@@ -121,7 +160,7 @@ export function buildPrepActionSignal(
       ? nextActionLoop.status === 'action_ready' || (nextActionLoop.accountsPrepared?.length || 0) > 0
       : true;
 
-    return {
+    return enrichWithAccountTruth({
       roleplayStatus,
       roleplayStreakDays,
       roleplayGroundingSource,
@@ -134,7 +173,7 @@ export function buildPrepActionSignal(
       nextLoopStatus: next?.status || null,
       currentLoopType: current?.loopType || null,
       serverLoopCount: serverLoopMetadata.length,
-    };
+    }, date);
   }
 
   // Use explicit loop state when available (client-side)
@@ -142,7 +181,7 @@ export function buildPrepActionSignal(
     const loops = loadLoops(date);
     if (loops.length > 0) {
       const state = computeLoopReadinessFromLoops(loops);
-      return {
+      return enrichWithAccountTruth({
         roleplayStatus,
         roleplayStreakDays,
         roleplayGroundingSource,
@@ -153,7 +192,7 @@ export function buildPrepActionSignal(
         carryForwardCount: state.carryForwardCount,
         currentLoopStatus: state.currentLoop?.status || null,
         nextLoopStatus: state.nextLoop?.status || null,
-      };
+      }, date);
     }
   }
   const loops = computeLoopReadiness(blocks, completedGoals, currentBlockIndex);
@@ -185,7 +224,7 @@ export function buildPrepActionSignal(
 
   const nextLoop = loops[0] || null;
 
-  return {
+  return enrichWithAccountTruth({
     roleplayStatus,
     roleplayStreakDays,
     roleplayGroundingSource,
@@ -194,5 +233,5 @@ export function buildPrepActionSignal(
     preparedAccountsWaiting: allPreppedIds.size,
     blockedReason: nextLoop?.blockedReason ?? null,
     carryForwardCount: carryForward,
-  };
+  }, date);
 }

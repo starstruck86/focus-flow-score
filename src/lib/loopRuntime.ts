@@ -24,8 +24,19 @@ import {
   type RoleplayBlockStatus,
   type RoleplayBlockEvent,
 } from '@/lib/dailyRoleplayBlock';
-import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled } from '@/lib/featureFlags';
+import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled, isAccountExecutionModelEnabled } from '@/lib/featureFlags';
 import { todayInAppTz } from '@/lib/timeFormat';
+import {
+  markAccountPrepped,
+  recordAccountOutcome,
+  markAccountWorkedGeneric,
+  buildCarryForward as buildAccountCarryForward,
+  buildExecutionSummary,
+  getLoopAccountReadiness,
+  reconcileOnPlanChange,
+  type OutcomeType,
+  type AccountExecutionEntry,
+} from '@/lib/accountExecutionState';
 
 // ── Provenance Model ───────────────────────────────────────
 
@@ -81,6 +92,13 @@ export function onPrepComplete(
   if (!targetLoop) return;
   const updated = markPrepComplete(loops, targetLoop.loopId, preparedAccounts);
   saveLoops(date, updated);
+
+  // Write account-level truth
+  if (isAccountExecutionModelEnabled()) {
+    for (const acct of preparedAccounts) {
+      markAccountPrepped(date, acct.id, acct.name, targetLoop.loopId, blockId);
+    }
+  }
 }
 
 /**
@@ -99,6 +117,13 @@ export function onActionComplete(
   if (!targetLoop) return;
   const updated = markActionComplete(loops, targetLoop.loopId, workedAccounts);
   saveLoops(date, updated);
+
+  // Write account-level truth
+  if (isAccountExecutionModelEnabled()) {
+    for (const acct of workedAccounts) {
+      markAccountWorkedGeneric(date, acct.id, acct.name, targetLoop.loopId, blockId);
+    }
+  }
 }
 
 /**
@@ -117,12 +142,45 @@ export function onAccountWorked(
     loop.accountsWorked.push({ ...account, workedAt: new Date().toISOString() });
     saveLoops(date, loops);
   }
+
+  // Write account-level truth
+  if (isAccountExecutionModelEnabled()) {
+    markAccountWorkedGeneric(date, account.id, account.name, loopId, null);
+  }
+}
+
+/**
+ * Record a specific account outcome (for Dave or detailed tracking).
+ */
+export function onAccountOutcome(
+  date: string,
+  accountId: string,
+  accountName: string,
+  loopId: string | null,
+  blockId: string | null,
+  outcomeType: OutcomeType,
+  notes: string | null = null,
+): AccountExecutionEntry | null {
+  if (!isAccountExecutionModelEnabled()) return null;
+  return recordAccountOutcome(date, accountId, accountName, loopId, blockId, outcomeType, notes);
 }
 
 /**
  * Persist carry-forward accounts for tomorrow's loops.
+ * Uses account-level truth when available.
  */
 export function persistCarryForward(date: string): LoopAccount[] {
+  // Account-level carry-forward takes precedence
+  if (isAccountExecutionModelEnabled()) {
+    const accountCarry = buildAccountCarryForward(date);
+    if (accountCarry.length > 0) {
+      return accountCarry.map(a => ({
+        id: a.accountId,
+        name: a.accountName,
+        carryForward: true,
+      }));
+    }
+  }
   const loops = loadLoops(date);
   return getCarryForwardAccounts(loops);
 }
@@ -431,6 +489,16 @@ export interface SystemDebugSnapshot {
   currentLoopStatus: string | null;
   carryForwardCount: number;
 
+  // Account execution state
+  accountTruthEnabled: boolean;
+  accountPreppedCount: number;
+  accountWorkedCount: number;
+  accountUnworkedPreppedCount: number;
+  accountCarryForwardCount: number;
+  accountReadyToCallCount: number;
+  accountSourceOfTruth: 'account_state' | 'heuristic';
+  recentOutcomes: string[];
+
   // Roleplay state
   roleplayStatusToday: RoleplayBlockStatus | null;
   roleplayGroundingSource: 'playbook' | 'default' | null;
@@ -475,11 +543,29 @@ export function captureDebugSnapshot(
 
   const currentLoop = loopResult.loops.find(l => l.status !== 'complete') || null;
 
+  // Account execution truth
+  const acctEnabled = isAccountExecutionModelEnabled();
+  const acctSummary = acctEnabled ? buildExecutionSummary(today) : null;
+  const recentOutcomes: string[] = [];
+  if (acctSummary) {
+    for (const [type, count] of Object.entries(acctSummary.outcomeCounts)) {
+      recentOutcomes.push(`${type}:${count}`);
+    }
+  }
+
   return {
     loopSource: loopResult.source,
     loopCount: loopResult.loops.length,
     currentLoopStatus: currentLoop?.status || null,
     carryForwardCount: carryForward,
+    accountTruthEnabled: acctEnabled,
+    accountPreppedCount: acctSummary?.preppedCount ?? 0,
+    accountWorkedCount: acctSummary?.workedCount ?? 0,
+    accountUnworkedPreppedCount: acctSummary?.unworkedPreppedCount ?? 0,
+    accountCarryForwardCount: acctSummary?.carryForwardCount ?? 0,
+    accountReadyToCallCount: acctSummary?.readyToCallCount ?? 0,
+    accountSourceOfTruth: acctSummary?.sourceOfTruth ?? 'heuristic',
+    recentOutcomes,
     roleplayStatusToday: roleplayResult.status,
     roleplayGroundingSource: provenance?.groundingSource || null,
     selectedScenarioId: provenance?.selectedScenarioId || null,

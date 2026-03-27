@@ -6,7 +6,7 @@
  * Now supports server-side loop metadata and grounded roleplay indicators.
  */
 import { memo } from 'react';
-import { Mic, Phone, AlertTriangle, CheckCircle2, ArrowRight, Sparkles } from 'lucide-react';
+import { Mic, Phone, AlertTriangle, CheckCircle2, ArrowRight, Sparkles, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { PrepActionSignal } from '@/lib/loopReadiness';
 
@@ -42,9 +42,19 @@ export const ExecutionSignals = memo(function ExecutionSignals({ signal }: Execu
     );
   }
 
-  // Next action block readiness
+  // Next action block readiness — prefer account truth when available
   if (signal.nextActionBlockLabel) {
-    if (signal.nextActionBlockReady) {
+    if (signal.accountTruthAvailable && signal.accountReadyToCallCount !== undefined && signal.accountReadyToCallCount > 0) {
+      items.push(
+        <span key="action" className="inline-flex items-center gap-1 text-primary">
+          <Phone className="h-3 w-3" />
+          {signal.accountReadyToCallCount} ready to call
+          {signal.accountWorkedCount !== undefined && signal.accountWorkedCount > 0 && (
+            <span className="font-medium">· {signal.accountWorkedCount} worked</span>
+          )}
+        </span>
+      );
+    } else if (signal.nextActionBlockReady) {
       items.push(
         <span key="action" className="inline-flex items-center gap-1 text-primary">
           <Phone className="h-3 w-3" />
@@ -62,6 +72,16 @@ export const ExecutionSignals = memo(function ExecutionSignals({ signal }: Execu
         </span>
       );
     }
+  }
+
+  // Account outcome summary
+  if (signal.accountTruthAvailable && signal.accountOutcomeSummary && signal.accountOutcomeSummary.length > 0) {
+    items.push(
+      <span key="outcomes" className="inline-flex items-center gap-1 text-muted-foreground">
+        <Users className="h-3 w-3" />
+        {signal.accountOutcomeSummary.slice(0, 2).join(', ')}
+      </span>
+    );
   }
 
   // Carry-forward accounts
