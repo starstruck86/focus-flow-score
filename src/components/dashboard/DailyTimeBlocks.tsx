@@ -49,6 +49,8 @@ import { RoleplayBlockCard } from '@/components/dashboard/RoleplayBlockCard';
 import { ExecutionSignals } from '@/components/dashboard/ExecutionSignals';
 import { getRoleplayBlockConfig, findRoleplaySlot, createRoleplayBlock, getTodayRoleplayStatus, getRoleplayStreak, recordRoleplayBlockEvent } from '@/lib/dailyRoleplayBlock';
 import { buildPrepActionSignal, type PrepActionSignal } from '@/lib/loopReadiness';
+import { onPrepComplete, onActionComplete, rebuildLoopsIfNeeded, triggerScenarioRegenIfNeeded, checkScenarioFreshnessOnLoad } from '@/lib/loopRuntime';
+import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled } from '@/lib/featureFlags';
 
 /** Inline contact count for linked account pills */
 const LinkedAccountContactCount = memo(function LinkedAccountContactCount({ accountId }: { accountId: string }) {
