@@ -49,6 +49,12 @@ export function updateRoleplayBlockConfig(patch: Partial<RoleplayBlockConfig>): 
 
 export type RoleplayBlockStatus = 'scheduled' | 'started' | 'completed' | 'skipped' | 'rescheduled' | 'missed';
 
+export type RoleplayCompletionTiming =
+  | 'completed_before_first_action'
+  | 'completed_after_first_action'
+  | 'skipped'
+  | 'missed';
+
 export interface RoleplayBlockEvent {
   date: string;
   status: RoleplayBlockStatus;
@@ -58,6 +64,7 @@ export interface RoleplayBlockEvent {
   durationUsed?: number;
   startedAt?: string;
   completedAt?: string;
+  completionTiming?: RoleplayCompletionTiming;
   timestamp: number;
 }
 
