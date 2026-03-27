@@ -107,6 +107,10 @@ export default function PrepHub() {
                 <MessageSquare className="h-3.5 w-3.5 mr-1" />
                 Prompts
               </TabsTrigger>
+              <TabsTrigger value="audio-test" className="text-xs">
+                <Brain className="h-3.5 w-3.5 mr-1" />
+                Audio
+              </TabsTrigger>
             </TabsList>
           </div>
 
