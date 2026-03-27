@@ -255,8 +255,12 @@ export function getDefaultFallbackScenario(config?: {
 
 export function loadCachedScenarios(): RoleplayScenario[] {
   try {
-    return JSON.parse(localStorage.getItem(SCENARIO_CACHE_KEY) || '[]');
-  } catch { return []; }
+    const raw = localStorage.getItem(SCENARIO_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) { localStorage.removeItem(SCENARIO_CACHE_KEY); return []; }
+    return parsed;
+  } catch { localStorage.removeItem(SCENARIO_CACHE_KEY); return []; }
 }
 
 export function saveCachedScenarios(scenarios: RoleplayScenario[]): void {
