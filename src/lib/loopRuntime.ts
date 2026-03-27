@@ -167,8 +167,20 @@ export function onAccountOutcome(
 
 /**
  * Persist carry-forward accounts for tomorrow's loops.
+ * Uses account-level truth when available.
  */
 export function persistCarryForward(date: string): LoopAccount[] {
+  // Account-level carry-forward takes precedence
+  if (isAccountExecutionModelEnabled()) {
+    const accountCarry = buildAccountCarryForward(date);
+    if (accountCarry.length > 0) {
+      return accountCarry.map(a => ({
+        id: a.accountId,
+        name: a.accountName,
+        carryForward: true,
+      }));
+    }
+  }
   const loops = loadLoops(date);
   return getCarryForwardAccounts(loops);
 }
