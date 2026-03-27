@@ -182,8 +182,13 @@ function loopStorageKey(date: string): string {
 export function loadLoops(date: string): ExecutionLoop[] {
   try {
     const raw = localStorage.getItem(loopStorageKey(date));
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    // Corruption guard: must be array of objects with loopId
+    if (!Array.isArray(parsed)) { localStorage.removeItem(loopStorageKey(date)); return []; }
+    if (parsed.length > 0 && !parsed[0].loopId) { localStorage.removeItem(loopStorageKey(date)); return []; }
+    return parsed;
+  } catch { localStorage.removeItem(loopStorageKey(date)); return []; }
 }
 
 export function saveLoops(date: string, loops: ExecutionLoop[]): void {

@@ -49,6 +49,8 @@ import { RoleplayBlockCard } from '@/components/dashboard/RoleplayBlockCard';
 import { ExecutionSignals } from '@/components/dashboard/ExecutionSignals';
 import { getRoleplayBlockConfig, findRoleplaySlot, createRoleplayBlock, getTodayRoleplayStatus, getRoleplayStreak, recordRoleplayBlockEvent } from '@/lib/dailyRoleplayBlock';
 import { buildPrepActionSignal, type PrepActionSignal } from '@/lib/loopReadiness';
+import { onPrepComplete, onActionComplete, rebuildLoopsIfNeeded, triggerScenarioRegenIfNeeded, checkScenarioFreshnessOnLoad } from '@/lib/loopRuntime';
+import { isLoopNativeSchedulerEnabled, isRoleplayGroundingEnabled } from '@/lib/featureFlags';
 
 /** Inline contact count for linked account pills */
 const LinkedAccountContactCount = memo(function LinkedAccountContactCount({ accountId }: { accountId: string }) {
@@ -649,9 +651,10 @@ export function DailyTimeBlocks() {
     if (!plan) return;
     const goalKey = `${blockIdx}-${goalIdx}`;
     const current = (plan.completed_goals || []) as string[];
-    const updated = current.includes(goalKey)
-      ? current.filter(g => g !== goalKey)
-      : [...current, goalKey];
+    const isCompleting = !current.includes(goalKey);
+    const updated = isCompleting
+      ? [...current, goalKey]
+      : current.filter(g => g !== goalKey);
 
     // Optimistic update
     queryClient.setQueryData(['daily-time-blocks', todayStr], {
@@ -663,6 +666,29 @@ export function DailyTimeBlocks() {
       .from('daily_time_blocks' as 'daily_time_blocks')
       .update({ completed_goals: updated })
       .eq('id', plan.id);
+
+    // Wire loop runtime state transitions when completing goals
+    if (isCompleting && isLoopNativeSchedulerEnabled()) {
+      try {
+        const rawBlocks = (plan.blocks || []) as TimeBlock[];
+        const block = rawBlocks[blockIdx];
+        if (!block) return;
+        const PREP_TYPES = new Set(['prep', 'research', 'build']);
+        const ACTION_TYPES = new Set(['prospecting', 'pipeline']);
+        const linkedAccounts = (block.linked_accounts || []).map((a: any) => ({ id: a.id, name: a.name }));
+
+        // Check if ALL goals for this block are now done
+        const allGoals = block.goals || [];
+        const updatedSet = new Set(updated);
+        const allDone = allGoals.length > 0 && allGoals.every((_: any, gi: number) => updatedSet.has(`${blockIdx}-${gi}`));
+
+        if (allDone && PREP_TYPES.has(block.type)) {
+          onPrepComplete(todayStr, blockIdx, linkedAccounts);
+        } else if (allDone && ACTION_TYPES.has(block.type)) {
+          onActionComplete(todayStr, blockIdx, linkedAccounts);
+        }
+      } catch {}
+    }
   }, [plan, todayStr, queryClient]);
 
   // Per-block thumbs feedback
@@ -888,13 +914,27 @@ export function DailyTimeBlocks() {
     return merged;
   }, [plan?.blocks, todayStr]);
 
+  // Rebuild loops if plan changed + wire scenario regen on mount
+  useEffect(() => {
+    if (plan && isLoopNativeSchedulerEnabled()) {
+      const planBlocks = (plan.blocks || []) as any[];
+      const serverMeta = (plan.key_metric_targets as any)?.loop_metadata;
+      rebuildLoopsIfNeeded(todayStr, planBlocks, serverMeta);
+    }
+  }, [plan, todayStr]);
+
+  useEffect(() => {
+    checkScenarioFreshnessOnLoad();
+  }, []);
+
   // Execution signals: prep→action readiness
   const executionSignal = useMemo(() => {
     const completedSet = new Set((plan?.completed_goals || []) as string[]);
     const rpStatus = roleplayDailyStatus;
     const streak = getRoleplayStreak();
-    return buildPrepActionSignal(blocks, completedSet, currentIdx, rpStatus, streak);
-  }, [blocks, plan?.completed_goals, currentIdx, roleplayDailyStatus]);
+    const serverMeta = (plan?.key_metric_targets as any)?.loop_metadata;
+    return buildPrepActionSignal(blocks, completedSet, currentIdx, rpStatus, streak, todayStr, serverMeta);
+  }, [blocks, plan?.completed_goals, currentIdx, roleplayDailyStatus, todayStr, plan?.key_metric_targets]);
 
   // Calculate progress
   const totalGoals = blocks.reduce((s, b) => s + b.goals.length, 0);
