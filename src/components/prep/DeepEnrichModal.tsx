@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Zap, RefreshCw, AlertTriangle, Info, FileAudio } from 'lucide-react';
+import { Zap, RefreshCw, AlertTriangle, Info, FileAudio, CheckCircle2, HelpCircle } from 'lucide-react';
 import { BulkIngestionPanel } from './BulkIngestionPanel';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEnrichmentJobStore } from '@/store/useEnrichmentJobStore';
@@ -32,6 +32,12 @@ import {
   getAudioStageLabel,
   getAudioFailureDescription,
 } from '@/lib/salesBrain/audioPipeline';
+import {
+  deriveProcessingState,
+  deriveModalActionState,
+  getProcessingStateColor,
+  type ActionState,
+} from '@/lib/processingState';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import { createLogger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
@@ -61,7 +67,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
   const isProcessing = state.status === 'running' || state.status === 'paused';
   const isDone = state.status === 'completed' || state.status === 'failed' || state.status === 'cancelled';
   const [mode, setMode] = useState<EnrichMode>('deep_enrich');
-  const [showReasons, setShowReasons] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   const scopedResources = useMemo(() => {
     if (selectedIds && selectedIds.size > 0) {
@@ -76,43 +82,32 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
   const sourceItems = useMemo(() => toEligibleResourceItems(activeEligibleResources, mode), [activeEligibleResources, mode]);
   const eligibleCount = useMemo(() => getEligibleCount(scopedResources, mode), [scopedResources, mode]);
 
-  // Per-resource enrichability breakdown
-  const enrichabilityBreakdown = useMemo(() => {
-    const breakdown: Record<string, { count: number; resources: Array<{ title: string; reason: string }> }> = {};
-    for (const r of scopedResources) {
-      const result = classifyEnrichability(r.file_url, r.resource_type);
-      const key = result.enrichability;
-      if (!breakdown[key]) breakdown[key] = { count: 0, resources: [] };
-      breakdown[key].count++;
-      breakdown[key].resources.push({
-        title: r.title,
-        reason: `${getSubtypeLabel(result.subtype)} — ${result.reason}`,
-      });
-    }
-    return breakdown;
-  }, [scopedResources]);
+  // Derive ActionState from scoped resources
+  const { actionState, counts } = useMemo(
+    () => deriveModalActionState(scopedResources, audioJobsMap),
+    [scopedResources, audioJobsMap],
+  );
 
-  const blockedCount = useMemo(() => {
-    return scopedResources.length - eligibleCount;
-  }, [scopedResources.length, eligibleCount]);
-
-  // Audio-specific breakdown
-  const audioBreakdown = useMemo(() => {
-    const audioResources = scopedResources.filter(r => isAudioResource(r.file_url, r.resource_type));
-    const items = audioResources.map(r => {
-      const sub = detectAudioSubtype(r.file_url, r.resource_type);
-      const strategy = getAudioStrategy(sub);
-      const job = audioJobsMap?.get(r.id) || null;
-      return { resource: r, subtype: sub, strategy, job };
-    });
-    return {
-      total: audioResources.length,
-      items,
-      failed: items.filter(i => i.job?.stage === 'failed').length,
-      needsManual: items.filter(i => i.job?.stage === 'needs_manual_assist' || i.strategy.manualAssistRequired).length,
-      retryable: items.filter(i => i.job?.stage === 'failed' && i.job?.retryable).length,
+  // Per-resource processing state breakdown for details view
+  const processingBreakdown = useMemo(() => {
+    const groups: Record<string, Array<{ title: string; description: string; nextAction: string | null }>> = {
+      READY: [],
+      RUNNING: [],
+      RETRYABLE_FAILURE: [],
+      MANUAL_REQUIRED: [],
+      METADATA_ONLY: [],
+      COMPLETED: [],
     };
+    for (const r of scopedResources) {
+      const job = audioJobsMap?.get(r.id) ?? null;
+      const ps = deriveProcessingState(r, job);
+      groups[ps.state].push({ title: r.title, description: ps.description, nextAction: ps.nextAction });
+    }
+    return groups;
   }, [scopedResources, audioJobsMap]);
+
+  const modeLabel = mode === 'deep_enrich' ? 'Deep Enrich' : 'Re-enrich';
+  const ModeIcon = mode === 'deep_enrich' ? Zap : RefreshCw;
 
   const handleStart = useCallback(
     (
@@ -161,156 +156,181 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
     setMode(value as EnrichMode);
   };
 
-  const modeLabel = mode === 'deep_enrich' ? 'Deep Enrich' : 'Re-enrich';
-  const ModeIcon = mode === 'deep_enrich' ? Zap : RefreshCw;
+  // ── Render based on ActionState ────────────────────────────
+  const renderPreStartContent = () => {
+    // Header state
+    const headerLabel = actionState === 'DONE'
+      ? 'All Processed'
+      : actionState === 'MANUAL_REQUIRED'
+        ? 'Needs Attention'
+        : `${modeLabel} Resources`;
 
-  return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-lg">
+    const HeaderIcon = actionState === 'DONE'
+      ? CheckCircle2
+      : actionState === 'MANUAL_REQUIRED'
+        ? AlertTriangle
+        : ModeIcon;
+
+    return (
+      <>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <ModeIcon className="h-5 w-5 text-primary" />
-            {modeLabel} Resources
+            <HeaderIcon className={cn('h-5 w-5', actionState === 'DONE' ? 'text-status-green' : 'text-primary')} />
+            {headerLabel}
           </DialogTitle>
         </DialogHeader>
 
-        {!isProcessing && !isDone && (
+        {/* Mode tabs — only show when there's something to do and counts > 0 */}
+        {actionState !== 'DONE' && (deepEligibleResources.length > 0 || reEnrichEligibleResources.length > 0) && (
           <Tabs value={mode} onValueChange={handleModeChange} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="deep_enrich" className="gap-1 text-xs">
-                <Zap className="h-3 w-3" />
-                Deep Enrich ({deepEligibleResources.length})
-              </TabsTrigger>
-              <TabsTrigger value="re_enrich" className="gap-1 text-xs">
-                <RefreshCw className="h-3 w-3" />
-                Re-enrich ({reEnrichEligibleResources.length})
-              </TabsTrigger>
+              {deepEligibleResources.length > 0 && (
+                <TabsTrigger value="deep_enrich" className="gap-1 text-xs">
+                  <Zap className="h-3 w-3" />
+                  Deep Enrich ({deepEligibleResources.length})
+                </TabsTrigger>
+              )}
+              {reEnrichEligibleResources.length > 0 && (
+                <TabsTrigger value="re_enrich" className="gap-1 text-xs">
+                  <RefreshCw className="h-3 w-3" />
+                  Re-enrich ({reEnrichEligibleResources.length})
+                </TabsTrigger>
+              )}
             </TabsList>
           </Tabs>
         )}
 
-        {!isProcessing && !isDone && (
-          <div className="space-y-2 text-xs text-muted-foreground">
-            <div className="flex items-center justify-between">
+        {/* DONE state */}
+        {actionState === 'DONE' && (
+          <div className="text-center py-6 space-y-2">
+            <CheckCircle2 className="h-10 w-10 text-status-green mx-auto" />
+            <p className="text-sm font-medium text-foreground">All resources processed</p>
+            <p className="text-xs text-muted-foreground">
+              {counts.done} completed
+              {counts.manual > 0 && ` · ${counts.manual} need manual input`}
+            </p>
+          </div>
+        )}
+
+        {/* Actionable states */}
+        {actionState !== 'DONE' && (
+          <div className="space-y-3">
+            {/* Summary line */}
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
               <p>
-                <span className="font-medium text-foreground">{scopedResources.length}</span> total resources
-                {selectedIds && selectedIds.size > 0 && ' (selected)'}
-                {' · '}
-                <span className="font-medium text-foreground">{eligibleCount}</span> eligible for {modeLabel.toLowerCase()}
-                {blockedCount > 0 && (
-                  <>
-                    {' · '}
-                    <span className="font-medium text-status-yellow">{blockedCount}</span> blocked
-                  </>
+                <span className="font-medium text-foreground">{eligibleCount}</span> ready to {modeLabel.toLowerCase()}
+                {counts.retryable > 0 && (
+                  <> · <span className="font-medium text-orange-600">{counts.retryable}</span> retryable</>
+                )}
+                {counts.manual > 0 && (
+                  <> · <span className="font-medium text-status-red">{counts.manual}</span> need attention</>
                 )}
               </p>
-              {blockedCount > 0 && (
+              {(counts.retryable > 0 || counts.manual > 0) && (
                 <Button
                   variant="ghost"
                   size="sm"
                   className="h-6 text-[10px] gap-1"
-                  onClick={() => setShowReasons(!showReasons)}
+                  onClick={() => setShowDetails(!showDetails)}
                 >
                   <Info className="h-3 w-3" />
-                  {showReasons ? 'Hide' : 'Show'} reasons
+                  {showDetails ? 'Hide' : 'Details'}
                 </Button>
               )}
             </div>
 
-            {eligibleCount === 0 && (
-              <p className="text-status-yellow">
-                {mode === 'deep_enrich'
-                  ? 'All resources are already enriched or ineligible. Switch to Re-enrich to reprocess.'
-                  : 'No previously enriched resources available to reprocess.'}
-              </p>
-            )}
-
-            {showReasons && (
-              <ScrollArea className="max-h-[240px] border border-border rounded-md p-2">
-                <div className="space-y-1.5">
-                  {/* Audio failures section */}
-                  {audioBreakdown.total > 0 && (
-                    <div className="mb-2">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <FileAudio className="h-3 w-3 text-primary" />
-                        <span className="text-[10px] font-medium text-foreground">Audio Resources ({audioBreakdown.total})</span>
-                        {audioBreakdown.failed > 0 && (
-                          <Badge variant="destructive" className="text-[8px]">{audioBreakdown.failed} failed</Badge>
-                        )}
-                        {audioBreakdown.needsManual > 0 && (
-                          <Badge className="text-[8px] bg-primary/20 text-primary">{audioBreakdown.needsManual} need assist</Badge>
-                        )}
-                      </div>
-                      {audioBreakdown.items.slice(0, 8).map((item, i) => {
-                        const failDesc = item.job?.failure_code ? getAudioFailureDescription(item.job.failure_code as any) : null;
-                        return (
-                          <div key={i} className="pl-3 mb-0.5">
-                            <p className="text-[10px] text-muted-foreground truncate">
-                              {item.resource.title}
-                            </p>
-                            <p className="text-[9px] text-muted-foreground/70 pl-2">
-                              {item.job ? (
-                                <>
-                                  {getAudioStageLabel(item.job.stage as any)}
-                                  {item.job.failure_code && ` · ${item.job.failure_code}`}
-                                  {failDesc && ` → ${failDesc.nextAction}`}
-                                  {item.job.attempts_count > 0 && ` · ${item.job.attempts_count} attempts`}
-                                </>
-                              ) : (
-                                <>{item.strategy.operatorFailureReason}</>
-                              )}
-                            </p>
-                          </div>
-                        );
-                      })}
-                      {audioBreakdown.items.length > 8 && (
-                        <p className="text-[10px] text-muted-foreground pl-3">+{audioBreakdown.items.length - 8} more</p>
-                      )}
-                    </div>
+            {/* Details panel */}
+            {showDetails && (
+              <ScrollArea className="max-h-[280px] border border-border rounded-md p-2">
+                <div className="space-y-3">
+                  {/* Retryable failures */}
+                  {processingBreakdown.RETRYABLE_FAILURE.length > 0 && (
+                    <DetailSection
+                      label="Retry Available"
+                      color="bg-orange-500/20 text-orange-600"
+                      items={processingBreakdown.RETRYABLE_FAILURE}
+                    />
                   )}
-
-                  {/* General enrichability breakdown */}
-                  {Object.entries(enrichabilityBreakdown).map(([state, data]) => (
-                    <div key={state}>
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <Badge className={cn('text-[8px]', getEnrichabilityColor(state as any))}>
-                          {getEnrichabilityLabel(state as any)}
-                        </Badge>
-                        <span className="text-[10px] text-muted-foreground">({data.count})</span>
-                      </div>
-                      {data.resources.slice(0, 5).map((r, i) => (
-                        <p key={i} className="text-[10px] text-muted-foreground pl-3 truncate">
-                          {r.title} — {r.reason}
-                        </p>
-                      ))}
-                      {data.resources.length > 5 && (
-                        <p className="text-[10px] text-muted-foreground pl-3">
-                          +{data.resources.length - 5} more
-                        </p>
-                      )}
-                    </div>
-                  ))}
+                  {/* Manual required */}
+                  {processingBreakdown.MANUAL_REQUIRED.length > 0 && (
+                    <DetailSection
+                      label="Manual Input Needed"
+                      color="bg-status-red/20 text-status-red"
+                      items={processingBreakdown.MANUAL_REQUIRED}
+                    />
+                  )}
+                  {/* Metadata only */}
+                  {processingBreakdown.METADATA_ONLY.length > 0 && (
+                    <DetailSection
+                      label="Metadata Only"
+                      color="bg-orange-500/20 text-orange-600"
+                      items={processingBreakdown.METADATA_ONLY}
+                    />
+                  )}
+                  {/* Ready */}
+                  {processingBreakdown.READY.length > 0 && (
+                    <DetailSection
+                      label="Ready"
+                      color="bg-primary/20 text-primary"
+                      items={processingBreakdown.READY}
+                    />
+                  )}
+                  {/* Completed */}
+                  {processingBreakdown.COMPLETED.length > 0 && (
+                    <DetailSection
+                      label="Completed"
+                      color="bg-status-green/20 text-status-green"
+                      items={processingBreakdown.COMPLETED}
+                    />
+                  )}
                 </div>
               </ScrollArea>
             )}
           </div>
         )}
+      </>
+    );
+  };
 
-        <BulkIngestionPanel
-          state={state}
-          onSetBatchSize={store.setBatchSize}
-          onStart={handleStart}
-          onPause={store.pause}
-          onResume={store.resume}
-          onCancel={store.cancel}
-          onReset={store.reset}
-          hasFailures={store.hasFailures()}
-          sourceItems={sourceItems}
-          sourceLabel="resources"
-          totalEligible={eligibleCount}
-        />
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-lg">
+        {!isProcessing && !isDone && renderPreStartContent()}
+
+        {(isProcessing || isDone) && (
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ModeIcon className="h-5 w-5 text-primary" />
+              {modeLabel} Resources
+            </DialogTitle>
+          </DialogHeader>
+        )}
+
+        {/* Only show BulkIngestionPanel when there are eligible items */}
+        {(eligibleCount > 0 || isProcessing || isDone) && (
+          <BulkIngestionPanel
+            state={state}
+            onSetBatchSize={store.setBatchSize}
+            onStart={handleStart}
+            onPause={store.pause}
+            onResume={store.resume}
+            onCancel={store.cancel}
+            onReset={store.reset}
+            hasFailures={store.hasFailures()}
+            sourceItems={sourceItems}
+            sourceLabel="resources"
+            totalEligible={eligibleCount}
+          />
+        )}
 
         {isDone && (
+          <DialogFooter>
+            <Button variant="outline" onClick={handleClose}>Close</Button>
+          </DialogFooter>
+        )}
+
+        {/* DONE state close button when nothing to process */}
+        {!isProcessing && !isDone && actionState === 'DONE' && (
           <DialogFooter>
             <Button variant="outline" onClick={handleClose}>Close</Button>
           </DialogFooter>
@@ -319,3 +339,35 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
     </Dialog>
   );
 });
+
+// ── Detail section sub-component ───────────────────────────
+function DetailSection({
+  label,
+  color,
+  items,
+}: {
+  label: string;
+  color: string;
+  items: Array<{ title: string; description: string; nextAction: string | null }>;
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 mb-1">
+        <Badge className={cn('text-[8px]', color)}>{label}</Badge>
+        <span className="text-[10px] text-muted-foreground">({items.length})</span>
+      </div>
+      {items.slice(0, 6).map((item, i) => (
+        <div key={i} className="pl-3 mb-1">
+          <p className="text-[10px] text-foreground truncate">{item.title}</p>
+          <p className="text-[9px] text-muted-foreground">{item.description}</p>
+          {item.nextAction && (
+            <p className="text-[9px] text-primary">→ {item.nextAction}</p>
+          )}
+        </div>
+      ))}
+      {items.length > 6 && (
+        <p className="text-[10px] text-muted-foreground pl-3">+{items.length - 6} more</p>
+      )}
+    </div>
+  );
+}
