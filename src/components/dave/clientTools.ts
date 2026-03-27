@@ -13,10 +13,8 @@ import { createProspectingTools } from './tools/prospecting';
 import { createSynthesisTools } from './tools/synthesis';
 import { createIntegrationTools } from './tools/integrations';
 import { updateVoiceContext } from '@/lib/voiceContext';
-import { getConfirmationPolicy, type ConfirmationLevel } from '@/lib/voiceConfirmation';
+import { getConfirmationPolicy } from '@/lib/voiceConfirmation';
 import { isVoiceOSEnabled } from '@/lib/featureFlags';
-import { recordFriction } from '@/lib/frictionSignals';
-
 
 
 async function getUserId(): Promise<string | null> {
