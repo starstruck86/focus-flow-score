@@ -754,6 +754,9 @@ export function ResourceManager() {
                 case 'delete':
                   deleteResource.mutate(resource.id);
                   break;
+                case 'bulk_enrich':
+                  setShowDeepEnrich(true);
+                  break;
               }
             }}
           />
