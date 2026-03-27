@@ -50,7 +50,7 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
         industry,
         startedAt: new Date().toISOString(),
       });
-      // Return confirmation prompt for Dave to speak
+      // Return conversational prompt — Dave will confirm then immediately roleplay
       return buildDaveConfirmationPrompt({ ...config, defaultScenarioType: scenario, defaultPersona: persona, defaultIndustry: industry });
     },
     complete_daily_roleplay: async (params: { durationUsed?: number }) => {
