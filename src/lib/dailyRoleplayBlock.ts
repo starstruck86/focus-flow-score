@@ -49,6 +49,12 @@ export function updateRoleplayBlockConfig(patch: Partial<RoleplayBlockConfig>): 
 
 export type RoleplayBlockStatus = 'scheduled' | 'started' | 'completed' | 'skipped' | 'rescheduled' | 'missed';
 
+export type RoleplayCompletionTiming =
+  | 'completed_before_first_action'
+  | 'completed_after_first_action'
+  | 'skipped'
+  | 'missed';
+
 export interface RoleplayBlockEvent {
   date: string;
   status: RoleplayBlockStatus;
@@ -58,6 +64,7 @@ export interface RoleplayBlockEvent {
   durationUsed?: number;
   startedAt?: string;
   completedAt?: string;
+  completionTiming?: RoleplayCompletionTiming;
   timestamp: number;
 }
 
@@ -184,6 +191,37 @@ export function buildDaveConfirmationPrompt(config?: RoleplayBlockConfig): strin
   return (
     `You've got a ${cfg.durationMinutes}-minute roleplay block. ` +
     `Default is a ${cfg.defaultScenarioType.replace('_', ' ')} with a ${cfg.defaultPersona} in ${cfg.defaultIndustry}. ` +
-    `Want to keep that, or change the scenario, persona, or industry before we start?`
+    `Want to keep that, or change the scenario, persona, or industry before we start?\n\n` +
+    `IMPORTANT INSTRUCTION FOR DAVE: After the user confirms (says "keep", "go", "start", "let's do it", etc.) ` +
+    `or requests changes, immediately proceed into the roleplay. Do NOT ask again. ` +
+    `Stay in character as the buyer for the full session. ` +
+    `When done, give a 2-sentence debrief with one coaching takeaway.`
   );
+}
+
+// ── Completion Timing Helper ──────────────────────────────
+
+/**
+ * Determine whether roleplay was completed before the first action block.
+ * Action blocks = prospecting, build, prep (not meetings, breaks, admin).
+ */
+export function classifyCompletionTiming(
+  completedAt: string | undefined,
+  planBlocks: Array<{ start_time: string; type: string }>,
+): RoleplayCompletionTiming {
+  if (!completedAt) return 'missed';
+
+  const ACTION_TYPES = new Set(['prospecting', 'build', 'prep', 'pipeline']);
+  const firstAction = planBlocks
+    .filter(b => ACTION_TYPES.has(b.type))
+    .sort((a, b) => a.start_time.localeCompare(b.start_time))[0];
+
+  if (!firstAction) return 'completed_before_first_action'; // no action blocks = definitely before
+
+  const completedTime = new Date(completedAt);
+  const [h, m] = firstAction.start_time.split(':').map(Number);
+  const today = new Date(completedAt);
+  today.setHours(h, m, 0, 0);
+
+  return completedTime <= today ? 'completed_before_first_action' : 'completed_after_first_action';
 }

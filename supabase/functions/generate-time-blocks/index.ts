@@ -1399,6 +1399,59 @@ READINESS CHECK: Before scheduling any Call Blitz or Email Blitz, verify: Do con
       }
     }
 
+    // ── ROLEPLAY BLOCK INJECTION: add morning Dave roleplay on weekdays ──
+    const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+    const hasRoleplayBlock = mergedBlocks.some((b: any) => b.type === 'roleplay');
+    if (isWeekday && !hasRoleplayBlock) {
+      // Find earliest morning slot (before 10:00) that doesn't overlap meetings
+      const ROLEPLAY_DURATION = 20;
+      const MORNING_WINDOW_START = workStartMin;
+      const MORNING_WINDOW_END = Math.min(toMinutes('10:00'), workEndMin);
+      const sorted = [...mergedBlocks].sort((a: any, b: any) => toMinutes(a.start_time) - toMinutes(b.start_time));
+      let cursor = MORNING_WINDOW_START;
+      let slotFound = false;
+
+      for (const block of sorted) {
+        const bStart = toMinutes(block.start_time);
+        if (bStart > MORNING_WINDOW_END) break;
+        if (bStart - cursor >= ROLEPLAY_DURATION) {
+          mergedBlocks.push({
+            start_time: minToTime(cursor),
+            end_time: minToTime(cursor + ROLEPLAY_DURATION),
+            label: '🎯 Dave Roleplay — Cold Call Practice',
+            type: 'roleplay',
+            workstream: 'new_logo',
+            goals: ['Complete a 20-minute cold call roleplay', 'Practice with Director of Marketing persona'],
+            reasoning: 'Daily roleplay forcing function — builds call muscle memory before live calls.',
+          });
+          slotFound = true;
+          break;
+        }
+        cursor = Math.max(cursor, toMinutes(block.end_time));
+      }
+
+      // Check gap after last morning block
+      if (!slotFound && MORNING_WINDOW_END - cursor >= ROLEPLAY_DURATION) {
+        mergedBlocks.push({
+          start_time: minToTime(cursor),
+          end_time: minToTime(cursor + ROLEPLAY_DURATION),
+          label: '🎯 Dave Roleplay — Cold Call Practice',
+          type: 'roleplay',
+          workstream: 'new_logo',
+          goals: ['Complete a 20-minute cold call roleplay', 'Practice with Director of Marketing persona'],
+          reasoning: 'Daily roleplay forcing function — builds call muscle memory before live calls.',
+        });
+        slotFound = true;
+      }
+
+      if (slotFound) {
+        mergedBlocks.sort((a: any, b: any) => toMinutes(a.start_time) - toMinutes(b.start_time));
+        logStage('roleplay_block_injected', 'Morning Dave roleplay block added to plan');
+      } else {
+        logStage('roleplay_block_skipped', 'No morning slot available for roleplay block');
+      }
+    }
+
     mergedBlocks = finalizePlanBlocks(mergedBlocks, requestSource);
 
     // ── FINAL INVARIANT CHECK: post-finalization calendar audit ──
