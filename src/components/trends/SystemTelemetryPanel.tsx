@@ -63,14 +63,14 @@ function confidenceColor(label: string) {
 }
 
 export function SystemTelemetryPanel() {
-  if (!isSystemOSEnabled()) return null;
-
   const summary = useMemo(() => getSystemSummary(), []);
   const modeState = useMemo(() => loadSystemMode(), []);
   const confidence = useMemo(() => computeSystemConfidence(DEFAULT_INPUTS, 0), []);
   const alerts = useMemo(() => loadAlerts().filter(a => a.state === 'active' || a.state === 'escalated').slice(0, 10), []);
   const corrections = useMemo(() => loadCorrectionLog().slice(-5), []);
   const healthHistory = useMemo(() => loadHealthHistory().slice(-10), []);
+
+  if (!isSystemOSEnabled()) return null;
 
   return (
     <div data-testid="system-telemetry" className="space-y-4">
