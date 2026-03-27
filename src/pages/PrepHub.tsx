@@ -82,6 +82,10 @@ export default function PrepHub() {
                 <BookOpen className="h-3.5 w-3.5 mr-1" />
                 Playbooks
               </TabsTrigger>
+              <TabsTrigger value="doctrine" className="text-xs">
+                <Lightbulb className="h-3.5 w-3.5 mr-1" />
+                Doctrine
+              </TabsTrigger>
               <TabsTrigger value="sources" className="text-xs">
                 <Brain className="h-3.5 w-3.5 mr-1" />
                 Sources

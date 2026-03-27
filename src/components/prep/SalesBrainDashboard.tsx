@@ -1,8 +1,9 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState, useCallback } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Brain, BookOpen, TrendingUp, AlertTriangle, Zap } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Brain, BookOpen, TrendingUp, AlertTriangle, Zap, Shield, ClipboardCheck, History } from 'lucide-react';
 import {
   DOCTRINE_CHAPTERS,
   getChapterLabel,
@@ -10,71 +11,84 @@ import {
   getBrainHealth,
   loadChangelog,
   getFreshnessColor,
+  getGovernanceColor,
+  getGovernanceLabel,
+  getDoctrineGovernanceStats,
+  isDoctrineEligibleForPropagation,
   type DoctrineChapter,
-  type BrainHealthSummary,
 } from '@/lib/salesBrain';
 import { cn } from '@/lib/utils';
+import { DoctrineReviewQueue } from './DoctrineReviewQueue';
+import { DoctrineChangeDigest } from './DoctrineChangeDigest';
+import { DoctrineRecoveryTools } from './DoctrineRecoveryTools';
 
 export const SalesBrainDashboard = memo(function SalesBrainDashboard() {
   const health = useMemo(() => getBrainHealth(), []);
-  const changelog = useMemo(() => loadChangelog().slice(0, 15), []);
+  const stats = useMemo(() => getDoctrineGovernanceStats(), []);
 
   return (
     <div className="space-y-4">
       {/* Health summary */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         <StatCard label="Insights" value={health.totalInsights} icon={<Zap className="h-3.5 w-3.5" />} />
-        <StatCard label="Doctrine" value={health.totalDoctrine} icon={<BookOpen className="h-3.5 w-3.5" />} />
-        <StatCard label="High Confidence" value={health.highConfidenceCount} icon={<TrendingUp className="h-3.5 w-3.5" />} />
-        <StatCard label="Stale" value={health.staleCount} icon={<AlertTriangle className="h-3.5 w-3.5" />} color={health.staleCount > 0 ? 'text-status-yellow' : undefined} />
-        <StatCard label="Recent Changes" value={health.recentChanges} icon={<Brain className="h-3.5 w-3.5" />} />
+        <StatCard label="Approved" value={stats.approved} icon={<Shield className="h-3.5 w-3.5" />} />
+        <StatCard label="Review Needed" value={stats.reviewNeeded} icon={<ClipboardCheck className="h-3.5 w-3.5" />}
+          color={stats.reviewNeeded > 0 ? 'text-status-yellow' : undefined} />
+        <StatCard label="Stale" value={stats.stale} icon={<AlertTriangle className="h-3.5 w-3.5" />}
+          color={stats.stale > 0 ? 'text-status-yellow' : undefined} />
+        <StatCard label="Propagating" value={stats.propagationEnabled} icon={<TrendingUp className="h-3.5 w-3.5" />} />
       </div>
 
-      {/* Chapters */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <BookOpen className="h-4 w-4 text-primary" />
-            Doctrine by Chapter
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ScrollArea className="max-h-[400px]">
-            <div className="space-y-3">
-              {DOCTRINE_CHAPTERS.map(chapter => (
-                <ChapterSection key={chapter} chapter={chapter} />
-              ))}
-            </div>
-          </ScrollArea>
-        </CardContent>
-      </Card>
+      {/* Sub-tabs */}
+      <Tabs defaultValue="chapters">
+        <TabsList className="w-max flex gap-0.5">
+          <TabsTrigger value="chapters" className="text-xs">
+            <BookOpen className="h-3.5 w-3.5 mr-1" /> Chapters
+          </TabsTrigger>
+          <TabsTrigger value="review" className="text-xs">
+            <ClipboardCheck className="h-3.5 w-3.5 mr-1" /> Review
+            {stats.reviewNeeded > 0 && (
+              <Badge variant="destructive" className="text-[8px] ml-1 h-4 min-w-4 px-1">{stats.reviewNeeded}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="changes" className="text-xs">
+            <History className="h-3.5 w-3.5 mr-1" /> Changes
+          </TabsTrigger>
+          <TabsTrigger value="recovery" className="text-xs">
+            <Shield className="h-3.5 w-3.5 mr-1" /> Recovery
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Recent changes */}
-      {changelog.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-primary" />
-              Recent Changes
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-1.5">
-              {changelog.map(event => (
-                <div key={event.id} className="flex items-start gap-2 text-xs">
-                  <span className="text-muted-foreground shrink-0 w-[60px]">
-                    {new Date(event.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  </span>
-                  <Badge variant="outline" className="text-[9px] shrink-0">
-                    {event.eventType.replace(/_/g, ' ')}
-                  </Badge>
-                  <span className="text-foreground truncate">{event.description}</span>
+        {/* Chapters */}
+        <TabsContent value="chapters" className="mt-3">
+          <Card>
+            <CardContent className="pt-4">
+              <ScrollArea className="max-h-[400px]">
+                <div className="space-y-3">
+                  {DOCTRINE_CHAPTERS.map(chapter => (
+                    <ChapterSection key={chapter} chapter={chapter} />
+                  ))}
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Review queue */}
+        <TabsContent value="review" className="mt-3">
+          <DoctrineReviewQueue />
+        </TabsContent>
+
+        {/* Changes */}
+        <TabsContent value="changes" className="mt-3">
+          <DoctrineChangeDigest />
+        </TabsContent>
+
+        {/* Recovery */}
+        <TabsContent value="recovery" className="mt-3">
+          <DoctrineRecoveryTools />
+        </TabsContent>
+      </Tabs>
 
       {/* Empty state */}
       {health.totalDoctrine === 0 && (
@@ -131,10 +145,24 @@ function ChapterSection({ chapter }: { chapter: DoctrineChapter }) {
       <div className="space-y-1 pl-2 border-l-2 border-border">
         {entries.map(entry => (
           <div key={entry.id} className="flex items-start gap-1.5">
+            <Badge className={cn('text-[8px] shrink-0 mt-0.5', getGovernanceColor(entry.governance.status))}>
+              {getGovernanceLabel(entry.governance.status)}
+            </Badge>
             <Badge className={cn('text-[8px] shrink-0 mt-0.5', getFreshnessColor(entry.freshnessState))}>
               {entry.freshnessState}
             </Badge>
-            <span className="text-xs text-foreground">{entry.statement}</span>
+            {isDoctrineEligibleForPropagation(entry) && (
+              <Badge variant="outline" className="text-[8px] shrink-0 mt-0.5 text-primary border-primary/30">
+                propagating
+              </Badge>
+            )}
+            {entry.governance.duplicateFlag !== 'none' && (
+              <Badge variant="outline" className="text-[7px] shrink-0 mt-0.5 border-status-yellow text-status-yellow">dup</Badge>
+            )}
+            {entry.governance.conflictFlag !== 'none' && (
+              <Badge variant="outline" className="text-[7px] shrink-0 mt-0.5 border-destructive text-destructive">conflict</Badge>
+            )}
+            <span className="text-xs text-foreground flex-1">{entry.statement}</span>
             <span className="text-[10px] text-muted-foreground shrink-0 ml-auto">
               {(entry.confidence * 100).toFixed(0)}%
             </span>

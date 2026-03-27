@@ -7,11 +7,10 @@
  * 3. Either reinforce, update, or create new doctrine entries
  * 4. Log all changes
  *
- * Phase 1: client-side with AI extraction via edge function.
- * Graceful degradation if AI unavailable.
+ * GOVERNANCE: New doctrine defaults to review_needed.
+ * Only operator approval enables full propagation.
  */
 
-import { supabase } from '@/integrations/supabase/client';
 import {
   type SalesBrainInsight,
   type DoctrineEntry,
@@ -25,6 +24,7 @@ import {
   appendChangelog,
   adjustConfidence,
   computeFreshness,
+  defaultGovernance,
 } from './doctrine';
 import { createLogger } from '@/lib/logger';
 
@@ -55,15 +55,12 @@ function generateId(): string {
 
 /**
  * Simple heuristic insight extractor (Phase 1).
- * Scans content for patterns and classifies them.
- * Will be replaced by AI extraction in Phase 2.
  */
 export function extractInsightsHeuristic(input: ExtractionInput): SalesBrainInsight[] {
   const { resourceId, title, content, description, tags } = input;
   const text = [title, description, content].filter(Boolean).join('\n').toLowerCase();
   const insights: SalesBrainInsight[] = [];
 
-  // Pattern-based chapter detection
   const chapterSignals: Array<{ chapter: DoctrineChapter; patterns: RegExp[]; category: InsightCategory }> = [
     { chapter: 'cold_calling', patterns: [/cold call/i, /outbound/i, /opener/i, /dial/i, /prospecting call/i], category: 'tactic' },
     { chapter: 'discovery', patterns: [/discovery/i, /pain point/i, /qualifying/i, /open.ended question/i], category: 'tactic' },
@@ -92,7 +89,6 @@ export function extractInsightsHeuristic(input: ExtractionInput): SalesBrainInsi
     }
   }
 
-  // If no specific signals, add a general insight
   if (insights.length === 0 && (content || description)) {
     insights.push({
       id: generateId(),
@@ -112,7 +108,6 @@ export function extractInsightsHeuristic(input: ExtractionInput): SalesBrainInsi
 
 // ── Match insights against existing doctrine ───────────────
 function findMatchingDoctrine(insight: SalesBrainInsight, existing: DoctrineEntry[]): DoctrineEntry | null {
-  // Simple match: same chapter + keyword overlap
   const candidates = existing.filter(d => d.chapter === insight.chapter && !d.supersedesId);
   if (candidates.length === 0) return null;
 
@@ -145,7 +140,6 @@ export function processPromotedResource(input: ExtractionInput): ExtractionResul
   const now = new Date().toISOString();
 
   for (const insight of newInsights) {
-    // Save insight
     existingInsights.push(insight);
 
     appendChangelog({
@@ -159,16 +153,15 @@ export function processPromotedResource(input: ExtractionInput): ExtractionResul
       timestamp: now,
     });
 
-    // Match against doctrine
     const match = findMatchingDoctrine(insight, existingDoctrine);
 
     if (match) {
-      // Reinforce existing doctrine
       match.confidence = adjustConfidence(match.confidence, 'reinforced');
       match.sourceInsightIds = [...new Set([...match.sourceInsightIds, insight.id])];
       match.sourceResourceIds = [...new Set([...match.sourceResourceIds, input.resourceId])];
       match.updatedAt = now;
       match.freshnessState = computeFreshness(now);
+      match.governance.lastReinforcedAt = now;
 
       doctrineUpdates.push({
         action: 'reinforced',
@@ -188,7 +181,7 @@ export function processPromotedResource(input: ExtractionInput): ExtractionResul
         timestamp: now,
       });
     } else if (insight.confidence >= 0.5) {
-      // Create new doctrine entry
+      // New doctrine defaults to review_needed
       const newDoc: DoctrineEntry = {
         id: generateId(),
         chapter: insight.chapter,
@@ -205,6 +198,7 @@ export function processPromotedResource(input: ExtractionInput): ExtractionResul
         supersedesId: null,
         createdAt: now,
         updatedAt: now,
+        governance: defaultGovernance('review_needed'),
       };
 
       existingDoctrine.push(newDoc);
@@ -223,13 +217,12 @@ export function processPromotedResource(input: ExtractionInput): ExtractionResul
         resourceId: input.resourceId,
         insightId: insight.id,
         doctrineId: newDoc.id,
-        description: `New doctrine created: "${newDoc.statement}"`,
+        description: `New doctrine created (review needed): "${newDoc.statement}"`,
         timestamp: now,
       });
     }
   }
 
-  // Persist
   saveInsights(existingInsights);
   saveDoctrine(existingDoctrine);
 

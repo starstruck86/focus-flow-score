@@ -1,24 +1,22 @@
 /**
  * Sales Brain — Propagation Layer
  *
- * Pushes doctrine updates into downstream systems:
- * - Dave (system prompt context)
- * - Roleplay (scenario grounding)
- * - Playbooks (creation/update suggestions)
- * - Prep recommendations
+ * Pushes doctrine updates into downstream systems.
+ * GOVERNED: Only approved, propagation-eligible doctrine propagates.
  *
- * Phase 1: In-memory propagation via localStorage events.
- * Future: Database-backed with edge function triggers.
+ * Targets: Dave, Roleplay, Playbooks, Prep
  */
 
 import {
   type DoctrineEntry,
   type DoctrineChapter,
-  getDoctrineForContext,
-  loadDoctrine,
-  getActiveDoctrineCount,
+  type PropagationTargets,
+  getPropagationEligibleDoctrine,
+  getActiveDoctrine,
   getInsightCount,
   loadChangelog,
+  loadDoctrine,
+  isDoctrineEligibleForPropagation,
 } from './doctrine';
 import { createLogger } from '@/lib/logger';
 
@@ -31,19 +29,16 @@ export interface PropagationResult {
   target: PropagationTarget;
   itemsPropagated: number;
   details: string;
+  sourceDoctrineIds: string[];
 }
 
 // ── Dave context injection ─────────────────────────────────
-/**
- * Returns doctrine-grounded context for Dave's system prompt.
- * Filtered by relevance to current execution context.
- */
 export function getDaveDoctrineContext(
   chapters?: DoctrineChapter[],
   maxEntries = 10,
 ): string {
-  const relevantChapters = chapters || ['cold_calling', 'discovery', 'objection_handling', 'messaging'];
-  const doctrine = getDoctrineForContext(relevantChapters).slice(0, maxEntries);
+  const doctrine = getPropagationEligibleDoctrine('dave', chapters || ['cold_calling', 'discovery', 'objection_handling', 'messaging'])
+    .slice(0, maxEntries);
 
   if (doctrine.length === 0) return '';
 
@@ -60,6 +55,7 @@ export interface RoleplayDoctrineGround {
   antiPatterns: string[];
   successCriteria: string[];
   talkTracks: string[];
+  sourceDoctrineIds: string[];
 }
 
 export function getRoleplayGrounding(chapter?: DoctrineChapter): RoleplayDoctrineGround {
@@ -67,7 +63,7 @@ export function getRoleplayGrounding(chapter?: DoctrineChapter): RoleplayDoctrin
     ? [chapter]
     : ['cold_calling', 'discovery', 'objection_handling', 'negotiation'];
 
-  const doctrine = getDoctrineForContext(chapters);
+  const doctrine = getPropagationEligibleDoctrine('roleplay', chapters);
 
   return {
     objectionThemes: doctrine
@@ -84,6 +80,7 @@ export function getRoleplayGrounding(chapter?: DoctrineChapter): RoleplayDoctrin
     talkTracks: doctrine
       .flatMap(d => d.talkTracks)
       .slice(0, 5),
+    sourceDoctrineIds: doctrine.map(d => d.id),
   };
 }
 
@@ -97,10 +94,9 @@ export interface PlaybookSuggestion {
 }
 
 export function getPlaybookSuggestions(): PlaybookSuggestion[] {
-  const doctrine = loadDoctrine().filter(d => !d.supersedesId);
+  const doctrine = getPropagationEligibleDoctrine('playbooks');
   const suggestions: PlaybookSuggestion[] = [];
 
-  // Find high-confidence doctrine without playbook backing
   for (const d of doctrine) {
     if (d.confidence >= 0.7 && d.freshnessState !== 'stale') {
       suggestions.push({
@@ -130,7 +126,6 @@ export function getPrepRecommendations(
 ): PrepRecommendation[] {
   const chapters: DoctrineChapter[] = [];
 
-  // Context-aware chapter selection
   if (dealStage) {
     const stageMap: Record<string, DoctrineChapter[]> = {
       'prospecting': ['cold_calling', 'messaging'],
@@ -145,13 +140,39 @@ export function getPrepRecommendations(
     chapters.push('cold_calling', 'discovery', 'messaging');
   }
 
-  const doctrine = getDoctrineForContext(chapters);
+  const doctrine = getPropagationEligibleDoctrine('prep', chapters);
   return doctrine.slice(0, 5).map(d => ({
     chapter: d.chapter,
     recommendation: d.tacticalImplication || d.statement,
     confidence: d.confidence,
     sourceDoctrineIds: [d.id],
   }));
+}
+
+// ── Downstream traceability ───────────────────────────────
+export interface DoctrineUsageMap {
+  doctrineId: string;
+  usedBy: {
+    dave: boolean;
+    roleplay: boolean;
+    prep: boolean;
+    playbooks: boolean;
+  };
+}
+
+export function getDoctrineUsageMap(): DoctrineUsageMap[] {
+  const all = loadDoctrine();
+  return all
+    .filter(d => !d.supersedesId)
+    .map(d => ({
+      doctrineId: d.id,
+      usedBy: {
+        dave: isDoctrineEligibleForPropagation(d, 'dave'),
+        roleplay: isDoctrineEligibleForPropagation(d, 'roleplay'),
+        prep: isDoctrineEligibleForPropagation(d, 'prep'),
+        playbooks: isDoctrineEligibleForPropagation(d, 'playbooks'),
+      },
+    }));
 }
 
 // ── Brain health summary ──────────────────────────────────
@@ -166,7 +187,7 @@ export interface BrainHealthSummary {
 }
 
 export function getBrainHealth(): BrainHealthSummary {
-  const doctrine = loadDoctrine().filter(d => !d.supersedesId);
+  const doctrine = getActiveDoctrine();
   const changelog = loadChangelog();
   const recentCutoff = Date.now() - 7 * 86400000;
 
@@ -192,14 +213,14 @@ export function getBrainHealth(): BrainHealthSummary {
 // ── Full propagation run ──────────────────────────────────
 export function runPropagation(): PropagationResult[] {
   const results: PropagationResult[] = [];
-  const doctrine = loadDoctrine().filter(d => !d.supersedesId);
 
   // Dave
-  const daveContext = getDaveDoctrineContext();
+  const daveDoctrine = getPropagationEligibleDoctrine('dave');
   results.push({
     target: 'dave',
-    itemsPropagated: doctrine.length,
-    details: daveContext ? `${doctrine.length} doctrine entries available for Dave` : 'No doctrine to propagate',
+    itemsPropagated: daveDoctrine.length,
+    details: daveDoctrine.length > 0 ? `${daveDoctrine.length} approved doctrine entries for Dave` : 'No eligible doctrine',
+    sourceDoctrineIds: daveDoctrine.map(d => d.id),
   });
 
   // Roleplay
@@ -209,6 +230,7 @@ export function runPropagation(): PropagationResult[] {
     target: 'roleplay',
     itemsPropagated: roleplayItems,
     details: `${grounding.objectionThemes.length} objection themes, ${grounding.antiPatterns.length} anti-patterns, ${grounding.talkTracks.length} talk tracks`,
+    sourceDoctrineIds: grounding.sourceDoctrineIds,
   });
 
   // Playbooks
@@ -216,7 +238,8 @@ export function runPropagation(): PropagationResult[] {
   results.push({
     target: 'playbooks',
     itemsPropagated: suggestions.length,
-    details: `${suggestions.length} playbook suggestions from doctrine`,
+    details: `${suggestions.length} playbook suggestions`,
+    sourceDoctrineIds: suggestions.flatMap(s => s.sourceDoctrineIds),
   });
 
   // Prep
@@ -224,7 +247,8 @@ export function runPropagation(): PropagationResult[] {
   results.push({
     target: 'prep',
     itemsPropagated: prepRecs.length,
-    details: `${prepRecs.length} prep recommendations available`,
+    details: `${prepRecs.length} prep recommendations`,
+    sourceDoctrineIds: prepRecs.flatMap(r => r.sourceDoctrineIds),
   });
 
   log.info('Propagation complete', { results });
