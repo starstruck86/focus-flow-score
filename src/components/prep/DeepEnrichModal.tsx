@@ -243,7 +243,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
                         )}
                       </div>
                       {audioBreakdown.items.slice(0, 8).map((item, i) => {
-                        const failDesc = item.job?.failureCode ? getAudioFailureDescription(item.job.failureCode) : null;
+                        const failDesc = item.job?.failure_code ? getAudioFailureDescription(item.job.failure_code as any) : null;
                         return (
                           <div key={i} className="pl-3 mb-0.5">
                             <p className="text-[10px] text-muted-foreground truncate">
@@ -252,10 +252,10 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
                             <p className="text-[9px] text-muted-foreground/70 pl-2">
                               {item.job ? (
                                 <>
-                                  {getAudioStageLabel(item.job.stage)}
-                                  {item.job.failureCode && ` · ${item.job.failureCode}`}
+                                  {getAudioStageLabel(item.job.stage as any)}
+                                  {item.job.failure_code && ` · ${item.job.failure_code}`}
                                   {failDesc && ` → ${failDesc.nextAction}`}
-                                  {item.job.attemptsCount > 0 && ` · ${item.job.attemptsCount} attempts`}
+                                  {item.job.attempts_count > 0 && ` · ${item.job.attempts_count} attempts`}
                                 </>
                               ) : (
                                 <>{item.strategy.operatorFailureReason}</>
