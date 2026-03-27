@@ -293,7 +293,7 @@ function DaveQuickActions() {
 
 export default function Cockpit() {
   return (
-    <AppLayout title="Cockpit">
+    <Layout>
       <div className="max-w-xl mx-auto px-4 pt-2 pb-40 space-y-4">
         <RightNowSection />
         <VoiceStateSection />
@@ -303,6 +303,6 @@ export default function Cockpit() {
         <SystemStatusSection />
         <LedgerSnapshotSection />
       </div>
-    </AppLayout>
+    </Layout>
   );
 }

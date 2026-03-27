@@ -37,6 +37,7 @@ export const COLOR_VAR: Record<NavColor, string> = {
 };
 
 export const navRow1: NavItemDef[] = [
+  { to: '/cockpit', label: 'Cockpit', icon: Crosshair, color: 'cockpit' },
   { to: '/', label: 'Today', icon: LayoutDashboard, color: 'today' },
   { to: '/tasks', label: 'Tasks', icon: CheckSquare, color: 'tasks' },
   { to: '/outreach', label: 'New Logo', icon: Users, color: 'outreach' },
