@@ -65,9 +65,9 @@ describe('Baseline Drift Detection', () => {
   });
 
   it('detects significant drift in weights', () => {
-    const baseline = makeBaseline();
+    const baseline = makeBaseline({ playbookWeights: { revenueWeight: 30, riskWeight: 25, momentumWeight: 20 } });
     const current = makeBaseline({
-      playbookWeights: { revenueWeight: 0.50, riskWeight: 0.10, momentumWeight: 0.40 },
+      playbookWeights: { revenueWeight: 50, riskWeight: 10, momentumWeight: 40 },
     });
     const report = computeDrift(baseline, current);
     expect(report.alertTriggered).toBe(true);
