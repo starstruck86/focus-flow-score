@@ -169,9 +169,10 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
     case 'audio_file':
       return {
         ...base,
-        enrichability: 'manual_input_needed',
-        reason: 'Audio file — transcription pipeline needed',
+        enrichability: 'partially_enrichable',
+        reason: 'Audio file — dedicated audio transcription pipeline available',
         canFetchMetadata: true,
+        canFetchTranscript: true,
       };
 
     case 'podcast_episode':

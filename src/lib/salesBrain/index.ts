@@ -126,6 +126,33 @@ export {
   type InsightTrace,
 } from './traceability';
 
+// Audio pipeline
+export {
+  isAudioResource,
+  detectAudioSubtype,
+  getAudioStrategy,
+  scoreTranscriptQuality,
+  getAudioFailureDescription,
+  getAudioStageLabel,
+  createAudioJob,
+  failAudioJob,
+  completeAudioJob,
+  getAudioJobForResource,
+  loadAudioJobs,
+  getAudioPipelineHealth,
+  reclassifyAudioFailures,
+  retryRetryableAudioJobs,
+  moveNonRetryableToManualAssist,
+  type AudioSubtype,
+  type AudioFailureCode,
+  type AudioPipelineStage,
+  type TranscriptQuality,
+  type TranscriptQualityResult,
+  type AudioStrategy,
+  type AudioJobState,
+  type AudioPipelineHealth,
+} from './audioPipeline';
+
 // Ingestion (existing)
 export {
   ingestItem,
