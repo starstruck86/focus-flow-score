@@ -545,12 +545,25 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
   };
 
   function failItem(id: string, error: string, category: FailureCategory, retryEligible = true) {
+    // Route failure to canonical bucket
+    const item = get().state.items.find(i => i.id === id);
+    const { routeFailure } = require('@/lib/failureRouting') as typeof import('@/lib/failureRouting');
+    const routing = routeFailure(
+      item?.url,
+      item?.sourceType,
+      category,
+      error,
+      item?.finalStatus,
+    );
+
     updateItem(id, {
       stage: 'failed',
-      error,
+      error: routing.reason, // Use source-specific reason instead of generic
       failureCategory: category,
       failureTimestamp: new Date().toISOString(),
-      retryEligible,
+      retryEligible: routing.retryable,
+      failureBucket: routing.bucket,
+      recoveryHint: routing.nextAction,
     });
   }
 
