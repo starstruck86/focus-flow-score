@@ -364,7 +364,7 @@ export function verifyResource(
     (status === 'deep_enriched' && quality.score < 50) ||
     (quality.score >= 90 && ['failed', 'quarantined'].includes(status));
 
-  return {
+  const partial: Omit<VerifiedResource, 'resolutionType' | 'rootCause' | 'requiredBuild'> = {
     id: resource.id,
     title: resource.title,
     url,
@@ -397,6 +397,16 @@ export function verifyResource(
     isMisclassified: contradictions.some(c => c.type === 'high_score_bad_state' || c.type === 'completed_low_score'),
     isStuckInWrongQueue: scoreStatusContradict,
     scoreStatusContradict,
+  };
+
+  // Generate remediation intelligence
+  const plan = generateRemediationPlan(partial as VerifiedResource);
+
+  return {
+    ...partial,
+    resolutionType: plan.resolutionType,
+    rootCause: plan.rootCause,
+    requiredBuild: plan.requiredBuild,
   };
 }
 
