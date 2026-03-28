@@ -53,7 +53,7 @@ const AUTH_GATED_DOMAINS = [
   'circle.so',
   'teachable.com', 'thinkific.com', 'kajabi.com',
   'podia.com', 'skool.com', 'mighty.co', 'patreon.com',
-  'memberstack.com', 'memberships.io',
+  'memberstack.com', 'memberships.io', 'fathom.video',
 ];
 
 // ── Detection ──────────────────────────────────────────────

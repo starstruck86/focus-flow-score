@@ -59,6 +59,7 @@ const AUTH_GATED_DOMAINS: Array<{ pattern: RegExp; platform: string }> = [
   { pattern: /onedrive\.live\.com/i, platform: 'OneDrive' },
   { pattern: /sharepoint\.com/i, platform: 'SharePoint' },
   { pattern: /\.zoom\.us\//i, platform: 'Zoom' },
+  { pattern: /fathom\.video/i, platform: 'Fathom' },
 ];
 
 const GOOGLE_DOC_PATTERNS = [/docs\.google\.com/i, /drive\.google\.com/i, /sheets\.google\.com/i, /slides\.google\.com/i];
