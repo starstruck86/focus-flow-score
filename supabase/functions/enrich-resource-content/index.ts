@@ -1145,14 +1145,76 @@ function getMethodChain(source: SourceClassification): Array<(url: string, apiKe
 }
 
 // ── Binary content detection ───────────────────────────────
+
+/** Audio/video magic byte signatures — these are printable ASCII but indicate binary media files */
+const MEDIA_MAGIC_PATTERNS = [
+  /^ftyp/i,            // M4A, MP4, MOV — ISO Base Media format
+  /^ID3/,              // MP3 with ID3 tag
+  /^\xff[\xfb\xf3\xf2\xe3]/, // MP3 sync bytes (MPEG audio)
+  /^RIFF/,             // WAV, AVI
+  /^OggS/,             // OGG Vorbis/Opus
+  /^fLaC/,             // FLAC
+  /^\x1aE\xdf\xa3/,   // WebM/MKV (EBML)
+  /^%PDF/,             // PDF (caught separately but guard)
+];
+
 function isBinaryContent(text: string): boolean {
   if (text.length < 50) return false;
-  const sample = text.slice(0, 512);
-  // Check for non-printable control characters (excluding tab, newline, carriage return)
-  const controlCharCount = (sample.match(/[\x00-\x08\x0E-\x1F\x7F]/g) || []).length;
-  const ratio = controlCharCount / sample.length;
-  // If >5% of the sample is control chars, it's binary
-  return ratio > 0.05 || /[\x00-\x08\x0E-\x1F]/.test(sample.slice(0, 200));
+
+  const sample = text.slice(0, 2048);
+
+  // 1. Check for known media file magic bytes/signatures
+  for (const pattern of MEDIA_MAGIC_PATTERNS) {
+    if (pattern.test(sample)) return true;
+  }
+
+  // 2. Check for ISO Base Media File container anywhere in first 64 bytes
+  //    (some files have a few bytes before 'ftyp')
+  if (/ftyp(M4A|mp4[12]|isom|MSNV|avc1|dash)/i.test(sample.slice(0, 64))) return true;
+
+  // 3. Check for MP3/audio container markers
+  if (sample.includes('moov') && sample.includes('trak') && sample.includes('mdia')) return true;
+  if (sample.includes('SoundHandler') || sample.includes('soun')) return true;
+
+  // 4. Low printable ASCII ratio — expanded check (use 1KB sample)
+  const checkSample = sample.slice(0, 1024);
+  const controlCharCount = (checkSample.match(/[\x00-\x08\x0E-\x1F\x7F]/g) || []).length;
+  const ratio = controlCharCount / checkSample.length;
+  if (ratio > 0.03) return true;
+
+  // 5. High proportion of null bytes indicates binary
+  const nullCount = (checkSample.match(/\x00/g) || []).length;
+  if (nullCount / checkSample.length > 0.02) return true;
+
+  return false;
+}
+
+/** Detect if content is specifically audio/video binary (for routing to transcription) */
+function isAudioBinaryContent(text: string): boolean {
+  if (text.length < 50) return false;
+  const sample = text.slice(0, 2048);
+
+  // M4A / MP4 container
+  if (/ftyp(M4A|mp4|isom)/i.test(sample.slice(0, 64))) return true;
+  if (sample.includes('moov') && sample.includes('trak') && sample.includes('SoundHandler')) return true;
+
+  // MP3
+  if (/^ID3/.test(sample)) return true;
+
+  // WAV
+  if (/^RIFF/.test(sample) && sample.includes('WAVE')) return true;
+
+  // OGG
+  if (/^OggS/.test(sample)) return true;
+
+  // FLAC
+  if (/^fLaC/.test(sample)) return true;
+
+  // Generic audio markers
+  if (sample.includes('Audition Template') && sample.includes('track')) return true;
+  if (sample.includes('Speech Volume Leveler')) return true;
+
+  return false;
 }
 
 // ── Quality validation ─────────────────────────────────────
