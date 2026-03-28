@@ -471,7 +471,20 @@ export default function EnrichmentVerification() {
               </Button>
             )}
 
-            <Button size="sm" onClick={handleRun} disabled={isLoading || saving || isRemediating || isValidating}>
+            {/* Fix Everything */}
+            {!isFixing && !isRemediating && !isValidating && (
+              <Button size="sm" onClick={handleFixEverything} disabled={isLoading || saving}
+                className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold">
+                <Zap className="h-3 w-3 mr-1" /> Fix Everything
+              </Button>
+            )}
+            {isFixing && (
+              <Button size="sm" variant="destructive" onClick={handleStopFix}>
+                <Square className="h-3 w-3 mr-1" /> Stop ({fixPhase})
+              </Button>
+            )}
+
+            <Button size="sm" onClick={handleRun} disabled={isLoading || saving || isRemediating || isValidating || isFixing}>
               {saving ? 'Saving…' : hasRun ? 'Re-run' : 'Run Verification'}
             </Button>
           </div>
