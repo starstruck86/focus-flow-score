@@ -1089,9 +1089,9 @@ function ResourceTable({ resources, onSelect, onFixResource }: {
 
 // ── Resource Drawer ───────────────────────────────────────
 
-function ResourceDrawer({ resource: v, onClose }: { resource: VerifiedResource; onClose: () => void }) {
+function ResourceDrawer({ resource: v, onClose, onFix }: { resource: VerifiedResource; onClose: () => void; onFix?: (r: VerifiedResource) => void }) {
   const copyId = () => { navigator.clipboard.writeText(v.id); toast.success('Copied ID'); };
-  return (
+  const action = BUCKET_ACTION_LABELS[v.fixabilityBucket];
     <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-background/60 backdrop-blur-sm" />
       <div className="relative w-full max-w-lg bg-card border-l border-border h-full overflow-y-auto" onClick={e => e.stopPropagation()}>
