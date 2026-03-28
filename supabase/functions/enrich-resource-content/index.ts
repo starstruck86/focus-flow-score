@@ -130,7 +130,14 @@ function classifySource(url: string): SourceClassification {
       return { source_type: 'youtube', platform: 'YouTube', auth_required: false, transcript_available: true, downloadable: false, js_rendered: true };
     }
 
-    // Podcast platforms
+    // ── Wrapped audio URL detection (Anchor.fm play links with encoded audio URL) ──
+    // MUST come before generic podcast check so embedded audio gets direct_audio routing
+    const embeddedAudio = extractEmbeddedAudioUrl(url);
+    if (embeddedAudio) {
+      return { source_type: 'direct_audio', platform: 'Anchor.fm (wrapped)', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
+    }
+
+    // Podcast platforms (generic — no embedded audio URL detected)
     if (/spotify\.com|podcasts\.apple\.com|anchor\.fm/i.test(host)) {
       return { source_type: 'podcast', platform: 'Podcast', auth_required: false, transcript_available: null, downloadable: false, js_rendered: true };
     }
@@ -435,25 +442,36 @@ async function youtubeCaption(url: string, _apiKey: string): Promise<ExtractionR
   }
 }
 
-/** Extract embedded audio URL from Anchor.fm play links */
+/** Extract embedded audio URL from Anchor.fm / podcast play links.
+ *  Handles URLs like: anchor.fm/s/.../podcast/play/12345/https%3A%2F%2Fcdn...%2Faudio.mp3
+ *  Also matches any URL where the last path segment is a URL-encoded audio file URL. */
 function extractEmbeddedAudioUrl(url: string): string | null {
-  // Anchor.fm play URLs embed the audio URL: anchor.fm/s/.../podcast/play/.../https%3A%2F%2F...mp3
-  const match = url.match(/\/podcast\/play\/\d+\/(https?%3A%2F%2F[^\s?#]+\.(?:mp3|m4a|wav|ogg|aac|opus))/i);
+  // Pattern 1: /podcast/play/{id}/{encoded-audio-url}
+  const match = url.match(/\/podcast\/play\/\d+\/(https?%3A%2F%2F[^\s?#]+)/i);
   if (match?.[1]) {
     try {
-      return decodeURIComponent(match[1]);
+      const decoded = decodeURIComponent(match[1]);
+      // Validate it looks like an audio file or a CDN media asset
+      if (/\.(mp3|m4a|wav|ogg|aac|opus|flac|webm)($|\?)/i.test(decoded)) return decoded;
+      // CloudFront/CDN paths with no extension but clearly audio (staging directories etc.)
+      if (/cloudfront\.net|cdn\.|media\.|audio\./i.test(decoded)) return decoded;
     } catch { /* fall through */ }
   }
-  // Also check for cloudfront or other CDN audio URLs encoded in the path
-  const cfMatch = url.match(/\/podcast\/play\/\d+\/(https?%3A%2F%2F[^\s?#]+)/i);
-  if (cfMatch?.[1]) {
+
+  // Pattern 2: Any URL where the last path segment is a URL-encoded http(s) audio URL
+  const segments = url.split('/');
+  const lastSeg = segments[segments.length - 1];
+  if (lastSeg && /^https?%3A%2F%2F/i.test(lastSeg)) {
     try {
-      const decoded = decodeURIComponent(cfMatch[1]);
-      if (/\.(mp3|m4a|wav|ogg|aac|opus)($|\?)/i.test(decoded)) return decoded;
+      const decoded = decodeURIComponent(lastSeg);
+      if (/\.(mp3|m4a|wav|ogg|aac|opus|flac|webm)($|\?)/i.test(decoded)) return decoded;
+      if (/cloudfront\.net|cdn\.|media\.|audio\./i.test(decoded)) return decoded;
     } catch { /* fall through */ }
   }
+
   return null;
 }
+
 
 /** Podcast: Resolve via resolve-podcast-episode, then transcribe if audio URL found */
 async function podcastResolveAndTranscribe(url: string, _apiKey: string): Promise<ExtractionResult> {
@@ -1458,7 +1476,27 @@ async function orchestrateEnrichment(
   const inProgressStatus = isReenrich ? "reenrich_in_progress" : "deep_enrich_in_progress";
   await setEnrichmentStatus(supabase, resourceId, inProgressStatus);
 
-  // 2. Execute method chain
+  // 2. Resolve wrapped audio URLs — use decoded direct URL for all method chain calls
+  let effectiveUrl = url;
+  const resolvedAudioUrl = extractEmbeddedAudioUrl(url);
+  if (resolvedAudioUrl && source.source_type === 'direct_audio') {
+    effectiveUrl = resolvedAudioUrl;
+    console.log(`[Orchestrate] WRAPPED AUDIO RESOLVED: wrapper=${url.slice(0, 80)} → resolved=${resolvedAudioUrl.slice(0, 80)}`);
+
+    // Persist resolution metadata on the resource
+    await supabase.from("resources").update({
+      content_classification: 'audio',
+      extraction_method: 'direct_audio_asset',
+      access_type: 'public',
+      recovery_status: 'pending_transcription',
+      recovery_reason: 'Anchor.fm wrapped audio URL — resolved to direct MP3',
+      next_best_action: 'start_transcription',
+      recovery_queue_bucket: 'auto_fixable',
+      manual_input_required: false,
+    }).eq("id", resourceId);
+  }
+
+  // 3. Execute method chain
   const methodChain = getMethodChain(source);
 
   if (methodChain.length === 0) {
@@ -1482,7 +1520,7 @@ async function orchestrateEnrichment(
   for (const extractionMethod of methodChain) {
     console.log(`[Orchestrate] Trying method ${extractionMethod.name || 'anonymous'} for ${resourceId}`);
 
-    const result = await extractionMethod(url, apiKey);
+    const result = await extractionMethod(effectiveUrl, apiKey);
     attempts.push(result.attempt);
 
     // If auth wall detected, reclassify
@@ -1662,6 +1700,19 @@ async function orchestrateEnrichment(
   // On re-enrich failure, preserve the existing enriched state
   const newStatus = isReenrich ? resource.enrichment_status : 'failed';
   const isRetryable = timeoutCount > 0 || attempts.some(a => a.http_status && a.http_status >= 500);
+  const isAudioSource = source.source_type === 'direct_audio' || source.source_type === 'podcast';
+
+  // Audio/podcast sources that failed transcription should stay in transcription queue, not generic failure
+  const recoveryStatus = isAudioSource ? 'pending_transcription'
+    : isRetryable ? 'failed_retryable'
+    : 'awaiting_user_content';
+  const recoveryAction = isAudioSource ? 'start_transcription'
+    : isRetryable ? 'queue_for_retry'
+    : 'paste_content';
+  const recoveryBucket = isAudioSource ? 'auto_fixable'
+    : isRetryable ? 'retryable'
+    : 'needs_input';
+
   await setEnrichmentStatus(supabase, resourceId, newStatus, {
     failure_reason: primaryReason,
     last_quality_score: bestQuality?.score || 0,
@@ -1669,13 +1720,14 @@ async function orchestrateEnrichment(
     validation_version: VALIDATION_VERSION,
     failure_count: (resource.failure_count || 0) + 1,
     // Persist recovery state
-    recovery_status: isRetryable ? 'failed_retryable' : 'awaiting_user_content',
-    recovery_reason: primaryReason,
-    next_best_action: isRetryable ? 'queue_for_retry' : 'paste_content',
-    manual_input_required: !isRetryable,
-    recovery_queue_bucket: isRetryable ? 'retryable' : 'needs_input',
+    recovery_status: recoveryStatus,
+    recovery_reason: isAudioSource ? `Audio transcription failed: ${primaryReason}` : primaryReason,
+    next_best_action: recoveryAction,
+    manual_input_required: !isAudioSource && !isRetryable,
+    recovery_queue_bucket: recoveryBucket,
     last_recovery_error: primaryReason,
     access_type: attempts.some(a => a.http_status === 403 || a.http_status === 401) ? 'auth_gated' : 'public',
+    content_classification: isAudioSource ? 'audio' : null,
   });
 
   console.log(`[Orchestrate] FAILED id=${resourceId} reason=${primaryReason} attempts=${attempts.length}`);
