@@ -110,7 +110,12 @@ function classifySource(url: string): SourceClassification {
       return { source_type: 'google_drive_file', platform: 'Google Drive', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
     }
 
-    // Google Docs/Slides (auth-gated — Sheets handled above)
+    // Google Docs — try export, not auth-gated by default (same as Sheets)
+    if (/docs\.google\.com\/document/i.test(url)) {
+      return { source_type: 'google_doc', platform: 'Google Docs', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
+    }
+
+    // Google Slides / other Google Docs patterns
     if (GOOGLE_DOC_PATTERNS.some(p => p.test(host))) {
       return { source_type: 'google_doc', platform: 'Google', auth_required: true, transcript_available: null, downloadable: false, js_rendered: false };
     }
