@@ -879,6 +879,24 @@ async function orchestrateEnrichment(
       const qv = validateContentQuality(result.content);
       result.attempt.validation_result = qv.passes ? 'pass' : (qv.score >= PARTIAL_MIN_SCORE ? 'partial' : 'fail');
 
+      // Binary content detected — do NOT store, route to needs_transcript
+      if (qv.is_binary) {
+        console.log(`[Orchestrate] BINARY CONTENT detected for ${resourceId} — routing to needs_transcript`);
+        await setEnrichmentStatus(supabase, resourceId, 'needs_transcript', {
+          failure_reason: 'Binary/audio data detected — needs transcript extraction',
+          last_quality_score: 0,
+          last_quality_tier: 'failed',
+        });
+        return {
+          resource_id: resourceId, url, source_classification: source,
+          final_status: 'failed', method_used: result.attempt.method, methods_attempted: attempts,
+          attempt_count: attempts.length, extracted_text_length: 0, completeness_score: 0,
+          confidence_score: 0, missing_fields: ['transcript'],
+          failure_reason: 'Binary content detected — not text. Needs transcript extraction.',
+          recovery_hint: 'This resource contains audio/binary data. Route through transcription pipeline or paste transcript manually.',
+        };
+      }
+
       console.log(`[Orchestrate] Method ${result.attempt.method}: ${result.content.length} chars, score=${qv.score}, tier=${qv.tier}`);
 
       // If quality passes, we're done
