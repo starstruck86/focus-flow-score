@@ -126,7 +126,7 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
         return {
           ...base,
           enrichability: 'needs_auth',
-          reason: `${host} requires authentication`,
+          reason: 'Login required — paste content manually via Manual Assist.',
           requiresAuth: true,
           canFetchMetadata: true,
         };
