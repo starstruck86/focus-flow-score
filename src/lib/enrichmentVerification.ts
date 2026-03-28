@@ -9,6 +9,7 @@ import { detectResourceSubtype, classifyEnrichability, getSubtypeLabel, type Res
 import { validateResourceQuality, type QualityResult } from '@/lib/resourceQuality';
 import { routeFailure, type FailureBucket, NON_RETRYABLE_BUCKETS } from '@/lib/failureRouting';
 import { getEnrichmentStatusLabel, type EnrichmentStatus } from '@/lib/resourceEligibility';
+import { generateRemediationPlan } from '@/lib/remediationIntelligence';
 
 // ── Types ──────────────────────────────────────────────────
 
