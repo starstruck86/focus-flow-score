@@ -41,12 +41,17 @@ export interface FixItem {
   currentScore: number | null;
   previousTier: string;
   currentTier: string | null;
+  previousState: string;
+  currentState: string | null;
+  previousFailureBucket: string | null;
+  currentFailureBucket: string | null;
   attemptsThisRun: number;
   maxAttempts: number;
   actionTaken: string | null;
   failureReason: string | null;
   terminalReason: string | null;
   resolvedAt: string | null;
+  isResolved: boolean;
 }
 
 export interface FixRunState {
@@ -102,7 +107,13 @@ const MANUAL_QUEUES: Set<RemediationQueue> = new Set([
 
 // ── Re-score a resource from DB ───────────────────────────
 
-async function rescoreResource(resourceId: string): Promise<QualityResult | null> {
+interface RescoreResult {
+  quality: QualityResult;
+  enrichmentStatus: string;
+  failureReason: string | null;
+}
+
+async function rescoreResource(resourceId: string): Promise<RescoreResult | null> {
   const { data, error } = await supabase
     .from('resources')
     .select('id, title, content, content_length, enrichment_status, enrichment_version, validation_version, enriched_at, failure_reason, file_url, description')
@@ -112,7 +123,7 @@ async function rescoreResource(resourceId: string): Promise<QualityResult | null
   if (error || !data) return null;
 
   const r = data as any;
-  return validateResourceQuality({
+  const quality = validateResourceQuality({
     id: r.id,
     title: r.title,
     content: r.content ?? null,
@@ -125,6 +136,26 @@ async function rescoreResource(resourceId: string): Promise<QualityResult | null
     file_url: r.file_url ?? null,
     description: r.description ?? null,
   });
+
+  return {
+    quality,
+    enrichmentStatus: r.enrichment_status ?? 'not_enriched',
+    failureReason: r.failure_reason ?? null,
+  };
+}
+
+/** Apply rescore results to item and determine resolution */
+function applyRescore(item: FixItem, rs: RescoreResult) {
+  item.currentScore = rs.quality.score;
+  item.currentTier = rs.quality.tier;
+  item.currentState = rs.enrichmentStatus;
+  item.currentFailureBucket = rs.failureReason;
+}
+
+function markResolved(item: FixItem, status: FixItemStatus) {
+  item.status = status;
+  item.resolvedAt = new Date().toISOString();
+  item.isResolved = status === 'resolved_complete' || status === 'resolved_metadata_only' || status === 'resolved_quarantined';
 }
 
 // ── Main Fix Engine ───────────────────────────────────────
@@ -161,12 +192,17 @@ export async function runFixBrokenResources(
         currentScore: null,
         previousTier: v.qualityTier,
         currentTier: null,
+        previousState: v.enrichmentStatus as string,
+        currentState: null,
+        previousFailureBucket: v.failureBucket,
+        currentFailureBucket: null,
         attemptsThisRun: 0,
         maxAttempts: AUTO_FIXABLE_QUEUES.has(queue) ? MAX_AUTO_ATTEMPTS : 1,
         actionTaken: null,
         failureReason: null,
         terminalReason: null,
         resolvedAt: null,
+        isResolved: false,
       });
     }
   }
@@ -217,6 +253,14 @@ export async function runFixBrokenResources(
 }
 
 async function processFixItem(item: FixItem, state: FixRunState): Promise<void> {
+  // Helper to finalize item after DB changes
+  const finalizeFromDb = async () => {
+    const rs = await rescoreResource(item.id);
+    if (rs) {
+      applyRescore(item, rs);
+    }
+  };
+
   // ── Accept Metadata Only ────────────────────────────────
   if (item.queue === 'accept_metadata_only') {
     item.status = 'processing';
@@ -233,10 +277,11 @@ async function processFixItem(item: FixItem, state: FixRunState): Promise<void> 
 
     if (error) throw new Error(error.message);
 
-    item.status = 'resolved_metadata_only';
+    item.currentState = 'deep_enriched';
+    item.currentFailureBucket = null;
+    markResolved(item, 'resolved_metadata_only');
     item.actionTaken = 'Accepted as metadata-only';
     item.terminalReason = 'No enrichable content available — accepted';
-    item.resolvedAt = new Date().toISOString();
     state.metadataOnlyCount++;
     return;
   }
@@ -254,10 +299,11 @@ async function processFixItem(item: FixItem, state: FixRunState): Promise<void> 
 
     if (error) throw new Error(error.message);
 
-    item.status = 'resolved_quarantined';
+    item.currentState = 'quarantined';
+    item.currentFailureBucket = item.previousFailureBucket;
+    markResolved(item, 'resolved_quarantined');
     item.actionTaken = 'Quarantined';
     item.terminalReason = `Repeated failures (${item.previousScore} score) — removed from auto-retry`;
-    item.resolvedAt = new Date().toISOString();
     state.quarantinedCount++;
     return;
   }
@@ -284,9 +330,12 @@ async function processFixItem(item: FixItem, state: FixRunState): Promise<void> 
 
     if (error) throw new Error(error.message);
 
+    item.currentState = 'incomplete';
+    item.currentFailureBucket = reason;
     item.status = 'awaiting_manual';
     item.actionTaken = `Routed to manual: ${item.queue}`;
     item.terminalReason = reason;
+    item.isResolved = false;
     state.manualRequiredCount++;
     return;
   }
@@ -334,61 +383,46 @@ async function processFixItem(item: FixItem, state: FixRunState): Promise<void> 
 
         if (result.error) {
           item.failureReason = result.error.message || 'Enrichment failed';
-          // If last attempt, check if we should quarantine
           if (attempt >= item.maxAttempts - 1) {
-            // Re-score to see where we landed
             item.status = 're_scoring';
-            const qr = await rescoreResource(item.id);
-            if (qr) {
-              item.currentScore = qr.score;
-              item.currentTier = qr.tier;
-            }
+            await finalizeFromDb();
 
-            if ((qr?.score ?? 0) >= 70) {
-              // Close enough — accept
-              item.status = 'resolved_complete';
-              item.terminalReason = `Score ${qr?.score} after ${attempt + 1} attempts`;
-              item.resolvedAt = new Date().toISOString();
+            if ((item.currentScore ?? 0) >= 70) {
+              markResolved(item, 'resolved_complete');
+              item.terminalReason = `Score ${item.currentScore} after ${attempt + 1} attempts`;
               state.resolvedCount++;
             } else {
-              // Escalate to quarantine
               await supabase.from('resources').update({
                 enrichment_status: 'quarantined',
                 failure_reason: `Fix run: ${item.failureReason} after ${item.attemptsThisRun} attempts`,
                 last_status_change_at: new Date().toISOString(),
               } as any).eq('id', item.id);
-              item.status = 'resolved_quarantined';
+              item.currentState = 'quarantined';
+              markResolved(item, 'resolved_quarantined');
               item.terminalReason = `Quarantined after ${item.attemptsThisRun} failed auto-fix attempts: ${item.failureReason}`;
-              item.resolvedAt = new Date().toISOString();
               state.quarantinedCount++;
             }
             return;
           }
-          // Wait before retry
           await new Promise(r => setTimeout(r, 2000));
           continue;
         }
 
         // Step 3: Re-score
         item.status = 're_scoring';
-        const qr = await rescoreResource(item.id);
-        if (qr) {
-          item.currentScore = qr.score;
-          item.currentTier = qr.tier;
-        }
+        await finalizeFromDb();
 
-        const score = qr?.score ?? 0;
+        const score = item.currentScore ?? 0;
+        const rs = await rescoreResource(item.id);
+        const passes = rs?.quality.passesCompletionContract ?? false;
 
-        if (score >= 70 && qr?.passesCompletionContract) {
-          // Use the lifecycle engine to properly mark complete
-          item.status = 'resolved_complete';
+        if (score >= 70 && passes) {
+          markResolved(item, 'resolved_complete');
           item.terminalReason = `Score ${score} — enrichment complete`;
-          item.resolvedAt = new Date().toISOString();
           state.resolvedCount++;
           return;
         }
 
-        // Not complete yet — if more attempts, retry
         if (attempt < item.maxAttempts - 1) {
           item.failureReason = `Score ${score} — retrying`;
           await new Promise(r => setTimeout(r, 1500));
@@ -397,20 +431,19 @@ async function processFixItem(item: FixItem, state: FixRunState): Promise<void> 
 
         // Last attempt, still not complete
         if (score >= 40) {
-          // Partial — leave as incomplete, don't quarantine
           item.status = 'failed_retry_exhausted';
           item.terminalReason = `Score ${score} after ${item.attemptsThisRun} attempts — needs manual review`;
+          item.isResolved = false;
           state.failedCount++;
         } else {
-          // Very low — quarantine
           await supabase.from('resources').update({
             enrichment_status: 'quarantined',
             failure_reason: `Fix run: score ${score} after ${item.attemptsThisRun} attempts`,
             last_status_change_at: new Date().toISOString(),
           } as any).eq('id', item.id);
-          item.status = 'resolved_quarantined';
+          item.currentState = 'quarantined';
+          markResolved(item, 'resolved_quarantined');
           item.terminalReason = `Quarantined: score ${score} after ${item.attemptsThisRun} attempts`;
-          item.resolvedAt = new Date().toISOString();
           state.quarantinedCount++;
         }
         return;
@@ -419,7 +452,9 @@ async function processFixItem(item: FixItem, state: FixRunState): Promise<void> 
         if (attempt >= item.maxAttempts - 1) {
           item.status = 'failed_retry_exhausted';
           item.terminalReason = `Enrichment error: ${enrichError.message}`;
+          item.isResolved = false;
           state.failedCount++;
+          await finalizeFromDb();
           return;
         }
         await new Promise(r => setTimeout(r, 2000));
@@ -431,24 +466,25 @@ async function processFixItem(item: FixItem, state: FixRunState): Promise<void> 
   // Fallback — skip
   item.status = 'skipped';
   item.actionTaken = 'No automatic action available';
+  item.isResolved = false;
   state.skippedCount++;
 }
 
 async function reconcileStateBug(item: FixItem, state: FixRunState): Promise<void> {
   item.status = 'processing';
 
-  // Re-read from DB and re-score
   item.status = 're_scoring';
-  const qr = await rescoreResource(item.id);
-  if (!qr) {
+  const rs = await rescoreResource(item.id);
+  if (!rs) {
     item.status = 'failed_retry_exhausted';
     item.failureReason = 'Could not read resource for re-scoring';
+    item.isResolved = false;
     state.failedCount++;
     return;
   }
 
-  item.currentScore = qr.score;
-  item.currentTier = qr.tier;
+  applyRescore(item, rs);
+  const qr = rs.quality;
 
   const update: Record<string, any> = {
     last_status_change_at: new Date().toISOString(),
@@ -457,7 +493,6 @@ async function reconcileStateBug(item: FixItem, state: FixRunState): Promise<voi
   };
 
   if (qr.score >= 70 && qr.passesCompletionContract) {
-    // Promote to complete
     update.enrichment_status = 'deep_enriched';
     update.failure_reason = null;
     update.enriched_at = new Date().toISOString();
@@ -465,64 +500,62 @@ async function reconcileStateBug(item: FixItem, state: FixRunState): Promise<voi
     const { error } = await supabase.from('resources').update(update as any).eq('id', item.id);
     if (error) throw new Error(error.message);
 
-    item.status = 'resolved_complete';
+    item.currentState = 'deep_enriched';
+    item.currentFailureBucket = null;
+    markResolved(item, 'resolved_complete');
     item.actionTaken = 'Reconciled: promoted to complete';
     item.terminalReason = `Score ${qr.score} — status corrected to deep_enriched`;
-    item.resolvedAt = new Date().toISOString();
     state.resolvedCount++;
   } else if (qr.score < 30) {
-    // Very low — quarantine
     update.enrichment_status = 'quarantined';
     update.failure_reason = `Reconciled: score ${qr.score} is too low`;
 
     const { error } = await supabase.from('resources').update(update as any).eq('id', item.id);
     if (error) throw new Error(error.message);
 
-    item.status = 'resolved_quarantined';
+    item.currentState = 'quarantined';
+    markResolved(item, 'resolved_quarantined');
     item.actionTaken = 'Reconciled: quarantined';
     item.terminalReason = `Score ${qr.score} — quarantined`;
-    item.resolvedAt = new Date().toISOString();
     state.quarantinedCount++;
   } else {
-    // Mid-range — try enriching
     update.enrichment_status = 'not_enriched';
     update.failure_reason = null;
 
     const { error } = await supabase.from('resources').update(update as any).eq('id', item.id);
     if (error) throw new Error(error.message);
 
-    // Try one enrichment pass
     item.status = 'enriching';
     item.actionTaken = 'Reconciled + re-enriching';
     item.attemptsThisRun = 1;
 
     try {
-      const result = await invokeEnrichResource<any>(
+      await invokeEnrichResource<any>(
         { resource_id: item.id },
         { componentName: 'FixBrokenResources', timeoutMs: 60000 },
       );
 
       item.status = 're_scoring';
-      const qr2 = await rescoreResource(item.id);
-      if (qr2) {
-        item.currentScore = qr2.score;
-        item.currentTier = qr2.tier;
+      const rs2 = await rescoreResource(item.id);
+      if (rs2) {
+        applyRescore(item, rs2);
       }
 
-      if ((qr2?.score ?? 0) >= 70 && qr2?.passesCompletionContract) {
-        item.status = 'resolved_complete';
-        item.terminalReason = `Score ${qr2?.score} after reconcile + re-enrich`;
-        item.resolvedAt = new Date().toISOString();
+      if ((rs2?.quality.score ?? 0) >= 70 && rs2?.quality.passesCompletionContract) {
+        markResolved(item, 'resolved_complete');
+        item.terminalReason = `Score ${rs2?.quality.score} after reconcile + re-enrich`;
         state.resolvedCount++;
       } else {
         item.status = 'failed_retry_exhausted';
-        item.terminalReason = `Score ${qr2?.score ?? 0} — needs manual review`;
+        item.terminalReason = `Score ${rs2?.quality.score ?? 0} — needs manual review`;
+        item.isResolved = false;
         state.failedCount++;
       }
     } catch (e: any) {
       item.status = 'failed_retry_exhausted';
       item.failureReason = e.message;
       item.terminalReason = `Enrichment failed: ${e.message}`;
+      item.isResolved = false;
       state.failedCount++;
     }
   }
