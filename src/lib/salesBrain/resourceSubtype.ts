@@ -170,7 +170,7 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
       return {
         ...base,
         enrichability: 'manual_input_needed',
-        reason: 'Auth-gated community page — requires login, paste content manually',
+        reason: 'Login required — paste content manually via Manual Assist.',
         requiresAuth: true,
         canFetchMetadata: false,
       };
