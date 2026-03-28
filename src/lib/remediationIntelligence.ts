@@ -50,7 +50,6 @@ const PLATFORM_UNSUPPORTED_SUBTYPES: ResourceSubtype[] = [
   'spotify_episode',
   'apple_podcast_episode',
   'auth_gated_community_page',
-  'google_drive_file',
 ];
 
 // ── Main entry point ───────────────────────────────────────
@@ -270,7 +269,7 @@ function buildPlatformSuggestion(subtype: ResourceSubtype): string {
     case 'auth_gated_community_page':
       return 'Build authenticated scraper for community platforms (Circle.so, etc.) or provide manual paste workflow';
     case 'google_drive_file':
-      return 'Implement Google Drive API export for supported MIME types (docs, sheets, slides)';
+      return 'Google Drive direct-download is now supported — retry enrichment. If still failing, check file sharing permissions.';
     default:
       return `Build content extraction adapter for ${subtype} resources`;
   }
