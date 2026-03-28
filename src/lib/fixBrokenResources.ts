@@ -107,7 +107,13 @@ const MANUAL_QUEUES: Set<RemediationQueue> = new Set([
 
 // ── Re-score a resource from DB ───────────────────────────
 
-async function rescoreResource(resourceId: string): Promise<QualityResult | null> {
+interface RescoreResult {
+  quality: QualityResult;
+  enrichmentStatus: string;
+  failureReason: string | null;
+}
+
+async function rescoreResource(resourceId: string): Promise<RescoreResult | null> {
   const { data, error } = await supabase
     .from('resources')
     .select('id, title, content, content_length, enrichment_status, enrichment_version, validation_version, enriched_at, failure_reason, file_url, description')
@@ -117,7 +123,7 @@ async function rescoreResource(resourceId: string): Promise<QualityResult | null
   if (error || !data) return null;
 
   const r = data as any;
-  return validateResourceQuality({
+  const quality = validateResourceQuality({
     id: r.id,
     title: r.title,
     content: r.content ?? null,
@@ -130,6 +136,26 @@ async function rescoreResource(resourceId: string): Promise<QualityResult | null
     file_url: r.file_url ?? null,
     description: r.description ?? null,
   });
+
+  return {
+    quality,
+    enrichmentStatus: r.enrichment_status ?? 'not_enriched',
+    failureReason: r.failure_reason ?? null,
+  };
+}
+
+/** Apply rescore results to item and determine resolution */
+function applyRescore(item: FixItem, rs: RescoreResult) {
+  item.currentScore = rs.quality.score;
+  item.currentTier = rs.quality.tier;
+  item.currentState = rs.enrichmentStatus;
+  item.currentFailureBucket = rs.failureReason;
+}
+
+function markResolved(item: FixItem, status: FixItemStatus) {
+  item.status = status;
+  item.resolvedAt = new Date().toISOString();
+  item.isResolved = status === 'resolved_complete' || status === 'resolved_metadata_only' || status === 'resolved_quarantined';
 }
 
 // ── Main Fix Engine ───────────────────────────────────────
