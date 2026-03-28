@@ -177,6 +177,12 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
           break;
         }
         case 'retry_enrich': {
+          // Reset status so the edge function doesn't skip it
+          await supabase.from('resources').update({
+            enrichment_status: 'not_enriched',
+            failure_reason: null,
+            last_status_change_at: new Date().toISOString(),
+          } as any).eq('id', r.id);
           await invokeEnrichResource({ resource_id: r.id, force: true }, { componentName: 'ResourceDetailDrawer', timeoutMs: 60000 });
           toast.success('Re-enrichment started');
           break;
