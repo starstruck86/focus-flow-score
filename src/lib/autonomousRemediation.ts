@@ -552,7 +552,7 @@ async function reconcileStateBug(item: RemediationItem, state: RemediationCycleS
       if (q2) item.afterScore = q2.score;
       if (s2) { item.afterState = s2.status; item.afterFailureBucket = s2.failureReason; }
 
-      if (q2 && q2.score >= 95 && q2.passesCompletionContract) {
+      if (q2 && q2.score >= 85 && q2.passesCompletionContract) {
         await supabase.from('resources').update({
           enrichment_status: 'deep_enriched', failure_reason: null,
           enriched_at: new Date().toISOString(), last_quality_score: q2.score,
