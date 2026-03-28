@@ -33,6 +33,10 @@ import {
   runAutonomousRemediation, getQueueSummaries, QUEUE_STRATEGIES,
   type RemediationCycleState, type RemediationItem, type RemediationItemStatus,
 } from '@/lib/autonomousRemediation';
+import {
+  runEndToEndValidation,
+  type ValidationResult, type ValidationPhase,
+} from '@/lib/validationOrchestrator';
 
 // ── Persist ───────────────────────────────────────────────
 
