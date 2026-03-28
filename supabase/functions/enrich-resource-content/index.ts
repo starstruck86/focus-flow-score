@@ -130,7 +130,14 @@ function classifySource(url: string): SourceClassification {
       return { source_type: 'youtube', platform: 'YouTube', auth_required: false, transcript_available: true, downloadable: false, js_rendered: true };
     }
 
-    // Podcast platforms
+    // ── Wrapped audio URL detection (Anchor.fm play links with encoded audio URL) ──
+    // MUST come before generic podcast check so embedded audio gets direct_audio routing
+    const embeddedAudio = extractEmbeddedAudioUrl(url);
+    if (embeddedAudio) {
+      return { source_type: 'direct_audio', platform: 'Anchor.fm (wrapped)', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
+    }
+
+    // Podcast platforms (generic — no embedded audio URL detected)
     if (/spotify\.com|podcasts\.apple\.com|anchor\.fm/i.test(host)) {
       return { source_type: 'podcast', platform: 'Podcast', auth_required: false, transcript_available: null, downloadable: false, js_rendered: true };
     }
