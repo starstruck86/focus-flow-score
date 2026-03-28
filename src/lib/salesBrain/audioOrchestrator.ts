@@ -359,19 +359,23 @@ export async function transcribeDirectAudio(
 }
 
 /**
- * Smart orchestrator — routes by subtype automatically
+ * Smart orchestrator — routes by subtype automatically.
+ * Every subtype MUST be explicitly handled. No silent fallthrough.
  */
 export async function processAudioResource(
   resourceId: string,
   sourceUrl: string,
+  resourceType?: string,
 ): Promise<TranscribeDirectResult | PlatformResolveResult> {
-  const subtype = detectAudioSubtype(sourceUrl);
+  const subtype = detectAudioSubtype(sourceUrl, resourceType);
 
   switch (subtype) {
+    // Direct transcription path
     case 'direct_audio_file':
     case 'podcast_episode_rss_backed':
       return transcribeDirectAudio(resourceId, sourceUrl);
 
+    // Platform resolution → may chain to transcription
     case 'spotify_episode':
     case 'spotify_show':
     case 'apple_podcast_episode':
@@ -379,8 +383,62 @@ export async function processAudioResource(
     case 'podcast_episode_page_only':
       return resolvePodcastEpisode(resourceId, sourceUrl);
 
-    default:
+    // YouTube — route through standard transcription (captions pipeline)
+    case 'youtube_audio_or_video':
       return transcribeDirectAudio(resourceId, sourceUrl);
+
+    // Transcript page — attempt direct extraction
+    case 'transcript_page_available':
+      return transcribeDirectAudio(resourceId, sourceUrl);
+
+    // Auth-gated — cannot auto-process, fail immediately with clear guidance
+    case 'auth_gated_audio': {
+      const job = await getOrCreateAudioJob(resourceId, sourceUrl, resourceType);
+      if (job) {
+        await supabase.from('audio_jobs').update({
+          stage: 'needs_manual_assist',
+          failure_code: 'AUTH_REQUIRED',
+          failure_reason: 'Audio is behind authentication — upload file or paste transcript',
+          retryable: false,
+          recommended_action: 'Upload the audio file directly, or paste the transcript via Manual Assist',
+          transcript_mode: 'manual_assist',
+          final_resolution_status: 'needs_manual_assist',
+          updated_at: new Date().toISOString(),
+        }).eq('id', job.id);
+      }
+      return {
+        success: false, jobId: job?.id || '', transcript: null, totalWords: 0, quality: null,
+        failureCode: 'AUTH_REQUIRED',
+        failureReason: 'Audio is behind authentication — upload file or paste transcript',
+        stage: 'needs_manual_assist', chunksTotal: 0, chunksCompleted: 0, provider: null,
+        durationMs: 0, persisted: false,
+      };
+    }
+
+    // Unsupported — fail with clear guidance, never silently
+    case 'unsupported_audio':
+    default: {
+      const job = await getOrCreateAudioJob(resourceId, sourceUrl, resourceType);
+      if (job) {
+        await supabase.from('audio_jobs').update({
+          stage: 'needs_manual_assist',
+          failure_code: 'MANUAL_TRANSCRIPT_REQUIRED',
+          failure_reason: 'Unsupported audio format — paste transcript or provide a direct audio URL',
+          retryable: false,
+          recommended_action: 'Paste transcript via Manual Assist, or provide a direct MP3/audio URL',
+          transcript_mode: 'manual_assist',
+          final_resolution_status: 'needs_manual_assist',
+          updated_at: new Date().toISOString(),
+        }).eq('id', job.id);
+      }
+      return {
+        success: false, jobId: job?.id || '', transcript: null, totalWords: 0, quality: null,
+        failureCode: 'MANUAL_TRANSCRIPT_REQUIRED',
+        failureReason: 'Unsupported audio format — paste transcript or provide a direct audio URL',
+        stage: 'needs_manual_assist', chunksTotal: 0, chunksCompleted: 0, provider: null,
+        durationMs: 0, persisted: false,
+      };
+    }
   }
 }
 
