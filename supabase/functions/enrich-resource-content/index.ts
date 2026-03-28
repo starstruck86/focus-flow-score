@@ -442,22 +442,35 @@ async function youtubeCaption(url: string, _apiKey: string): Promise<ExtractionR
   }
 }
 
-/** Extract embedded audio URL from Anchor.fm play links */
+/** Extract embedded audio URL from Anchor.fm / podcast play links.
+ *  Handles URLs like: anchor.fm/s/.../podcast/play/12345/https%3A%2F%2Fcdn...%2Faudio.mp3
+ *  Also matches any URL where the last path segment is a URL-encoded audio file URL. */
 function extractEmbeddedAudioUrl(url: string): string | null {
-  // Anchor.fm play URLs embed the audio URL: anchor.fm/s/.../podcast/play/.../https%3A%2F%2F...mp3
-  const match = url.match(/\/podcast\/play\/\d+\/(https?%3A%2F%2F[^\s?#]+\.(?:mp3|m4a|wav|ogg|aac|opus))/i);
+  // Pattern 1: /podcast/play/{id}/{encoded-audio-url}
+  const match = url.match(/\/podcast\/play\/\d+\/(https?%3A%2F%2F[^\s?#]+)/i);
   if (match?.[1]) {
     try {
-      return decodeURIComponent(match[1]);
+      const decoded = decodeURIComponent(match[1]);
+      // Validate it looks like an audio file or a CDN media asset
+      if (/\.(mp3|m4a|wav|ogg|aac|opus|flac|webm)($|\?)/i.test(decoded)) return decoded;
+      // CloudFront/CDN paths with no extension but clearly audio (staging directories etc.)
+      if (/cloudfront\.net|cdn\.|media\.|audio\./i.test(decoded)) return decoded;
     } catch { /* fall through */ }
   }
-  // Also check for cloudfront or other CDN audio URLs encoded in the path
-  const cfMatch = url.match(/\/podcast\/play\/\d+\/(https?%3A%2F%2F[^\s?#]+)/i);
-  if (cfMatch?.[1]) {
+
+  // Pattern 2: Any URL where the last path segment is a URL-encoded http(s) audio URL
+  const segments = url.split('/');
+  const lastSeg = segments[segments.length - 1];
+  if (lastSeg && /^https?%3A%2F%2F/i.test(lastSeg)) {
     try {
-      const decoded = decodeURIComponent(cfMatch[1]);
-      if (/\.(mp3|m4a|wav|ogg|aac|opus)($|\?)/i.test(decoded)) return decoded;
+      const decoded = decodeURIComponent(lastSeg);
+      if (/\.(mp3|m4a|wav|ogg|aac|opus|flac|webm)($|\?)/i.test(decoded)) return decoded;
+      if (/cloudfront\.net|cdn\.|media\.|audio\./i.test(decoded)) return decoded;
     } catch { /* fall through */ }
+  }
+
+  return null;
+}
   }
   return null;
 }
