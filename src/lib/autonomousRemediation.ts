@@ -55,6 +55,7 @@ export interface RemediationItem {
   attemptsThisRun: number;
   // Failure tracking
   failureHistory: FailureHistoryEntry[];
+  sameFailureCount: number; // how many times the SAME bucket has failed
   escalatedBecause: string | null;
   // UX
   whyFailed: string | null;
@@ -271,6 +272,7 @@ export function buildRemediationItems(
         strategyUsed: null,
         attemptsThisRun: 0,
         failureHistory: [],
+        sameFailureCount: 0,
         escalatedBecause: null,
         whyFailed: null,
         whatToDoNext: null,
@@ -391,6 +393,26 @@ async function processItem(item: RemediationItem, state: RemediationCycleState):
 // ── Strategy Implementations ──────────────────────────────
 
 async function autoFix(item: RemediationItem, state: RemediationCycleState, strategy: QueueStrategy): Promise<void> {
+  // ── Pre-check: same failure bucket hit 2+ times → stop retrying ──
+  if (item.sameFailureCount >= 2) {
+    const manualQueues: RemediationQueue[] = ['needs_transcript', 'needs_pasted_content', 'needs_access_auth', 'needs_alternate_source'];
+    const couldBeManual = !!item.url; // has a source → manual input path exists
+    if (couldBeManual) {
+      item.status = 'awaiting_manual';
+      item.whyFailed = `Same failure bucket "${item.queue}" hit ${item.sameFailureCount} times — will not retry`;
+      item.whatToDoNext = 'Provide alternate content or URL manually';
+      item.isResolved = false;
+      state.awaitingManualCount++;
+    } else {
+      item.status = 'escalated';
+      item.whyFailed = `System gap: same failure "${item.queue}" repeated ${item.sameFailureCount} times with no manual path`;
+      item.whatToDoNext = 'Requires code change — system cannot handle this resource type';
+      item.isResolved = false;
+      state.escalatedCount++;
+    }
+    return;
+  }
+
   for (let attempt = 0; attempt < strategy.maxAttempts; attempt++) {
     item.attemptsThisRun = attempt + 1;
     item.status = 'processing';
@@ -413,6 +435,7 @@ async function autoFix(item: RemediationItem, state: RemediationCycleState, stra
 
     if (resetError) {
       item.failureHistory.push({ bucket: item.queue, reason: resetError.message, timestamp: new Date().toISOString(), attempt: attempt + 1 });
+      item.sameFailureCount = item.failureHistory.filter(h => h.bucket === item.queue).length;
       continue;
     }
 
@@ -433,7 +456,7 @@ async function autoFix(item: RemediationItem, state: RemediationCycleState, stra
       item.afterScore = quality.score;
       item.afterState = dbState.status;
       item.afterFailureBucket = dbState.failureReason;
-      item.afterContradictions = 0; // Simplified — real contradictions need full re-verify
+      item.afterContradictions = 0;
 
       // Check strict exit
       const exit = checkExitCondition(item, quality.score, 0);
@@ -465,10 +488,19 @@ async function autoFix(item: RemediationItem, state: RemediationCycleState, stra
         timestamp: new Date().toISOString(),
         attempt: attempt + 1,
       });
+      item.sameFailureCount = item.failureHistory.filter(h => h.bucket === failBucket).length;
 
-      // Check escalation
-      if (shouldEscalateToQuarantine(item, failBucket)) {
-        await quarantineResource(item, state, `Same failure "${failBucket}" occurred ${item.failureHistory.filter(h => h.bucket === failBucket).length} times`);
+      // If same bucket hit 2+ times → stop immediately
+      if (item.sameFailureCount >= 2) {
+        const hasManualPath = !!item.url;
+        if (hasManualPath) {
+          item.status = 'awaiting_manual';
+          item.whyFailed = `Same failure "${failBucket}" repeated ${item.sameFailureCount} times — routing to manual input`;
+          item.whatToDoNext = 'Provide alternate content, paste transcript, or supply different URL';
+          state.awaitingManualCount++;
+        } else {
+          await quarantineResource(item, state, `System gap: "${failBucket}" repeated ${item.sameFailureCount} times with no recovery path`);
+        }
         return;
       }
 
