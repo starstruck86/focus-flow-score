@@ -86,7 +86,7 @@ const SOURCE_REASONS: Record<string, Record<FailureBucket, string>> = {
   spotify_episode: {
     retryable_extraction_failure: 'Spotify metadata extraction failed.',
     audio_resolution_required: 'Spotify does not provide direct audio access.',
-    transcript_required: 'Transcript required — paste transcript or provide alternate source.',
+    transcript_required: 'Spotify transcript required — paste transcript or provide alternate source.',
     auth_required: 'Spotify requires authentication for this content.',
     manual_content_required: 'Spotify episode requires manual transcript input.',
     unsupported_source: 'Spotify episode format not supported for direct extraction.',
@@ -113,7 +113,7 @@ const SOURCE_REASONS: Record<string, Record<FailureBucket, string>> = {
   podcast_episode: {
     retryable_extraction_failure: 'Podcast extraction failed — retry may resolve.',
     audio_resolution_required: 'Podcast audio could not be resolved. Retry resolution or provide direct audio URL.',
-    transcript_required: 'Transcript required — paste transcript or provide alternate source.',
+    transcript_required: 'Podcast transcript required — paste transcript or provide alternate source.',
     auth_required: 'Podcast source requires authentication to access.',
     manual_content_required: 'Podcast episode requires manual transcript input.',
     unsupported_source: 'Podcast source format not supported.',

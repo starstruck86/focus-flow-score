@@ -269,7 +269,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
                 <p className="text-xs text-muted-foreground">
                   <span className="font-medium text-foreground">{eligibleCount}</span> ready to {modeLabel.toLowerCase()}
                   {counts.retryable > 0 && (
-                    <> · <span className="font-medium text-orange-600">{counts.retryable}</span> retryable</>
+                    <> · <span className="font-medium text-status-yellow">{counts.retryable}</span> retryable</>
                   )}
                   {counts.manual + counts.metadataOnly > 0 && (
                     <> · <span className="font-medium text-status-red">{counts.manual + counts.metadataOnly}</span> need attention</>
