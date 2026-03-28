@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCopilot } from '@/contexts/CopilotContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
-  Crosshair, GraduationCap, Download, FileText,
+  Crosshair, GraduationCap, Download, FileText, Zap,
 } from 'lucide-react';
 import { VoiceCommandButton } from '@/components/VoiceCommandButton';
 
@@ -24,6 +24,9 @@ import { AudioTestHarness } from '@/components/prep/AudioTestHarness';
 
 // Library tab component
 import { ResourceManager } from '@/components/prep/ResourceManager';
+
+// Enrichment Engine
+import { EnrichmentEngine } from '@/components/prep/EnrichmentEngine';
 
 // Governance (feature-flagged overlay)
 import { GovernancePanel } from '@/components/governance/GovernancePanel';
@@ -45,7 +48,7 @@ export default function PrepHub() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-foreground">Sales Brain OS</h1>
-            <p className="text-xs text-muted-foreground">Execute · Learn · Ingest · Library</p>
+            <p className="text-xs text-muted-foreground">Execute · Learn · Enrich · Ingest · Library</p>
           </div>
           <div className="flex items-center gap-2">
             <VoiceCommandButton />
@@ -53,20 +56,24 @@ export default function PrepHub() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="execute" className="text-xs gap-1.5">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="execute" className="text-xs gap-1">
               <Crosshair className="h-3.5 w-3.5" />
               Execute
             </TabsTrigger>
-            <TabsTrigger value="learn" className="text-xs gap-1.5">
+            <TabsTrigger value="learn" className="text-xs gap-1">
               <GraduationCap className="h-3.5 w-3.5" />
               Learn
             </TabsTrigger>
-            <TabsTrigger value="ingest" className="text-xs gap-1.5">
+            <TabsTrigger value="enrich" className="text-xs gap-1">
+              <Zap className="h-3.5 w-3.5" />
+              Enrich
+            </TabsTrigger>
+            <TabsTrigger value="ingest" className="text-xs gap-1">
               <Download className="h-3.5 w-3.5" />
               Ingest
             </TabsTrigger>
-            <TabsTrigger value="library" className="text-xs gap-1.5">
+            <TabsTrigger value="library" className="text-xs gap-1">
               <FileText className="h-3.5 w-3.5" />
               Library
             </TabsTrigger>
@@ -85,6 +92,11 @@ export default function PrepHub() {
           <TabsContent value="learn" className="mt-3 space-y-4">
             <SalesBrainDashboard />
             <PlaybooksPanel />
+          </TabsContent>
+
+          {/* ═══ ENRICH ═══ */}
+          <TabsContent value="enrich" className="mt-3 space-y-4">
+            <EnrichmentEngine />
           </TabsContent>
 
           {/* ═══ INGEST ═══ */}
