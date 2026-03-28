@@ -427,10 +427,9 @@ function getMethodChain(source: SourceClassification): Array<(url: string, apiKe
     case 'pdf':
       return [firecrawlScrape, firecrawlFullPage];
     case 'podcast':
-      return [
-        (u, k) => firecrawlScrape(u, k, { waitFor: 5000 }),
-        firecrawlFullPage,
-      ];
+      return [podcastResolveAndTranscribe];
+    case 'direct_audio':
+      return [directAudioTranscribe];
     case 'social':
       return [firecrawlScrape, firecrawlFullPage];
     case 'auth_gated':
