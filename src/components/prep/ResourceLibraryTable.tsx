@@ -587,7 +587,7 @@ export function ResourceLibraryTable({
                                 <Info className="h-3.5 w-3.5 mr-2" /> Audio Inspector
                               </DropdownMenuItem>
                             )}
-                            {/* Context-aware actions based on processing state */}
+                            {/* State-driven actions — one per state, no duplicates */}
                             {(() => {
                               const ps = deriveProcessingState(resource, audioJob);
                               const items: React.ReactNode[] = [];
@@ -607,34 +607,16 @@ export function ResourceLibraryTable({
                                 );
                               }
                               if (ps.state === 'RETRYABLE_FAILURE') {
-                                if (isAudio && audioJob?.retryable) {
-                                  items.push(
-                                    <DropdownMenuItem key="retry-resolve" onClick={() => onAction('retry_resolve', resource)}>
-                                      <RefreshCw className="h-3.5 w-3.5 mr-2" /> Retry Resolve
-                                    </DropdownMenuItem>,
-                                    <DropdownMenuItem key="retry-transcription" onClick={() => onAction('retry_transcription', resource)}>
-                                      <RefreshCw className="h-3.5 w-3.5 mr-2" /> Retry Transcription
-                                    </DropdownMenuItem>
-                                  );
-                                } else if (resource.file_url?.startsWith('http')) {
-                                  items.push(
-                                    <DropdownMenuItem key="retry" onClick={() => onAction('deep_enrich', resource)}>
-                                      <RefreshCw className="h-3.5 w-3.5 mr-2" /> Retry Enrichment
-                                    </DropdownMenuItem>
-                                  );
-                                }
-                              }
-                              if (ps.state === 'MANUAL_REQUIRED' || ps.state === 'METADATA_ONLY' || ps.state === 'RETRYABLE_FAILURE') {
                                 items.push(
-                                  <DropdownMenuItem key="manual" onClick={() => onAction('manual_assist', resource)}>
-                                    <HelpCircle className="h-3.5 w-3.5 mr-2" /> Manual Assist
+                                  <DropdownMenuItem key="retry" onClick={() => onAction('deep_enrich', resource)}>
+                                    <RefreshCw className="h-3.5 w-3.5 mr-2" /> Retry
                                   </DropdownMenuItem>
                                 );
                               }
-                              // Always offer Manual Assist for READY items that are audio/platform
-                              if (ps.state === 'READY' && isAudio) {
+                              // Manual Assist — available for ALL resources, all non-RUNNING states
+                              if (ps.state !== 'RUNNING') {
                                 items.push(
-                                  <DropdownMenuItem key="manual-ready" onClick={() => onAction('manual_assist', resource)}>
+                                  <DropdownMenuItem key="manual" onClick={() => onAction('manual_assist', resource)}>
                                     <HelpCircle className="h-3.5 w-3.5 mr-2" /> Manual Assist
                                   </DropdownMenuItem>
                                 );
