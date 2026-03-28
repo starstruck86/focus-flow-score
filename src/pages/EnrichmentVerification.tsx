@@ -3,7 +3,7 @@
  * Two modes: Verification (audit) and Remediation (fix).
  */
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useAllResources } from '@/hooks/useResources';
+import { useAllResources, type Resource } from '@/hooks/useResources';
 import { useAudioJobsMap } from '@/hooks/useAudioJobs';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
