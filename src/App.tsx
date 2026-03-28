@@ -31,6 +31,7 @@ import { lazy, Suspense } from "react";
 
 const Diagnostics = lazy(() => import("./pages/Diagnostics"));
 const Cockpit = lazy(() => import("./pages/Cockpit"));
+const EnrichmentVerification = lazy(() => import("./pages/EnrichmentVerification"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -95,6 +96,13 @@ const App = () => (
                     <ProtectedRoute>
                       <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading diagnostics…</p></div>}>
                         <Diagnostics />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/verify-enrichment" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading verification…</p></div>}>
+                        <EnrichmentVerification />
                       </Suspense>
                     </ProtectedRoute>
                   } />
