@@ -172,8 +172,16 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
     }
   }
 
-  async function handleMarkMetadataOnly(resourceId: string) {
-    setProcessing(resourceId);
+  async function handleMarkMetadataOnly(item: RecoveryItem) {
+    // Guard: only allow metadata-only for auth-gated or system-gap resources
+    const allowed = item.recoveryBucket === 'auth_gated' || item.recoveryBucket === 'system_gap'
+      || item.resource.enrichability === 'needs_auth'
+      || item.resource.resolutionType === 'system_gap';
+    if (!allowed) {
+      toast.error('Metadata-only is only allowed for auth-gated or system gap resources. Retry or paste content instead.');
+      return;
+    }
+    setProcessing(item.resource.id);
     try {
       await supabase.from('resources').update({
         enrichment_status: 'deep_enriched',
@@ -181,7 +189,10 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
         last_quality_tier: 'metadata_only',
         last_status_change_at: new Date().toISOString(),
         enriched_at: new Date().toISOString(),
-      } as any).eq('id', resourceId);
+        recovery_status: 'resolved_metadata_only',
+        recovery_reason: 'Intentionally accepted as metadata-only',
+        extraction_method: 'metadata_only',
+      } as any).eq('id', item.resource.id);
       toast.success('Marked as metadata-only');
       onItemResolved();
     } catch (e: any) {
