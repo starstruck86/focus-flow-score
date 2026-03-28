@@ -195,7 +195,9 @@ export function getRecoveryAction(reason: SkipReason): RecoveryAction {
 
 /** Whether a skip reason represents a recoverable state (not a true terminal skip) */
 export function isRecoverableSkip(reason: SkipReason): boolean {
-  return reason !== 'operator_locked' && reason !== 'quarantined_not_selected';
+  // operator_locked is the only true terminal skip
+  // quarantined_not_selected IS recoverable — user can select the bucket next run
+  return reason !== 'operator_locked';
 }
 
 export function getSkipReason(v: VerifiedResource, selectedBuckets: string[]): SkipReason | null {

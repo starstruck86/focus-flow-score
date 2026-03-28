@@ -1399,6 +1399,13 @@ async function orchestrateEnrichment(
   if (source.auth_required) {
     await setEnrichmentStatus(supabase, resourceId, 'needs_auth', {
       failure_reason: `Auth-gated source (${source.platform}) — requires login to access content`,
+      // Persist recovery state
+      recovery_status: 'auth_gated_manual_action_required',
+      recovery_reason: `Auth-gated: ${source.platform}`,
+      next_best_action: 'paste_content',
+      manual_input_required: true,
+      recovery_queue_bucket: 'needs_input',
+      access_type: 'auth_gated',
     });
 
     return {
@@ -1505,6 +1512,12 @@ async function orchestrateEnrichment(
           failure_reason: 'Binary/audio data detected — needs transcript extraction',
           last_quality_score: 0,
           last_quality_tier: 'failed',
+          recovery_status: 'pending_transcription',
+          recovery_reason: 'Binary/audio content — transcript needed',
+          next_best_action: 'start_transcription',
+          manual_input_required: false,
+          recovery_queue_bucket: 'auto_fixable',
+          content_classification: 'audio',
         });
         return {
           resource_id: resourceId, url, source_classification: source,
@@ -1542,6 +1555,31 @@ async function orchestrateEnrichment(
 
   // 3. Evaluate best result
   if (bestContent && bestQuality && bestQuality.passes) {
+    // ── ZERO-TEXT GUARDRAIL ──
+    // Never mark deep_enriched if usable text is effectively zero
+    const usableLength = bestContent.replace(/\s+/g, ' ').trim().length;
+    if (usableLength < 50) {
+      console.log(`[Orchestrate] GUARDRAIL: id=${resourceId} usable text only ${usableLength} chars — refusing to mark complete`);
+      await setEnrichmentStatus(supabase, resourceId, 'incomplete', {
+        failure_reason: `Extracted text too short (${usableLength} chars) — does not meet minimum threshold`,
+        last_quality_score: bestQuality.score,
+        last_quality_tier: 'failed',
+        recovery_status: 'awaiting_user_content',
+        recovery_reason: 'Extraction produced insufficient text',
+        next_best_action: 'paste_content',
+        manual_input_required: true,
+        recovery_queue_bucket: 'needs_input',
+      });
+      return {
+        resource_id: resourceId, url, source_classification: source,
+        final_status: 'failed', method_used: bestMethod, methods_attempted: attempts,
+        attempt_count: attempts.length, extracted_text_length: usableLength,
+        completeness_score: bestQuality.score, confidence_score: 0,
+        missing_fields: ['body_content'], failure_reason: `Usable text too short: ${usableLength} chars`,
+        recovery_hint: 'Paste content manually — automatic extraction did not produce enough text',
+      };
+    }
+
     // FULL SUCCESS
     await supabase.from("resources").update({ content: bestContent }).eq("id", resourceId);
     await setEnrichmentStatus(supabase, resourceId, "deep_enriched", {
@@ -1552,6 +1590,15 @@ async function orchestrateEnrichment(
       failure_reason: null,
       last_quality_score: bestQuality.score,
       last_quality_tier: bestQuality.tier,
+      // Clear recovery state on success
+      recovery_status: 'resolved_complete',
+      recovery_reason: null,
+      next_best_action: null,
+      manual_input_required: false,
+      recovery_queue_bucket: null,
+      last_recovery_error: null,
+      extraction_method: bestMethod,
+      access_type: source.auth_required ? 'auth_gated' : 'public',
     });
     await supabase.from("resource_digests").delete().eq("resource_id", resourceId);
 
@@ -1614,12 +1661,21 @@ async function orchestrateEnrichment(
 
   // On re-enrich failure, preserve the existing enriched state
   const newStatus = isReenrich ? resource.enrichment_status : 'failed';
+  const isRetryable = timeoutCount > 0 || attempts.some(a => a.http_status && a.http_status >= 500);
   await setEnrichmentStatus(supabase, resourceId, newStatus, {
     failure_reason: primaryReason,
     last_quality_score: bestQuality?.score || 0,
     last_quality_tier: bestQuality?.tier || 'failed',
     validation_version: VALIDATION_VERSION,
     failure_count: (resource.failure_count || 0) + 1,
+    // Persist recovery state
+    recovery_status: isRetryable ? 'failed_retryable' : 'awaiting_user_content',
+    recovery_reason: primaryReason,
+    next_best_action: isRetryable ? 'queue_for_retry' : 'paste_content',
+    manual_input_required: !isRetryable,
+    recovery_queue_bucket: isRetryable ? 'retryable' : 'needs_input',
+    last_recovery_error: primaryReason,
+    access_type: attempts.some(a => a.http_status === 403 || a.http_status === 401) ? 'auth_gated' : 'public',
   });
 
   console.log(`[Orchestrate] FAILED id=${resourceId} reason=${primaryReason} attempts=${attempts.length}`);

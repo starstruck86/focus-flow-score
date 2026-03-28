@@ -44,7 +44,7 @@ function classifyRecoveryItem(v: VerifiedResource): RecoveryItem | null {
   if (v.fixabilityBucket === 'needs_transcript') {
     recoveryBucket = 'needs_transcript';
     recoveryReason = 'Audio/video content — transcript not yet extracted';
-    nextBestAction = 'Paste transcript or retry transcription';
+    nextBestAction = 'Auto-transcribe or paste transcript';
   } else if (v.fixabilityBucket === 'needs_access_auth') {
     recoveryBucket = 'auth_gated';
     recoveryReason = 'Content behind authentication wall';
@@ -114,20 +114,28 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
     return c;
   }, [resources]);
 
-  async function handleRetry(resourceId: string) {
+  async function handleRetry(resourceId: string, isTranscript = false) {
     setProcessing(resourceId);
     try {
       await supabase.from('resources').update({
         enrichment_status: 'not_enriched',
         failure_reason: null,
         failure_count: 0,
+        recovery_status: isTranscript ? 'pending_transcription' : 'pending_retry',
+        recovery_attempt_count: 0,
         last_status_change_at: new Date().toISOString(),
       } as any).eq('id', resourceId);
-      await invokeEnrichResource({ resource_id: resourceId, force: true }, { componentName: 'RecoveryQueue', timeoutMs: 60000 });
-      toast.success('Retry initiated');
+      await invokeEnrichResource({ resource_id: resourceId, force: true }, { componentName: 'RecoveryQueue', timeoutMs: 90000 });
+      toast.success(isTranscript ? 'Transcription retry initiated' : 'Retry initiated');
       onItemResolved();
     } catch (e: any) {
       toast.error(`Retry failed: ${e.message}`);
+      // Persist failure in recovery state
+      await supabase.from('resources').update({
+        recovery_status: 'retry_failed',
+        last_recovery_error: e.message,
+        recovery_attempt_count: 1,
+      } as any).eq('id', resourceId);
     } finally {
       setProcessing(null);
     }
@@ -135,15 +143,21 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
 
   async function handlePasteContent(resourceId: string) {
     if (!pasteContent.trim()) { toast.error('Content is empty'); return; }
+    const trimmed = pasteContent.trim();
+    if (trimmed.length < 50) { toast.error('Content too short — minimum 50 characters'); return; }
     setProcessing(resourceId);
     try {
       await supabase.from('resources').update({
-        content: pasteContent.trim(),
+        content: trimmed,
         content_status: 'full',
         enrichment_status: 'not_enriched',
         failure_reason: null,
         failure_count: 0,
-        content_length: pasteContent.trim().length,
+        content_length: trimmed.length,
+        manual_content_present: true,
+        manual_input_required: false,
+        recovery_status: 'pending_reprocess',
+        extraction_method: 'manual_paste',
         last_status_change_at: new Date().toISOString(),
       } as any).eq('id', resourceId);
       await invokeEnrichResource({ resource_id: resourceId, force: true }, { componentName: 'RecoveryQueue', timeoutMs: 60000 });
@@ -158,8 +172,16 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
     }
   }
 
-  async function handleMarkMetadataOnly(resourceId: string) {
-    setProcessing(resourceId);
+  async function handleMarkMetadataOnly(item: RecoveryItem) {
+    // Guard: only allow metadata-only for auth-gated or system-gap resources
+    const allowed = item.recoveryBucket === 'auth_gated' || item.recoveryBucket === 'system_gap'
+      || item.resource.enrichability === 'needs_auth'
+      || item.resource.resolutionType === 'system_gap';
+    if (!allowed) {
+      toast.error('Metadata-only is only allowed for auth-gated or system gap resources. Retry or paste content instead.');
+      return;
+    }
+    setProcessing(item.resource.id);
     try {
       await supabase.from('resources').update({
         enrichment_status: 'deep_enriched',
@@ -167,7 +189,10 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
         last_quality_tier: 'metadata_only',
         last_status_change_at: new Date().toISOString(),
         enriched_at: new Date().toISOString(),
-      } as any).eq('id', resourceId);
+        recovery_status: 'resolved_metadata_only',
+        recovery_reason: 'Intentionally accepted as metadata-only',
+        extraction_method: 'metadata_only',
+      } as any).eq('id', item.resource.id);
       toast.success('Marked as metadata-only');
       onItemResolved();
     } catch (e: any) {
@@ -260,7 +285,8 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
                         variant="ghost"
                         size="sm"
                         className="h-5 w-5 p-0"
-                        onClick={() => handleRetry(item.resource.id)}
+                        title={item.recoveryBucket === 'needs_transcript' ? 'Retry transcription' : 'Retry enrichment'}
+                        onClick={() => handleRetry(item.resource.id, item.recoveryBucket === 'needs_transcript')}
                         disabled={isProcessing}
                       >
                         <RotateCcw className={cn('h-3 w-3', isProcessing && 'animate-spin')} />
@@ -307,8 +333,8 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
                             variant="outline"
                             size="sm"
                             className="h-6 text-[10px]"
-                            onClick={() => handleMarkMetadataOnly(item.resource.id)}
-                            disabled={isProcessing}
+                            onClick={() => handleMarkMetadataOnly(item)}
+                            disabled={isProcessing || !(item.recoveryBucket === 'auth_gated' || item.recoveryBucket === 'system_gap')}
                           >
                             <Eye className="h-3 w-3 mr-1" />
                             Metadata Only

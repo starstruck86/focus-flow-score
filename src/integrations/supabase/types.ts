@@ -2682,10 +2682,12 @@ export type Database = {
       }
       resources: {
         Row: {
+          access_type: string | null
           account_id: string | null
           author_or_speaker: string | null
           brain_status: string
           content: string | null
+          content_classification: string | null
           content_length: number | null
           content_status: string
           created_at: string
@@ -2700,6 +2702,7 @@ export type Database = {
           enrichment_status: string
           enrichment_version: number
           external_id: string | null
+          extraction_method: string | null
           failure_count: number
           failure_reason: string | null
           file_url: string | null
@@ -2711,8 +2714,16 @@ export type Database = {
           last_quality_score: number | null
           last_quality_tier: string | null
           last_reconciled_at: string | null
+          last_recovery_error: string | null
           last_status_change_at: string | null
+          manual_content_present: boolean | null
+          manual_input_required: boolean | null
+          next_best_action: string | null
           opportunity_id: string | null
+          recovery_attempt_count: number | null
+          recovery_queue_bucket: string | null
+          recovery_reason: string | null
+          recovery_status: string | null
           resource_type: string
           screenshot_structure: string | null
           source_created_at: string | null
@@ -2727,10 +2738,12 @@ export type Database = {
           validation_version: number
         }
         Insert: {
+          access_type?: string | null
           account_id?: string | null
           author_or_speaker?: string | null
           brain_status?: string
           content?: string | null
+          content_classification?: string | null
           content_length?: number | null
           content_status?: string
           created_at?: string
@@ -2745,6 +2758,7 @@ export type Database = {
           enrichment_status?: string
           enrichment_version?: number
           external_id?: string | null
+          extraction_method?: string | null
           failure_count?: number
           failure_reason?: string | null
           file_url?: string | null
@@ -2756,8 +2770,16 @@ export type Database = {
           last_quality_score?: number | null
           last_quality_tier?: string | null
           last_reconciled_at?: string | null
+          last_recovery_error?: string | null
           last_status_change_at?: string | null
+          manual_content_present?: boolean | null
+          manual_input_required?: boolean | null
+          next_best_action?: string | null
           opportunity_id?: string | null
+          recovery_attempt_count?: number | null
+          recovery_queue_bucket?: string | null
+          recovery_reason?: string | null
+          recovery_status?: string | null
           resource_type?: string
           screenshot_structure?: string | null
           source_created_at?: string | null
@@ -2772,10 +2794,12 @@ export type Database = {
           validation_version?: number
         }
         Update: {
+          access_type?: string | null
           account_id?: string | null
           author_or_speaker?: string | null
           brain_status?: string
           content?: string | null
+          content_classification?: string | null
           content_length?: number | null
           content_status?: string
           created_at?: string
@@ -2790,6 +2814,7 @@ export type Database = {
           enrichment_status?: string
           enrichment_version?: number
           external_id?: string | null
+          extraction_method?: string | null
           failure_count?: number
           failure_reason?: string | null
           file_url?: string | null
@@ -2801,8 +2826,16 @@ export type Database = {
           last_quality_score?: number | null
           last_quality_tier?: string | null
           last_reconciled_at?: string | null
+          last_recovery_error?: string | null
           last_status_change_at?: string | null
+          manual_content_present?: boolean | null
+          manual_input_required?: boolean | null
+          next_best_action?: string | null
           opportunity_id?: string | null
+          recovery_attempt_count?: number | null
+          recovery_queue_bucket?: string | null
+          recovery_reason?: string | null
+          recovery_status?: string | null
           resource_type?: string
           screenshot_structure?: string | null
           source_created_at?: string | null
