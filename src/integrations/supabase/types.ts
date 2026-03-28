@@ -3431,6 +3431,63 @@ export type Database = {
           },
         ]
       }
+      verification_runs: {
+        Row: {
+          by_failure_bucket: Json
+          by_fixability: Json
+          by_processing_state: Json
+          by_score_band: Json
+          by_subtype: Json
+          created_at: string
+          fix_recommendations: Json
+          id: string
+          repeated_patterns: Json
+          run_at: string
+          summary_snapshot: Json
+          total_broken: number
+          total_contradictions: number
+          total_in_scope: number
+          total_resources: number
+          user_id: string
+        }
+        Insert: {
+          by_failure_bucket?: Json
+          by_fixability?: Json
+          by_processing_state?: Json
+          by_score_band?: Json
+          by_subtype?: Json
+          created_at?: string
+          fix_recommendations?: Json
+          id?: string
+          repeated_patterns?: Json
+          run_at?: string
+          summary_snapshot?: Json
+          total_broken?: number
+          total_contradictions?: number
+          total_in_scope?: number
+          total_resources?: number
+          user_id: string
+        }
+        Update: {
+          by_failure_bucket?: Json
+          by_fixability?: Json
+          by_processing_state?: Json
+          by_score_band?: Json
+          by_subtype?: Json
+          created_at?: string
+          fix_recommendations?: Json
+          id?: string
+          repeated_patterns?: Json
+          run_at?: string
+          summary_snapshot?: Json
+          total_broken?: number
+          total_contradictions?: number
+          total_in_scope?: number
+          total_resources?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       voice_reminders: {
         Row: {
           created_at: string | null
