@@ -1512,6 +1512,12 @@ async function orchestrateEnrichment(
           failure_reason: 'Binary/audio data detected — needs transcript extraction',
           last_quality_score: 0,
           last_quality_tier: 'failed',
+          recovery_status: 'pending_transcription',
+          recovery_reason: 'Binary/audio content — transcript needed',
+          next_best_action: 'start_transcription',
+          manual_input_required: false,
+          recovery_queue_bucket: 'auto_fixable',
+          content_classification: 'audio',
         });
         return {
           resource_id: resourceId, url, source_classification: source,
