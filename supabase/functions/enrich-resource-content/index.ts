@@ -1702,6 +1702,19 @@ async function orchestrateEnrichment(
   // On re-enrich failure, preserve the existing enriched state
   const newStatus = isReenrich ? resource.enrichment_status : 'failed';
   const isRetryable = timeoutCount > 0 || attempts.some(a => a.http_status && a.http_status >= 500);
+  const isAudioSource = source.source_type === 'direct_audio' || source.source_type === 'podcast';
+
+  // Audio/podcast sources that failed transcription should stay in transcription queue, not generic failure
+  const recoveryStatus = isAudioSource ? 'pending_transcription'
+    : isRetryable ? 'failed_retryable'
+    : 'awaiting_user_content';
+  const recoveryAction = isAudioSource ? 'start_transcription'
+    : isRetryable ? 'queue_for_retry'
+    : 'paste_content';
+  const recoveryBucket = isAudioSource ? 'auto_fixable'
+    : isRetryable ? 'retryable'
+    : 'needs_input';
+
   await setEnrichmentStatus(supabase, resourceId, newStatus, {
     failure_reason: primaryReason,
     last_quality_score: bestQuality?.score || 0,
@@ -1709,13 +1722,14 @@ async function orchestrateEnrichment(
     validation_version: VALIDATION_VERSION,
     failure_count: (resource.failure_count || 0) + 1,
     // Persist recovery state
-    recovery_status: isRetryable ? 'failed_retryable' : 'awaiting_user_content',
-    recovery_reason: primaryReason,
-    next_best_action: isRetryable ? 'queue_for_retry' : 'paste_content',
-    manual_input_required: !isRetryable,
-    recovery_queue_bucket: isRetryable ? 'retryable' : 'needs_input',
+    recovery_status: recoveryStatus,
+    recovery_reason: isAudioSource ? `Audio transcription failed: ${primaryReason}` : primaryReason,
+    next_best_action: recoveryAction,
+    manual_input_required: !isAudioSource && !isRetryable,
+    recovery_queue_bucket: recoveryBucket,
     last_recovery_error: primaryReason,
     access_type: attempts.some(a => a.http_status === 403 || a.http_status === 401) ? 'auth_gated' : 'public',
+    content_classification: isAudioSource ? 'audio' : null,
   });
 
   console.log(`[Orchestrate] FAILED id=${resourceId} reason=${primaryReason} attempts=${attempts.length}`);
