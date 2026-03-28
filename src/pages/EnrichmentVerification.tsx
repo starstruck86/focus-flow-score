@@ -778,21 +778,41 @@ const FIX_STATUS_LABELS: Record<FixItemStatus, string> = { pending: 'Pending', p
 const FIX_STATUS_COLORS: Record<FixItemStatus, string> = { pending: 'text-muted-foreground', processing: 'text-primary', enriching: 'text-primary', re_scoring: 'text-primary', resolved_complete: 'text-status-green', resolved_metadata_only: 'text-muted-foreground', resolved_quarantined: 'text-status-red', awaiting_manual: 'text-status-yellow', failed_retry_exhausted: 'text-status-red', skipped: 'text-muted-foreground' };
 
 function FixRunPanel({ state }: { state: FixRunState }) {
+  const [showAll, setShowAll] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<string>('all');
   const progress = state.totalItems > 0 ? Math.round((state.processedCount / state.totalItems) * 100) : 0;
   const isRunning = state.status === 'running';
+  const isComplete = state.status === 'completed';
+
+  const resolvedItems = state.items.filter(i => i.isResolved);
+  const unresolvedItems = state.items.filter(i => !i.isResolved && i.status !== 'pending' && i.status !== 'skipped');
+  const scoreImproved = state.items.filter(i => i.currentScore !== null && i.currentScore > i.previousScore);
+  const stateChanged = state.items.filter(i => i.currentState !== null && i.currentState !== i.previousState);
+  
+  const filteredItems = filterStatus === 'all' ? state.items :
+    filterStatus === 'resolved' ? state.items.filter(i => i.isResolved) :
+    filterStatus === 'unresolved' ? unresolvedItems :
+    filterStatus === 'improved' ? scoreImproved :
+    state.items.filter(i => i.status === filterStatus);
+
   return (
     <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {isRunning ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <Zap className="h-4 w-4 text-primary" />}
-          <h3 className="font-semibold text-sm">Fix Broken Resources</h3>
+          <h3 className="font-semibold text-sm">Fix Broken Resources — {isComplete ? 'Results' : 'Running'}</h3>
           <Badge variant="outline">{state.status}</Badge>
         </div>
         <span className="text-sm font-mono text-muted-foreground">{state.processedCount}/{state.totalItems}</span>
       </div>
+
+      {/* Progress bar */}
       <div className="h-2 rounded-full bg-muted overflow-hidden">
         <div className="h-full bg-primary transition-all duration-300" style={{ width: `${progress}%` }} />
       </div>
+
+      {/* Summary stats */}
       <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-center">
         {[
           { v: state.resolvedCount, l: 'Resolved', c: 'text-status-green' },
@@ -808,23 +828,152 @@ function FixRunPanel({ state }: { state: FixRunState }) {
           </div>
         ))}
       </div>
-      <ScrollArea className="max-h-[300px] rounded-lg border border-border">
-        <div className="divide-y divide-border">
-          {state.items.map(item => (
-            <div key={item.id} className={`flex items-center gap-3 px-3 py-2 text-sm ${item.id === state.currentItemId ? 'bg-primary/10' : ''}`}>
-              <div className="min-w-0 flex-1">
-                <div className="font-medium truncate">{item.title}</div>
-                <div className="text-xs text-muted-foreground truncate">
-                  {item.subtypeLabel} · {QUEUE_LABELS[item.queue]}
-                  {item.terminalReason && <span className="ml-1">— {item.terminalReason}</span>}
+
+      {/* Proof summary — only when complete */}
+      {isComplete && (
+        <div className="rounded-lg border border-border bg-card p-3 space-y-2">
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Proof of Impact</h4>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+            <div>
+              <span className="text-muted-foreground">Truly Resolved:</span>
+              <span className={`ml-1 font-bold ${resolvedItems.length > 0 ? 'text-status-green' : 'text-muted-foreground'}`}>{resolvedItems.length}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Still Broken:</span>
+              <span className={`ml-1 font-bold ${unresolvedItems.length > 0 ? 'text-status-red' : 'text-status-green'}`}>{unresolvedItems.length}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Score Improved:</span>
+              <span className="ml-1 font-bold text-primary">{scoreImproved.length}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">State Changed:</span>
+              <span className="ml-1 font-bold text-primary">{stateChanged.length}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Filter tabs */}
+      {isComplete && (
+        <div className="flex items-center gap-1 flex-wrap">
+          {[
+            { key: 'all', label: `All (${state.items.length})` },
+            { key: 'resolved', label: `Resolved (${resolvedItems.length})` },
+            { key: 'unresolved', label: `Unresolved (${unresolvedItems.length})` },
+            { key: 'improved', label: `Score ↑ (${scoreImproved.length})` },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setFilterStatus(tab.key)}
+              className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                filterStatus === tab.key
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-card text-muted-foreground border-border hover:bg-muted'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Results table */}
+      <ScrollArea className="max-h-[400px] rounded-lg border border-border">
+        <div className="min-w-[600px]">
+          {/* Header */}
+          <div className="grid grid-cols-[1fr_70px_70px_90px_90px_100px_80px] gap-1 px-3 py-2 border-b border-border bg-muted/30 text-[10px] font-medium text-muted-foreground sticky top-0 z-10">
+            <span>Resource</span>
+            <span className="text-center">Score Before</span>
+            <span className="text-center">Score After</span>
+            <span>Old State</span>
+            <span>New State</span>
+            <span>Old Failure</span>
+            <span className="text-right">Resolved?</span>
+          </div>
+          {/* Rows */}
+          {filteredItems.map(item => {
+            const scoreDelta = item.currentScore !== null ? item.currentScore - item.previousScore : null;
+            const stateDidChange = item.currentState !== null && item.currentState !== item.previousState;
+            const failureBucketChanged = item.currentFailureBucket !== item.previousFailureBucket;
+            
+            return (
+              <div
+                key={item.id}
+                className={`grid grid-cols-[1fr_70px_70px_90px_90px_100px_80px] gap-1 px-3 py-2 border-b border-border items-center text-sm ${
+                  item.id === state.currentItemId ? 'bg-primary/10' : ''
+                }`}
+              >
+                {/* Title + action */}
+                <div className="min-w-0">
+                  <div className="font-medium truncate text-xs">{item.title}</div>
+                  <div className="text-[10px] text-muted-foreground truncate">
+                    {item.actionTaken || item.subtypeLabel}
+                    {item.terminalReason && <span className="ml-1 italic">— {item.terminalReason}</span>}
+                  </div>
+                </div>
+
+                {/* Score Before */}
+                <div className={`text-center font-mono text-xs ${item.previousScore >= 70 ? 'text-status-green' : item.previousScore >= 40 ? 'text-status-yellow' : 'text-status-red'}`}>
+                  {item.previousScore}
+                </div>
+
+                {/* Score After */}
+                <div className="text-center font-mono text-xs">
+                  {item.currentScore !== null ? (
+                    <span className={item.currentScore >= 70 ? 'text-status-green' : item.currentScore >= 40 ? 'text-status-yellow' : 'text-status-red'}>
+                      {item.currentScore}
+                      {scoreDelta !== null && scoreDelta !== 0 && (
+                        <span className={`ml-0.5 text-[10px] ${scoreDelta > 0 ? 'text-status-green' : 'text-status-red'}`}>
+                          {scoreDelta > 0 ? `+${scoreDelta}` : scoreDelta}
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </div>
+
+                {/* Old State */}
+                <div className="text-[10px] truncate">
+                  <Badge variant="outline" className="text-[9px] px-1">{item.previousState}</Badge>
+                </div>
+
+                {/* New State */}
+                <div className="text-[10px] truncate">
+                  {item.currentState ? (
+                    <Badge
+                      variant="outline"
+                      className={`text-[9px] px-1 ${stateDidChange ? 'border-primary text-primary' : ''}`}
+                    >
+                      {item.currentState}
+                      {stateDidChange && <span className="ml-0.5">⚡</span>}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </div>
+
+                {/* Old Failure Bucket */}
+                <div className="text-[10px] text-muted-foreground truncate" title={item.previousFailureBucket || 'none'}>
+                  {item.previousFailureBucket ? item.previousFailureBucket.slice(0, 20) : '—'}
+                </div>
+
+                {/* Resolved? */}
+                <div className="text-right">
+                  {item.isResolved ? (
+                    <span className="inline-flex items-center gap-0.5 text-status-green text-xs font-medium">
+                      <CheckCircle2 className="h-3 w-3" /> Yes
+                    </span>
+                  ) : item.status === 'pending' || item.status === 'processing' || item.status === 'enriching' || item.status === 're_scoring' ? (
+                    <Loader2 className="h-3 w-3 animate-spin text-primary inline" />
+                  ) : (
+                    <span className="text-status-red text-xs font-medium">No</span>
+                  )}
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {item.currentScore !== null && <span className="text-xs font-mono">{item.previousScore}→{item.currentScore}</span>}
-                <span className={`text-xs font-medium ${FIX_STATUS_COLORS[item.status]}`}>{FIX_STATUS_LABELS[item.status]}</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </ScrollArea>
     </div>
