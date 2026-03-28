@@ -34,6 +34,7 @@ import {
 import {
   deriveProcessingState, getProcessingStateColor,
 } from '@/lib/processingState';
+import { routeFailure, getFailureBucketActions } from '@/lib/failureRouting';
 import type { AudioFailureCode, AudioPipelineStage } from '@/lib/salesBrain/audioPipeline';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import type { Resource } from '@/hooks/useResources';
