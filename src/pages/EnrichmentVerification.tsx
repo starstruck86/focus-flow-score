@@ -1029,30 +1029,56 @@ function RemediationResultsPanel({ state, filter, onFilterChange }: {
   );
 }
 
-// ── Resource Table ────────────────────────────────────────
+// ── Bucket action labels ──────────────────────────────────
+const BUCKET_ACTION_LABELS: Record<string, { label: string; icon: React.ReactNode }> = {
+  needs_transcript: { label: 'Paste Transcript', icon: <FileText className="h-3 w-3" /> },
+  needs_pasted_content: { label: 'Paste Content', icon: <FileText className="h-3 w-3" /> },
+  needs_access_auth: { label: 'Provide Access', icon: <Lock className="h-3 w-3" /> },
+  needs_alternate_source: { label: 'Provide Better URL', icon: <ExternalLink className="h-3 w-3" /> },
+  accept_metadata_only: { label: 'Accept or Improve', icon: <CheckCircle2 className="h-3 w-3" /> },
+  auto_fix_now: { label: 'Auto Fix', icon: <Zap className="h-3 w-3" /> },
+  retry_different_strategy: { label: 'Retry', icon: <RotateCcw className="h-3 w-3" /> },
+  bad_scoring_state_bug: { label: 'Reconcile', icon: <Bug className="h-3 w-3" /> },
+  needs_quarantine: { label: 'Quarantined', icon: <Ban className="h-3 w-3" /> },
+};
 
-function ResourceTable({ resources, onSelect }: { resources: VerifiedResource[]; onSelect: (r: VerifiedResource) => void }) {
+function ResourceTable({ resources, onSelect, onFixResource }: {
+  resources: VerifiedResource[];
+  onSelect: (r: VerifiedResource) => void;
+  onFixResource?: (r: VerifiedResource) => void;
+}) {
   if (!resources.length) return <p className="text-sm text-muted-foreground text-center py-8">No resources match filters.</p>;
   return (
     <ScrollArea className="rounded-lg border border-border">
       <div className="min-w-[700px]">
-        <div className="grid grid-cols-[1fr_100px_60px_120px_140px_30px] gap-2 px-4 py-2 border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0">
-          <span>Title</span><span>Status</span><span>Score</span><span>Fixability</span><span>Root Cause</span><span></span>
+        <div className="grid grid-cols-[1fr_100px_60px_120px_100px_30px] gap-2 px-4 py-2 border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0">
+          <span>Title</span><span>Status</span><span>Score</span><span>Fixability</span><span>Next Action</span><span></span>
         </div>
-        {resources.map(v => (
-          <button key={v.id} onClick={() => onSelect(v)}
-            className="grid grid-cols-[1fr_100px_60px_120px_140px_30px] gap-2 px-4 py-2.5 border-b border-border hover:bg-muted/30 w-full text-left items-center">
-            <div className="min-w-0">
-              <div className="text-sm font-medium truncate">{v.title}</div>
-              <div className="text-xs text-muted-foreground truncate">{v.subtypeLabel}</div>
+        {resources.map(v => {
+          const action = BUCKET_ACTION_LABELS[v.fixabilityBucket];
+          return (
+            <div key={v.id} className="grid grid-cols-[1fr_100px_60px_120px_100px_30px] gap-2 px-4 py-2.5 border-b border-border hover:bg-muted/30 items-center">
+              <button onClick={() => onSelect(v)} className="min-w-0 text-left">
+                <div className="text-sm font-medium truncate">{v.title}</div>
+                <div className="text-xs text-muted-foreground truncate">{v.subtypeLabel}</div>
+              </button>
+              <div><Badge variant="outline" className="text-xs whitespace-nowrap">{v.enrichmentStatusLabel}</Badge></div>
+              <div className={`text-sm font-mono font-bold ${v.qualityScore >= 70 ? 'text-status-green' : v.qualityScore >= 40 ? 'text-status-yellow' : 'text-status-red'}`}>{v.qualityScore}</div>
+              <div><span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${FIXABILITY_COLORS[v.fixabilityBucket]}`}>{FIXABILITY_LABELS[v.fixabilityBucket]}</span></div>
+              <div>
+                {v.fixabilityBucket !== 'truly_complete' && action && onFixResource ? (
+                  <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1 px-2"
+                    onClick={(e) => { e.stopPropagation(); onFixResource(v); }}>
+                    {action.icon} {action.label}
+                  </Button>
+                ) : v.fixabilityBucket === 'truly_complete' ? (
+                  <span className="text-xs text-status-green font-medium">✓ Complete</span>
+                ) : null}
+              </div>
+              <div className="flex items-center">{v.contradictions.length > 0 && <AlertTriangle className="h-3.5 w-3.5 text-status-red" />}</div>
             </div>
-            <div><Badge variant="outline" className="text-xs whitespace-nowrap">{v.enrichmentStatusLabel}</Badge></div>
-            <div className={`text-sm font-mono font-bold ${v.qualityScore >= 70 ? 'text-status-green' : v.qualityScore >= 40 ? 'text-status-yellow' : 'text-status-red'}`}>{v.qualityScore}</div>
-            <div><span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${FIXABILITY_COLORS[v.fixabilityBucket]}`}>{FIXABILITY_LABELS[v.fixabilityBucket]}</span></div>
-            <div className="text-xs text-muted-foreground truncate">{v.rootCauseCategory}</div>
-            <div className="flex items-center">{v.contradictions.length > 0 && <AlertTriangle className="h-3.5 w-3.5 text-status-red" />}</div>
-          </button>
-        ))}
+          );
+        })}
       </div>
     </ScrollArea>
   );
