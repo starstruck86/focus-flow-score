@@ -554,6 +554,26 @@ export function EnrichmentEngine() {
         <ManualInputInbox queues={liveInboxQueues} onItemResolved={handleInboxResolved} />
       )}
 
+      {/* Recovery Queue */}
+      {showRecoveryQueue && !isRunning && (
+        <RecoveryQueue resources={displayResources} onItemResolved={handleInboxResolved} />
+      )}
+
+      {/* Recovery Queue toggle button */}
+      {!isRunning && (
+        <div className="flex justify-end">
+          <button
+            className={cn(
+              'text-[10px] px-2 py-1 rounded border transition-colors',
+              showRecoveryQueue ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary',
+            )}
+            onClick={() => setShowRecoveryQueue(!showRecoveryQueue)}
+          >
+            {showRecoveryQueue ? 'Hide' : 'Show'} Recovery Queue
+          </button>
+        </div>
+      )}
+
       {/* Proof of Impact */}
       {result.phase === 'complete' && result.preSnapshot && result.postSnapshot && (
         <ProofOfImpact pre={result.preSnapshot} post={result.postSnapshot} result={result} />
