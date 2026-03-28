@@ -67,6 +67,10 @@ export interface VerifiedResource {
   isMisclassified: boolean;
   isStuckInWrongQueue: boolean;
   scoreStatusContradict: boolean;
+  // Remediation Intelligence
+  resolutionType: 'auto_fix' | 'manual_input' | 'system_gap';
+  rootCause: string;
+  requiredBuild: { type: string; description: string; suggestedImplementation: string } | null;
 }
 
 export interface VerificationSummary {
