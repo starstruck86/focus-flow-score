@@ -297,6 +297,12 @@ export default function EnrichmentVerification() {
                 >
                   <Wrench className="h-3 w-3" /> Remediate
                 </button>
+                <button
+                  onClick={() => setMode('gaps')}
+                  className={`px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors ${mode === 'gaps' ? 'bg-destructive text-destructive-foreground' : 'bg-card text-muted-foreground hover:bg-muted'}`}
+                >
+                  <ShieldAlert className="h-3 w-3" /> System Gaps
+                </button>
               </div>
             )}
 
