@@ -143,15 +143,21 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
 
   async function handlePasteContent(resourceId: string) {
     if (!pasteContent.trim()) { toast.error('Content is empty'); return; }
+    const trimmed = pasteContent.trim();
+    if (trimmed.length < 50) { toast.error('Content too short — minimum 50 characters'); return; }
     setProcessing(resourceId);
     try {
       await supabase.from('resources').update({
-        content: pasteContent.trim(),
+        content: trimmed,
         content_status: 'full',
         enrichment_status: 'not_enriched',
         failure_reason: null,
         failure_count: 0,
-        content_length: pasteContent.trim().length,
+        content_length: trimmed.length,
+        manual_content_present: true,
+        manual_input_required: false,
+        recovery_status: 'pending_reprocess',
+        extraction_method: 'manual_paste',
         last_status_change_at: new Date().toISOString(),
       } as any).eq('id', resourceId);
       await invokeEnrichResource({ resource_id: resourceId, force: true }, { componentName: 'RecoveryQueue', timeoutMs: 60000 });
