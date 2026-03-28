@@ -194,7 +194,39 @@ export default function EnrichmentVerification() {
     return list;
   }, [verified, searchQuery, selectedBucket]);
 
-  const toggleSection = (key: string) =>
+  // Build remediation queues from verified resources
+  const remediationQueues = useMemo(() => {
+    if (!verified.length) return null;
+    return buildRemediationQueues(verified);
+  }, [verified]);
+
+  const handleBulkAction = useCallback(async (queue: RemediationQueue) => {
+    if (!remediationQueues) return;
+    const resources = remediationQueues[queue];
+    if (!resources.length) {
+      toast.info('No resources in this queue');
+      return;
+    }
+    setRunningQueue(queue);
+    setLastBulkResult(null);
+    try {
+      const result = await executeBulkAction(queue, resources);
+      setLastBulkResult(result);
+      if (result.failed === 0) {
+        toast.success(`${QUEUE_LABELS[queue]}: ${result.succeeded} resources updated`);
+      } else {
+        toast.warning(`${QUEUE_LABELS[queue]}: ${result.succeeded} succeeded, ${result.failed} failed`);
+      }
+      // Invalidate resources to refresh data
+      qc.invalidateQueries({ queryKey: ['resources'] });
+      qc.invalidateQueries({ queryKey: ['all-resources'] });
+    } catch (e: any) {
+      toast.error(`Bulk action failed: ${e.message}`);
+    } finally {
+      setRunningQueue(null);
+    }
+  }, [remediationQueues, qc]);
+
     setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
 
   const exportJSON = useCallback(() => {
