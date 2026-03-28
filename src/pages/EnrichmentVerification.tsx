@@ -1147,43 +1147,45 @@ function ResourceDrawer({ resource: v, onClose, onFix }: { resource: VerifiedRes
 
           {/* What Needs To Happen */}
           {v.fixabilityBucket !== 'truly_complete' && (
-            <div className="space-y-2">
-              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">What Needs To Happen</h4>
-              {v.resolutionType === 'auto_fix' && (
-                <div className="rounded-lg border border-status-green/30 bg-status-green/10 p-3">
-                  <div className="text-xs font-semibold text-status-green mb-1">⚡ Automatic Resolution</div>
-                  <div className="text-sm font-medium">This will be fixed automatically. {v.recommendedAction}</div>
-                </div>
-              )}
-              {v.resolutionType === 'manual_input' && (
-                <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
-                  <div className="text-xs font-semibold text-primary mb-1">✋ Manual Input Required</div>
-                  <div className="text-sm font-medium">{v.recommendedAction}</div>
-                </div>
-              )}
-              {v.resolutionType === 'system_gap' && (
-                <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 space-y-2">
-                  <div className="text-xs font-bold text-destructive uppercase tracking-wide">⚠ System Limitation Detected</div>
-                  <div className="text-sm font-medium text-destructive">{v.rootCause}</div>
-                  {v.requiredBuild && (
-                    <div className="mt-2 space-y-1 border-t border-destructive/20 pt-2">
-                      <div className="text-xs font-semibold text-destructive/80">Required Build:</div>
-                      <Field label="Type" value={v.requiredBuild.type} />
-                      <Field label="Description" value={v.requiredBuild.description} />
-                      <div className="text-xs text-muted-foreground mt-1">
-                        <span className="font-semibold">Suggested Fix: </span>
-                        {v.requiredBuild.suggestedImplementation}
+            <>
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">What Needs To Happen</h4>
+                {v.resolutionType === 'auto_fix' && (
+                  <div className="rounded-lg border border-status-green/30 bg-status-green/10 p-3">
+                    <div className="text-xs font-semibold text-status-green mb-1">⚡ Automatic Resolution</div>
+                    <div className="text-sm font-medium">This will be fixed automatically. {v.recommendedAction}</div>
+                  </div>
+                )}
+                {v.resolutionType === 'manual_input' && (
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+                    <div className="text-xs font-semibold text-primary mb-1">✋ Manual Input Required</div>
+                    <div className="text-sm font-medium">{v.recommendedAction}</div>
+                  </div>
+                )}
+                {v.resolutionType === 'system_gap' && (
+                  <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 space-y-2">
+                    <div className="text-xs font-bold text-destructive uppercase tracking-wide">⚠ System Limitation Detected</div>
+                    <div className="text-sm font-medium text-destructive">{v.rootCause}</div>
+                    {v.requiredBuild && (
+                      <div className="mt-2 space-y-1 border-t border-destructive/20 pt-2">
+                        <div className="text-xs font-semibold text-destructive/80">Required Build:</div>
+                        <Field label="Type" value={v.requiredBuild.type} />
+                        <Field label="Description" value={v.requiredBuild.description} />
+                        <div className="text-xs text-muted-foreground mt-1">
+                          <span className="font-semibold">Suggested Fix: </span>
+                          {v.requiredBuild.suggestedImplementation}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              {action && onFix && v.fixabilityBucket !== 'needs_quarantine' && (
+                <Button className="w-full" onClick={() => onFix(v)}>
+                  {action.icon} <span className="ml-2">{action.label}</span>
+                </Button>
               )}
-            </div>
-            {action && onFix && v.fixabilityBucket !== 'needs_quarantine' && (
-              <Button className="w-full mt-3" onClick={() => onFix(v)}>
-                {action.icon} <span className="ml-2">{action.label}</span>
-              </Button>
-            )}
+            </>
           )}
 
           {v.contradictions.length > 0 && (
