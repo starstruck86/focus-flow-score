@@ -2,7 +2,7 @@
  * Resource Detail Drawer — Full inline editor with diagnostics and actions.
  * Parts 3 + 4 of the Enrichment Operator Console.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { useQueryClient } from '@tanstack/react-query';
@@ -16,11 +16,12 @@ import { Separator } from '@/components/ui/separator';
 import {
   X, Save, Zap, RotateCcw, FileText, ExternalLink, Trash2,
   Bookmark, SkipForward, Ban, ShieldOff, Play, Wrench,
-  Loader2, CheckCircle2, AlertTriangle, Copy,
+  Loader2, CheckCircle2, AlertTriangle, Copy, Unlock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { VerifiedResource } from '@/lib/enrichmentVerification';
 import { mapVerifiedToBucket, BUCKET_META } from './types';
+import { classifyQuarantine, getQuarantineSubClass, shouldAutoRelease } from '@/lib/quarantineClassification';
 
 interface Props {
   resource: VerifiedResource;
