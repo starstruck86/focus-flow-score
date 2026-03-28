@@ -1014,6 +1014,147 @@ function Field({ label, value, copyable, onCopy, link }: {
   );
 }
 
+// ── System Gaps View ──────────────────────────────────────
+
+interface GapGroup {
+  key: string;
+  failureType: string;
+  subtype: string;
+  subtypeLabel: string;
+  summary: string;
+  count: number;
+  requiredBuild: { type: string; description: string; suggestedImplementation: string } | null;
+  resourceIds: string[];
+  resources: VerifiedResource[];
+}
+
+function SystemGapsView({ resources, onSelect }: { resources: VerifiedResource[]; onSelect: (v: VerifiedResource) => void }) {
+  const gaps = useMemo(() => {
+    const gapResources = resources.filter(r => r.resolutionType === 'system_gap');
+    const groupMap = new Map<string, GapGroup>();
+
+    for (const r of gapResources) {
+      const failureType = r.requiredBuild?.type || 'unknown';
+      const key = `${failureType}::${r.subtype}`;
+      const existing = groupMap.get(key);
+      if (existing) {
+        existing.count++;
+        existing.resourceIds.push(r.id);
+        existing.resources.push(r);
+      } else {
+        groupMap.set(key, {
+          key,
+          failureType,
+          subtype: r.subtype,
+          subtypeLabel: r.subtypeLabel,
+          summary: r.rootCause || r.rootCauseCategory,
+          count: 1,
+          requiredBuild: r.requiredBuild,
+          resourceIds: [r.id],
+          resources: [r],
+        });
+      }
+    }
+
+    return Array.from(groupMap.values()).sort((a, b) => b.count - a.count);
+  }, [resources]);
+
+  const totalGapResources = gaps.reduce((s, g) => s + g.count, 0);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+
+  if (gaps.length === 0) {
+    return (
+      <div className="rounded-lg border border-status-green/30 bg-status-green/5 p-6 text-center">
+        <CheckCircle2 className="h-8 w-8 text-status-green mx-auto mb-2" />
+        <div className="font-semibold text-status-green">No System Gaps Detected</div>
+        <div className="text-sm text-muted-foreground mt-1">All failures are either auto-fixable or require manual input — no missing platform support.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header banner */}
+      <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4">
+        <div className="flex items-center gap-2 mb-1">
+          <ShieldAlert className="h-5 w-5 text-destructive" />
+          <span className="font-bold text-destructive">System Gaps Detected</span>
+        </div>
+        <div className="text-sm text-muted-foreground">
+          <span className="font-semibold text-foreground">{gaps.length}</span> distinct system gaps affecting{' '}
+          <span className="font-semibold text-foreground">{totalGapResources}</span> resources.
+          These require code changes — they cannot be resolved by retrying or manual input alone.
+        </div>
+      </div>
+
+      {/* Gap cards */}
+      {gaps.map(g => {
+        const isExpanded = expandedKey === g.key;
+        return (
+          <div key={g.key} className="rounded-lg border border-destructive/30 bg-card overflow-hidden">
+            <button
+              onClick={() => setExpandedKey(isExpanded ? null : g.key)}
+              className="w-full px-4 py-3 flex items-start gap-3 text-left hover:bg-muted/30 transition-colors"
+            >
+              <div className="mt-0.5">
+                {isExpanded ? <ChevronDown className="h-4 w-4 text-destructive" /> : <ChevronRight className="h-4 w-4 text-destructive" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-sm">{g.summary}</div>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  <Badge variant="outline" className="text-[10px] border-destructive/30 text-destructive">{g.subtypeLabel}</Badge>
+                  <Badge variant="outline" className="text-[10px]">{g.failureType}</Badge>
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-lg font-bold text-destructive">{g.count}</div>
+                <div className="text-[10px] text-muted-foreground">resources</div>
+              </div>
+            </button>
+
+            {isExpanded && (
+              <div className="border-t border-border px-4 py-3 space-y-3">
+                {g.requiredBuild && (
+                  <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 space-y-2">
+                    <div className="text-xs font-bold text-destructive uppercase tracking-wide">Required Build</div>
+                    <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+                      <span className="text-muted-foreground">Type:</span>
+                      <span className="font-medium">{g.requiredBuild.type}</span>
+                      <span className="text-muted-foreground">Description:</span>
+                      <span className="font-medium">{g.requiredBuild.description}</span>
+                      <span className="text-muted-foreground">Suggested Fix:</span>
+                      <span>{g.requiredBuild.suggestedImplementation}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Affected Resources</div>
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {g.resources.map(r => (
+                    <button
+                      key={r.id}
+                      onClick={() => onSelect(r)}
+                      className="w-full text-left px-2 py-1.5 rounded hover:bg-muted/50 transition-colors flex items-center gap-2 text-sm"
+                    >
+                      <span className="truncate flex-1">{r.title}</span>
+                      <span className="text-xs text-muted-foreground shrink-0">{r.qualityScore}/100</span>
+                      <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" />
+                    </button>
+                  ))}
+                </div>
+
+                <Button size="sm" variant="destructive" className="w-full" onClick={() => toast.info(`System gap "${g.failureType}" flagged for engineering`)}>
+                  <Bug className="h-3 w-3 mr-1" /> Fix this system gap
+                </Button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── E2E Validation Results View ───────────────────────────
 
 const PHASE_LABELS: Record<ValidationPhase, string> = {
