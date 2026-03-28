@@ -441,6 +441,12 @@ export default function EnrichmentVerification() {
                 >
                   <ShieldAlert className="h-3 w-3" /> System Gaps
                 </button>
+                <button
+                  onClick={() => setMode('roadmap')}
+                  className={`px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors ${mode === 'roadmap' ? 'bg-destructive text-destructive-foreground' : 'bg-card text-muted-foreground hover:bg-muted'}`}
+                >
+                  <ArrowRight className="h-3 w-3" /> Roadmap
+                </button>
               </div>
             )}
 
