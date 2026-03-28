@@ -401,6 +401,9 @@ export default function EnrichmentVerification() {
               />
             )}
 
+            {/* Fix Broken Resources Panel */}
+            {fixRunState && <FixRunPanel state={fixRunState} />}
+
             {/* Repeated Patterns */}
             <SectionHeader title="Repeated Failure Patterns" sectionKey="patterns" expanded={expandedSections.patterns} toggle={toggleSection} count={summary.repeatedPatterns.length} />
             {expandedSections.patterns && <PatternsSection patterns={summary.repeatedPatterns} />}
