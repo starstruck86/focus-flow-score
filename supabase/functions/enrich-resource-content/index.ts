@@ -631,6 +631,17 @@ function getMethodChain(source: SourceClassification): Array<(url: string, apiKe
   }
 }
 
+// ── Binary content detection ───────────────────────────────
+function isBinaryContent(text: string): boolean {
+  if (text.length < 50) return false;
+  const sample = text.slice(0, 512);
+  // Check for non-printable control characters (excluding tab, newline, carriage return)
+  const controlCharCount = (sample.match(/[\x00-\x08\x0E-\x1F\x7F]/g) || []).length;
+  const ratio = controlCharCount / sample.length;
+  // If >5% of the sample is control chars, it's binary
+  return ratio > 0.05 || /[\x00-\x08\x0E-\x1F]/.test(sample.slice(0, 200));
+}
+
 // ── Quality validation ─────────────────────────────────────
 interface QualityValidation {
   score: number;
@@ -638,6 +649,7 @@ interface QualityValidation {
   violations: string[];
   passes: boolean;
   missing_fields: string[];
+  is_binary: boolean;
 }
 
 function validateContentQuality(content: string | null): QualityValidation {
@@ -646,6 +658,15 @@ function validateContentQuality(content: string | null): QualityValidation {
   const text = content || '';
   const len = text.length;
   let score = 0;
+
+  // Binary preflight — if binary, score is 0 and route to needs_transcript
+  if (len > 0 && isBinaryContent(text)) {
+    violations.push('binary_content_detected');
+    return {
+      score: 0, tier: 'failed', violations, passes: false,
+      missing_fields: ['transcript'], is_binary: true,
+    };
+  }
 
   // Content depth (0-30)
   if (len === 0) {
@@ -663,7 +684,6 @@ function validateContentQuality(content: string | null): QualityValidation {
   // Structural (0-20)
   if (len > 0) {
     score += 10;
-    // Check for headings/structure
     if (/^#{1,3}\s/m.test(text) || /\n\n/.test(text)) score += 10;
     else score += 3;
   }
@@ -706,7 +726,7 @@ function validateContentQuality(content: string | null): QualityValidation {
   else if (score >= 10) tier = 'incomplete';
   else tier = 'failed';
 
-  return { score, tier, violations, passes: tier === 'complete', missing_fields: missingFields };
+  return { score, tier, violations, passes: tier === 'complete', missing_fields: missingFields, is_binary: false };
 }
 
 // ── Normalized output contract ─────────────────────────────
@@ -858,6 +878,24 @@ async function orchestrateEnrichment(
     if (result.content && result.content.length > 0) {
       const qv = validateContentQuality(result.content);
       result.attempt.validation_result = qv.passes ? 'pass' : (qv.score >= PARTIAL_MIN_SCORE ? 'partial' : 'fail');
+
+      // Binary content detected — do NOT store, route to needs_transcript
+      if (qv.is_binary) {
+        console.log(`[Orchestrate] BINARY CONTENT detected for ${resourceId} — routing to needs_transcript`);
+        await setEnrichmentStatus(supabase, resourceId, 'needs_transcript', {
+          failure_reason: 'Binary/audio data detected — needs transcript extraction',
+          last_quality_score: 0,
+          last_quality_tier: 'failed',
+        });
+        return {
+          resource_id: resourceId, url, source_classification: source,
+          final_status: 'failed', method_used: result.attempt.method, methods_attempted: attempts,
+          attempt_count: attempts.length, extracted_text_length: 0, completeness_score: 0,
+          confidence_score: 0, missing_fields: ['transcript'],
+          failure_reason: 'Binary content detected — not text. Needs transcript extraction.',
+          recovery_hint: 'This resource contains audio/binary data. Route through transcription pipeline or paste transcript manually.',
+        };
+      }
 
       console.log(`[Orchestrate] Method ${result.attempt.method}: ${result.content.length} chars, score=${qv.score}, tier=${qv.tier}`);
 
