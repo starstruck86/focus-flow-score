@@ -625,7 +625,7 @@ export default function EnrichmentVerification() {
         )}
       </div>
 
-      {drawerResource && <ResourceDrawer resource={drawerResource} onClose={() => setDrawerResource(null)} />}
+      {drawerResource && <ResourceDrawer resource={drawerResource} onClose={() => setDrawerResource(null)} onFix={(r) => navigate(`/prep?manualAssist=${r.id}`)} />}
     </div>
   );
 }
