@@ -10,7 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Search, ArrowUpDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { CANONICAL_STATE_LABELS, type CanonicalState } from '@/lib/canonicalResourceState';
+import type { VerifiedResource } from '@/lib/enrichmentVerification';
 import type { VerifiedResource } from '@/lib/enrichmentVerification';
 import type { BucketFilter } from './types';
 import { mapVerifiedToBucket, BUCKET_META } from './types';
