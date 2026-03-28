@@ -210,8 +210,16 @@ export function validateResourceQuality(resource: ResourceForValidation): Qualit
   const score = contentDepth + structuralCompleteness + semanticUsefulness + extractionConfidence + freshnessIntegrity;
 
   // ── Determine tier ───────────────────────────────────────
+  // Filter out minor violations (warnings) vs hard blockers
+  const hardViolations = violations.filter(v =>
+    !v.startsWith('Enrichment version outdated') &&
+    !v.startsWith('Validation version outdated') &&
+    !v.includes('Missing source URL') &&
+    v !== 'binary_content_detected'  // binary is a hard blocker but handled separately
+  );
+
   let tier: QualityTier;
-  if (score >= QUALITY_THRESHOLDS.COMPLETE_MIN_SCORE && violations.length === 0) {
+  if (score >= QUALITY_THRESHOLDS.COMPLETE_MIN_SCORE && hardViolations.length <= QUALITY_THRESHOLDS.MAX_VIOLATIONS_FOR_COMPLETE) {
     tier = 'complete';
   } else if (score >= QUALITY_THRESHOLDS.SHALLOW_MIN_SCORE) {
     tier = 'shallow';
@@ -220,6 +228,9 @@ export function validateResourceQuality(resource: ResourceForValidation): Qualit
   } else {
     tier = 'failed';
   }
+
+  // Binary content can never be complete regardless of score
+  if (isBinaryContent) tier = 'failed';
 
   const passesCompletionContract = tier === 'complete';
 
