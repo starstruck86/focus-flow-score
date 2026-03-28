@@ -992,12 +992,13 @@ interface QualityValidation {
   is_binary: boolean;
 }
 
-function validateContentQuality(content: string | null): QualityValidation {
+function validateContentQuality(content: string | null, sourceType?: SourceType): QualityValidation {
   const violations: string[] = [];
   const missingFields: string[] = [];
   const text = content || '';
   const len = text.length;
   let score = 0;
+  const isSpreadsheet = sourceType === 'google_sheet';
 
   // Binary preflight — if binary, score is 0 and route to needs_transcript
   if (len > 0 && isBinaryContent(text)) {
@@ -1024,8 +1025,15 @@ function validateContentQuality(content: string | null): QualityValidation {
   // Structural (0-20)
   if (len > 0) {
     score += 10;
-    if (/^#{1,3}\s/m.test(text) || /\n\n/.test(text)) score += 10;
-    else score += 3;
+    if (isSpreadsheet) {
+      // Spreadsheets get full structural credit for having table structure
+      if (/\|.*\|/.test(text) || /,/.test(text)) score += 10;
+      else score += 5;
+    } else if (/^#{1,3}\s/m.test(text) || /\n\n/.test(text)) {
+      score += 10;
+    } else {
+      score += 3;
+    }
   }
 
   // Semantic usefulness (0-30)
@@ -1033,6 +1041,17 @@ function validateContentQuality(content: string | null): QualityValidation {
     if (text.startsWith('[External Link:') || text.startsWith('[Placeholder')) {
       violations.push('Content is a placeholder stub');
       missingFields.push('real_content');
+    } else if (isSpreadsheet) {
+      // Spreadsheet-aware scoring: don't penalize tabular content
+      // Count non-empty cells/fields as a proxy for useful data
+      const dataLines = text.split('\n').filter(l => l.trim().length > 0 && !l.startsWith('#') && !l.startsWith('*'));
+      if (dataLines.length >= 3) {
+        score += 25; // Tabular data with 3+ rows of content is useful
+      } else if (dataLines.length > 0) {
+        score += 15;
+      } else {
+        score += 5;
+      }
     } else {
       const lines = text.split('\n').filter(l => l.trim().length > 0);
       const boilerplateLines = lines.filter(line => BOILERPLATE_PATTERNS.some(p => p.test(line)));
