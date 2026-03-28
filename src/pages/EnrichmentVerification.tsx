@@ -520,7 +520,16 @@ export default function EnrichmentVerification() {
             <Button onClick={handleRun} disabled={isLoading} size="lg">
               {isLoading ? 'Loading…' : 'Run Verification'}
             </Button>
+            <div className="text-xs text-muted-foreground">or</div>
+            <Button onClick={handleFixEverything} disabled={isLoading} size="lg" className="bg-primary text-primary-foreground">
+              <Zap className="h-4 w-4 mr-2" /> Fix Everything
+            </Button>
           </div>
+        )}
+
+        {/* Fix Everything progress / summary */}
+        {(isFixing || (fixPhase === 'complete' && fixSummary)) && (
+          <FixEverythingSummary phase={fixPhase as any} summary={fixSummary} />
         )}
 
         {hasRun && summary && mode === 'verify' && (
