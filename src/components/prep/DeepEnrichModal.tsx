@@ -24,6 +24,7 @@ import {
   getProcessingStateColor,
   type ActionState,
 } from '@/lib/processingState';
+import { deriveEnrichSession } from '@/lib/enrichSession';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import { createLogger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
@@ -50,8 +51,9 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
   const queryClient = useQueryClient();
   const store = useEnrichmentJobStore();
   const { state } = store;
-  const isProcessing = state.status === 'running' || state.status === 'paused';
-  const isDone = state.status === 'completed' || state.status === 'failed' || state.status === 'cancelled';
+  const session = useMemo(() => deriveEnrichSession(state), [state]);
+  const isProcessing = session.terminalState === 'running' || session.terminalState === 'paused';
+  const isDone = session.terminalState.startsWith('completed') || session.terminalState === 'cancelled';
   const [mode, setMode] = useState<EnrichMode>('deep_enrich');
   const [showDetails, setShowDetails] = useState(false);
 
@@ -348,7 +350,6 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
             hasFailures={store.hasFailures()}
             sourceItems={sourceItems}
             sourceLabel="resources"
-            totalEligible={eligibleCount}
           />
         )}
 

@@ -182,10 +182,8 @@ describe('deriveEnrichSession', () => {
       totalItems: 2,
     }));
 
-    // The session must still derive correctly — queued item means remaining > 0
-    // but since store says completed, the guard should log error
-    // The terminal state forces to completed anyway (guard is for logging)
-    expect(session.completedCount + session.remainingCount).toBe(session.totalSelected);
+    expect(session.terminalState).toBe('completed_success');
+    expect(session.remainingCount).toBe(0);
   });
 
   // Invariant: all items accounted for

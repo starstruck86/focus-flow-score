@@ -24,7 +24,6 @@ import { deriveEnrichSession, type EnrichSession } from '@/lib/enrichSession';
 import type {
   IngestionState,
   IngestionItem,
-  FailureCategory,
 } from '@/store/useEnrichmentJobStore';
 import type { FailureBucket } from '@/lib/failureRouting';
 
@@ -40,7 +39,6 @@ interface BulkIngestionPanelProps {
   hasFailures: boolean;
   sourceItems: Array<{ resourceId?: string; url: string; title: string; enrichMode?: 'deep_enrich' | 're_enrich'; videoId?: string; channel?: string; publishDate?: string; duration?: string }>;
   sourceLabel?: string;
-  totalEligible?: number;
 }
 
 /** User-friendly failure labels keyed by FailureCategory */
@@ -91,10 +89,46 @@ const STAGE_LABELS: Record<string, string> = {
   needs_review: 'Needs review',
 };
 
+const FAILURE_BUCKET_LABELS: Partial<Record<FailureBucket, string>> = {
+  retryable_extraction_failure: 'Retryable Extraction Failure',
+  audio_resolution_required: 'Audio Resolution Required',
+  transcript_required: 'Transcript Required',
+  auth_required: 'Auth Required',
+  manual_content_required: 'Manual Content Required',
+  unsupported_source: 'Unsupported Source',
+  metadata_only_salvageable: 'Metadata Only',
+};
+
+function isShallowTranscriptMessage(value?: string): boolean {
+  const lower = value?.toLowerCase() ?? '';
+  return lower.includes('low vocabulary')
+    || lower.includes('unique words')
+    || lower.includes('content too weak')
+    || lower.includes('too shallow')
+    || lower.includes('insufficient usable text');
+}
+
+function getItemMessage(item: IngestionItem): string | undefined {
+  if (item.stage === 'partial' && isShallowTranscriptMessage(item.error)) {
+    return 'Transcript too shallow — content incomplete';
+  }
+
+  return item.error;
+}
+
+function getItemNextAction(item: IngestionItem): string | undefined {
+  if (item.stage === 'partial' && isShallowTranscriptMessage(item.error)) {
+    return 'Review and supplement manually or provide full transcript';
+  }
+
+  return item.recoveryHint ?? (item.retryEligible === false ? 'Manual Assist' : 'Retry');
+}
+
 function ItemDetail({ item }: { item: IngestionItem }) {
-  const isRetryable = item.retryEligible !== false;
+  const itemMessage = getItemMessage(item);
+  const nextAction = getItemNextAction(item);
   const failureLabel = item.failureBucket
-    ? item.failureBucket.replace(/_/g, ' ')
+    ? (FAILURE_BUCKET_LABELS[item.failureBucket] || item.failureBucket.replace(/_/g, ' '))
     : item.failureCategory
       ? (FAILURE_LABELS[item.failureCategory] || item.failureCategory.replace(/^failed_/, '').replace(/_/g, ' '))
       : null;
@@ -111,7 +145,7 @@ function ItemDetail({ item }: { item: IngestionItem }) {
       )}
       <div className="min-w-0 flex-1">
         <span className="font-medium text-foreground truncate block">{item.title}</span>
-        {item.error && <p className="text-muted-foreground">{item.error}</p>}
+        {itemMessage && <p className="text-muted-foreground">{itemMessage}</p>}
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           {failureLabel && (
             <Badge variant="outline" className="text-[9px] h-4 px-1 uppercase tracking-[0.08em]">
@@ -138,11 +172,8 @@ function ItemDetail({ item }: { item: IngestionItem }) {
             <span className="text-[10px] text-muted-foreground">score: {item.completenessScore}</span>
           )}
         </div>
-        {item.recoveryHint && (
-          <p className="text-[10px] text-primary/80 italic mt-0.5">{item.recoveryHint}</p>
-        )}
-        {!isRetryable && (
-          <p className="text-[10px] text-muted-foreground italic mt-0.5">Not retryable — fix source first</p>
+        {nextAction && (
+          <p className="text-[10px] text-primary/80 italic mt-0.5">→ {nextAction}</p>
         )}
       </div>
     </div>
@@ -166,8 +197,8 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
   const {
     terminalState, percentComplete, successCount, failedCount,
     skippedCount, partialCount, needsAuthCount, unsupportedCount,
-    remainingCount, totalRunnableAtStart, currentBatchIndex,
-    totalBatches, failedItems, retryableCount, completedCount,
+    totalRunnableAtStart, currentBatchIndex,
+    totalBatches, failedItems, retryableCount,
   } = session;
 
   const isActive = terminalState === 'running' || terminalState === 'paused';
@@ -296,8 +327,8 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
         </div>
       )}
 
-      {/* Progress — active or terminal (non-noop) */}
-      {(isActive || (isDone && terminalState !== 'completed_noop')) && (
+      {/* Progress — active only */}
+      {isActive && (
         <div className="space-y-2">
           {totalRunnableAtStart > 0 ? (
             <Progress value={percentComplete} className="h-2" />
@@ -308,8 +339,8 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
               {totalBatches > 0 && currentBatchIndex > 0 && (
                 <span>Batch {currentBatchIndex}/{totalBatches} · </span>
               )}
-              {totalRunnableAtStart > 0 ? (
-                <span>{completedCount - skippedCount}/{totalRunnableAtStart}</span>
+              {totalRunnableAtStart > 0 && (
+                <span>{percentComplete}% complete</span>
               ) : null}
               {currentItem && (
                 <span className="ml-1 flex items-center gap-1">
@@ -366,8 +397,22 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
             </div>
           )}
 
+        </div>
+      )}
+
+      {/* Terminal actions */}
+      {isDone && terminalState !== 'completed_noop' && (
+        <div className="space-y-2">
+          <p className="text-[11px] text-muted-foreground">
+            {terminalState === 'completed_success'
+              ? 'All runnable resources processed'
+              : terminalState === 'completed_with_errors'
+                ? 'Processed with errors — review failed items'
+                : 'Run stopped before completion'}
+          </p>
+
           {/* Retry — only when done and there are retryable failures */}
-          {isDone && retryableCount > 0 && (
+          {retryableCount > 0 && (
             <Button
               variant="outline"
               size="sm"

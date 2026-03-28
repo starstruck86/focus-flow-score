@@ -357,6 +357,29 @@ function categorizeFailure(err: unknown): FailureCategory {
   return 'failed_unknown';
 }
 
+function isShallowTranscriptSignal(value?: string | null): boolean {
+  const lower = value?.toLowerCase() ?? '';
+  return lower.includes('low vocabulary')
+    || lower.includes('unique words')
+    || lower.includes('content too weak')
+    || lower.includes('too shallow')
+    || lower.includes('insufficient usable text');
+}
+
+function getPartialOutcomeCopy(failureReason?: string | null, recoveryHint?: string | null): { error: string; recoveryHint: string } {
+  if (isShallowTranscriptSignal(failureReason) || isShallowTranscriptSignal(recoveryHint)) {
+    return {
+      error: 'Transcript too shallow — content incomplete',
+      recoveryHint: 'Review and supplement manually or provide full transcript',
+    };
+  }
+
+  return {
+    error: failureReason || 'Partially enriched',
+    recoveryHint: recoveryHint || 'Review and supplement manually',
+  };
+}
+
 function validateUrl(rawUrl: string): string | null {
   if (!rawUrl || !rawUrl.trim()) return 'missing_data';
   try {
@@ -672,7 +695,13 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
             return;
           }
           if (finalStatus === 'partial') {
-            updateItem(item.id, { stage: 'partial', ...orchestratorPatch, error: output?.failure_reason || 'Partially enriched' });
+            const partialCopy = getPartialOutcomeCopy(output?.failure_reason, output?.recovery_hint);
+            updateItem(item.id, {
+              stage: 'partial',
+              ...orchestratorPatch,
+              error: partialCopy.error,
+              recoveryHint: partialCopy.recoveryHint,
+            });
             inFlightResourceIds.delete(resourceId);
             return;
           }
