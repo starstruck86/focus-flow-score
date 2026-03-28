@@ -123,8 +123,9 @@ function detectContradictions(r: Resource, quality: QualityResult, audioJob: Aud
   const status = r.enrichment_status as string;
   const score = quality.score;
 
-  // completed but score < 100
-  if (status === 'deep_enriched' && score < 100) {
+  // completed but score critically low (below 70 is a real contradiction;
+  // 70-99 is acceptable for short-but-genuine content like podcast summaries)
+  if (status === 'deep_enriched' && score < 70) {
     contradictions.push({
       type: 'completed_low_score',
       description: `Status is deep_enriched but quality score is ${score}/100`,
