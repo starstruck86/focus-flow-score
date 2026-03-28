@@ -388,12 +388,18 @@ export default function EnrichmentVerification() {
       });
 
       setFixPhase('complete');
-      qc.invalidateQueries({ queryKey: ['resources'] });
-      qc.invalidateQueries({ queryKey: ['all-resources'] });
-      toast.success('Fix Everything complete');
+      // Auto-refresh data after completion
+      await qc.invalidateQueries({ queryKey: ['resources'] });
+      await qc.invalidateQueries({ queryKey: ['all-resources'] });
+      await qc.invalidateQueries({ queryKey: ['verification-runs'] });
+      // Re-run verification view with fresh data
+      setHasRun(false);
+      await new Promise(r => setTimeout(r, 100));
+      setHasRun(true);
+      toast.success('Run Full System complete');
     } catch (e: any) {
       setFixPhase('error');
-      toast.error(`Fix Everything failed: ${e.message}`);
+      toast.error(`Run Full System failed: ${e.message}`);
     }
   }, [qc]);
 
@@ -481,11 +487,11 @@ export default function EnrichmentVerification() {
               </Button>
             )}
 
-            {/* Fix Everything */}
+            {/* Run Full System — primary action */}
             {!isFixing && !isRemediating && !isValidating && (
               <Button size="sm" onClick={handleFixEverything} disabled={isLoading || saving}
                 className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold">
-                <Zap className="h-3 w-3 mr-1" /> Fix Everything
+                <Zap className="h-3 w-3 mr-1" /> Run Full System
               </Button>
             )}
             {isFixing && (
@@ -520,19 +526,19 @@ export default function EnrichmentVerification() {
       )}
 
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        {!hasRun && !saving && (
+        {!hasRun && !saving && !isFixing && (
           <div className="rounded-lg border border-border p-8 text-center space-y-4">
-            <AlertTriangle className="h-10 w-10 text-status-yellow mx-auto" />
-            <h2 className="text-xl font-semibold">Ready to Verify</h2>
+            <Zap className="h-10 w-10 text-primary mx-auto" />
+            <h2 className="text-xl font-semibold">Run Full System</h2>
             <p className="text-muted-foreground max-w-md mx-auto">
-              Evaluates every resource against the enrichment completeness contract. Real data only.
+              Verifies all resources, runs autonomous remediation, re-verifies, and reports remaining work. One click, no decisions.
             </p>
-            <Button onClick={handleRun} disabled={isLoading} size="lg">
-              {isLoading ? 'Loading…' : 'Run Verification'}
+            <Button onClick={handleFixEverything} disabled={isLoading} size="lg" className="bg-primary text-primary-foreground">
+              <Zap className="h-4 w-4 mr-2" /> Run Full System
             </Button>
             <div className="text-xs text-muted-foreground">or</div>
-            <Button onClick={handleFixEverything} disabled={isLoading} size="lg" className="bg-primary text-primary-foreground">
-              <Zap className="h-4 w-4 mr-2" /> Fix Everything
+            <Button onClick={handleRun} disabled={isLoading} size="lg" variant="outline">
+              {isLoading ? 'Loading…' : 'Run Verification Only'}
             </Button>
           </div>
         )}
