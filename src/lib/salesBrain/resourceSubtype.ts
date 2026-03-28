@@ -72,8 +72,13 @@ export function detectResourceSubtype(url: string | null, resourceType?: string)
   if (lower.includes('docs.google.com/spreadsheets') || lower.includes('sheets.google.com')) return 'google_sheet';
   if (lower.includes('drive.google.com/file/')) return 'google_drive_file';
 
-  // Auth-gated community pages
-  if (/\.circle\.so\b/i.test(lower)) return 'auth_gated_community_page';
+  // Auth-gated community pages — check all known gated domains
+  if (url) {
+    try {
+      const host = new URL(url).hostname.toLowerCase();
+      if (AUTH_GATED_DOMAINS.some(d => host.includes(d))) return 'auth_gated_community_page';
+    } catch { /* not a valid URL */ }
+  }
 
   // Zoom
   if (lower.includes('zoom.us/rec') || lower.includes('zoom.us/share')) return 'zoom_recording';
@@ -121,7 +126,7 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
         return {
           ...base,
           enrichability: 'needs_auth',
-          reason: `${host} requires authentication`,
+          reason: 'Login required — paste content manually via Manual Assist.',
           requiresAuth: true,
           canFetchMetadata: true,
         };
