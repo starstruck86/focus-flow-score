@@ -270,6 +270,27 @@ export default function EnrichmentVerification() {
     setTimeout(() => setHasRun(true), 0);
   }, []);
 
+  const handleStartFix = useCallback(() => {
+    if (!remediationQueues) return;
+    const controller = new AbortController();
+    setFixAbortController(controller);
+    runFixBrokenResources(remediationQueues, (state) => {
+      setFixRunState({ ...state });
+      if (state.status === 'completed') {
+        qc.invalidateQueries({ queryKey: ['resources'] });
+        qc.invalidateQueries({ queryKey: ['all-resources'] });
+        toast.success(`Fix run complete: ${state.resolvedCount} resolved, ${state.quarantinedCount} quarantined, ${state.manualRequiredCount} manual`);
+      }
+    }, controller.signal);
+  }, [remediationQueues, qc]);
+
+  const handleStopFix = useCallback(() => {
+    fixAbortController?.abort();
+    setFixAbortController(null);
+  }, [fixAbortController]);
+
+  const isFixRunning = fixRunState?.status === 'running';
+
   const isLoading = loadingResources || loadingAudio;
 
   return (
