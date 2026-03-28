@@ -181,8 +181,8 @@ export function validateResourceQuality(resource: ResourceForValidation): Qualit
     violations.push(`Failure flag present: ${resource.failure_reason}`);
   }
 
-  // No placeholder content
-  if (contentLen >= QUALITY_THRESHOLDS.MIN_CONTENT_CHARS) {
+  // No placeholder content (use effective length to exclude binary)
+  if (effectiveContentLen >= QUALITY_THRESHOLDS.MIN_CONTENT_CHARS) {
     extractionConfidence += 5;
   }
 
