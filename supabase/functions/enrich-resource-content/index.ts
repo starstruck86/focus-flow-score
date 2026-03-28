@@ -438,7 +438,7 @@ async function youtubeCaption(url: string, _apiKey: string): Promise<ExtractionR
 /** Extract embedded audio URL from Anchor.fm play links */
 function extractEmbeddedAudioUrl(url: string): string | null {
   // Anchor.fm play URLs embed the audio URL: anchor.fm/s/.../podcast/play/.../https%3A%2F%2F...mp3
-  const match = url.match(/\/podcast\/play\/\d+\/(https?%3A%2F%2F[^\s?#]+\.mp3)/i);
+  const match = url.match(/\/podcast\/play\/\d+\/(https?%3A%2F%2F[^\s?#]+\.(?:mp3|m4a|wav|ogg|aac|opus))/i);
   if (match?.[1]) {
     try {
       return decodeURIComponent(match[1]);
