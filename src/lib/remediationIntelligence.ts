@@ -264,10 +264,8 @@ function inferFailureType(r: VerifiedResource): FailureType {
 function buildPlatformSuggestion(subtype: ResourceSubtype): string {
   switch (subtype) {
     case 'spotify_episode':
-    case 'spotify_show':
       return 'Integrate Spotify API for episode metadata + require manual transcript or alternate audio URL for transcription';
     case 'apple_podcast_episode':
-    case 'apple_podcast_show':
       return 'Use iTunes Search API to resolve RSS feed, extract audio enclosure URL, then route through transcription pipeline';
     case 'auth_gated_community_page':
       return 'Build authenticated scraper for community platforms (Circle.so, etc.) or provide manual paste workflow';
