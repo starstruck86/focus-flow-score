@@ -44,7 +44,7 @@ function classifyRecoveryItem(v: VerifiedResource): RecoveryItem | null {
   if (v.fixabilityBucket === 'needs_transcript') {
     recoveryBucket = 'needs_transcript';
     recoveryReason = 'Audio/video content — transcript not yet extracted';
-    nextBestAction = 'Paste transcript or retry transcription';
+    nextBestAction = 'Auto-transcribe or paste transcript';
   } else if (v.fixabilityBucket === 'needs_access_auth') {
     recoveryBucket = 'auth_gated';
     recoveryReason = 'Content behind authentication wall';
