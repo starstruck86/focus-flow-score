@@ -38,6 +38,10 @@ import {
   type ValidationResult, type ValidationPhase,
 } from '@/lib/validationOrchestrator';
 import { analyzeRemediationBatch, type RemediationSummary } from '@/lib/remediationIntelligence';
+import { generateProductRoadmap, generateBuildPrompt, type RoadmapSummary, type RoadmapIssue, type IssueSeverity } from '@/lib/systemGapRoadmap';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from '@/components/ui/dialog';
 
 // ── Persist ───────────────────────────────────────────────
 
