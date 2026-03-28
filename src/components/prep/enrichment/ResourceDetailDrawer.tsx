@@ -2,7 +2,7 @@
  * Resource Detail Drawer — Full inline editor with diagnostics and actions.
  * Parts 3 + 4 of the Enrichment Operator Console.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { useQueryClient } from '@tanstack/react-query';
@@ -16,11 +16,12 @@ import { Separator } from '@/components/ui/separator';
 import {
   X, Save, Zap, RotateCcw, FileText, ExternalLink, Trash2,
   Bookmark, SkipForward, Ban, ShieldOff, Play, Wrench,
-  Loader2, CheckCircle2, AlertTriangle, Copy,
+  Loader2, CheckCircle2, AlertTriangle, Copy, Unlock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { VerifiedResource } from '@/lib/enrichmentVerification';
 import { mapVerifiedToBucket, BUCKET_META } from './types';
+import { classifyQuarantine, getQuarantineSubClass, shouldAutoRelease } from '@/lib/quarantineClassification';
 
 interface Props {
   resource: VerifiedResource;
@@ -272,9 +273,33 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
                 ))}
               </div>
             )}
+            {/* Quarantine Info */}
+            {r.quarantined && (() => {
+              const qMeta = classifyQuarantine(r);
+              const subClass = getQuarantineSubClass(qMeta);
+              const canRelease = shouldAutoRelease(r);
+              return (
+                <div className="rounded bg-destructive/5 border border-destructive/20 px-2 py-1.5 space-y-1">
+                  <p className="text-[10px] font-medium text-destructive">Quarantine Details</p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[10px]">
+                    <DiagRow label="Type" value={qMeta.reasonType.replace(/_/g, ' ')} />
+                    <DiagRow label="Classification" value={subClass.replace(/_/g, ' ')} />
+                    <DiagRow label="By System" value={qMeta.quarantinedBySystem ? 'Yes' : 'No'} />
+                    <DiagRow label="By Operator" value={qMeta.quarantinedByOperator ? 'Yes' : 'No'} />
+                    <DiagRow label="Locked" value={qMeta.quarantineLocked ? 'Yes' : 'No'} />
+                    <DiagRow label="Valid" value={qMeta.isValid ? 'Yes' : 'No'} />
+                  </div>
+                  {canRelease && (
+                    <div className="flex items-center gap-2 pt-1">
+                      <Badge variant="secondary" className="text-[9px] bg-primary/10 text-primary border-primary/20">
+                        Invalid quarantine: eligible for automatic retry
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
-
-          <Separator />
 
           {/* Editable fields */}
           <div className="space-y-2">

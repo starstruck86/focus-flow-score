@@ -23,17 +23,19 @@ import { buildRemediationQueues } from '@/lib/remediationEngine';
 import { runAutonomousRemediation, type RemediationCycleState } from '@/lib/autonomousRemediation';
 import { analyzeRemediationBatch } from '@/lib/remediationIntelligence';
 import { generateProductRoadmap, type RoadmapSummary } from '@/lib/systemGapRoadmap';
+import { shouldAutoRelease, classifyQuarantine, getQuarantineSubClass, SKIP_REASON_LABELS, getSkipReason } from '@/lib/quarantineClassification';
 import { ManualInputInbox, type InboxQueue, type InboxItem } from './ManualInputInbox';
 import { FileText, Lock, ExternalLink, Eye } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
-import type { BucketFilter, RunSnapshot, RunResult } from './enrichment/types';
-import { EMPTY_RESULT, mapVerifiedToBucket } from './enrichment/types';
+import type { BucketFilter, RunSnapshot, RunResult, RunScopeBucket, BucketExecutionSummary } from './enrichment/types';
+import { EMPTY_RESULT, mapVerifiedToBucket, RUN_SCOPE_META, DEFAULT_RUN_SCOPE } from './enrichment/types';
 import { SummaryCards } from './enrichment/SummaryCards';
 import { ResourceWorkbench } from './enrichment/ResourceWorkbench';
 import { ResourceDetailDrawer } from './enrichment/ResourceDetailDrawer';
 import { RunControls } from './enrichment/RunControls';
 import { ProofOfImpact } from './enrichment/ProofOfImpact';
 import { RoadmapPanel } from './enrichment/RoadmapPanel';
+import { BucketSummaryPanel } from './enrichment/BucketSummaryPanel';
 
 // ── Helpers ────────────────────────────────────────────────
 
@@ -118,6 +120,151 @@ function buildInboxQueues(resources: any[], audioMap: Map<string, any>): InboxQu
   }));
 }
 
+// Maps fixabilityBucket → RunScopeBucket for filtering
+function fixabilityToScopeBucket(v: VerifiedResource): RunScopeBucket | null {
+  if (v.fixabilityBucket === 'auto_fix_now') return 'auto_fixable';
+  if (v.fixabilityBucket === 'retry_different_strategy') return 'retry_different_strategy';
+  if (v.fixabilityBucket === 'bad_scoring_state_bug') return 'bad_scoring_state_bug';
+  if (v.fixabilityBucket === 'already_fixed_stale_ui') return 'already_fixed_stale_ui';
+  if (v.quarantined || v.fixabilityBucket === 'needs_quarantine') return 'quarantined';
+  if (['needs_transcript', 'needs_pasted_content', 'needs_access_auth', 'needs_alternate_source', 'accept_metadata_only'].includes(v.fixabilityBucket)) return 'needs_input';
+  if (v.resolutionType === 'system_gap') return 'system_gap';
+  return null;
+}
+
+/**
+ * Filter verified resources based on selected run scope buckets.
+ * Auto-releases invalid quarantines when quarantined bucket is selected.
+ */
+function filterByScope(verified: VerifiedResource[], selectedBuckets: RunScopeBucket[]): {
+  included: VerifiedResource[];
+  skipped: Array<{ resource: VerifiedResource; reason: string }>;
+  autoReleased: VerifiedResource[];
+} {
+  const included: VerifiedResource[] = [];
+  const skipped: Array<{ resource: VerifiedResource; reason: string }> = [];
+  const autoReleased: VerifiedResource[] = [];
+
+  for (const v of verified) {
+    if (v.fixabilityBucket === 'truly_complete' || v.fixabilityBucket === 'true_unsupported') {
+      continue; // Skip complete/unsupported
+    }
+
+    const scopeBucket = fixabilityToScopeBucket(v);
+    if (!scopeBucket || !selectedBuckets.includes(scopeBucket)) {
+      const skipReason = getSkipReason(v, selectedBuckets);
+      skipped.push({ resource: v, reason: skipReason ? SKIP_REASON_LABELS[skipReason] : `Bucket "${scopeBucket}" not selected` });
+      continue;
+    }
+
+    // Handle quarantined resources
+    if (v.quarantined || v.fixabilityBucket === 'needs_quarantine') {
+      if (shouldAutoRelease(v)) {
+        autoReleased.push(v);
+        included.push(v); // Will be unquarantined and processed
+      } else {
+        const meta = classifyQuarantine(v);
+        if (meta.quarantineLocked) {
+          skipped.push({ resource: v, reason: SKIP_REASON_LABELS.operator_locked });
+        } else if (selectedBuckets.includes('quarantined')) {
+          included.push(v);
+        } else {
+          skipped.push({ resource: v, reason: SKIP_REASON_LABELS.quarantined_not_selected });
+        }
+      }
+      continue;
+    }
+
+    // Handle needs_input: check if required input exists
+    if (scopeBucket === 'needs_input' && !selectedBuckets.includes('needs_input')) {
+      const skipReason = getSkipReason(v, selectedBuckets);
+      skipped.push({ resource: v, reason: skipReason ? SKIP_REASON_LABELS[skipReason] : 'Needs input bucket not selected' });
+      continue;
+    }
+
+    included.push(v);
+  }
+
+  return { included, skipped, autoReleased };
+}
+
+/**
+ * Build per-bucket execution summaries from remediation state + skip data.
+ */
+function buildBucketSummaries(
+  preVerified: VerifiedResource[],
+  postVerified: VerifiedResource[],
+  skipped: Array<{ resource: VerifiedResource; reason: string }>,
+  autoReleased: VerifiedResource[],
+  remState: RemediationCycleState | null,
+): BucketExecutionSummary[] {
+  const buckets = new Map<string, BucketExecutionSummary>();
+
+  const getOrCreate = (bucket: string, label: string): BucketExecutionSummary => {
+    if (!buckets.has(bucket)) {
+      buckets.set(bucket, {
+        bucket, bucketLabel: label,
+        inputCount: 0, attemptedCount: 0, skippedCount: 0,
+        resolvedCount: 0, improvedNotComplete: 0, unchangedCount: 0,
+        failedCount: 0, autoReleasedFromQuarantine: 0, skipReasons: {},
+      });
+    }
+    return buckets.get(bucket)!;
+  };
+
+  // Count inputs by pre-run bucket
+  for (const v of preVerified) {
+    if (v.fixabilityBucket === 'truly_complete' || v.fixabilityBucket === 'true_unsupported') continue;
+    const sb = fixabilityToScopeBucket(v);
+    if (sb) {
+      const s = getOrCreate(sb, RUN_SCOPE_META[sb]?.label || sb);
+      s.inputCount++;
+    }
+  }
+
+  // Count skipped
+  for (const { resource, reason } of skipped) {
+    const sb = fixabilityToScopeBucket(resource);
+    if (sb) {
+      const s = getOrCreate(sb, RUN_SCOPE_META[sb]?.label || sb);
+      s.skippedCount++;
+      s.skipReasons[reason] = (s.skipReasons[reason] || 0) + 1;
+    }
+  }
+
+  // Count auto-released
+  const qSummary = getOrCreate('quarantined', 'Quarantined');
+  qSummary.autoReleasedFromQuarantine = autoReleased.length;
+
+  // Count attempted/resolved from remediation state
+  if (remState) {
+    for (const item of remState.items) {
+      // Map the remediation queue back to scope bucket
+      let sb: string = 'auto_fixable';
+      if (item.queue === 'auto_fix_now') sb = 'auto_fixable';
+      else if (item.queue === 'retry_different_strategy') sb = 'retry_different_strategy';
+      else if (item.queue === 'bad_scoring_state_bug') sb = 'bad_scoring_state_bug';
+      else if (item.queue === 'needs_quarantine') sb = 'quarantined';
+      else if (['needs_transcript', 'needs_pasted_content', 'needs_access_auth', 'needs_alternate_source', 'accept_metadata_only'].includes(item.queue)) sb = 'needs_input';
+
+      const s = getOrCreate(sb, RUN_SCOPE_META[sb as RunScopeBucket]?.label || sb);
+      s.attemptedCount++;
+
+      if (item.status === 'resolved_complete' || item.status === 'resolved_metadata_only') {
+        s.resolvedCount++;
+      } else if (item.afterScore !== null && item.afterScore > item.beforeScore) {
+        s.improvedNotComplete++;
+      } else if (item.status === 'escalated' || item.status === 'resolved_quarantined') {
+        s.failedCount++;
+      } else {
+        s.unchangedCount++;
+      }
+    }
+  }
+
+  return Array.from(buckets.values()).filter(s => s.inputCount > 0 || s.attemptedCount > 0 || s.skippedCount > 0);
+}
+
 // ── Main Component ─────────────────────────────────────────
 
 export function EnrichmentEngine() {
@@ -161,8 +308,38 @@ export function EnrichmentEngine() {
 
   const deltaComplete = lastRun ? (health?.trulyComplete ?? 0) - lastRun.complete : null;
 
-  // ── Run Full System ────────────────────────────────────
-  const handleRunFull = useCallback(async () => {
+  // Compute bucket counts for scope selector
+  const scopeBucketCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const v of liveVerified) {
+      const sb = fixabilityToScopeBucket(v);
+      if (sb) counts[sb] = (counts[sb] || 0) + 1;
+    }
+    return counts;
+  }, [liveVerified]);
+
+  // ── Auto-release quarantined resources in DB ───────────
+  async function autoReleaseQuarantines(resources: VerifiedResource[]): Promise<number> {
+    if (resources.length === 0) return 0;
+    const ids = resources.map(r => r.id);
+    const { error } = await supabase
+      .from('resources')
+      .update({
+        enrichment_status: 'not_enriched',
+        failure_reason: null,
+        failure_count: 0,
+        last_status_change_at: new Date().toISOString(),
+      } as any)
+      .in('id', ids);
+    if (error) {
+      console.error('Auto-release failed:', error);
+      return 0;
+    }
+    return ids.length;
+  }
+
+  // ── Run Full System (bucket-scoped) ────────────────────
+  const handleRunFull = useCallback(async (selectedBuckets: RunScopeBucket[]) => {
     const controller = new AbortController();
     abortRef.current = controller;
     setResult({ ...EMPTY_RESULT, phase: 'scanning' });
@@ -172,11 +349,20 @@ export function EnrichmentEngine() {
       setResult(prev => ({ ...prev, phase: 'verifying' }));
       const preVerified = verifyAll(resources, audioMap);
       const preSnap = buildSnapshot(preVerified);
-      const broken = preVerified.filter(v => v.fixabilityBucket !== 'truly_complete');
+
+      // Filter by selected scope
+      const { included, skipped, autoReleased } = filterByScope(preVerified, selectedBuckets);
+
+      // Auto-release invalid quarantines
+      const releasedCount = await autoReleaseQuarantines(autoReleased);
+      if (releasedCount > 0) {
+        toast.info(`Auto-released ${releasedCount} invalid quarantine${releasedCount > 1 ? 's' : ''}`);
+      }
+
       setResult(prev => ({ ...prev, phase: 'remediating', preSnapshot: preSnap }));
       let remState: RemediationCycleState | null = null;
-      if (broken.length > 0) {
-        const queues = buildRemediationQueues(broken);
+      if (included.length > 0) {
+        const queues = buildRemediationQueues(included);
         remState = await runAutonomousRemediation(queues, () => {}, controller.signal);
       }
       if (controller.signal.aborted) return;
@@ -188,6 +374,9 @@ export function EnrichmentEngine() {
       const analysis = analyzeRemediationBatch(stillBroken);
       const roadmap = generateProductRoadmap(stillBroken);
       const inboxQueues = buildInboxQueues(post.resources, post.audioMap);
+
+      const bucketSummaries = buildBucketSummaries(preVerified, postVerified, skipped, autoReleased, remState);
+
       setResult({
         phase: 'complete', preSnapshot: preSnap, postSnapshot: postSnap,
         autoResolved: remState?.resolvedCompleteCount ?? 0,
@@ -195,18 +384,22 @@ export function EnrichmentEngine() {
         needsManual: analysis.manualInput, quarantined: remState?.resolvedQuarantinedCount ?? 0,
         systemGaps: analysis.systemGaps.length, remediationState: remState, roadmap, inboxQueues,
         verifiedResources: postVerified,
+        bucketSummaries,
       });
       setLastRun(preSnap);
       await qc.invalidateQueries({ queryKey: ['resources'] });
       await qc.invalidateQueries({ queryKey: ['all-resources'] });
-      toast.success(`Done: ${postSnap.complete - preSnap.complete} newly resolved`);
+      const totalAttempted = included.length;
+      const totalSkipped = skipped.length;
+      toast.success(`Done: ${postSnap.complete - preSnap.complete} newly resolved, ${totalAttempted} attempted, ${totalSkipped} skipped`);
     } catch (e: any) {
       setResult(prev => ({ ...prev, phase: 'error', errorMessage: e.message }));
       toast.error(`Failed: ${e.message}`);
     }
   }, [qc]);
 
-  const handleAutoFixOnly = useCallback(async () => {
+  // ── Bulk re-enrich a specific bucket ───────────────────
+  const handleBulkBucket = useCallback(async (bucket: RunScopeBucket) => {
     const controller = new AbortController();
     abortRef.current = controller;
     setResult({ ...EMPTY_RESULT, phase: 'scanning' });
@@ -214,20 +407,25 @@ export function EnrichmentEngine() {
       const { resources, audioMap } = await fetchFreshData();
       const verified = verifyAll(resources, audioMap);
       const preSnap = buildSnapshot(verified);
-      const autoFixable = verified.filter(v =>
-        ['auto_fix_now', 'retry_different_strategy', 'bad_scoring_state_bug', 'already_fixed_stale_ui'].includes(v.fixabilityBucket)
-      );
-      if (autoFixable.length === 0) {
+
+      const { included, skipped, autoReleased } = filterByScope(verified, [bucket]);
+      if (included.length === 0) {
         setResult({ ...EMPTY_RESULT, phase: 'complete', preSnapshot: preSnap, postSnapshot: preSnap });
-        toast.info('Nothing auto-fixable found');
+        toast.info(`No processable resources in ${RUN_SCOPE_META[bucket]?.label || bucket}`);
         return;
       }
+
+      // Auto-release if quarantined
+      await autoReleaseQuarantines(autoReleased);
+
       setResult(prev => ({ ...prev, phase: 'remediating', preSnapshot: preSnap }));
-      const queues = buildRemediationQueues(autoFixable);
+      const queues = buildRemediationQueues(included);
       const remState = await runAutonomousRemediation(queues, () => {}, controller.signal);
       const post = await fetchFreshData();
       const postVerified = verifyAll(post.resources, post.audioMap);
       const postSnap = buildSnapshot(postVerified);
+      const bucketSummaries = buildBucketSummaries(verified, postVerified, skipped, autoReleased, remState);
+
       setResult({
         phase: 'complete', preSnapshot: preSnap, postSnapshot: postSnap,
         autoResolved: remState.resolvedCompleteCount, improvedNotComplete: 0,
@@ -235,14 +433,20 @@ export function EnrichmentEngine() {
         remediationState: remState, roadmap: null,
         inboxQueues: buildInboxQueues(post.resources, post.audioMap),
         verifiedResources: postVerified,
+        bucketSummaries,
       });
       await qc.invalidateQueries({ queryKey: ['resources'] });
       await qc.invalidateQueries({ queryKey: ['all-resources'] });
-      toast.success(`Auto-fix: ${remState.resolvedCompleteCount} resolved`);
+      toast.success(`${RUN_SCOPE_META[bucket]?.label}: ${remState.resolvedCompleteCount} resolved`);
     } catch (e: any) {
       setResult(prev => ({ ...prev, phase: 'error', errorMessage: e.message }));
     }
   }, [qc]);
+
+  const handleAutoFixOnly = useCallback(async () => {
+    // Delegate to handleBulkBucket with all auto-fix buckets
+    handleRunFull(DEFAULT_RUN_SCOPE);
+  }, [handleRunFull]);
 
   const handleVerifyOnly = useCallback(async () => {
     setResult({ ...EMPTY_RESULT, phase: 'verifying' });
@@ -310,6 +514,8 @@ export function EnrichmentEngine() {
         onStop={handleStop}
         onToggleInbox={() => setShowInbox(!showInbox)}
         showInbox={showInbox}
+        onBulkBucket={handleBulkBucket}
+        bucketCounts={scopeBucketCounts}
       />
 
       {/* Manual Inbox (toggle) */}
@@ -320,6 +526,11 @@ export function EnrichmentEngine() {
       {/* Proof of Impact */}
       {result.phase === 'complete' && result.preSnapshot && result.postSnapshot && (
         <ProofOfImpact pre={result.preSnapshot} post={result.postSnapshot} result={result} />
+      )}
+
+      {/* Per-Bucket Execution Summary */}
+      {result.phase === 'complete' && result.bucketSummaries && result.bucketSummaries.length > 0 && (
+        <BucketSummaryPanel summaries={result.bucketSummaries} />
       )}
 
       {/* Resource Workbench + Detail Drawer */}
@@ -380,7 +591,6 @@ export function EnrichmentEngine() {
           onToggle={() => toggleSection('roadmap')}
           onViewAffected={(ids) => {
             setActiveBucket('system_gap');
-            // Could enhance to filter to specific IDs
           }}
         />
       )}

@@ -232,8 +232,17 @@ function classifyFixability(
     return 'already_fixed_stale_ui';
   }
 
-  // Quarantined
+  // Quarantined — check if this is a legacy/invalid quarantine
   if (status === 'quarantined') {
+    // If enrichable with low failure count, it may be an invalid quarantine
+    if (
+      (enrichability === 'fully_enrichable' || enrichability === 'partially_enrichable') &&
+      (r.failure_count ?? 0) < 2 &&
+      !r.failure_reason?.toLowerCase().includes('operator') &&
+      !r.failure_reason?.toLowerCase().includes('manual hold')
+    ) {
+      return 'auto_fix_now'; // Invalid quarantine → route to auto-fix
+    }
     return 'needs_quarantine';
   }
 

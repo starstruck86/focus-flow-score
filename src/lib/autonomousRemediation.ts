@@ -390,8 +390,17 @@ async function processItem(item: RemediationItem, state: RemediationCycleState):
     }
   }
 
-  // ── Quarantined: NO automation ──────────────────────────
+  // ── Quarantined: check if it was auto-released (now has not_enriched status)
+  // If it still says quarantine queue but was already reset, treat as auto_fix_now
   if (item.queue === 'needs_quarantine') {
+    // Check current DB state — if it was auto-released, it will be not_enriched
+    const currentState = await getResourceState(item.id);
+    if (currentState && currentState.status === 'not_enriched') {
+      // Was auto-released → treat as auto-fix
+      item.queue = 'auto_fix_now' as any;
+      await autoFix(item, state, QUEUE_STRATEGIES['auto_fix_now']);
+      return;
+    }
     await quarantineResource(item, state, 'Pre-existing quarantine — manual review only');
     return;
   }
