@@ -142,8 +142,30 @@ export function deriveProcessingState(
     };
   }
 
-  // Failed enrichment
+  // Failed enrichment — audio resources get audio-specific guidance
   if (status === 'failed') {
+    // Audio resource with no audio job — give audio-aware failure guidance
+    if (!audioJob && isAudioResource(resource.file_url, resource.resource_type)) {
+      const audioSubtype = detectAudioSubtype(resource.file_url, resource.resource_type);
+      const strategy = getAudioStrategy(audioSubtype);
+      if (strategy.manualAssistRequired) {
+        return {
+          state: 'MANUAL_REQUIRED',
+          label: 'Manual Input Needed',
+          description: strategy.operatorFailureReason,
+          nextAction: 'Open Manual Assist to provide transcript or alternate source',
+          retryable: false,
+        };
+      }
+      return {
+        state: 'RETRYABLE_FAILURE',
+        label: 'Retry Available',
+        description: resource.failure_reason || strategy.operatorFailureReason,
+        nextAction: strategy.retryMode === 'automatic' ? 'Retry transcription' : 'Open Manual Assist',
+        retryable: strategy.retryMode === 'automatic',
+      };
+    }
+
     const ea = classifyEnrichability(resource.file_url, resource.resource_type);
     if (ea.enrichability === 'manual_input_needed' || ea.enrichability === 'needs_auth') {
       return {
