@@ -1,14 +1,15 @@
 /**
- * Enrichment Engine — Integrated into Sales Brain OS
+ * Enrichment Engine — Integrated execution system for Sales Brain OS
  *
- * One-click "Run Full Enrichment System" with:
- * - Success dashboard
- * - Operator work queues
- * - Resource diagnostics
+ * Features:
+ * - One-click "Run Full Enrichment System"
+ * - Run Auto-Fix Only / Re-run Verification buttons
+ * - Manual Input Inbox with inline editing
+ * - Before/after proof-of-impact dashboard
+ * - Delta since last run
  * - System gap roadmap
  */
-import { useState, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { useAllResources, type Resource } from '@/hooks/useResources';
 import { useAudioJobsMap } from '@/hooks/useAudioJobs';
 import { useAuth } from '@/contexts/AuthContext';
@@ -17,232 +18,348 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
 import {
   Zap, Square, CheckCircle2, AlertTriangle, Clock, FileText,
   Lock, RotateCcw, Ban, Wrench, ExternalLink, ChevronDown, ChevronRight,
-  TrendingUp, Loader2, ArrowRight, Copy
+  TrendingUp, Loader2, ArrowRight, Copy, Play, Eye, Inbox,
 } from 'lucide-react';
 import {
   resolveCanonicalState, computeEnrichmentHealth,
   CANONICAL_STATE_LABELS, CANONICAL_STATE_COLORS,
-  type CanonicalState, type CanonicalStateResult, type EnrichmentHealthStats,
+  type CanonicalState, type EnrichmentHealthStats,
 } from '@/lib/canonicalResourceState';
 import {
   verifyResource, buildVerificationSummary,
   type VerifiedResource, type AudioJobInfo,
 } from '@/lib/enrichmentVerification';
-import { buildRemediationQueues, type RemediationQueue } from '@/lib/remediationEngine';
+import { buildRemediationQueues } from '@/lib/remediationEngine';
 import { runAutonomousRemediation, type RemediationCycleState } from '@/lib/autonomousRemediation';
 import { analyzeRemediationBatch } from '@/lib/remediationIntelligence';
 import { generateProductRoadmap, generateBuildPrompt, type RoadmapSummary, type RoadmapIssue } from '@/lib/systemGapRoadmap';
+import { ManualInputInbox, type InboxQueue, type InboxItem } from './ManualInputInbox';
 import { cn } from '@/lib/utils';
 
 // ── Types ──────────────────────────────────────────────────
 
+interface RunSnapshot {
+  timestamp: string;
+  total: number;
+  complete: number;
+  broken: number;
+  avgScore: number;
+}
+
 interface RunResult {
-  phase: 'idle' | 'scanning' | 'remediating' | 'analyzing' | 'complete' | 'error';
-  totalScanned: number;
-  preComplete: number;
-  postComplete: number;
+  phase: 'idle' | 'scanning' | 'verifying' | 'remediating' | 'analyzing' | 'complete' | 'error';
+  preSnapshot: RunSnapshot | null;
+  postSnapshot: RunSnapshot | null;
   autoResolved: number;
   improvedNotComplete: number;
   needsManual: number;
   quarantined: number;
   systemGaps: number;
-  netScoreChange: number;
   remediationState: RemediationCycleState | null;
   roadmap: RoadmapSummary | null;
-  workQueues: WorkQueue[];
+  inboxQueues: InboxQueue[];
+  verifiedResources: VerifiedResource[];
   errorMessage?: string;
 }
 
-interface WorkQueue {
-  state: CanonicalState;
-  label: string;
-  action: string;
-  items: WorkQueueItem[];
-}
-
-interface WorkQueueItem {
-  id: string;
-  title: string;
-  url: string | null;
-  subtypeLabel: string;
-  score: number;
-  reason: string;
-  nextAction: string;
-  sourceRouter: string;
-}
-
 const EMPTY_RESULT: RunResult = {
-  phase: 'idle', totalScanned: 0, preComplete: 0, postComplete: 0,
+  phase: 'idle', preSnapshot: null, postSnapshot: null,
   autoResolved: 0, improvedNotComplete: 0, needsManual: 0,
-  quarantined: 0, systemGaps: 0, netScoreChange: 0,
-  remediationState: null, roadmap: null, workQueues: [],
+  quarantined: 0, systemGaps: 0,
+  remediationState: null, roadmap: null, inboxQueues: [], verifiedResources: [],
 };
+
+// ── Helpers ────────────────────────────────────────────────
+
+function buildAudioJobInfo(rawJob: any): AudioJobInfo {
+  return {
+    resourceId: rawJob.resource_id, stage: rawJob.stage ?? 'unknown',
+    failureCode: rawJob.failure_code ?? null, failureReason: rawJob.failure_reason ?? null,
+    hasTranscript: rawJob.has_transcript ?? false, transcriptMode: rawJob.transcript_mode ?? null,
+    finalResolutionStatus: rawJob.final_resolution_status ?? null,
+    transcriptWordCount: rawJob.transcript_word_count ?? null, attemptsCount: rawJob.attempts_count ?? 0,
+  };
+}
+
+async function fetchFreshData() {
+  const [{ data: resources }, { data: audioRaw }] = await Promise.all([
+    supabase.from('resources').select('*').order('created_at', { ascending: false }),
+    supabase.from('audio_jobs').select('*').order('created_at', { ascending: false }).limit(500),
+  ]);
+  const audioMap = new Map<string, any>();
+  for (const row of (audioRaw || [])) {
+    if (!audioMap.has((row as any).resource_id)) audioMap.set((row as any).resource_id, row);
+  }
+  return { resources: (resources || []) as any[], audioMap };
+}
+
+function verifyAll(resources: any[], audioMap: Map<string, any>): VerifiedResource[] {
+  return resources.map(r => {
+    const rawJob = audioMap.get(r.id);
+    const audioJob: AudioJobInfo | null = rawJob ? buildAudioJobInfo(rawJob) : null;
+    return verifyResource(r as any, audioJob);
+  });
+}
+
+function buildSnapshot(verified: VerifiedResource[]): RunSnapshot {
+  const complete = verified.filter(v => v.fixabilityBucket === 'truly_complete').length;
+  const avg = verified.length > 0 ? Math.round(verified.reduce((s, v) => s + v.qualityScore, 0) / verified.length) : 0;
+  return { timestamp: new Date().toISOString(), total: verified.length, complete, broken: verified.length - complete, avgScore: avg };
+}
+
+function buildInboxQueues(resources: any[], audioMap: Map<string, any>): InboxQueue[] {
+  const queueMap = new Map<CanonicalState, InboxItem[]>();
+  const MANUAL_STATES: CanonicalState[] = [
+    'needs_transcript', 'needs_pasted_content', 'needs_access_auth',
+    'needs_alternate_source', 'metadata_only_candidate',
+  ];
+
+  for (const resource of resources) {
+    const job = audioMap.get(resource.id) ?? null;
+    const resolved = resolveCanonicalState(resource, job);
+    if (!MANUAL_STATES.includes(resolved.state)) continue;
+
+    if (!queueMap.has(resolved.state)) queueMap.set(resolved.state, []);
+    queueMap.get(resolved.state)!.push({
+      id: resource.id, title: resource.title, url: resource.file_url ?? null,
+      subtypeLabel: resolved.subtypeLabel, score: resolved.qualityScore,
+      status: resource.enrichment_status ?? 'unknown', reason: resolved.description,
+      nextAction: resolved.nextAction || 'Review', sourceRouter: resolved.sourceRouter,
+      failureCount: resource.failure_count ?? 0,
+      lastAttempt: resource.last_enrichment_attempt_at ?? null,
+      audioJobStatus: job?.stage ?? null,
+    });
+  }
+
+  const ICONS: Record<string, React.ReactNode> = {
+    needs_transcript: <FileText className="h-3.5 w-3.5 text-accent-foreground" />,
+    needs_pasted_content: <FileText className="h-3.5 w-3.5 text-accent-foreground" />,
+    needs_access_auth: <Lock className="h-3.5 w-3.5 text-destructive" />,
+    needs_alternate_source: <ExternalLink className="h-3.5 w-3.5 text-orange-500" />,
+    metadata_only_candidate: <Eye className="h-3.5 w-3.5 text-muted-foreground" />,
+  };
+
+  const ACTIONS: Record<string, string> = {
+    needs_transcript: 'Paste transcript',
+    needs_pasted_content: 'Paste content',
+    needs_access_auth: 'Provide access or paste',
+    needs_alternate_source: 'Provide better URL',
+    metadata_only_candidate: 'Accept or improve',
+  };
+
+  return MANUAL_STATES
+    .filter(s => queueMap.has(s))
+    .map(s => ({
+      state: s,
+      label: CANONICAL_STATE_LABELS[s],
+      action: ACTIONS[s] || '',
+      icon: ICONS[s] || <FileText className="h-3.5 w-3.5" />,
+      items: queueMap.get(s) || [],
+    }));
+}
 
 // ── Main Component ─────────────────────────────────────────
 
 export function EnrichmentEngine() {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const qc = useQueryClient();
   const { data: allResources, isLoading: loadingResources } = useAllResources();
   const { data: audioJobsMap, isLoading: loadingAudio } = useAudioJobsMap();
   const [result, setResult] = useState<RunResult>(EMPTY_RESULT);
-  const [abort, setAbort] = useState<AbortController | null>(null);
-  const [expandedQueues, setExpandedQueues] = useState<Record<string, boolean>>({});
+  const [lastRun, setLastRun] = useState<RunSnapshot | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const [showInbox, setShowInbox] = useState(false);
+  const [expandedSections, setExpanded] = useState<Record<string, boolean>>({});
 
-  const isRunning = result.phase !== 'idle' && result.phase !== 'complete' && result.phase !== 'error';
+  const isRunning = !['idle', 'complete', 'error'].includes(result.phase);
+  const isLoading = loadingResources || loadingAudio;
 
-  // Compute live health from canonical state model
+  // Compute live health
   const health = useMemo<EnrichmentHealthStats | null>(() => {
     if (!allResources) return null;
     return computeEnrichmentHealth(allResources, audioJobsMap ?? undefined);
   }, [allResources, audioJobsMap]);
 
-  // ── Run Full Enrichment System ──────────────────────────
+  // Live inbox queues (always available, not just after a run)
+  const liveInboxQueues = useMemo(() => {
+    if (!allResources) return [];
+    const audioMap = new Map<string, any>();
+    if (audioJobsMap) {
+      for (const [k, v] of audioJobsMap) audioMap.set(k, v);
+    }
+    return buildInboxQueues(allResources as any[], audioMap);
+  }, [allResources, audioJobsMap]);
 
-  const handleRun = useCallback(async () => {
+  // ── Run Full System ────────────────────────────────────
+
+  const handleRunFull = useCallback(async () => {
     const controller = new AbortController();
-    setAbort(controller);
+    abortRef.current = controller;
     setResult({ ...EMPTY_RESULT, phase: 'scanning' });
 
     try {
-      // Step 1: Scan all resources
-      const { data: freshResources } = await supabase.from('resources').select('*').order('created_at', { ascending: false });
-      const { data: freshAudioRaw } = await supabase.from('audio_jobs').select('*').order('created_at', { ascending: false }).limit(500);
-      const audioMap = new Map<string, any>();
-      for (const row of (freshAudioRaw || [])) {
-        if (!audioMap.has((row as any).resource_id)) audioMap.set((row as any).resource_id, row);
-      }
-
-      const verified: VerifiedResource[] = [];
-      for (const resource of (freshResources || []) as any[]) {
-        const rawJob = audioMap.get(resource.id);
-        const audioJob: AudioJobInfo | null = rawJob ? {
-          resourceId: resource.id, stage: rawJob.stage ?? 'unknown',
-          failureCode: rawJob.failure_code ?? null, failureReason: rawJob.failure_reason ?? null,
-          hasTranscript: rawJob.has_transcript ?? false, transcriptMode: rawJob.transcript_mode ?? null,
-          finalResolutionStatus: rawJob.final_resolution_status ?? null,
-          transcriptWordCount: rawJob.transcript_word_count ?? null, attemptsCount: rawJob.attempts_count ?? 0,
-        } : null;
-        verified.push(verifyResource(resource as any, audioJob));
-      }
-
+      // 1. Scan
+      const { resources, audioMap } = await fetchFreshData();
       if (controller.signal.aborted) return;
 
-      const preComplete = verified.filter(v => v.fixabilityBucket === 'truly_complete').length;
-      const broken = verified.filter(v => v.fixabilityBucket !== 'truly_complete');
+      // 2. Pre-verify
+      setResult(prev => ({ ...prev, phase: 'verifying' }));
+      const preVerified = verifyAll(resources, audioMap);
+      const preSnap = buildSnapshot(preVerified);
+      const broken = preVerified.filter(v => v.fixabilityBucket !== 'truly_complete');
 
-      setResult(prev => ({
-        ...prev, phase: 'remediating',
-        totalScanned: verified.length,
-        preComplete,
-      }));
+      setResult(prev => ({ ...prev, phase: 'remediating', preSnapshot: preSnap }));
 
-      // Step 2: Remediate
+      // 3. Remediate
       let remState: RemediationCycleState | null = null;
       if (broken.length > 0) {
         const queues = buildRemediationQueues(broken);
         remState = await runAutonomousRemediation(queues, () => {}, controller.signal);
       }
-
       if (controller.signal.aborted) return;
 
-      // Step 3: Re-verify + analyze
+      // 4. Post-verify
       setResult(prev => ({ ...prev, phase: 'analyzing' }));
-
-      const { data: postResources } = await supabase.from('resources').select('*').order('created_at', { ascending: false });
-      const { data: postAudioRaw } = await supabase.from('audio_jobs').select('*').order('created_at', { ascending: false }).limit(500);
-      const postAudioMap = new Map<string, any>();
-      for (const row of (postAudioRaw || [])) {
-        if (!postAudioMap.has((row as any).resource_id)) postAudioMap.set((row as any).resource_id, row);
-      }
-
-      const postVerified: VerifiedResource[] = [];
-      for (const resource of (postResources || []) as any[]) {
-        const rawJob = postAudioMap.get(resource.id);
-        const audioJob: AudioJobInfo | null = rawJob ? {
-          resourceId: resource.id, stage: rawJob.stage ?? 'unknown',
-          failureCode: rawJob.failure_code ?? null, failureReason: rawJob.failure_reason ?? null,
-          hasTranscript: rawJob.has_transcript ?? false, transcriptMode: rawJob.transcript_mode ?? null,
-          finalResolutionStatus: rawJob.final_resolution_status ?? null,
-          transcriptWordCount: rawJob.transcript_word_count ?? null, attemptsCount: rawJob.attempts_count ?? 0,
-        } : null;
-        postVerified.push(verifyResource(resource as any, audioJob));
-      }
-
-      const postComplete = postVerified.filter(v => v.fixabilityBucket === 'truly_complete').length;
+      const post = await fetchFreshData();
+      const postVerified = verifyAll(post.resources, post.audioMap);
+      const postSnap = buildSnapshot(postVerified);
       const stillBroken = postVerified.filter(v => v.fixabilityBucket !== 'truly_complete');
       const analysis = analyzeRemediationBatch(stillBroken);
-
-      // Build work queues from canonical states
-      const workQueues = buildWorkQueues(postResources as any[], postAudioMap);
-
-      // Generate roadmap
       const roadmap = generateProductRoadmap(stillBroken);
-
-      // Compute score change
-      const preAvg = verified.length > 0 ? verified.reduce((s, v) => s + v.qualityScore, 0) / verified.length : 0;
-      const postAvg = postVerified.length > 0 ? postVerified.reduce((s, v) => s + v.qualityScore, 0) / postVerified.length : 0;
+      const inboxQueues = buildInboxQueues(post.resources, post.audioMap);
 
       setResult({
-        phase: 'complete',
-        totalScanned: verified.length,
-        preComplete,
-        postComplete,
+        phase: 'complete', preSnapshot: preSnap, postSnapshot: postSnap,
         autoResolved: remState?.resolvedCompleteCount ?? 0,
         improvedNotComplete: (remState?.scoreImprovements ?? 0) - (remState?.resolvedCompleteCount ?? 0),
         needsManual: analysis.manualInput,
         quarantined: remState?.resolvedQuarantinedCount ?? 0,
         systemGaps: analysis.systemGaps.length,
-        netScoreChange: Math.round(postAvg - preAvg),
-        remediationState: remState,
-        roadmap,
-        workQueues,
+        remediationState: remState, roadmap, inboxQueues,
+        verifiedResources: postVerified,
       });
+      setLastRun(preSnap);
 
-      // Refresh queries
       await qc.invalidateQueries({ queryKey: ['resources'] });
       await qc.invalidateQueries({ queryKey: ['all-resources'] });
-      toast.success(`Enrichment complete: ${postComplete - preComplete} newly resolved`);
-
+      toast.success(`Done: ${postSnap.complete - preSnap.complete} newly resolved`);
     } catch (e: any) {
       setResult(prev => ({ ...prev, phase: 'error', errorMessage: e.message }));
-      toast.error(`Enrichment failed: ${e.message}`);
+      toast.error(`Failed: ${e.message}`);
     }
   }, [qc]);
 
-  const handleStop = useCallback(() => {
-    abort?.abort();
-    setAbort(null);
-    setResult(prev => ({ ...prev, phase: 'idle' }));
-  }, [abort]);
+  // ── Run Auto-Fix Only ──────────────────────────────────
 
-  const isLoading = loadingResources || loadingAudio;
+  const handleAutoFixOnly = useCallback(async () => {
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setResult({ ...EMPTY_RESULT, phase: 'scanning' });
+
+    try {
+      const { resources, audioMap } = await fetchFreshData();
+      const verified = verifyAll(resources, audioMap);
+      const preSnap = buildSnapshot(verified);
+      const autoFixable = verified.filter(v =>
+        v.fixabilityBucket === 'auto_fix_now' ||
+        v.fixabilityBucket === 'retry_different_strategy' ||
+        v.fixabilityBucket === 'bad_scoring_state_bug' ||
+        v.fixabilityBucket === 'already_fixed_stale_ui'
+      );
+
+      if (autoFixable.length === 0) {
+        setResult({ ...EMPTY_RESULT, phase: 'complete', preSnapshot: preSnap, postSnapshot: preSnap });
+        toast.info('Nothing auto-fixable found');
+        return;
+      }
+
+      setResult(prev => ({ ...prev, phase: 'remediating', preSnapshot: preSnap }));
+      const queues = buildRemediationQueues(autoFixable);
+      const remState = await runAutonomousRemediation(queues, () => {}, controller.signal);
+
+      const post = await fetchFreshData();
+      const postVerified = verifyAll(post.resources, post.audioMap);
+      const postSnap = buildSnapshot(postVerified);
+
+      setResult({
+        phase: 'complete', preSnapshot: preSnap, postSnapshot: postSnap,
+        autoResolved: remState.resolvedCompleteCount, improvedNotComplete: 0,
+        needsManual: 0, quarantined: remState.resolvedQuarantinedCount, systemGaps: 0,
+        remediationState: remState, roadmap: null,
+        inboxQueues: buildInboxQueues(post.resources, post.audioMap),
+        verifiedResources: postVerified,
+      });
+
+      await qc.invalidateQueries({ queryKey: ['resources'] });
+      await qc.invalidateQueries({ queryKey: ['all-resources'] });
+      toast.success(`Auto-fix: ${remState.resolvedCompleteCount} resolved`);
+    } catch (e: any) {
+      setResult(prev => ({ ...prev, phase: 'error', errorMessage: e.message }));
+    }
+  }, [qc]);
+
+  // ── Re-run Verification Only ───────────────────────────
+
+  const handleVerifyOnly = useCallback(async () => {
+    setResult({ ...EMPTY_RESULT, phase: 'verifying' });
+    try {
+      const { resources, audioMap } = await fetchFreshData();
+      const verified = verifyAll(resources, audioMap);
+      const snap = buildSnapshot(verified);
+      const stillBroken = verified.filter(v => v.fixabilityBucket !== 'truly_complete');
+      const roadmap = generateProductRoadmap(stillBroken);
+
+      setResult({
+        phase: 'complete', preSnapshot: snap, postSnapshot: snap,
+        autoResolved: 0, improvedNotComplete: 0,
+        needsManual: stillBroken.filter(v => ['needs_transcript', 'needs_pasted_content', 'needs_access_auth', 'needs_alternate_source'].includes(v.fixabilityBucket)).length,
+        quarantined: stillBroken.filter(v => v.fixabilityBucket === 'needs_quarantine').length,
+        systemGaps: stillBroken.filter(v => v.resolutionType === 'system_gap').length,
+        remediationState: null, roadmap,
+        inboxQueues: buildInboxQueues(resources, audioMap),
+        verifiedResources: verified,
+      });
+      toast.success('Verification complete');
+    } catch (e: any) {
+      setResult(prev => ({ ...prev, phase: 'error', errorMessage: e.message }));
+    }
+  }, []);
+
+  const handleStop = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setResult(prev => ({ ...prev, phase: 'idle' }));
+  }, []);
+
+  const handleInboxResolved = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['resources'] });
+    qc.invalidateQueries({ queryKey: ['all-resources'] });
+  }, [qc]);
+
+  const toggleSection = (key: string) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
 
   return (
     <div className="space-y-4">
-      {/* ── Success Dashboard ── */}
-      {health && (
-        <HealthDashboard health={health} />
-      )}
+      {/* ── Health Dashboard ── */}
+      {health && <HealthDashboard health={health} lastRun={lastRun} />}
 
-      {/* ── Primary Action ── */}
+      {/* ── Primary Actions ── */}
       <Card>
-        <CardContent className="py-4">
+        <CardContent className="py-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-foreground">Run Full Enrichment System</p>
+              <p className="text-sm font-semibold text-foreground">Enrichment Engine</p>
               <p className="text-xs text-muted-foreground">
-                Scan → Verify → Remediate → Re-verify → Report
+                Scan → Verify → Auto-fix → Re-verify → Report
               </p>
             </div>
             {!isRunning ? (
-              <Button onClick={handleRun} disabled={isLoading} className="bg-primary text-primary-foreground font-semibold gap-1.5">
+              <Button onClick={handleRunFull} disabled={isLoading} className="bg-primary text-primary-foreground font-semibold gap-1.5">
                 <Zap className="h-3.5 w-3.5" /> Run Full System
               </Button>
             ) : (
@@ -252,37 +369,81 @@ export function EnrichmentEngine() {
             )}
           </div>
 
+          {/* Secondary actions */}
+          {!isRunning && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={handleAutoFixOnly} disabled={isLoading}>
+                <Play className="h-3 w-3" /> Auto-Fix Only
+              </Button>
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={handleVerifyOnly} disabled={isLoading}>
+                <Eye className="h-3 w-3" /> Re-run Verification
+              </Button>
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setShowInbox(!showInbox)}>
+                <Inbox className="h-3 w-3" /> Manual Inbox
+                {liveInboxQueues.reduce((s, q) => s + q.items.length, 0) > 0 && (
+                  <Badge variant="secondary" className="text-[9px] ml-1 h-4 px-1">
+                    {liveInboxQueues.reduce((s, q) => s + q.items.length, 0)}
+                  </Badge>
+                )}
+              </Button>
+            </div>
+          )}
+
           {/* Progress */}
           {isRunning && (
-            <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="h-3 w-3 animate-spin" />
               {result.phase === 'scanning' && 'Scanning all resources…'}
+              {result.phase === 'verifying' && 'Verifying quality & state…'}
               {result.phase === 'remediating' && 'Running autonomous remediation…'}
-              {result.phase === 'analyzing' && 'Re-verifying and analyzing results…'}
+              {result.phase === 'analyzing' && 'Analyzing results…'}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* ── Run Results ── */}
-      {result.phase === 'complete' && (
-        <>
-          <RunResultsSummary result={result} />
+      {/* ── Live Manual Inbox (toggle) ── */}
+      {showInbox && !isRunning && (
+        <ManualInputInbox queues={liveInboxQueues} onItemResolved={handleInboxResolved} />
+      )}
 
-          {/* Work Queues */}
-          {result.workQueues.filter(q => q.items.length > 0).map(queue => (
-            <WorkQueueSection
-              key={queue.state}
-              queue={queue}
-              expanded={expandedQueues[queue.state] ?? false}
-              onToggle={() => setExpandedQueues(prev => ({ ...prev, [queue.state]: !prev[queue.state] }))}
-              onFix={(id) => navigate(`/prep?manualAssist=${id}`)}
-            />
-          ))}
+      {/* ── Run Results ── */}
+      {result.phase === 'complete' && result.preSnapshot && result.postSnapshot && (
+        <>
+          {/* Proof of Impact */}
+          <ProofOfImpact pre={result.preSnapshot} post={result.postSnapshot} result={result} />
+
+          {/* Post-run Manual Inbox */}
+          {result.inboxQueues.length > 0 && (
+            <div>
+              <button onClick={() => toggleSection('postInbox')} className="flex items-center gap-1.5 mb-2">
+                {expandedSections.postInbox ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                <Inbox className="h-3.5 w-3.5 text-status-yellow" />
+                <span className="text-sm font-semibold text-foreground">Remaining Manual Work</span>
+                <Badge variant="outline" className="text-[10px]">
+                  {result.inboxQueues.reduce((s, q) => s + q.items.length, 0)}
+                </Badge>
+              </button>
+              {expandedSections.postInbox && (
+                <ManualInputInbox queues={result.inboxQueues} onItemResolved={handleInboxResolved} />
+              )}
+            </div>
+          )}
+
+          {/* Remaining non-manual work (ready, retryable, quarantined, system gap) */}
+          <RemainingWorkQueues
+            verified={result.verifiedResources}
+            expanded={expandedSections}
+            onToggle={toggleSection}
+          />
 
           {/* Roadmap */}
           {result.roadmap && result.roadmap.issues.length > 0 && (
-            <RoadmapSection roadmap={result.roadmap} />
+            <RoadmapSection
+              roadmap={result.roadmap}
+              expanded={expandedSections.roadmap ?? false}
+              onToggle={() => toggleSection('roadmap')}
+            />
           )}
         </>
       )}
@@ -292,49 +453,41 @@ export function EnrichmentEngine() {
           <CardContent className="py-4 text-center">
             <AlertTriangle className="h-6 w-6 mx-auto mb-2 text-destructive" />
             <p className="text-sm text-destructive">{result.errorMessage}</p>
-            <Button variant="outline" size="sm" className="mt-2" onClick={() => setResult(EMPTY_RESULT)}>
-              Dismiss
-            </Button>
+            <Button variant="outline" size="sm" className="mt-2" onClick={() => setResult(EMPTY_RESULT)}>Dismiss</Button>
           </CardContent>
         </Card>
       )}
-
-      {/* Advanced link */}
-      <div className="text-center">
-        <Button variant="link" size="sm" onClick={() => navigate('/verify-enrichment')} className="text-xs text-muted-foreground gap-1">
-          <ExternalLink className="h-3 w-3" /> Open Advanced Diagnostics
-        </Button>
-      </div>
     </div>
   );
 }
 
 // ── Health Dashboard ──────────────────────────────────────
 
-function HealthDashboard({ health }: { health: EnrichmentHealthStats }) {
+function HealthDashboard({ health, lastRun }: { health: EnrichmentHealthStats; lastRun: RunSnapshot | null }) {
+  const delta = lastRun ? health.trulyComplete - lastRun.complete : null;
+
   return (
     <div className="space-y-2">
-      {/* Completion bar */}
       <div className="flex items-center gap-3">
         <div className="flex-1">
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs font-medium text-foreground">
               {health.completionPct}% Complete
+              {delta !== null && delta !== 0 && (
+                <span className={cn('ml-1.5 text-[10px]', delta > 0 ? 'text-status-green' : 'text-destructive')}>
+                  ({delta > 0 ? '+' : ''}{delta} since last run)
+                </span>
+              )}
             </span>
-            <span className="text-[10px] text-muted-foreground">
-              {health.trulyComplete}/{health.total} resources
-            </span>
+            <span className="text-[10px] text-muted-foreground">{health.trulyComplete}/{health.total}</span>
           </div>
           <div className="h-2 bg-muted rounded-full overflow-hidden">
-            <div
-              className="h-full bg-status-green rounded-full transition-all duration-500"
-              style={{ width: `${health.completionPct}%` }}
-            />
+            <div className="h-full bg-status-green rounded-full transition-all duration-500"
+              style={{ width: `${health.completionPct}%` }} />
           </div>
         </div>
       </div>
 
-      {/* Stat grid */}
       <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
         <MiniStat icon={<CheckCircle2 className="h-3 w-3" />} label="Complete" value={health.trulyComplete} color="text-status-green" />
         <MiniStat icon={<Zap className="h-3 w-3" />} label="Auto-fixable" value={health.machinFixable} color="text-primary" />
@@ -359,13 +512,16 @@ function MiniStat({ icon, label, value, color }: { icon: React.ReactNode; label:
   );
 }
 
-// ── Run Results Summary ──────────────────────────────────
+// ── Proof of Impact ──────────────────────────────────────
 
-function RunResultsSummary({ result }: { result: RunResult }) {
-  const improved = result.postComplete > result.preComplete;
+function ProofOfImpact({ pre, post, result }: { pre: RunSnapshot; post: RunSnapshot; result: RunResult }) {
+  const improved = post.complete > pre.complete;
+  const newlyResolved = post.complete - pre.complete;
+  const scoreDelta = post.avgScore - pre.avgScore;
+
   return (
-    <Card className={improved ? 'border-status-green/30' : 'border-status-yellow/30'}>
-      <CardContent className="py-4">
+    <Card className={improved ? 'border-status-green/30' : 'border-border'}>
+      <CardContent className="py-4 space-y-3">
         <div className="flex items-start gap-3">
           {improved ? (
             <TrendingUp className="h-5 w-5 text-status-green shrink-0 mt-0.5" />
@@ -374,32 +530,28 @@ function RunResultsSummary({ result }: { result: RunResult }) {
           )}
           <div className="flex-1 space-y-2">
             <p className="text-sm font-semibold text-foreground">
-              {improved ? 'System Improved' : 'Blockers Remain'}
+              {improved ? `System Improved — ${newlyResolved} newly resolved` : 'Verification Complete — Blockers Remain'}
             </p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-              <div>
-                <span className="text-muted-foreground">Scanned</span>
-                <p className="font-bold text-foreground">{result.totalScanned}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Auto-resolved</span>
-                <p className="font-bold text-status-green">{result.autoResolved}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Needs Input</span>
-                <p className="font-bold text-status-yellow">{result.needsManual}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">System Gaps</span>
-                <p className="font-bold text-destructive">{result.systemGaps}</p>
-              </div>
+
+            {/* Executive summary grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-xs">
+              <ProofStat label="Scanned" value={pre.total} />
+              <ProofStat label="Under 100 before" value={pre.broken} />
+              <ProofStat label="Under 100 after" value={post.broken} color={post.broken < pre.broken ? 'text-status-green' : undefined} />
+              <ProofStat label="Newly resolved" value={newlyResolved} color={newlyResolved > 0 ? 'text-status-green' : undefined} />
+              <ProofStat label="Auto-resolved" value={result.autoResolved} color="text-status-green" />
+              <ProofStat label="Needs input" value={result.needsManual} color="text-status-yellow" />
+              <ProofStat label="Quarantined" value={result.quarantined} color="text-destructive" />
+              <ProofStat label="System gaps" value={result.systemGaps} color="text-destructive" />
             </div>
+
+            {/* Before → After bar */}
             <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
-              <span>Before: {result.preComplete} complete</span>
+              <span>Before: {pre.complete}/{pre.total} ({Math.round(pre.complete / pre.total * 100)}%)</span>
               <ArrowRight className="h-3 w-3" />
-              <span>After: {result.postComplete} complete</span>
-              <span className={cn('font-medium', result.netScoreChange > 0 ? 'text-status-green' : 'text-muted-foreground')}>
-                {result.netScoreChange > 0 ? '+' : ''}{result.netScoreChange} avg score
+              <span>After: {post.complete}/{post.total} ({Math.round(post.complete / post.total * 100)}%)</span>
+              <span className={cn('font-medium', scoreDelta > 0 ? 'text-status-green' : 'text-muted-foreground')}>
+                {scoreDelta > 0 ? '+' : ''}{scoreDelta} avg score
               </span>
             </div>
           </div>
@@ -409,66 +561,74 @@ function RunResultsSummary({ result }: { result: RunResult }) {
   );
 }
 
-// ── Work Queue Section ───────────────────────────────────
+function ProofStat({ label, value, color }: { label: string; value: number; color?: string }) {
+  return (
+    <div>
+      <span className="text-muted-foreground">{label}</span>
+      <p className={cn('font-bold', color || 'text-foreground')}>{value}</p>
+    </div>
+  );
+}
 
-function WorkQueueSection({ queue, expanded, onToggle, onFix }: {
-  queue: WorkQueue; expanded: boolean;
-  onToggle: () => void; onFix: (id: string) => void;
+// ── Remaining Work (non-manual) ──────────────────────────
+
+function RemainingWorkQueues({ verified, expanded, onToggle }: {
+  verified: VerifiedResource[];
+  expanded: Record<string, boolean>;
+  onToggle: (key: string) => void;
 }) {
-  const stateColor = CANONICAL_STATE_COLORS[queue.state] || 'bg-muted text-muted-foreground';
+  const groups: { key: string; label: string; color: string; items: VerifiedResource[] }[] = [
+    { key: 'ready', label: 'Ready to Enrich', color: 'text-primary', items: verified.filter(v => v.fixabilityBucket === 'auto_fix_now') },
+    { key: 'retry', label: 'Retryable', color: 'text-orange-500', items: verified.filter(v => v.fixabilityBucket === 'retry_different_strategy') },
+    { key: 'quarantined', label: 'Quarantined', color: 'text-destructive', items: verified.filter(v => v.fixabilityBucket === 'needs_quarantine' || v.quarantined) },
+    { key: 'sysgap', label: 'System Gap', color: 'text-destructive', items: verified.filter(v => v.resolutionType === 'system_gap') },
+  ].filter(g => g.items.length > 0);
+
+  if (groups.length === 0) return null;
 
   return (
-    <Card>
-      <button onClick={onToggle} className="w-full text-left px-4 py-3 flex items-center gap-2">
-        {expanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
-        <Badge className={cn('text-[10px]', stateColor)}>{queue.label}</Badge>
-        <span className="text-sm font-medium text-foreground">{queue.items.length} resources</span>
-        <span className="text-xs text-muted-foreground ml-auto">{queue.action}</span>
-      </button>
-      {expanded && (
-        <CardContent className="pt-0 pb-3">
-          <ScrollArea className="max-h-[300px]">
-            <div className="space-y-1">
-              {queue.items.map(item => (
-                <div key={item.id} className="flex items-start gap-2 rounded px-2 py-1.5 hover:bg-muted/30 transition-colors">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-foreground truncate">{item.title}</p>
-                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                      <span>{item.subtypeLabel}</span>
-                      <span>Score: {item.score}</span>
-                      <span className="text-foreground/70">{item.sourceRouter}</span>
+    <div className="space-y-2">
+      {groups.map(group => (
+        <Card key={group.key}>
+          <button onClick={() => onToggle(group.key)} className="w-full text-left px-4 py-3 flex items-center gap-2">
+            {expanded[group.key] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            <span className={cn('text-sm font-medium', group.color)}>{group.label}</span>
+            <Badge variant="outline" className="text-[10px]">{group.items.length}</Badge>
+          </button>
+          {expanded[group.key] && (
+            <CardContent className="pt-0 pb-3">
+              <ScrollArea className="max-h-[300px]">
+                <div className="space-y-1">
+                  {group.items.map(v => (
+                    <div key={v.id} className="flex items-start gap-2 rounded px-2 py-1.5 text-xs">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-foreground truncate">{v.title}</p>
+                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                          <span>{v.subtypeLabel}</span>
+                          <span>Score: {v.qualityScore}</span>
+                          <span>{v.enrichmentStatusLabel}</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">{v.whyNotComplete}</p>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground shrink-0">{v.recommendedAction}</span>
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{item.reason}</p>
-                  </div>
-                  <Button
-                    size="sm" variant="outline"
-                    className="h-6 text-[10px] gap-1 shrink-0"
-                    onClick={() => onFix(item.id)}
-                  >
-                    {item.nextAction.includes('Paste') ? <FileText className="h-2.5 w-2.5" /> :
-                     item.nextAction.includes('Auth') ? <Lock className="h-2.5 w-2.5" /> :
-                     item.nextAction.includes('Retry') ? <RotateCcw className="h-2.5 w-2.5" /> :
-                     <Wrench className="h-2.5 w-2.5" />}
-                    {item.nextAction.length > 30 ? item.nextAction.slice(0, 28) + '…' : item.nextAction}
-                  </Button>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </ScrollArea>
-        </CardContent>
-      )}
-    </Card>
+              </ScrollArea>
+            </CardContent>
+          )}
+        </Card>
+      ))}
+    </div>
   );
 }
 
 // ── Roadmap Section ──────────────────────────────────────
 
-function RoadmapSection({ roadmap }: { roadmap: RoadmapSummary }) {
-  const [expanded, setExpanded] = useState(false);
-
+function RoadmapSection({ roadmap, expanded, onToggle }: { roadmap: RoadmapSummary; expanded: boolean; onToggle: () => void }) {
   return (
     <Card className="border-destructive/30">
-      <button onClick={() => setExpanded(!expanded)} className="w-full text-left px-4 py-3 flex items-center gap-2">
+      <button onClick={onToggle} className="w-full text-left px-4 py-3 flex items-center gap-2">
         {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         <Wrench className="h-3.5 w-3.5 text-destructive" />
         <span className="text-sm font-semibold text-foreground">Product Roadmap</span>
@@ -490,8 +650,7 @@ function RoadmapSection({ roadmap }: { roadmap: RoadmapSummary }) {
 }
 
 function RoadmapIssueCard({ issue }: { issue: RoadmapIssue }) {
-  const [showPrompt, setShowPrompt] = useState(false);
-  const sevColors = {
+  const sevColors: Record<string, string> = {
     critical: 'text-destructive bg-destructive/10',
     high: 'text-orange-500 bg-orange-500/10',
     medium: 'text-status-yellow bg-status-yellow/10',
@@ -510,74 +669,11 @@ function RoadmapIssueCard({ issue }: { issue: RoadmapIssue }) {
       <div className="flex items-center gap-1.5">
         <Badge variant="outline" className="text-[9px]">{issue.subtypeLabel}</Badge>
         <Badge variant="outline" className="text-[9px]">{issue.requiredBuild.type}</Badge>
-        <Button
-          size="sm" variant="ghost"
-          className="h-5 text-[9px] gap-0.5 ml-auto"
-          onClick={() => {
-            const prompt = generateBuildPrompt(issue);
-            navigator.clipboard.writeText(prompt);
-            toast.success('Build prompt copied');
-          }}
-        >
+        <Button size="sm" variant="ghost" className="h-5 text-[9px] gap-0.5 ml-auto"
+          onClick={() => { navigator.clipboard.writeText(generateBuildPrompt(issue)); toast.success('Copied'); }}>
           <Copy className="h-2.5 w-2.5" /> Copy Prompt
         </Button>
       </div>
     </div>
   );
-}
-
-// ── Build Work Queues ────────────────────────────────────
-
-function buildWorkQueues(resources: Resource[], audioMap: Map<string, any>): WorkQueue[] {
-  const queueMap = new Map<CanonicalState, WorkQueueItem[]>();
-
-  for (const resource of resources) {
-    const job = audioMap.get(resource.id) ?? null;
-    const resolved = resolveCanonicalState(resource, job);
-
-    // Skip complete and enriching
-    if (resolved.state === 'truly_complete' || resolved.state === 'enriching') continue;
-
-    if (!queueMap.has(resolved.state)) queueMap.set(resolved.state, []);
-    queueMap.get(resolved.state)!.push({
-      id: resource.id,
-      title: resource.title,
-      url: resource.file_url ?? null,
-      subtypeLabel: resolved.subtypeLabel,
-      score: resolved.qualityScore,
-      reason: resolved.description,
-      nextAction: resolved.nextAction || 'Review',
-      sourceRouter: resolved.sourceRouter,
-    });
-  }
-
-  const QUEUE_ORDER: CanonicalState[] = [
-    'ready_to_enrich', 'retryable_failure',
-    'needs_transcript', 'needs_pasted_content',
-    'needs_access_auth', 'needs_alternate_source',
-    'metadata_only_candidate', 'quarantined', 'system_gap',
-  ];
-
-  const QUEUE_ACTIONS: Record<CanonicalState, string> = {
-    ready_to_enrich: 'Run enrichment',
-    enriching: '',
-    retryable_failure: 'Retry extraction',
-    needs_transcript: 'Paste transcript',
-    needs_pasted_content: 'Paste content',
-    needs_access_auth: 'Provide access',
-    needs_alternate_source: 'Provide better URL',
-    metadata_only_candidate: 'Accept or improve',
-    quarantined: 'Manual review',
-    truly_complete: '',
-    system_gap: 'Requires build',
-  };
-
-  return QUEUE_ORDER
-    .filter(state => queueMap.has(state))
-    .map(state => ({
-      state,
-      label: CANONICAL_STATE_LABELS[state],
-      action: QUEUE_ACTIONS[state],
-      items: queueMap.get(state) || [],
-    }));
 }
