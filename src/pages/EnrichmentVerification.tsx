@@ -3,6 +3,7 @@
  * Queries REAL resources + audio_jobs, evaluates every non-100 resource,
  * surfaces contradictions, failure patterns, and a fix plan.
  * Persists each run to verification_runs for comparison over time.
+ * Includes Remediation Engine with action queues and bulk actions.
  */
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useAllResources } from '@/hooks/useResources';
@@ -10,7 +11,7 @@ import { useAudioJobsMap } from '@/hooks/useAudioJobs';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Download, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Copy, ExternalLink, Search, Filter, History, Zap, ShieldAlert, Lock, FileText, Ban, Bug, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Download, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Copy, ExternalLink, Search, Filter, History, Zap, ShieldAlert, Lock, FileText, Ban, Bug, RotateCcw, Play, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,6 +30,15 @@ import {
   type VerificationSummary,
   type AudioJobInfo,
 } from '@/lib/enrichmentVerification';
+import {
+  buildRemediationQueues,
+  executeBulkAction,
+  QUEUE_LABELS,
+  QUEUE_DESCRIPTIONS,
+  QUEUE_ACTIONS,
+  type RemediationQueue,
+  type BulkActionResult,
+} from '@/lib/remediationEngine';
 
 // ── Persist run to DB ──────────────────────────────────────
 
@@ -96,9 +106,12 @@ export default function EnrichmentVerification() {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     dashboard: true,
     fixPlan: true,
+    remediation: true,
     patterns: false,
     table: true,
   });
+  const [runningQueue, setRunningQueue] = useState<RemediationQueue | null>(null);
+  const [lastBulkResult, setLastBulkResult] = useState<BulkActionResult | null>(null);
 
   // Run verification against real data
   const { verified, summary } = useMemo(() => {
@@ -180,6 +193,39 @@ export default function EnrichmentVerification() {
     }
     return list;
   }, [verified, searchQuery, selectedBucket]);
+
+  // Build remediation queues from verified resources
+  const remediationQueues = useMemo(() => {
+    if (!verified.length) return null;
+    return buildRemediationQueues(verified);
+  }, [verified]);
+
+  const handleBulkAction = useCallback(async (queue: RemediationQueue) => {
+    if (!remediationQueues) return;
+    const resources = remediationQueues[queue];
+    if (!resources.length) {
+      toast.info('No resources in this queue');
+      return;
+    }
+    setRunningQueue(queue);
+    setLastBulkResult(null);
+    try {
+      const result = await executeBulkAction(queue, resources);
+      setLastBulkResult(result);
+      if (result.failed === 0) {
+        toast.success(`${QUEUE_LABELS[queue]}: ${result.succeeded} resources updated`);
+      } else {
+        toast.warning(`${QUEUE_LABELS[queue]}: ${result.succeeded} succeeded, ${result.failed} failed`);
+      }
+      // Invalidate resources to refresh data
+      qc.invalidateQueries({ queryKey: ['resources'] });
+      qc.invalidateQueries({ queryKey: ['all-resources'] });
+    } catch (e: any) {
+      toast.error(`Bulk action failed: ${e.message}`);
+    } finally {
+      setRunningQueue(null);
+    }
+  }, [remediationQueues, qc]);
 
   const toggleSection = (key: string) =>
     setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
@@ -302,6 +348,18 @@ export default function EnrichmentVerification() {
             {/* Fix Plan */}
             <SectionHeader title="What Needs to Be Fixed" sectionKey="fixPlan" expanded={expandedSections.fixPlan} toggle={toggleSection} />
             {expandedSections.fixPlan && <FixPlanSection recommendations={summary.fixRecommendations} />}
+
+            {/* Remediation Queues */}
+            <SectionHeader title="Recovery Queues" sectionKey="remediation" expanded={expandedSections.remediation} toggle={toggleSection} />
+            {expandedSections.remediation && remediationQueues && (
+              <RemediationQueuesSection
+                queues={remediationQueues}
+                onRunAction={handleBulkAction}
+                runningQueue={runningQueue}
+                lastResult={lastBulkResult}
+                onFilterByQueue={(q) => setSelectedBucket(q)}
+              />
+            )}
 
             {/* Repeated Patterns */}
             <SectionHeader title="Repeated Failure Patterns" sectionKey="patterns" expanded={expandedSections.patterns} toggle={toggleSection} count={summary.repeatedPatterns.length} />
@@ -524,7 +582,155 @@ function FixPlanSection({ recommendations }: { recommendations: VerificationSumm
   );
 }
 
-// ── Patterns Section ───────────────────────────────────────
+// ── Remediation Queues Section ─────────────────────────────
+
+const QUEUE_ICONS: Record<RemediationQueue, React.ReactNode> = {
+  auto_fix_now: <Zap className="h-4 w-4" />,
+  retry_different_strategy: <RotateCcw className="h-4 w-4" />,
+  needs_transcript: <FileText className="h-4 w-4" />,
+  needs_pasted_content: <FileText className="h-4 w-4" />,
+  needs_access_auth: <Lock className="h-4 w-4" />,
+  needs_alternate_source: <ExternalLink className="h-4 w-4" />,
+  accept_metadata_only: <CheckCircle2 className="h-4 w-4" />,
+  needs_quarantine: <Ban className="h-4 w-4" />,
+  bad_scoring_state_bug: <Bug className="h-4 w-4" />,
+};
+
+const QUEUE_COLORS: Record<RemediationQueue, string> = {
+  auto_fix_now: 'border-status-green/40 bg-status-green/5',
+  retry_different_strategy: 'border-status-yellow/40 bg-status-yellow/5',
+  needs_transcript: 'border-primary/40 bg-primary/5',
+  needs_pasted_content: 'border-primary/40 bg-primary/5',
+  needs_access_auth: 'border-orange-500/40 bg-orange-500/5',
+  needs_alternate_source: 'border-orange-500/40 bg-orange-500/5',
+  accept_metadata_only: 'border-border bg-muted/30',
+  needs_quarantine: 'border-status-red/40 bg-status-red/5',
+  bad_scoring_state_bug: 'border-status-red/40 bg-status-red/5',
+};
+
+function RemediationQueuesSection({
+  queues,
+  onRunAction,
+  runningQueue,
+  lastResult,
+  onFilterByQueue,
+}: {
+  queues: Record<RemediationQueue, VerifiedResource[]>;
+  onRunAction: (q: RemediationQueue) => void;
+  runningQueue: RemediationQueue | null;
+  lastResult: BulkActionResult | null;
+  onFilterByQueue: (q: string) => void;
+}) {
+  const orderedQueues: RemediationQueue[] = [
+    'auto_fix_now',
+    'bad_scoring_state_bug',
+    'retry_different_strategy',
+    'needs_transcript',
+    'needs_pasted_content',
+    'needs_access_auth',
+    'needs_alternate_source',
+    'accept_metadata_only',
+    'needs_quarantine',
+  ];
+
+  const nonEmptyQueues = orderedQueues.filter(q => queues[q].length > 0);
+
+  if (nonEmptyQueues.length === 0) {
+    return (
+      <div className="rounded-lg border border-status-green/30 bg-status-green/5 p-4 flex items-center gap-2">
+        <CheckCircle2 className="h-5 w-5 text-status-green" />
+        <span className="text-sm">All resources are in a final state — no recovery actions needed.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {lastResult && (
+        <div className={`rounded-lg border p-3 text-sm ${
+          lastResult.failed === 0 ? 'border-status-green/30 bg-status-green/5' : 'border-status-yellow/30 bg-status-yellow/5'
+        }`}>
+          <span className="font-medium">{QUEUE_LABELS[lastResult.queue]}:</span>{' '}
+          {lastResult.succeeded} updated{lastResult.failed > 0 && `, ${lastResult.failed} failed`}
+          {lastResult.errors.length > 0 && (
+            <div className="mt-1 text-xs text-muted-foreground">
+              {lastResult.errors.slice(0, 3).map((e, i) => (
+                <div key={i}>{e.title}: {e.error}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {nonEmptyQueues.map(queue => {
+          const resources = queues[queue];
+          const isRunning = runningQueue === queue;
+          const isAutomatic = queue === 'auto_fix_now' || queue === 'retry_different_strategy' || queue === 'bad_scoring_state_bug' || queue === 'accept_metadata_only' || queue === 'needs_quarantine';
+
+          return (
+            <div key={queue} className={`rounded-lg border p-4 space-y-3 ${QUEUE_COLORS[queue]}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  {QUEUE_ICONS[queue]}
+                  <div>
+                    <div className="font-medium text-sm">{QUEUE_LABELS[queue]}</div>
+                    <div className="text-xs text-muted-foreground">{QUEUE_DESCRIPTIONS[queue]}</div>
+                  </div>
+                </div>
+                <Badge variant="secondary" className="font-bold shrink-0">{resources.length}</Badge>
+              </div>
+
+              <div className="text-xs text-muted-foreground border-t border-border/50 pt-2">
+                <span className="font-medium">Action:</span> {QUEUE_ACTIONS[queue]}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {isAutomatic ? (
+                  <Button
+                    size="sm"
+                    variant={queue === 'auto_fix_now' ? 'default' : 'outline'}
+                    onClick={() => onRunAction(queue)}
+                    disabled={isRunning || runningQueue !== null}
+                    className="flex-1"
+                  >
+                    {isRunning ? (
+                      <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Running…</>
+                    ) : (
+                      <><Play className="h-3 w-3 mr-1" /> Run ({resources.length})</>
+                    )}
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onRunAction(queue)}
+                    disabled={isRunning || runningQueue !== null}
+                    className="flex-1"
+                  >
+                    {isRunning ? (
+                      <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Running…</>
+                    ) : (
+                      <><Play className="h-3 w-3 mr-1" /> Route ({resources.length})</>
+                    )}
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => onFilterByQueue(queue)}
+                >
+                  <Search className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 
 function PatternsSection({ patterns }: { patterns: Array<{ pattern: string; count: number }> }) {
   if (!patterns.length) return <p className="text-sm text-muted-foreground">No repeated patterns detected.</p>;
