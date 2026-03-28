@@ -169,6 +169,24 @@ describe('deriveEnrichSession', () => {
     expect(session.percentComplete).toBe(100);
   });
 
+  // Case: quarantined items count as failed
+  it('quarantined items are counted in failedCount', () => {
+    const items = [
+      makeItem({ stage: 'complete' }),
+      makeItem({ stage: 'quarantined' as any, error: 'repeated failure', quarantined: true } as any),
+    ];
+    const session = deriveEnrichSession(makeState({
+      status: 'completed',
+      items,
+      totalItems: 2,
+    }));
+
+    expect(session.terminalState).toBe('completed_with_errors');
+    expect(session.failedCount).toBe(1);
+    expect(session.successCount).toBe(1);
+    expect(session.remainingCount).toBe(0);
+  });
+
   // Invariant: completed + remaining must never coexist
   it('INVARIANT — completed state never has remaining items', () => {
     // Force a contradictory raw state (store says completed but items still queued)

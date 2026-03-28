@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { routeFailure, getFailureBucketActions, type FailureBucket } from '@/lib/failureRouting';
+import { routeFailure, getFailureBucketActions, shouldQuarantine, NON_RETRYABLE_BUCKETS, type FailureBucket } from '@/lib/failureRouting';
 
 describe('routeFailure', () => {
   it('Spotify episode routes to transcript_required, not generic failed', () => {
@@ -20,7 +20,7 @@ describe('routeFailure', () => {
       'Network error',
     );
     expect(r2.bucket).toBe('transcript_required');
-    expect(r2.reason).toContain('Spotify');
+    expect(r2.reason).toContain('Transcript required');
     expect(r2.reason).toContain('transcript');
   });
 
@@ -31,7 +31,7 @@ describe('routeFailure', () => {
       'failed_quality',
       'No matching enclosure found',
     );
-    expect(r.bucket).toBe('audio_resolution_required');
+    expect(r.bucket).toBe('alternate_source_required');
     expect(r.reason).toContain('enclosure');
   });
 
@@ -80,7 +80,7 @@ describe('routeFailure', () => {
     expect(r.bucket).toBe('retryable_extraction_failure');
     // Must not use generic message
     expect(r.reason).not.toBe('Content too weak to enrich');
-    expect(r.reason).toContain('Extractor');
+    expect(r.reason).toContain('Extractor returned insufficient');
   });
 
   it('direct audio file with timeout routes to retryable', () => {
@@ -156,6 +156,26 @@ describe('routeFailure', () => {
       expect(r.nextAction).toBeTruthy();
       expect(r.reason).toBeTruthy();
       expect(r.bucket).toBeTruthy();
+    }
+  });
+
+  it('shouldQuarantine after 2 same-bucket failures', () => {
+    expect(shouldQuarantine('retryable_extraction_failure', 1)).toBe(false);
+    expect(shouldQuarantine('retryable_extraction_failure', 2)).toBe(true);
+    expect(shouldQuarantine('transcript_required', 2)).toBe(true);
+  });
+
+  it('non-retryable buckets are defined correctly', () => {
+    expect(NON_RETRYABLE_BUCKETS.has('transcript_required')).toBe(true);
+    expect(NON_RETRYABLE_BUCKETS.has('auth_required')).toBe(true);
+    expect(NON_RETRYABLE_BUCKETS.has('retryable_extraction_failure')).toBe(false);
+  });
+
+  it('manual assist actions available for all non-retryable buckets', () => {
+    for (const bucket of NON_RETRYABLE_BUCKETS) {
+      const actions = getFailureBucketActions(bucket);
+      const hasManual = actions.some(a => a.action === 'manual_assist' || a.action === 'provide_alternate_url' || a.action === 'mark_metadata_only' || a.action === 'park_for_later');
+      expect(hasManual).toBe(true);
     }
   });
 });
