@@ -285,7 +285,8 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
                         variant="ghost"
                         size="sm"
                         className="h-5 w-5 p-0"
-                        onClick={() => handleRetry(item.resource.id)}
+                        title={item.recoveryBucket === 'needs_transcript' ? 'Retry transcription' : 'Retry enrichment'}
+                        onClick={() => handleRetry(item.resource.id, item.recoveryBucket === 'needs_transcript')}
                         disabled={isProcessing}
                       >
                         <RotateCcw className={cn('h-3 w-3', isProcessing && 'animate-spin')} />
