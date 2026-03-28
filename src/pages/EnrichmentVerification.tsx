@@ -318,7 +318,20 @@ export default function EnrichmentVerification() {
               </Button>
             )}
 
-            <Button size="sm" onClick={handleRun} disabled={isLoading || saving || isRemediating}>
+            {/* E2E Validation */}
+            {!isValidating && !isRemediating && (
+              <Button size="sm" onClick={handleStartValidation} disabled={isLoading || saving}
+                className="bg-accent text-accent-foreground hover:bg-accent/90">
+                <ShieldAlert className="h-3 w-3 mr-1" /> Run E2E Validation
+              </Button>
+            )}
+            {isValidating && (
+              <Button size="sm" variant="destructive" onClick={handleStopValidation}>
+                <Square className="h-3 w-3 mr-1" /> Stop Validation
+              </Button>
+            )}
+
+            <Button size="sm" onClick={handleRun} disabled={isLoading || saving || isRemediating || isValidating}>
               {saving ? 'Saving…' : hasRun ? 'Re-run' : 'Run Verification'}
             </Button>
           </div>
