@@ -86,7 +86,7 @@ export function IncomingQueue() {
         {/* Live indicator */}
         <span className="flex items-center gap-1">
           {realtimeConnected ? (
-            <Wifi className="h-3 w-3 text-green-500" />
+            <Wifi className="h-3 w-3 text-primary" />
           ) : (
             <WifiOff className="h-3 w-3 text-destructive" />
           )}
