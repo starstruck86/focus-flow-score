@@ -39,6 +39,7 @@ type SourceType =
   | 'auth_gated'
   | 'social'
   | 'podcast'
+  | 'direct_audio'
   | 'unknown';
 
 interface SourceClassification {
@@ -109,9 +110,14 @@ function classifySource(url: string): SourceClassification {
       return { source_type: 'youtube', platform: 'YouTube', auth_required: false, transcript_available: true, downloadable: false, js_rendered: true };
     }
 
-    // Podcast
+    // Podcast platforms
     if (/spotify\.com|podcasts\.apple\.com|anchor\.fm/i.test(host)) {
       return { source_type: 'podcast', platform: 'Podcast', auth_required: false, transcript_available: null, downloadable: false, js_rendered: true };
+    }
+
+    // Direct audio files
+    if (/\.(mp3|m4a|wav|ogg|aac|flac|opus|webm)($|\?)/i.test(u.pathname)) {
+      return { source_type: 'direct_audio', platform: 'Audio', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
     }
 
     // Social
@@ -409,6 +415,196 @@ async function youtubeCaption(url: string, _apiKey: string): Promise<ExtractionR
   }
 }
 
+/** Podcast: Resolve via resolve-podcast-episode, then transcribe if audio URL found */
+async function podcastResolveAndTranscribe(url: string, _apiKey: string): Promise<ExtractionResult> {
+  const method = 'podcast_resolve_transcribe';
+  const startMs = Date.now();
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+    // Step 1: Resolve the podcast episode to get audio URL
+    console.log(`[Podcast] Resolving: ${url}`);
+    const resolveResp = await fetch(`${supabaseUrl}/functions/v1/resolve-podcast-episode`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({ url }),
+    });
+
+    if (!resolveResp.ok) {
+      throw new Error(`Resolve function returned ${resolveResp.status}`);
+    }
+
+    const resolveData = await resolveResp.json();
+    console.log(`[Podcast] Resolved: status=${resolveData.finalStatus}, audioUrl=${resolveData.resolution?.audioEnclosureUrl ? 'found' : 'none'}`);
+
+    const audioUrl = resolveData.resolution?.audioEnclosureUrl;
+
+    // If no audio URL found, return metadata as content (better than nothing)
+    if (!audioUrl) {
+      const metadataContent = buildPodcastMetadataContent(resolveData);
+      const durationMs = Date.now() - startMs;
+
+      if (metadataContent && metadataContent.length > 100) {
+        return {
+          content: metadataContent,
+          attempt: {
+            method, duration_ms: durationMs, chars_extracted: metadataContent.length, timeout_hit: false,
+            auth_wall_detected: false, http_status: 200,
+            validation_result: 'partial', error_category: 'no_audio_url',
+            error_detail: resolveData.failureReason || 'No audio URL resolved — metadata only',
+          },
+        };
+      }
+
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: false, http_status: 200,
+          validation_result: 'fail', error_category: 'podcast_no_audio',
+          error_detail: resolveData.failureReason || 'Could not resolve audio URL for transcription',
+        },
+      };
+    }
+
+    // Step 2: Send to transcribe-audio
+    console.log(`[Podcast] Transcribing audio: ${audioUrl.substring(0, 80)}...`);
+    const transcribeResp = await fetch(`${supabaseUrl}/functions/v1/transcribe-audio`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({ audio_url: audioUrl }),
+    });
+
+    if (!transcribeResp.ok) {
+      throw new Error(`Transcribe function returned ${transcribeResp.status}`);
+    }
+
+    const transcribeData = await transcribeResp.json();
+    const durationMs = Date.now() - startMs;
+
+    if (transcribeData.success && transcribeData.transcript && transcribeData.transcript.length >= 50) {
+      // Build rich content: metadata header + transcript
+      const header = resolveData.metadata?.title ? `# ${resolveData.metadata.title}\n` : '';
+      const showLine = resolveData.metadata?.showName ? `**Show:** ${resolveData.metadata.showName}\n` : '';
+      const transcript = `${header}${showLine}\n## Transcript\n\n${transcribeData.transcript}`;
+
+      return {
+        content: transcript.slice(0, CONTENT_CAP),
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: transcript.length, timeout_hit: false,
+          auth_wall_detected: false, http_status: 200,
+          validation_result: transcript.length >= 500 ? 'pass' : 'partial',
+          error_category: null, error_detail: null,
+        },
+      };
+    }
+
+    // Transcription failed
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: false,
+        auth_wall_detected: false, http_status: 200,
+        validation_result: 'fail',
+        error_category: transcribeData.failureCode || 'transcription_failed',
+        error_detail: transcribeData.failureReason || 'Audio transcription produced no usable text',
+      },
+    };
+  } catch (e) {
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
+        auth_wall_detected: false, http_status: null,
+        validation_result: 'fail', error_category: 'podcast_pipeline_error',
+        error_detail: (e as Error).message?.slice(0, 200),
+      },
+    };
+  }
+}
+
+/** Direct audio: Send straight to transcribe-audio */
+async function directAudioTranscribe(url: string, _apiKey: string): Promise<ExtractionResult> {
+  const method = 'direct_audio_transcribe';
+  const startMs = Date.now();
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+    console.log(`[DirectAudio] Transcribing: ${url.substring(0, 80)}...`);
+    const transcribeResp = await fetch(`${supabaseUrl}/functions/v1/transcribe-audio`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({ audio_url: url }),
+    });
+
+    if (!transcribeResp.ok) {
+      throw new Error(`Transcribe returned ${transcribeResp.status}`);
+    }
+
+    const data = await transcribeResp.json();
+    const durationMs = Date.now() - startMs;
+
+    if (data.success && data.transcript && data.transcript.length >= 50) {
+      return {
+        content: data.transcript.slice(0, CONTENT_CAP),
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: data.transcript.length, timeout_hit: false,
+          auth_wall_detected: false, http_status: 200,
+          validation_result: data.transcript.length >= 500 ? 'pass' : 'partial',
+          error_category: null, error_detail: null,
+        },
+      };
+    }
+
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: false,
+        auth_wall_detected: false, http_status: 200,
+        validation_result: 'fail',
+        error_category: data.failureCode || 'transcription_failed',
+        error_detail: data.failureReason || 'Audio transcription produced no usable text',
+      },
+    };
+  } catch (e) {
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
+        auth_wall_detected: false, http_status: null,
+        validation_result: 'fail', error_category: 'audio_transcribe_error',
+        error_detail: (e as Error).message?.slice(0, 200),
+      },
+    };
+  }
+}
+
+/** Build readable content from podcast metadata when no audio URL available */
+function buildPodcastMetadataContent(resolveData: any): string | null {
+  const m = resolveData?.metadata;
+  if (!m) return null;
+  const parts: string[] = [];
+  if (m.title) parts.push(`# ${m.title}`);
+  if (m.showName) parts.push(`**Show:** ${m.showName}`);
+  if (m.publishDate) parts.push(`**Published:** ${m.publishDate}`);
+  if (m.description) parts.push(`\n## Description\n\n${m.description}`);
+  if (resolveData.failureReason) parts.push(`\n---\n*Note: ${resolveData.failureReason}*`);
+  return parts.length > 0 ? parts.join('\n') : null;
+}
+
 // ── Method chains per source type ──────────────────────────
 function getMethodChain(source: SourceClassification): Array<(url: string, apiKey: string) => Promise<ExtractionResult>> {
   switch (source.source_type) {
@@ -421,10 +617,9 @@ function getMethodChain(source: SourceClassification): Array<(url: string, apiKe
     case 'pdf':
       return [firecrawlScrape, firecrawlFullPage];
     case 'podcast':
-      return [
-        (u, k) => firecrawlScrape(u, k, { waitFor: 5000 }),
-        firecrawlFullPage,
-      ];
+      return [podcastResolveAndTranscribe];
+    case 'direct_audio':
+      return [directAudioTranscribe];
     case 'social':
       return [firecrawlScrape, firecrawlFullPage];
     case 'auth_gated':
