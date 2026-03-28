@@ -331,6 +331,128 @@ async function resolveApplePodcastEpisode(url: string, showId: string, episodeId
   };
 }
 
+// ── Anchor.fm ──────────────────────────────────────────────
+
+function isAnchorUrl(url: string): boolean {
+  return /anchor\.fm/i.test(url);
+}
+
+async function resolveAnchorEpisode(url: string): Promise<ResolveResult> {
+  const stages: ResolveResult['resolverStages'] = [];
+  const metadata: ResolveResult['metadata'] = {
+    title: null, showName: null, description: null,
+    durationMs: null, artworkUrl: null, episodeUrl: url, publishDate: null,
+  };
+  const resolution: ResolveResult['resolution'] = {
+    rssFeedUrl: null, audioEnclosureUrl: null,
+    transcriptSourceUrl: null, canonicalPageUrl: url,
+  };
+
+  // Anchor.fm URLs follow pattern: anchor.fm/s/{showId}/podcast or anchor.fm/{showName}/episodes/{slug}
+  // Try to derive RSS feed URL — Anchor provides RSS at anchor.fm/s/{showId}/podcast/rss
+  // or for new Spotify-hosted: podcasters.spotify.com/pod/{showName}/rss
+  
+  stages.push({ stage: 'resolving_anchor_rss', status: 'running' });
+  
+  // Try to scrape the anchor page to find the RSS link or audio player
+  const firecrawlKey = Deno.env.get('FIRECRAWL_API_KEY');
+  let pageContent = '';
+  
+  if (firecrawlKey) {
+    try {
+      const scrapeResp = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${firecrawlKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, formats: ['markdown', 'html'], waitFor: 3000, timeout: 30000 }),
+      });
+      if (scrapeResp.ok) {
+        const data = await scrapeResp.json();
+        pageContent = data.data?.markdown || '';
+        const html = data.data?.html || '';
+        
+        // Look for audio URL in the HTML
+        const audioMatch = html.match(/(?:src|href)="(https?:\/\/[^"]*\.(?:mp3|m4a|ogg)[^"]*)"/i);
+        if (audioMatch) {
+          resolution.audioEnclosureUrl = audioMatch[1];
+        }
+        
+        // Look for RSS link
+        const rssMatch = html.match(/(?:href)="(https?:\/\/[^"]*\/rss[^"]*)"/i)
+          || html.match(/(?:href)="(https?:\/\/anchor\.fm\/s\/[^"]*\/podcast\/rss)"/i);
+        if (rssMatch) {
+          resolution.rssFeedUrl = rssMatch[1];
+        }
+        
+        // Extract title from page
+        const titleMatch = pageContent.match(/^#\s+(.+)/m) || pageContent.match(/^(.{10,80})/m);
+        if (titleMatch) metadata.title = titleMatch[1].trim();
+        
+        // Extract description
+        const paragraphs = pageContent.split('\n\n').filter((p: string) => p.trim().length > 50);
+        if (paragraphs.length > 0) {
+          metadata.description = paragraphs.slice(0, 3).join('\n\n').substring(0, 2000);
+        }
+        
+        stages[stages.length - 1] = { stage: 'resolving_anchor_rss', status: 'done', detail: `audio=${resolution.audioEnclosureUrl ? 'found' : 'none'}, rss=${resolution.rssFeedUrl ? 'found' : 'none'}` };
+      } else {
+        stages[stages.length - 1] = { stage: 'resolving_anchor_rss', status: 'failed', detail: `Scrape ${scrapeResp.status}` };
+      }
+    } catch (e) {
+      stages[stages.length - 1] = { stage: 'resolving_anchor_rss', status: 'failed', detail: String(e) };
+    }
+  } else {
+    stages[stages.length - 1] = { stage: 'resolving_anchor_rss', status: 'failed', detail: 'No Firecrawl key for page scrape' };
+  }
+
+  // If we found RSS but no direct audio, try to parse the RSS for enclosures
+  if (resolution.rssFeedUrl && !resolution.audioEnclosureUrl) {
+    stages.push({ stage: 'resolving_audio_enclosure', status: 'running' });
+    try {
+      const rssResp = await fetch(resolution.rssFeedUrl);
+      if (rssResp.ok) {
+        const rssXml = await rssResp.text();
+        // Get first episode enclosure
+        const encMatch = rssXml.match(/<enclosure[^>]+url="([^"]+)"/);
+        if (encMatch) {
+          resolution.audioEnclosureUrl = encMatch[1];
+          stages[stages.length - 1] = { stage: 'resolving_audio_enclosure', status: 'done', detail: 'Found from RSS' };
+        } else {
+          stages[stages.length - 1] = { stage: 'resolving_audio_enclosure', status: 'failed', detail: 'No enclosure in RSS' };
+        }
+      }
+    } catch (e) {
+      stages[stages.length - 1] = { stage: 'resolving_audio_enclosure', status: 'failed', detail: String(e) };
+    }
+  }
+
+  let finalStatus: string;
+  let failureCode: string | null = null;
+  let failureReason: string | null = null;
+
+  if (resolution.audioEnclosureUrl) {
+    finalStatus = 'audio_resolved';
+  } else if (metadata.title || metadata.description) {
+    finalStatus = 'metadata_only';
+    failureCode = 'ANCHOR_NO_AUDIO_URL';
+    failureReason = 'Anchor.fm page scraped but no direct audio URL found. Paste transcript or provide direct audio URL.';
+  } else {
+    finalStatus = 'needs_manual_assist';
+    failureCode = 'ANCHOR_PARSE_FAILED';
+    failureReason = 'Could not extract audio or metadata from Anchor.fm. Paste transcript manually.';
+  }
+
+  return {
+    success: true,
+    subtype: 'anchor_episode',
+    metadata,
+    resolution,
+    finalStatus,
+    failureCode,
+    failureReason,
+    resolverStages: stages,
+  };
+}
+
 // ── Main handler ───────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -356,6 +478,8 @@ Deno.serve(async (req) => {
       result = await resolveSpotifyEpisode(url, spotifyEpId);
     } else if (appleIds.showId) {
       result = await resolveApplePodcastEpisode(url, appleIds.showId, appleIds.episodeId);
+    } else if (isAnchorUrl(url)) {
+      result = await resolveAnchorEpisode(url);
     } else {
       // Unknown podcast URL — try as generic page
       result = {
@@ -365,7 +489,7 @@ Deno.serve(async (req) => {
         resolution: { rssFeedUrl: null, audioEnclosureUrl: null, transcriptSourceUrl: null, canonicalPageUrl: null },
         finalStatus: 'needs_manual_assist',
         failureCode: 'CANONICAL_PAGE_NOT_FOUND',
-        failureReason: 'URL is not a recognized Spotify or Apple Podcasts episode. Provide a direct audio URL or paste transcript.',
+        failureReason: 'URL is not a recognized Spotify, Apple Podcasts, or Anchor episode. Provide a direct audio URL or paste transcript.',
         resolverStages: [],
       };
     }
