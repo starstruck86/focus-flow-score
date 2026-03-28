@@ -232,6 +232,39 @@ export default function EnrichmentVerification() {
     a.click(); URL.revokeObjectURL(url);
   }, [verified, summary]);
 
+  // ── E2E Validation ─────────────────────────────────────
+  const handleStartValidation = useCallback(async () => {
+    const controller = new AbortController();
+    setValidationAbort(controller);
+    setMode('validate');
+
+    const fetchRes = async () => {
+      const { data } = await supabase.from('resources').select('*').order('created_at', { ascending: false });
+      return (data || []) as any as Resource[];
+    };
+    const fetchAudio = async () => {
+      const { data } = await supabase.from('audio_jobs').select('*').order('created_at', { ascending: false }).limit(500);
+      const map = new Map<string, any>();
+      for (const row of (data || [])) {
+        if (!map.has((row as any).resource_id)) map.set((row as any).resource_id, row);
+      }
+      return map;
+    };
+
+    await runEndToEndValidation(fetchRes, fetchAudio, (r) => {
+      setValidationResult({ ...r });
+      if (r.phase === 'complete') {
+        qc.invalidateQueries({ queryKey: ['resources'] });
+        qc.invalidateQueries({ queryKey: ['all-resources'] });
+      }
+    }, controller.signal);
+  }, [qc]);
+
+  const handleStopValidation = useCallback(() => {
+    validationAbort?.abort();
+    setValidationAbort(null);
+  }, [validationAbort]);
+
   const isLoading = loadingResources || loadingAudio;
 
   return (
