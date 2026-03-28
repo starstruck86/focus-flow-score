@@ -147,12 +147,11 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
   );
 
   const handleClose = useCallback(() => {
-    if (isDone) {
-      store.reset();
-      queryClient.invalidateQueries({ queryKey: ['resources'] });
-    }
+    // Always reset transient session on close — prevents stale completed state on reopen
+    store.reset();
+    queryClient.invalidateQueries({ queryKey: ['resources'] });
     onOpenChange(false);
-  }, [isDone, store, queryClient, onOpenChange]);
+  }, [store, queryClient, onOpenChange]);
 
   const handleModeChange = (value: string) => {
     if (isProcessing || isDone) return;

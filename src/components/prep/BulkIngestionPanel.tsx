@@ -17,19 +17,19 @@ import {
 import {
   Play, Pause, Square, RotateCcw, ChevronDown,
   CheckCircle2, XCircle, SkipForward, AlertTriangle,
-  Eye, Loader2, Zap, Lock, AlertOctagon, TriangleAlert,
+  Loader2, Zap, Lock, AlertOctagon, TriangleAlert,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { deriveEnrichSession, type EnrichSession } from '@/lib/enrichSession';
 import type {
   IngestionState,
-  IngestionJobStatus,
   IngestionItem,
+  FailureCategory,
 } from '@/store/useEnrichmentJobStore';
 
 interface BulkIngestionPanelProps {
   state: IngestionState;
   onSetBatchSize: (size: number) => void;
-  onSetReprocessMode?: (mode: any) => void;
   onStart: (items: Array<{ resourceId?: string; url: string; title: string; enrichMode?: 'deep_enrich' | 're_enrich'; videoId?: string; channel?: string; publishDate?: string; duration?: string }>, opts?: { retryFailedOnly?: boolean }) => void;
   onPause: () => void;
   onResume: () => void;
@@ -40,43 +40,6 @@ interface BulkIngestionPanelProps {
   sourceLabel?: string;
   totalEligible?: number;
 }
-
-const STATUS_LABELS: Record<IngestionJobStatus, string> = {
-  idle: 'Ready',
-  running: 'Deep Enriching…',
-  paused: 'Paused',
-  completed: 'Completed',
-  failed: 'Completed with errors',
-  cancelled: 'Cancelled',
-};
-
-const STATUS_COLORS: Record<IngestionJobStatus, string> = {
-  idle: 'bg-muted text-muted-foreground',
-  running: 'bg-primary/20 text-primary',
-  paused: 'bg-status-yellow/20 text-status-yellow',
-  completed: 'bg-status-green/20 text-status-green',
-  failed: 'bg-status-red/20 text-status-red',
-  cancelled: 'bg-muted text-muted-foreground',
-};
-
-const STAGE_LABELS: Record<string, string> = {
-  queued: 'Queued',
-  preflight: 'Preflight…',
-  preprocessing: 'Preprocessing…',
-  checking_duplicate: 'Checking duplicates…',
-  fetching: 'Fetching…',
-  classifying: 'Classifying…',
-  saving: 'Saving…',
-  enriching: 'Deep enriching…',
-  verifying: 'Verifying…',
-  complete: 'Enriched',
-  partial: 'Partially Enriched',
-  needs_auth: 'Needs Auth',
-  unsupported: 'Unsupported',
-  skipped: 'Skipped',
-  failed: 'Failed',
-  needs_review: 'Needs review',
-};
 
 /** User-friendly failure labels keyed by FailureCategory */
 const FAILURE_LABELS: Record<string, string> = {
@@ -105,6 +68,25 @@ const SKIP_REASON_LABELS: Record<string, string> = {
   unsupported_source: 'Unsupported source type',
   invalid_url: 'Invalid URL',
   missing_data: 'Missing required data',
+};
+
+const STAGE_LABELS: Record<string, string> = {
+  queued: 'Queued',
+  preflight: 'Preflight…',
+  preprocessing: 'Preprocessing…',
+  checking_duplicate: 'Checking duplicates…',
+  fetching: 'Fetching…',
+  classifying: 'Classifying…',
+  saving: 'Saving…',
+  enriching: 'Deep enriching…',
+  verifying: 'Verifying…',
+  complete: 'Enriched',
+  partial: 'Partially Enriched',
+  needs_auth: 'Needs Auth',
+  unsupported: 'Unsupported',
+  skipped: 'Skipped',
+  failed: 'Failed',
+  needs_review: 'Needs review',
 };
 
 function ItemDetail({ item }: { item: IngestionItem }) {
@@ -174,17 +156,24 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
   hasFailures,
   sourceItems,
   sourceLabel = 'items',
-  totalEligible,
 }: BulkIngestionPanelProps) {
-  const isActive = state.status === 'running' || state.status === 'paused';
-  const isDone = state.status === 'completed' || state.status === 'failed' || state.status === 'cancelled';
-  const progressPct = state.totalItems > 0 ? Math.round((state.processedCount / state.totalItems) * 100) : 0;
+  // ── Canonical session (single source of truth) ──────────
+  const session = useMemo(() => deriveEnrichSession(state), [state]);
+  const {
+    terminalState, percentComplete, successCount, failedCount,
+    skippedCount, partialCount, needsAuthCount, unsupportedCount,
+    remainingCount, totalRunnableAtStart, currentBatchIndex,
+    totalBatches, failedItems, retryableCount, completedCount,
+  } = session;
+
+  const isActive = terminalState === 'running' || terminalState === 'paused';
+  const isDone = terminalState.startsWith('completed') || terminalState === 'cancelled';
+
   const [showFailed, setShowFailed] = useState(false);
   const [showSkipped, setShowSkipped] = useState(false);
   const [showPartial, setShowPartial] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
 
-  const failedItems = useMemo(() => state.items.filter(i => i.stage === 'failed'), [state.items]);
   const skippedItems = useMemo(() => state.items.filter(i => i.stage === 'skipped'), [state.items]);
   const partialItems = useMemo(() => state.items.filter(i => i.stage === 'partial'), [state.items]);
   const authItems = useMemo(() => state.items.filter(i => i.stage === 'needs_auth' || i.stage === 'unsupported'), [state.items]);
@@ -193,8 +182,30 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
     [state.items]
   );
 
-  const allSkipped = isDone && state.skippedCount > 0 && state.successCount === 0 && state.failedCount === 0 && (state.partialCount || 0) === 0;
-  const retryableCount = failedItems.filter(i => i.retryEligible !== false).length;
+  // ── Terminal state labels ───────────────────────────────
+  const statusLabel = (() => {
+    switch (terminalState) {
+      case 'idle': return 'Ready';
+      case 'running': return 'Deep Enriching…';
+      case 'paused': return 'Paused';
+      case 'completed_success': return 'Completed';
+      case 'completed_with_errors': return 'Completed with errors';
+      case 'completed_noop': return 'Nothing to run';
+      case 'cancelled': return 'Cancelled';
+    }
+  })();
+
+  const statusColor = (() => {
+    switch (terminalState) {
+      case 'idle': return 'bg-muted text-muted-foreground';
+      case 'running': return 'bg-primary/20 text-primary';
+      case 'paused': return 'bg-status-yellow/20 text-status-yellow';
+      case 'completed_success': return 'bg-status-green/20 text-status-green';
+      case 'completed_with_errors': return 'bg-status-red/20 text-status-red';
+      case 'completed_noop': return 'bg-muted text-muted-foreground';
+      case 'cancelled': return 'bg-muted text-muted-foreground';
+    }
+  })();
 
   return (
     <div className="border border-border rounded-lg bg-card p-4 space-y-3">
@@ -203,19 +214,25 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
         <div className="flex items-center gap-2">
           <Zap className="h-4 w-4 text-primary" />
           <h3 className="text-sm font-semibold text-foreground">Deep Enrich</h3>
-          <Badge className={cn('text-[10px]', STATUS_COLORS[state.status])}>
-            {STATUS_LABELS[state.status]}
+          <Badge className={cn('text-[10px]', statusColor)}>
+            {statusLabel}
           </Badge>
         </div>
         {isDone && (
-          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={onReset}>
+          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => {
+            setShowFailed(false);
+            setShowSkipped(false);
+            setShowPartial(false);
+            setShowAuth(false);
+            onReset();
+          }}>
             <RotateCcw className="h-3 w-3" /> Reset
           </Button>
         )}
       </div>
 
       {/* Controls — idle */}
-      {state.status === 'idle' && (
+      {terminalState === 'idle' && (
         <div className="space-y-2">
           <p className="text-[11px] text-muted-foreground">
             Classifies source type, runs multi-method extraction with fallback, and validates quality before marking enriched.
@@ -236,12 +253,6 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
             <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
               <span className="font-medium text-foreground">{sourceItems.length}</span>
               <span>eligible {sourceLabel}</span>
-              {totalEligible != null && totalEligible > sourceItems.length && (
-                <>
-                  <span>·</span>
-                  <span>{totalEligible} total eligible</span>
-                </>
-              )}
               <span>·</span>
               <span>will process <span className="font-medium text-foreground">{Math.min(state.batchSize, sourceItems.length)}</span> per batch</span>
             </div>
@@ -272,15 +283,30 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
         </div>
       )}
 
-      {/* Progress */}
-      {(isActive || isDone) && (
+      {/* No-op terminal */}
+      {terminalState === 'completed_noop' && (
+        <div className="text-center py-4 space-y-1">
+          <CheckCircle2 className="h-8 w-8 text-status-green mx-auto" />
+          <p className="text-sm font-medium text-foreground">All processed</p>
+          <p className="text-xs text-muted-foreground">No runnable resources in this selection.</p>
+        </div>
+      )}
+
+      {/* Progress — active or terminal (non-noop) */}
+      {(isActive || (isDone && terminalState !== 'completed_noop')) && (
         <div className="space-y-2">
-          <Progress value={progressPct} className="h-2" />
+          {totalRunnableAtStart > 0 ? (
+            <Progress value={percentComplete} className="h-2" />
+          ) : null}
 
           <div className="flex items-center justify-between text-[11px]">
             <div className="flex items-center gap-1 text-muted-foreground">
-              {state.currentBatch > 0 && <span>Batch {state.currentBatch}/{state.totalBatches} · </span>}
-              <span>{state.processedCount}/{state.totalItems}</span>
+              {totalBatches > 0 && currentBatchIndex > 0 && (
+                <span>Batch {currentBatchIndex}/{totalBatches} · </span>
+              )}
+              {totalRunnableAtStart > 0 ? (
+                <span>{completedCount - skippedCount}/{totalRunnableAtStart}</span>
+              ) : null}
               {currentItem && (
                 <span className="ml-1 flex items-center gap-1">
                   · <Loader2 className="h-3 w-3 animate-spin" />
@@ -290,27 +316,29 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
               )}
             </div>
             <div className="flex items-center gap-3">
-              <span className="flex items-center gap-0.5 text-status-green">
-                <CheckCircle2 className="h-3 w-3" /> {state.successCount}
-              </span>
-              {(state.partialCount || 0) > 0 && (
-                <span className="flex items-center gap-0.5 text-status-yellow">
-                  <TriangleAlert className="h-3 w-3" /> {state.partialCount}
+              {successCount > 0 && (
+                <span className="flex items-center gap-0.5 text-status-green">
+                  <CheckCircle2 className="h-3 w-3" /> {successCount}
                 </span>
               )}
-              {(state.needsAuthCount || 0) > 0 && (
+              {partialCount > 0 && (
                 <span className="flex items-center gap-0.5 text-status-yellow">
-                  <Lock className="h-3 w-3" /> {state.needsAuthCount}
+                  <TriangleAlert className="h-3 w-3" /> {partialCount}
                 </span>
               )}
-              {state.failedCount > 0 && (
+              {needsAuthCount > 0 && (
+                <span className="flex items-center gap-0.5 text-status-yellow">
+                  <Lock className="h-3 w-3" /> {needsAuthCount}
+                </span>
+              )}
+              {failedCount > 0 && (
                 <span className="flex items-center gap-0.5 text-status-red">
-                  <XCircle className="h-3 w-3" /> {state.failedCount}
+                  <XCircle className="h-3 w-3" /> {failedCount}
                 </span>
               )}
-              {state.skippedCount > 0 && (
+              {skippedCount > 0 && (
                 <span className="flex items-center gap-0.5 text-muted-foreground">
-                  <SkipForward className="h-3 w-3" /> {state.skippedCount}
+                  <SkipForward className="h-3 w-3" /> {skippedCount}
                 </span>
               )}
             </div>
@@ -319,7 +347,7 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
           {/* Active controls */}
           {isActive && (
             <div className="flex items-center gap-2">
-              {state.status === 'running' ? (
+              {terminalState === 'running' ? (
                 <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onPause}>
                   <Pause className="h-3 w-3" /> Pause
                 </Button>
@@ -334,7 +362,7 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
             </div>
           )}
 
-          {/* Retry */}
+          {/* Retry — only when done and there are retryable failures */}
           {isDone && retryableCount > 0 && (
             <Button
               variant="outline"
@@ -346,37 +374,34 @@ export const BulkIngestionPanel = memo(function BulkIngestionPanel({
               Retry {retryableCount} failed
             </Button>
           )}
+        </div>
+      )}
 
-          {/* Post-batch remaining */}
-          {isDone && (totalEligible != null ? totalEligible - state.successCount > 0 : sourceItems.length > state.processedCount) && (
-            <div className="text-[11px] text-muted-foreground pt-1">
-              {state.successCount > 0 && <span className="text-status-green font-medium">{state.successCount} enriched</span>}
-              {' · '}
-              {totalEligible != null
-                ? `${Math.max(0, totalEligible - state.successCount)} eligible ${sourceLabel} remaining`
-                : `${sourceItems.length - state.processedCount} ${sourceLabel} remaining`}
-            </div>
-          )}
+      {/* Terminal summary — never shows "remaining" after completion */}
+      {isDone && terminalState !== 'completed_noop' && (
+        <div className="flex items-center gap-4 text-[11px] pt-1 border-t border-border flex-wrap">
+          <span className="text-status-green font-medium">{successCount} enriched</span>
+          {partialCount > 0 && <span className="text-status-yellow">{partialCount} partial</span>}
+          {needsAuthCount > 0 && <span className="text-status-yellow">{needsAuthCount} needs auth</span>}
+          {unsupportedCount > 0 && <span className="text-muted-foreground">{unsupportedCount} unsupported</span>}
+          {skippedCount > 0 && <span className="text-muted-foreground">{skippedCount} skipped</span>}
+          {failedCount > 0 && <span className="text-status-red">{failedCount} failed</span>}
+        </div>
+      )}
+
+      {/* All-failed explicit message */}
+      {isDone && successCount === 0 && failedCount > 0 && skippedCount === 0 && partialCount === 0 && (
+        <div className="bg-destructive/5 rounded-md p-3 text-[11px] space-y-1">
+          <p className="font-medium text-status-red">Run completed with errors</p>
+          <p className="text-muted-foreground">0 enriched · 0 skipped · {failedCount} failed</p>
         </div>
       )}
 
       {/* All-skipped explanation */}
-      {allSkipped && (
+      {isDone && skippedCount > 0 && successCount === 0 && failedCount === 0 && partialCount === 0 && (
         <div className="bg-muted/50 rounded-md p-3 text-[11px] text-muted-foreground space-y-1">
-          <p className="font-medium text-foreground">All {state.skippedCount} {sourceLabel} were skipped</p>
+          <p className="font-medium text-foreground">All {skippedCount} {sourceLabel} were skipped</p>
           <p>Items were skipped because they were already enriched or are duplicates.</p>
-        </div>
-      )}
-
-      {/* Trust gate summary */}
-      {isDone && !allSkipped && (
-        <div className="flex items-center gap-4 text-[11px] pt-1 border-t border-border flex-wrap">
-          <span className="text-status-green font-medium">{state.successCount} enriched</span>
-          {(state.partialCount || 0) > 0 && <span className="text-status-yellow">{state.partialCount} partial</span>}
-          {(state.needsAuthCount || 0) > 0 && <span className="text-status-yellow">{state.needsAuthCount} needs auth</span>}
-          {(state.unsupportedCount || 0) > 0 && <span className="text-muted-foreground">{state.unsupportedCount} unsupported</span>}
-          <span className="text-muted-foreground">{state.skippedCount} skipped</span>
-          {state.failedCount > 0 && <span className="text-status-red">{state.failedCount} failed</span>}
         </div>
       )}
 
