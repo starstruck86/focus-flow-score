@@ -24,7 +24,7 @@ import {
 import { cn } from '@/lib/utils';
 import {
   getEnrichmentStatusLabel, getEnrichmentStatusColor,
-  getRecommendedAction, type EnrichmentStatus,
+  type EnrichmentStatus,
 } from '@/lib/resourceEligibility';
 import {
   getQualityTierLabel, getQualityTierColor,
