@@ -129,12 +129,12 @@ describe('routeFailure', () => {
   it('every bucket has at least one row action', () => {
     const buckets: FailureBucket[] = [
       'retryable_extraction_failure',
-      'audio_resolution_required',
+      'alternate_source_required',
       'transcript_required',
       'auth_required',
       'manual_content_required',
       'unsupported_source',
-      'metadata_only_salvageable',
+      'metadata_only_acceptable',
     ];
     for (const b of buckets) {
       const actions = getFailureBucketActions(b);

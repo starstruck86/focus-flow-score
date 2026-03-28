@@ -12,7 +12,8 @@ export type EnrichTerminalState =
   | 'completed_success'
   | 'completed_with_errors'
   | 'completed_noop'
-  | 'cancelled';
+  | 'cancelled'
+  | 'completed_quarantined';
 
 export interface EnrichSession {
   /** Total items selected for the run */
@@ -59,7 +60,7 @@ const ACTIVE_STAGES = new Set([
 ]);
 
 const TERMINAL_STAGES = new Set([
-  'complete', 'partial', 'needs_auth', 'unsupported', 'skipped', 'failed', 'needs_review',
+  'complete', 'partial', 'needs_auth', 'unsupported', 'skipped', 'failed', 'needs_review', 'quarantined',
 ]);
 
 /**
@@ -91,6 +92,10 @@ export function deriveEnrichSession(state: IngestionState): EnrichSession {
         break;
       case 'failed':
       case 'needs_review':
+        failedCount++;
+        failedItems.push(item);
+        break;
+      case 'quarantined' as any:
         failedCount++;
         failedItems.push(item);
         break;

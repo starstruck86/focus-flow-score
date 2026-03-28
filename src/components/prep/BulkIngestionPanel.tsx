@@ -91,12 +91,12 @@ const STAGE_LABELS: Record<string, string> = {
 
 const FAILURE_BUCKET_LABELS: Partial<Record<FailureBucket, string>> = {
   retryable_extraction_failure: 'Retryable Extraction Failure',
-  audio_resolution_required: 'Audio Resolution Required',
+  alternate_source_required: 'Alternate Source Required',
   transcript_required: 'Transcript Required',
   auth_required: 'Auth Required',
   manual_content_required: 'Manual Content Required',
   unsupported_source: 'Unsupported Source',
-  metadata_only_salvageable: 'Metadata Only',
+  metadata_only_acceptable: 'Metadata Only',
 };
 
 function isShallowTranscriptMessage(value?: string): boolean {
