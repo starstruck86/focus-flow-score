@@ -26,6 +26,7 @@ import type {
   IngestionItem,
   FailureCategory,
 } from '@/store/useEnrichmentJobStore';
+import type { FailureBucket } from '@/lib/failureRouting';
 
 interface BulkIngestionPanelProps {
   state: IngestionState;
