@@ -92,6 +92,7 @@ export function validateResourceQuality(resource: ResourceForValidation): Qualit
   const violations: string[] = [];
   const content = resource.content || '';
   const contentLen = content.length;
+  const isSpreadsheet = resource.file_url ? /docs\.google\.com\/spreadsheets|sheets\.google\.com/i.test(resource.file_url) : false;
 
   // ── 1. Content Depth (0-25) ──────────────────────────────
   // Detect binary/non-text content (audio files stored as content)
