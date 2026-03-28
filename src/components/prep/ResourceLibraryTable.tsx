@@ -1,7 +1,4 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import {
-  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
-} from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,28 +11,24 @@ import {
   DropdownMenuTrigger, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-// ScrollArea removed — using native scroll for proper table behavior
 import {
   Search, ArrowUpDown, ArrowUp, ArrowDown,
   MoreHorizontal, Zap, RefreshCw, RotateCcw, Trash2,
-  Eye, AlertTriangle, CheckCircle2, XCircle, FileText,
+  Eye, AlertTriangle, CheckCircle2, FileText,
   Filter, X, FileAudio, HelpCircle, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import {
-  getEnrichmentStatusLabel, getEnrichmentStatusColor,
-  type EnrichmentStatus,
-} from '@/lib/resourceEligibility';
+import { type EnrichmentStatus } from '@/lib/resourceEligibility';
 import {
   getQualityTierLabel, getQualityTierColor,
 } from '@/lib/resourceQuality';
 import { detectDrift } from '@/lib/resourceLifecycle';
 import {
   detectResourceSubtype, getSubtypeLabel, classifyEnrichability,
-  getEnrichabilityLabel, getEnrichabilityColor,
+  getEnrichabilityColor,
 } from '@/lib/salesBrain/resourceSubtype';
 import {
-  isAudioResource, detectAudioSubtype, getAudioStageLabel,
+  isAudioResource, getAudioStageLabel,
   getAudioFailureDescription,
 } from '@/lib/salesBrain/audioPipeline';
 import {
@@ -240,7 +233,7 @@ export function ResourceLibraryTable({
   }, []);
 
   return (
-    <div ref={shellRef} className="flex flex-col" style={{ height: 'calc(100vh - 180px)', minHeight: '450px' }}>
+    <div ref={shellRef} className="flex flex-col" style={{ height: 'calc(100vh - 160px)', minHeight: '450px' }}>
       {/* Saved views — pinned top */}
       <div className="flex items-center gap-1 overflow-x-auto pb-1 shrink-0">
         {SAVED_VIEWS.map(view => (
@@ -594,7 +587,7 @@ export function ResourceLibraryTable({
                                 <Info className="h-3.5 w-3.5 mr-2" /> Audio Inspector
                               </DropdownMenuItem>
                             )}
-                            {/* Context-aware actions based on processing state */}
+                            {/* State-driven actions — one per state, no duplicates */}
                             {(() => {
                               const ps = deriveProcessingState(resource, audioJob);
                               const items: React.ReactNode[] = [];
@@ -614,34 +607,16 @@ export function ResourceLibraryTable({
                                 );
                               }
                               if (ps.state === 'RETRYABLE_FAILURE') {
-                                if (isAudio && audioJob?.retryable) {
-                                  items.push(
-                                    <DropdownMenuItem key="retry-resolve" onClick={() => onAction('retry_resolve', resource)}>
-                                      <RefreshCw className="h-3.5 w-3.5 mr-2" /> Retry Resolve
-                                    </DropdownMenuItem>,
-                                    <DropdownMenuItem key="retry-transcription" onClick={() => onAction('retry_transcription', resource)}>
-                                      <RefreshCw className="h-3.5 w-3.5 mr-2" /> Retry Transcription
-                                    </DropdownMenuItem>
-                                  );
-                                } else if (resource.file_url?.startsWith('http')) {
-                                  items.push(
-                                    <DropdownMenuItem key="retry" onClick={() => onAction('deep_enrich', resource)}>
-                                      <RefreshCw className="h-3.5 w-3.5 mr-2" /> Retry Enrichment
-                                    </DropdownMenuItem>
-                                  );
-                                }
-                              }
-                              if (ps.state === 'MANUAL_REQUIRED' || ps.state === 'METADATA_ONLY' || ps.state === 'RETRYABLE_FAILURE') {
                                 items.push(
-                                  <DropdownMenuItem key="manual" onClick={() => onAction('manual_assist', resource)}>
-                                    <HelpCircle className="h-3.5 w-3.5 mr-2" /> Manual Assist
+                                  <DropdownMenuItem key="retry" onClick={() => onAction('deep_enrich', resource)}>
+                                    <RefreshCw className="h-3.5 w-3.5 mr-2" /> Retry
                                   </DropdownMenuItem>
                                 );
                               }
-                              // Always offer Manual Assist for READY items that are audio/platform
-                              if (ps.state === 'READY' && isAudio) {
+                              // Manual Assist — available for ALL resources, all non-RUNNING states
+                              if (ps.state !== 'RUNNING') {
                                 items.push(
-                                  <DropdownMenuItem key="manual-ready" onClick={() => onAction('manual_assist', resource)}>
+                                  <DropdownMenuItem key="manual" onClick={() => onAction('manual_assist', resource)}>
                                     <HelpCircle className="h-3.5 w-3.5 mr-2" /> Manual Assist
                                   </DropdownMenuItem>
                                 );
