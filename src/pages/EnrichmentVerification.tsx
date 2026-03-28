@@ -72,7 +72,7 @@ function useVerificationHistory() {
 
 // ── Mode ──────────────────────────────────────────────────
 
-type PageMode = 'verify' | 'remediate' | 'validate' | 'gaps';
+type PageMode = 'verify' | 'remediate' | 'validate' | 'gaps' | 'roadmap';
 
 // ── Main ──────────────────────────────────────────────────
 
