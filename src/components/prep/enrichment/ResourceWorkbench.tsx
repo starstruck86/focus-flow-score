@@ -72,6 +72,11 @@ export function ResourceWorkbench({ resources, activeBucket, onSelectResource, s
     }
   }, [filtered, sort]);
 
+  // Reset page when filters change
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+  const safePageNum = Math.min(page, Math.max(0, totalPages - 1));
+  const paginated = sorted.slice(safePageNum * PAGE_SIZE, (safePageNum + 1) * PAGE_SIZE);
+
   const bucketLabel = BUCKET_META[activeBucket]?.label ?? 'All Resources';
 
   return (
@@ -83,7 +88,7 @@ export function ResourceWorkbench({ resources, activeBucket, onSelectResource, s
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
             <Input
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => { setSearch(e.target.value); setPage(0); }}
               placeholder="Search resources…"
               className="h-7 text-xs pl-7"
             />
@@ -102,7 +107,7 @@ export function ResourceWorkbench({ resources, activeBucket, onSelectResource, s
             </SelectContent>
           </Select>
           {subtypes.length > 1 && (
-            <Select value={subtypeFilter} onValueChange={setSubtypeFilter}>
+            <Select value={subtypeFilter} onValueChange={v => { setSubtypeFilter(v); setPage(0); }}>
               <SelectTrigger className="h-7 w-[120px] text-xs">
                 <SelectValue placeholder="Subtype" />
               </SelectTrigger>
@@ -113,20 +118,29 @@ export function ResourceWorkbench({ resources, activeBucket, onSelectResource, s
             </Select>
           )}
         </div>
-        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-          <span className="font-medium">{bucketLabel}</span>
-          <span>·</span>
-          <span>{sorted.length} resources</span>
+        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{bucketLabel}</span>
+            <span>·</span>
+            <span>{sorted.length} resources</span>
+            {totalPages > 1 && <span>· Page {safePageNum + 1}/{totalPages}</span>}
+          </div>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[10px]" disabled={safePageNum === 0} onClick={() => setPage(p => p - 1)}>← Prev</Button>
+              <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[10px]" disabled={safePageNum >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next →</Button>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Resource list */}
       <ScrollArea className="max-h-[60vh]">
         <div className="space-y-1">
-          {sorted.length === 0 && (
+          {paginated.length === 0 && (
             <p className="text-xs text-muted-foreground text-center py-8">No resources match the current filter</p>
           )}
-          {sorted.map(r => (
+          {paginated.map(r => (
             <ResourceRow
               key={r.id}
               resource={r}
