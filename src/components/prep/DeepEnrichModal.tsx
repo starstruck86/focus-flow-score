@@ -24,6 +24,7 @@ import {
   getProcessingStateColor,
   type ActionState,
 } from '@/lib/processingState';
+import { deriveEnrichSession } from '@/lib/enrichSession';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import { createLogger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
@@ -50,8 +51,9 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
   const queryClient = useQueryClient();
   const store = useEnrichmentJobStore();
   const { state } = store;
-  const isProcessing = state.status === 'running' || state.status === 'paused';
-  const isDone = state.status === 'completed' || state.status === 'failed' || state.status === 'cancelled';
+  const session = useMemo(() => deriveEnrichSession(state), [state]);
+  const isProcessing = session.terminalState === 'running' || session.terminalState === 'paused';
+  const isDone = session.terminalState.startsWith('completed') || session.terminalState === 'cancelled';
   const [mode, setMode] = useState<EnrichMode>('deep_enrich');
   const [showDetails, setShowDetails] = useState(false);
 
@@ -242,7 +244,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
             {actionState === 'RETRY_FIXABLE' && (
               <div className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  <span className="font-medium text-orange-600">{counts.retryable}</span>
+                  <span className="font-medium text-status-yellow">{counts.retryable}</span>
                   {' '}item{counts.retryable !== 1 ? 's' : ''} can be retried automatically.
                   {counts.manual + counts.metadataOnly > 0 && (
                     <> · <span className="font-medium text-status-red">{counts.manual + counts.metadataOnly}</span> need attention</>
@@ -267,7 +269,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
                 <p className="text-xs text-muted-foreground">
                   <span className="font-medium text-foreground">{eligibleCount}</span> ready to {modeLabel.toLowerCase()}
                   {counts.retryable > 0 && (
-                    <> · <span className="font-medium text-orange-600">{counts.retryable}</span> retryable</>
+                    <> · <span className="font-medium text-status-yellow">{counts.retryable}</span> retryable</>
                   )}
                   {counts.manual + counts.metadataOnly > 0 && (
                     <> · <span className="font-medium text-status-red">{counts.manual + counts.metadataOnly}</span> need attention</>
@@ -295,7 +297,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
                 {processingBreakdown.RETRYABLE_FAILURE.length > 0 && (
                   <DetailSection
                     label="Retry Available"
-                    color="bg-orange-500/20 text-orange-600"
+                    color="bg-status-yellow/20 text-status-yellow"
                     items={processingBreakdown.RETRYABLE_FAILURE}
                   />
                 )}
@@ -309,7 +311,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
                 {processingBreakdown.METADATA_ONLY.length > 0 && (
                   <DetailSection
                     label="Metadata Only"
-                    color="bg-orange-500/20 text-orange-600"
+                    color="bg-status-yellow/20 text-status-yellow"
                     items={processingBreakdown.METADATA_ONLY}
                   />
                 )}
@@ -348,7 +350,6 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
             hasFailures={store.hasFailures()}
             sourceItems={sourceItems}
             sourceLabel="resources"
-            totalEligible={eligibleCount}
           />
         )}
 

@@ -46,14 +46,14 @@ const BUCKET_DEFINITIONS: Record<FailureBucket, Omit<FailureRouting, 'reason'>> 
   },
   transcript_required: {
     bucket: 'transcript_required',
-    nextAction: 'Paste transcript or provide alternate episode source',
+    nextAction: 'Paste transcript or provide alternate source',
     processingState: 'MANUAL_REQUIRED',
     rowAction: 'manual_assist',
     retryable: false,
   },
   auth_required: {
     bucket: 'auth_required',
-    nextAction: 'Provide access or upload file content',
+    nextAction: 'Provide access or direct download link',
     processingState: 'MANUAL_REQUIRED',
     rowAction: 'manual_assist',
     retryable: false,
@@ -86,7 +86,7 @@ const SOURCE_REASONS: Record<string, Record<FailureBucket, string>> = {
   spotify_episode: {
     retryable_extraction_failure: 'Spotify metadata extraction failed.',
     audio_resolution_required: 'Spotify does not provide direct audio access.',
-    transcript_required: 'No direct audio access from Spotify. Paste transcript or provide alternate episode source.',
+    transcript_required: 'Transcript required for Spotify — paste transcript or provide alternate source.',
     auth_required: 'Spotify requires authentication for this content.',
     manual_content_required: 'Spotify episode requires manual transcript input.',
     unsupported_source: 'Spotify episode format not supported for direct extraction.',
@@ -95,7 +95,7 @@ const SOURCE_REASONS: Record<string, Record<FailureBucket, string>> = {
   apple_podcast_episode: {
     retryable_extraction_failure: 'Apple Podcast extraction failed — retry may resolve.',
     audio_resolution_required: 'RSS feed resolved but no matching audio enclosure found. Retry resolution or provide direct audio URL.',
-    transcript_required: 'Apple Podcast audio could not be resolved. Paste transcript or provide direct audio URL.',
+    transcript_required: 'Transcript required — paste transcript or provide alternate source.',
     auth_required: 'Apple Podcast requires authentication for this episode.',
     manual_content_required: 'Apple Podcast episode requires manual transcript input.',
     unsupported_source: 'Apple Podcast format not supported.',
@@ -104,11 +104,20 @@ const SOURCE_REASONS: Record<string, Record<FailureBucket, string>> = {
   audio_file: {
     retryable_extraction_failure: 'Audio transcription failed — retry with extended timeout.',
     audio_resolution_required: 'Audio file could not be downloaded for transcription.',
-    transcript_required: 'Audio file could not be transcribed. Paste transcript manually.',
+    transcript_required: 'Transcript required — paste transcript or provide alternate source.',
     auth_required: 'Audio file requires authentication to access.',
     manual_content_required: 'Audio file transcription exhausted. Paste transcript via Manual Assist.',
     unsupported_source: 'Audio format not supported for transcription.',
     metadata_only_salvageable: 'Audio file — metadata captured. Paste transcript for full enrichment.',
+  },
+  podcast_episode: {
+    retryable_extraction_failure: 'Podcast extraction failed — retry may resolve.',
+    audio_resolution_required: 'Podcast audio could not be resolved. Retry resolution or provide direct audio URL.',
+    transcript_required: 'Transcript required for podcast — paste transcript or provide alternate source.',
+    auth_required: 'Podcast source requires authentication to access.',
+    manual_content_required: 'Podcast episode requires manual transcript input.',
+    unsupported_source: 'Podcast source format not supported.',
+    metadata_only_salvageable: 'Podcast — metadata captured. Paste transcript or provide alternate source.',
   },
   google_doc: {
     retryable_extraction_failure: 'Google Doc extraction failed — retry enrichment.',
@@ -189,10 +198,6 @@ function determineBucket(
   // Source-type-first routing
   switch (subtype) {
     case 'spotify_episode':
-      // Spotify can never provide direct audio — always transcript_required or metadata_only
-      if (failureCategory === 'failed_quality' || finalStatus === 'partial') {
-        return 'metadata_only_salvageable';
-      }
       return 'transcript_required';
 
     case 'apple_podcast_episode':
@@ -204,7 +209,7 @@ function determineBucket(
         return 'audio_resolution_required';
       }
       if (failureCategory === 'failed_quality') {
-        return 'audio_resolution_required';
+        return 'transcript_required';
       }
       return 'audio_resolution_required';
 
@@ -299,7 +304,7 @@ function getSourceSpecificReason(
     case 'audio_resolution_required':
       return 'Audio source could not be resolved. Provide direct audio URL.';
     case 'transcript_required':
-      return 'Transcript not available. Paste transcript or provide alternate source.';
+      return 'Transcript required — paste transcript or provide alternate source.';
     case 'auth_required':
       return 'Authentication required to access this content.';
     case 'manual_content_required':

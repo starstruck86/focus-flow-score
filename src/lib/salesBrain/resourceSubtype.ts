@@ -95,7 +95,7 @@ export function detectResourceSubtype(url: string | null, resourceType?: string)
   if (/\.pdf(\?|$)/i.test(lower)) return 'pdf';
 
   // Podcast RSS
-  if (resourceType === 'podcast_episode') return 'podcast_episode';
+  if (resourceType === 'podcast_episode' || resourceType === 'podcast') return 'podcast_episode';
 
   // Known competitor page
   if (resourceType === 'competitor_page') return 'competitor_page';

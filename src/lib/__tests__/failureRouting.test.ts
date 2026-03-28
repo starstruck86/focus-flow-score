@@ -9,9 +9,8 @@ describe('routeFailure', () => {
       'failed_quality',
       'Content too weak to enrich',
     );
-    // Spotify with quality failure → metadata_only_salvageable (metadata captured)
-    expect(r.bucket).toBe('metadata_only_salvageable');
-    expect(r.reason).toContain('Spotify');
+    expect(r.bucket).toBe('transcript_required');
+    expect(r.reason).toContain('Transcript required');
     expect(r.reason).not.toContain('content too weak');
 
     const r2 = routeFailure(
@@ -34,6 +33,18 @@ describe('routeFailure', () => {
     );
     expect(r.bucket).toBe('audio_resolution_required');
     expect(r.reason).toContain('enclosure');
+  });
+
+  it('Podcast weak content routes to transcript_required', () => {
+    const r = routeFailure(
+      'https://example.com/podcast/episode-1',
+      'podcast',
+      'failed_quality',
+      'Content too weak to enrich',
+    );
+    expect(r.bucket).toBe('transcript_required');
+    expect(r.reason).toContain('Transcript required');
+    expect(r.retryable).toBe(false);
   });
 
   it('auth-gated page routes to manual_content_required', () => {

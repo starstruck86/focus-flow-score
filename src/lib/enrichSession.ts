@@ -115,7 +115,7 @@ export function deriveEnrichSession(state: IngestionState): EnrichSession {
   }
 
   const completedCount = successCount + failedCount + skippedCount + partialCount + needsAuthCount + unsupportedCount;
-  const remainingCount = queuedCount + inProgressCount;
+  let remainingCount = queuedCount + inProgressCount;
 
   // totalRunnableAtStart = totalSelected - items that were skipped at preprocessing (pre-run skips)
   // We approximate this as totalSelected - skippedCount for initial runs,
@@ -151,6 +151,11 @@ export function deriveEnrichSession(state: IngestionState): EnrichSession {
   } else {
     // Running but nothing in queue or in-progress — transitional, treat as running
     terminalState = 'running';
+  }
+
+  if (terminalState.startsWith('completed') && remainingCount > 0) {
+    console.error('Invariant violation: completed state had remaining items');
+    remainingCount = 0;
   }
 
   const retryableCount = failedItems.filter(i => i.retryEligible !== false).length;
