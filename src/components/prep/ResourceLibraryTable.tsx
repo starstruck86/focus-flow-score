@@ -114,30 +114,7 @@ const SAVED_VIEWS: SavedView[] = [
   },
 ];
 
-// ── Recommended action helpers ─────────────────────────────
-function getActionLabel(action: string): string {
-  switch (action) {
-    case 'deep_enrich': return 'Deep Enrich';
-    case 're_enrich': return 'Re-enrich';
-    case 'retry': return 'Retry';
-    case 'review_manually': return 'Review';
-    case 'no_action': return '—';
-    case 'ignore': return 'Ignore';
-    default: return action;
-  }
-}
-
-function getActionColor(action: string): string {
-  switch (action) {
-    case 'deep_enrich': return 'bg-primary/20 text-primary';
-    case 're_enrich': return 'bg-status-yellow/20 text-status-yellow';
-    case 'retry': return 'bg-orange-500/20 text-orange-600';
-    case 'review_manually': return 'bg-status-red/20 text-status-red';
-    case 'no_action': return 'bg-muted text-muted-foreground';
-    case 'ignore': return 'bg-muted text-muted-foreground';
-    default: return 'bg-muted text-muted-foreground';
-  }
-}
+// (Action helpers removed — action column now uses deriveProcessingState directly)
 
 // ── Sort comparator ────────────────────────────────────────
 function sortResources(resources: Resource[], key: SortKey, dir: SortDir): Resource[] {
