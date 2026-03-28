@@ -278,7 +278,7 @@ export default function EnrichmentVerification() {
             </Button>
             <div>
               <h1 className="text-lg font-semibold">Enrichment Verification</h1>
-              <p className="text-xs text-muted-foreground">{allResources?.length ?? 0} resources · {mode === 'verify' ? 'Audit Mode' : 'Remediation Mode'}</p>
+              <p className="text-xs text-muted-foreground">{allResources?.length ?? 0} resources · {mode === 'verify' ? 'Audit Mode' : mode === 'remediate' ? 'Remediation Mode' : 'Validation Mode'}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
