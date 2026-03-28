@@ -292,6 +292,7 @@ export function EnrichmentEngine() {
           activeBucket={activeBucket}
           onBucketClick={setActiveBucket}
           deltaComplete={deltaComplete}
+          verifiedResources={displayResources}
         />
       )}
 
