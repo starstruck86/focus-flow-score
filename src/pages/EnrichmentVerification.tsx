@@ -526,19 +526,19 @@ export default function EnrichmentVerification() {
       )}
 
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        {!hasRun && !saving && (
+        {!hasRun && !saving && !isFixing && (
           <div className="rounded-lg border border-border p-8 text-center space-y-4">
-            <AlertTriangle className="h-10 w-10 text-status-yellow mx-auto" />
-            <h2 className="text-xl font-semibold">Ready to Verify</h2>
+            <Zap className="h-10 w-10 text-primary mx-auto" />
+            <h2 className="text-xl font-semibold">Run Full System</h2>
             <p className="text-muted-foreground max-w-md mx-auto">
-              Evaluates every resource against the enrichment completeness contract. Real data only.
+              Verifies all resources, runs autonomous remediation, re-verifies, and reports remaining work. One click, no decisions.
             </p>
-            <Button onClick={handleRun} disabled={isLoading} size="lg">
-              {isLoading ? 'Loading…' : 'Run Verification'}
+            <Button onClick={handleFixEverything} disabled={isLoading} size="lg" className="bg-primary text-primary-foreground">
+              <Zap className="h-4 w-4 mr-2" /> Run Full System
             </Button>
             <div className="text-xs text-muted-foreground">or</div>
-            <Button onClick={handleFixEverything} disabled={isLoading} size="lg" className="bg-primary text-primary-foreground">
-              <Zap className="h-4 w-4 mr-2" /> Fix Everything
+            <Button onClick={handleRun} disabled={isLoading} size="lg" variant="outline">
+              {isLoading ? 'Loading…' : 'Run Verification Only'}
             </Button>
           </div>
         )}
