@@ -1542,6 +1542,31 @@ async function orchestrateEnrichment(
 
   // 3. Evaluate best result
   if (bestContent && bestQuality && bestQuality.passes) {
+    // ── ZERO-TEXT GUARDRAIL ──
+    // Never mark deep_enriched if usable text is effectively zero
+    const usableLength = bestContent.replace(/\s+/g, ' ').trim().length;
+    if (usableLength < 50) {
+      console.log(`[Orchestrate] GUARDRAIL: id=${resourceId} usable text only ${usableLength} chars — refusing to mark complete`);
+      await setEnrichmentStatus(supabase, resourceId, 'incomplete', {
+        failure_reason: `Extracted text too short (${usableLength} chars) — does not meet minimum threshold`,
+        last_quality_score: bestQuality.score,
+        last_quality_tier: 'failed',
+        recovery_status: 'awaiting_user_content',
+        recovery_reason: 'Extraction produced insufficient text',
+        next_best_action: 'paste_content',
+        manual_input_required: true,
+        recovery_queue_bucket: 'needs_input',
+      });
+      return {
+        resource_id: resourceId, url, source_classification: source,
+        final_status: 'failed', method_used: bestMethod, methods_attempted: attempts,
+        attempt_count: attempts.length, extracted_text_length: usableLength,
+        completeness_score: bestQuality.score, confidence_score: 0,
+        missing_fields: ['body_content'], failure_reason: `Usable text too short: ${usableLength} chars`,
+        recovery_hint: 'Paste content manually — automatic extraction did not produce enough text',
+      };
+    }
+
     // FULL SUCCESS
     await supabase.from("resources").update({ content: bestContent }).eq("id", resourceId);
     await setEnrichmentStatus(supabase, resourceId, "deep_enriched", {
@@ -1552,6 +1577,15 @@ async function orchestrateEnrichment(
       failure_reason: null,
       last_quality_score: bestQuality.score,
       last_quality_tier: bestQuality.tier,
+      // Clear recovery state on success
+      recovery_status: 'resolved_complete',
+      recovery_reason: null,
+      next_best_action: null,
+      manual_input_required: false,
+      recovery_queue_bucket: null,
+      last_recovery_error: null,
+      extraction_method: bestMethod,
+      access_type: source.auth_required ? 'auth_gated' : 'public',
     });
     await supabase.from("resource_digests").delete().eq("resource_id", resourceId);
 
