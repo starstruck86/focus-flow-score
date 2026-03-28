@@ -242,7 +242,8 @@ function determineBucket(
       return 'retryable_extraction_failure';
 
     case 'google_drive_file':
-      return 'auth_required';
+      if (failureCategory === 'failed_needs_auth') return 'auth_required';
+      return 'retryable_extraction_failure';
 
     case 'google_doc':
       if (failureCategory === 'failed_needs_auth') return 'auth_required';

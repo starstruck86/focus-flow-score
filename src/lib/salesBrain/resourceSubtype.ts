@@ -166,10 +166,11 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
     case 'google_drive_file':
       return {
         ...base,
-        enrichability: 'needs_auth',
-        reason: 'Google Drive file — requires access or export. Upload the file or paste content.',
+        enrichability: 'fully_enrichable',
+        reason: 'Google Drive file — direct download will be attempted automatically.',
+        canFetchText: true,
         canFetchMetadata: true,
-        requiresAuth: true,
+        requiresAuth: false,
       };
 
     case 'auth_gated_community_page':
