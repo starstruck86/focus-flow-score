@@ -99,6 +99,13 @@ const App = () => (
                       </Suspense>
                     </ProtectedRoute>
                   } />
+                  <Route path="/verify-enrichment" element={
+                    <ProtectedRoute>
+                      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><p className="text-muted-foreground">Loading verification…</p></div>}>
+                        <EnrichmentVerification />
+                      </Suspense>
+                    </ProtectedRoute>
+                  } />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </BrowserRouter>
