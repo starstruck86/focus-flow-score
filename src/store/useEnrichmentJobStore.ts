@@ -133,7 +133,8 @@ export type IngestionItemStage =
   | 'unsupported'
   | 'skipped'
   | 'failed'
-  | 'needs_review';
+  | 'needs_review'
+  | 'quarantined';
 
 export type IngestionJobStatus = 'idle' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
 
@@ -150,6 +151,10 @@ export interface IngestionItem {
   retryEligible?: boolean;
   /** Canonical failure bucket — set on failure for routing */
   failureBucket?: import('@/lib/failureRouting').FailureBucket;
+  /** How many times this resource has failed with the same bucket */
+  sameBucketFailureCount?: number;
+  /** Whether this item is quarantined from automatic retries */
+  quarantined?: boolean;
   videoId?: string;
   channel?: string;
   publishDate?: string;
@@ -570,7 +575,7 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
   function failItem(id: string, error: string, category: FailureCategory, retryEligible = true) {
     // Route failure to canonical bucket
     const item = get().state.items.find(i => i.id === id);
-    const { routeFailure } = require('@/lib/failureRouting') as typeof import('@/lib/failureRouting');
+    const { routeFailure, shouldQuarantine, NON_RETRYABLE_BUCKETS } = require('@/lib/failureRouting') as typeof import('@/lib/failureRouting');
     const routing = routeFailure(
       item?.url,
       item?.sourceType,
@@ -579,14 +584,24 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
       item?.finalStatus,
     );
 
+    // Track repeated same-bucket failures for escalation
+    const priorBucketCount = (item?.failureBucket === routing.bucket)
+      ? (item?.sameBucketFailureCount ?? 1)
+      : 0;
+    const newBucketCount = priorBucketCount + 1;
+    const isQuarantined = shouldQuarantine(routing.bucket, newBucketCount);
+    const isAutoRetryable = routing.retryable && !NON_RETRYABLE_BUCKETS.has(routing.bucket) && !isQuarantined;
+
     updateItem(id, {
-      stage: 'failed',
+      stage: isQuarantined ? 'quarantined' as IngestionItemStage : 'failed',
       error: routing.reason, // Use source-specific reason instead of generic
       failureCategory: category,
       failureTimestamp: new Date().toISOString(),
-      retryEligible: routing.retryable,
+      retryEligible: isAutoRetryable,
       failureBucket: routing.bucket,
       recoveryHint: routing.nextAction,
+      sameBucketFailureCount: newBucketCount,
+      quarantined: isQuarantined,
     });
   }
 
@@ -1079,7 +1094,7 @@ export const useEnrichmentJobStore = create<EnrichmentJobStore>((set, get) => {
 
       if (options?.retryFailedOnly) {
         ingestionItems = store.state.items.map(i =>
-          i.stage === 'failed'
+          (i.stage === 'failed' && i.retryEligible && !i.quarantined)
             ? { ...i, stage: 'queued' as const, error: undefined, failureCategory: undefined, failureTimestamp: undefined }
             : i
         );
