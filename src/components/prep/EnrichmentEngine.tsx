@@ -25,6 +25,8 @@ import { analyzeRemediationBatch } from '@/lib/remediationIntelligence';
 import { generateProductRoadmap, type RoadmapSummary } from '@/lib/systemGapRoadmap';
 import { ManualInputInbox, type InboxQueue, type InboxItem } from './ManualInputInbox';
 import { FileText, Lock, ExternalLink, Eye } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import type { BucketFilter, RunSnapshot, RunResult } from './enrichment/types';
 import { EMPTY_RESULT, mapVerifiedToBucket } from './enrichment/types';
 import { SummaryCards } from './enrichment/SummaryCards';
@@ -132,6 +134,7 @@ export function EnrichmentEngine() {
   const [selectedResource, setSelectedResource] = useState<VerifiedResource | null>(null);
   const [expandedSections, setExpanded] = useState<Record<string, boolean>>({});
 
+  const isMobile = useIsMobile();
   const isRunning = !['idle', 'complete', 'error'].includes(result.phase);
   const isLoading = loadingResources || loadingAudio;
 
@@ -324,7 +327,7 @@ export function EnrichmentEngine() {
       {displayResources.length > 0 && (
         <div className="flex gap-0 border border-border rounded-lg overflow-hidden bg-background">
           {/* Workbench list */}
-          <div className={selectedResource ? 'w-1/2 border-r border-border' : 'w-full'}>
+          <div className={selectedResource && !isMobile ? 'w-1/2 border-r border-border' : 'w-full'}>
             <div className="p-3">
               <ResourceWorkbench
                 resources={displayResources}
@@ -334,14 +337,14 @@ export function EnrichmentEngine() {
               />
             </div>
           </div>
-          {/* Detail drawer */}
-          {selectedResource && (
+          {/* Desktop: inline split pane */}
+          {selectedResource && !isMobile && (
             <div className="w-1/2 min-h-[400px] max-h-[80vh]">
               <ResourceDetailDrawer
                 key={selectedResource.id}
                 resource={selectedResource}
                 onClose={() => setSelectedResource(null)}
-              onResourceUpdated={() => {
+                onResourceUpdated={() => {
                   qc.invalidateQueries({ queryKey: ['resources'] });
                   qc.invalidateQueries({ queryKey: ['all-resources'] });
                   qc.invalidateQueries({ queryKey: ['audio-jobs-map'] });
@@ -351,6 +354,25 @@ export function EnrichmentEngine() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Mobile: full-screen dialog for detail drawer */}
+      {selectedResource && isMobile && (
+        <Dialog open onOpenChange={(open) => { if (!open) setSelectedResource(null); }}>
+          <DialogContent className="max-w-[100vw] w-full h-[100dvh] max-h-[100dvh] p-0 rounded-none border-0 [&>button]:hidden">
+            <ResourceDetailDrawer
+              key={selectedResource.id}
+              resource={selectedResource}
+              onClose={() => setSelectedResource(null)}
+              onResourceUpdated={() => {
+                qc.invalidateQueries({ queryKey: ['resources'] });
+                qc.invalidateQueries({ queryKey: ['all-resources'] });
+                qc.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+                setSelectedResource(null);
+              }}
+            />
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Product Roadmap */}
