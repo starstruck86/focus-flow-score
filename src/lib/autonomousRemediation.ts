@@ -519,7 +519,9 @@ async function reconcileStateBug(item: RemediationItem, state: RemediationCycleS
     last_quality_tier: quality.tier,
   };
 
-  if (quality.score >= 95 && quality.passesCompletionContract) {
+  // If score >= 85 and resource already has real content, accept as complete
+  // (short but genuine content like podcast summaries shouldn't block completion)
+  if (quality.score >= 85 && quality.passesCompletionContract) {
     update.enrichment_status = 'deep_enriched';
     update.failure_reason = null;
     update.enriched_at = new Date().toISOString();
@@ -527,7 +529,7 @@ async function reconcileStateBug(item: RemediationItem, state: RemediationCycleS
     item.afterState = 'deep_enriched';
     item.afterFailureBucket = null;
     markTerminal(item, state, 'resolved_complete', `Score ${quality.score} — state corrected to deep_enriched`);
-  } else if (quality.score < 30) {
+  } else if (quality.score >= 95 && quality.passesCompletionContract) {
     await quarantineResource(item, state, `Score ${quality.score} too low — state bug with unrecoverable content`);
   } else {
     // Mid-range score — reset for re-enrichment
