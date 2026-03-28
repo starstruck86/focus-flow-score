@@ -244,7 +244,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
             {actionState === 'RETRY_FIXABLE' && (
               <div className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  <span className="font-medium text-orange-600">{counts.retryable}</span>
+                  <span className="font-medium text-status-yellow">{counts.retryable}</span>
                   {' '}item{counts.retryable !== 1 ? 's' : ''} can be retried automatically.
                   {counts.manual + counts.metadataOnly > 0 && (
                     <> · <span className="font-medium text-status-red">{counts.manual + counts.metadataOnly}</span> need attention</>
@@ -297,7 +297,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
                 {processingBreakdown.RETRYABLE_FAILURE.length > 0 && (
                   <DetailSection
                     label="Retry Available"
-                    color="bg-orange-500/20 text-orange-600"
+                    color="bg-status-yellow/20 text-status-yellow"
                     items={processingBreakdown.RETRYABLE_FAILURE}
                   />
                 )}
@@ -311,7 +311,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
                 {processingBreakdown.METADATA_ONLY.length > 0 && (
                   <DetailSection
                     label="Metadata Only"
-                    color="bg-orange-500/20 text-orange-600"
+                    color="bg-status-yellow/20 text-status-yellow"
                     items={processingBreakdown.METADATA_ONLY}
                   />
                 )}
