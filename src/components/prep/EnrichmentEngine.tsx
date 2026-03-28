@@ -134,6 +134,7 @@ export function EnrichmentEngine() {
   const [selectedResource, setSelectedResource] = useState<VerifiedResource | null>(null);
   const [expandedSections, setExpanded] = useState<Record<string, boolean>>({});
 
+  const isMobile = useIsMobile();
   const isRunning = !['idle', 'complete', 'error'].includes(result.phase);
   const isLoading = loadingResources || loadingAudio;
 
