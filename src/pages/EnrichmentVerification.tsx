@@ -227,6 +227,7 @@ export default function EnrichmentVerification() {
     }
   }, [remediationQueues, qc]);
 
+  const toggleSection = (key: string) =>
     setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
 
   const exportJSON = useCallback(() => {
