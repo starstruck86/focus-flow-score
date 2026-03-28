@@ -39,6 +39,7 @@ type SourceType =
   | 'auth_gated'
   | 'social'
   | 'podcast'
+  | 'direct_audio'
   | 'unknown';
 
 interface SourceClassification {
