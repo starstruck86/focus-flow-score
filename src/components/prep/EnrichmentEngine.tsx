@@ -340,9 +340,10 @@ export function EnrichmentEngine() {
                 key={selectedResource.id}
                 resource={selectedResource}
                 onClose={() => setSelectedResource(null)}
-                onResourceUpdated={() => {
-                  invalidateAll();
-                  // Refresh the selected resource
+              onResourceUpdated={() => {
+                  qc.invalidateQueries({ queryKey: ['resources'] });
+                  qc.invalidateQueries({ queryKey: ['all-resources'] });
+                  qc.invalidateQueries({ queryKey: ['audio-jobs-map'] });
                   setSelectedResource(null);
                 }}
               />
