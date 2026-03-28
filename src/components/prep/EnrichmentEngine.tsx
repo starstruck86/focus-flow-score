@@ -360,7 +360,8 @@ export function EnrichmentEngine() {
       {/* Mobile: full-screen dialog for detail drawer */}
       {selectedResource && isMobile && (
         <Dialog open onOpenChange={(open) => { if (!open) setSelectedResource(null); }}>
-          <DialogContent className="max-w-[100vw] w-full h-[100dvh] max-h-[100dvh] p-0 rounded-none border-0 [&>button]:hidden">
+          <DialogContent className="fixed inset-0 left-0 top-0 translate-x-0 translate-y-0 max-w-none w-full h-[100dvh] max-h-[100dvh] p-0 rounded-none border-0 gap-0 [&>button.absolute]:hidden">
+            <VisuallyHidden><DialogTitle>Resource Detail</DialogTitle></VisuallyHidden>
             <ResourceDetailDrawer
               key={selectedResource.id}
               resource={selectedResource}
