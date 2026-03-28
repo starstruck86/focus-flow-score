@@ -487,11 +487,11 @@ export default function EnrichmentVerification() {
               </Button>
             )}
 
-            {/* Fix Everything */}
+            {/* Run Full System — primary action */}
             {!isFixing && !isRemediating && !isValidating && (
               <Button size="sm" onClick={handleFixEverything} disabled={isLoading || saving}
                 className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold">
-                <Zap className="h-3 w-3 mr-1" /> Fix Everything
+                <Zap className="h-3 w-3 mr-1" /> Run Full System
               </Button>
             )}
             {isFixing && (
