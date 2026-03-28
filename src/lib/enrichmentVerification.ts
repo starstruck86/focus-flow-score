@@ -219,13 +219,16 @@ function classifyFixability(
     return 'bad_scoring_state_bug';
   }
 
-  // If truly complete
+  // If truly complete (score >= 70 with no major contradictions)
   if (status === 'deep_enriched' && quality.score >= 70 && contradictions.length === 0) {
     return 'truly_complete';
   }
 
-  // If deep_enriched and decent score but under 100
+  // If deep_enriched with score >= 70 but minor issues
   if (status === 'deep_enriched' && quality.score >= 70) {
+    // Check if contradictions are only minor (info level)
+    const hasSerious = contradictions.some(c => c.severity === 'critical' || c.severity === 'warning');
+    if (!hasSerious) return 'truly_complete';
     return 'already_fixed_stale_ui';
   }
 
