@@ -23,10 +23,13 @@ interface Props {
   selectedId?: string | null;
 }
 
+const PAGE_SIZE = 50;
+
 export function ResourceWorkbench({ resources, activeBucket, onSelectResource, selectedId }: Props) {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortKey>('score_asc');
   const [subtypeFilter, setSubtypeFilter] = useState<string>('all');
+  const [page, setPage] = useState(0);
 
   // Filter by bucket
   const bucketFiltered = useMemo(() => {
