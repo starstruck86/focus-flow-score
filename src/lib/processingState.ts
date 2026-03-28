@@ -170,9 +170,9 @@ export function deriveProcessingState(
     if (ea.enrichability === 'manual_input_needed' || ea.enrichability === 'needs_auth') {
       return {
         state: 'MANUAL_REQUIRED',
-        label: 'Manual Input Needed',
+        label: ea.enrichability === 'needs_auth' ? 'Needs Auth' : 'Manual Input Needed',
         description: ea.reason,
-        nextAction: 'Open Manual Assist or provide alternate source',
+        nextAction: 'Open Manual Assist',
         retryable: false,
       };
     }
@@ -181,8 +181,17 @@ export function deriveProcessingState(
         state: 'METADATA_ONLY',
         label: 'Metadata Only',
         description: ea.reason,
-        nextAction: 'Paste transcript or provide alternate URL',
+        nextAction: 'Open Manual Assist',
         retryable: false,
+      };
+    }
+    if (ea.enrichability === 'fully_enrichable' || ea.enrichability === 'partially_enrichable') {
+      return {
+        state: 'RETRYABLE_FAILURE',
+        label: 'Retry Available',
+        description: resource.failure_reason || `${ea.reason} — retry enrichment`,
+        nextAction: 'Retry enrichment',
+        retryable: true,
       };
     }
     return {
@@ -266,7 +275,7 @@ export function deriveProcessingState(
         state: 'MANUAL_REQUIRED',
         label: 'Needs Auth',
         description: ea.reason,
-        nextAction: 'Provide accessible link or paste content manually',
+        nextAction: 'Open Manual Assist',
         retryable: false,
       };
     }
@@ -275,7 +284,7 @@ export function deriveProcessingState(
         state: 'METADATA_ONLY',
         label: 'Metadata Only',
         description: ea.reason,
-        nextAction: 'Paste transcript or provide alternate URL',
+        nextAction: 'Open Manual Assist',
         retryable: false,
       };
     }

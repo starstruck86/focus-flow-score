@@ -50,6 +50,7 @@ export interface EnrichabilityResult {
 
 // ── Auth-gated domains ─────────────────────────────────────
 const AUTH_GATED_DOMAINS = [
+  'circle.so',
   'teachable.com', 'thinkific.com', 'kajabi.com',
   'podia.com', 'skool.com', 'mighty.co', 'patreon.com',
   'memberstack.com', 'memberships.io',
@@ -143,7 +144,7 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
       return {
         ...base,
         enrichability: 'fully_enrichable',
-        reason: 'Google Doc — full text extraction supported',
+        reason: 'Google Doc — fully supported. Retry enrichment.',
         canFetchText: true,
         canFetchMetadata: true,
       };
@@ -161,7 +162,7 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
       return {
         ...base,
         enrichability: 'needs_auth',
-        reason: 'Google Drive file — may require auth or direct download link',
+        reason: 'Google Drive file — requires access or export. Upload the file or paste content.',
         canFetchMetadata: true,
         requiresAuth: true,
       };
@@ -170,7 +171,7 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
       return {
         ...base,
         enrichability: 'manual_input_needed',
-        reason: 'Auth-gated community page — requires login, paste content manually',
+        reason: 'Login required — paste content manually via Manual Assist.',
         requiresAuth: true,
         canFetchMetadata: false,
       };
@@ -179,7 +180,7 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
       return {
         ...base,
         enrichability: 'manual_input_needed',
-        reason: 'Zoom recording — transcript may require manual download',
+        reason: 'Zoom recording — download transcript from Zoom and paste via Manual Assist.',
         canFetchMetadata: true,
         requiresAuth: true,
         isDynamic: true,
@@ -189,7 +190,7 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
       return {
         ...base,
         enrichability: 'metadata_only',
-        reason: 'Spotify — metadata available, transcript requires external source or manual paste',
+        reason: 'Spotify — metadata only. Paste transcript or provide alternate URL.',
         canFetchMetadata: true,
       };
 
