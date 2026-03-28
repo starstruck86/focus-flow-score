@@ -442,8 +442,8 @@ async function autoFix(item: RemediationItem, state: RemediationCycleState, stra
         return;
       }
 
-      // If score >= 95, promote to complete
-      if (quality.score >= 95 && quality.passesCompletionContract) {
+      // If score >= 85 with real content, promote to complete
+      if (quality.score >= 85 && quality.passesCompletionContract) {
         await supabase.from('resources').update({
           enrichment_status: 'deep_enriched',
           failure_reason: null,
