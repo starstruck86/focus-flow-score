@@ -438,7 +438,7 @@ async function youtubeCaption(url: string, _apiKey: string): Promise<ExtractionR
 /** Extract embedded audio URL from Anchor.fm play links */
 function extractEmbeddedAudioUrl(url: string): string | null {
   // Anchor.fm play URLs embed the audio URL: anchor.fm/s/.../podcast/play/.../https%3A%2F%2F...mp3
-  const match = url.match(/\/podcast\/play\/\d+\/(https?%3A%2F%2F[^\s?#]+\.mp3)/i);
+  const match = url.match(/\/podcast\/play\/\d+\/(https?%3A%2F%2F[^\s?#]+\.(?:mp3|m4a|wav|ogg|aac|opus))/i);
   if (match?.[1]) {
     try {
       return decodeURIComponent(match[1]);
@@ -1145,14 +1145,76 @@ function getMethodChain(source: SourceClassification): Array<(url: string, apiKe
 }
 
 // ── Binary content detection ───────────────────────────────
+
+/** Audio/video magic byte signatures — these are printable ASCII but indicate binary media files */
+const MEDIA_MAGIC_PATTERNS = [
+  /^ftyp/i,            // M4A, MP4, MOV — ISO Base Media format
+  /^ID3/,              // MP3 with ID3 tag
+  /^\xff[\xfb\xf3\xf2\xe3]/, // MP3 sync bytes (MPEG audio)
+  /^RIFF/,             // WAV, AVI
+  /^OggS/,             // OGG Vorbis/Opus
+  /^fLaC/,             // FLAC
+  /^\x1aE\xdf\xa3/,   // WebM/MKV (EBML)
+  /^%PDF/,             // PDF (caught separately but guard)
+];
+
 function isBinaryContent(text: string): boolean {
   if (text.length < 50) return false;
-  const sample = text.slice(0, 512);
-  // Check for non-printable control characters (excluding tab, newline, carriage return)
-  const controlCharCount = (sample.match(/[\x00-\x08\x0E-\x1F\x7F]/g) || []).length;
-  const ratio = controlCharCount / sample.length;
-  // If >5% of the sample is control chars, it's binary
-  return ratio > 0.05 || /[\x00-\x08\x0E-\x1F]/.test(sample.slice(0, 200));
+
+  const sample = text.slice(0, 2048);
+
+  // 1. Check for known media file magic bytes/signatures
+  for (const pattern of MEDIA_MAGIC_PATTERNS) {
+    if (pattern.test(sample)) return true;
+  }
+
+  // 2. Check for ISO Base Media File container anywhere in first 64 bytes
+  //    (some files have a few bytes before 'ftyp')
+  if (/ftyp(M4A|mp4[12]|isom|MSNV|avc1|dash)/i.test(sample.slice(0, 64))) return true;
+
+  // 3. Check for MP3/audio container markers
+  if (sample.includes('moov') && sample.includes('trak') && sample.includes('mdia')) return true;
+  if (sample.includes('SoundHandler') || sample.includes('soun')) return true;
+
+  // 4. Low printable ASCII ratio — expanded check (use 1KB sample)
+  const checkSample = sample.slice(0, 1024);
+  const controlCharCount = (checkSample.match(/[\x00-\x08\x0E-\x1F\x7F]/g) || []).length;
+  const ratio = controlCharCount / checkSample.length;
+  if (ratio > 0.03) return true;
+
+  // 5. High proportion of null bytes indicates binary
+  const nullCount = (checkSample.match(/\x00/g) || []).length;
+  if (nullCount / checkSample.length > 0.02) return true;
+
+  return false;
+}
+
+/** Detect if content is specifically audio/video binary (for routing to transcription) */
+function isAudioBinaryContent(text: string): boolean {
+  if (text.length < 50) return false;
+  const sample = text.slice(0, 2048);
+
+  // M4A / MP4 container
+  if (/ftyp(M4A|mp4|isom)/i.test(sample.slice(0, 64))) return true;
+  if (sample.includes('moov') && sample.includes('trak') && sample.includes('SoundHandler')) return true;
+
+  // MP3
+  if (/^ID3/.test(sample)) return true;
+
+  // WAV
+  if (/^RIFF/.test(sample) && sample.includes('WAVE')) return true;
+
+  // OGG
+  if (/^OggS/.test(sample)) return true;
+
+  // FLAC
+  if (/^fLaC/.test(sample)) return true;
+
+  // Generic audio markers
+  if (sample.includes('Audition Template') && sample.includes('track')) return true;
+  if (sample.includes('Speech Volume Leveler')) return true;
+
+  return false;
 }
 
 // ── Quality validation ─────────────────────────────────────
@@ -1349,8 +1411,33 @@ async function orchestrateEnrichment(
     };
   }
 
-  // Skip already enriched unless forced
-  if (resource.enrichment_status === "deep_enriched" && !force) {
+  // Pre-check: If existing content is binary audio, clear it and reroute to transcription
+  const existingContent = resource.content || '';
+  if (existingContent.length > 0 && isBinaryContent(existingContent)) {
+    const isAudio = isAudioBinaryContent(existingContent) ||
+      source.source_type === 'podcast' || source.source_type === 'direct_audio';
+
+    console.log(`[Orchestrate] BINARY PREFLIGHT: id=${resourceId} isAudio=${isAudio} — clearing binary content from DB`);
+
+    // Clear the binary content from the resource immediately
+    await supabase.from("resources").update({
+      content: '',
+      content_length: 0,
+    }).eq("id", resourceId);
+
+    if (isAudio) {
+      // Override source classification to route through transcription
+      if (source.source_type !== 'podcast' && source.source_type !== 'direct_audio') {
+        console.log(`[Orchestrate] Reclassifying ${source.source_type} → podcast for audio binary content`);
+        source.source_type = 'podcast' as SourceType;
+        source.platform = 'Audio (reclassified from binary)';
+      }
+    }
+  }
+
+  // Skip already enriched unless forced — but NOT if we just detected binary
+  const hasBinaryCleared = existingContent.length > 0 && isBinaryContent(existingContent);
+  if (resource.enrichment_status === "deep_enriched" && !force && !hasBinaryCleared) {
     return {
       resource_id: resourceId, url, source_classification: source,
       final_status: 'enriched', method_used: 'already_enriched', methods_attempted: [],
@@ -1579,7 +1666,7 @@ Deno.serve(async (req) => {
     if (resource_ids && Array.isArray(resource_ids) && resource_ids.length > 0) {
       const { data: resources, error: qErr } = await supabase
         .from("resources")
-        .select("id, file_url, enrichment_status, content_status, failure_count, content_length")
+        .select("id, file_url, content, enrichment_status, content_status, failure_count, content_length")
         .in("id", resource_ids.slice(0, 50));
 
       if (qErr) throw new Error("Query failed");
@@ -1642,7 +1729,7 @@ Deno.serve(async (req) => {
       const batchLimit = Math.min(limit || 50, 50);
       const { data: placeholders, error: qErr } = await supabase
         .from("resources")
-        .select("id, file_url, enrichment_status, failure_count, content_length")
+        .select("id, file_url, content, enrichment_status, failure_count, content_length")
         .in("enrichment_status", ["not_enriched", "incomplete", "partial", "failed"])
         .like("file_url", "http%")
         .limit(batchLimit);
