@@ -272,6 +272,7 @@ export function buildRemediationItems(
         strategyUsed: null,
         attemptsThisRun: 0,
         failureHistory: [],
+        sameFailureCount: 0,
         escalatedBecause: null,
         whyFailed: null,
         whatToDoNext: null,
