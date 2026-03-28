@@ -98,9 +98,7 @@ describe('googleDriveResolver', () => {
     it('fails for non-Drive URL', () => {
       const result = resolveGoogleDriveUrl('https://example.com');
       expect(result.canResolve).toBe(false);
-      if (!result.canResolve) {
-        expect(result.failureReason).toBe('Not a Google Drive file URL');
-      }
+      expect((result as any).failureReason).toBe('Not a Google Drive file URL');
     });
 
     it('fails for empty URL', () => {
