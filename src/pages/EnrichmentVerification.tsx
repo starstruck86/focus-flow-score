@@ -576,7 +576,10 @@ export default function EnrichmentVerification() {
               )}
               <span className="text-sm text-muted-foreground ml-auto">{filtered.length} resources</span>
             </div>
-            <ResourceTable resources={filtered} onSelect={setDrawerResource} />
+            <ResourceTable resources={filtered} onSelect={setDrawerResource} onFixResource={(r) => {
+              // Navigate to resource library with manual assist context
+              navigate(`/prep?manualAssist=${r.id}`);
+            }} />
           </>
         )}
 
