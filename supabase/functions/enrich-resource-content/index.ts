@@ -1666,7 +1666,7 @@ Deno.serve(async (req) => {
     if (resource_ids && Array.isArray(resource_ids) && resource_ids.length > 0) {
       const { data: resources, error: qErr } = await supabase
         .from("resources")
-        .select("id, file_url, enrichment_status, content_status, failure_count, content_length")
+        .select("id, file_url, content, enrichment_status, content_status, failure_count, content_length")
         .in("id", resource_ids.slice(0, 50));
 
       if (qErr) throw new Error("Query failed");
