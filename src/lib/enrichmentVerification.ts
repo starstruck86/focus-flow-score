@@ -9,6 +9,7 @@ import { detectResourceSubtype, classifyEnrichability, getSubtypeLabel, type Res
 import { validateResourceQuality, type QualityResult } from '@/lib/resourceQuality';
 import { routeFailure, type FailureBucket, NON_RETRYABLE_BUCKETS } from '@/lib/failureRouting';
 import { getEnrichmentStatusLabel, type EnrichmentStatus } from '@/lib/resourceEligibility';
+import { generateRemediationPlan } from '@/lib/remediationIntelligence';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -67,6 +68,10 @@ export interface VerifiedResource {
   isMisclassified: boolean;
   isStuckInWrongQueue: boolean;
   scoreStatusContradict: boolean;
+  // Remediation Intelligence
+  resolutionType: 'auto_fix' | 'manual_input' | 'system_gap';
+  rootCause: string;
+  requiredBuild: { type: string; description: string; suggestedImplementation: string } | null;
 }
 
 export interface VerificationSummary {
@@ -359,7 +364,7 @@ export function verifyResource(
     (status === 'deep_enriched' && quality.score < 50) ||
     (quality.score >= 90 && ['failed', 'quarantined'].includes(status));
 
-  return {
+  const partial: Omit<VerifiedResource, 'resolutionType' | 'rootCause' | 'requiredBuild'> = {
     id: resource.id,
     title: resource.title,
     url,
@@ -392,6 +397,16 @@ export function verifyResource(
     isMisclassified: contradictions.some(c => c.type === 'high_score_bad_state' || c.type === 'completed_low_score'),
     isStuckInWrongQueue: scoreStatusContradict,
     scoreStatusContradict,
+  };
+
+  // Generate remediation intelligence
+  const plan = generateRemediationPlan(partial as VerifiedResource);
+
+  return {
+    ...partial,
+    resolutionType: plan.resolutionType,
+    rootCause: plan.rootCause,
+    requiredBuild: plan.requiredBuild,
   };
 }
 
