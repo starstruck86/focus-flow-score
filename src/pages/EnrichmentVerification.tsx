@@ -1070,7 +1070,9 @@ function ResourceTable({ resources, onSelect, onFixResource }: {
               <div className={`text-sm font-mono font-bold ${v.qualityScore >= 70 ? 'text-status-green' : v.qualityScore >= 40 ? 'text-status-yellow' : 'text-status-red'}`}>{v.qualityScore}</div>
               <div><span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${FIXABILITY_COLORS[v.fixabilityBucket]}`}>{FIXABILITY_LABELS[v.fixabilityBucket]}</span></div>
               <div>
-                {v.fixabilityBucket !== 'truly_complete' && action && onFixResource ? (
+                {v.resolutionType === 'system_gap' ? (
+                  <span className="text-[10px] text-destructive font-medium">🔧 System build required</span>
+                ) : v.fixabilityBucket !== 'truly_complete' && action && onFixResource ? (
                   <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1 px-2"
                     onClick={(e) => { e.stopPropagation(); onFixResource(v); }}>
                     {action.icon} {action.label}
