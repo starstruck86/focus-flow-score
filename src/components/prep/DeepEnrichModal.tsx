@@ -110,8 +110,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
 
   const hasDetailsContent = processingBreakdown.RETRYABLE_FAILURE.length > 0
     || processingBreakdown.MANUAL_REQUIRED.length > 0
-    || processingBreakdown.METADATA_ONLY.length > 0
-    || processingBreakdown.COMPLETED.length > 0;
+    || processingBreakdown.METADATA_ONLY.length > 0;
 
   const handleStart = useCallback(
     (
