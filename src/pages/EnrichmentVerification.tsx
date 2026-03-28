@@ -349,6 +349,18 @@ export default function EnrichmentVerification() {
             <SectionHeader title="What Needs to Be Fixed" sectionKey="fixPlan" expanded={expandedSections.fixPlan} toggle={toggleSection} />
             {expandedSections.fixPlan && <FixPlanSection recommendations={summary.fixRecommendations} />}
 
+            {/* Remediation Queues */}
+            <SectionHeader title="Recovery Queues" sectionKey="remediation" expanded={expandedSections.remediation} toggle={toggleSection} />
+            {expandedSections.remediation && remediationQueues && (
+              <RemediationQueuesSection
+                queues={remediationQueues}
+                onRunAction={handleBulkAction}
+                runningQueue={runningQueue}
+                lastResult={lastBulkResult}
+                onFilterByQueue={(q) => setSelectedBucket(q)}
+              />
+            )}
+
             {/* Repeated Patterns */}
             <SectionHeader title="Repeated Failure Patterns" sectionKey="patterns" expanded={expandedSections.patterns} toggle={toggleSection} count={summary.repeatedPatterns.length} />
             {expandedSections.patterns && <PatternsSection patterns={summary.repeatedPatterns} />}
