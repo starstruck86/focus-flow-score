@@ -607,7 +607,6 @@ export function ResourceLibraryTable({
                                 </DropdownMenuItem>
                               </>
                             )}
-                            {/* Manual Assist is now available for all resource types via the enrichment actions above */}
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => onAction('reset', resource)}>
                               <RotateCcw className="h-3.5 w-3.5 mr-2" /> Reset Status
