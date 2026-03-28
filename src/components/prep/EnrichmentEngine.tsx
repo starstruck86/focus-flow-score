@@ -99,7 +99,7 @@ function buildInboxQueues(resources: any[], audioMap: Map<string, any>): InboxQu
     needs_transcript: <FileText className="h-3.5 w-3.5 text-accent-foreground" />,
     needs_pasted_content: <FileText className="h-3.5 w-3.5 text-accent-foreground" />,
     needs_access_auth: <Lock className="h-3.5 w-3.5 text-destructive" />,
-    needs_alternate_source: <ExternalLink className="h-3.5 w-3.5 text-orange-500" />,
+    needs_alternate_source: <ExternalLink className="h-3.5 w-3.5 text-destructive" />,
     metadata_only_candidate: <Eye className="h-3.5 w-3.5 text-muted-foreground" />,
   };
   const ACTIONS: Record<string, string> = {
