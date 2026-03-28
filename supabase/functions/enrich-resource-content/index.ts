@@ -1235,7 +1235,7 @@ async function orchestrateEnrichment(
     }
 
     if (result.content && result.content.length > 0) {
-      const qv = validateContentQuality(result.content);
+      const qv = validateContentQuality(result.content, source.source_type);
       result.attempt.validation_result = qv.passes ? 'pass' : (qv.score >= PARTIAL_MIN_SCORE ? 'partial' : 'fail');
 
       // Binary content detected — do NOT store, route to needs_transcript

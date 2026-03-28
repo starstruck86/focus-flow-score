@@ -254,6 +254,10 @@ function determineBucket(
       if (failureCategory === 'failed_needs_auth') return 'auth_required';
       return 'retryable_extraction_failure';
 
+    case 'google_sheet':
+      if (failureCategory === 'failed_needs_auth') return 'auth_required';
+      return 'retryable_extraction_failure';
+
     case 'google_doc':
       if (failureCategory === 'failed_needs_auth') return 'auth_required';
       return 'retryable_extraction_failure';

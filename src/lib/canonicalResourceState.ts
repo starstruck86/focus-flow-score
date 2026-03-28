@@ -252,6 +252,16 @@ export function resolveCanonicalState(
     }
   }
 
+  // Google Sheet — dedicated routing, not generic google_doc
+  if (subtype === 'google_sheet') {
+    if (status === 'needs_auth') {
+      return { ...base, state: 'needs_access_auth', label: 'Needs Auth', description: 'Google Sheet requires sharing permissions', nextAction: 'Set sharing to "Anyone with the link"', qualityScore: quality.score };
+    }
+    if (status === 'not_enriched' || !status) {
+      return { ...base, state: 'ready_to_enrich', label: 'Ready', description: 'Google Sheet — CSV export will be attempted', nextAction: 'Run enrichment', qualityScore: quality.score };
+    }
+  }
+
   // Zoom recording
   if (subtype === 'zoom_recording') {
     return { ...base, state: 'needs_transcript', label: 'Needs Transcript', description: 'Zoom recording — download transcript from Zoom', nextAction: 'Paste transcript via Manual Assist', qualityScore: quality.score };
