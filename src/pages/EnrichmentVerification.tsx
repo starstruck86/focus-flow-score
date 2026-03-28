@@ -1179,6 +1179,12 @@ function ResourceDrawer({ resource: v, onClose, onFix }: { resource: VerifiedRes
                 </div>
               )}
             </div>
+              {/* Fix Now button */}
+              {action && onFix && v.fixabilityBucket !== 'needs_quarantine' && (
+                <Button className="w-full mt-3" onClick={() => onFix(v)}>
+                  {action.icon} <span className="ml-2">{action.label}</span>
+                </Button>
+              )}
           )}
 
           {v.contradictions.length > 0 && (
