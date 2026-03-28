@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,11 +13,13 @@ import {
 import { processPromotedResource } from '@/lib/salesBrain/transformationPipeline';
 import { toast } from 'sonner';
 
-const QUEUE_KEY = 'incoming-queue';
+export const QUEUE_KEY = 'incoming-queue';
 
-/** Realtime subscription — invalidates queue on any resources row change */
+// ── Realtime hook with connection status ─────────────────────────
+
 export function useIncomingQueueRealtime() {
   const qc = useQueryClient();
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
 
   useEffect(() => {
     const channel = supabase
@@ -29,13 +31,35 @@ export function useIncomingQueueRealtime() {
           qc.invalidateQueries({ queryKey: [QUEUE_KEY] });
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        setRealtimeConnected(status === 'SUBSCRIBED');
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, [qc]);
+
+  return { realtimeConnected };
 }
+
+// ── Sync tracker ─────────────────────────────────────────────────
+
+export function useSyncTracker(dataUpdatedAt: number) {
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  const prevUpdatedAt = useRef(dataUpdatedAt);
+
+  useEffect(() => {
+    if (dataUpdatedAt > 0 && dataUpdatedAt !== prevUpdatedAt.current) {
+      setLastSyncedAt(new Date());
+      prevUpdatedAt.current = dataUpdatedAt;
+    }
+  }, [dataUpdatedAt]);
+
+  return lastSyncedAt;
+}
+
+// ── Main query ───────────────────────────────────────────────────
 
 export function useIncomingQueue(status: BrainStatus = 'pending') {
   const { user } = useAuth();
@@ -44,9 +68,27 @@ export function useIncomingQueue(status: BrainStatus = 'pending') {
     queryFn: () => getIncomingResources(user!.id, status),
     enabled: !!user?.id,
     refetchOnWindowFocus: true,
-    staleTime: 5_000, // 5s — keeps it fresh
+    staleTime: 5_000,
   });
 }
+
+// ── Manual refresh ───────────────────────────────────────────────
+
+export function useManualRefresh() {
+  const qc = useQueryClient();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    await qc.refetchQueries({ queryKey: [QUEUE_KEY] });
+    setRefreshing(false);
+    toast.success('Queue refreshed');
+  }, [qc]);
+
+  return { refresh, refreshing };
+}
+
+// ── Mutations ────────────────────────────────────────────────────
 
 export function useUpdateBrainStatus() {
   const qc = useQueryClient();
@@ -83,12 +125,9 @@ export function useUpdateBrainStatus() {
       }
     },
 
-    // Optimistic update: remove item from current tab instantly
     onMutate: async ({ id, status: newStatus }) => {
-      // Cancel outgoing refetches so they don't overwrite our optimistic update
       await qc.cancelQueries({ queryKey: [QUEUE_KEY] });
 
-      // Snapshot all queue caches for rollback
       const allStatuses: BrainStatus[] = ['pending', 'promoted', 'ignored', 'archived'];
       const snapshots: Record<string, IncomingResource[] | undefined> = {};
 
@@ -96,10 +135,7 @@ export function useUpdateBrainStatus() {
         const key = [QUEUE_KEY, user?.id, s];
         snapshots[s] = qc.getQueryData<IncomingResource[]>(key);
 
-        if (s === newStatus && snapshots[s]) {
-          // We don't know the full item shape, so just invalidate the target tab
-        } else if (snapshots[s]) {
-          // Remove item from this tab's cache
+        if (s !== newStatus && snapshots[s]) {
           qc.setQueryData<IncomingResource[]>(key, (old) =>
             (old || []).filter((item) => item.id !== id),
           );
@@ -110,7 +146,6 @@ export function useUpdateBrainStatus() {
     },
 
     onError: (_err, _vars, context) => {
-      // Rollback all tabs
       if (context?.snapshots) {
         const allStatuses: BrainStatus[] = ['pending', 'promoted', 'ignored', 'archived'];
         for (const s of allStatuses) {
