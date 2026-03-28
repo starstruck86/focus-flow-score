@@ -39,6 +39,12 @@ import {
   type RemediationQueue,
   type BulkActionResult,
 } from '@/lib/remediationEngine';
+import {
+  runFixBrokenResources,
+  type FixRunState,
+  type FixItem,
+  type FixItemStatus,
+} from '@/lib/fixBrokenResources';
 
 // ── Persist run to DB ──────────────────────────────────────
 
