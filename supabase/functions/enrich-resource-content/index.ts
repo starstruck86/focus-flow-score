@@ -1399,6 +1399,13 @@ async function orchestrateEnrichment(
   if (source.auth_required) {
     await setEnrichmentStatus(supabase, resourceId, 'needs_auth', {
       failure_reason: `Auth-gated source (${source.platform}) — requires login to access content`,
+      // Persist recovery state
+      recovery_status: 'auth_gated_manual_action_required',
+      recovery_reason: `Auth-gated: ${source.platform}`,
+      next_best_action: 'paste_content',
+      manual_input_required: true,
+      recovery_queue_bucket: 'needs_input',
+      access_type: 'auth_gated',
     });
 
     return {
