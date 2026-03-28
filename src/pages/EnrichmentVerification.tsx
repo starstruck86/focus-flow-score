@@ -37,6 +37,7 @@ import {
   runEndToEndValidation,
   type ValidationResult, type ValidationPhase,
 } from '@/lib/validationOrchestrator';
+import { analyzeRemediationBatch, type RemediationSummary } from '@/lib/remediationIntelligence';
 
 // ── Persist ───────────────────────────────────────────────
 
@@ -106,6 +107,19 @@ export default function EnrichmentVerification() {
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [validationAbort, setValidationAbort] = useState<AbortController | null>(null);
   const isValidating = validationResult?.phase !== undefined && validationResult.phase !== 'idle' && validationResult.phase !== 'complete' && validationResult.phase !== 'error';
+
+  // Fix Everything state
+  type FixEverythingPhase = 'idle' | 'verifying' | 'remediating' | 'analyzing' | 'complete' | 'error';
+  const [fixPhase, setFixPhase] = useState<FixEverythingPhase>('idle');
+  const [fixSummary, setFixSummary] = useState<{
+    fixedAuto: number; needsInput: number; systemGaps: number;
+    totalScanned: number; remediationSummary: RemediationSummary | null;
+    remediationState: RemediationCycleState | null;
+    gapDetails: Array<{ failureType: string; count: number; description: string }>;
+    manualGroups: Array<{ bucket: string; count: number; action: string }>;
+  } | null>(null);
+  const [fixAbort, setFixAbort] = useState<AbortController | null>(null);
+  const isFixing = fixPhase !== 'idle' && fixPhase !== 'complete' && fixPhase !== 'error';
 
   // Verification
   const { verified, summary } = useMemo(() => {
@@ -265,6 +279,126 @@ export default function EnrichmentVerification() {
     setValidationAbort(null);
   }, [validationAbort]);
 
+  // ── Fix Everything ───────────────────────────────────────
+  const handleFixEverything = useCallback(async () => {
+    const controller = new AbortController();
+    setFixAbort(controller);
+    setFixSummary(null);
+    setFixPhase('verifying');
+
+    try {
+      // Step 1: Run verification
+      setHasRun(false);
+      await new Promise(r => setTimeout(r, 50));
+      setHasRun(true);
+      await new Promise(r => setTimeout(r, 200)); // let useMemo recompute
+
+      // We need fresh verified data — re-fetch from supabase
+      const { data: freshResources } = await supabase.from('resources').select('*').order('created_at', { ascending: false });
+      const { data: freshAudioRaw } = await supabase.from('audio_jobs').select('*').order('created_at', { ascending: false }).limit(500);
+      const freshAudioMap = new Map<string, any>();
+      for (const row of (freshAudioRaw || [])) {
+        if (!freshAudioMap.has((row as any).resource_id)) freshAudioMap.set((row as any).resource_id, row);
+      }
+
+      const freshVerified: VerifiedResource[] = [];
+      for (const resource of (freshResources || []) as any[]) {
+        const rawJob = freshAudioMap.get(resource.id);
+        const audioJob: AudioJobInfo | null = rawJob ? {
+          resourceId: resource.id, stage: rawJob.stage ?? 'unknown',
+          failureCode: rawJob.failure_code ?? null, failureReason: rawJob.failure_reason ?? null,
+          hasTranscript: rawJob.has_transcript ?? false, transcriptMode: rawJob.transcript_mode ?? null,
+          finalResolutionStatus: rawJob.final_resolution_status ?? null,
+          transcriptWordCount: rawJob.transcript_word_count ?? null, attemptsCount: rawJob.attempts_count ?? 0,
+        } : null;
+        freshVerified.push(verifyResource(resource as any, audioJob));
+      }
+
+      if (controller.signal.aborted) return;
+
+      // Step 2: Run remediation on broken resources
+      setFixPhase('remediating');
+      const broken = freshVerified.filter(v => v.fixabilityBucket !== 'truly_complete');
+      const queues = buildRemediationQueues(broken);
+
+      let remState: RemediationCycleState | null = null;
+      if (broken.length > 0) {
+        remState = await runAutonomousRemediation(queues, (s) => {
+          setRemediationState({ ...s });
+        }, controller.signal);
+      }
+
+      if (controller.signal.aborted) return;
+
+      // Step 3: Run remediation intelligence analysis
+      setFixPhase('analyzing');
+
+      // Re-verify after remediation
+      const { data: postResources } = await supabase.from('resources').select('*').order('created_at', { ascending: false });
+      const { data: postAudioRaw } = await supabase.from('audio_jobs').select('*').order('created_at', { ascending: false }).limit(500);
+      const postAudioMap = new Map<string, any>();
+      for (const row of (postAudioRaw || [])) {
+        if (!postAudioMap.has((row as any).resource_id)) postAudioMap.set((row as any).resource_id, row);
+      }
+
+      const postVerified: VerifiedResource[] = [];
+      for (const resource of (postResources || []) as any[]) {
+        const rawJob = postAudioMap.get(resource.id);
+        const audioJob: AudioJobInfo | null = rawJob ? {
+          resourceId: resource.id, stage: rawJob.stage ?? 'unknown',
+          failureCode: rawJob.failure_code ?? null, failureReason: rawJob.failure_reason ?? null,
+          hasTranscript: rawJob.has_transcript ?? false, transcriptMode: rawJob.transcript_mode ?? null,
+          finalResolutionStatus: rawJob.final_resolution_status ?? null,
+          transcriptWordCount: rawJob.transcript_word_count ?? null, attemptsCount: rawJob.attempts_count ?? 0,
+        } : null;
+        postVerified.push(verifyResource(resource as any, audioJob));
+      }
+
+      const stillBroken = postVerified.filter(v => v.fixabilityBucket !== 'truly_complete');
+      const analysis = analyzeRemediationBatch(stillBroken);
+
+      const gapDetails = analysis.systemGaps.map(g => ({
+        failureType: g.failureType,
+        count: g.count,
+        description: g.requiredBuild.description,
+      }));
+
+      const manualBuckets = ['needs_transcript', 'needs_pasted_content', 'needs_access_auth', 'needs_alternate_source'];
+      const manualGroups = manualBuckets
+        .map(b => ({
+          bucket: b,
+          count: stillBroken.filter(v => v.fixabilityBucket === b).length,
+          action: QUEUE_ACTIONS[b as RemediationQueue] || 'Provide required input',
+        }))
+        .filter(g => g.count > 0);
+
+      setFixSummary({
+        fixedAuto: remState?.resolvedCompleteCount ?? 0,
+        needsInput: analysis.manualInput,
+        systemGaps: analysis.systemGaps.length,
+        totalScanned: freshVerified.length,
+        remediationSummary: analysis,
+        remediationState: remState,
+        gapDetails,
+        manualGroups,
+      });
+
+      setFixPhase('complete');
+      qc.invalidateQueries({ queryKey: ['resources'] });
+      qc.invalidateQueries({ queryKey: ['all-resources'] });
+      toast.success('Fix Everything complete');
+    } catch (e: any) {
+      setFixPhase('error');
+      toast.error(`Fix Everything failed: ${e.message}`);
+    }
+  }, [qc]);
+
+  const handleStopFix = useCallback(() => {
+    fixAbort?.abort();
+    setFixAbort(null);
+    setFixPhase('idle');
+  }, [fixAbort]);
+
   const isLoading = loadingResources || loadingAudio;
 
   return (
@@ -278,7 +412,7 @@ export default function EnrichmentVerification() {
             </Button>
             <div>
               <h1 className="text-lg font-semibold">Enrichment Verification</h1>
-              <p className="text-xs text-muted-foreground">{allResources?.length ?? 0} resources · {mode === 'verify' ? 'Audit Mode' : mode === 'remediate' ? 'Remediation Mode' : 'Validation Mode'}</p>
+              <p className="text-xs text-muted-foreground">{allResources?.length ?? 0} resources · {mode === 'verify' ? 'Audit Mode' : mode === 'remediate' ? 'Remediation Mode' : mode === 'gaps' ? 'System Gaps' : 'Validation Mode'}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -337,7 +471,20 @@ export default function EnrichmentVerification() {
               </Button>
             )}
 
-            <Button size="sm" onClick={handleRun} disabled={isLoading || saving || isRemediating || isValidating}>
+            {/* Fix Everything */}
+            {!isFixing && !isRemediating && !isValidating && (
+              <Button size="sm" onClick={handleFixEverything} disabled={isLoading || saving}
+                className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold">
+                <Zap className="h-3 w-3 mr-1" /> Fix Everything
+              </Button>
+            )}
+            {isFixing && (
+              <Button size="sm" variant="destructive" onClick={handleStopFix}>
+                <Square className="h-3 w-3 mr-1" /> Stop ({fixPhase})
+              </Button>
+            )}
+
+            <Button size="sm" onClick={handleRun} disabled={isLoading || saving || isRemediating || isValidating || isFixing}>
               {saving ? 'Saving…' : hasRun ? 'Re-run' : 'Run Verification'}
             </Button>
           </div>
@@ -373,7 +520,16 @@ export default function EnrichmentVerification() {
             <Button onClick={handleRun} disabled={isLoading} size="lg">
               {isLoading ? 'Loading…' : 'Run Verification'}
             </Button>
+            <div className="text-xs text-muted-foreground">or</div>
+            <Button onClick={handleFixEverything} disabled={isLoading} size="lg" className="bg-primary text-primary-foreground">
+              <Zap className="h-4 w-4 mr-2" /> Fix Everything
+            </Button>
           </div>
+        )}
+
+        {/* Fix Everything progress / summary */}
+        {(isFixing || (fixPhase === 'complete' && fixSummary)) && (
+          <FixEverythingSummary phase={fixPhase as any} summary={fixSummary} />
         )}
 
         {hasRun && summary && mode === 'verify' && (
@@ -1010,6 +1166,105 @@ function Field({ label, value, copyable, onCopy, link }: {
         {copyable && <button onClick={onCopy}><Copy className="h-3 w-3 text-muted-foreground" /></button>}
         {link && <a href={link} target="_blank" rel="noopener"><ExternalLink className="h-3 w-3 text-muted-foreground" /></a>}
       </div>
+    </div>
+  );
+}
+
+// ── Fix Everything Summary ────────────────────────────────
+
+function FixEverythingSummary({ phase, summary }: {
+  phase: 'verifying' | 'remediating' | 'analyzing' | 'complete' | 'error';
+  summary: {
+    fixedAuto: number; needsInput: number; systemGaps: number;
+    totalScanned: number; remediationSummary: RemediationSummary | null;
+    remediationState: RemediationCycleState | null;
+    gapDetails: Array<{ failureType: string; count: number; description: string }>;
+    manualGroups: Array<{ bucket: string; count: number; action: string }>;
+  } | null;
+}) {
+  if (phase !== 'complete' || !summary) {
+    const phaseLabels = { verifying: 'Verifying all resources…', remediating: 'Running auto-remediation…', analyzing: 'Analyzing remaining gaps…', error: 'Error occurred', complete: '' };
+    return (
+      <div className="rounded-lg border border-primary/30 bg-primary/5 p-6 text-center space-y-3">
+        <Loader2 className="h-8 w-8 text-primary mx-auto animate-spin" />
+        <div className="font-semibold text-primary">{phaseLabels[phase]}</div>
+        <div className="text-sm text-muted-foreground">This may take a few minutes. Do not navigate away.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Top summary cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="rounded-lg border border-status-green/30 bg-status-green/10 p-4 text-center">
+          <div className="text-3xl font-bold text-status-green">{summary.fixedAuto}</div>
+          <div className="text-sm font-medium text-status-green mt-1">Fixed Automatically</div>
+          <div className="text-xs text-muted-foreground mt-0.5">No action needed</div>
+        </div>
+        <div className="rounded-lg border border-primary/30 bg-primary/10 p-4 text-center">
+          <div className="text-3xl font-bold text-primary">{summary.needsInput}</div>
+          <div className="text-sm font-medium text-primary mt-1">Needs Your Input</div>
+          <div className="text-xs text-muted-foreground mt-0.5">Manual content or access required</div>
+        </div>
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-center">
+          <div className="text-3xl font-bold text-destructive">{summary.systemGaps}</div>
+          <div className="text-sm font-medium text-destructive mt-1">Requires System Build</div>
+          <div className="text-xs text-muted-foreground mt-0.5">Code changes needed</div>
+        </div>
+      </div>
+
+      <div className="text-sm text-muted-foreground text-center">
+        Scanned <span className="font-semibold text-foreground">{summary.totalScanned}</span> resources total
+      </div>
+
+      {/* Manual input groups */}
+      {summary.manualGroups.length > 0 && (
+        <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+          <h4 className="text-sm font-semibold flex items-center gap-2">
+            <FileText className="h-4 w-4 text-primary" /> Resources Needing Your Input
+          </h4>
+          <div className="space-y-2">
+            {summary.manualGroups.map(g => (
+              <div key={g.bucket} className="flex items-center justify-between py-2 px-3 rounded bg-muted/30">
+                <div>
+                  <div className="text-sm font-medium">{QUEUE_LABELS[g.bucket as RemediationQueue] || g.bucket}</div>
+                  <div className="text-xs text-muted-foreground">{g.action}</div>
+                </div>
+                <Badge variant="secondary" className="font-bold">{g.count}</Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* System gaps */}
+      {summary.gapDetails.length > 0 && (
+        <div className="rounded-lg border border-destructive/30 bg-card p-4 space-y-3">
+          <h4 className="text-sm font-semibold flex items-center gap-2 text-destructive">
+            <ShieldAlert className="h-4 w-4" /> System Gaps Requiring Code Changes
+          </h4>
+          <div className="space-y-2">
+            {summary.gapDetails.map((g, i) => (
+              <div key={i} className="rounded border border-destructive/20 bg-destructive/5 p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <Badge variant="outline" className="text-[10px] border-destructive/30 text-destructive">{g.failureType}</Badge>
+                  <span className="text-sm font-bold text-destructive">{g.count} resources</span>
+                </div>
+                <div className="text-sm">{g.description}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* All clear */}
+      {summary.needsInput === 0 && summary.systemGaps === 0 && (
+        <div className="rounded-lg border border-status-green/30 bg-status-green/5 p-6 text-center">
+          <CheckCircle2 className="h-8 w-8 text-status-green mx-auto mb-2" />
+          <div className="font-semibold text-status-green">All Resources Resolved</div>
+        </div>
+      )}
     </div>
   );
 }
