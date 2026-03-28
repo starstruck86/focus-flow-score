@@ -302,6 +302,7 @@ export function EnrichmentEngine() {
   const [lastRun, setLastRun] = useState<RunSnapshot | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const [showInbox, setShowInbox] = useState(false);
+  const [showRecoveryQueue, setShowRecoveryQueue] = useState(false);
   const [activeBucket, setActiveBucket] = useState<BucketFilter>('all');
   const [selectedResource, setSelectedResource] = useState<VerifiedResource | null>(null);
   const [expandedSections, setExpanded] = useState<Record<string, boolean>>({});
