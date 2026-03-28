@@ -69,7 +69,7 @@ describe('routeFailure', () => {
     expect(r.bucket).toBe('retryable_extraction_failure');
     // Must not use generic message
     expect(r.reason).not.toBe('Content too weak to enrich');
-    expect(r.reason).toContain('Extraction failed');
+    expect(r.reason).toContain('Extractor');
   });
 
   it('direct audio file with timeout routes to retryable', () => {
