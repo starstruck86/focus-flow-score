@@ -208,11 +208,12 @@ function filterByScope(verified: VerifiedResource[], selectedBuckets: RunScopeBu
 
 /**
  * Build per-bucket execution summaries from remediation state + skip data.
+ * Separates recoverable items from true skips.
  */
 function buildBucketSummaries(
   preVerified: VerifiedResource[],
   postVerified: VerifiedResource[],
-  skipped: Array<{ resource: VerifiedResource; reason: string }>,
+  skipped: Array<{ resource: VerifiedResource; reason: string; recoverable: boolean; recoveryAction: string }>,
   autoReleased: VerifiedResource[],
   remState: RemediationCycleState | null,
 ): BucketExecutionSummary[] {
@@ -225,6 +226,7 @@ function buildBucketSummaries(
         inputCount: 0, attemptedCount: 0, skippedCount: 0,
         resolvedCount: 0, improvedNotComplete: 0, unchangedCount: 0,
         failedCount: 0, autoReleasedFromQuarantine: 0, skipReasons: {},
+        queuedForRecoveryCount: 0, awaitingManualInputCount: 0, terminalFailedCount: 0,
       });
     }
     return buckets.get(bucket)!;
@@ -240,12 +242,16 @@ function buildBucketSummaries(
     }
   }
 
-  // Count skipped
-  for (const { resource, reason } of skipped) {
+  // Classify skipped: recoverable → queuedForRecovery, non-recoverable → skipped
+  for (const { resource, reason, recoverable } of skipped) {
     const sb = fixabilityToScopeBucket(resource);
     if (sb) {
       const s = getOrCreate(sb, RUN_SCOPE_META[sb]?.label || sb);
-      s.skippedCount++;
+      if (recoverable) {
+        s.queuedForRecoveryCount++;
+      } else {
+        s.skippedCount++;
+      }
       s.skipReasons[reason] = (s.skipReasons[reason] || 0) + 1;
     }
   }
@@ -257,7 +263,6 @@ function buildBucketSummaries(
   // Count attempted/resolved from remediation state
   if (remState) {
     for (const item of remState.items) {
-      // Map the remediation queue back to scope bucket
       let sb: string = 'auto_fixable';
       if (item.queue === 'auto_fix_now') sb = 'auto_fixable';
       else if (item.queue === 'retry_different_strategy') sb = 'retry_different_strategy';
@@ -270,17 +275,19 @@ function buildBucketSummaries(
 
       if (item.status === 'resolved_complete' || item.status === 'resolved_metadata_only') {
         s.resolvedCount++;
+      } else if (item.status === 'awaiting_manual') {
+        s.awaitingManualInputCount++;
       } else if (item.afterScore !== null && item.afterScore > item.beforeScore) {
         s.improvedNotComplete++;
       } else if (item.status === 'escalated' || item.status === 'resolved_quarantined') {
-        s.failedCount++;
+        s.terminalFailedCount++;
       } else {
         s.unchangedCount++;
       }
     }
   }
 
-  return Array.from(buckets.values()).filter(s => s.inputCount > 0 || s.attemptedCount > 0 || s.skippedCount > 0);
+  return Array.from(buckets.values()).filter(s => s.inputCount > 0 || s.attemptedCount > 0 || s.skippedCount > 0 || s.queuedForRecoveryCount > 0);
 }
 
 // ── Main Component ─────────────────────────────────────────
