@@ -8,6 +8,7 @@
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import { classifyEnrichability, type EnrichabilityState } from '@/lib/salesBrain/resourceSubtype';
+import { isAudioResource, detectAudioSubtype, getAudioStrategy } from '@/lib/salesBrain/audioPipeline';
 
 export type ProcessingState =
   | 'READY'
@@ -141,8 +142,30 @@ export function deriveProcessingState(
     };
   }
 
-  // Failed enrichment
+  // Failed enrichment — audio resources get audio-specific guidance
   if (status === 'failed') {
+    // Audio resource with no audio job — give audio-aware failure guidance
+    if (!audioJob && isAudioResource(resource.file_url, resource.resource_type)) {
+      const audioSubtype = detectAudioSubtype(resource.file_url, resource.resource_type);
+      const strategy = getAudioStrategy(audioSubtype);
+      if (strategy.manualAssistRequired) {
+        return {
+          state: 'MANUAL_REQUIRED',
+          label: 'Manual Input Needed',
+          description: strategy.operatorFailureReason,
+          nextAction: 'Open Manual Assist to provide transcript or alternate source',
+          retryable: false,
+        };
+      }
+      return {
+        state: 'RETRYABLE_FAILURE',
+        label: 'Retry Available',
+        description: resource.failure_reason || strategy.operatorFailureReason,
+        nextAction: strategy.retryMode === 'automatic' ? 'Retry transcription' : 'Open Manual Assist',
+        retryable: strategy.retryMode === 'automatic',
+      };
+    }
+
     const ea = classifyEnrichability(resource.file_url, resource.resource_type);
     if (ea.enrichability === 'manual_input_needed' || ea.enrichability === 'needs_auth') {
       return {
@@ -193,8 +216,41 @@ export function deriveProcessingState(
     };
   }
 
-  // Not enriched — check enrichability
+  // Not enriched — check enrichability, with audio-specific routing
   if (status === 'not_enriched' || !status) {
+    // Audio resources without a job get audio-aware guidance
+    if (isAudioResource(resource.file_url, resource.resource_type)) {
+      const audioSubtype = detectAudioSubtype(resource.file_url, resource.resource_type);
+      const strategy = getAudioStrategy(audioSubtype);
+
+      if (strategy.manualAssistRequired) {
+        return {
+          state: 'MANUAL_REQUIRED',
+          label: 'Manual Input Needed',
+          description: strategy.operatorFailureReason,
+          nextAction: 'Open Manual Assist',
+          retryable: false,
+        };
+      }
+      if (strategy.metadataOnlyAcceptable && strategy.retryMode === 'manual_only') {
+        return {
+          state: 'METADATA_ONLY',
+          label: 'Metadata Only',
+          description: strategy.operatorFailureReason,
+          nextAction: 'Paste transcript or provide alternate URL',
+          retryable: false,
+        };
+      }
+      // Direct audio / RSS-backed / Apple — ready for auto processing
+      return {
+        state: 'READY',
+        label: 'Ready',
+        description: `Audio detected — ${strategy.primaryPath.description}`,
+        nextAction: 'Run Deep Enrich',
+        retryable: false,
+      };
+    }
+
     const ea = classifyEnrichability(resource.file_url, resource.resource_type);
     if (ea.enrichability === 'manual_input_needed') {
       return {
