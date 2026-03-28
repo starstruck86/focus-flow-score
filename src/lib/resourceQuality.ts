@@ -92,6 +92,7 @@ export function validateResourceQuality(resource: ResourceForValidation): Qualit
   const violations: string[] = [];
   const content = resource.content || '';
   const contentLen = content.length;
+  const isSpreadsheet = resource.file_url ? /docs\.google\.com\/spreadsheets|sheets\.google\.com/i.test(resource.file_url) : false;
 
   // ── 1. Content Depth (0-25) ──────────────────────────────
   // Detect binary/non-text content (audio files stored as content)
@@ -141,6 +142,16 @@ export function validateResourceQuality(resource: ResourceForValidation): Qualit
   if (isBinaryContent) {
     violations.push('binary_content_detected — no semantic analysis possible');
     semanticUsefulness = 0;
+  } else if (isSpreadsheet && effectiveContentLen > 0) {
+    // Spreadsheet-aware: tabular content is valid — don't penalize for lacking prose
+    const dataLines = content.split('\n').filter(l => l.trim().length > 0 && !l.startsWith('#') && !l.startsWith('*'));
+    if (dataLines.length >= 3) {
+      semanticUsefulness = 25; // Rich tabular data
+    } else if (dataLines.length > 0) {
+      semanticUsefulness = 15;
+    } else {
+      semanticUsefulness = 5;
+    }
   } else if (effectiveContentLen > 0) {
     // Check boilerplate ratio
     const lines = content.split('\n').filter(l => l.trim().length > 0);

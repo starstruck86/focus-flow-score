@@ -77,7 +77,7 @@ function getSourceRouter(subtype: ResourceSubtype): string {
     case 'podcast_episode': return 'audio_transcription';
     case 'audio_file': return 'direct_transcription';
     case 'google_doc': return 'document_extraction';
-    case 'google_sheet': return 'document_extraction';
+    case 'google_sheet': return 'spreadsheet_extraction';
     case 'google_drive_file': return 'document_extraction';
     case 'auth_gated_community_page': return 'manual_input';
     case 'zoom_recording': return 'transcript_needed';
@@ -249,6 +249,16 @@ export function resolveCanonicalState(
     }
     if (status === 'not_enriched' || !status) {
       return { ...base, state: 'ready_to_enrich', label: 'Ready', description: 'Google Drive file — direct download will be attempted', nextAction: 'Run enrichment', qualityScore: quality.score };
+    }
+  }
+
+  // Google Sheet — dedicated routing, not generic google_doc
+  if (subtype === 'google_sheet') {
+    if (status === 'needs_auth') {
+      return { ...base, state: 'needs_access_auth', label: 'Needs Auth', description: 'Google Sheet requires sharing permissions', nextAction: 'Set sharing to "Anyone with the link"', qualityScore: quality.score };
+    }
+    if (status === 'not_enriched' || !status) {
+      return { ...base, state: 'ready_to_enrich', label: 'Ready', description: 'Google Sheet — CSV export will be attempted', nextAction: 'Run enrichment', qualityScore: quality.score };
     }
   }
 

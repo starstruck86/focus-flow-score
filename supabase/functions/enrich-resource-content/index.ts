@@ -35,6 +35,7 @@ type SourceType =
   | 'pdf'
   | 'youtube'
   | 'google_doc'
+  | 'google_sheet'
   | 'google_drive_file'
   | 'notion'
   | 'auth_gated'
@@ -97,6 +98,11 @@ function classifySource(url: string): SourceClassification {
       }
     }
 
+    // Google Sheets — dedicated subtype, NOT auth-gated by default
+    if (/docs\.google\.com\/spreadsheets/i.test(host) || /sheets\.google\.com/i.test(host)) {
+      return { source_type: 'google_sheet', platform: 'Google Sheets', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
+    }
+
     // Google Drive file links (not Docs/Sheets/Slides) — try direct download
     if (/drive\.google\.com\/file\/d\//i.test(host) ||
         /drive\.google\.com\/open\?/i.test(url) ||
@@ -104,7 +110,7 @@ function classifySource(url: string): SourceClassification {
       return { source_type: 'google_drive_file', platform: 'Google Drive', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
     }
 
-    // Google Docs/Sheets/Slides (auth-gated)
+    // Google Docs/Slides (auth-gated — Sheets handled above)
     if (GOOGLE_DOC_PATTERNS.some(p => p.test(host))) {
       return { source_type: 'google_doc', platform: 'Google', auth_required: true, transcript_available: null, downloadable: false, js_rendered: false };
     }
@@ -614,6 +620,176 @@ function buildPodcastMetadataContent(resolveData: any): string | null {
   return parts.length > 0 ? parts.join('\n') : null;
 }
 
+// ── Google Sheets helpers ───────────────────────────────────
+function extractSheetId(url: string): string | null {
+  const m = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/i);
+  return m?.[1] ?? null;
+}
+
+/** Export Google Sheet as CSV (one sheet at a time), then combine all tabs */
+async function googleSheetExport(url: string, _apiKey: string): Promise<ExtractionResult> {
+  const method = 'google_sheet_csv_export';
+  const startMs = Date.now();
+
+  const sheetId = extractSheetId(url);
+  if (!sheetId) {
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
+        auth_wall_detected: false, http_status: null,
+        validation_result: 'fail', error_category: 'parse_failure',
+        error_detail: 'Could not extract spreadsheet ID from Google Sheets URL',
+      },
+    };
+  }
+
+  try {
+    // First try to get the HTML version to discover sheet/tab names
+    const htmlUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/htmlview`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30_000);
+
+    // Export as CSV (default first sheet)
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
+    const csvResp = await fetch(csvUrl, {
+      signal: controller.signal,
+      redirect: 'follow',
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; EnrichBot/1.0)' },
+    });
+    clearTimeout(timer);
+    const durationMs = Date.now() - startMs;
+
+    if (csvResp.status === 401 || csvResp.status === 403) {
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: true, http_status: csvResp.status,
+          validation_result: 'fail', error_category: 'auth_failure',
+          error_detail: `Google Sheets returned ${csvResp.status} — file is not publicly accessible`,
+        },
+      };
+    }
+
+    if (!csvResp.ok) {
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: false, http_status: csvResp.status,
+          validation_result: 'fail', error_category: `http_${csvResp.status}`,
+          error_detail: `Google Sheets export returned ${csvResp.status}`,
+        },
+      };
+    }
+
+    const csvText = await csvResp.text();
+
+    // Check if we got an HTML login page instead of CSV
+    if (csvText.includes('accounts.google.com') && csvText.includes('Sign in')) {
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: true, http_status: 200,
+          validation_result: 'fail', error_category: 'auth_failure',
+          error_detail: 'Google Sheets requires sign-in — file is not publicly accessible',
+        },
+      };
+    }
+
+    // Convert CSV to structured markdown-like text
+    const structuredContent = convertCsvToStructuredText(csvText, sheetId);
+
+    return {
+      content: structuredContent.slice(0, CONTENT_CAP),
+      attempt: {
+        method, duration_ms: durationMs, chars_extracted: structuredContent.length, timeout_hit: false,
+        auth_wall_detected: false, http_status: 200,
+        validation_result: structuredContent.length >= MIN_CONTENT_CHARS ? 'pass' : 'partial',
+        error_category: null, error_detail: null,
+      },
+    };
+  } catch (e) {
+    const durationMs = Date.now() - startMs;
+    const isTimeout = e instanceof DOMException && e.name === 'AbortError';
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: isTimeout,
+        auth_wall_detected: false, http_status: null,
+        validation_result: 'fail',
+        error_category: isTimeout ? 'timeout' : 'network',
+        error_detail: isTimeout ? 'Timed out fetching Google Sheet' : (e as Error).message?.slice(0, 200),
+      },
+    };
+  }
+}
+
+/** Convert raw CSV text into structured readable text preserving headers and rows */
+function convertCsvToStructuredText(csvText: string, sheetId: string): string {
+  const lines = csvText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (lines.length === 0) return '';
+
+  const parts: string[] = [];
+  parts.push(`# Google Spreadsheet\n`);
+  parts.push(`**Source:** Google Sheets (ID: ${sheetId})`);
+  parts.push(`**Rows:** ${lines.length}\n`);
+
+  // Parse CSV lines — simple parser (handles quoted fields)
+  const parseRow = (line: string): string[] => {
+    const fields: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+        else inQuotes = !inQuotes;
+      } else if (ch === ',' && !inQuotes) {
+        fields.push(current.trim());
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    fields.push(current.trim());
+    return fields;
+  };
+
+  // First row as headers
+  const headers = parseRow(lines[0]);
+  const nonEmptyHeaders = headers.filter(h => h.length > 0);
+
+  if (nonEmptyHeaders.length > 0) {
+    parts.push(`## Headers\n`);
+    parts.push(`| ${headers.join(' | ')} |`);
+    parts.push(`| ${headers.map(() => '---').join(' | ')} |`);
+
+    // Data rows (cap at 500 rows for content size)
+    const maxRows = Math.min(lines.length, 501);
+    for (let i = 1; i < maxRows; i++) {
+      const fields = parseRow(lines[i]);
+      // Pad or trim to match header count
+      while (fields.length < headers.length) fields.push('');
+      parts.push(`| ${fields.slice(0, headers.length).join(' | ')} |`);
+    }
+
+    if (lines.length > 501) {
+      parts.push(`\n*... ${lines.length - 501} additional rows truncated*`);
+    }
+  } else {
+    // No clear headers — just dump as text
+    parts.push(`## Content\n`);
+    for (const line of lines.slice(0, 500)) {
+      parts.push(line);
+    }
+  }
+
+  return parts.join('\n');
+}
+
 // ── Google Drive helpers ────────────────────────────────────
 function extractDriveFileId(url: string): string | null {
   const patterns = [
@@ -784,6 +960,8 @@ function getMethodChain(source: SourceClassification): Array<(url: string, apiKe
       return [firecrawlScrape, firecrawlFullPage];
     case 'google_drive_file':
       return [googleDriveDirectDownload, firecrawlScrape];
+    case 'google_sheet':
+      return [googleSheetExport, firecrawlScrape];
     case 'auth_gated':
     case 'google_doc':
     case 'notion':
@@ -814,12 +992,13 @@ interface QualityValidation {
   is_binary: boolean;
 }
 
-function validateContentQuality(content: string | null): QualityValidation {
+function validateContentQuality(content: string | null, sourceType?: SourceType): QualityValidation {
   const violations: string[] = [];
   const missingFields: string[] = [];
   const text = content || '';
   const len = text.length;
   let score = 0;
+  const isSpreadsheet = sourceType === 'google_sheet';
 
   // Binary preflight — if binary, score is 0 and route to needs_transcript
   if (len > 0 && isBinaryContent(text)) {
@@ -846,8 +1025,15 @@ function validateContentQuality(content: string | null): QualityValidation {
   // Structural (0-20)
   if (len > 0) {
     score += 10;
-    if (/^#{1,3}\s/m.test(text) || /\n\n/.test(text)) score += 10;
-    else score += 3;
+    if (isSpreadsheet) {
+      // Spreadsheets get full structural credit for having table structure
+      if (/\|.*\|/.test(text) || /,/.test(text)) score += 10;
+      else score += 5;
+    } else if (/^#{1,3}\s/m.test(text) || /\n\n/.test(text)) {
+      score += 10;
+    } else {
+      score += 3;
+    }
   }
 
   // Semantic usefulness (0-30)
@@ -855,6 +1041,17 @@ function validateContentQuality(content: string | null): QualityValidation {
     if (text.startsWith('[External Link:') || text.startsWith('[Placeholder')) {
       violations.push('Content is a placeholder stub');
       missingFields.push('real_content');
+    } else if (isSpreadsheet) {
+      // Spreadsheet-aware scoring: don't penalize tabular content
+      // Count non-empty cells/fields as a proxy for useful data
+      const dataLines = text.split('\n').filter(l => l.trim().length > 0 && !l.startsWith('#') && !l.startsWith('*'));
+      if (dataLines.length >= 3) {
+        score += 25; // Tabular data with 3+ rows of content is useful
+      } else if (dataLines.length > 0) {
+        score += 15;
+      } else {
+        score += 5;
+      }
     } else {
       const lines = text.split('\n').filter(l => l.trim().length > 0);
       const boilerplateLines = lines.filter(line => BOILERPLATE_PATTERNS.some(p => p.test(line)));
@@ -1038,7 +1235,7 @@ async function orchestrateEnrichment(
     }
 
     if (result.content && result.content.length > 0) {
-      const qv = validateContentQuality(result.content);
+      const qv = validateContentQuality(result.content, source.source_type);
       result.attempt.validation_result = qv.passes ? 'pass' : (qv.score >= PARTIAL_MIN_SCORE ? 'partial' : 'fail');
 
       // Binary content detected — do NOT store, route to needs_transcript

@@ -143,6 +143,15 @@ const SOURCE_REASONS: Record<string, Record<FailureBucket, string>> = {
     unsupported_source: 'Google Doc format not recognized.',
     metadata_only_acceptable: 'Google Doc — metadata only. Retry or paste content.',
   },
+  google_sheet: {
+    retryable_extraction_failure: 'Google Sheet extraction failed — retry enrichment.',
+    alternate_source_required: 'Google Sheet could not be exported.',
+    transcript_required: 'Google Sheet extraction failed. Retry or paste content.',
+    auth_required: 'Google Sheet requires sharing permissions — set to "Anyone with the link".',
+    manual_content_required: 'Google Sheet could not be accessed. Paste content via Manual Assist.',
+    unsupported_source: 'Google Sheet format not recognized.',
+    metadata_only_acceptable: 'Google Sheet — metadata only. Retry or paste content.',
+  },
   google_drive_file: {
     retryable_extraction_failure: 'Google Drive file extraction failed.',
     alternate_source_required: 'Google Drive file is not audio.',
@@ -242,6 +251,10 @@ function determineBucket(
       return 'retryable_extraction_failure';
 
     case 'google_drive_file':
+      if (failureCategory === 'failed_needs_auth') return 'auth_required';
+      return 'retryable_extraction_failure';
+
+    case 'google_sheet':
       if (failureCategory === 'failed_needs_auth') return 'auth_required';
       return 'retryable_extraction_failure';
 
