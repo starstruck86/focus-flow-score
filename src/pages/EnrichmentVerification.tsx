@@ -913,6 +913,56 @@ function ResourceDrawer({ resource: v, onClose }: { resource: VerifiedResource; 
             </div>
           </Section>
 
+          {/* Why This Failed */}
+          {v.fixabilityBucket !== 'truly_complete' && (
+            <Section title="Why This Failed">
+              <Field label="Root Cause" value={v.rootCause || v.rootCauseCategory} />
+              <Field label="Failure Type" value={v.resolutionType === 'system_gap' ? 'System Gap' : v.failureBucket || 'None'} />
+              <Field label="Resolution Type" value={
+                v.resolutionType === 'auto_fix' ? '⚡ Auto Fix' :
+                v.resolutionType === 'manual_input' ? '✋ Manual Input' :
+                v.resolutionType === 'system_gap' ? '🔧 System Gap' : v.resolutionType
+              } />
+              <Field label="Recommended Action" value={v.recommendedAction} />
+            </Section>
+          )}
+
+          {/* What Needs To Happen */}
+          {v.fixabilityBucket !== 'truly_complete' && (
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">What Needs To Happen</h4>
+              {v.resolutionType === 'auto_fix' && (
+                <div className="rounded-lg border border-status-green/30 bg-status-green/10 p-3">
+                  <div className="text-xs font-semibold text-status-green mb-1">⚡ Automatic Resolution</div>
+                  <div className="text-sm font-medium">This will be fixed automatically. {v.recommendedAction}</div>
+                </div>
+              )}
+              {v.resolutionType === 'manual_input' && (
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+                  <div className="text-xs font-semibold text-primary mb-1">✋ Manual Input Required</div>
+                  <div className="text-sm font-medium">{v.recommendedAction}</div>
+                </div>
+              )}
+              {v.resolutionType === 'system_gap' && (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 space-y-2">
+                  <div className="text-xs font-bold text-destructive uppercase tracking-wide">⚠ System Limitation Detected</div>
+                  <div className="text-sm font-medium text-destructive">{v.rootCause}</div>
+                  {v.requiredBuild && (
+                    <div className="mt-2 space-y-1 border-t border-destructive/20 pt-2">
+                      <div className="text-xs font-semibold text-destructive/80">Required Build:</div>
+                      <Field label="Type" value={v.requiredBuild.type} />
+                      <Field label="Description" value={v.requiredBuild.description} />
+                      <div className="text-xs text-muted-foreground mt-1">
+                        <span className="font-semibold">Suggested Fix: </span>
+                        {v.requiredBuild.suggestedImplementation}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {v.contradictions.length > 0 && (
             <Section title={`Contradictions (${v.contradictions.length})`}>
               {v.contradictions.map((c, i) => (
