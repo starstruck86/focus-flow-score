@@ -189,7 +189,7 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
       return {
         ...base,
         enrichability: 'metadata_only',
-        reason: 'Spotify — metadata available, transcript requires external source or manual paste',
+        reason: 'Spotify — metadata only. Paste transcript or provide alternate URL.',
         canFetchMetadata: true,
       };
 
