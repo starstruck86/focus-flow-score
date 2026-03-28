@@ -32,7 +32,7 @@ export function ProofOfImpact({ pre, post, result }: Props) {
               <Stat label="Broken after" value={post.broken} color={post.broken < pre.broken ? 'text-status-green' : undefined} />
               <Stat label="Newly resolved" value={newlyResolved} color={newlyResolved > 0 ? 'text-status-green' : undefined} />
               <Stat label="Auto-resolved" value={result.autoResolved} color="text-status-green" />
-              <Stat label="Needs input" value={result.needsManual} color="text-status-yellow" />
+              <Stat label="Awaiting input" value={result.needsManual} color="text-status-yellow" />
               <Stat label="Quarantined" value={result.quarantined} color="text-destructive" />
               <Stat label="System gaps" value={result.systemGaps} color="text-destructive" />
             </div>

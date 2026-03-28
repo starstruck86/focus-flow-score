@@ -5,6 +5,7 @@
  * run controls, proof-of-impact, manual inbox, product roadmap.
  */
 import { useState, useMemo, useCallback, useRef } from 'react';
+import { cn } from '@/lib/utils';
 import { useAllResources, type Resource } from '@/hooks/useResources';
 import { useAudioJobsMap } from '@/hooks/useAudioJobs';
 import { useAuth } from '@/contexts/AuthContext';
@@ -23,7 +24,7 @@ import { buildRemediationQueues } from '@/lib/remediationEngine';
 import { runAutonomousRemediation, type RemediationCycleState } from '@/lib/autonomousRemediation';
 import { analyzeRemediationBatch } from '@/lib/remediationIntelligence';
 import { generateProductRoadmap, type RoadmapSummary } from '@/lib/systemGapRoadmap';
-import { shouldAutoRelease, classifyQuarantine, getQuarantineSubClass, SKIP_REASON_LABELS, getSkipReason } from '@/lib/quarantineClassification';
+import { shouldAutoRelease, classifyQuarantine, getQuarantineSubClass, SKIP_REASON_LABELS, getSkipReason, isRecoverableSkip, getRecoveryAction } from '@/lib/quarantineClassification';
 import { ManualInputInbox, type InboxQueue, type InboxItem } from './ManualInputInbox';
 import { FileText, Lock, ExternalLink, Eye } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -36,6 +37,7 @@ import { RunControls } from './enrichment/RunControls';
 import { ProofOfImpact } from './enrichment/ProofOfImpact';
 import { RoadmapPanel } from './enrichment/RoadmapPanel';
 import { BucketSummaryPanel } from './enrichment/BucketSummaryPanel';
+import { RecoveryQueue } from './enrichment/RecoveryQueue';
 
 // ── Helpers ────────────────────────────────────────────────
 
@@ -135,25 +137,33 @@ function fixabilityToScopeBucket(v: VerifiedResource): RunScopeBucket | null {
 /**
  * Filter verified resources based on selected run scope buckets.
  * Auto-releases invalid quarantines when quarantined bucket is selected.
+ * Recoverable items are routed to recovery, not "skipped".
  */
 function filterByScope(verified: VerifiedResource[], selectedBuckets: RunScopeBucket[]): {
   included: VerifiedResource[];
-  skipped: Array<{ resource: VerifiedResource; reason: string }>;
+  skipped: Array<{ resource: VerifiedResource; reason: string; recoverable: boolean; recoveryAction: string }>;
   autoReleased: VerifiedResource[];
 } {
   const included: VerifiedResource[] = [];
-  const skipped: Array<{ resource: VerifiedResource; reason: string }> = [];
+  const skipped: Array<{ resource: VerifiedResource; reason: string; recoverable: boolean; recoveryAction: string }> = [];
   const autoReleased: VerifiedResource[] = [];
 
   for (const v of verified) {
     if (v.fixabilityBucket === 'truly_complete' || v.fixabilityBucket === 'true_unsupported') {
-      continue; // Skip complete/unsupported
+      continue; // Genuinely complete/unsupported
     }
 
     const scopeBucket = fixabilityToScopeBucket(v);
     if (!scopeBucket || !selectedBuckets.includes(scopeBucket)) {
       const skipReason = getSkipReason(v, selectedBuckets);
-      skipped.push({ resource: v, reason: skipReason ? SKIP_REASON_LABELS[skipReason] : `Bucket "${scopeBucket}" not selected` });
+      const recoverable = skipReason ? isRecoverableSkip(skipReason) : false;
+      const recoveryAction = skipReason ? getRecoveryAction(skipReason) : 'none';
+      skipped.push({
+        resource: v,
+        reason: skipReason ? SKIP_REASON_LABELS[skipReason] : `Bucket "${scopeBucket}" not selected`,
+        recoverable,
+        recoveryAction,
+      });
       continue;
     }
 
@@ -165,20 +175,30 @@ function filterByScope(verified: VerifiedResource[], selectedBuckets: RunScopeBu
       } else {
         const meta = classifyQuarantine(v);
         if (meta.quarantineLocked) {
-          skipped.push({ resource: v, reason: SKIP_REASON_LABELS.operator_locked });
+          skipped.push({ resource: v, reason: SKIP_REASON_LABELS.operator_locked, recoverable: false, recoveryAction: 'none' });
         } else if (selectedBuckets.includes('quarantined')) {
           included.push(v);
         } else {
-          skipped.push({ resource: v, reason: SKIP_REASON_LABELS.quarantined_not_selected });
+          skipped.push({ resource: v, reason: SKIP_REASON_LABELS.quarantined_not_selected, recoverable: true, recoveryAction: 'queue_for_retry' });
         }
       }
       continue;
     }
 
-    // Handle needs_input: check if required input exists
+    // Handle needs_input: INCLUDE them when their bucket is selected (they route to manual in remediation)
+    if (scopeBucket === 'needs_input' && selectedBuckets.includes('needs_input')) {
+      included.push(v);
+      continue;
+    }
+
     if (scopeBucket === 'needs_input' && !selectedBuckets.includes('needs_input')) {
       const skipReason = getSkipReason(v, selectedBuckets);
-      skipped.push({ resource: v, reason: skipReason ? SKIP_REASON_LABELS[skipReason] : 'Needs input bucket not selected' });
+      skipped.push({
+        resource: v,
+        reason: skipReason ? SKIP_REASON_LABELS[skipReason] : 'Needs input bucket not selected',
+        recoverable: true,
+        recoveryAction: skipReason ? getRecoveryAction(skipReason) : 'paste_content',
+      });
       continue;
     }
 
@@ -190,11 +210,12 @@ function filterByScope(verified: VerifiedResource[], selectedBuckets: RunScopeBu
 
 /**
  * Build per-bucket execution summaries from remediation state + skip data.
+ * Separates recoverable items from true skips.
  */
 function buildBucketSummaries(
   preVerified: VerifiedResource[],
   postVerified: VerifiedResource[],
-  skipped: Array<{ resource: VerifiedResource; reason: string }>,
+  skipped: Array<{ resource: VerifiedResource; reason: string; recoverable: boolean; recoveryAction: string }>,
   autoReleased: VerifiedResource[],
   remState: RemediationCycleState | null,
 ): BucketExecutionSummary[] {
@@ -207,6 +228,7 @@ function buildBucketSummaries(
         inputCount: 0, attemptedCount: 0, skippedCount: 0,
         resolvedCount: 0, improvedNotComplete: 0, unchangedCount: 0,
         failedCount: 0, autoReleasedFromQuarantine: 0, skipReasons: {},
+        queuedForRecoveryCount: 0, awaitingManualInputCount: 0, terminalFailedCount: 0,
       });
     }
     return buckets.get(bucket)!;
@@ -222,12 +244,16 @@ function buildBucketSummaries(
     }
   }
 
-  // Count skipped
-  for (const { resource, reason } of skipped) {
+  // Classify skipped: recoverable → queuedForRecovery, non-recoverable → skipped
+  for (const { resource, reason, recoverable } of skipped) {
     const sb = fixabilityToScopeBucket(resource);
     if (sb) {
       const s = getOrCreate(sb, RUN_SCOPE_META[sb]?.label || sb);
-      s.skippedCount++;
+      if (recoverable) {
+        s.queuedForRecoveryCount++;
+      } else {
+        s.skippedCount++;
+      }
       s.skipReasons[reason] = (s.skipReasons[reason] || 0) + 1;
     }
   }
@@ -239,7 +265,6 @@ function buildBucketSummaries(
   // Count attempted/resolved from remediation state
   if (remState) {
     for (const item of remState.items) {
-      // Map the remediation queue back to scope bucket
       let sb: string = 'auto_fixable';
       if (item.queue === 'auto_fix_now') sb = 'auto_fixable';
       else if (item.queue === 'retry_different_strategy') sb = 'retry_different_strategy';
@@ -252,17 +277,19 @@ function buildBucketSummaries(
 
       if (item.status === 'resolved_complete' || item.status === 'resolved_metadata_only') {
         s.resolvedCount++;
+      } else if (item.status === 'awaiting_manual') {
+        s.awaitingManualInputCount++;
       } else if (item.afterScore !== null && item.afterScore > item.beforeScore) {
         s.improvedNotComplete++;
       } else if (item.status === 'escalated' || item.status === 'resolved_quarantined') {
-        s.failedCount++;
+        s.terminalFailedCount++;
       } else {
         s.unchangedCount++;
       }
     }
   }
 
-  return Array.from(buckets.values()).filter(s => s.inputCount > 0 || s.attemptedCount > 0 || s.skippedCount > 0);
+  return Array.from(buckets.values()).filter(s => s.inputCount > 0 || s.attemptedCount > 0 || s.skippedCount > 0 || s.queuedForRecoveryCount > 0);
 }
 
 // ── Main Component ─────────────────────────────────────────
@@ -276,6 +303,7 @@ export function EnrichmentEngine() {
   const [lastRun, setLastRun] = useState<RunSnapshot | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const [showInbox, setShowInbox] = useState(false);
+  const [showRecoveryQueue, setShowRecoveryQueue] = useState(false);
   const [activeBucket, setActiveBucket] = useState<BucketFilter>('all');
   const [selectedResource, setSelectedResource] = useState<VerifiedResource | null>(null);
   const [expandedSections, setExpanded] = useState<Record<string, boolean>>({});
@@ -390,8 +418,12 @@ export function EnrichmentEngine() {
       await qc.invalidateQueries({ queryKey: ['resources'] });
       await qc.invalidateQueries({ queryKey: ['all-resources'] });
       const totalAttempted = included.length;
-      const totalSkipped = skipped.length;
-      toast.success(`Done: ${postSnap.complete - preSnap.complete} newly resolved, ${totalAttempted} attempted, ${totalSkipped} skipped`);
+      const recoverable = skipped.filter(s => s.recoverable).length;
+      const trueSkipped = skipped.filter(s => !s.recoverable).length;
+      const parts = [`${postSnap.complete - preSnap.complete} resolved`, `${totalAttempted} attempted`];
+      if (recoverable > 0) parts.push(`${recoverable} queued for recovery`);
+      if (trueSkipped > 0) parts.push(`${trueSkipped} intentionally skipped`);
+      toast.success(`Done: ${parts.join(', ')}`);
     } catch (e: any) {
       setResult(prev => ({ ...prev, phase: 'error', errorMessage: e.message }));
       toast.error(`Failed: ${e.message}`);
@@ -521,6 +553,26 @@ export function EnrichmentEngine() {
       {/* Manual Inbox (toggle) */}
       {showInbox && !isRunning && (
         <ManualInputInbox queues={liveInboxQueues} onItemResolved={handleInboxResolved} />
+      )}
+
+      {/* Recovery Queue */}
+      {showRecoveryQueue && !isRunning && (
+        <RecoveryQueue resources={displayResources} onItemResolved={handleInboxResolved} />
+      )}
+
+      {/* Recovery Queue toggle button */}
+      {!isRunning && (
+        <div className="flex justify-end">
+          <button
+            className={cn(
+              'text-[10px] px-2 py-1 rounded border transition-colors',
+              showRecoveryQueue ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary',
+            )}
+            onClick={() => setShowRecoveryQueue(!showRecoveryQueue)}
+          >
+            {showRecoveryQueue ? 'Hide' : 'Show'} Recovery Queue
+          </button>
+        </div>
       )}
 
       {/* Proof of Impact */}

@@ -143,7 +143,17 @@ export function shouldAutoRelease(v: VerifiedResource): boolean {
   return true;
 }
 
-// ── Skip reasons ──────────────────────────────────────────
+// ── Recovery routing reasons (replaces old "skip" reasons) ──
+
+export type RecoveryAction =
+  | 'start_transcription'
+  | 'paste_content'
+  | 'paste_transcript'
+  | 'provide_access'
+  | 'provide_alternate_url'
+  | 'assign_manual_review'
+  | 'queue_for_retry'
+  | 'none';
 
 export type SkipReason =
   | 'missing_transcript'
@@ -157,16 +167,36 @@ export type SkipReason =
   | 'needs_input_not_provided';
 
 export const SKIP_REASON_LABELS: Record<SkipReason, string> = {
-  missing_transcript: 'Missing transcript',
-  missing_pasted_content: 'Missing pasted content',
-  still_auth_gated: 'Still auth-gated',
-  quarantined_not_selected: 'Quarantined but not selected for this run',
-  system_gap_excluded: 'System gap excluded from automation',
-  no_alternate_url: 'No alternate URL provided',
-  not_machine_fixable: 'Not machine-fixable',
+  missing_transcript: 'Queued for recovery: transcript needed',
+  missing_pasted_content: 'Queued for recovery: content needed',
+  still_auth_gated: 'Queued for recovery: access required',
+  quarantined_not_selected: 'Quarantined — not selected for this run',
+  system_gap_excluded: 'Queued for recovery: system gap',
+  no_alternate_url: 'Queued for recovery: alternate URL needed',
+  not_machine_fixable: 'Awaiting manual input',
   operator_locked: 'Operator-locked quarantine',
-  needs_input_not_provided: 'Required manual input not yet provided',
+  needs_input_not_provided: 'Awaiting manual input',
 };
+
+/** Maps a recoverable skip reason to its next best action */
+export function getRecoveryAction(reason: SkipReason): RecoveryAction {
+  switch (reason) {
+    case 'missing_transcript': return 'paste_transcript';
+    case 'missing_pasted_content': return 'paste_content';
+    case 'still_auth_gated': return 'provide_access';
+    case 'no_alternate_url': return 'provide_alternate_url';
+    case 'system_gap_excluded': return 'assign_manual_review';
+    case 'needs_input_not_provided': return 'paste_content';
+    case 'not_machine_fixable': return 'paste_content';
+    case 'quarantined_not_selected': return 'queue_for_retry';
+    case 'operator_locked': return 'none';
+  }
+}
+
+/** Whether a skip reason represents a recoverable state (not a true terminal skip) */
+export function isRecoverableSkip(reason: SkipReason): boolean {
+  return reason !== 'operator_locked' && reason !== 'quarantined_not_selected';
+}
 
 export function getSkipReason(v: VerifiedResource, selectedBuckets: string[]): SkipReason | null {
   if (v.resolutionType === 'system_gap' && !selectedBuckets.includes('system_gap')) return 'system_gap_excluded';

@@ -51,6 +51,10 @@ export interface BucketExecutionSummary {
   failedCount: number;
   autoReleasedFromQuarantine: number;
   skipReasons: Record<string, number>;
+  // Recovery-aware reporting
+  queuedForRecoveryCount: number;
+  awaitingManualInputCount: number;
+  terminalFailedCount: number;
 }
 
 export interface RunSnapshot {
