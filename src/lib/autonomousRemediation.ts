@@ -253,6 +253,13 @@ export function buildRemediationItems(
 
   for (const queue of PROCESSING_PRIORITY) {
     for (const v of (queues[queue] || [])) {
+      // ── SYSTEM GAP LOCK: never enter remediation loop ──
+      // Resources classified as system_gap require a code change, not a retry.
+      if (v.resolutionType === 'system_gap') continue;
+
+      // Carry over DB failure count so same-bucket guards work across runs
+      const dbFailureCount = v.failureCount || 0;
+
       items.push({
         id: v.id,
         title: v.title,
@@ -271,8 +278,11 @@ export function buildRemediationItems(
         isResolved: false,
         strategyUsed: null,
         attemptsThisRun: 0,
-        failureHistory: [],
-        sameFailureCount: 0,
+        failureHistory: dbFailureCount >= 2 ? [
+          { bucket: queue, reason: 'Prior failure (from DB)', timestamp: new Date().toISOString(), attempt: 1 },
+          { bucket: queue, reason: 'Prior failure (from DB)', timestamp: new Date().toISOString(), attempt: 2 },
+        ] : [],
+        sameFailureCount: dbFailureCount >= 2 ? dbFailureCount : 0,
         escalatedBecause: null,
         whyFailed: null,
         whatToDoNext: null,
