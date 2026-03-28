@@ -110,9 +110,14 @@ function classifySource(url: string): SourceClassification {
       return { source_type: 'youtube', platform: 'YouTube', auth_required: false, transcript_available: true, downloadable: false, js_rendered: true };
     }
 
-    // Podcast
+    // Podcast platforms
     if (/spotify\.com|podcasts\.apple\.com|anchor\.fm/i.test(host)) {
       return { source_type: 'podcast', platform: 'Podcast', auth_required: false, transcript_available: null, downloadable: false, js_rendered: true };
+    }
+
+    // Direct audio files
+    if (/\.(mp3|m4a|wav|ogg|aac|flac|opus|webm)($|\?)/i.test(u.pathname)) {
+      return { source_type: 'direct_audio', platform: 'Audio', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
     }
 
     // Social
