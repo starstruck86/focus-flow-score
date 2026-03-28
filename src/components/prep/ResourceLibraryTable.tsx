@@ -557,15 +557,50 @@ export function ResourceLibraryTable({
                         <span className="text-[11px] text-muted-foreground">v{resource.enrichment_version ?? 0}</span>
                       </td>
                       <td className="px-3 align-middle">
-                        {recommended.action !== 'no_action' ? (
-                          <Badge className={cn('text-[9px] cursor-pointer', getActionColor(recommended.action))}
-                            onClick={e => { e.stopPropagation(); onAction(recommended.action, resource); }}
-                          >
-                            {getActionLabel(recommended.action)}
-                          </Badge>
-                        ) : (
-                          <span className="text-[10px] text-muted-foreground">—</span>
-                        )}
+                        {(() => {
+                          const ps = deriveProcessingState(resource, audioJob);
+                          if (ps.state === 'READY' && resource.file_url?.startsWith('http')) {
+                            return (
+                              <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('READY'))}
+                                onClick={e => { e.stopPropagation(); onAction('deep_enrich', resource); }}>
+                                Deep Enrich
+                              </Badge>
+                            );
+                          }
+                          if (ps.state === 'RETRYABLE_FAILURE') {
+                            return (
+                              <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('RETRYABLE_FAILURE'))}
+                                onClick={e => { e.stopPropagation(); onAction('deep_enrich', resource); }}>
+                                Retry
+                              </Badge>
+                            );
+                          }
+                          if (ps.state === 'MANUAL_REQUIRED') {
+                            return (
+                              <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('MANUAL_REQUIRED'))}
+                                onClick={e => { e.stopPropagation(); onAction('manual_assist', resource); }}>
+                                Manual Assist
+                              </Badge>
+                            );
+                          }
+                          if (ps.state === 'METADATA_ONLY') {
+                            return (
+                              <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('METADATA_ONLY'))}
+                                onClick={e => { e.stopPropagation(); onAction('manual_assist', resource); }}>
+                                Add Source
+                              </Badge>
+                            );
+                          }
+                          if (ps.state === 'COMPLETED' && resource.file_url?.startsWith('http')) {
+                            return (
+                              <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('COMPLETED'))}
+                                onClick={e => { e.stopPropagation(); onAction('re_enrich', resource); }}>
+                                Re-enrich
+                              </Badge>
+                            );
+                          }
+                          return <span className="text-[10px] text-muted-foreground">—</span>;
+                        })()}
                       </td>
                       <td className="px-3 align-middle" onClick={e => e.stopPropagation()}>
                         <DropdownMenu>
