@@ -578,7 +578,7 @@ export function ResourceLibraryTable({
                             <DropdownMenuItem onClick={() => onAction('view', resource)}>
                               <Eye className="h-3.5 w-3.5 mr-2" /> Inspect
                             </DropdownMenuItem>
-                            {isAudio && (
+                          {isAudio && (
                               <DropdownMenuItem onClick={() => onAction('inspect_audio', resource)}>
                                 <Info className="h-3.5 w-3.5 mr-2" /> Audio Inspector
                               </DropdownMenuItem>
@@ -591,11 +591,11 @@ export function ResourceLibraryTable({
                                 <DropdownMenuItem onClick={() => onAction('re_enrich', resource)}>
                                   <RefreshCw className="h-3.5 w-3.5 mr-2" /> Re-enrich
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => onAction('manual_assist', resource)}>
-                                  <HelpCircle className="h-3.5 w-3.5 mr-2" /> Manual Assist
-                                </DropdownMenuItem>
                               </>
                             )}
+                            <DropdownMenuItem onClick={() => onAction('manual_assist', resource)}>
+                              <HelpCircle className="h-3.5 w-3.5 mr-2" /> Manual Assist
+                            </DropdownMenuItem>
                             {isAudio && audioJob?.retryable && (
                               <>
                                 <DropdownMenuSeparator />
