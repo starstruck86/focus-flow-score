@@ -108,6 +108,19 @@ export default function EnrichmentVerification() {
   const [validationAbort, setValidationAbort] = useState<AbortController | null>(null);
   const isValidating = validationResult?.phase !== undefined && validationResult.phase !== 'idle' && validationResult.phase !== 'complete' && validationResult.phase !== 'error';
 
+  // Fix Everything state
+  type FixEverythingPhase = 'idle' | 'verifying' | 'remediating' | 'analyzing' | 'complete' | 'error';
+  const [fixPhase, setFixPhase] = useState<FixEverythingPhase>('idle');
+  const [fixSummary, setFixSummary] = useState<{
+    fixedAuto: number; needsInput: number; systemGaps: number;
+    totalScanned: number; remediationSummary: RemediationSummary | null;
+    remediationState: RemediationCycleState | null;
+    gapDetails: Array<{ failureType: string; count: number; description: string }>;
+    manualGroups: Array<{ bucket: string; count: number; action: string }>;
+  } | null>(null);
+  const [fixAbort, setFixAbort] = useState<AbortController | null>(null);
+  const isFixing = fixPhase !== 'idle' && fixPhase !== 'complete' && fixPhase !== 'error';
+
   // Verification
   const { verified, summary } = useMemo(() => {
     if (!hasRun || !allResources) return { verified: [], summary: null };
