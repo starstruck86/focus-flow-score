@@ -99,7 +99,7 @@ export function validateResourceQuality(resource: ResourceForValidation): Qualit
 
   let contentDepth = 0;
   if (isBinaryContent) {
-    violations.push('Content is binary data (not text) — needs transcript extraction');
+    violations.push('binary_content_detected');
     contentDepth = 0;
   } else if (effectiveContentLen === 0) {
     violations.push('No content extracted');
