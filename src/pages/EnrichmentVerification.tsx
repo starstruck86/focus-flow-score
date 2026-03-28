@@ -774,6 +774,62 @@ function RemediationQueuesSection({
   );
 }
 
+const FIX_STATUS_LABELS: Record<FixItemStatus, string> = { pending: 'Pending', processing: 'Processing', enriching: 'Enriching…', re_scoring: 'Re-scoring…', resolved_complete: '✓ Complete', resolved_metadata_only: '✓ Metadata', resolved_quarantined: '⊘ Quarantined', awaiting_manual: '⏳ Manual', failed_retry_exhausted: '✗ Failed', skipped: '—' };
+const FIX_STATUS_COLORS: Record<FixItemStatus, string> = { pending: 'text-muted-foreground', processing: 'text-primary', enriching: 'text-primary', re_scoring: 'text-primary', resolved_complete: 'text-status-green', resolved_metadata_only: 'text-muted-foreground', resolved_quarantined: 'text-status-red', awaiting_manual: 'text-status-yellow', failed_retry_exhausted: 'text-status-red', skipped: 'text-muted-foreground' };
+
+function FixRunPanel({ state }: { state: FixRunState }) {
+  const progress = state.totalItems > 0 ? Math.round((state.processedCount / state.totalItems) * 100) : 0;
+  const isRunning = state.status === 'running';
+  return (
+    <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {isRunning ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <Zap className="h-4 w-4 text-primary" />}
+          <h3 className="font-semibold text-sm">Fix Broken Resources</h3>
+          <Badge variant="outline">{state.status}</Badge>
+        </div>
+        <span className="text-sm font-mono text-muted-foreground">{state.processedCount}/{state.totalItems}</span>
+      </div>
+      <div className="h-2 rounded-full bg-muted overflow-hidden">
+        <div className="h-full bg-primary transition-all duration-300" style={{ width: `${progress}%` }} />
+      </div>
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-center">
+        {[
+          { v: state.resolvedCount, l: 'Resolved', c: 'text-status-green' },
+          { v: state.quarantinedCount, l: 'Quarantined', c: 'text-status-red' },
+          { v: state.metadataOnlyCount, l: 'Metadata', c: 'text-muted-foreground' },
+          { v: state.manualRequiredCount, l: 'Manual', c: 'text-status-yellow' },
+          { v: state.failedCount, l: 'Failed', c: 'text-status-red' },
+          { v: state.skippedCount, l: 'Skipped', c: 'text-muted-foreground' },
+        ].map(s => (
+          <div key={s.l} className="rounded-lg border border-border p-2">
+            <div className={`text-lg font-bold ${s.c}`}>{s.v}</div>
+            <div className="text-[10px] text-muted-foreground">{s.l}</div>
+          </div>
+        ))}
+      </div>
+      <ScrollArea className="max-h-[300px] rounded-lg border border-border">
+        <div className="divide-y divide-border">
+          {state.items.map(item => (
+            <div key={item.id} className={`flex items-center gap-3 px-3 py-2 text-sm ${item.id === state.currentItemId ? 'bg-primary/10' : ''}`}>
+              <div className="min-w-0 flex-1">
+                <div className="font-medium truncate">{item.title}</div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {item.subtypeLabel} · {QUEUE_LABELS[item.queue]}
+                  {item.terminalReason && <span className="ml-1">— {item.terminalReason}</span>}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {item.currentScore !== null && <span className="text-xs font-mono">{item.previousScore}→{item.currentScore}</span>}
+                <span className={`text-xs font-medium ${FIX_STATUS_COLORS[item.status]}`}>{FIX_STATUS_LABELS[item.status]}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}
 
 function PatternsSection({ patterns }: { patterns: Array<{ pattern: string; count: number }> }) {
   if (!patterns.length) return <p className="text-sm text-muted-foreground">No repeated patterns detected.</p>;
