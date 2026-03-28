@@ -1465,7 +1465,27 @@ async function orchestrateEnrichment(
   const inProgressStatus = isReenrich ? "reenrich_in_progress" : "deep_enrich_in_progress";
   await setEnrichmentStatus(supabase, resourceId, inProgressStatus);
 
-  // 2. Execute method chain
+  // 2. Resolve wrapped audio URLs — use decoded direct URL for all method chain calls
+  let effectiveUrl = url;
+  const resolvedAudioUrl = extractEmbeddedAudioUrl(url);
+  if (resolvedAudioUrl && source.source_type === 'direct_audio') {
+    effectiveUrl = resolvedAudioUrl;
+    console.log(`[Orchestrate] WRAPPED AUDIO RESOLVED: wrapper=${url.slice(0, 80)} → resolved=${resolvedAudioUrl.slice(0, 80)}`);
+
+    // Persist resolution metadata on the resource
+    await supabase.from("resources").update({
+      content_classification: 'audio',
+      extraction_method: 'direct_audio_asset',
+      access_type: 'public',
+      recovery_status: 'pending_transcription',
+      recovery_reason: 'Anchor.fm wrapped audio URL — resolved to direct MP3',
+      next_best_action: 'start_transcription',
+      recovery_queue_bucket: 'auto_fixable',
+      manual_input_required: false,
+    }).eq("id", resourceId);
+  }
+
+  // 3. Execute method chain
   const methodChain = getMethodChain(source);
 
   if (methodChain.length === 0) {
@@ -1489,7 +1509,7 @@ async function orchestrateEnrichment(
   for (const extractionMethod of methodChain) {
     console.log(`[Orchestrate] Trying method ${extractionMethod.name || 'anonymous'} for ${resourceId}`);
 
-    const result = await extractionMethod(url, apiKey);
+    const result = await extractionMethod(effectiveUrl, apiKey);
     attempts.push(result.attempt);
 
     // If auth wall detected, reclassify
