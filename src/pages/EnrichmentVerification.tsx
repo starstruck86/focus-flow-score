@@ -609,6 +609,11 @@ export default function EnrichmentVerification() {
         {mode === 'gaps' && hasRun && verified.length > 0 && (
           <SystemGapsView resources={verified} onSelect={setDrawerResource} />
         )}
+
+        {/* Product Roadmap Mode */}
+        {mode === 'roadmap' && hasRun && verified.length > 0 && (
+          <ProductRoadmapView resources={verified} />
+        )}
       </div>
 
       {drawerResource && <ResourceDrawer resource={drawerResource} onClose={() => setDrawerResource(null)} />}
