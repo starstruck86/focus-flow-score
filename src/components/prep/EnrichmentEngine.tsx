@@ -23,7 +23,7 @@ import { buildRemediationQueues } from '@/lib/remediationEngine';
 import { runAutonomousRemediation, type RemediationCycleState } from '@/lib/autonomousRemediation';
 import { analyzeRemediationBatch } from '@/lib/remediationIntelligence';
 import { generateProductRoadmap, type RoadmapSummary } from '@/lib/systemGapRoadmap';
-import { shouldAutoRelease, classifyQuarantine, getQuarantineSubClass, SKIP_REASON_LABELS, getSkipReason } from '@/lib/quarantineClassification';
+import { shouldAutoRelease, classifyQuarantine, getQuarantineSubClass, SKIP_REASON_LABELS, getSkipReason, isRecoverableSkip, getRecoveryAction } from '@/lib/quarantineClassification';
 import { ManualInputInbox, type InboxQueue, type InboxItem } from './ManualInputInbox';
 import { FileText, Lock, ExternalLink, Eye } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
