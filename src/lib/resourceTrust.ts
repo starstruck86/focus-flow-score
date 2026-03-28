@@ -182,7 +182,7 @@ const SOURCE_POLICIES: Record<SourceCategory, SourcePolicy> = {
 // ── Auth-gated domains ─────────────────────────────────────
 const AUTH_GATED_DOMAINS = [
   'circle.so', 'teachable.com', 'kajabi.com', 'skool.com',
-  'thinkific.com', 'podia.com', 'gumroad.com',
+  'thinkific.com', 'podia.com', 'gumroad.com', 'fathom.video',
 ];
 
 // ── Source classification ──────────────────────────────────
