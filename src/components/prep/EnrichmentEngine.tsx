@@ -26,7 +26,6 @@ import { generateProductRoadmap, type RoadmapSummary } from '@/lib/systemGapRoad
 import { ManualInputInbox, type InboxQueue, type InboxItem } from './ManualInputInbox';
 import { FileText, Lock, ExternalLink, Eye } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
 import type { BucketFilter, RunSnapshot, RunResult } from './enrichment/types';
 import { EMPTY_RESULT, mapVerifiedToBucket } from './enrichment/types';
 import { SummaryCards } from './enrichment/SummaryCards';
@@ -356,23 +355,21 @@ export function EnrichmentEngine() {
         </div>
       )}
 
-      {/* Mobile: full-screen dialog for detail drawer */}
+      {/* Mobile: full-screen overlay for detail drawer */}
       {selectedResource && isMobile && (
-        <Dialog open onOpenChange={(open) => { if (!open) setSelectedResource(null); }}>
-          <DialogContent className="max-w-[100vw] w-full h-[100dvh] max-h-[100dvh] p-0 rounded-none border-0 [&>button]:hidden">
-            <ResourceDetailDrawer
-              key={selectedResource.id}
-              resource={selectedResource}
-              onClose={() => setSelectedResource(null)}
-              onResourceUpdated={() => {
-                qc.invalidateQueries({ queryKey: ['resources'] });
-                qc.invalidateQueries({ queryKey: ['all-resources'] });
-                qc.invalidateQueries({ queryKey: ['audio-jobs-map'] });
-                setSelectedResource(null);
-              }}
-            />
-          </DialogContent>
-        </Dialog>
+        <div className="fixed inset-0 z-50 bg-background flex flex-col">
+          <ResourceDetailDrawer
+            key={selectedResource.id}
+            resource={selectedResource}
+            onClose={() => setSelectedResource(null)}
+            onResourceUpdated={() => {
+              qc.invalidateQueries({ queryKey: ['resources'] });
+              qc.invalidateQueries({ queryKey: ['all-resources'] });
+              qc.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+              setSelectedResource(null);
+            }}
+          />
+        </div>
       )}
 
       {/* Product Roadmap */}
