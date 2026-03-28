@@ -105,7 +105,7 @@ export function IncomingQueue() {
         {isStale && (
           <>
             <span className="text-border">·</span>
-            <Badge variant="outline" className="text-[9px] h-4 gap-0.5 border-yellow-500/50 text-yellow-600">
+            <Badge variant="outline" className="text-[9px] h-4 gap-0.5 border-destructive/50 text-destructive">
               <AlertTriangle className="h-2.5 w-2.5" />
               May be stale
             </Badge>
