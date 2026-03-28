@@ -952,3 +952,216 @@ function Field({ label, value, copyable, onCopy, link }: {
     </div>
   );
 }
+
+// ── E2E Validation Results View ───────────────────────────
+
+const PHASE_LABELS: Record<ValidationPhase, string> = {
+  idle: 'Ready',
+  initial_verify: 'Running initial verification…',
+  remediating: 'Running autonomous remediation…',
+  post_verify: 'Re-verifying after remediation…',
+  complete: 'Validation Complete',
+  error: 'Validation Error',
+};
+
+function ValidationResultsView({ result }: { result: ValidationResult }) {
+  const isComplete = result.phase === 'complete';
+  const isRunning = !['complete', 'error', 'idle'].includes(result.phase);
+  const progress = result.phase === 'initial_verify' ? 20 :
+    result.phase === 'remediating' ? 40 + (result.remediationState ?
+      Math.round((result.remediationState.processedCount / Math.max(result.remediationState.totalItems, 1)) * 40) : 0) :
+    result.phase === 'post_verify' ? 90 : result.phase === 'complete' ? 100 : 0;
+
+  return (
+    <div className="space-y-6">
+      {/* System Proven Banner */}
+      {isComplete && (
+        <div className={`rounded-xl border-2 p-6 text-center space-y-3 ${
+          result.systemProven
+            ? 'border-status-green bg-status-green/10'
+            : 'border-status-red bg-status-red/10'
+        }`}>
+          <div className="flex items-center justify-center gap-3">
+            {result.systemProven
+              ? <CheckCircle2 className="h-8 w-8 text-status-green" />
+              : <ShieldAlert className="h-8 w-8 text-status-red" />}
+            <h2 className="text-2xl font-bold">
+              {result.systemProven ? 'System Proven ✓' : 'System Not Yet Proven'}
+            </h2>
+          </div>
+          {!result.systemProven && result.blockers.length > 0 && (
+            <div className="space-y-1 text-sm text-status-red">
+              <p className="font-semibold">Blockers:</p>
+              {result.blockers.map((b, i) => <p key={i}>• {b}</p>)}
+            </div>
+          )}
+          {result.systemProven && (
+            <p className="text-sm text-status-green font-medium">
+              Non-complete resources decreased from {result.preBrokenCount} → {result.postBrokenCount}. 
+              {result.totalAutoResolved} auto-resolved. Average score {result.netScoreChange >= 0 ? '+' : ''}{result.netScoreChange}.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Progress */}
+      {isRunning && (
+        <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <span className="font-semibold text-sm">{PHASE_LABELS[result.phase]}</span>
+          </div>
+          <div className="h-2 rounded-full bg-muted overflow-hidden">
+            <div className="h-full bg-primary transition-all duration-500" style={{ width: `${progress}%` }} />
+          </div>
+          {result.remediationState && result.phase === 'remediating' && (
+            <p className="text-xs text-muted-foreground">
+              {result.remediationState.processedCount}/{result.remediationState.totalItems} resources processed
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Final Summary */}
+      {isComplete && (
+        <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+          <h3 className="font-semibold text-sm flex items-center gap-2">
+            <Zap className="h-4 w-4 text-primary" /> Final Results Summary
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <SummaryCard label="Total Scanned" value={result.totalScanned} />
+            <SummaryCard label="Below 100 at Start" value={result.totalBelowHundredAtStart} variant={result.totalBelowHundredAtStart > 0 ? 'danger' : 'success'} />
+            <SummaryCard label="Auto-Resolved" value={result.totalAutoResolved} variant={result.totalAutoResolved > 0 ? 'success' : 'muted'} />
+            <SummaryCard label="Improved (Not Resolved)" value={result.totalImprovedNotResolved} variant={result.totalImprovedNotResolved > 0 ? 'warning' : 'muted'} />
+            <SummaryCard label="Needs Manual Input" value={result.totalNeedsManualInput} variant={result.totalNeedsManualInput > 0 ? 'warning' : 'muted'} />
+            <SummaryCard label="Quarantined" value={result.totalQuarantined} variant={result.totalQuarantined > 0 ? 'danger' : 'muted'} />
+            <SummaryCard label="Net Score Change" value={`${result.netScoreChange >= 0 ? '+' : ''}${result.netScoreChange}`} variant={result.netScoreChange > 0 ? 'success' : result.netScoreChange < 0 ? 'danger' : 'muted'} />
+            <SummaryCard label="Still Not at 100" value={result.totalRemainingNotHundred} variant={result.totalRemainingNotHundred > 0 ? 'danger' : 'success'} />
+          </div>
+        </div>
+      )}
+
+      {/* Queue Effectiveness */}
+      {isComplete && result.queueEffectiveness.length > 0 && (
+        <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+          <h3 className="font-semibold text-sm">Queue Effectiveness</h3>
+          <div className="space-y-2">
+            {result.queueEffectiveness.map(q => (
+              <div key={q.queue} className="flex items-center gap-3 text-sm py-1.5 border-b border-border last:border-0">
+                <span className="font-medium min-w-[160px]">{QUEUE_LABELS[q.queue as RemediationQueue] || q.queue}</span>
+                <span className="text-muted-foreground">{q.inputCount} in</span>
+                <span className="text-status-green font-medium">{q.resolvedCount} resolved</span>
+                <span className="text-primary">{q.improvedCount} improved</span>
+                <span className="text-muted-foreground">{q.unchangedCount} unchanged</span>
+                <span className="ml-auto font-mono text-xs">
+                  <span className={q.effectivenessRate > 50 ? 'text-status-green' : q.effectivenessRate > 0 ? 'text-status-yellow' : 'text-status-red'}>
+                    {q.effectivenessRate}%
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Repeated Failure Patterns */}
+      {isComplete && result.repeatedFailurePatterns.length > 0 && (
+        <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+          <h3 className="font-semibold text-sm">Top Repeated Remaining Failure Patterns</h3>
+          <div className="space-y-1">
+            {result.repeatedFailurePatterns.map((p, i) => (
+              <div key={i} className="flex items-center justify-between text-sm py-1 px-2 rounded hover:bg-muted/50">
+                <span>{p.pattern}</span>
+                <Badge variant="secondary">{p.count}×</Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Remaining Work */}
+      {isComplete && result.remainingWork.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="font-semibold text-base flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-status-yellow" />
+            Remaining Work ({result.totalRemainingNotHundred} resources)
+          </h3>
+          {result.remainingWork.map(group => (
+            <div key={group.bucket} className="rounded-lg border border-border overflow-hidden">
+              <div className="bg-muted/30 px-4 py-2.5 border-b border-border flex items-center justify-between">
+                <span className="font-medium text-sm">{group.label}</span>
+                <Badge variant="secondary">{group.resources.length}</Badge>
+              </div>
+              <ScrollArea className="max-h-[300px]">
+                <div className="min-w-[700px]">
+                  <div className="grid grid-cols-[1fr_100px_50px_100px_1fr_1fr] gap-2 px-4 py-1.5 border-b border-border bg-muted/20 text-[10px] font-medium text-muted-foreground">
+                    <span>Title</span><span>Subtype</span><span>Score</span><span>Status</span><span>Reason</span><span>Next Action</span>
+                  </div>
+                  {group.resources.map(r => (
+                    <div key={r.id} className="grid grid-cols-[1fr_100px_50px_100px_1fr_1fr] gap-2 px-4 py-2 border-b border-border items-center text-xs">
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{r.title}</div>
+                        {r.url && <a href={r.url} target="_blank" rel="noopener" className="text-primary truncate block text-[10px]">{r.url}</a>}
+                      </div>
+                      <span className="text-muted-foreground truncate">{r.subtypeLabel}</span>
+                      <span className={`font-mono font-bold ${r.score >= 70 ? 'text-status-green' : r.score >= 40 ? 'text-status-yellow' : 'text-status-red'}`}>{r.score}</span>
+                      <Badge variant="outline" className="text-[9px] px-1">{r.status}</Badge>
+                      <span className="text-muted-foreground truncate" title={r.reasonNotComplete}>{r.reasonNotComplete}</span>
+                      <span className="text-primary font-medium truncate" title={r.nextAction}>{r.nextAction}</span>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Action Log */}
+      {isComplete && result.actionLog.length > 0 && (
+        <details className="rounded-lg border border-border overflow-hidden">
+          <summary className="px-4 py-3 bg-muted/30 font-semibold text-sm cursor-pointer hover:bg-muted/50">
+            Remediation Action Log ({result.actionLog.length} actions)
+          </summary>
+          <ScrollArea className="max-h-[400px]">
+            <div className="min-w-[600px]">
+              {result.actionLog.map((log, i) => (
+                <div key={i} className="grid grid-cols-[1fr_80px_50px_50px_1fr] gap-2 px-4 py-1.5 border-b border-border text-xs items-center">
+                  <span className="truncate font-medium">{log.title}</span>
+                  <span className="text-muted-foreground">{QUEUE_LABELS[log.queue as RemediationQueue] || log.queue}</span>
+                  <span className="font-mono text-status-red">{log.beforeScore}</span>
+                  <span className={`font-mono ${log.afterScore !== null && log.afterScore > log.beforeScore ? 'text-status-green' : 'text-muted-foreground'}`}>
+                    {log.afterScore ?? '—'}
+                  </span>
+                  <span className="text-muted-foreground truncate">{log.outcome}</span>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        </details>
+      )}
+
+      {/* Error */}
+      {result.error && (
+        <div className="rounded-lg border border-status-red/30 bg-status-red/5 p-4 text-sm text-status-red">
+          <strong>Error:</strong> {result.error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SummaryCard({ label, value, variant = 'muted' }: { label: string; value: number | string; variant?: 'success' | 'danger' | 'warning' | 'muted' }) {
+  const colors = {
+    success: 'border-status-green/30 bg-status-green/5 text-status-green',
+    danger: 'border-status-red/30 bg-status-red/5 text-status-red',
+    warning: 'border-status-yellow/30 bg-status-yellow/5 text-status-yellow',
+    muted: 'border-border bg-card text-foreground',
+  };
+  return (
+    <div className={`rounded-lg border p-3 ${colors[variant]}`}>
+      <div className="text-2xl font-bold">{value}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+    </div>
+  );
+}
