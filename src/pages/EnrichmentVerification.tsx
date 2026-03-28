@@ -102,6 +102,11 @@ export default function EnrichmentVerification() {
   const [remediationAbort, setRemediationAbort] = useState<AbortController | null>(null);
   const [remediationFilter, setRemediationFilter] = useState<string>('all');
 
+  // E2E Validation state
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
+  const [validationAbort, setValidationAbort] = useState<AbortController | null>(null);
+  const isValidating = validationResult?.phase !== undefined && validationResult.phase !== 'idle' && validationResult.phase !== 'complete' && validationResult.phase !== 'error';
+
   // Verification
   const { verified, summary } = useMemo(() => {
     if (!hasRun || !allResources) return { verified: [], summary: null };
