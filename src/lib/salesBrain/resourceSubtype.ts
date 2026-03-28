@@ -143,7 +143,7 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
       return {
         ...base,
         enrichability: 'fully_enrichable',
-        reason: 'Google Doc — full text extraction supported',
+        reason: 'Google Doc — fully supported. Retry enrichment.',
         canFetchText: true,
         canFetchMetadata: true,
       };
