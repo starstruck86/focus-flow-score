@@ -272,13 +272,6 @@ function determineBucket(
     }
   }
 
-  // Final fallback based on enrichability
-  const ea = classifyEnrichability(url ?? null, resourceType);
-  if (ea.enrichability === 'needs_auth') return 'auth_required';
-  if (ea.enrichability === 'manual_input_needed') return 'manual_content_required';
-  if (ea.enrichability === 'metadata_only') return 'metadata_only_salvageable';
-  if (ea.enrichability === 'unsupported') return 'unsupported_source';
-
   return 'retryable_extraction_failure';
 }
 
