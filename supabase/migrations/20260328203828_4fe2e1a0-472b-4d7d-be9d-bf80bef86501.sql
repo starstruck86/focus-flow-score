@@ -1,0 +1,1 @@
+UPDATE resources SET enrichment_status = 'not_enriched', failure_reason = NULL, failure_count = 0, content_status = 'placeholder' WHERE id = 'e3b316a8-1b3e-4e4e-8a1e-1b3e4e4e8a1e' OR (file_url LIKE '%anchor.fm%' AND enrichment_status IN ('failed', 'quarantined'));

@@ -435,6 +435,26 @@ async function youtubeCaption(url: string, _apiKey: string): Promise<ExtractionR
   }
 }
 
+/** Extract embedded audio URL from Anchor.fm play links */
+function extractEmbeddedAudioUrl(url: string): string | null {
+  // Anchor.fm play URLs embed the audio URL: anchor.fm/s/.../podcast/play/.../https%3A%2F%2F...mp3
+  const match = url.match(/\/podcast\/play\/\d+\/(https?%3A%2F%2F[^\s?#]+\.mp3)/i);
+  if (match?.[1]) {
+    try {
+      return decodeURIComponent(match[1]);
+    } catch { /* fall through */ }
+  }
+  // Also check for cloudfront or other CDN audio URLs encoded in the path
+  const cfMatch = url.match(/\/podcast\/play\/\d+\/(https?%3A%2F%2F[^\s?#]+)/i);
+  if (cfMatch?.[1]) {
+    try {
+      const decoded = decodeURIComponent(cfMatch[1]);
+      if (/\.(mp3|m4a|wav|ogg|aac|opus)($|\?)/i.test(decoded)) return decoded;
+    } catch { /* fall through */ }
+  }
+  return null;
+}
+
 /** Podcast: Resolve via resolve-podcast-episode, then transcribe if audio URL found */
 async function podcastResolveAndTranscribe(url: string, _apiKey: string): Promise<ExtractionResult> {
   const method = 'podcast_resolve_transcribe';
@@ -443,6 +463,39 @@ async function podcastResolveAndTranscribe(url: string, _apiKey: string): Promis
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+    // Check for embedded audio URL first (Anchor.fm play links)
+    const embeddedAudio = extractEmbeddedAudioUrl(url);
+    if (embeddedAudio) {
+      console.log(`[Podcast] Found embedded audio URL: ${embeddedAudio.substring(0, 80)}...`);
+      // Skip resolve, go straight to transcription
+      const transcribeResp = await fetch(`${supabaseUrl}/functions/v1/transcribe-audio`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${serviceKey}`,
+        },
+        body: JSON.stringify({ audio_url: embeddedAudio }),
+      });
+
+      if (transcribeResp.ok) {
+        const data = await transcribeResp.json();
+        if (data.success && data.transcript && data.transcript.length >= 50) {
+          return {
+            content: data.transcript.slice(0, CONTENT_CAP),
+            attempt: {
+              method: 'podcast_embedded_audio_transcribe', duration_ms: Date.now() - startMs,
+              chars_extracted: data.transcript.length, timeout_hit: false,
+              auth_wall_detected: false, http_status: 200,
+              validation_result: data.transcript.length >= 500 ? 'pass' : 'partial',
+              error_category: null, error_detail: null,
+            },
+          };
+        }
+      }
+      // If embedded transcription failed, fall through to normal resolve
+      console.log(`[Podcast] Embedded audio transcription failed, trying resolve...`);
+    }
 
     // Step 1: Resolve the podcast episode to get audio URL
     console.log(`[Podcast] Resolving: ${url}`);
@@ -1072,7 +1125,7 @@ function getMethodChain(source: SourceClassification): Array<(url: string, apiKe
     case 'pdf':
       return [firecrawlScrape, firecrawlFullPage];
     case 'podcast':
-      return [podcastResolveAndTranscribe];
+      return [podcastResolveAndTranscribe, directAudioTranscribe, firecrawlScrape];
     case 'direct_audio':
       return [directAudioTranscribe];
     case 'social':
