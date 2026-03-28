@@ -30,6 +30,7 @@ import type {
 interface BulkIngestionPanelProps {
   state: IngestionState;
   onSetBatchSize: (size: number) => void;
+  onSetReprocessMode?: (mode: any) => void;
   onStart: (items: Array<{ resourceId?: string; url: string; title: string; enrichMode?: 'deep_enrich' | 're_enrich'; videoId?: string; channel?: string; publishDate?: string; duration?: string }>, opts?: { retryFailedOnly?: boolean }) => void;
   onPause: () => void;
   onResume: () => void;
