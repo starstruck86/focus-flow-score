@@ -470,10 +470,7 @@ function extractEmbeddedAudioUrl(url: string): string | null {
   }
 
   return null;
-}
-  }
-  return null;
-}
+
 
 /** Podcast: Resolve via resolve-podcast-episode, then transcribe if audio URL found */
 async function podcastResolveAndTranscribe(url: string, _apiKey: string): Promise<ExtractionResult> {
