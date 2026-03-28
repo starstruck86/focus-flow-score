@@ -36,22 +36,23 @@ export interface QualityDimensions {
 
 // ── Hard Thresholds (centralized, versioned) ───────────────
 export const QUALITY_THRESHOLDS = {
-  version: 1,
-  // Content depth
-  MIN_CONTENT_CHARS: 500,
-  GOOD_CONTENT_CHARS: 2000,
-  EXCELLENT_CONTENT_CHARS: 5000,
+  version: 2,
+  // Content depth — lowered minimum to allow short-but-real content (summaries, podcast descriptions)
+  MIN_CONTENT_CHARS: 200,
+  GOOD_CONTENT_CHARS: 1000,
+  EXCELLENT_CONTENT_CHARS: 3000,
   // Structural completeness
   REQUIRED_FIELDS: ['content', 'enrichment_status', 'enrichment_version'] as const,
   // Semantic usefulness
   BOILERPLATE_MAX_RATIO: 0.5, // if >50% of content is boilerplate → fail
-  MIN_UNIQUE_WORDS: 50,
+  MIN_UNIQUE_WORDS: 25, // lowered from 50 to not penalize short legitimate content
   // Quality score thresholds for tiers
   COMPLETE_MIN_SCORE: 70,
   SHALLOW_MIN_SCORE: 40,
   INCOMPLETE_MIN_SCORE: 10,
   // Max tolerated violations for deep_enriched
-  MAX_VIOLATIONS_FOR_COMPLETE: 0,
+  // Allow minor violations (e.g. "content too short" warnings) — only block on hard failures
+  MAX_VIOLATIONS_FOR_COMPLETE: 1,
   // Freshness
   FRESHNESS_DAYS: 90,
 } as const;
