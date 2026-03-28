@@ -67,6 +67,9 @@ interface ResourceLibraryTableProps {
 }
 
 // ── Saved views ────────────────────────────────────────────
+// Saved view filters use a function that receives the resource and optionally an audioJobsMap
+// We can't use deriveProcessingState directly in static filter since it needs audioJob,
+// so we use heuristic filters that approximate canonical states
 const SAVED_VIEWS: SavedView[] = [
   {
     id: 'all', label: 'All', icon: <FileText className="h-3 w-3" />,
@@ -74,11 +77,21 @@ const SAVED_VIEWS: SavedView[] = [
   },
   {
     id: 'needs_action', label: 'Needs Action', icon: <Zap className="h-3 w-3" />,
-    filter: (r) => !r.enrichment_status || r.enrichment_status === 'not_enriched' || r.enrichment_status === 'incomplete' || r.enrichment_status === 'failed',
+    filter: (r) => {
+      const status = r.enrichment_status;
+      if (!status || status === 'not_enriched' || status === 'incomplete' || status === 'failed') return true;
+      const ea = classifyEnrichability(r.file_url, r.resource_type);
+      return ea.enrichability === 'manual_input_needed' || ea.enrichability === 'needs_auth';
+    },
   },
   {
     id: 'retryable', label: 'Retryable', icon: <RefreshCw className="h-3 w-3" />,
-    filter: (r) => r.enrichment_status === 'failed' || r.enrichment_status === 'incomplete' || r.enrichment_status === 'queued_for_reenrich' || ((r as any).last_quality_tier === 'shallow' && r.enrichment_status === 'deep_enriched'),
+    filter: (r) => {
+      const status = r.enrichment_status;
+      if (status === 'failed' || status === 'incomplete' || status === 'stale' || status === 'quarantined') return true;
+      if ((r as any).last_quality_tier === 'shallow' && status === 'deep_enriched') return true;
+      return false;
+    },
   },
   {
     id: 'manual', label: 'Manual Required', icon: <HelpCircle className="h-3 w-3" />,
