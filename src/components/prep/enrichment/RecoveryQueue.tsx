@@ -333,8 +333,8 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
                             variant="outline"
                             size="sm"
                             className="h-6 text-[10px]"
-                            onClick={() => handleMarkMetadataOnly(item.resource.id)}
-                            disabled={isProcessing}
+                            onClick={() => handleMarkMetadataOnly(item)}
+                            disabled={isProcessing || !(item.recoveryBucket === 'auth_gated' || item.recoveryBucket === 'system_gap')}
                           >
                             <Eye className="h-3 w-3 mr-1" />
                             Metadata Only
