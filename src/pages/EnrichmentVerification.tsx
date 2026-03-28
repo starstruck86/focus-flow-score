@@ -427,6 +427,11 @@ export default function EnrichmentVerification() {
             )}
           </>
         )}
+
+        {/* E2E Validation Mode */}
+        {mode === 'validate' && validationResult && (
+          <ValidationResultsView result={validationResult} />
+        )}
       </div>
 
       {drawerResource && <ResourceDrawer resource={drawerResource} onClose={() => setDrawerResource(null)} />}
