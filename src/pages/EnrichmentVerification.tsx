@@ -37,6 +37,7 @@ import {
   runEndToEndValidation,
   type ValidationResult, type ValidationPhase,
 } from '@/lib/validationOrchestrator';
+import { analyzeRemediationBatch, type RemediationSummary } from '@/lib/remediationIntelligence';
 
 // ── Persist ───────────────────────────────────────────────
 
