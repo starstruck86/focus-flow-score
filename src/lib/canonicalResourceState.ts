@@ -77,7 +77,7 @@ function getSourceRouter(subtype: ResourceSubtype): string {
     case 'podcast_episode': return 'audio_transcription';
     case 'audio_file': return 'direct_transcription';
     case 'google_doc': return 'document_extraction';
-    case 'google_sheet': return 'document_extraction';
+    case 'google_sheet': return 'spreadsheet_extraction';
     case 'google_drive_file': return 'document_extraction';
     case 'auth_gated_community_page': return 'manual_input';
     case 'zoom_recording': return 'transcript_needed';
