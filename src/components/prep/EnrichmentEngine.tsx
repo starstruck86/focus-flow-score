@@ -374,10 +374,4 @@ export function EnrichmentEngine() {
       )}
     </div>
   );
-
-  function invalidateAll() {
-    qc.invalidateQueries({ queryKey: ['resources'] });
-    qc.invalidateQueries({ queryKey: ['all-resources'] });
-    qc.invalidateQueries({ queryKey: ['audio-jobs-map'] });
-  }
 }
