@@ -415,8 +415,12 @@ export function EnrichmentEngine() {
       await qc.invalidateQueries({ queryKey: ['resources'] });
       await qc.invalidateQueries({ queryKey: ['all-resources'] });
       const totalAttempted = included.length;
-      const totalSkipped = skipped.length;
-      toast.success(`Done: ${postSnap.complete - preSnap.complete} newly resolved, ${totalAttempted} attempted, ${totalSkipped} skipped`);
+      const recoverable = skipped.filter(s => s.recoverable).length;
+      const trueSkipped = skipped.filter(s => !s.recoverable).length;
+      const parts = [`${postSnap.complete - preSnap.complete} resolved`, `${totalAttempted} attempted`];
+      if (recoverable > 0) parts.push(`${recoverable} queued for recovery`);
+      if (trueSkipped > 0) parts.push(`${trueSkipped} intentionally skipped`);
+      toast.success(`Done: ${parts.join(', ')}`);
     } catch (e: any) {
       setResult(prev => ({ ...prev, phase: 'error', errorMessage: e.message }));
       toast.error(`Failed: ${e.message}`);

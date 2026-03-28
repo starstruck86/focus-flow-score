@@ -28,16 +28,26 @@ export function BucketSummaryPanel({ summaries }: Props) {
                 <MiniStat label="Attempted" value={s.attemptedCount} />
                 <MiniStat label="Resolved" value={s.resolvedCount} color={s.resolvedCount > 0 ? 'text-status-green' : undefined} />
                 <MiniStat label="Improved" value={s.improvedNotComplete} color={s.improvedNotComplete > 0 ? 'text-primary' : undefined} />
-                <MiniStat label="Skipped" value={s.skippedCount} color={s.skippedCount > 0 ? 'text-status-yellow' : undefined} />
+                {s.queuedForRecoveryCount > 0 && (
+                  <MiniStat label="Queued for Recovery" value={s.queuedForRecoveryCount} color="text-status-yellow" />
+                )}
+                {s.awaitingManualInputCount > 0 && (
+                  <MiniStat label="Awaiting Input" value={s.awaitingManualInputCount} color="text-status-yellow" />
+                )}
                 <MiniStat label="Unchanged" value={s.unchangedCount} />
-                <MiniStat label="Failed" value={s.failedCount} color={s.failedCount > 0 ? 'text-destructive' : undefined} />
+                {s.terminalFailedCount > 0 && (
+                  <MiniStat label="Terminal Failed" value={s.terminalFailedCount} color="text-destructive" />
+                )}
+                {s.skippedCount > 0 && (
+                  <MiniStat label="Intentionally Skipped" value={s.skippedCount} color="text-muted-foreground" />
+                )}
                 {s.autoReleasedFromQuarantine > 0 && (
                   <MiniStat label="Auto-released" value={s.autoReleasedFromQuarantine} color="text-primary" />
                 )}
               </div>
               {Object.keys(s.skipReasons).length > 0 && (
                 <div className="pt-0.5">
-                  <p className="text-[9px] text-muted-foreground font-medium mb-0.5">Skip reasons:</p>
+                  <p className="text-[9px] text-muted-foreground font-medium mb-0.5">Recovery routing:</p>
                   <div className="flex flex-wrap gap-1">
                     {Object.entries(s.skipReasons).map(([reason, count]) => (
                       <Badge key={reason} variant="secondary" className="text-[8px] h-3.5 px-1">
