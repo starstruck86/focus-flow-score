@@ -1623,6 +1623,186 @@ function ValidationResultsView({ result }: { result: ValidationResult }) {
   );
 }
 
+// ── Product Roadmap View ──────────────────────────────────
+
+function ProductRoadmapView({ resources }: { resources: VerifiedResource[] }) {
+  const roadmap = useMemo(() => generateProductRoadmap(resources), [resources]);
+  const [buildModal, setBuildModal] = useState<RoadmapIssue | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const severityColors: Record<IssueSeverity, string> = {
+    critical: 'border-destructive/50 bg-destructive/10 text-destructive',
+    high: 'border-orange-500/50 bg-orange-500/10 text-orange-600 dark:text-orange-400',
+    medium: 'border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400',
+    low: 'border-muted-foreground/30 bg-muted/30 text-muted-foreground',
+  };
+
+  const severityBadgeColors: Record<IssueSeverity, string> = {
+    critical: 'bg-destructive text-destructive-foreground',
+    high: 'bg-orange-500 text-white',
+    medium: 'bg-yellow-500 text-white',
+    low: 'bg-muted text-muted-foreground',
+  };
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    toast.success('Build prompt copied to clipboard');
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (roadmap.issues.length === 0) {
+    return (
+      <div className="rounded-lg border border-status-green/30 bg-status-green/5 p-6 text-center">
+        <CheckCircle2 className="h-8 w-8 text-status-green mx-auto mb-2" />
+        <div className="font-semibold text-status-green">No System Gaps — No Roadmap Needed</div>
+        <div className="text-sm text-muted-foreground mt-1">All failures are either auto-fixable or require manual input.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Summary Header */}
+      <div className="rounded-xl border-2 border-destructive/40 bg-destructive/5 p-5">
+        <h2 className="text-lg font-bold flex items-center gap-2 mb-3">
+          <ShieldAlert className="h-5 w-5 text-destructive" />
+          Product Roadmap (Derived from Real Failures)
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="rounded-lg border border-border bg-card p-3 text-center">
+            <div className="text-2xl font-bold text-foreground">{roadmap.totalSystemGaps}</div>
+            <div className="text-xs text-muted-foreground">Total System Gaps</div>
+          </div>
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-center">
+            <div className="text-2xl font-bold text-destructive">{roadmap.criticalIssues}</div>
+            <div className="text-xs text-muted-foreground">Critical Issues</div>
+          </div>
+          <div className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-3 text-center">
+            <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{roadmap.highIssues}</div>
+            <div className="text-xs text-muted-foreground">High Priority</div>
+          </div>
+          <div className="rounded-lg border border-border bg-card p-3 text-center">
+            <div className="text-2xl font-bold text-foreground">{roadmap.pctFailuresCausedBySystem}%</div>
+            <div className="text-xs text-muted-foreground">Failures from System Gaps</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Issue Cards */}
+      {roadmap.issues.map((issue, idx) => (
+        <div key={issue.groupKey} className={`rounded-lg border-2 overflow-hidden ${severityColors[issue.severity]}`}>
+          <div className="p-4 space-y-3">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${severityBadgeColors[issue.severity]}`}>
+                    {issue.severity}
+                  </span>
+                  <Badge variant="outline" className="text-[10px]">{issue.requiredBuild.type}</Badge>
+                  <Badge variant="outline" className="text-[10px]">{issue.subtypeLabel}</Badge>
+                </div>
+                <h3 className="font-semibold text-sm text-foreground">{issue.issueName}</h3>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-lg font-bold">{issue.affectedResources}</div>
+                <div className="text-[10px] text-muted-foreground">resources</div>
+              </div>
+            </div>
+
+            {/* Root Cause */}
+            <div className="text-sm">
+              <span className="text-muted-foreground font-medium">Root Cause: </span>
+              <span className="text-foreground">{issue.rootCauseSummary}</span>
+            </div>
+
+            {/* Business Impact */}
+            <div className="text-sm">
+              <span className="text-muted-foreground font-medium">Impact: </span>
+              <span className="text-foreground">{issue.businessImpact}</span>
+            </div>
+
+            {/* Required Build */}
+            <div className="rounded-lg border border-border bg-background/60 p-3 space-y-1.5">
+              <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Required Build</div>
+              <div className="text-sm">
+                <span className="text-muted-foreground">Description: </span>
+                <span className="text-foreground">{issue.requiredBuild.description}</span>
+              </div>
+              <div className="text-sm">
+                <span className="text-muted-foreground">Suggested Fix: </span>
+                <span className="text-foreground">{issue.requiredBuild.suggestedImplementation}</span>
+              </div>
+            </div>
+
+            {/* Example Resources */}
+            {issue.exampleResources.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Example Resources</div>
+                {issue.exampleResources.map((r, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm">
+                    <span className="truncate flex-1 text-foreground">{r.title}</span>
+                    {r.url && (
+                      <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline shrink-0">
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* CTA */}
+            <Button
+              size="sm"
+              variant="destructive"
+              className="w-full"
+              onClick={() => setBuildModal(issue)}
+            >
+              <Wrench className="h-3 w-3 mr-1" /> Fix This Issue
+            </Button>
+          </div>
+        </div>
+      ))}
+
+      {/* Build Prompt Modal */}
+      <Dialog open={!!buildModal} onOpenChange={(open) => !open && setBuildModal(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wrench className="h-5 w-5 text-destructive" />
+              Build Prompt: {buildModal?.issueName}
+            </DialogTitle>
+            <DialogDescription>
+              Copy this prompt to start fixing this system gap.
+            </DialogDescription>
+          </DialogHeader>
+          {buildModal && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${severityBadgeColors[buildModal.severity]}`}>
+                  {buildModal.severity}
+                </span>
+                <span className="text-sm text-muted-foreground">{buildModal.affectedResources} affected resources</span>
+              </div>
+              <pre className="bg-muted rounded-lg p-4 text-xs whitespace-pre-wrap font-mono overflow-y-auto max-h-[40vh] border border-border">
+                {generateBuildPrompt(buildModal)}
+              </pre>
+              <Button
+                className="w-full"
+                onClick={() => handleCopy(generateBuildPrompt(buildModal))}
+              >
+                <Copy className="h-3 w-3 mr-1" /> {copied ? 'Copied!' : 'Copy Build Prompt'}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 function SummaryCard({ label, value, variant = 'muted' }: { label: string; value: number | string; variant?: 'success' | 'danger' | 'warning' | 'muted' }) {
   const colors = {
     success: 'border-status-green/30 bg-status-green/5 text-status-green',

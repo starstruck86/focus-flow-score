@@ -362,6 +362,24 @@ export async function runAutonomousRemediation(
 async function processItem(item: RemediationItem, state: RemediationCycleState): Promise<void> {
   const strategy = QUEUE_STRATEGIES[item.queue];
 
+  // ── System gap: NEVER retry — route to roadmap ──────────
+  // Check if the verified resource had resolutionType === 'system_gap'
+  // We detect this via the beforeFailureBucket + sameFailureCount pattern
+  if (item.sameFailureCount >= 2 || item.queue === 'needs_quarantine') {
+    // Check if this is a system_gap pattern (repeated failures or quarantine)
+    const isSystemGap = item.sameFailureCount >= 2;
+    if (isSystemGap) {
+      item.status = 'escalated';
+      item.isResolved = false;
+      item.escalatedBecause = 'Blocked by system limitation — requires build (routed to roadmap)';
+      item.whyFailed = 'System gap detected — retrying will not fix this';
+      item.whatToDoNext = 'See Product Roadmap for required build specification';
+      item.terminalReason = 'system_gap_blocked';
+      state.escalatedCount++;
+      return;
+    }
+  }
+
   // ── Quarantined: NO automation ──────────────────────────
   if (item.queue === 'needs_quarantine') {
     await quarantineResource(item, state, 'Pre-existing quarantine — manual review only');
