@@ -123,8 +123,9 @@ function detectContradictions(r: Resource, quality: QualityResult, audioJob: Aud
   const status = r.enrichment_status as string;
   const score = quality.score;
 
-  // completed but score < 100
-  if (status === 'deep_enriched' && score < 100) {
+  // completed but score critically low (below 70 is a real contradiction;
+  // 70-99 is acceptable for short-but-genuine content like podcast summaries)
+  if (status === 'deep_enriched' && score < 70) {
     contradictions.push({
       type: 'completed_low_score',
       description: `Status is deep_enriched but quality score is ${score}/100`,
@@ -250,8 +251,19 @@ function classifyFixability(
     if ((r.content || '').length < 500) return 'needs_transcript';
   }
 
+  // Binary content stored as text — needs transcript extraction
+  const contentStr = r.content || '';
+  if (contentStr.length > 100 && /[\x00-\x08\x0E-\x1F]/.test(contentStr.slice(0, 200))) {
+    return 'needs_transcript';
+  }
+
+  // Partial status with real text content — can be promoted
+  if (status === 'partial' && quality.score >= 70) {
+    return 'auto_fix_now';
+  }
+
   // Retryable failures
-  if (status === 'failed' || status === 'incomplete') {
+  if (status === 'failed' || status === 'incomplete' || status === 'partial') {
     const failureCount = r.failure_count ?? 0;
     if (failureCount >= 2) {
       return 'needs_alternate_source';

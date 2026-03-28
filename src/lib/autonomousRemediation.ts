@@ -442,8 +442,8 @@ async function autoFix(item: RemediationItem, state: RemediationCycleState, stra
         return;
       }
 
-      // If score >= 95, promote to complete
-      if (quality.score >= 95 && quality.passesCompletionContract) {
+      // If score >= 85 with real content, promote to complete
+      if (quality.score >= 85 && quality.passesCompletionContract) {
         await supabase.from('resources').update({
           enrichment_status: 'deep_enriched',
           failure_reason: null,
@@ -519,7 +519,9 @@ async function reconcileStateBug(item: RemediationItem, state: RemediationCycleS
     last_quality_tier: quality.tier,
   };
 
-  if (quality.score >= 95 && quality.passesCompletionContract) {
+  // If score >= 85 and resource already has real content, accept as complete
+  // (short but genuine content like podcast summaries shouldn't block completion)
+  if (quality.score >= 85 && quality.passesCompletionContract) {
     update.enrichment_status = 'deep_enriched';
     update.failure_reason = null;
     update.enriched_at = new Date().toISOString();
@@ -527,7 +529,7 @@ async function reconcileStateBug(item: RemediationItem, state: RemediationCycleS
     item.afterState = 'deep_enriched';
     item.afterFailureBucket = null;
     markTerminal(item, state, 'resolved_complete', `Score ${quality.score} — state corrected to deep_enriched`);
-  } else if (quality.score < 30) {
+  } else if (quality.score >= 95 && quality.passesCompletionContract) {
     await quarantineResource(item, state, `Score ${quality.score} too low — state bug with unrecoverable content`);
   } else {
     // Mid-range score — reset for re-enrichment
@@ -550,7 +552,7 @@ async function reconcileStateBug(item: RemediationItem, state: RemediationCycleS
       if (q2) item.afterScore = q2.score;
       if (s2) { item.afterState = s2.status; item.afterFailureBucket = s2.failureReason; }
 
-      if (q2 && q2.score >= 95 && q2.passesCompletionContract) {
+      if (q2 && q2.score >= 85 && q2.passesCompletionContract) {
         await supabase.from('resources').update({
           enrichment_status: 'deep_enriched', failure_reason: null,
           enriched_at: new Date().toISOString(), last_quality_score: q2.score,
