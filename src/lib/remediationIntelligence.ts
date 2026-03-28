@@ -48,9 +48,7 @@ export interface RemediationPlan {
 // ── Unsupported platform subtypes ──────────────────────────
 const PLATFORM_UNSUPPORTED_SUBTYPES: ResourceSubtype[] = [
   'spotify_episode',
-  'spotify_show',
   'apple_podcast_episode',
-  'apple_podcast_show',
   'auth_gated_community_page',
   'google_drive_file',
 ];
