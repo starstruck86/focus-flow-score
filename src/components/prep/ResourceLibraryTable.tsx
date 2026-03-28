@@ -414,7 +414,6 @@ export function ResourceLibraryTable({
                 </tr>
               ) : (
                 filtered.map(resource => {
-                  const recommended = getRecommendedAction(resource);
                   const drift = detectDrift(resource);
                   const isSelected = selectedIds.has(resource.id);
                   const isAudio = isAudioResource(resource.file_url, resource.resource_type);
