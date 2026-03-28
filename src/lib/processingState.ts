@@ -194,8 +194,41 @@ export function deriveProcessingState(
     };
   }
 
-  // Not enriched — check enrichability
+  // Not enriched — check enrichability, with audio-specific routing
   if (status === 'not_enriched' || !status) {
+    // Audio resources without a job get audio-aware guidance
+    if (isAudioResource(resource.file_url, resource.resource_type)) {
+      const audioSubtype = detectAudioSubtype(resource.file_url, resource.resource_type);
+      const strategy = getAudioStrategy(audioSubtype);
+
+      if (strategy.manualAssistRequired) {
+        return {
+          state: 'MANUAL_REQUIRED',
+          label: 'Manual Input Needed',
+          description: strategy.operatorFailureReason,
+          nextAction: 'Open Manual Assist',
+          retryable: false,
+        };
+      }
+      if (strategy.metadataOnlyAcceptable && strategy.retryMode === 'manual_only') {
+        return {
+          state: 'METADATA_ONLY',
+          label: 'Metadata Only',
+          description: strategy.operatorFailureReason,
+          nextAction: 'Paste transcript or provide alternate URL',
+          retryable: false,
+        };
+      }
+      // Direct audio / RSS-backed / Apple — ready for auto processing
+      return {
+        state: 'READY',
+        label: 'Ready',
+        description: `Audio detected — ${strategy.primaryPath.description}`,
+        nextAction: 'Run Deep Enrich',
+        retryable: false,
+      };
+    }
+
     const ea = classifyEnrichability(resource.file_url, resource.resource_type);
     if (ea.enrichability === 'manual_input_needed') {
       return {
