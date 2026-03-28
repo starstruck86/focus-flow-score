@@ -106,9 +106,12 @@ export default function EnrichmentVerification() {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     dashboard: true,
     fixPlan: true,
+    remediation: true,
     patterns: false,
     table: true,
   });
+  const [runningQueue, setRunningQueue] = useState<RemediationQueue | null>(null);
+  const [lastBulkResult, setLastBulkResult] = useState<BulkActionResult | null>(null);
 
   // Run verification against real data
   const { verified, summary } = useMemo(() => {
