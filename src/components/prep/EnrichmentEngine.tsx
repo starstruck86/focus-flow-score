@@ -25,6 +25,8 @@ import { analyzeRemediationBatch } from '@/lib/remediationIntelligence';
 import { generateProductRoadmap, type RoadmapSummary } from '@/lib/systemGapRoadmap';
 import { ManualInputInbox, type InboxQueue, type InboxItem } from './ManualInputInbox';
 import { FileText, Lock, ExternalLink, Eye } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import type { BucketFilter, RunSnapshot, RunResult } from './enrichment/types';
 import { EMPTY_RESULT, mapVerifiedToBucket } from './enrichment/types';
 import { SummaryCards } from './enrichment/SummaryCards';
