@@ -114,20 +114,28 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
     return c;
   }, [resources]);
 
-  async function handleRetry(resourceId: string) {
+  async function handleRetry(resourceId: string, isTranscript = false) {
     setProcessing(resourceId);
     try {
       await supabase.from('resources').update({
         enrichment_status: 'not_enriched',
         failure_reason: null,
         failure_count: 0,
+        recovery_status: isTranscript ? 'pending_transcription' : 'pending_retry',
+        recovery_attempt_count: 0,
         last_status_change_at: new Date().toISOString(),
       } as any).eq('id', resourceId);
-      await invokeEnrichResource({ resource_id: resourceId, force: true }, { componentName: 'RecoveryQueue', timeoutMs: 60000 });
-      toast.success('Retry initiated');
+      await invokeEnrichResource({ resource_id: resourceId, force: true }, { componentName: 'RecoveryQueue', timeoutMs: 90000 });
+      toast.success(isTranscript ? 'Transcription retry initiated' : 'Retry initiated');
       onItemResolved();
     } catch (e: any) {
       toast.error(`Retry failed: ${e.message}`);
+      // Persist failure in recovery state
+      await supabase.from('resources').update({
+        recovery_status: 'retry_failed',
+        last_recovery_error: e.message,
+        recovery_attempt_count: 1,
+      } as any).eq('id', resourceId);
     } finally {
       setProcessing(null);
     }
