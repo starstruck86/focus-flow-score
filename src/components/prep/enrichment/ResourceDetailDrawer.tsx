@@ -71,6 +71,10 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
     setActiveAction(action);
     try {
       switch (action) {
+        case 'save': {
+          await saveFields();
+          break;
+        }
         case 'save_reenrich': {
           await saveFields();
           await invokeEnrichResource({ resource_id: r.id, force: true }, { componentName: 'ResourceDetailDrawer', timeoutMs: 60000 });
