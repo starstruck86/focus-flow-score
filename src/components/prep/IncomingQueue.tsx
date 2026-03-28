@@ -4,16 +4,25 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useIncomingQueue, useUpdateBrainStatus, useManualIngest } from '@/hooks/useIncomingQueue';
+import {
+  useIncomingQueue,
+  useIncomingQueueRealtime,
+  useUpdateBrainStatus,
+  useManualIngest,
+} from '@/hooks/useIncomingQueue';
 import type { BrainStatus } from '@/lib/salesBrain/ingestion';
 import {
   CheckCircle, XCircle, Archive, ExternalLink,
-  Plus, Inbox, Eye, EyeOff,
+  Plus, Inbox, EyeOff,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 export function IncomingQueue() {
   const [filter, setFilter] = useState<BrainStatus>('pending');
+
+  // Live realtime subscription — auto-invalidates on any resources change
+  useIncomingQueueRealtime();
+
   const { data: items = [], isLoading } = useIncomingQueue(filter);
   const updateStatus = useUpdateBrainStatus();
   const manualIngest = useManualIngest();
@@ -30,12 +39,15 @@ export function IncomingQueue() {
     setShowAdd(false);
   };
 
+  // Count is always derived from the rendered data — never a separate query
+  const count = items.length;
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold text-foreground">Incoming Queue</h3>
-          <p className="text-[11px] text-muted-foreground">{items.length} items</p>
+          <p className="text-[11px] text-muted-foreground">{count} {filter} items</p>
         </div>
         <Button size="sm" variant="outline" onClick={() => setShowAdd(!showAdd)}>
           <Plus className="h-3.5 w-3.5 mr-1" /> Add URL
@@ -85,7 +97,7 @@ export function IncomingQueue() {
 
       {isLoading ? (
         <p className="text-xs text-muted-foreground">Loading...</p>
-      ) : items.length === 0 ? (
+      ) : count === 0 ? (
         <Card>
           <CardContent className="p-6 text-center">
             <p className="text-xs text-muted-foreground">
@@ -129,6 +141,7 @@ export function IncomingQueue() {
                         variant="ghost"
                         className="h-7 w-7 text-primary"
                         title="Promote"
+                        disabled={updateStatus.isPending}
                         onClick={() => updateStatus.mutate({ id: item.id, status: 'promoted' })}
                       >
                         <CheckCircle className="h-3.5 w-3.5" />
@@ -138,6 +151,7 @@ export function IncomingQueue() {
                         variant="ghost"
                         className="h-7 w-7 text-muted-foreground"
                         title="Ignore"
+                        disabled={updateStatus.isPending}
                         onClick={() => updateStatus.mutate({ id: item.id, status: 'ignored' })}
                       >
                         <XCircle className="h-3.5 w-3.5" />
@@ -147,6 +161,7 @@ export function IncomingQueue() {
                         variant="ghost"
                         className="h-7 w-7 text-muted-foreground"
                         title="Archive"
+                        disabled={updateStatus.isPending}
                         onClick={() => updateStatus.mutate({ id: item.id, status: 'archived' })}
                       >
                         <Archive className="h-3.5 w-3.5" />
@@ -159,6 +174,7 @@ export function IncomingQueue() {
                       size="sm"
                       variant="ghost"
                       className="text-[10px] h-6"
+                      disabled={updateStatus.isPending}
                       onClick={() => updateStatus.mutate({ id: item.id, status: 'pending' })}
                     >
                       ↩ Pending
