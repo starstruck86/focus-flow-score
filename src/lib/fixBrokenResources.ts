@@ -166,12 +166,17 @@ export async function runFixBrokenResources(
         currentScore: null,
         previousTier: v.qualityTier,
         currentTier: null,
+        previousState: v.enrichmentStatus as string,
+        currentState: null,
+        previousFailureBucket: v.failureBucket,
+        currentFailureBucket: null,
         attemptsThisRun: 0,
         maxAttempts: AUTO_FIXABLE_QUEUES.has(queue) ? MAX_AUTO_ATTEMPTS : 1,
         actionTaken: null,
         failureReason: null,
         terminalReason: null,
         resolvedAt: null,
+        isResolved: false,
       });
     }
   }
