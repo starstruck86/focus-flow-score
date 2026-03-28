@@ -321,22 +321,29 @@ export async function transcribeDirectAudio(
 
     const quality = scoreTranscriptQuality(result.transcript || '', undefined);
 
+    // If quality is 'failed', this means transcription happened but content is weak.
+    // Always store a specific failure_code so operator knows what happened.
+    const isQualityFailed = quality.quality === 'failed';
+
     await supabase.from('audio_jobs').update({
-      stage: quality.quality === 'failed' ? 'needs_manual_assist' : 'completed',
+      stage: isQualityFailed ? 'needs_manual_assist' : 'completed',
       transcript_text: result.transcript,
       transcript_segments: result.segments,
       transcript_word_count: result.totalWords,
       transcript_quality: quality.quality,
-      has_transcript: quality.quality !== 'failed',
+      has_transcript: !isQualityFailed,
       quality_result: quality as any,
       provider_used: result.provider,
       chunk_metadata: result.segments?.map((s: any) => ({ index: s.chunkIndex, startByte: s.startByte, endByte: s.endByte })) || [],
       last_successful_stage: 'transcribing',
       transcript_mode: 'direct_transcription',
-      final_resolution_status: quality.quality === 'failed' ? 'needs_manual_assist' : 'completed',
+      final_resolution_status: isQualityFailed ? 'needs_manual_assist' : 'completed',
       attempts_count: (job.attempts_count || 0) + 1,
-      failure_code: null,
-      failure_reason: null,
+      // When quality fails, store a clear failure code instead of clearing it
+      failure_code: isQualityFailed ? (quality.totalWords < 50 ? 'TRANSCRIPT_TOO_SHORT' : 'TRANSCRIPT_LOW_SIGNAL') : null,
+      failure_reason: isQualityFailed ? quality.reason : null,
+      recommended_action: isQualityFailed ? 'Paste a full transcript via Manual Assist, or provide a better audio source' : null,
+      retryable: false,
       updated_at: new Date().toISOString(),
     }).eq('id', job.id);
 

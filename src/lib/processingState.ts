@@ -8,6 +8,7 @@
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import { classifyEnrichability, type EnrichabilityState } from '@/lib/salesBrain/resourceSubtype';
+import { isAudioResource, detectAudioSubtype, getAudioStrategy } from '@/lib/salesBrain/audioPipeline';
 
 export type ProcessingState =
   | 'READY'
