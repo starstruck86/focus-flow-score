@@ -35,6 +35,7 @@ type SourceType =
   | 'pdf'
   | 'youtube'
   | 'google_doc'
+  | 'google_sheet'
   | 'google_drive_file'
   | 'notion'
   | 'auth_gated'
