@@ -297,12 +297,116 @@ async function firecrawlJsRendered(url: string, apiKey: string): Promise<Extract
   return firecrawlScrape(url, apiKey, { waitFor: 10000, timeout: 120_000 });
 }
 
-/** YouTube: Firecrawl with extended wait for transcript */
-async function firecrawlYouTube(url: string, apiKey: string): Promise<ExtractionResult> {
-  const result = await firecrawlScrape(url, apiKey, { waitFor: 8000, timeout: 60_000 });
-  // Re-label the method
-  result.attempt.method = 'firecrawl_youtube';
-  return result;
+/** YouTube: Extract captions via innertube API (no Firecrawl needed) */
+async function youtubeCaption(url: string, _apiKey: string): Promise<ExtractionResult> {
+  const method = 'youtube_captions';
+  const startMs = Date.now();
+
+  try {
+    // Extract video ID
+    const u = new URL(url);
+    let videoId: string | null = null;
+    if (u.hostname === 'youtu.be') videoId = u.pathname.slice(1).split('/')[0] || null;
+    else if (u.hostname.includes('youtube.com')) {
+      videoId = u.searchParams.get('v');
+      if (!videoId) {
+        const m = u.pathname.match(/\/(embed|v)\/([\w-]{11})/);
+        if (m) videoId = m[2];
+      }
+    }
+    if (!videoId) throw new Error('Could not extract video ID');
+
+    // Call innertube player API directly (same logic as youtube-captions function)
+    const playerResp = await fetch(
+      'https://www.youtube.com/youtubei/v1/player?prettyPrint=false',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          context: { client: { clientName: 'WEB', clientVersion: '2.20240101.00.00', hl: 'en' } },
+          videoId,
+        }),
+      }
+    );
+    if (!playerResp.ok) throw new Error(`Innertube returned ${playerResp.status}`);
+    const player = await playerResp.json();
+
+    // Check playability
+    const status = player?.playabilityStatus?.status;
+    if (status === 'ERROR' || status === 'UNPLAYABLE') {
+      throw new Error(player?.playabilityStatus?.reason || 'Video unavailable');
+    }
+
+    // Get caption tracks
+    const tracks = player?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+    if (!Array.isArray(tracks) || tracks.length === 0) {
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: false, http_status: 200,
+          validation_result: 'fail', error_category: 'no_captions',
+          error_detail: 'No caption tracks available for this YouTube video',
+        },
+      };
+    }
+
+    // Pick best track (prefer en manual, then en auto, then any)
+    const pick = tracks.find((t: any) => t.languageCode?.startsWith('en') && t.kind !== 'asr')
+      || tracks.find((t: any) => t.languageCode?.startsWith('en'))
+      || tracks.find((t: any) => t.kind !== 'asr')
+      || tracks[0];
+
+    // Fetch captions as raw XML (default format)
+    const capResp = await fetch(pick.baseUrl);
+    if (!capResp.ok) throw new Error(`Caption fetch returned ${capResp.status}`);
+    const capXml = await capResp.text();
+
+    // Parse XML <text> elements to plain text
+    const textMatches = capXml.matchAll(/<text[^>]*>([\s\S]*?)<\/text>/gi);
+    const lines: string[] = [];
+    for (const match of textMatches) {
+      const decoded = match[1]
+        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/<[^>]+>/g, '')
+        .trim();
+      if (decoded) lines.push(decoded);
+    }
+    const transcript = lines.join(' ').replace(/\s+/g, ' ').trim();
+    const durationMs = Date.now() - startMs;
+
+    if (transcript.length < 50) {
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: transcript.length, timeout_hit: false,
+          auth_wall_detected: false, http_status: 200,
+          validation_result: 'fail', error_category: 'caption_parse_failed',
+          error_detail: `Captions found but parsed to only ${transcript.length} chars`,
+        },
+      };
+    }
+
+    return {
+      content: transcript.slice(0, CONTENT_CAP),
+      attempt: {
+        method, duration_ms: durationMs, chars_extracted: transcript.length, timeout_hit: false,
+        auth_wall_detected: false, http_status: 200,
+        validation_result: transcript.length >= 500 ? 'pass' : 'partial',
+        error_category: null, error_detail: null,
+      },
+    };
+  } catch (e) {
+    const durationMs = Date.now() - startMs;
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: false,
+        auth_wall_detected: false, http_status: null,
+        validation_result: 'fail', error_category: 'youtube_caption_error',
+        error_detail: (e as Error).message?.slice(0, 200),
+      },
+    };
+  }
 }
 
 // ── Method chains per source type ──────────────────────────
