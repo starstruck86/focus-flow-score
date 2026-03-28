@@ -137,7 +137,10 @@ export function validateResourceQuality(resource: ResourceForValidation): Qualit
 
   // ── 3. Semantic Usefulness (0-25) ────────────────────────
   let semanticUsefulness = 0;
-  if (contentLen > 0) {
+  if (isBinaryContent) {
+    violations.push('Binary content — no semantic analysis possible');
+    semanticUsefulness = 0;
+  } else if (effectiveContentLen > 0) {
     // Check boilerplate ratio
     const lines = content.split('\n').filter(l => l.trim().length > 0);
     const boilerplateLines = lines.filter(line =>
