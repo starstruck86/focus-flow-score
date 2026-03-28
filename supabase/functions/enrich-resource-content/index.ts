@@ -967,8 +967,9 @@ function getMethodChain(source: SourceClassification): Array<(url: string, apiKe
       return [googleDriveDirectDownload, firecrawlScrape];
     case 'google_sheet':
       return [googleSheetExport, firecrawlScrape];
-    case 'auth_gated':
     case 'google_doc':
+      return [googleDocExport, firecrawlScrape];
+    case 'auth_gated':
     case 'notion':
       return []; // No methods — immediately classified
     default:
