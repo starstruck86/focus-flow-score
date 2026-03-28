@@ -438,6 +438,11 @@ export default function EnrichmentVerification() {
         {mode === 'validate' && validationResult && (
           <ValidationResultsView result={validationResult} />
         )}
+
+        {/* System Gaps Mode */}
+        {mode === 'gaps' && hasRun && verified.length > 0 && (
+          <SystemGapsView resources={verified} onSelect={setDrawerResource} />
+        )}
       </div>
 
       {drawerResource && <ResourceDrawer resource={drawerResource} onClose={() => setDrawerResource(null)} />}
