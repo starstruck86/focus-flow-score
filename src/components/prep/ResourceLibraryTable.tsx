@@ -588,7 +588,7 @@ export function ResourceLibraryTable({
                                 <Info className="h-3.5 w-3.5 mr-2" /> Audio Inspector
                               </DropdownMenuItem>
                             )}
-                            {/* State-driven actions — one per state, no duplicates */}
+                            {/* State-driven actions — failure-bucket-aware */}
                             {(() => {
                               const ps = deriveProcessingState(resource, audioJob);
                               const items: React.ReactNode[] = [];
@@ -607,15 +607,29 @@ export function ResourceLibraryTable({
                                   </DropdownMenuItem>
                                 );
                               }
-                              if (ps.state === 'RETRYABLE_FAILURE') {
-                                items.push(
-                                  <DropdownMenuItem key="retry" onClick={() => onAction('deep_enrich', resource)}>
-                                    <RefreshCw className="h-3.5 w-3.5 mr-2" /> Retry
-                                  </DropdownMenuItem>
+                              // Failed states: use failure routing for precise actions
+                              if (ps.state === 'RETRYABLE_FAILURE' || ps.state === 'MANUAL_REQUIRED' || ps.state === 'METADATA_ONLY') {
+                                const routing = routeFailure(
+                                  resource.file_url,
+                                  resource.resource_type ?? undefined,
+                                  undefined,
+                                  resource.failure_reason ?? undefined,
                                 );
+                                const bucketActions = getFailureBucketActions(routing.bucket);
+                                for (const ba of bucketActions) {
+                                  const icon = ba.icon === 'retry' ? <RefreshCw className="h-3.5 w-3.5 mr-2" />
+                                    : ba.icon === 'inspect_audio' ? <Info className="h-3.5 w-3.5 mr-2" />
+                                    : ba.icon === 'mark_metadata' ? <CheckCircle2 className="h-3.5 w-3.5 mr-2" />
+                                    : <HelpCircle className="h-3.5 w-3.5 mr-2" />;
+                                  items.push(
+                                    <DropdownMenuItem key={ba.action} onClick={() => onAction(ba.action === 'mark_metadata_only' ? 'mark_metadata_only' : ba.action, resource)}>
+                                      {icon} {ba.label}
+                                    </DropdownMenuItem>
+                                  );
+                                }
                               }
-                              // Manual Assist — available for ALL resources, all non-RUNNING states
-                              if (ps.state !== 'RUNNING') {
+                              // Manual Assist always available for non-RUNNING, non-failed (already covered above)
+                              if (ps.state === 'READY' || ps.state === 'COMPLETED') {
                                 items.push(
                                   <DropdownMenuItem key="manual" onClick={() => onAction('manual_assist', resource)}>
                                     <HelpCircle className="h-3.5 w-3.5 mr-2" /> Manual Assist
