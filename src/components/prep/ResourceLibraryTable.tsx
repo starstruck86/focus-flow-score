@@ -556,7 +556,7 @@ export function ResourceLibraryTable({
                             return (
                               <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('METADATA_ONLY'))}
                                 onClick={e => { e.stopPropagation(); onAction('manual_assist', resource); }}>
-                                Add Source
+                                Manual Assist
                               </Badge>
                             );
                           }

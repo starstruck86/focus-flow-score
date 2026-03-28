@@ -110,8 +110,7 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
 
   const hasDetailsContent = processingBreakdown.RETRYABLE_FAILURE.length > 0
     || processingBreakdown.MANUAL_REQUIRED.length > 0
-    || processingBreakdown.METADATA_ONLY.length > 0
-    || processingBreakdown.COMPLETED.length > 0;
+    || processingBreakdown.METADATA_ONLY.length > 0;
 
   const handleStart = useCallback(
     (
@@ -315,18 +314,11 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
                     items={processingBreakdown.METADATA_ONLY}
                   />
                 )}
-                {processingBreakdown.READY.length > 0 && (
+                {processingBreakdown.READY.length > 0 && actionState !== 'RUN_ENRICH' && (
                   <DetailSection
                     label="Ready"
                     color="bg-primary/20 text-primary"
                     items={processingBreakdown.READY}
-                  />
-                )}
-                {processingBreakdown.COMPLETED.length > 0 && (
-                  <DetailSection
-                    label="Completed"
-                    color="bg-status-green/20 text-status-green"
-                    items={processingBreakdown.COMPLETED}
                   />
                 )}
               </div>
