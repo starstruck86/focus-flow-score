@@ -47,6 +47,7 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
     qc.invalidateQueries({ queryKey: ['resources'] });
     qc.invalidateQueries({ queryKey: ['all-resources'] });
     qc.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+    qc.invalidateQueries({ queryKey: ['incoming-queue'] });
     onResourceUpdated();
   }, [qc, onResourceUpdated]);
 
