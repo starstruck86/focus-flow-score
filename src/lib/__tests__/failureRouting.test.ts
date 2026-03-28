@@ -33,7 +33,7 @@ describe('routeFailure', () => {
       'No matching enclosure found',
     );
     expect(r.bucket).toBe('audio_resolution_required');
-    expect(r.reason).toContain('Apple Podcast');
+    expect(r.reason).toContain('enclosure');
   });
 
   it('auth-gated page routes to manual_content_required', () => {
