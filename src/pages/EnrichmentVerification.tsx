@@ -266,7 +266,7 @@ export default function EnrichmentVerification() {
 
             {mode === 'remediate' && hasRun && remediationQueues && !isRemediating && (
               <Button size="sm" onClick={handleStartRemediation} disabled={isLoading}
-                className="bg-status-green hover:bg-status-green/90 text-white">
+                className="bg-status-green hover:bg-status-green/90 text-status-green-foreground">
                 <Zap className="h-3 w-3 mr-1" /> Process All Queues
               </Button>
             )}
