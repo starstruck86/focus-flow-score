@@ -93,17 +93,25 @@ export function validateResourceQuality(resource: ResourceForValidation): Qualit
   const contentLen = content.length;
 
   // ── 1. Content Depth (0-25) ──────────────────────────────
+  // Detect binary/non-text content (audio files stored as content)
+  const isBinaryContent = contentLen > 100 && /[\x00-\x08\x0E-\x1F]/.test(content.slice(0, 200));
+  const effectiveContentLen = isBinaryContent ? 0 : contentLen;
+
   let contentDepth = 0;
-  if (contentLen === 0) {
+  if (isBinaryContent) {
+    violations.push('Content is binary data (not text) — needs transcript extraction');
+    contentDepth = 0;
+  } else if (effectiveContentLen === 0) {
     violations.push('No content extracted');
     contentDepth = 0;
-  } else if (contentLen < QUALITY_THRESHOLDS.MIN_CONTENT_CHARS) {
-    violations.push(`Content too short: ${contentLen} chars (min ${QUALITY_THRESHOLDS.MIN_CONTENT_CHARS})`);
-    contentDepth = Math.round((contentLen / QUALITY_THRESHOLDS.MIN_CONTENT_CHARS) * 10);
-  } else if (contentLen < QUALITY_THRESHOLDS.GOOD_CONTENT_CHARS) {
-    contentDepth = 15;
-  } else if (contentLen < QUALITY_THRESHOLDS.EXCELLENT_CONTENT_CHARS) {
+  } else if (effectiveContentLen < QUALITY_THRESHOLDS.MIN_CONTENT_CHARS) {
+    violations.push(`Content too short: ${effectiveContentLen} chars (min ${QUALITY_THRESHOLDS.MIN_CONTENT_CHARS})`);
+    contentDepth = Math.round((effectiveContentLen / QUALITY_THRESHOLDS.MIN_CONTENT_CHARS) * 10);
+  } else if (effectiveContentLen < QUALITY_THRESHOLDS.GOOD_CONTENT_CHARS) {
+    // 500-2000 chars: real content that may be a summary or short resource — award 20/25
     contentDepth = 20;
+  } else if (effectiveContentLen < QUALITY_THRESHOLDS.EXCELLENT_CONTENT_CHARS) {
+    contentDepth = 22;
   } else {
     contentDepth = 25;
   }
