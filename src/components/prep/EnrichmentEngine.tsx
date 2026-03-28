@@ -26,8 +26,6 @@ import { generateProductRoadmap, type RoadmapSummary } from '@/lib/systemGapRoad
 import { ManualInputInbox, type InboxQueue, type InboxItem } from './ManualInputInbox';
 import { FileText, Lock, ExternalLink, Eye } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import type { BucketFilter, RunSnapshot, RunResult } from './enrichment/types';
 import { EMPTY_RESULT, mapVerifiedToBucket } from './enrichment/types';
 import { SummaryCards } from './enrichment/SummaryCards';
