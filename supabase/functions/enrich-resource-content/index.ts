@@ -110,7 +110,12 @@ function classifySource(url: string): SourceClassification {
       return { source_type: 'google_drive_file', platform: 'Google Drive', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
     }
 
-    // Google Docs/Slides (auth-gated — Sheets handled above)
+    // Google Docs — try export, not auth-gated by default (same as Sheets)
+    if (/docs\.google\.com\/document/i.test(url)) {
+      return { source_type: 'google_doc', platform: 'Google Docs', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
+    }
+
+    // Google Slides / other Google Docs patterns
     if (GOOGLE_DOC_PATTERNS.some(p => p.test(host))) {
       return { source_type: 'google_doc', platform: 'Google', auth_required: true, transcript_available: null, downloadable: false, js_rendered: false };
     }
@@ -790,6 +795,91 @@ function convertCsvToStructuredText(csvText: string, sheetId: string): string {
   return parts.join('\n');
 }
 
+// ── Google Doc helpers ──────────────────────────────────────
+function extractGoogleDocId(url: string): string | null {
+  const m = url.match(/docs\.google\.com\/document\/d\/([a-zA-Z0-9_-]+)/i);
+  return m?.[1] ?? null;
+}
+
+/** Export a public Google Doc as plain text */
+async function googleDocExport(url: string, _apiKey: string): Promise<ExtractionResult> {
+  const method = 'google_doc_export';
+  const startMs = Date.now();
+
+  try {
+    const docId = extractGoogleDocId(url);
+    if (!docId) {
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: false, http_status: 0,
+          validation_result: 'fail', error_category: 'extraction_error',
+          error_detail: 'Could not extract Google Doc ID from URL',
+        },
+      };
+    }
+
+    const exportUrl = `https://docs.google.com/document/d/${docId}/export?format=txt`;
+    const resp = await fetch(exportUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      redirect: 'follow',
+    });
+
+    const durationMs = Date.now() - startMs;
+
+    if (!resp.ok) {
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: resp.status === 401 || resp.status === 403,
+          http_status: resp.status,
+          validation_result: 'fail',
+          error_category: resp.status === 401 || resp.status === 403 ? 'auth_failure' : 'extraction_error',
+          error_detail: `Google Doc export returned HTTP ${resp.status}`,
+        },
+      };
+    }
+
+    const text = await resp.text();
+
+    // Check for auth redirect
+    if (text.includes('accounts.google.com') && text.includes('Sign in')) {
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: true, http_status: 200,
+          validation_result: 'fail', error_category: 'auth_failure',
+          error_detail: 'Google Doc requires sign-in — not publicly accessible',
+        },
+      };
+    }
+
+    const trimmed = text.trim();
+    return {
+      content: trimmed.slice(0, CONTENT_CAP),
+      attempt: {
+        method, duration_ms: durationMs, chars_extracted: trimmed.length, timeout_hit: false,
+        auth_wall_detected: false, http_status: 200,
+        validation_result: trimmed.length >= MIN_CONTENT_CHARS ? 'pass' : 'partial',
+        error_category: null, error_detail: null,
+      },
+    };
+  } catch (e) {
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
+        auth_wall_detected: false, http_status: 0,
+        validation_result: 'fail', error_category: 'extraction_error',
+        error_detail: `Google Doc export error: ${(e as Error).message}`,
+      },
+    };
+  }
+}
+
 // ── Google Drive helpers ────────────────────────────────────
 function extractDriveFileId(url: string): string | null {
   const patterns = [
@@ -962,8 +1052,9 @@ function getMethodChain(source: SourceClassification): Array<(url: string, apiKe
       return [googleDriveDirectDownload, firecrawlScrape];
     case 'google_sheet':
       return [googleSheetExport, firecrawlScrape];
-    case 'auth_gated':
     case 'google_doc':
+      return [googleDocExport, firecrawlScrape];
+    case 'auth_gated':
     case 'notion':
       return []; // No methods — immediately classified
     default:

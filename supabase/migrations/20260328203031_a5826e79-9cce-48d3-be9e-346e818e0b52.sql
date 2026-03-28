@@ -1,0 +1,1 @@
+UPDATE resources SET enrichment_status = 'not_enriched', failure_reason = NULL, failure_count = 0, content_status = 'placeholder' WHERE file_url LIKE '%docs.google.com/document%' AND enrichment_status = 'quarantined';
