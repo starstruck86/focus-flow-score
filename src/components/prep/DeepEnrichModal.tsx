@@ -3,8 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Zap, RefreshCw, AlertTriangle, Info, CheckCircle2, HelpCircle } from 'lucide-react';
+import { Zap, RefreshCw, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import { BulkIngestionPanel } from './BulkIngestionPanel';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEnrichmentJobStore } from '@/store/useEnrichmentJobStore';
@@ -83,32 +82,36 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
   );
   const eligibleCount = effectiveMode === 'deep_enrich' ? deepEligibleCount : reEnrichEligibleCount;
 
-  // Derive ActionState from scoped resources
+  // Derive ActionState
   const { actionState, counts } = useMemo(
     () => deriveModalActionState(scopedResources, audioJobsMap),
     [scopedResources, audioJobsMap],
   );
 
-  // Per-resource processing state breakdown for details view
+  // Processing state breakdown for details
   const processingBreakdown = useMemo(() => {
-    const groups: Record<string, Array<{ title: string; description: string; nextAction: string | null }>> = {
-      READY: [],
-      RUNNING: [],
+    const groups: Record<string, Array<{ title: string; description: string; nextAction: string | null; retryable: boolean }>> = {
       RETRYABLE_FAILURE: [],
       MANUAL_REQUIRED: [],
       METADATA_ONLY: [],
+      READY: [],
       COMPLETED: [],
     };
     for (const r of scopedResources) {
       const job = audioJobsMap?.get(r.id) ?? null;
       const ps = deriveProcessingState(r, job);
-      groups[ps.state].push({ title: r.title, description: ps.description, nextAction: ps.nextAction });
+      if (ps.state === 'RUNNING') continue; // skip running from details
+      if (groups[ps.state]) {
+        groups[ps.state].push({ title: r.title, description: ps.description, nextAction: ps.nextAction, retryable: ps.retryable });
+      }
     }
     return groups;
   }, [scopedResources, audioJobsMap]);
 
-  const modeLabel = effectiveMode === 'deep_enrich' ? 'Deep Enrich' : 'Re-enrich';
-  const ModeIcon = effectiveMode === 'deep_enrich' ? Zap : RefreshCw;
+  const hasDetailsContent = processingBreakdown.RETRYABLE_FAILURE.length > 0
+    || processingBreakdown.MANUAL_REQUIRED.length > 0
+    || processingBreakdown.METADATA_ONLY.length > 0
+    || processingBreakdown.COMPLETED.length > 0;
 
   const handleStart = useCallback(
     (
@@ -157,39 +160,44 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
     setMode(value as EnrichMode);
   };
 
-  // ── Determine header state ────────────────────────────────
-  const headerLabel = actionState === 'DONE'
-    ? 'All Processed'
-    : actionState === 'MANUAL_REQUIRED'
-      ? 'Needs Attention'
-      : `${modeLabel} Resources`;
+  // ── Determine what to render ────────────────────────────────
+  const modeLabel = effectiveMode === 'deep_enrich' ? 'Deep Enrich' : 'Re-enrich';
+  const ModeIcon = effectiveMode === 'deep_enrich' ? Zap : RefreshCw;
 
-  const HeaderIcon = actionState === 'DONE'
-    ? CheckCircle2
-    : actionState === 'MANUAL_REQUIRED'
-      ? AlertTriangle
-      : ModeIcon;
+  // Mode tabs: ONLY show when both modes have >0 eligible AND we're in a runnable state
+  const showModeTabs = !isProcessing && !isDone
+    && deepEligibleCount > 0 && reEnrichEligibleCount > 0
+    && actionState === 'RUN_ENRICH';
 
-  // Whether mode tabs should render: only when both modes have >0 eligible
-  const showModeTabs = actionState !== 'DONE' && deepEligibleCount > 0 && reEnrichEligibleCount > 0;
-
-  // Whether the bulk ingestion panel should render
-  const showBulkPanel = isProcessing || isDone || (eligibleCount > 0 && (actionState === 'RUN_ENRICH' || actionState === 'RETRY_FIXABLE'));
+  // Bulk panel: show when processing, done, or when there are eligible items to run
+  const showBulkPanel = isProcessing || isDone || (eligibleCount > 0 && actionState === 'RUN_ENRICH');
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-lg">
-        {/* Pre-start state */}
+        {/* ── Pre-start states ─────────────────────────── */}
         {!isProcessing && !isDone && (
           <>
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <HeaderIcon className={cn('h-5 w-5', actionState === 'DONE' ? 'text-status-green' : 'text-primary')} />
-                {headerLabel}
+              <DialogTitle className="flex items-center gap-2 text-base">
+                {actionState === 'DONE' ? (
+                  <CheckCircle2 className="h-5 w-5 text-status-green" />
+                ) : actionState === 'MANUAL_REQUIRED' ? (
+                  <AlertTriangle className="h-5 w-5 text-status-red" />
+                ) : (
+                  <ModeIcon className="h-5 w-5 text-primary" />
+                )}
+                {actionState === 'DONE'
+                  ? 'All Processed'
+                  : actionState === 'MANUAL_REQUIRED'
+                    ? 'Needs Attention'
+                    : actionState === 'RETRY_FIXABLE'
+                      ? 'Retry Failed Items'
+                      : `${modeLabel} Resources`}
               </DialogTitle>
             </DialogHeader>
 
-            {/* Mode tabs — only when BOTH modes have eligible items */}
+            {/* Mode tabs — only when both modes have eligible items */}
             {showModeTabs && (
               <Tabs value={effectiveMode} onValueChange={handleModeChange} className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
@@ -205,101 +213,111 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
               </Tabs>
             )}
 
-            {/* DONE state */}
+            {/* ── DONE ──────────────────────────────────── */}
             {actionState === 'DONE' && (
               <div className="text-center py-6 space-y-2">
                 <CheckCircle2 className="h-10 w-10 text-status-green mx-auto" />
                 <p className="text-sm font-medium text-foreground">All resources processed</p>
                 <p className="text-xs text-muted-foreground">
                   {counts.done} completed
-                  {counts.manual > 0 && ` · ${counts.manual} need manual input`}
+                  {counts.metadataOnly > 0 && ` · ${counts.metadataOnly} metadata only`}
                 </p>
               </div>
             )}
 
-            {/* Actionable states — summary + details */}
-            {actionState !== 'DONE' && (
+            {/* ── MANUAL_REQUIRED (no runnable items) ──── */}
+            {actionState === 'MANUAL_REQUIRED' && (
               <div className="space-y-3">
-                {/* Primary action description */}
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <p>
-                    {actionState === 'RUN_ENRICH' && (
-                      <>
-                        <span className="font-medium text-foreground">{eligibleCount}</span> ready to {modeLabel.toLowerCase()}
-                      </>
-                    )}
-                    {actionState === 'RETRY_FIXABLE' && (
-                      <>
-                        <span className="font-medium text-orange-600">{counts.retryable}</span> can be retried automatically
-                      </>
-                    )}
-                    {actionState === 'MANUAL_REQUIRED' && (
-                      <>
-                        <span className="font-medium text-status-red">{counts.manual}</span> need manual input or an alternate source
-                      </>
-                    )}
-                    {/* Secondary counts */}
-                    {actionState === 'RUN_ENRICH' && counts.retryable > 0 && (
-                      <> · <span className="font-medium text-orange-600">{counts.retryable}</span> retryable</>
-                    )}
-                    {(actionState === 'RUN_ENRICH' || actionState === 'RETRY_FIXABLE') && counts.manual > 0 && (
-                      <> · <span className="font-medium text-status-red">{counts.manual}</span> need attention</>
-                    )}
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-medium text-status-red">{counts.manual + counts.metadataOnly}</span>
+                  {' '}resource{counts.manual + counts.metadataOnly !== 1 ? 's' : ''} need manual input — login access, pasted content, transcript, or an alternate URL.
+                </p>
+                {counts.done > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {counts.done} already completed.
                   </p>
-                  {(counts.retryable > 0 || counts.manual > 0 || processingBreakdown.COMPLETED.length > 0) && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-[10px] gap-1"
-                      onClick={() => setShowDetails(!showDetails)}
-                    >
-                      <Info className="h-3 w-3" />
-                      {showDetails ? 'Hide' : 'Details'}
-                    </Button>
-                  )}
-                </div>
+                )}
+              </div>
+            )}
 
-                {/* Details panel */}
-                {showDetails && (
-                  <ScrollArea className="max-h-[280px] border border-border rounded-md p-2">
-                    <div className="space-y-3">
-                      {processingBreakdown.RETRYABLE_FAILURE.length > 0 && (
-                        <DetailSection
-                          label="Retry Available"
-                          color="bg-orange-500/20 text-orange-600"
-                          items={processingBreakdown.RETRYABLE_FAILURE}
-                        />
-                      )}
-                      {processingBreakdown.MANUAL_REQUIRED.length > 0 && (
-                        <DetailSection
-                          label="Manual Input Needed"
-                          color="bg-status-red/20 text-status-red"
-                          items={processingBreakdown.MANUAL_REQUIRED}
-                        />
-                      )}
-                      {processingBreakdown.METADATA_ONLY.length > 0 && (
-                        <DetailSection
-                          label="Metadata Only"
-                          color="bg-orange-500/20 text-orange-600"
-                          items={processingBreakdown.METADATA_ONLY}
-                        />
-                      )}
-                      {processingBreakdown.READY.length > 0 && (
-                        <DetailSection
-                          label="Ready"
-                          color="bg-primary/20 text-primary"
-                          items={processingBreakdown.READY}
-                        />
-                      )}
-                      {processingBreakdown.COMPLETED.length > 0 && (
-                        <DetailSection
-                          label="Completed"
-                          color="bg-status-green/20 text-status-green"
-                          items={processingBreakdown.COMPLETED}
-                        />
-                      )}
-                    </div>
-                  </ScrollArea>
+            {/* ── RETRY_FIXABLE ────────────────────────── */}
+            {actionState === 'RETRY_FIXABLE' && (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-medium text-orange-600">{counts.retryable}</span>
+                  {' '}item{counts.retryable !== 1 ? 's' : ''} can be retried automatically.
+                  {counts.manual + counts.metadataOnly > 0 && (
+                    <> · <span className="font-medium text-status-red">{counts.manual + counts.metadataOnly}</span> need attention</>
+                  )}
+                </p>
+              </div>
+            )}
+
+            {/* ── RUN_ENRICH ───────────────────────────── */}
+            {actionState === 'RUN_ENRICH' && (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">{eligibleCount}</span> ready to {modeLabel.toLowerCase()}
+                  {counts.retryable > 0 && (
+                    <> · <span className="font-medium text-orange-600">{counts.retryable}</span> retryable</>
+                  )}
+                  {counts.manual + counts.metadataOnly > 0 && (
+                    <> · <span className="font-medium text-status-red">{counts.manual + counts.metadataOnly}</span> need attention</>
+                  )}
+                </p>
+              </div>
+            )}
+
+            {/* ── Details toggle ─────────────────────────── */}
+            {actionState !== 'DONE' && hasDetailsContent && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs gap-1 w-full justify-center"
+                onClick={() => setShowDetails(!showDetails)}
+              >
+                {showDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                {showDetails ? 'Hide details' : 'Show details'}
+              </Button>
+            )}
+
+            {/* Details panel */}
+            {showDetails && (
+              <div className="max-h-[280px] overflow-y-auto border border-border rounded-md p-2 space-y-3">
+                {processingBreakdown.RETRYABLE_FAILURE.length > 0 && (
+                  <DetailSection
+                    label="Retry Available"
+                    color="bg-orange-500/20 text-orange-600"
+                    items={processingBreakdown.RETRYABLE_FAILURE}
+                  />
+                )}
+                {processingBreakdown.MANUAL_REQUIRED.length > 0 && (
+                  <DetailSection
+                    label="Manual Input Needed"
+                    color="bg-status-red/20 text-status-red"
+                    items={processingBreakdown.MANUAL_REQUIRED}
+                  />
+                )}
+                {processingBreakdown.METADATA_ONLY.length > 0 && (
+                  <DetailSection
+                    label="Metadata Only"
+                    color="bg-orange-500/20 text-orange-600"
+                    items={processingBreakdown.METADATA_ONLY}
+                  />
+                )}
+                {processingBreakdown.READY.length > 0 && (
+                  <DetailSection
+                    label="Ready"
+                    color="bg-primary/20 text-primary"
+                    items={processingBreakdown.READY}
+                  />
+                )}
+                {processingBreakdown.COMPLETED.length > 0 && (
+                  <DetailSection
+                    label="Completed"
+                    color="bg-status-green/20 text-status-green"
+                    items={processingBreakdown.COMPLETED}
+                  />
                 )}
               </div>
             )}
@@ -333,18 +351,8 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
           />
         )}
 
-        {/* Close buttons */}
-        {isDone && (
-          <DialogFooter>
-            <Button variant="outline" onClick={handleClose}>Close</Button>
-          </DialogFooter>
-        )}
-        {!isProcessing && !isDone && actionState === 'DONE' && (
-          <DialogFooter>
-            <Button variant="outline" onClick={handleClose}>Close</Button>
-          </DialogFooter>
-        )}
-        {!isProcessing && !isDone && actionState === 'MANUAL_REQUIRED' && eligibleCount === 0 && (
+        {/* Close button — shown in DONE, MANUAL_REQUIRED pre-start, or after processing completes */}
+        {(isDone || (!isProcessing && !isDone && (actionState === 'DONE' || actionState === 'MANUAL_REQUIRED'))) && (
           <DialogFooter>
             <Button variant="outline" onClick={handleClose}>Close</Button>
           </DialogFooter>
@@ -362,7 +370,7 @@ function DetailSection({
 }: {
   label: string;
   color: string;
-  items: Array<{ title: string; description: string; nextAction: string | null }>;
+  items: Array<{ title: string; description: string; nextAction: string | null; retryable: boolean }>;
 }) {
   return (
     <div>
