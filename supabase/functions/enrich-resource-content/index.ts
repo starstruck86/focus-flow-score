@@ -960,6 +960,8 @@ function getMethodChain(source: SourceClassification): Array<(url: string, apiKe
       return [firecrawlScrape, firecrawlFullPage];
     case 'google_drive_file':
       return [googleDriveDirectDownload, firecrawlScrape];
+    case 'google_sheet':
+      return [googleSheetExport, firecrawlScrape];
     case 'auth_gated':
     case 'google_doc':
     case 'notion':
