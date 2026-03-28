@@ -148,6 +148,8 @@ export interface IngestionItem {
   failureCategory?: FailureCategory;
   failureTimestamp?: string;
   retryEligible?: boolean;
+  /** Canonical failure bucket — set on failure for routing */
+  failureBucket?: import('@/lib/failureRouting').FailureBucket;
   videoId?: string;
   channel?: string;
   publishDate?: string;
