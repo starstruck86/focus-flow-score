@@ -50,7 +50,6 @@ const PLATFORM_UNSUPPORTED_SUBTYPES: ResourceSubtype[] = [
   'spotify_episode',
   'apple_podcast_episode',
   'auth_gated_community_page',
-  'google_drive_file',
 ];
 
 // ── Main entry point ───────────────────────────────────────
