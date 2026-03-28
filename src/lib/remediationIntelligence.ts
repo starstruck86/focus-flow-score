@@ -253,7 +253,7 @@ function buildManualInputPlan(r: VerifiedResource): RemediationPlan {
 // ── Helpers ────────────────────────────────────────────────
 function inferFailureType(r: VerifiedResource): FailureType {
   if (!r.url) return 'no_source_url';
-  if (r.enrichability === 'requires_auth') return 'auth_gated';
+  if (r.enrichability === 'needs_auth') return 'auth_gated';
   if (r.failureReason?.toLowerCase().includes('timeout') ||
       r.failureReason?.toLowerCase().includes('network')) return 'transient_network';
   if (r.whyNotComplete?.includes('boilerplate')) return 'boilerplate_dominated';
