@@ -3,6 +3,7 @@
  * Queries REAL resources + audio_jobs, evaluates every non-100 resource,
  * surfaces contradictions, failure patterns, and a fix plan.
  * Persists each run to verification_runs for comparison over time.
+ * Includes Remediation Engine with action queues and bulk actions.
  */
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useAllResources } from '@/hooks/useResources';
@@ -10,7 +11,7 @@ import { useAudioJobsMap } from '@/hooks/useAudioJobs';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Download, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Copy, ExternalLink, Search, Filter, History, Zap, ShieldAlert, Lock, FileText, Ban, Bug, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Download, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Copy, ExternalLink, Search, Filter, History, Zap, ShieldAlert, Lock, FileText, Ban, Bug, RotateCcw, Play, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,6 +30,15 @@ import {
   type VerificationSummary,
   type AudioJobInfo,
 } from '@/lib/enrichmentVerification';
+import {
+  buildRemediationQueues,
+  executeBulkAction,
+  QUEUE_LABELS,
+  QUEUE_DESCRIPTIONS,
+  QUEUE_ACTIONS,
+  type RemediationQueue,
+  type BulkActionResult,
+} from '@/lib/remediationEngine';
 
 // ── Persist run to DB ──────────────────────────────────────
 
