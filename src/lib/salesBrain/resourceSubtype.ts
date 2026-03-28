@@ -161,7 +161,7 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
       return {
         ...base,
         enrichability: 'needs_auth',
-        reason: 'Google Drive file — may require auth or direct download link',
+        reason: 'Google Drive file — requires access or export. Upload the file or paste content.',
         canFetchMetadata: true,
         requiresAuth: true,
       };
