@@ -1411,8 +1411,33 @@ async function orchestrateEnrichment(
     };
   }
 
-  // Skip already enriched unless forced
-  if (resource.enrichment_status === "deep_enriched" && !force) {
+  // Pre-check: If existing content is binary audio, clear it and reroute to transcription
+  const existingContent = resource.content || '';
+  if (existingContent.length > 0 && isBinaryContent(existingContent)) {
+    const isAudio = isAudioBinaryContent(existingContent) ||
+      source.source_type === 'podcast' || source.source_type === 'direct_audio';
+
+    console.log(`[Orchestrate] BINARY PREFLIGHT: id=${resourceId} isAudio=${isAudio} — clearing binary content from DB`);
+
+    // Clear the binary content from the resource immediately
+    await supabase.from("resources").update({
+      content: '',
+      content_length: 0,
+    }).eq("id", resourceId);
+
+    if (isAudio) {
+      // Override source classification to route through transcription
+      if (source.source_type !== 'podcast' && source.source_type !== 'direct_audio') {
+        console.log(`[Orchestrate] Reclassifying ${source.source_type} → podcast for audio binary content`);
+        source.source_type = 'podcast' as SourceType;
+        source.platform = 'Audio (reclassified from binary)';
+      }
+    }
+  }
+
+  // Skip already enriched unless forced — but NOT if we just detected binary
+  const hasBinaryCleared = existingContent.length > 0 && isBinaryContent(existingContent);
+  if (resource.enrichment_status === "deep_enriched" && !force && !hasBinaryCleared) {
     return {
       resource_id: resourceId, url, source_classification: source,
       final_status: 'enriched', method_used: 'already_enriched', methods_attempted: [],
