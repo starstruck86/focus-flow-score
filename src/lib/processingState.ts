@@ -28,6 +28,7 @@ export interface ProcessingStateResult {
   label: string;
   description: string;
   nextAction: string | null;
+  retryable: boolean;
 }
 
 // ── Per-resource processing state ──────────────────────────
@@ -49,6 +50,7 @@ export function deriveProcessingState(
       label: 'Processing',
       description: 'Enrichment is running',
       nextAction: null,
+      retryable: false,
     };
   }
 
@@ -56,13 +58,14 @@ export function deriveProcessingState(
   if (audioJob) {
     const stage = audioJob.stage;
 
-    if (stage === 'completed' || stage === 'quality_checked' || stage === 'metadata_only_complete') {
-      if (audioJob.transcript_mode === 'metadata_only' || stage === 'metadata_only_complete') {
+    if (stage === 'completed' || stage === 'quality_checked') {
+      if (audioJob.transcript_mode === 'metadata_only') {
         return {
           state: 'METADATA_ONLY',
           label: 'Metadata Only',
           description: 'Only metadata captured — no transcript available',
           nextAction: 'Open Manual Assist to provide transcript',
+          retryable: false,
         };
       }
       return {
@@ -72,6 +75,7 @@ export function deriveProcessingState(
           ? `Transcribed (${audioJob.transcript_word_count ?? 0} words)`
           : 'Processing complete',
         nextAction: null,
+        retryable: false,
       };
     }
 
@@ -80,7 +84,8 @@ export function deriveProcessingState(
         state: 'METADATA_ONLY',
         label: 'Metadata Only',
         description: 'Only metadata captured — no direct audio access',
-        nextAction: 'Open Manual Assist to provide transcript or alternate URL',
+        nextAction: 'Paste transcript or provide alternate URL',
+        retryable: false,
       };
     }
 
@@ -90,6 +95,7 @@ export function deriveProcessingState(
         label: 'Manual Input Needed',
         description: audioJob.failure_reason || 'Automatic processing exhausted',
         nextAction: audioJob.recommended_action || 'Open Manual Assist',
+        retryable: false,
       };
     }
 
@@ -100,6 +106,7 @@ export function deriveProcessingState(
           label: 'Retry Available',
           description: audioJob.failure_reason || 'Processing failed but can be retried',
           nextAction: 'Retry transcription or resolution',
+          retryable: true,
         };
       }
       return {
@@ -107,6 +114,7 @@ export function deriveProcessingState(
         label: 'Manual Input Needed',
         description: audioJob.failure_reason || 'Processing failed — automatic retry not available',
         nextAction: audioJob.recommended_action || 'Open Manual Assist',
+        retryable: false,
       };
     }
 
@@ -117,6 +125,7 @@ export function deriveProcessingState(
         label: 'Processing',
         description: `Audio pipeline: ${stage}`,
         nextAction: null,
+        retryable: false,
       };
     }
   }
@@ -128,12 +137,12 @@ export function deriveProcessingState(
       label: 'Completed',
       description: 'Enrichment complete',
       nextAction: null,
+      retryable: false,
     };
   }
 
   // Failed enrichment
   if (status === 'failed') {
-    // Check enrichability to determine if manual is needed
     const ea = classifyEnrichability(resource.file_url, resource.resource_type);
     if (ea.enrichability === 'manual_input_needed' || ea.enrichability === 'needs_auth') {
       return {
@@ -141,6 +150,16 @@ export function deriveProcessingState(
         label: 'Manual Input Needed',
         description: ea.reason,
         nextAction: 'Open Manual Assist or provide alternate source',
+        retryable: false,
+      };
+    }
+    if (ea.enrichability === 'metadata_only') {
+      return {
+        state: 'METADATA_ONLY',
+        label: 'Metadata Only',
+        description: ea.reason,
+        nextAction: 'Paste transcript or provide alternate URL',
+        retryable: false,
       };
     }
     return {
@@ -148,6 +167,7 @@ export function deriveProcessingState(
       label: 'Retry Available',
       description: resource.failure_reason || 'Enrichment failed',
       nextAction: 'Retry enrichment',
+      retryable: true,
     };
   }
 
@@ -158,6 +178,7 @@ export function deriveProcessingState(
       label: 'Incomplete',
       description: 'Partial enrichment — can be retried',
       nextAction: 'Re-enrich to complete',
+      retryable: true,
     };
   }
 
@@ -168,6 +189,7 @@ export function deriveProcessingState(
       label: status === 'stale' ? 'Stale' : 'Quarantined',
       description: `Resource is ${status} — re-enrich recommended`,
       nextAction: 'Re-enrich',
+      retryable: true,
     };
   }
 
@@ -180,6 +202,7 @@ export function deriveProcessingState(
         label: 'Manual Input Needed',
         description: ea.reason,
         nextAction: 'Open Manual Assist',
+        retryable: false,
       };
     }
     if (ea.enrichability === 'needs_auth') {
@@ -188,6 +211,7 @@ export function deriveProcessingState(
         label: 'Needs Auth',
         description: ea.reason,
         nextAction: 'Provide accessible link or paste content manually',
+        retryable: false,
       };
     }
     if (ea.enrichability === 'metadata_only') {
@@ -195,7 +219,8 @@ export function deriveProcessingState(
         state: 'METADATA_ONLY',
         label: 'Metadata Only',
         description: ea.reason,
-        nextAction: 'Open Manual Assist to provide transcript',
+        nextAction: 'Paste transcript or provide alternate URL',
+        retryable: false,
       };
     }
     if (ea.enrichability === 'no_source' || ea.enrichability === 'unsupported') {
@@ -204,6 +229,7 @@ export function deriveProcessingState(
         label: ea.enrichability === 'no_source' ? 'No Source' : 'Unsupported',
         description: ea.reason,
         nextAction: null,
+        retryable: false,
       };
     }
     return {
@@ -211,6 +237,7 @@ export function deriveProcessingState(
       label: 'Ready',
       description: 'Ready for enrichment',
       nextAction: 'Run Deep Enrich',
+      retryable: false,
     };
   }
 
@@ -221,6 +248,7 @@ export function deriveProcessingState(
       label: status === 'duplicate' ? 'Duplicate' : 'Superseded',
       description: `Resource is ${status}`,
       nextAction: null,
+      retryable: false,
     };
   }
 
@@ -230,6 +258,7 @@ export function deriveProcessingState(
     label: 'Ready',
     description: 'Ready for processing',
     nextAction: 'Run Deep Enrich',
+    retryable: false,
   };
 }
 
@@ -250,10 +279,11 @@ export function getProcessingStateColor(state: ProcessingState): string {
 export function deriveModalActionState(
   resources: Resource[],
   audioJobsMap?: Map<string, AudioJobRecord>,
-): { actionState: ActionState; counts: { runnable: number; retryable: number; manual: number; done: number } } {
+): { actionState: ActionState; counts: { runnable: number; retryable: number; manual: number; metadataOnly: number; done: number } } {
   let runnable = 0;
   let retryable = 0;
   let manual = 0;
+  let metadataOnly = 0;
   let done = 0;
 
   for (const r of resources) {
@@ -261,10 +291,10 @@ export function deriveModalActionState(
     const ps = deriveProcessingState(r, job);
     switch (ps.state) {
       case 'READY': runnable++; break;
-      case 'RUNNING': runnable++; break; // still counts as active
+      case 'RUNNING': break; // don't count running as actionable
       case 'RETRYABLE_FAILURE': retryable++; break;
       case 'MANUAL_REQUIRED': manual++; break;
-      case 'METADATA_ONLY': manual++; break;
+      case 'METADATA_ONLY': metadataOnly++; break;
       case 'COMPLETED': done++; break;
     }
   }
@@ -272,8 +302,8 @@ export function deriveModalActionState(
   let actionState: ActionState;
   if (runnable > 0) actionState = 'RUN_ENRICH';
   else if (retryable > 0) actionState = 'RETRY_FIXABLE';
-  else if (manual > 0) actionState = 'MANUAL_REQUIRED';
+  else if (manual > 0 || metadataOnly > 0) actionState = 'MANUAL_REQUIRED';
   else actionState = 'DONE';
 
-  return { actionState, counts: { runnable, retryable, manual, done } };
+  return { actionState, counts: { runnable, retryable, manual, metadataOnly, done } };
 }

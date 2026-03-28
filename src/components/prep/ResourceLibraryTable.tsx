@@ -578,35 +578,65 @@ export function ResourceLibraryTable({
                             <DropdownMenuItem onClick={() => onAction('view', resource)}>
                               <Eye className="h-3.5 w-3.5 mr-2" /> Inspect
                             </DropdownMenuItem>
-                          {isAudio && (
+                            {isAudio && (
                               <DropdownMenuItem onClick={() => onAction('inspect_audio', resource)}>
                                 <Info className="h-3.5 w-3.5 mr-2" /> Audio Inspector
                               </DropdownMenuItem>
                             )}
-                            {resource.file_url?.startsWith('http') && (
-                              <>
-                                <DropdownMenuItem onClick={() => onAction('deep_enrich', resource)}>
-                                  <Zap className="h-3.5 w-3.5 mr-2" /> Deep Enrich
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => onAction('re_enrich', resource)}>
-                                  <RefreshCw className="h-3.5 w-3.5 mr-2" /> Re-enrich
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                            <DropdownMenuItem onClick={() => onAction('manual_assist', resource)}>
-                              <HelpCircle className="h-3.5 w-3.5 mr-2" /> Manual Assist
-                            </DropdownMenuItem>
-                            {isAudio && audioJob?.retryable && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={() => onAction('retry_resolve', resource)}>
-                                  <RefreshCw className="h-3.5 w-3.5 mr-2" /> Retry Resolve
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => onAction('retry_transcription', resource)}>
-                                  <RefreshCw className="h-3.5 w-3.5 mr-2" /> Retry Transcription
-                                </DropdownMenuItem>
-                              </>
-                            )}
+                            {/* Context-aware actions based on processing state */}
+                            {(() => {
+                              const ps = deriveProcessingState(resource, audioJob);
+                              const items: React.ReactNode[] = [];
+
+                              if (ps.state === 'READY' && resource.file_url?.startsWith('http')) {
+                                items.push(
+                                  <DropdownMenuItem key="enrich" onClick={() => onAction('deep_enrich', resource)}>
+                                    <Zap className="h-3.5 w-3.5 mr-2" /> Deep Enrich
+                                  </DropdownMenuItem>
+                                );
+                              }
+                              if (ps.state === 'COMPLETED' && resource.file_url?.startsWith('http')) {
+                                items.push(
+                                  <DropdownMenuItem key="reenrich" onClick={() => onAction('re_enrich', resource)}>
+                                    <RefreshCw className="h-3.5 w-3.5 mr-2" /> Re-enrich
+                                  </DropdownMenuItem>
+                                );
+                              }
+                              if (ps.state === 'RETRYABLE_FAILURE') {
+                                if (isAudio && audioJob?.retryable) {
+                                  items.push(
+                                    <DropdownMenuItem key="retry-resolve" onClick={() => onAction('retry_resolve', resource)}>
+                                      <RefreshCw className="h-3.5 w-3.5 mr-2" /> Retry Resolve
+                                    </DropdownMenuItem>,
+                                    <DropdownMenuItem key="retry-transcription" onClick={() => onAction('retry_transcription', resource)}>
+                                      <RefreshCw className="h-3.5 w-3.5 mr-2" /> Retry Transcription
+                                    </DropdownMenuItem>
+                                  );
+                                } else if (resource.file_url?.startsWith('http')) {
+                                  items.push(
+                                    <DropdownMenuItem key="retry" onClick={() => onAction('deep_enrich', resource)}>
+                                      <RefreshCw className="h-3.5 w-3.5 mr-2" /> Retry Enrichment
+                                    </DropdownMenuItem>
+                                  );
+                                }
+                              }
+                              if (ps.state === 'MANUAL_REQUIRED' || ps.state === 'METADATA_ONLY' || ps.state === 'RETRYABLE_FAILURE') {
+                                items.push(
+                                  <DropdownMenuItem key="manual" onClick={() => onAction('manual_assist', resource)}>
+                                    <HelpCircle className="h-3.5 w-3.5 mr-2" /> Manual Assist
+                                  </DropdownMenuItem>
+                                );
+                              }
+                              // Always offer Manual Assist for READY items that are audio/platform
+                              if (ps.state === 'READY' && isAudio) {
+                                items.push(
+                                  <DropdownMenuItem key="manual-ready" onClick={() => onAction('manual_assist', resource)}>
+                                    <HelpCircle className="h-3.5 w-3.5 mr-2" /> Manual Assist
+                                  </DropdownMenuItem>
+                                );
+                              }
+                              return items;
+                            })()}
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => onAction('reset', resource)}>
                               <RotateCcw className="h-3.5 w-3.5 mr-2" /> Reset Status
