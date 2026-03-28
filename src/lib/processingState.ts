@@ -275,7 +275,7 @@ export function deriveProcessingState(
         state: 'MANUAL_REQUIRED',
         label: 'Needs Auth',
         description: ea.reason,
-        nextAction: 'Provide accessible link or paste content manually',
+        nextAction: 'Open Manual Assist',
         retryable: false,
       };
     }
@@ -284,7 +284,7 @@ export function deriveProcessingState(
         state: 'METADATA_ONLY',
         label: 'Metadata Only',
         description: ea.reason,
-        nextAction: 'Paste transcript or provide alternate URL',
+        nextAction: 'Open Manual Assist',
         retryable: false,
       };
     }
