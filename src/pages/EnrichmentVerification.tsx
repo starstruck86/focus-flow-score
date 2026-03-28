@@ -279,6 +279,126 @@ export default function EnrichmentVerification() {
     setValidationAbort(null);
   }, [validationAbort]);
 
+  // ── Fix Everything ───────────────────────────────────────
+  const handleFixEverything = useCallback(async () => {
+    const controller = new AbortController();
+    setFixAbort(controller);
+    setFixSummary(null);
+    setFixPhase('verifying');
+
+    try {
+      // Step 1: Run verification
+      setHasRun(false);
+      await new Promise(r => setTimeout(r, 50));
+      setHasRun(true);
+      await new Promise(r => setTimeout(r, 200)); // let useMemo recompute
+
+      // We need fresh verified data — re-fetch from supabase
+      const { data: freshResources } = await supabase.from('resources').select('*').order('created_at', { ascending: false });
+      const { data: freshAudioRaw } = await supabase.from('audio_jobs').select('*').order('created_at', { ascending: false }).limit(500);
+      const freshAudioMap = new Map<string, any>();
+      for (const row of (freshAudioRaw || [])) {
+        if (!freshAudioMap.has((row as any).resource_id)) freshAudioMap.set((row as any).resource_id, row);
+      }
+
+      const freshVerified: VerifiedResource[] = [];
+      for (const resource of (freshResources || []) as any[]) {
+        const rawJob = freshAudioMap.get(resource.id);
+        const audioJob: AudioJobInfo | null = rawJob ? {
+          resourceId: resource.id, stage: rawJob.stage ?? 'unknown',
+          failureCode: rawJob.failure_code ?? null, failureReason: rawJob.failure_reason ?? null,
+          hasTranscript: rawJob.has_transcript ?? false, transcriptMode: rawJob.transcript_mode ?? null,
+          finalResolutionStatus: rawJob.final_resolution_status ?? null,
+          transcriptWordCount: rawJob.transcript_word_count ?? null, attemptsCount: rawJob.attempts_count ?? 0,
+        } : null;
+        freshVerified.push(verifyResource(resource as any, audioJob));
+      }
+
+      if (controller.signal.aborted) return;
+
+      // Step 2: Run remediation on broken resources
+      setFixPhase('remediating');
+      const broken = freshVerified.filter(v => v.fixabilityBucket !== 'truly_complete');
+      const queues = buildRemediationQueues(broken);
+
+      let remState: RemediationCycleState | null = null;
+      if (broken.length > 0) {
+        remState = await runAutonomousRemediation(queues, (s) => {
+          setRemediationState({ ...s });
+        }, controller.signal);
+      }
+
+      if (controller.signal.aborted) return;
+
+      // Step 3: Run remediation intelligence analysis
+      setFixPhase('analyzing');
+
+      // Re-verify after remediation
+      const { data: postResources } = await supabase.from('resources').select('*').order('created_at', { ascending: false });
+      const { data: postAudioRaw } = await supabase.from('audio_jobs').select('*').order('created_at', { ascending: false }).limit(500);
+      const postAudioMap = new Map<string, any>();
+      for (const row of (postAudioRaw || [])) {
+        if (!postAudioMap.has((row as any).resource_id)) postAudioMap.set((row as any).resource_id, row);
+      }
+
+      const postVerified: VerifiedResource[] = [];
+      for (const resource of (postResources || []) as any[]) {
+        const rawJob = postAudioMap.get(resource.id);
+        const audioJob: AudioJobInfo | null = rawJob ? {
+          resourceId: resource.id, stage: rawJob.stage ?? 'unknown',
+          failureCode: rawJob.failure_code ?? null, failureReason: rawJob.failure_reason ?? null,
+          hasTranscript: rawJob.has_transcript ?? false, transcriptMode: rawJob.transcript_mode ?? null,
+          finalResolutionStatus: rawJob.final_resolution_status ?? null,
+          transcriptWordCount: rawJob.transcript_word_count ?? null, attemptsCount: rawJob.attempts_count ?? 0,
+        } : null;
+        postVerified.push(verifyResource(resource as any, audioJob));
+      }
+
+      const stillBroken = postVerified.filter(v => v.fixabilityBucket !== 'truly_complete');
+      const analysis = analyzeRemediationBatch(stillBroken);
+
+      const gapDetails = analysis.systemGaps.map(g => ({
+        failureType: g.failureType,
+        count: g.count,
+        description: g.requiredBuild.description,
+      }));
+
+      const manualBuckets = ['needs_transcript', 'needs_pasted_content', 'needs_access_auth', 'needs_alternate_source'];
+      const manualGroups = manualBuckets
+        .map(b => ({
+          bucket: b,
+          count: stillBroken.filter(v => v.fixabilityBucket === b).length,
+          action: QUEUE_ACTIONS[b as RemediationQueue] || 'Provide required input',
+        }))
+        .filter(g => g.count > 0);
+
+      setFixSummary({
+        fixedAuto: remState?.resolvedCompleteCount ?? 0,
+        needsInput: analysis.manualInput,
+        systemGaps: analysis.systemGaps.length,
+        totalScanned: freshVerified.length,
+        remediationSummary: analysis,
+        remediationState: remState,
+        gapDetails,
+        manualGroups,
+      });
+
+      setFixPhase('complete');
+      qc.invalidateQueries({ queryKey: ['resources'] });
+      qc.invalidateQueries({ queryKey: ['all-resources'] });
+      toast.success('Fix Everything complete');
+    } catch (e: any) {
+      setFixPhase('error');
+      toast.error(`Fix Everything failed: ${e.message}`);
+    }
+  }, [qc]);
+
+  const handleStopFix = useCallback(() => {
+    fixAbort?.abort();
+    setFixAbort(null);
+    setFixPhase('idle');
+  }, [fixAbort]);
+
   const isLoading = loadingResources || loadingAudio;
 
   return (
@@ -292,7 +412,7 @@ export default function EnrichmentVerification() {
             </Button>
             <div>
               <h1 className="text-lg font-semibold">Enrichment Verification</h1>
-              <p className="text-xs text-muted-foreground">{allResources?.length ?? 0} resources · {mode === 'verify' ? 'Audit Mode' : mode === 'remediate' ? 'Remediation Mode' : 'Validation Mode'}</p>
+              <p className="text-xs text-muted-foreground">{allResources?.length ?? 0} resources · {mode === 'verify' ? 'Audit Mode' : mode === 'remediate' ? 'Remediation Mode' : mode === 'gaps' ? 'System Gaps' : 'Validation Mode'}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
