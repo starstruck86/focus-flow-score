@@ -97,7 +97,14 @@ function classifySource(url: string): SourceClassification {
       }
     }
 
-    // Google Docs
+    // Google Drive file links (not Docs/Sheets/Slides) — try direct download
+    if (/drive\.google\.com\/file\/d\//i.test(host) ||
+        /drive\.google\.com\/open\?/i.test(url) ||
+        /drive\.google\.com\/uc\?/i.test(url)) {
+      return { source_type: 'google_drive_file', platform: 'Google Drive', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
+    }
+
+    // Google Docs/Sheets/Slides (auth-gated)
     if (GOOGLE_DOC_PATTERNS.some(p => p.test(host))) {
       return { source_type: 'google_doc', platform: 'Google', auth_required: true, transcript_available: null, downloadable: false, js_rendered: false };
     }
