@@ -5,6 +5,7 @@
  * run controls, proof-of-impact, manual inbox, product roadmap.
  */
 import { useState, useMemo, useCallback, useRef } from 'react';
+import { cn } from '@/lib/utils';
 import { useAllResources, type Resource } from '@/hooks/useResources';
 import { useAudioJobsMap } from '@/hooks/useAudioJobs';
 import { useAuth } from '@/contexts/AuthContext';
