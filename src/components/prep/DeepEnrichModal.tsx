@@ -250,6 +250,16 @@ export const DeepEnrichModal = memo(function DeepEnrichModal({
                     <> · <span className="font-medium text-status-red">{counts.manual + counts.metadataOnly}</span> need attention</>
                   )}
                 </p>
+                {eligibleCount > 0 && (
+                  <Button
+                    size="sm"
+                    className="w-full gap-1.5"
+                    onClick={() => handleStart(sourceItems, { retryFailedOnly: true })}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Retry Failed Items ({eligibleCount})
+                  </Button>
+                )}
               </div>
             )}
 

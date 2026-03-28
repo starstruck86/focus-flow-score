@@ -24,7 +24,7 @@ import {
 import { cn } from '@/lib/utils';
 import {
   getEnrichmentStatusLabel, getEnrichmentStatusColor,
-  getRecommendedAction, type EnrichmentStatus,
+  type EnrichmentStatus,
 } from '@/lib/resourceEligibility';
 import {
   getQualityTierLabel, getQualityTierColor,
@@ -114,30 +114,7 @@ const SAVED_VIEWS: SavedView[] = [
   },
 ];
 
-// ── Recommended action helpers ─────────────────────────────
-function getActionLabel(action: string): string {
-  switch (action) {
-    case 'deep_enrich': return 'Deep Enrich';
-    case 're_enrich': return 'Re-enrich';
-    case 'retry': return 'Retry';
-    case 'review_manually': return 'Review';
-    case 'no_action': return '—';
-    case 'ignore': return 'Ignore';
-    default: return action;
-  }
-}
-
-function getActionColor(action: string): string {
-  switch (action) {
-    case 'deep_enrich': return 'bg-primary/20 text-primary';
-    case 're_enrich': return 'bg-status-yellow/20 text-status-yellow';
-    case 'retry': return 'bg-orange-500/20 text-orange-600';
-    case 'review_manually': return 'bg-status-red/20 text-status-red';
-    case 'no_action': return 'bg-muted text-muted-foreground';
-    case 'ignore': return 'bg-muted text-muted-foreground';
-    default: return 'bg-muted text-muted-foreground';
-  }
-}
+// (Action helpers removed — action column now uses deriveProcessingState directly)
 
 // ── Sort comparator ────────────────────────────────────────
 function sortResources(resources: Resource[], key: SortKey, dir: SortDir): Resource[] {
@@ -437,7 +414,6 @@ export function ResourceLibraryTable({
                 </tr>
               ) : (
                 filtered.map(resource => {
-                  const recommended = getRecommendedAction(resource);
                   const drift = detectDrift(resource);
                   const isSelected = selectedIds.has(resource.id);
                   const isAudio = isAudioResource(resource.file_url, resource.resource_type);
@@ -557,15 +533,50 @@ export function ResourceLibraryTable({
                         <span className="text-[11px] text-muted-foreground">v{resource.enrichment_version ?? 0}</span>
                       </td>
                       <td className="px-3 align-middle">
-                        {recommended.action !== 'no_action' ? (
-                          <Badge className={cn('text-[9px] cursor-pointer', getActionColor(recommended.action))}
-                            onClick={e => { e.stopPropagation(); onAction(recommended.action, resource); }}
-                          >
-                            {getActionLabel(recommended.action)}
-                          </Badge>
-                        ) : (
-                          <span className="text-[10px] text-muted-foreground">—</span>
-                        )}
+                        {(() => {
+                          const ps = deriveProcessingState(resource, audioJob);
+                          if (ps.state === 'READY' && resource.file_url?.startsWith('http')) {
+                            return (
+                              <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('READY'))}
+                                onClick={e => { e.stopPropagation(); onAction('deep_enrich', resource); }}>
+                                Deep Enrich
+                              </Badge>
+                            );
+                          }
+                          if (ps.state === 'RETRYABLE_FAILURE') {
+                            return (
+                              <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('RETRYABLE_FAILURE'))}
+                                onClick={e => { e.stopPropagation(); onAction('deep_enrich', resource); }}>
+                                Retry
+                              </Badge>
+                            );
+                          }
+                          if (ps.state === 'MANUAL_REQUIRED') {
+                            return (
+                              <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('MANUAL_REQUIRED'))}
+                                onClick={e => { e.stopPropagation(); onAction('manual_assist', resource); }}>
+                                Manual Assist
+                              </Badge>
+                            );
+                          }
+                          if (ps.state === 'METADATA_ONLY') {
+                            return (
+                              <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('METADATA_ONLY'))}
+                                onClick={e => { e.stopPropagation(); onAction('manual_assist', resource); }}>
+                                Add Source
+                              </Badge>
+                            );
+                          }
+                          if (ps.state === 'COMPLETED' && resource.file_url?.startsWith('http')) {
+                            return (
+                              <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('COMPLETED'))}
+                                onClick={e => { e.stopPropagation(); onAction('re_enrich', resource); }}>
+                                Re-enrich
+                              </Badge>
+                            );
+                          }
+                          return <span className="text-[10px] text-muted-foreground">—</span>;
+                        })()}
                       </td>
                       <td className="px-3 align-middle" onClick={e => e.stopPropagation()}>
                         <DropdownMenu>
