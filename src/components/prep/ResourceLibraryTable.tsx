@@ -1,7 +1,4 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import {
-  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
-} from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,28 +11,24 @@ import {
   DropdownMenuTrigger, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-// ScrollArea removed — using native scroll for proper table behavior
 import {
   Search, ArrowUpDown, ArrowUp, ArrowDown,
   MoreHorizontal, Zap, RefreshCw, RotateCcw, Trash2,
-  Eye, AlertTriangle, CheckCircle2, XCircle, FileText,
+  Eye, AlertTriangle, CheckCircle2, FileText,
   Filter, X, FileAudio, HelpCircle, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import {
-  getEnrichmentStatusLabel, getEnrichmentStatusColor,
-  type EnrichmentStatus,
-} from '@/lib/resourceEligibility';
+import { type EnrichmentStatus } from '@/lib/resourceEligibility';
 import {
   getQualityTierLabel, getQualityTierColor,
 } from '@/lib/resourceQuality';
 import { detectDrift } from '@/lib/resourceLifecycle';
 import {
   detectResourceSubtype, getSubtypeLabel, classifyEnrichability,
-  getEnrichabilityLabel, getEnrichabilityColor,
+  getEnrichabilityColor,
 } from '@/lib/salesBrain/resourceSubtype';
 import {
-  isAudioResource, detectAudioSubtype, getAudioStageLabel,
+  isAudioResource, getAudioStageLabel,
   getAudioFailureDescription,
 } from '@/lib/salesBrain/audioPipeline';
 import {
