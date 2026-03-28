@@ -225,6 +225,7 @@ function validateSessionInvariants(s: EnrichSession): void {
   // This check is structural — if an item is in failedItems, its stage must be 'failed'
   for (const item of s.failedItems) {
     if (item.stage !== 'failed' && item.stage !== 'needs_review') {
+      if (item.stage === 'quarantined') continue; // quarantined is a valid failed-bucket stage
       console.error(
         `[EnrichSession INVARIANT] Item "${item.title}" is in failedItems but stage="${item.stage}". ` +
         `Failed items must have stage=failed or needs_review.`
