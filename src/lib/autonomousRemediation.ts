@@ -55,6 +55,7 @@ export interface RemediationItem {
   attemptsThisRun: number;
   // Failure tracking
   failureHistory: FailureHistoryEntry[];
+  sameFailureCount: number; // how many times the SAME bucket has failed
   escalatedBecause: string | null;
   // UX
   whyFailed: string | null;
