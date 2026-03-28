@@ -50,6 +50,7 @@ export interface EnrichabilityResult {
 
 // ── Auth-gated domains ─────────────────────────────────────
 const AUTH_GATED_DOMAINS = [
+  'circle.so',
   'teachable.com', 'thinkific.com', 'kajabi.com',
   'podia.com', 'skool.com', 'mighty.co', 'patreon.com',
   'memberstack.com', 'memberships.io',
