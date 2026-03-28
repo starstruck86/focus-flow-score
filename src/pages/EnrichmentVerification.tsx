@@ -2,11 +2,15 @@
  * Enrichment Verification — Operator-grade diagnostic page.
  * Queries REAL resources + audio_jobs, evaluates every non-100 resource,
  * surfaces contradictions, failure patterns, and a fix plan.
+ * Persists each run to verification_runs for comparison over time.
  */
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useAllResources } from '@/hooks/useResources';
 import { useAudioJobsMap } from '@/hooks/useAudioJobs';
-import { ArrowLeft, Download, AlertTriangle, CheckCircle2, XCircle, ChevronDown, ChevronRight, Copy, ExternalLink, Search, Filter } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Download, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Copy, ExternalLink, Search, Filter, History, Zap, ShieldAlert, Lock, FileText, Ban, Bug, RotateCcw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -25,20 +29,70 @@ import {
   type VerificationSummary,
   type AudioJobInfo,
 } from '@/lib/enrichmentVerification';
-import type { Resource } from '@/hooks/useResources';
+
+// ── Persist run to DB ──────────────────────────────────────
+
+async function persistRun(userId: string, totalResources: number, summary: VerificationSummary) {
+  const totalBroken = summary.totalInScope - (summary.byFixability['truly_complete'] || 0);
+  const { error } = await supabase.from('verification_runs' as any).insert({
+    user_id: userId,
+    total_resources: totalResources,
+    total_in_scope: summary.totalInScope,
+    total_broken: totalBroken,
+    total_contradictions: summary.totalContradictions,
+    by_fixability: summary.byFixability,
+    by_failure_bucket: summary.byFailureBucket,
+    by_processing_state: summary.byProcessingState,
+    by_subtype: summary.bySubtype,
+    by_score_band: summary.byScoreBand,
+    fix_recommendations: summary.fixRecommendations,
+    repeated_patterns: summary.repeatedPatterns,
+    summary_snapshot: {
+      retryable: summary.byRetryable.retryable,
+      nonRetryable: summary.byRetryable.nonRetryable,
+      quarantined: summary.byQuarantined,
+      manualRequired: summary.byManualRequired,
+      metadataOnly: summary.byMetadataOnly,
+    },
+  } as any);
+  if (error) console.error('Failed to persist verification run:', error);
+  return !error;
+}
+
+function useVerificationHistory() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ['verification-runs', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('verification_runs' as any)
+        .select('*')
+        .order('run_at', { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      return (data || []) as any[];
+    },
+    enabled: !!user,
+  });
+}
 
 // ── Main Page ──────────────────────────────────────────────
 
 export default function EnrichmentVerification() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const qc = useQueryClient();
   const { data: allResources, isLoading: loadingResources } = useAllResources();
   const { data: audioJobsMap, isLoading: loadingAudio } = useAudioJobsMap();
+  const { data: history } = useVerificationHistory();
 
   const [hasRun, setHasRun] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [includeComplete, setIncludeComplete] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
   const [drawerResource, setDrawerResource] = useState<VerifiedResource | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     dashboard: true,
     fixPlan: true,
@@ -54,7 +108,6 @@ export default function EnrichmentVerification() {
     const results: VerifiedResource[] = [];
 
     for (const resource of allResources) {
-      // Build audio job info
       const rawJob = audioMap.get(resource.id);
       const audioJob: AudioJobInfo | null = rawJob ? {
         resourceId: resource.id,
@@ -69,8 +122,6 @@ export default function EnrichmentVerification() {
       } : null;
 
       const v = verifyResource(resource, audioJob);
-
-      // Filter: include if not truly 100 complete, or if includeComplete toggle is on
       if (includeComplete || v.fixabilityBucket !== 'truly_complete') {
         results.push(v);
       }
@@ -81,7 +132,38 @@ export default function EnrichmentVerification() {
     return { verified: results, summary };
   }, [hasRun, allResources, audioJobsMap, includeComplete]);
 
-  // Filtered view
+  // Persist on first run
+  useEffect(() => {
+    if (summary && hasRun && user && !saving) {
+      setSaving(true);
+      persistRun(user.id, allResources?.length ?? 0, summary).then((ok) => {
+        if (ok) {
+          qc.invalidateQueries({ queryKey: ['verification-runs'] });
+          toast.success('Verification run saved');
+        }
+        setSaving(false);
+      });
+    }
+    // Only run when hasRun transitions
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasRun]);
+
+  // Derived banner numbers
+  const bannerStats = useMemo(() => {
+    if (!summary) return null;
+    const fix = summary.byFixability;
+    return {
+      totalBroken: summary.totalInScope - (fix['truly_complete'] || 0),
+      autoFix: fix['auto_fix_now'] || 0,
+      retryable: fix['retry_different_strategy'] || 0,
+      needsInput: (fix['needs_transcript'] || 0) + (fix['needs_pasted_content'] || 0) + (fix['needs_alternate_source'] || 0),
+      needsAuth: fix['needs_access_auth'] || 0,
+      metadataOnly: fix['accept_metadata_only'] || 0,
+      quarantined: fix['needs_quarantine'] || 0,
+      stateBugs: (fix['bad_scoring_state_bug'] || 0) + (fix['already_fixed_stale_ui'] || 0),
+    };
+  }, [summary]);
+
   const filtered = useMemo(() => {
     let list = verified;
     if (searchQuery) {
@@ -128,11 +210,17 @@ export default function EnrichmentVerification() {
     toast.success('Exported CSV');
   }, [verified]);
 
+  const handleRun = useCallback(() => {
+    setHasRun(false);
+    // Force re-run by toggling off then on in next tick
+    setTimeout(() => setHasRun(true), 0);
+  }, []);
+
   const isLoading = loadingResources || loadingAudio;
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
+      {/* Sticky header */}
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border px-4 py-3">
         <div className="flex items-center justify-between gap-3 max-w-7xl mx-auto">
           <div className="flex items-center gap-3">
@@ -145,6 +233,11 @@ export default function EnrichmentVerification() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {history && history.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={() => setShowHistory(!showHistory)}>
+                <History className="h-3.5 w-3.5 mr-1" /> History
+              </Button>
+            )}
             {hasRun && (
               <>
                 <Button variant="outline" size="sm" onClick={exportCSV}>
@@ -155,19 +248,38 @@ export default function EnrichmentVerification() {
                 </Button>
               </>
             )}
-            <Button
-              size="sm"
-              onClick={() => setHasRun(true)}
-              disabled={isLoading}
-            >
-              {hasRun ? 'Re-run Verification' : 'Run Verification Against Real Data'}
+            <Button size="sm" onClick={handleRun} disabled={isLoading || saving}>
+              {saving ? 'Saving…' : hasRun ? 'Re-run Verification' : 'Run Verification Against Real Data'}
             </Button>
           </div>
         </div>
       </div>
 
+      {/* Summary Banner — always visible after a run */}
+      {hasRun && bannerStats && (
+        <div className="border-b border-border bg-card">
+          <div className="max-w-7xl mx-auto px-4 py-3">
+            <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+              <BannerStat icon={<AlertTriangle className="h-3.5 w-3.5" />} label="Broken" value={bannerStats.totalBroken} color="text-status-red" />
+              <BannerStat icon={<Zap className="h-3.5 w-3.5" />} label="Auto-fix" value={bannerStats.autoFix} color="text-status-green" />
+              <BannerStat icon={<RotateCcw className="h-3.5 w-3.5" />} label="Retryable" value={bannerStats.retryable} color="text-status-yellow" />
+              <BannerStat icon={<FileText className="h-3.5 w-3.5" />} label="Needs Input" value={bannerStats.needsInput} color="text-primary" />
+              <BannerStat icon={<Lock className="h-3.5 w-3.5" />} label="Needs Auth" value={bannerStats.needsAuth} color="text-orange-500" />
+              <BannerStat icon={<FileText className="h-3.5 w-3.5" />} label="Meta Only" value={bannerStats.metadataOnly} color="text-muted-foreground" />
+              <BannerStat icon={<Ban className="h-3.5 w-3.5" />} label="Quarantined" value={bannerStats.quarantined} color="text-status-red" />
+              <BannerStat icon={<Bug className="h-3.5 w-3.5" />} label="State Bugs" value={bannerStats.stateBugs} color="text-status-red" />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        {!hasRun && (
+        {/* Run History */}
+        {showHistory && history && history.length > 0 && (
+          <RunHistory runs={history} />
+        )}
+
+        {!hasRun && !saving && (
           <div className="rounded-lg border border-border p-8 text-center space-y-4">
             <AlertTriangle className="h-10 w-10 text-status-yellow mx-auto" />
             <h2 className="text-xl font-semibold">Ready to Verify</h2>
@@ -175,7 +287,7 @@ export default function EnrichmentVerification() {
               This will evaluate every resource in your database against the enrichment system.
               No mocked data — real records only.
             </p>
-            <Button onClick={() => setHasRun(true)} disabled={isLoading} size="lg">
+            <Button onClick={handleRun} disabled={isLoading} size="lg">
               {isLoading ? 'Loading resources…' : 'Run Verification Against Real Data'}
             </Button>
           </div>
@@ -183,7 +295,7 @@ export default function EnrichmentVerification() {
 
         {hasRun && summary && (
           <>
-            {/* Summary Cards */}
+            {/* Dashboard */}
             <SectionHeader title="Dashboard" sectionKey="dashboard" expanded={expandedSections.dashboard} toggle={toggleSection} />
             {expandedSections.dashboard && <DashboardCards summary={summary} onBucketClick={setSelectedBucket} selectedBucket={selectedBucket} />}
 
@@ -199,12 +311,7 @@ export default function EnrichmentVerification() {
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
               <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search resources…"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
+                <Input placeholder="Search resources…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-9" />
               </div>
               <div className="flex items-center gap-2">
                 <Switch id="include-complete" checked={includeComplete} onCheckedChange={setIncludeComplete} />
@@ -212,7 +319,7 @@ export default function EnrichmentVerification() {
               </div>
               {selectedBucket && (
                 <Button variant="outline" size="sm" onClick={() => setSelectedBucket(null)}>
-                  <Filter className="h-3 w-3 mr-1" /> Clear filter: {FIXABILITY_LABELS[selectedBucket as keyof typeof FIXABILITY_LABELS] || selectedBucket}
+                  <Filter className="h-3 w-3 mr-1" /> Clear: {FIXABILITY_LABELS[selectedBucket as keyof typeof FIXABILITY_LABELS] || selectedBucket}
                 </Button>
               )}
               <span className="text-sm text-muted-foreground ml-auto">{filtered.length} resources</span>
@@ -220,17 +327,57 @@ export default function EnrichmentVerification() {
 
             {/* Table */}
             <SectionHeader title="Resources" sectionKey="table" expanded={expandedSections.table} toggle={toggleSection} count={filtered.length} />
-            {expandedSections.table && (
-              <ResourceTable resources={filtered} onSelect={setDrawerResource} />
-            )}
+            {expandedSections.table && <ResourceTable resources={filtered} onSelect={setDrawerResource} />}
           </>
         )}
       </div>
 
       {/* Drawer */}
-      {drawerResource && (
-        <ResourceDrawer resource={drawerResource} onClose={() => setDrawerResource(null)} />
-      )}
+      {drawerResource && <ResourceDrawer resource={drawerResource} onClose={() => setDrawerResource(null)} />}
+    </div>
+  );
+}
+
+// ── Banner Stat ────────────────────────────────────────────
+
+function BannerStat({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: number; color: string }) {
+  return (
+    <div className="flex flex-col items-center gap-0.5 py-1">
+      <div className={`flex items-center gap-1 ${color}`}>
+        {icon}
+        <span className="text-lg font-bold">{value}</span>
+      </div>
+      <span className="text-[10px] text-muted-foreground leading-tight">{label}</span>
+    </div>
+  );
+}
+
+// ── Run History ────────────────────────────────────────────
+
+function RunHistory({ runs }: { runs: any[] }) {
+  return (
+    <div className="rounded-lg border border-border p-4 space-y-3">
+      <h3 className="text-sm font-semibold flex items-center gap-2"><History className="h-4 w-4" /> Previous Runs</h3>
+      <div className="space-y-2">
+        {runs.map((run: any) => {
+          const snap = run.summary_snapshot || {};
+          return (
+            <div key={run.id} className="flex items-center justify-between text-sm py-2 px-3 rounded-lg border border-border bg-muted/20">
+              <div className="flex items-center gap-3">
+                <span className="text-muted-foreground font-mono text-xs">
+                  {new Date(run.run_at).toLocaleDateString()} {new Date(run.run_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+                <Badge variant="outline">{run.total_resources} total</Badge>
+              </div>
+              <div className="flex items-center gap-3 text-xs">
+                <span className="text-status-red font-medium">{run.total_broken} broken</span>
+                <span className="text-muted-foreground">{run.total_contradictions} contradictions</span>
+                <span className="text-muted-foreground">Q:{snap.quarantined ?? 0}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -257,7 +404,6 @@ function DashboardCards({ summary, onBucketClick, selectedBucket }: {
 }) {
   return (
     <div className="space-y-4">
-      {/* Top-level stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatCard label="In Scope" value={summary.totalInScope} />
         <StatCard label="Contradictions" value={summary.totalContradictions} variant={summary.totalContradictions > 0 ? 'danger' : 'success'} />
@@ -265,20 +411,18 @@ function DashboardCards({ summary, onBucketClick, selectedBucket }: {
         <StatCard label="Manual Required" value={summary.byManualRequired} variant={summary.byManualRequired > 0 ? 'warning' : 'muted'} />
       </div>
 
-      {/* Score bands */}
       <div>
         <h3 className="text-sm font-medium text-muted-foreground mb-2">Quality Score Distribution</h3>
         <div className="grid grid-cols-5 gap-2">
           {Object.entries(summary.byScoreBand).map(([band, count]) => (
             <div key={band} className="rounded-lg border border-border p-3 text-center">
               <div className="text-lg font-bold">{count}</div>
-              <div className="text-xs text-muted-foreground">{band === '100' ? '100' : band}</div>
+              <div className="text-xs text-muted-foreground">{band}</div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Fixability buckets */}
       <div>
         <h3 className="text-sm font-medium text-muted-foreground mb-2">Fixability Breakdown</h3>
         <div className="flex flex-wrap gap-2">
@@ -299,7 +443,6 @@ function DashboardCards({ summary, onBucketClick, selectedBucket }: {
         </div>
       </div>
 
-      {/* Subtypes */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <h3 className="text-sm font-medium text-muted-foreground mb-2">By Subtype</h3>
@@ -355,15 +498,20 @@ function FixPlanSection({ recommendations }: { recommendations: VerificationSumm
     );
   }
 
-  const sevColors = { critical: 'bg-status-red/20 text-status-red', high: 'bg-orange-500/20 text-orange-600', medium: 'bg-status-yellow/20 text-status-yellow', low: 'bg-muted text-muted-foreground' };
+  const sevColors: Record<string, string> = {
+    critical: 'bg-status-red/20 text-status-red',
+    high: 'bg-orange-500/20 text-orange-600',
+    medium: 'bg-status-yellow/20 text-status-yellow',
+    low: 'bg-muted text-muted-foreground',
+  };
 
   return (
     <div className="space-y-3">
       {recommendations.map((rec, i) => (
         <div key={i} className="rounded-lg border border-border p-4 space-y-2">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2">
-              <Badge className={sevColors[rec.severity]}>{rec.severity}</Badge>
+              <Badge className={sevColors[rec.severity] || ''}>{rec.severity}</Badge>
               <span className="font-medium text-sm">{rec.issueName}</span>
             </div>
             <Badge variant="outline">{rec.affectedCount} affected</Badge>
@@ -379,9 +527,7 @@ function FixPlanSection({ recommendations }: { recommendations: VerificationSumm
 // ── Patterns Section ───────────────────────────────────────
 
 function PatternsSection({ patterns }: { patterns: Array<{ pattern: string; count: number }> }) {
-  if (!patterns.length) {
-    return <p className="text-sm text-muted-foreground">No repeated patterns detected.</p>;
-  }
+  if (!patterns.length) return <p className="text-sm text-muted-foreground">No repeated patterns detected.</p>;
   return (
     <div className="space-y-1">
       {patterns.map((p, i) => (
@@ -397,14 +543,11 @@ function PatternsSection({ patterns }: { patterns: Array<{ pattern: string; coun
 // ── Resource Table ─────────────────────────────────────────
 
 function ResourceTable({ resources, onSelect }: { resources: VerifiedResource[]; onSelect: (r: VerifiedResource) => void }) {
-  if (!resources.length) {
-    return <p className="text-sm text-muted-foreground text-center py-8">No resources match the current filters.</p>;
-  }
+  if (!resources.length) return <p className="text-sm text-muted-foreground text-center py-8">No resources match the current filters.</p>;
 
   return (
     <ScrollArea className="rounded-lg border border-border">
       <div className="min-w-[700px]">
-        {/* Header */}
         <div className="grid grid-cols-[1fr_100px_60px_120px_140px_30px] gap-2 px-4 py-2 border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0">
           <span>Title</span>
           <span>Status</span>
@@ -413,7 +556,6 @@ function ResourceTable({ resources, onSelect }: { resources: VerifiedResource[];
           <span>Root Cause</span>
           <span></span>
         </div>
-        {/* Rows */}
         {resources.map(v => (
           <button
             key={v.id}
@@ -424,9 +566,7 @@ function ResourceTable({ resources, onSelect }: { resources: VerifiedResource[];
               <div className="text-sm font-medium truncate">{v.title}</div>
               <div className="text-xs text-muted-foreground truncate">{v.subtypeLabel}</div>
             </div>
-            <div>
-              <Badge variant="outline" className="text-xs whitespace-nowrap">{v.enrichmentStatusLabel}</Badge>
-            </div>
+            <div><Badge variant="outline" className="text-xs whitespace-nowrap">{v.enrichmentStatusLabel}</Badge></div>
             <div className={`text-sm font-mono font-bold ${v.qualityScore >= 70 ? 'text-status-green' : v.qualityScore >= 40 ? 'text-status-yellow' : 'text-status-red'}`}>
               {v.qualityScore}
             </div>
@@ -437,9 +577,7 @@ function ResourceTable({ resources, onSelect }: { resources: VerifiedResource[];
             </div>
             <div className="text-xs text-muted-foreground truncate">{v.rootCauseCategory}</div>
             <div className="flex items-center">
-              {v.contradictions.length > 0 && (
-                <AlertTriangle className="h-3.5 w-3.5 text-status-red" />
-              )}
+              {v.contradictions.length > 0 && <AlertTriangle className="h-3.5 w-3.5 text-status-red" />}
             </div>
           </button>
         ))}
@@ -456,17 +594,13 @@ function ResourceDrawer({ resource: v, onClose }: { resource: VerifiedResource; 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-background/60 backdrop-blur-sm" />
-      <div
-        className="relative w-full max-w-lg bg-card border-l border-border h-full overflow-y-auto"
-        onClick={e => e.stopPropagation()}
-      >
+      <div className="relative w-full max-w-lg bg-card border-l border-border h-full overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="sticky top-0 bg-card z-10 px-4 py-3 border-b border-border flex items-center justify-between">
           <h3 className="font-semibold text-sm truncate">{v.title}</h3>
           <Button variant="ghost" size="sm" onClick={onClose}>✕</Button>
         </div>
 
         <div className="p-4 space-y-6">
-          {/* Identity */}
           <Section title="Identity">
             <Field label="ID" value={v.id} copyable onCopy={copyId} />
             <Field label="URL" value={v.url || 'None'} link={v.url ?? undefined} />
@@ -474,7 +608,6 @@ function ResourceDrawer({ resource: v, onClose }: { resource: VerifiedResource; 
             <Field label="Enrichability" value={v.enrichability} />
           </Section>
 
-          {/* State */}
           <Section title="Current State">
             <Field label="Enrichment Status" value={v.enrichmentStatusLabel} />
             <Field label="Quality Score" value={`${v.qualityScore}/100`} />
@@ -485,7 +618,6 @@ function ResourceDrawer({ resource: v, onClose }: { resource: VerifiedResource; 
             <Field label="Last Attempt" value={v.lastAttemptAt || 'Never'} />
           </Section>
 
-          {/* Failure */}
           <Section title="Failure Info">
             <Field label="Failure Bucket" value={v.failureBucket || 'None'} />
             <Field label="Failure Reason" value={v.failureReason || 'None'} />
@@ -494,7 +626,6 @@ function ResourceDrawer({ resource: v, onClose }: { resource: VerifiedResource; 
             <Field label="Quarantined" value={v.quarantined ? 'Yes' : 'No'} />
           </Section>
 
-          {/* Audio */}
           {v.audioJobStatus && (
             <Section title="Audio Job">
               <Field label="Stage" value={v.audioJobStatus} />
@@ -504,7 +635,6 @@ function ResourceDrawer({ resource: v, onClose }: { resource: VerifiedResource; 
             </Section>
           )}
 
-          {/* Contradictions */}
           <Section title={`Contradictions (${v.contradictions.length})`}>
             {v.contradictions.length === 0 ? (
               <div className="flex items-center gap-2 text-sm text-status-green">
@@ -526,15 +656,14 @@ function ResourceDrawer({ resource: v, onClose }: { resource: VerifiedResource; 
             )}
           </Section>
 
-          {/* Diagnosis */}
           <Section title="Diagnosis">
             <Field label="Fixability" value={FIXABILITY_LABELS[v.fixabilityBucket]} />
             <Field label="Root Cause" value={v.rootCauseCategory} />
             <Field label="Why Not Complete" value={v.whyNotComplete} />
             <Field label="Recommended Action" value={v.recommendedAction} />
-            <Field label="System Behavior Correct" value={v.isSystemBehaviorCorrect ? '✓ Yes' : '✗ No'} />
+            <Field label="System Correct" value={v.isSystemBehaviorCorrect ? '✓ Yes' : '✗ No'} />
             <Field label="Misclassified" value={v.isMisclassified ? '✗ Yes' : '✓ No'} />
-            <Field label="Stuck in Wrong Queue" value={v.isStuckInWrongQueue ? '✗ Yes' : '✓ No'} />
+            <Field label="Stuck Wrong Queue" value={v.isStuckInWrongQueue ? '✗ Yes' : '✓ No'} />
             <Field label="Score/Status Contradict" value={v.scoreStatusContradict ? '✗ Yes' : '✓ No'} />
           </Section>
         </div>
@@ -543,7 +672,7 @@ function ResourceDrawer({ resource: v, onClose }: { resource: VerifiedResource; 
   );
 }
 
-// ── Helpers ────────────────────────────────────────────────
+// ── Shared sub-components ──────────────────────────────────
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
