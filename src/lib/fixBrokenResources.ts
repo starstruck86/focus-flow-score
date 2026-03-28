@@ -41,12 +41,17 @@ export interface FixItem {
   currentScore: number | null;
   previousTier: string;
   currentTier: string | null;
+  previousState: string;
+  currentState: string | null;
+  previousFailureBucket: string | null;
+  currentFailureBucket: string | null;
   attemptsThisRun: number;
   maxAttempts: number;
   actionTaken: string | null;
   failureReason: string | null;
   terminalReason: string | null;
   resolvedAt: string | null;
+  isResolved: boolean;
 }
 
 export interface FixRunState {
