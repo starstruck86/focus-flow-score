@@ -31,6 +31,7 @@ import { lazy, Suspense } from "react";
 
 const Diagnostics = lazy(() => import("./pages/Diagnostics"));
 const Cockpit = lazy(() => import("./pages/Cockpit"));
+const EnrichmentVerification = lazy(() => import("./pages/EnrichmentVerification"));
 
 const queryClient = new QueryClient({
   defaultOptions: {

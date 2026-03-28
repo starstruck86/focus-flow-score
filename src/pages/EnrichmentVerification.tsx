@@ -1,0 +1,578 @@
+/**
+ * Enrichment Verification — Operator-grade diagnostic page.
+ * Queries REAL resources + audio_jobs, evaluates every non-100 resource,
+ * surfaces contradictions, failure patterns, and a fix plan.
+ */
+import { useState, useMemo, useCallback } from 'react';
+import { useAllResources } from '@/hooks/useResources';
+import { useAudioJobsMap } from '@/hooks/useAudioJobs';
+import { ArrowLeft, Download, AlertTriangle, CheckCircle2, XCircle, ChevronDown, ChevronRight, Copy, ExternalLink, Search, Filter } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { toast } from 'sonner';
+import {
+  verifyResource,
+  buildVerificationSummary,
+  sortByPain,
+  FIXABILITY_LABELS,
+  FIXABILITY_COLORS,
+  type VerifiedResource,
+  type VerificationSummary,
+  type AudioJobInfo,
+} from '@/lib/enrichmentVerification';
+import type { Resource } from '@/hooks/useResources';
+
+// ── Main Page ──────────────────────────────────────────────
+
+export default function EnrichmentVerification() {
+  const navigate = useNavigate();
+  const { data: allResources, isLoading: loadingResources } = useAllResources();
+  const { data: audioJobsMap, isLoading: loadingAudio } = useAudioJobsMap();
+
+  const [hasRun, setHasRun] = useState(false);
+  const [includeComplete, setIncludeComplete] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
+  const [drawerResource, setDrawerResource] = useState<VerifiedResource | null>(null);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    dashboard: true,
+    fixPlan: true,
+    patterns: false,
+    table: true,
+  });
+
+  // Run verification against real data
+  const { verified, summary } = useMemo(() => {
+    if (!hasRun || !allResources) return { verified: [], summary: null };
+
+    const audioMap = audioJobsMap ?? new Map();
+    const results: VerifiedResource[] = [];
+
+    for (const resource of allResources) {
+      // Build audio job info
+      const rawJob = audioMap.get(resource.id);
+      const audioJob: AudioJobInfo | null = rawJob ? {
+        resourceId: resource.id,
+        stage: (rawJob as any).stage ?? 'unknown',
+        failureCode: (rawJob as any).failure_code ?? null,
+        failureReason: (rawJob as any).failure_reason ?? null,
+        hasTranscript: (rawJob as any).has_transcript ?? false,
+        transcriptMode: (rawJob as any).transcript_mode ?? null,
+        finalResolutionStatus: (rawJob as any).final_resolution_status ?? null,
+        transcriptWordCount: (rawJob as any).transcript_word_count ?? null,
+        attemptsCount: (rawJob as any).attempts_count ?? 0,
+      } : null;
+
+      const v = verifyResource(resource, audioJob);
+
+      // Filter: include if not truly 100 complete, or if includeComplete toggle is on
+      if (includeComplete || v.fixabilityBucket !== 'truly_complete') {
+        results.push(v);
+      }
+    }
+
+    results.sort(sortByPain);
+    const summary = buildVerificationSummary(results);
+    return { verified: results, summary };
+  }, [hasRun, allResources, audioJobsMap, includeComplete]);
+
+  // Filtered view
+  const filtered = useMemo(() => {
+    let list = verified;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(v =>
+        v.title.toLowerCase().includes(q) ||
+        v.url?.toLowerCase().includes(q) ||
+        v.subtypeLabel.toLowerCase().includes(q) ||
+        v.fixabilityBucket.includes(q)
+      );
+    }
+    if (selectedBucket) {
+      list = list.filter(v => v.fixabilityBucket === selectedBucket);
+    }
+    return list;
+  }, [verified, searchQuery, selectedBucket]);
+
+  const toggleSection = (key: string) =>
+    setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
+
+  const exportJSON = useCallback(() => {
+    const blob = new Blob([JSON.stringify({ summary, resources: verified }, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `enrichment-verification-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click(); URL.revokeObjectURL(url);
+    toast.success('Exported verification results');
+  }, [verified, summary]);
+
+  const exportCSV = useCallback(() => {
+    if (!verified.length) return;
+    const headers = ['ID', 'Title', 'URL', 'Subtype', 'Status', 'Score', 'Tier', 'Failure Bucket', 'Fixability', 'Contradictions', 'Root Cause', 'Action'];
+    const rows = verified.map(v => [
+      v.id, v.title, v.url || '', v.subtypeLabel, v.enrichmentStatusLabel,
+      v.qualityScore, v.qualityTier, v.failureBucket || '', FIXABILITY_LABELS[v.fixabilityBucket],
+      v.contradictions.length, v.rootCauseCategory, v.recommendedAction,
+    ]);
+    const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `enrichment-verification-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+    toast.success('Exported CSV');
+  }, [verified]);
+
+  const isLoading = loadingResources || loadingAudio;
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between gap-3 max-w-7xl mx-auto">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/prep')}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <h1 className="text-lg font-semibold">Enrichment Verification</h1>
+              <p className="text-xs text-muted-foreground">Real data · {allResources?.length ?? 0} total resources</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {hasRun && (
+              <>
+                <Button variant="outline" size="sm" onClick={exportCSV}>
+                  <Download className="h-3 w-3 mr-1" /> CSV
+                </Button>
+                <Button variant="outline" size="sm" onClick={exportJSON}>
+                  <Download className="h-3 w-3 mr-1" /> JSON
+                </Button>
+              </>
+            )}
+            <Button
+              size="sm"
+              onClick={() => setHasRun(true)}
+              disabled={isLoading}
+            >
+              {hasRun ? 'Re-run Verification' : 'Run Verification Against Real Data'}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+        {!hasRun && (
+          <div className="rounded-lg border border-border p-8 text-center space-y-4">
+            <AlertTriangle className="h-10 w-10 text-status-yellow mx-auto" />
+            <h2 className="text-xl font-semibold">Ready to Verify</h2>
+            <p className="text-muted-foreground max-w-md mx-auto">
+              This will evaluate every resource in your database against the enrichment system.
+              No mocked data — real records only.
+            </p>
+            <Button onClick={() => setHasRun(true)} disabled={isLoading} size="lg">
+              {isLoading ? 'Loading resources…' : 'Run Verification Against Real Data'}
+            </Button>
+          </div>
+        )}
+
+        {hasRun && summary && (
+          <>
+            {/* Summary Cards */}
+            <SectionHeader title="Dashboard" sectionKey="dashboard" expanded={expandedSections.dashboard} toggle={toggleSection} />
+            {expandedSections.dashboard && <DashboardCards summary={summary} onBucketClick={setSelectedBucket} selectedBucket={selectedBucket} />}
+
+            {/* Fix Plan */}
+            <SectionHeader title="What Needs to Be Fixed" sectionKey="fixPlan" expanded={expandedSections.fixPlan} toggle={toggleSection} />
+            {expandedSections.fixPlan && <FixPlanSection recommendations={summary.fixRecommendations} />}
+
+            {/* Repeated Patterns */}
+            <SectionHeader title="Repeated Failure Patterns" sectionKey="patterns" expanded={expandedSections.patterns} toggle={toggleSection} count={summary.repeatedPatterns.length} />
+            {expandedSections.patterns && <PatternsSection patterns={summary.repeatedPatterns} />}
+
+            {/* Controls */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search resources…"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch id="include-complete" checked={includeComplete} onCheckedChange={setIncludeComplete} />
+                <Label htmlFor="include-complete" className="text-sm">Include complete</Label>
+              </div>
+              {selectedBucket && (
+                <Button variant="outline" size="sm" onClick={() => setSelectedBucket(null)}>
+                  <Filter className="h-3 w-3 mr-1" /> Clear filter: {FIXABILITY_LABELS[selectedBucket as keyof typeof FIXABILITY_LABELS] || selectedBucket}
+                </Button>
+              )}
+              <span className="text-sm text-muted-foreground ml-auto">{filtered.length} resources</span>
+            </div>
+
+            {/* Table */}
+            <SectionHeader title="Resources" sectionKey="table" expanded={expandedSections.table} toggle={toggleSection} count={filtered.length} />
+            {expandedSections.table && (
+              <ResourceTable resources={filtered} onSelect={setDrawerResource} />
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Drawer */}
+      {drawerResource && (
+        <ResourceDrawer resource={drawerResource} onClose={() => setDrawerResource(null)} />
+      )}
+    </div>
+  );
+}
+
+// ── Section Header ─────────────────────────────────────────
+
+function SectionHeader({ title, sectionKey, expanded, toggle, count }: {
+  title: string; sectionKey: string; expanded: boolean;
+  toggle: (key: string) => void; count?: number;
+}) {
+  return (
+    <button onClick={() => toggle(sectionKey)} className="flex items-center gap-2 w-full text-left py-2 group">
+      {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+      <h2 className="text-base font-semibold">{title}</h2>
+      {count !== undefined && <Badge variant="secondary" className="text-xs">{count}</Badge>}
+    </button>
+  );
+}
+
+// ── Dashboard Cards ────────────────────────────────────────
+
+function DashboardCards({ summary, onBucketClick, selectedBucket }: {
+  summary: VerificationSummary; onBucketClick: (b: string | null) => void; selectedBucket: string | null;
+}) {
+  return (
+    <div className="space-y-4">
+      {/* Top-level stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <StatCard label="In Scope" value={summary.totalInScope} />
+        <StatCard label="Contradictions" value={summary.totalContradictions} variant={summary.totalContradictions > 0 ? 'danger' : 'success'} />
+        <StatCard label="Quarantined" value={summary.byQuarantined} variant={summary.byQuarantined > 0 ? 'warning' : 'muted'} />
+        <StatCard label="Manual Required" value={summary.byManualRequired} variant={summary.byManualRequired > 0 ? 'warning' : 'muted'} />
+      </div>
+
+      {/* Score bands */}
+      <div>
+        <h3 className="text-sm font-medium text-muted-foreground mb-2">Quality Score Distribution</h3>
+        <div className="grid grid-cols-5 gap-2">
+          {Object.entries(summary.byScoreBand).map(([band, count]) => (
+            <div key={band} className="rounded-lg border border-border p-3 text-center">
+              <div className="text-lg font-bold">{count}</div>
+              <div className="text-xs text-muted-foreground">{band === '100' ? '100' : band}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Fixability buckets */}
+      <div>
+        <h3 className="text-sm font-medium text-muted-foreground mb-2">Fixability Breakdown</h3>
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(summary.byFixability)
+            .sort(([, a], [, b]) => b - a)
+            .map(([bucket, count]) => (
+              <button
+                key={bucket}
+                onClick={() => onBucketClick(selectedBucket === bucket ? null : bucket)}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium transition-all ${
+                  selectedBucket === bucket ? 'ring-2 ring-primary' : ''
+                } ${FIXABILITY_COLORS[bucket as keyof typeof FIXABILITY_COLORS] || 'bg-muted text-muted-foreground'}`}
+              >
+                {FIXABILITY_LABELS[bucket as keyof typeof FIXABILITY_LABELS] || bucket}
+                <span className="font-bold">{count}</span>
+              </button>
+            ))}
+        </div>
+      </div>
+
+      {/* Subtypes */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <h3 className="text-sm font-medium text-muted-foreground mb-2">By Subtype</h3>
+          <div className="space-y-1">
+            {Object.entries(summary.bySubtype).sort(([, a], [, b]) => b - a).map(([sub, count]) => (
+              <div key={sub} className="flex items-center justify-between text-sm py-0.5">
+                <span className="text-foreground">{sub}</span>
+                <span className="font-mono text-muted-foreground">{count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <h3 className="text-sm font-medium text-muted-foreground mb-2">By Status</h3>
+          <div className="space-y-1">
+            {Object.entries(summary.byProcessingState).sort(([, a], [, b]) => b - a).map(([state, count]) => (
+              <div key={state} className="flex items-center justify-between text-sm py-0.5">
+                <span className="text-foreground">{state}</span>
+                <span className="font-mono text-muted-foreground">{count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, variant = 'muted' }: { label: string; value: number; variant?: 'success' | 'danger' | 'warning' | 'muted' }) {
+  const colors = {
+    success: 'border-status-green/30 bg-status-green/5',
+    danger: 'border-status-red/30 bg-status-red/5',
+    warning: 'border-status-yellow/30 bg-status-yellow/5',
+    muted: 'border-border bg-card',
+  };
+  return (
+    <div className={`rounded-lg border p-3 ${colors[variant]}`}>
+      <div className="text-2xl font-bold">{value}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+    </div>
+  );
+}
+
+// ── Fix Plan Section ───────────────────────────────────────
+
+function FixPlanSection({ recommendations }: { recommendations: VerificationSummary['fixRecommendations'] }) {
+  if (!recommendations.length) {
+    return (
+      <div className="rounded-lg border border-status-green/30 bg-status-green/5 p-4 flex items-center gap-2">
+        <CheckCircle2 className="h-5 w-5 text-status-green" />
+        <span className="text-sm">No fix recommendations — system is clean.</span>
+      </div>
+    );
+  }
+
+  const sevColors = { critical: 'bg-status-red/20 text-status-red', high: 'bg-orange-500/20 text-orange-600', medium: 'bg-status-yellow/20 text-status-yellow', low: 'bg-muted text-muted-foreground' };
+
+  return (
+    <div className="space-y-3">
+      {recommendations.map((rec, i) => (
+        <div key={i} className="rounded-lg border border-border p-4 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Badge className={sevColors[rec.severity]}>{rec.severity}</Badge>
+              <span className="font-medium text-sm">{rec.issueName}</span>
+            </div>
+            <Badge variant="outline">{rec.affectedCount} affected</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">{rec.whyItMatters}</p>
+          <p className="text-sm font-medium text-foreground">→ {rec.fix}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Patterns Section ───────────────────────────────────────
+
+function PatternsSection({ patterns }: { patterns: Array<{ pattern: string; count: number }> }) {
+  if (!patterns.length) {
+    return <p className="text-sm text-muted-foreground">No repeated patterns detected.</p>;
+  }
+  return (
+    <div className="space-y-1">
+      {patterns.map((p, i) => (
+        <div key={i} className="flex items-center justify-between text-sm py-1 px-2 rounded hover:bg-muted/50">
+          <span>{p.pattern}</span>
+          <Badge variant="secondary">{p.count}×</Badge>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Resource Table ─────────────────────────────────────────
+
+function ResourceTable({ resources, onSelect }: { resources: VerifiedResource[]; onSelect: (r: VerifiedResource) => void }) {
+  if (!resources.length) {
+    return <p className="text-sm text-muted-foreground text-center py-8">No resources match the current filters.</p>;
+  }
+
+  return (
+    <ScrollArea className="rounded-lg border border-border">
+      <div className="min-w-[700px]">
+        {/* Header */}
+        <div className="grid grid-cols-[1fr_100px_60px_120px_140px_30px] gap-2 px-4 py-2 border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0">
+          <span>Title</span>
+          <span>Status</span>
+          <span>Score</span>
+          <span>Fixability</span>
+          <span>Root Cause</span>
+          <span></span>
+        </div>
+        {/* Rows */}
+        {resources.map(v => (
+          <button
+            key={v.id}
+            onClick={() => onSelect(v)}
+            className="grid grid-cols-[1fr_100px_60px_120px_140px_30px] gap-2 px-4 py-2.5 border-b border-border hover:bg-muted/30 w-full text-left items-center"
+          >
+            <div className="min-w-0">
+              <div className="text-sm font-medium truncate">{v.title}</div>
+              <div className="text-xs text-muted-foreground truncate">{v.subtypeLabel}</div>
+            </div>
+            <div>
+              <Badge variant="outline" className="text-xs whitespace-nowrap">{v.enrichmentStatusLabel}</Badge>
+            </div>
+            <div className={`text-sm font-mono font-bold ${v.qualityScore >= 70 ? 'text-status-green' : v.qualityScore >= 40 ? 'text-status-yellow' : 'text-status-red'}`}>
+              {v.qualityScore}
+            </div>
+            <div>
+              <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${FIXABILITY_COLORS[v.fixabilityBucket]}`}>
+                {FIXABILITY_LABELS[v.fixabilityBucket]}
+              </span>
+            </div>
+            <div className="text-xs text-muted-foreground truncate">{v.rootCauseCategory}</div>
+            <div className="flex items-center">
+              {v.contradictions.length > 0 && (
+                <AlertTriangle className="h-3.5 w-3.5 text-status-red" />
+              )}
+            </div>
+          </button>
+        ))}
+      </div>
+    </ScrollArea>
+  );
+}
+
+// ── Resource Drawer ────────────────────────────────────────
+
+function ResourceDrawer({ resource: v, onClose }: { resource: VerifiedResource; onClose: () => void }) {
+  const copyId = () => { navigator.clipboard.writeText(v.id); toast.success('Copied ID'); };
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-background/60 backdrop-blur-sm" />
+      <div
+        className="relative w-full max-w-lg bg-card border-l border-border h-full overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="sticky top-0 bg-card z-10 px-4 py-3 border-b border-border flex items-center justify-between">
+          <h3 className="font-semibold text-sm truncate">{v.title}</h3>
+          <Button variant="ghost" size="sm" onClick={onClose}>✕</Button>
+        </div>
+
+        <div className="p-4 space-y-6">
+          {/* Identity */}
+          <Section title="Identity">
+            <Field label="ID" value={v.id} copyable onCopy={copyId} />
+            <Field label="URL" value={v.url || 'None'} link={v.url ?? undefined} />
+            <Field label="Subtype" value={v.subtypeLabel} />
+            <Field label="Enrichability" value={v.enrichability} />
+          </Section>
+
+          {/* State */}
+          <Section title="Current State">
+            <Field label="Enrichment Status" value={v.enrichmentStatusLabel} />
+            <Field label="Quality Score" value={`${v.qualityScore}/100`} />
+            <Field label="Quality Tier" value={v.qualityTier} />
+            <Field label="Content Length" value={`${v.contentLength.toLocaleString()} chars`} />
+            <Field label="Enrichment Version" value={`v${v.enrichmentVersion}`} />
+            <Field label="Enriched At" value={v.enrichedAt || 'Never'} />
+            <Field label="Last Attempt" value={v.lastAttemptAt || 'Never'} />
+          </Section>
+
+          {/* Failure */}
+          <Section title="Failure Info">
+            <Field label="Failure Bucket" value={v.failureBucket || 'None'} />
+            <Field label="Failure Reason" value={v.failureReason || 'None'} />
+            <Field label="Failure Count" value={String(v.failureCount)} />
+            <Field label="Retry Eligible" value={v.retryEligible ? 'Yes' : 'No'} />
+            <Field label="Quarantined" value={v.quarantined ? 'Yes' : 'No'} />
+          </Section>
+
+          {/* Audio */}
+          {v.audioJobStatus && (
+            <Section title="Audio Job">
+              <Field label="Stage" value={v.audioJobStatus} />
+              <Field label="Transcript Mode" value={v.transcriptMode || 'N/A'} />
+              <Field label="Final Resolution" value={v.finalResolutionStatus || 'N/A'} />
+              <Field label="Has Transcript" value={v.hasTranscript ? 'Yes' : 'No'} />
+            </Section>
+          )}
+
+          {/* Contradictions */}
+          <Section title={`Contradictions (${v.contradictions.length})`}>
+            {v.contradictions.length === 0 ? (
+              <div className="flex items-center gap-2 text-sm text-status-green">
+                <CheckCircle2 className="h-4 w-4" /> No contradictions
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {v.contradictions.map((c, i) => (
+                  <div key={i} className={`rounded p-2 text-sm ${
+                    c.severity === 'critical' ? 'bg-status-red/10 border border-status-red/30' :
+                    c.severity === 'warning' ? 'bg-status-yellow/10 border border-status-yellow/30' :
+                    'bg-muted border border-border'
+                  }`}>
+                    <div className="font-medium">{c.type}</div>
+                    <div className="text-muted-foreground">{c.description}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Section>
+
+          {/* Diagnosis */}
+          <Section title="Diagnosis">
+            <Field label="Fixability" value={FIXABILITY_LABELS[v.fixabilityBucket]} />
+            <Field label="Root Cause" value={v.rootCauseCategory} />
+            <Field label="Why Not Complete" value={v.whyNotComplete} />
+            <Field label="Recommended Action" value={v.recommendedAction} />
+            <Field label="System Behavior Correct" value={v.isSystemBehaviorCorrect ? '✓ Yes' : '✗ No'} />
+            <Field label="Misclassified" value={v.isMisclassified ? '✗ Yes' : '✓ No'} />
+            <Field label="Stuck in Wrong Queue" value={v.isStuckInWrongQueue ? '✗ Yes' : '✓ No'} />
+            <Field label="Score/Status Contradict" value={v.scoreStatusContradict ? '✗ Yes' : '✓ No'} />
+          </Section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Helpers ────────────────────────────────────────────────
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{title}</h4>
+      <div className="space-y-1.5">{children}</div>
+    </div>
+  );
+}
+
+function Field({ label, value, copyable, onCopy, link }: {
+  label: string; value: string; copyable?: boolean; onCopy?: () => void; link?: string;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-2 text-sm">
+      <span className="text-muted-foreground shrink-0">{label}</span>
+      <div className="flex items-center gap-1 min-w-0">
+        <span className="text-foreground text-right truncate">{value}</span>
+        {copyable && onCopy && (
+          <button onClick={onCopy} className="text-muted-foreground hover:text-foreground shrink-0">
+            <Copy className="h-3 w-3" />
+          </button>
+        )}
+        {link && (
+          <a href={link} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground shrink-0">
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
