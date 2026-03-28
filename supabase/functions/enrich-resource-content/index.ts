@@ -614,6 +614,157 @@ function buildPodcastMetadataContent(resolveData: any): string | null {
   return parts.length > 0 ? parts.join('\n') : null;
 }
 
+// ── Google Drive helpers ────────────────────────────────────
+function extractDriveFileId(url: string): string | null {
+  const patterns = [
+    /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i,
+    /drive\.google\.com\/open\?.*id=([a-zA-Z0-9_-]+)/i,
+    /docs\.google\.com\/uc\?.*id=([a-zA-Z0-9_-]+)/i,
+    /drive\.google\.com\/uc\?.*id=([a-zA-Z0-9_-]+)/i,
+  ];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m?.[1]) return m[1];
+  }
+  return null;
+}
+
+/** Attempt direct download from Google Drive using the uc?export=download endpoint */
+async function googleDriveDirectDownload(url: string, _apiKey: string): Promise<ExtractionResult> {
+  const method = 'google_drive_direct_download';
+  const startMs = Date.now();
+
+  const fileId = extractDriveFileId(url);
+  if (!fileId) {
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
+        auth_wall_detected: false, http_status: null,
+        validation_result: 'fail', error_category: 'parse_failure',
+        error_detail: 'Could not extract file ID from Google Drive URL',
+      },
+    };
+  }
+
+  const directUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+  console.log(`[GoogleDrive] Attempting direct download: fileId=${fileId}`);
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30_000);
+    const response = await fetch(directUrl, {
+      signal: controller.signal,
+      redirect: 'follow',
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; EnrichBot/1.0)' },
+    });
+    clearTimeout(timer);
+    const durationMs = Date.now() - startMs;
+
+    if (response.status === 401 || response.status === 403) {
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: true, http_status: response.status,
+          validation_result: 'fail', error_category: 'auth_failure',
+          error_detail: `Google Drive returned ${response.status} — file permissions block download`,
+        },
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: false, http_status: response.status,
+          validation_result: 'fail', error_category: `http_${response.status}`,
+          error_detail: `Google Drive returned ${response.status}`,
+        },
+      };
+    }
+
+    // Check content type — if binary/non-text, we can't extract
+    const contentType = response.headers.get('content-type') || '';
+    const isTextLike = /text|html|json|xml|csv|markdown|plain|pdf/i.test(contentType);
+
+    if (!isTextLike) {
+      // Binary file — can't extract text directly
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: false, http_status: response.status,
+          validation_result: 'fail', error_category: 'unsupported_file_type',
+          error_detail: `File type "${contentType}" is not extractable as text. Upload or paste content manually.`,
+        },
+      };
+    }
+
+    const text = await response.text();
+    const durationFinal = Date.now() - startMs;
+
+    // Check for Google's HTML "download anyway" confirmation page
+    if (text.includes('Google Drive - Virus scan warning') || text.includes('uc?export=download&amp;confirm=')) {
+      // Large file confirmation page — try to follow confirm link
+      const confirmMatch = text.match(/confirm=([a-zA-Z0-9_-]+)/);
+      if (confirmMatch) {
+        const confirmUrl = `https://drive.google.com/uc?export=download&confirm=${confirmMatch[1]}&id=${fileId}`;
+        try {
+          const confirmResp = await fetch(confirmUrl, { redirect: 'follow' });
+          if (confirmResp.ok) {
+            const cType = confirmResp.headers.get('content-type') || '';
+            if (/text|html|json|xml|csv|plain/i.test(cType)) {
+              const confirmText = await confirmResp.text();
+              return {
+                content: confirmText.slice(0, CONTENT_CAP),
+                attempt: {
+                  method: 'google_drive_direct_download_confirmed', duration_ms: Date.now() - startMs,
+                  chars_extracted: confirmText.length, timeout_hit: false,
+                  auth_wall_detected: false, http_status: confirmResp.status,
+                  validation_result: confirmText.length >= MIN_CONTENT_CHARS ? 'pass' : 'partial',
+                  error_category: null, error_detail: null,
+                },
+              };
+            }
+          }
+        } catch { /* fall through */ }
+      }
+
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationFinal, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: false, http_status: 200,
+          validation_result: 'fail', error_category: 'large_file_confirmation',
+          error_detail: 'Google Drive requires virus scan confirmation for large files. Upload the file manually.',
+        },
+      };
+    }
+
+    return {
+      content: text.slice(0, CONTENT_CAP),
+      attempt: {
+        method, duration_ms: durationFinal, chars_extracted: text.length, timeout_hit: false,
+        auth_wall_detected: false, http_status: response.status,
+        validation_result: text.length >= MIN_CONTENT_CHARS ? 'pass' : 'partial',
+        error_category: null, error_detail: null,
+      },
+    };
+  } catch (e) {
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: Date.now() - startMs, chars_extracted: 0,
+        timeout_hit: String(e).includes('abort'), auth_wall_detected: false,
+        http_status: null, validation_result: 'fail',
+        error_category: 'fetch_failure', error_detail: String(e),
+      },
+    };
+  }
+}
+
 // ── Method chains per source type ──────────────────────────
 function getMethodChain(source: SourceClassification): Array<(url: string, apiKey: string) => Promise<ExtractionResult>> {
   switch (source.source_type) {
@@ -631,6 +782,8 @@ function getMethodChain(source: SourceClassification): Array<(url: string, apiKe
       return [directAudioTranscribe];
     case 'social':
       return [firecrawlScrape, firecrawlFullPage];
+    case 'google_drive_file':
+      return [googleDriveDirectDownload, firecrawlScrape];
     case 'auth_gated':
     case 'google_doc':
     case 'notion':
