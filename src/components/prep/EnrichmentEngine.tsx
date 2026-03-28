@@ -135,25 +135,33 @@ function fixabilityToScopeBucket(v: VerifiedResource): RunScopeBucket | null {
 /**
  * Filter verified resources based on selected run scope buckets.
  * Auto-releases invalid quarantines when quarantined bucket is selected.
+ * Recoverable items are routed to recovery, not "skipped".
  */
 function filterByScope(verified: VerifiedResource[], selectedBuckets: RunScopeBucket[]): {
   included: VerifiedResource[];
-  skipped: Array<{ resource: VerifiedResource; reason: string }>;
+  skipped: Array<{ resource: VerifiedResource; reason: string; recoverable: boolean; recoveryAction: string }>;
   autoReleased: VerifiedResource[];
 } {
   const included: VerifiedResource[] = [];
-  const skipped: Array<{ resource: VerifiedResource; reason: string }> = [];
+  const skipped: Array<{ resource: VerifiedResource; reason: string; recoverable: boolean; recoveryAction: string }> = [];
   const autoReleased: VerifiedResource[] = [];
 
   for (const v of verified) {
     if (v.fixabilityBucket === 'truly_complete' || v.fixabilityBucket === 'true_unsupported') {
-      continue; // Skip complete/unsupported
+      continue; // Genuinely complete/unsupported
     }
 
     const scopeBucket = fixabilityToScopeBucket(v);
     if (!scopeBucket || !selectedBuckets.includes(scopeBucket)) {
       const skipReason = getSkipReason(v, selectedBuckets);
-      skipped.push({ resource: v, reason: skipReason ? SKIP_REASON_LABELS[skipReason] : `Bucket "${scopeBucket}" not selected` });
+      const recoverable = skipReason ? isRecoverableSkip(skipReason) : false;
+      const recoveryAction = skipReason ? getRecoveryAction(skipReason) : 'none';
+      skipped.push({
+        resource: v,
+        reason: skipReason ? SKIP_REASON_LABELS[skipReason] : `Bucket "${scopeBucket}" not selected`,
+        recoverable,
+        recoveryAction,
+      });
       continue;
     }
 
@@ -165,20 +173,30 @@ function filterByScope(verified: VerifiedResource[], selectedBuckets: RunScopeBu
       } else {
         const meta = classifyQuarantine(v);
         if (meta.quarantineLocked) {
-          skipped.push({ resource: v, reason: SKIP_REASON_LABELS.operator_locked });
+          skipped.push({ resource: v, reason: SKIP_REASON_LABELS.operator_locked, recoverable: false, recoveryAction: 'none' });
         } else if (selectedBuckets.includes('quarantined')) {
           included.push(v);
         } else {
-          skipped.push({ resource: v, reason: SKIP_REASON_LABELS.quarantined_not_selected });
+          skipped.push({ resource: v, reason: SKIP_REASON_LABELS.quarantined_not_selected, recoverable: true, recoveryAction: 'queue_for_retry' });
         }
       }
       continue;
     }
 
-    // Handle needs_input: check if required input exists
+    // Handle needs_input: INCLUDE them when their bucket is selected (they route to manual in remediation)
+    if (scopeBucket === 'needs_input' && selectedBuckets.includes('needs_input')) {
+      included.push(v);
+      continue;
+    }
+
     if (scopeBucket === 'needs_input' && !selectedBuckets.includes('needs_input')) {
       const skipReason = getSkipReason(v, selectedBuckets);
-      skipped.push({ resource: v, reason: skipReason ? SKIP_REASON_LABELS[skipReason] : 'Needs input bucket not selected' });
+      skipped.push({
+        resource: v,
+        reason: skipReason ? SKIP_REASON_LABELS[skipReason] : 'Needs input bucket not selected',
+        recoverable: true,
+        recoveryAction: skipReason ? getRecoveryAction(skipReason) : 'paste_content',
+      });
       continue;
     }
 
