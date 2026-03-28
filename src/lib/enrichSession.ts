@@ -12,7 +12,8 @@ export type EnrichTerminalState =
   | 'completed_success'
   | 'completed_with_errors'
   | 'completed_noop'
-  | 'cancelled';
+  | 'cancelled'
+  | 'completed_quarantined';
 
 export interface EnrichSession {
   /** Total items selected for the run */
@@ -59,7 +60,7 @@ const ACTIVE_STAGES = new Set([
 ]);
 
 const TERMINAL_STAGES = new Set([
-  'complete', 'partial', 'needs_auth', 'unsupported', 'skipped', 'failed', 'needs_review',
+  'complete', 'partial', 'needs_auth', 'unsupported', 'skipped', 'failed', 'needs_review', 'quarantined',
 ]);
 
 /**
@@ -91,6 +92,10 @@ export function deriveEnrichSession(state: IngestionState): EnrichSession {
         break;
       case 'failed':
       case 'needs_review':
+        failedCount++;
+        failedItems.push(item);
+        break;
+      case 'quarantined' as any:
         failedCount++;
         failedItems.push(item);
         break;
@@ -220,6 +225,7 @@ function validateSessionInvariants(s: EnrichSession): void {
   // This check is structural — if an item is in failedItems, its stage must be 'failed'
   for (const item of s.failedItems) {
     if (item.stage !== 'failed' && item.stage !== 'needs_review') {
+      if (item.stage === 'quarantined') continue; // quarantined is a valid failed-bucket stage
       console.error(
         `[EnrichSession INVARIANT] Item "${item.title}" is in failedItems but stage="${item.stage}". ` +
         `Failed items must have stage=failed or needs_review.`

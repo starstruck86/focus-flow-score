@@ -10,12 +10,12 @@ import type { FailureCategory } from '@/store/useEnrichmentJobStore';
 // ── Failure Buckets ────────────────────────────────────────
 export type FailureBucket =
   | 'retryable_extraction_failure'
-  | 'audio_resolution_required'
+  | 'alternate_source_required'
   | 'transcript_required'
   | 'auth_required'
   | 'manual_content_required'
   | 'unsupported_source'
-  | 'metadata_only_salvageable';
+  | 'metadata_only_acceptable';
 
 export interface FailureRouting {
   bucket: FailureBucket;
@@ -37,9 +37,9 @@ const BUCKET_DEFINITIONS: Record<FailureBucket, Omit<FailureRouting, 'reason'>> 
     rowAction: 'retry_extraction',
     retryable: true,
   },
-  audio_resolution_required: {
-    bucket: 'audio_resolution_required',
-    nextAction: 'Retry audio resolution or provide direct audio URL',
+  alternate_source_required: {
+    bucket: 'alternate_source_required',
+    nextAction: 'Provide alternate source URL or direct audio URL',
     processingState: 'MANUAL_REQUIRED',
     rowAction: 'inspect_audio',
     retryable: false,
@@ -72,97 +72,112 @@ const BUCKET_DEFINITIONS: Record<FailureBucket, Omit<FailureRouting, 'reason'>> 
     rowAction: 'manual_assist',
     retryable: false,
   },
-  metadata_only_salvageable: {
-    bucket: 'metadata_only_salvageable',
-    nextAction: 'Mark as metadata-only or paste transcript via Manual Assist',
+  metadata_only_acceptable: {
+    bucket: 'metadata_only_acceptable',
+    nextAction: 'Accept metadata only or paste full content via Manual Assist',
     processingState: 'METADATA_ONLY',
     rowAction: 'manual_assist',
     retryable: false,
   },
 };
 
+/** Buckets that should NEVER be automatically retried */
+export const NON_RETRYABLE_BUCKETS: ReadonlySet<FailureBucket> = new Set([
+  'alternate_source_required',
+  'transcript_required',
+  'auth_required',
+  'manual_content_required',
+  'unsupported_source',
+  'metadata_only_acceptable',
+]);
+
+/** Check if a bucket should be quarantined after repeated failures */
+export function shouldQuarantine(bucket: FailureBucket, sameBucketFailureCount: number): boolean {
+  return sameBucketFailureCount >= 2;
+}
+
 // ── Source-specific reason templates ───────────────────────
 const SOURCE_REASONS: Record<string, Record<FailureBucket, string>> = {
   spotify_episode: {
-    retryable_extraction_failure: 'Spotify metadata extraction failed.',
-    audio_resolution_required: 'Spotify does not provide direct audio access.',
-    transcript_required: 'Transcript required for Spotify — paste transcript or provide alternate source.',
+    retryable_extraction_failure: 'Spotify metadata extraction failed — retry may resolve.',
+    alternate_source_required: 'Spotify does not provide direct audio. Provide alternate source URL.',
+    transcript_required: 'Transcript required — paste transcript or provide alternate source.',
     auth_required: 'Spotify requires authentication for this content.',
     manual_content_required: 'Spotify episode requires manual transcript input.',
     unsupported_source: 'Spotify episode format not supported for direct extraction.',
-    metadata_only_salvageable: 'Spotify — metadata captured. Paste transcript or provide alternate URL.',
+    metadata_only_acceptable: 'Spotify — metadata captured. Accept metadata only or paste transcript.',
   },
   apple_podcast_episode: {
     retryable_extraction_failure: 'Apple Podcast extraction failed — retry may resolve.',
-    audio_resolution_required: 'RSS feed resolved but no matching audio enclosure found. Retry resolution or provide direct audio URL.',
-    transcript_required: 'Transcript required — paste transcript or provide alternate source.',
+    alternate_source_required: 'RSS feed resolved but no matching enclosure. Provide direct audio URL or alternate source.',
+    transcript_required: 'Transcript required — paste transcript or provide direct audio URL.',
     auth_required: 'Apple Podcast requires authentication for this episode.',
     manual_content_required: 'Apple Podcast episode requires manual transcript input.',
     unsupported_source: 'Apple Podcast format not supported.',
-    metadata_only_salvageable: 'Apple Podcast — metadata captured. Provide direct audio URL or paste transcript.',
+    metadata_only_acceptable: 'Apple Podcast — metadata captured. Provide direct audio URL or paste transcript.',
   },
   audio_file: {
     retryable_extraction_failure: 'Audio transcription failed — retry with extended timeout.',
-    audio_resolution_required: 'Audio file could not be downloaded for transcription.',
+    alternate_source_required: 'Audio file could not be downloaded. Provide alternate source or direct URL.',
     transcript_required: 'Transcript required — paste transcript or provide alternate source.',
     auth_required: 'Audio file requires authentication to access.',
     manual_content_required: 'Audio file transcription exhausted. Paste transcript via Manual Assist.',
     unsupported_source: 'Audio format not supported for transcription.',
-    metadata_only_salvageable: 'Audio file — metadata captured. Paste transcript for full enrichment.',
+    metadata_only_acceptable: 'Audio file — metadata captured. Paste transcript for full enrichment.',
   },
   podcast_episode: {
     retryable_extraction_failure: 'Podcast extraction failed — retry may resolve.',
-    audio_resolution_required: 'Podcast audio could not be resolved. Retry resolution or provide direct audio URL.',
-    transcript_required: 'Transcript required for podcast — paste transcript or provide alternate source.',
+    alternate_source_required: 'Podcast audio could not be resolved. Provide direct audio URL or alternate source.',
+    transcript_required: 'Transcript required — paste transcript or provide alternate source.',
     auth_required: 'Podcast source requires authentication to access.',
     manual_content_required: 'Podcast episode requires manual transcript input.',
     unsupported_source: 'Podcast source format not supported.',
-    metadata_only_salvageable: 'Podcast — metadata captured. Paste transcript or provide alternate source.',
+    metadata_only_acceptable: 'Podcast — metadata captured. Paste transcript or provide alternate source.',
   },
   google_doc: {
     retryable_extraction_failure: 'Google Doc extraction failed — retry enrichment.',
-    audio_resolution_required: 'Google Doc does not have audio content.',
+    alternate_source_required: 'Google Doc does not have audio content.',
     transcript_required: 'Google Doc extraction failed. Retry or paste content.',
     auth_required: 'Google Doc requires sharing permissions.',
     manual_content_required: 'Google Doc could not be accessed. Paste content via Manual Assist.',
     unsupported_source: 'Google Doc format not recognized.',
-    metadata_only_salvageable: 'Google Doc — metadata only. Retry or paste content.',
+    metadata_only_acceptable: 'Google Doc — metadata only. Retry or paste content.',
   },
   google_drive_file: {
     retryable_extraction_failure: 'Google Drive file extraction failed.',
-    audio_resolution_required: 'Google Drive file is not audio.',
+    alternate_source_required: 'Google Drive file is not audio.',
     transcript_required: 'Google Drive file needs manual download.',
-    auth_required: 'Google Drive file — requires access or direct download link.',
+    auth_required: 'Google Drive file — provide access or direct download link.',
     manual_content_required: 'Google Drive file — upload the file or paste content.',
     unsupported_source: 'Google Drive file format not supported.',
-    metadata_only_salvageable: 'Google Drive — metadata captured. Upload file or paste content.',
+    metadata_only_acceptable: 'Google Drive — metadata captured. Upload file or paste content.',
   },
   auth_gated_community_page: {
     retryable_extraction_failure: 'Auth-gated page extraction failed.',
-    audio_resolution_required: 'Auth-gated page does not have audio.',
+    alternate_source_required: 'Auth-gated page does not have audio.',
     transcript_required: 'Auth-gated page cannot be auto-transcribed.',
     auth_required: 'Login required. Paste content manually via Manual Assist.',
     manual_content_required: 'Login required. Paste content manually via Manual Assist.',
     unsupported_source: 'Auth-gated page cannot be crawled.',
-    metadata_only_salvageable: 'Auth-gated — metadata only. Paste content for full enrichment.',
+    metadata_only_acceptable: 'Auth-gated — metadata only. Paste content for full enrichment.',
   },
   zoom_recording: {
     retryable_extraction_failure: 'Zoom recording extraction failed.',
-    audio_resolution_required: 'Zoom recording requires direct download.',
+    alternate_source_required: 'Zoom recording requires direct download.',
     transcript_required: 'Zoom recording — download transcript from Zoom and paste via Manual Assist.',
     auth_required: 'Zoom recording requires authentication.',
     manual_content_required: 'Zoom recording — download transcript from Zoom and paste via Manual Assist.',
     unsupported_source: 'Zoom recording format not directly supported.',
-    metadata_only_salvageable: 'Zoom — metadata captured. Download and paste transcript.',
+    metadata_only_acceptable: 'Zoom — metadata captured. Download and paste transcript.',
   },
   web_article: {
     retryable_extraction_failure: 'Extractor returned insufficient usable text after valid fetch.',
-    audio_resolution_required: 'Web article does not have audio content.',
+    alternate_source_required: 'Web article does not have audio content.',
     transcript_required: 'Web article needs manual content input.',
     auth_required: 'Web article requires authentication to access.',
     manual_content_required: 'Web article content could not be extracted. Paste content via Manual Assist.',
     unsupported_source: 'Web article format not supported.',
-    metadata_only_salvageable: 'Web article — metadata captured. Paste content for full enrichment.',
+    metadata_only_acceptable: 'Web article — metadata captured. Paste content for full enrichment.',
   },
 };
 
@@ -206,12 +221,12 @@ function determineBucket(
         return 'retryable_extraction_failure';
       }
       if (errorMessage?.toLowerCase().includes('enclosure') || errorMessage?.toLowerCase().includes('rss')) {
-        return 'audio_resolution_required';
+        return 'alternate_source_required';
       }
       if (failureCategory === 'failed_quality') {
         return 'transcript_required';
       }
-      return 'audio_resolution_required';
+      return 'alternate_source_required';
 
     case 'audio_file':
     case 'podcast_episode':
@@ -300,9 +315,9 @@ function getSourceSpecificReason(
   // Fallback reason per bucket
   switch (bucket) {
     case 'retryable_extraction_failure':
-      return 'Extraction failed — retry may resolve the issue.';
-    case 'audio_resolution_required':
-      return 'Audio source could not be resolved. Provide direct audio URL.';
+      return 'Extraction failed — retry may resolve.';
+    case 'alternate_source_required':
+      return 'Source could not be resolved. Provide alternate source URL or direct audio URL.';
     case 'transcript_required':
       return 'Transcript required — paste transcript or provide alternate source.';
     case 'auth_required':
@@ -311,8 +326,8 @@ function getSourceSpecificReason(
       return 'Automatic extraction exhausted. Paste content via Manual Assist.';
     case 'unsupported_source':
       return 'Source type not supported for automatic enrichment.';
-    case 'metadata_only_salvageable':
-      return 'Only metadata could be captured. Provide content for full enrichment.';
+    case 'metadata_only_acceptable':
+      return 'Only metadata could be captured. Accept metadata only or provide content.';
   }
 }
 
@@ -341,20 +356,21 @@ export function getFailureBucketActions(bucket: FailureBucket): Array<{
         { action: 'deep_enrich', label: 'Retry Extraction', icon: 'retry' },
         { action: 'manual_assist', label: 'Manual Assist', icon: 'manual_assist' },
       ];
-    case 'audio_resolution_required':
+    case 'alternate_source_required':
       return [
         { action: 'inspect_audio', label: 'Inspect Audio', icon: 'inspect_audio' },
-        { action: 'deep_enrich', label: 'Retry Resolution', icon: 'retry' },
-        { action: 'manual_assist', label: 'Manual Assist', icon: 'manual_assist' },
+        { action: 'provide_alternate_url', label: 'Provide Alternate URL', icon: 'manual_assist' },
+        { action: 'manual_assist', label: 'Paste Transcript', icon: 'manual_assist' },
       ];
     case 'transcript_required':
       return [
         { action: 'manual_assist', label: 'Paste Transcript', icon: 'manual_assist' },
-        { action: 'inspect_audio', label: 'Inspect Audio', icon: 'inspect_audio' },
+        { action: 'provide_alternate_url', label: 'Provide Alternate URL', icon: 'manual_assist' },
       ];
     case 'auth_required':
       return [
-        { action: 'manual_assist', label: 'Provide Access / Paste Content', icon: 'manual_assist' },
+        { action: 'manual_assist', label: 'Provide Access', icon: 'manual_assist' },
+        { action: 'manual_assist', label: 'Paste Content', icon: 'manual_assist' },
       ];
     case 'manual_content_required':
       return [
@@ -364,10 +380,11 @@ export function getFailureBucketActions(bucket: FailureBucket): Array<{
       return [
         { action: 'manual_assist', label: 'Convert & Paste Content', icon: 'manual_assist' },
       ];
-    case 'metadata_only_salvageable':
+    case 'metadata_only_acceptable':
       return [
         { action: 'manual_assist', label: 'Provide Content', icon: 'manual_assist' },
         { action: 'mark_metadata_only', label: 'Accept Metadata Only', icon: 'mark_metadata' },
+        { action: 'park_for_later', label: 'Park for Later', icon: 'manual_assist' },
       ];
   }
 }

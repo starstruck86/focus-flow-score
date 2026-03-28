@@ -15,7 +15,7 @@ import {
   Search, ArrowUpDown, ArrowUp, ArrowDown,
   MoreHorizontal, Zap, RefreshCw, RotateCcw, Trash2,
   Eye, AlertTriangle, CheckCircle2, FileText,
-  Filter, X, FileAudio, HelpCircle, Info,
+  Filter, X, FileAudio, HelpCircle, Info, Inbox, ShieldAlert,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type EnrichmentStatus } from '@/lib/resourceEligibility';
@@ -105,6 +105,25 @@ const SAVED_VIEWS: SavedView[] = [
   {
     id: 'audio', label: 'Audio', icon: <FileAudio className="h-3 w-3" />,
     filter: (r) => isAudioResource(r.file_url, r.resource_type),
+  },
+  {
+    id: 'needs_input', label: 'Needs Input', icon: <Inbox className="h-3 w-3" />,
+    filter: (r) => {
+      const status = r.enrichment_status;
+      if (status === 'quarantined') return true;
+      if (status === 'failed' || status === 'incomplete') {
+        const ea = classifyEnrichability(r.file_url, r.resource_type);
+        return ea.enrichability === 'manual_input_needed'
+          || ea.enrichability === 'needs_auth'
+          || ea.enrichability === 'metadata_only';
+      }
+      const ea = classifyEnrichability(r.file_url, r.resource_type);
+      return ea.enrichability === 'manual_input_needed' || ea.enrichability === 'needs_auth';
+    },
+  },
+  {
+    id: 'quarantined', label: 'Quarantined', icon: <ShieldAlert className="h-3 w-3" />,
+    filter: (r) => r.enrichment_status === 'quarantined',
   },
 ];
 
