@@ -98,6 +98,11 @@ function classifySource(url: string): SourceClassification {
       }
     }
 
+    // Google Sheets — dedicated subtype, NOT auth-gated by default
+    if (/docs\.google\.com\/spreadsheets/i.test(host) || /sheets\.google\.com/i.test(host)) {
+      return { source_type: 'google_sheet', platform: 'Google Sheets', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
+    }
+
     // Google Drive file links (not Docs/Sheets/Slides) — try direct download
     if (/drive\.google\.com\/file\/d\//i.test(host) ||
         /drive\.google\.com\/open\?/i.test(url) ||
@@ -105,7 +110,7 @@ function classifySource(url: string): SourceClassification {
       return { source_type: 'google_drive_file', platform: 'Google Drive', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
     }
 
-    // Google Docs/Sheets/Slides (auth-gated)
+    // Google Docs/Slides (auth-gated — Sheets handled above)
     if (GOOGLE_DOC_PATTERNS.some(p => p.test(host))) {
       return { source_type: 'google_doc', platform: 'Google', auth_required: true, transcript_available: null, downloadable: false, js_rendered: false };
     }
