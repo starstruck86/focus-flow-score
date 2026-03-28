@@ -1,0 +1,1 @@
+UPDATE resources SET enrichment_status = 'not_enriched', failure_reason = NULL, failure_count = 0, content_status = 'placeholder' WHERE file_url LIKE '%drive.google.com/file/d/%' AND enrichment_status IN ('failed', 'quarantined') AND failure_reason LIKE '%octet-stream%';

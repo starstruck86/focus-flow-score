@@ -951,19 +951,48 @@ async function googleDriveDirectDownload(url: string, _apiKey: string): Promise<
       };
     }
 
-    // Check content type — if binary/non-text, we can't extract
+    // Check content type — if binary/non-text, try Google's export-as-text fallback
     const contentType = response.headers.get('content-type') || '';
     const isTextLike = /text|html|json|xml|csv|markdown|plain|pdf/i.test(contentType);
 
     if (!isTextLike) {
-      // Binary file — can't extract text directly
+      // Binary file — try exporting via Google Docs viewer as plain text
+      console.log(`[GoogleDrive] Binary content-type "${contentType}" — trying Docs export fallback for fileId=${fileId}`);
+      try {
+        // Google can open most office docs; export as txt via the Docs export URL
+        const docsExportUrl = `https://docs.google.com/document/d/${fileId}/export?format=txt`;
+        const docsResp = await fetch(docsExportUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          redirect: 'follow',
+        });
+        if (docsResp.ok) {
+          const docsText = await docsResp.text();
+          const trimmed = docsText.trim();
+          if (trimmed.length >= MIN_CONTENT_CHARS && !trimmed.includes('accounts.google.com')) {
+            return {
+              content: trimmed.slice(0, CONTENT_CAP),
+              attempt: {
+                method: 'google_drive_docs_export', duration_ms: Date.now() - startMs,
+                chars_extracted: trimmed.length, timeout_hit: false,
+                auth_wall_detected: false, http_status: 200,
+                validation_result: 'pass', error_category: null, error_detail: null,
+              },
+            };
+          }
+        }
+      } catch (e) {
+        console.log(`[GoogleDrive] Docs export fallback failed: ${(e as Error).message}`);
+      }
+
+      // If Docs export didn't work, try Firecrawl via the preview URL
+      // Return failure so the method chain continues to the next strategy (firecrawlScrape)
       return {
         content: null,
         attempt: {
-          method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: false,
+          method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
           auth_wall_detected: false, http_status: response.status,
           validation_result: 'fail', error_category: 'unsupported_file_type',
-          error_detail: `File type "${contentType}" is not extractable as text. Upload or paste content manually.`,
+          error_detail: `File type "${contentType}" — direct download binary, falling through to scraper.`,
         },
       };
     }
