@@ -355,24 +355,21 @@ export function EnrichmentEngine() {
         </div>
       )}
 
-      {/* Mobile: full-screen dialog for detail drawer */}
+      {/* Mobile: full-screen overlay for detail drawer */}
       {selectedResource && isMobile && (
-        <Dialog open onOpenChange={(open) => { if (!open) setSelectedResource(null); }}>
-          <DialogContent className="fixed inset-0 left-0 top-0 translate-x-0 translate-y-0 max-w-none w-full h-[100dvh] max-h-[100dvh] p-0 rounded-none border-0 gap-0 [&>button.absolute]:hidden">
-            <VisuallyHidden><DialogTitle>Resource Detail</DialogTitle></VisuallyHidden>
-            <ResourceDetailDrawer
-              key={selectedResource.id}
-              resource={selectedResource}
-              onClose={() => setSelectedResource(null)}
-              onResourceUpdated={() => {
-                qc.invalidateQueries({ queryKey: ['resources'] });
-                qc.invalidateQueries({ queryKey: ['all-resources'] });
-                qc.invalidateQueries({ queryKey: ['audio-jobs-map'] });
-                setSelectedResource(null);
-              }}
-            />
-          </DialogContent>
-        </Dialog>
+        <div className="fixed inset-0 z-50 bg-background flex flex-col">
+          <ResourceDetailDrawer
+            key={selectedResource.id}
+            resource={selectedResource}
+            onClose={() => setSelectedResource(null)}
+            onResourceUpdated={() => {
+              qc.invalidateQueries({ queryKey: ['resources'] });
+              qc.invalidateQueries({ queryKey: ['all-resources'] });
+              qc.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+              setSelectedResource(null);
+            }}
+          />
+        </div>
       )}
 
       {/* Product Roadmap */}
