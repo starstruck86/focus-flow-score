@@ -118,6 +118,8 @@ export default function EnrichmentVerification() {
   });
   const [runningQueue, setRunningQueue] = useState<RemediationQueue | null>(null);
   const [lastBulkResult, setLastBulkResult] = useState<BulkActionResult | null>(null);
+  const [fixRunState, setFixRunState] = useState<FixRunState | null>(null);
+  const [fixAbortController, setFixAbortController] = useState<AbortController | null>(null);
 
   // Run verification against real data
   const { verified, summary } = useMemo(() => {
