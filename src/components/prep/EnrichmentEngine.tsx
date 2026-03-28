@@ -36,6 +36,7 @@ import { RunControls } from './enrichment/RunControls';
 import { ProofOfImpact } from './enrichment/ProofOfImpact';
 import { RoadmapPanel } from './enrichment/RoadmapPanel';
 import { BucketSummaryPanel } from './enrichment/BucketSummaryPanel';
+import { RecoveryQueue } from './enrichment/RecoveryQueue';
 
 // ── Helpers ────────────────────────────────────────────────
 
