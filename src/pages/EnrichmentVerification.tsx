@@ -388,12 +388,18 @@ export default function EnrichmentVerification() {
       });
 
       setFixPhase('complete');
-      qc.invalidateQueries({ queryKey: ['resources'] });
-      qc.invalidateQueries({ queryKey: ['all-resources'] });
-      toast.success('Fix Everything complete');
+      // Auto-refresh data after completion
+      await qc.invalidateQueries({ queryKey: ['resources'] });
+      await qc.invalidateQueries({ queryKey: ['all-resources'] });
+      await qc.invalidateQueries({ queryKey: ['verification-runs'] });
+      // Re-run verification view with fresh data
+      setHasRun(false);
+      await new Promise(r => setTimeout(r, 100));
+      setHasRun(true);
+      toast.success('Run Full System complete');
     } catch (e: any) {
       setFixPhase('error');
-      toast.error(`Fix Everything failed: ${e.message}`);
+      toast.error(`Run Full System failed: ${e.message}`);
     }
   }, [qc]);
 
