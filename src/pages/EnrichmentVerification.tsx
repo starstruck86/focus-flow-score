@@ -1043,6 +1043,7 @@ const BUCKET_ACTION_LABELS: Record<string, { label: string; icon: React.ReactNod
   retry_different_strategy: { label: 'Retry', icon: <RotateCcw className="h-3 w-3" /> },
   bad_scoring_state_bug: { label: 'Reconcile', icon: <Bug className="h-3 w-3" /> },
   needs_quarantine: { label: 'Quarantined', icon: <Ban className="h-3 w-3" /> },
+  true_unsupported: { label: 'Unsupported', icon: <Ban className="h-3 w-3" /> },
 };
 
 function ResourceTable({ resources, onSelect, onFixResource }: {
