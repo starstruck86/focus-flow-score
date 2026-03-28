@@ -179,7 +179,7 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
       return {
         ...base,
         enrichability: 'manual_input_needed',
-        reason: 'Zoom recording — transcript may require manual download',
+        reason: 'Zoom recording — download transcript from Zoom and paste via Manual Assist.',
         canFetchMetadata: true,
         requiresAuth: true,
         isDynamic: true,
