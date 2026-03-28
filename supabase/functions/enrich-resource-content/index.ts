@@ -417,7 +417,7 @@ function getMethodChain(source: SourceClassification): Array<(url: string, apiKe
     case 'webpage_js':
       return [firecrawlJsRendered, firecrawlFullPage, firecrawlScrape];
     case 'youtube':
-      return [firecrawlYouTube, firecrawlFullPage];
+      return [youtubeCaption, firecrawlScrape];
     case 'pdf':
       return [firecrawlScrape, firecrawlFullPage];
     case 'podcast':
