@@ -92,6 +92,15 @@ function classifySource(url: string): SourceClassification {
     const u = new URL(url);
     const host = u.hostname + u.pathname;
 
+    // ── Zoom recording URLs — MUST come before generic auth-gated check ──
+    // Matches: *.zoom.us/rec/play/... and *.zoom.us/rec/share/...
+    if (/\.zoom\.us\/rec\/(play|share)\//i.test(url)) {
+      return {
+        source_type: 'zoom_recording', platform: 'Zoom', auth_required: false,
+        transcript_available: null, downloadable: false, js_rendered: true,
+      };
+    }
+
     // Auth-gated
     for (const ag of AUTH_GATED_DOMAINS) {
       if (ag.pattern.test(host)) {
