@@ -445,6 +445,7 @@ function GuidedResolutionPanel({
 
 export function RecoveryQueue({ resources, onItemResolved }: Props) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<RecoveryFilter>('all');
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
