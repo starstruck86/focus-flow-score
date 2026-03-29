@@ -98,6 +98,37 @@ export async function triggerDeepExtraction(
 }
 
 /**
+ * Poll resource state until enrichment_status changes from 'not_enriched',
+ * then close the attempt. Handles the race where the edge function hasn't
+ * finished writing back yet.
+ */
+async function closeAttemptWithRetry(
+  resourceId: string,
+  attemptId: string | null,
+  maxRetries: number,
+  delayMs: number,
+) {
+  if (!attemptId) return;
+
+  for (let i = 0; i < maxRetries; i++) {
+    const { data: resource } = await (supabase as any)
+      .from('resources')
+      .select('enrichment_status')
+      .eq('id', resourceId)
+      .single();
+
+    // If the enrichment status has moved past 'not_enriched', the edge function is done
+    if (resource && resource.enrichment_status !== 'not_enriched') {
+      break;
+    }
+    // Wait before retrying
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+
+  await closeAttemptFromResourceState(resourceId, attemptId);
+}
+
+/**
  * After enrichment completes, read the resource state and close the pending attempt.
  */
 async function closeAttemptFromResourceState(resourceId: string, attemptId: string | null) {
