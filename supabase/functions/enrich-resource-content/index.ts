@@ -3199,7 +3199,7 @@ async function orchestrateEnrichment(
   }
 
   console.log(`[Orchestrate] FAILED id=${resourceId} reason=${primaryReason} attempts=${attempts.length}`);
-  return {
+  const failedOutput: EnrichmentOutput = {
     resource_id: resourceId, url, source_classification: source,
     final_status: 'failed', method_used: bestMethod, methods_attempted: attempts,
     attempt_count: attempts.length, extracted_text_length: bestContent?.length || 0,
@@ -3207,6 +3207,8 @@ async function orchestrateEnrichment(
     missing_fields: bestQuality?.missing_fields || ['body_content'],
     failure_reason: primaryReason, recovery_hint: recoveryHint,
   };
+  if (userId) await persistAttemptProvenance(supabase, userId, resourceId, source, failedOutput, attempts);
+  return failedOutput;
 }
 
 // ── HTTP handler ───────────────────────────────────────────
