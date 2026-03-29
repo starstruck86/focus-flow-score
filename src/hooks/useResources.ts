@@ -50,6 +50,23 @@ export type Resource = {
   last_quality_score?: number | null;
   last_quality_tier?: string | null;
   enrichment_audit_log?: any[];
+  // Advanced extraction fields
+  advanced_extraction_status?: string | null;
+  advanced_extraction_attempts?: number;
+  last_advanced_extraction_at?: string | null;
+  resolution_method?: string | null;
+  platform_status?: string | null;
+  // Recovery fields
+  recovery_status?: string | null;
+  recovery_reason?: string | null;
+  next_best_action?: string | null;
+  recovery_queue_bucket?: string | null;
+  manual_input_required?: boolean;
+  recovery_attempt_count?: number;
+  last_recovery_error?: string | null;
+  access_type?: string | null;
+  content_classification?: string | null;
+  extraction_method?: string | null;
 };
 
 export type ResourceVersion = {

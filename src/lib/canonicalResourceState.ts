@@ -17,6 +17,10 @@ export type CanonicalState =
   | 'ready_to_enrich'
   | 'enriching'
   | 'retryable_failure'
+  | 'advanced_extraction_pending'
+  | 'advanced_extraction_in_progress'
+  | 'advanced_extraction_failed'
+  | 'awaiting_assisted_resolution'
   | 'needs_transcript'
   | 'needs_pasted_content'
   | 'needs_access_auth'
@@ -43,6 +47,10 @@ export const CANONICAL_STATE_LABELS: Record<CanonicalState, string> = {
   ready_to_enrich: 'Ready',
   enriching: 'Processing',
   retryable_failure: 'Retryable',
+  advanced_extraction_pending: 'Deep Extract Queued',
+  advanced_extraction_in_progress: 'Deep Extracting',
+  advanced_extraction_failed: 'Deep Extract Failed',
+  awaiting_assisted_resolution: 'Assisted Resolution',
   needs_transcript: 'Needs Transcript',
   needs_pasted_content: 'Needs Content',
   needs_access_auth: 'Needs Auth',
@@ -57,6 +65,10 @@ export const CANONICAL_STATE_COLORS: Record<CanonicalState, string> = {
   ready_to_enrich: 'bg-primary/20 text-primary',
   enriching: 'bg-status-yellow/20 text-status-yellow',
   retryable_failure: 'bg-orange-500/20 text-orange-500',
+  advanced_extraction_pending: 'bg-primary/20 text-primary',
+  advanced_extraction_in_progress: 'bg-status-yellow/20 text-status-yellow',
+  advanced_extraction_failed: 'bg-orange-500/20 text-orange-500',
+  awaiting_assisted_resolution: 'bg-accent/20 text-accent-foreground',
   needs_transcript: 'bg-accent/20 text-accent-foreground',
   needs_pasted_content: 'bg-accent/20 text-accent-foreground',
   needs_access_auth: 'bg-status-red/20 text-status-red',
@@ -159,6 +171,15 @@ export function resolveCanonicalState(
     return { ...base, state: 'enriching', label: 'Processing', description: 'Enrichment running', nextAction: null, qualityScore: quality.score };
   }
 
+  // Advanced extraction states
+  const advStatus = (resource as any).advanced_extraction_status as string | null;
+  if (advStatus === 'pending') {
+    return { ...base, state: 'advanced_extraction_pending', label: 'Deep Extract Queued', description: 'Queued for advanced platform-specific extraction', nextAction: null, qualityScore: quality.score };
+  }
+  if (advStatus === 'in_progress') {
+    return { ...base, state: 'advanced_extraction_in_progress', label: 'Deep Extracting', description: 'Advanced extraction running', nextAction: null, qualityScore: quality.score };
+  }
+
   // Audio job active processing
   if (audioJob && ['queued', 'resolving', 'downloading', 'transcribing', 'assembling',
     'detecting_source_type', 'resolving_platform_metadata', 'resolving_canonical_episode_page',
@@ -241,9 +262,17 @@ export function resolveCanonicalState(
     }
   }
 
-  // Auth-gated routing
-  if (enrichResult.enrichability === 'needs_auth' || subtype === 'auth_gated_community_page') {
-    return { ...base, state: 'needs_access_auth', label: 'Needs Auth', description: enrichResult.reason || 'Login required', nextAction: 'Paste content via Manual Assist', qualityScore: quality.score };
+  // Zoom recording — try advanced extraction before manual fallback
+  if (subtype === 'zoom_recording') {
+    const advAttempts = (resource as any).advanced_extraction_attempts ?? 0;
+    const platformSt = (resource as any).platform_status as string | null;
+    if (advStatus === 'failed' && advAttempts >= 2) {
+      return { ...base, state: 'awaiting_assisted_resolution', label: 'Assisted Resolution', description: `Zoom deep extraction failed after ${advAttempts} attempts — paste transcript or upload recording`, nextAction: 'Paste transcript or upload recording', qualityScore: quality.score };
+    }
+    if (status === 'failed' && advAttempts === 0) {
+      return { ...base, state: 'advanced_extraction_pending', label: 'Try Deep Extraction', description: 'Zoom recording — advanced extraction available', nextAction: 'Try Deep Extraction', qualityScore: quality.score };
+    }
+    return { ...base, state: 'awaiting_assisted_resolution', label: 'Needs Transcript', description: platformSt || 'Zoom recording — download transcript from Zoom', nextAction: 'Paste transcript via Manual Assist', qualityScore: quality.score };
   }
 
   // Google Drive — only route to auth if actually failed after direct-download attempt
@@ -256,7 +285,7 @@ export function resolveCanonicalState(
     }
   }
 
-  // Google Sheet — dedicated routing, not generic google_doc
+  // Google Sheet — dedicated routing
   if (subtype === 'google_sheet') {
     if (status === 'needs_auth') {
       return { ...base, state: 'needs_access_auth', label: 'Needs Auth', description: 'Google Sheet requires sharing permissions', nextAction: 'Set sharing to "Anyone with the link"', qualityScore: quality.score };
@@ -266,9 +295,34 @@ export function resolveCanonicalState(
     }
   }
 
-  // Zoom recording
-  if (subtype === 'zoom_recording') {
-    return { ...base, state: 'needs_transcript', label: 'Needs Transcript', description: 'Zoom recording — download transcript from Zoom', nextAction: 'Paste transcript via Manual Assist', qualityScore: quality.score };
+  if (subtype === 'thinkific_lesson') {
+    const advAttempts = (resource as any).advanced_extraction_attempts ?? 0;
+    if (advStatus === 'failed' && advAttempts >= 2) {
+      return { ...base, state: 'awaiting_assisted_resolution', label: 'Assisted Resolution', description: 'Thinkific deep extraction failed — paste content or upload export', nextAction: 'Paste content or upload transcript', qualityScore: quality.score };
+    }
+    if ((status === 'failed' || enrichResult.enrichability === 'needs_auth') && advAttempts === 0) {
+      return { ...base, state: 'advanced_extraction_pending', label: 'Try Deep Extraction', description: 'Thinkific lesson — advanced extraction available', nextAction: 'Try Deep Extraction', qualityScore: quality.score };
+    }
+    // Fallback for thinkific
+    return { ...base, state: 'needs_access_auth', label: 'Needs Auth', description: 'Thinkific lesson requires login', nextAction: 'Paste content via Manual Assist', qualityScore: quality.score };
+  }
+
+  // Circle page — try advanced extraction before manual fallback
+  if (subtype === 'auth_gated_community_page') {
+    const advAttempts = (resource as any).advanced_extraction_attempts ?? 0;
+    const isCircle = url?.includes('circle.so');
+    if (isCircle && advStatus === 'failed' && advAttempts >= 2) {
+      return { ...base, state: 'awaiting_assisted_resolution', label: 'Assisted Resolution', description: 'Circle deep extraction failed — paste content or provide access', nextAction: 'Paste content or provide access', qualityScore: quality.score };
+    }
+    if (isCircle && status === 'failed' && advAttempts === 0) {
+      return { ...base, state: 'advanced_extraction_pending', label: 'Try Deep Extraction', description: 'Circle page — advanced extraction available', nextAction: 'Try Deep Extraction', qualityScore: quality.score };
+    }
+    return { ...base, state: 'needs_access_auth', label: 'Needs Auth', description: enrichResult.reason || 'Login required', nextAction: 'Paste content via Manual Assist', qualityScore: quality.score };
+  }
+
+  // Auth-gated routing (remaining)
+  if (enrichResult.enrichability === 'needs_auth') {
+    return { ...base, state: 'needs_access_auth', label: 'Needs Auth', description: enrichResult.reason || 'Login required', nextAction: 'Paste content via Manual Assist', qualityScore: quality.score };
   }
 
   // ── 7. Status-based routing for remaining ──
@@ -332,6 +386,10 @@ export interface EnrichmentHealthStats {
   readyToEnrich: number;
   enriching: number;
   retryableFailure: number;
+  advancedExtractionPending: number;
+  advancedExtractionInProgress: number;
+  advancedExtractionFailed: number;
+  awaitingAssistedResolution: number;
   needsTranscript: number;
   needsPastedContent: number;
   needsAccessAuth: number;
@@ -354,6 +412,10 @@ export function computeEnrichmentHealth(
     readyToEnrich: 0,
     enriching: 0,
     retryableFailure: 0,
+    advancedExtractionPending: 0,
+    advancedExtractionInProgress: 0,
+    advancedExtractionFailed: 0,
+    awaitingAssistedResolution: 0,
     needsTranscript: 0,
     needsPastedContent: 0,
     needsAccessAuth: 0,
@@ -374,6 +436,10 @@ export function computeEnrichmentHealth(
       case 'ready_to_enrich': stats.readyToEnrich++; break;
       case 'enriching': stats.enriching++; break;
       case 'retryable_failure': stats.retryableFailure++; break;
+      case 'advanced_extraction_pending': stats.advancedExtractionPending++; break;
+      case 'advanced_extraction_in_progress': stats.advancedExtractionInProgress++; break;
+      case 'advanced_extraction_failed': stats.advancedExtractionFailed++; break;
+      case 'awaiting_assisted_resolution': stats.awaitingAssistedResolution++; break;
       case 'needs_transcript': stats.needsTranscript++; break;
       case 'needs_pasted_content': stats.needsPastedContent++; break;
       case 'needs_access_auth': stats.needsAccessAuth++; break;
@@ -385,8 +451,8 @@ export function computeEnrichmentHealth(
   }
 
   stats.completionPct = stats.total > 0 ? Math.round((stats.trulyComplete / stats.total) * 100) : 0;
-  stats.machinFixable = stats.readyToEnrich + stats.retryableFailure;
-  stats.needsInput = stats.needsTranscript + stats.needsPastedContent + stats.needsAccessAuth + stats.needsAlternateSource;
+  stats.machinFixable = stats.readyToEnrich + stats.retryableFailure + stats.advancedExtractionPending;
+  stats.needsInput = stats.needsTranscript + stats.needsPastedContent + stats.needsAccessAuth + stats.needsAlternateSource + stats.awaitingAssistedResolution;
 
   return stats;
 }
