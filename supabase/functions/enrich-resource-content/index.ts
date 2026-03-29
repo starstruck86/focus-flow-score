@@ -2880,6 +2880,7 @@ async function orchestrateEnrichment(
     : 'needs_input';
 
   const zoomRecoveryReason = isZoomAuthBlocked ? `Zoom recording requires authentication to access (${zoomFailureCategory})`
+    : zoomFailureCategory === 'zoom_runtime_resolution_incomplete' ? 'Zoom player config detected but transcript/media could not be resolved from runtime state. Paste transcript manually or provide recording download.'
     : isZoomShell ? 'Zoom player shell only — no transcript or media found. Paste transcript manually or provide download.'
     : isZoomSource ? `Zoom recording extraction failed: ${zoomFailureCategory} — paste transcript or provide recording download`
     : null;
