@@ -64,6 +64,11 @@ interface ResourceLibraryTableProps {
 // Saved view filters use a function that receives the resource and optionally an audioJobsMap
 // We can't use deriveProcessingState directly in static filter since it needs audioJob,
 // so we use heuristic filters that approximate canonical states
+// Helper: resource has substantial content and should not appear in blocked views
+function hasSubstantialContent(r: Resource): boolean {
+  return ((r as any).content_length ?? 0) > 1000 || (r as any).manual_content_present === true;
+}
+
 const SAVED_VIEWS: SavedView[] = [
   {
     id: 'all', label: 'All', icon: <FileText className="h-3 w-3" />,
@@ -72,6 +77,7 @@ const SAVED_VIEWS: SavedView[] = [
   {
     id: 'needs_action', label: 'Needs Action', icon: <Zap className="h-3 w-3" />,
     filter: (r) => {
+      if (hasSubstantialContent(r)) return false;
       const status = r.enrichment_status;
       if (!status || status === 'not_enriched' || status === 'incomplete' || status === 'failed') return true;
       const ea = classifyEnrichability(r.file_url, r.resource_type);
@@ -81,6 +87,7 @@ const SAVED_VIEWS: SavedView[] = [
   {
     id: 'retryable', label: 'Retryable', icon: <RefreshCw className="h-3 w-3" />,
     filter: (r) => {
+      if (hasSubstantialContent(r)) return false;
       const status = r.enrichment_status;
       if (status === 'failed' || status === 'incomplete' || status === 'stale' || status === 'quarantined') return true;
       if ((r as any).last_quality_tier === 'shallow' && status === 'deep_enriched') return true;
@@ -90,6 +97,7 @@ const SAVED_VIEWS: SavedView[] = [
   {
     id: 'manual', label: 'Manual Required', icon: <HelpCircle className="h-3 w-3" />,
     filter: (r) => {
+      if (hasSubstantialContent(r)) return false;
       const ea = classifyEnrichability(r.file_url, r.resource_type);
       return ea.enrichability === 'manual_input_needed' || ea.enrichability === 'needs_auth' || ea.enrichability === 'metadata_only';
     },
@@ -100,7 +108,7 @@ const SAVED_VIEWS: SavedView[] = [
   },
   {
     id: 'completed', label: 'Completed', icon: <CheckCircle2 className="h-3 w-3" />,
-    filter: (r) => r.enrichment_status === 'deep_enriched',
+    filter: (r) => r.enrichment_status === 'deep_enriched' || hasSubstantialContent(r),
   },
   {
     id: 'audio', label: 'Audio', icon: <FileAudio className="h-3 w-3" />,
@@ -109,6 +117,7 @@ const SAVED_VIEWS: SavedView[] = [
   {
     id: 'needs_input', label: 'Needs Input', icon: <Inbox className="h-3 w-3" />,
     filter: (r) => {
+      if (hasSubstantialContent(r)) return false;
       const status = r.enrichment_status;
       if (status === 'quarantined') return true;
       if (status === 'failed' || status === 'incomplete') {
@@ -123,7 +132,7 @@ const SAVED_VIEWS: SavedView[] = [
   },
   {
     id: 'quarantined', label: 'Quarantined', icon: <ShieldAlert className="h-3 w-3" />,
-    filter: (r) => r.enrichment_status === 'quarantined',
+    filter: (r) => r.enrichment_status === 'quarantined' && !hasSubstantialContent(r),
   },
 ];
 
