@@ -2605,9 +2605,10 @@ async function setEnrichmentStatus(
     enrichment_status: status,
     last_status_change_at: now,
     last_enrichment_attempt_at: now,
-    ...extra,
   };
 
+  // Set default content_status based on enrichment status,
+  // but allow extra to override (e.g. manual content fast-path sets content_status='full')
   if (status === 'deep_enriched') update.content_status = 'enriched';
   else if (status === 'deep_enrich_in_progress' || status === 'reenrich_in_progress') update.content_status = 'enriching';
   else if (status === 'partial') update.content_status = 'partial';
@@ -2615,6 +2616,9 @@ async function setEnrichmentStatus(
   else if (status === 'unsupported') update.content_status = 'unsupported';
   else if (status === 'failed' || status === 'incomplete') update.content_status = 'placeholder';
   else if (status === 'not_enriched') update.content_status = 'placeholder';
+
+  // Spread extra AFTER defaults so caller can override content_status etc.
+  Object.assign(update, extra);
 
   await supabase.from("resources").update(update).eq("id", resourceId);
 }
