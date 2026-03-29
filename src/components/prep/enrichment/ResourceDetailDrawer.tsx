@@ -52,6 +52,13 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [showContentViewer, setShowContentViewer] = useState(false);
   const [diagOpen, setDiagOpen] = useState(!isMobile);
+  const [currentUserId, setCurrentUserId] = useState<string>('');
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) setCurrentUserId(data.user.id);
+    });
+  }, []);
 
   const bucket = mapVerifiedToBucket(r);
   const bucketMeta = BUCKET_META[bucket];
