@@ -42,6 +42,7 @@ type SourceType =
   | 'social'
   | 'podcast'
   | 'direct_audio'
+  | 'zoom_recording'
   | 'unknown';
 
 interface SourceClassification {
@@ -90,6 +91,15 @@ function classifySource(url: string): SourceClassification {
   try {
     const u = new URL(url);
     const host = u.hostname + u.pathname;
+
+    // ── Zoom recording URLs — MUST come before generic auth-gated check ──
+    // Matches: *.zoom.us/rec/play/... and *.zoom.us/rec/share/...
+    if (/\.zoom\.us\/rec\/(play|share)\//i.test(url)) {
+      return {
+        source_type: 'zoom_recording', platform: 'Zoom', auth_required: false,
+        transcript_available: null, downloadable: false, js_rendered: true,
+      };
+    }
 
     // Auth-gated
     for (const ag of AUTH_GATED_DOMAINS) {
@@ -472,6 +482,223 @@ function extractEmbeddedAudioUrl(url: string): string | null {
   return null;
 }
 
+// ── Zoom shell detection patterns ──
+const ZOOM_SHELL_PATTERNS = [
+  /sign\s*in/i,
+  /download\s*(the\s*)?app/i,
+  /join\s*a?\s*meeting/i,
+  /host\s*a?\s*meeting/i,
+  /zoom\s*workplace/i,
+  /zoom\s*phone/i,
+  /zoom\s*events/i,
+  /request\s*a\s*demo/i,
+  /contact\s*sales/i,
+  /plans\s*&?\s*pricing/i,
+  /zoom\s*blog/i,
+  /learning\s*center/i,
+  /zoom\s*community/i,
+];
+
+/** Detect whether Zoom page content is just the generic shell/nav (no recording content) */
+function isZoomShellOnly(text: string): boolean {
+  if (!text || text.length < 50) return true;
+  const sample = text.slice(0, 3000);
+  const shellHits = ZOOM_SHELL_PATTERNS.filter(p => p.test(sample)).length;
+  // If >4 shell patterns match and content is short, it's just the shell
+  if (shellHits >= 4 && text.length < 3000) return true;
+  // If content is dominated by nav links with no substantial paragraphs
+  const lines = sample.split('\n').filter(l => l.trim().length > 0);
+  const substantiveLines = lines.filter(l => l.trim().length > 80);
+  if (substantiveLines.length < 3 && shellHits >= 3) return true;
+  return false;
+}
+
+/** Extract transcript data from Zoom recording page HTML/markdown */
+function extractZoomTranscriptFromContent(text: string): string | null {
+  if (!text) return null;
+
+  // Look for VTT/SRT-style transcript segments embedded in page
+  const vttMatch = text.match(/WEBVTT[\s\S]{100,}/i);
+  if (vttMatch) {
+    const lines = vttMatch[0].split('\n')
+      .filter(l => !/^\d+$/.test(l.trim()) && !/-->/.test(l) && !/^WEBVTT/i.test(l.trim()) && l.trim().length > 0);
+    const transcript = lines.join(' ').replace(/\s+/g, ' ').trim();
+    if (transcript.length >= 100) return transcript;
+  }
+
+  // Look for JSON transcript payloads in script tags or player bootstrap data
+  const jsonPatterns = [
+    /"transcript":\s*"([^"]{100,})"/i,
+    /"captions?":\s*\[[\s\S]*?"text":\s*"([^"]{50,})"/i,
+    /"cc_url":\s*"(https?:[^"]+)"/i,
+  ];
+  for (const pat of jsonPatterns) {
+    const m = text.match(pat);
+    if (m?.[1] && m[1].length >= 100) {
+      // If it's a URL to captions file, return as-is for caller to fetch
+      if (/^https?:/.test(m[1])) return `[CAPTION_URL:${m[1]}]`;
+      return m[1].replace(/\\n/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+  }
+
+  return null;
+}
+
+/** Zoom recording extractor — attempts transcript/player data, then falls back to scraping */
+async function zoomRecordingExtract(url: string, apiKey: string): Promise<ExtractionResult> {
+  const method = 'zoom_recording_handler';
+  const startMs = Date.now();
+
+  try {
+    // Step 1: Fetch the page via Firecrawl with JS rendering + wait for player to load
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 120_000);
+
+    const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url,
+        formats: ["markdown", "html"],
+        onlyMainContent: false,
+        waitFor: 8000,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timer);
+    const durationMs = Date.now() - startMs;
+
+    if (!response.ok) {
+      const status = response.status;
+      // 403/401 = auth required for this recording
+      if (status === 403 || status === 401) {
+        return {
+          content: null,
+          attempt: {
+            method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: false,
+            auth_wall_detected: true, http_status: status,
+            validation_result: 'fail', error_category: 'zoom_auth_required',
+            error_detail: `Zoom recording returned ${status} — access requires authentication`,
+          },
+        };
+      }
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: false, http_status: status,
+          validation_result: 'fail', error_category: 'zoom_recording_access_blocked',
+          error_detail: `Zoom recording page returned ${status}`,
+        },
+      };
+    }
+
+    const data = await response.json();
+    const markdown = (data.data?.markdown || data.markdown || "").slice(0, CONTENT_CAP);
+    const html = data.data?.html || data.html || "";
+
+    // Step 2: Check for embedded transcript in HTML or markdown
+    const transcriptFromHtml = extractZoomTranscriptFromContent(html);
+    const transcriptFromMd = extractZoomTranscriptFromContent(markdown);
+    const foundTranscript = transcriptFromHtml || transcriptFromMd;
+
+    if (foundTranscript && !foundTranscript.startsWith('[CAPTION_URL:') && foundTranscript.length >= 100) {
+      console.log(`[Zoom] Found embedded transcript: ${foundTranscript.length} chars`);
+      return {
+        content: foundTranscript.slice(0, CONTENT_CAP),
+        attempt: {
+          method: 'zoom_embedded_transcript', duration_ms: Date.now() - startMs,
+          chars_extracted: foundTranscript.length, timeout_hit: false,
+          auth_wall_detected: false, http_status: 200,
+          validation_result: foundTranscript.length >= 500 ? 'pass' : 'partial',
+          error_category: null, error_detail: null,
+        },
+      };
+    }
+
+    // Step 2b: If we found a caption URL, try to fetch it
+    if (foundTranscript?.startsWith('[CAPTION_URL:')) {
+      const captionUrl = foundTranscript.slice(13, -1);
+      try {
+        const capResp = await fetch(captionUrl);
+        if (capResp.ok) {
+          const capText = await capResp.text();
+          // Parse VTT/SRT
+          const lines = capText.split('\n')
+            .filter(l => !/^\d+$/.test(l.trim()) && !/-->/.test(l) && !/^WEBVTT/i.test(l.trim()) && l.trim().length > 0);
+          const transcript = lines.join(' ').replace(/\s+/g, ' ').trim();
+          if (transcript.length >= 100) {
+            return {
+              content: transcript.slice(0, CONTENT_CAP),
+              attempt: {
+                method: 'zoom_caption_url', duration_ms: Date.now() - startMs,
+                chars_extracted: transcript.length, timeout_hit: false,
+                auth_wall_detected: false, http_status: 200,
+                validation_result: transcript.length >= 500 ? 'pass' : 'partial',
+                error_category: null, error_detail: null,
+              },
+            };
+          }
+        }
+      } catch (e) {
+        console.log(`[Zoom] Caption URL fetch failed: ${(e as Error).message}`);
+      }
+    }
+
+    // Step 3: Check if we got Zoom shell only (no real content)
+    if (isZoomShellOnly(markdown)) {
+      console.log(`[Zoom] Shell-only content detected for ${url.slice(0, 80)}`);
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: Date.now() - startMs, chars_extracted: markdown.length, timeout_hit: false,
+          auth_wall_detected: false, http_status: 200,
+          validation_result: 'fail', error_category: 'zoom_player_shell_only',
+          error_detail: 'Zoom page returned generic navigation/shell — no recording content found',
+        },
+      };
+    }
+
+    // Step 4: If markdown has substantial content (meeting details, chat, etc.) use it
+    if (markdown.length >= 200) {
+      return {
+        content: markdown,
+        attempt: {
+          method: 'zoom_page_content', duration_ms: Date.now() - startMs,
+          chars_extracted: markdown.length, timeout_hit: false,
+          auth_wall_detected: false, http_status: 200,
+          validation_result: markdown.length >= 1000 ? 'pass' : 'partial',
+          error_category: null, error_detail: null,
+        },
+      };
+    }
+
+    // No usable content
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
+        auth_wall_detected: false, http_status: 200,
+        validation_result: 'fail', error_category: 'zoom_transcript_not_found',
+        error_detail: 'Zoom recording page loaded but no transcript, captions, or media asset found',
+      },
+    };
+  } catch (e) {
+    const durationMs = Date.now() - startMs;
+    const isTimeout = e instanceof DOMException && e.name === 'AbortError';
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: isTimeout,
+        auth_wall_detected: false, http_status: null,
+        validation_result: 'fail',
+        error_category: isTimeout ? 'timeout' : 'zoom_media_asset_not_resolved',
+        error_detail: isTimeout ? 'Zoom recording page timed out after 120s' : (e as Error).message?.slice(0, 200),
+      },
+    };
+  }
+}
 
 /** Podcast: Resolve via resolve-podcast-episode, then transcribe if audio URL found */
 async function podcastResolveAndTranscribe(url: string, _apiKey: string): Promise<ExtractionResult> {
@@ -1146,6 +1373,8 @@ function getMethodChain(source: SourceClassification): Array<(url: string, apiKe
       return [podcastResolveAndTranscribe, directAudioTranscribe, firecrawlScrape];
     case 'direct_audio':
       return [directAudioTranscribe];
+    case 'zoom_recording':
+      return [zoomRecordingExtract];
     case 'social':
       return [firecrawlScrape, firecrawlFullPage];
     case 'google_drive_file':
@@ -1525,17 +1754,34 @@ async function orchestrateEnrichment(
 
     // If auth wall detected, reclassify
     if (result.attempt.auth_wall_detected) {
-      console.log(`[Orchestrate] Auth wall detected for ${resourceId}`);
+      console.log(`[Orchestrate] Auth wall detected for ${resourceId} (source=${source.source_type})`);
+
+      const isZoom = source.source_type === 'zoom_recording';
+      const failureReason = isZoom
+        ? `Zoom recording requires authentication — ${result.attempt.error_category || 'zoom_auth_required'}`
+        : 'Login/signup wall detected during scraping';
+
       await setEnrichmentStatus(supabase, resourceId, 'needs_auth', {
-        failure_reason: 'Login/signup wall detected during scraping',
+        failure_reason: failureReason,
+        recovery_status: 'auth_gated_manual_action_required',
+        recovery_reason: isZoom ? 'Zoom recording access blocked — requires login or shared link permissions' : failureReason,
+        next_best_action: isZoom ? 'provide_access' : 'paste_content',
+        manual_input_required: true,
+        recovery_queue_bucket: 'needs_input',
+        access_type: 'auth_gated',
+        content_classification: isZoom ? 'video' : null,
+        extraction_method: isZoom ? 'zoom_recording_handler' : null,
       });
+
       return {
         resource_id: resourceId, url, source_classification: { ...source, auth_required: true },
         final_status: 'needs_auth', method_used: result.attempt.method, methods_attempted: attempts,
         attempt_count: attempts.length, extracted_text_length: 0, completeness_score: 0,
         confidence_score: 0, missing_fields: ['body_content'],
-        failure_reason: 'Auth wall detected — content requires login',
-        recovery_hint: 'Paste the content manually or provide a public link',
+        failure_reason: failureReason,
+        recovery_hint: isZoom
+          ? 'This Zoom recording requires authentication. Paste the transcript, provide a public share link, or upload the recording.'
+          : 'Paste the content manually or provide a public link',
       };
     }
 
@@ -1701,17 +1947,42 @@ async function orchestrateEnrichment(
   const newStatus = isReenrich ? resource.enrichment_status : 'failed';
   const isRetryable = timeoutCount > 0 || attempts.some(a => a.http_status && a.http_status >= 500);
   const isAudioSource = source.source_type === 'direct_audio' || source.source_type === 'podcast';
+  const isZoomSource = source.source_type === 'zoom_recording';
+
+  // Zoom-specific failure classification
+  const zoomFailureCategory = isZoomSource
+    ? (attempts.find(a => a.error_category?.startsWith('zoom_'))?.error_category || 'zoom_transcript_not_found')
+    : null;
+  const isZoomAuthBlocked = isZoomSource && (
+    zoomFailureCategory === 'zoom_auth_required' ||
+    zoomFailureCategory === 'zoom_recording_access_blocked' ||
+    attempts.some(a => a.auth_wall_detected)
+  );
+  const isZoomShell = isZoomSource && zoomFailureCategory === 'zoom_player_shell_only';
 
   // Audio/podcast sources that failed transcription should stay in transcription queue, not generic failure
-  const recoveryStatus = isAudioSource ? 'pending_transcription'
+  const recoveryStatus = isZoomAuthBlocked ? 'auth_gated_manual_action_required'
+    : isZoomShell ? 'awaiting_user_content'
+    : isZoomSource ? 'awaiting_user_content'
+    : isAudioSource ? 'pending_transcription'
     : isRetryable ? 'failed_retryable'
     : 'awaiting_user_content';
-  const recoveryAction = isAudioSource ? 'start_transcription'
+  const recoveryAction = isZoomAuthBlocked ? 'provide_access'
+    : isZoomShell ? 'paste_transcript'
+    : isZoomSource ? 'paste_transcript'
+    : isAudioSource ? 'start_transcription'
     : isRetryable ? 'queue_for_retry'
     : 'paste_content';
-  const recoveryBucket = isAudioSource ? 'auto_fixable'
+  const recoveryBucket = isZoomAuthBlocked ? 'needs_input'
+    : isZoomSource ? 'needs_input'
+    : isAudioSource ? 'auto_fixable'
     : isRetryable ? 'retryable'
     : 'needs_input';
+
+  const zoomRecoveryReason = isZoomAuthBlocked ? `Zoom recording requires authentication to access (${zoomFailureCategory})`
+    : isZoomShell ? 'Zoom player shell only — no transcript or media found. Paste transcript manually or provide download.'
+    : isZoomSource ? `Zoom recording extraction failed: ${zoomFailureCategory} — paste transcript or provide recording download`
+    : null;
 
   await setEnrichmentStatus(supabase, resourceId, newStatus, {
     failure_reason: primaryReason,
@@ -1721,13 +1992,14 @@ async function orchestrateEnrichment(
     failure_count: (resource.failure_count || 0) + 1,
     // Persist recovery state
     recovery_status: recoveryStatus,
-    recovery_reason: isAudioSource ? `Audio transcription failed: ${primaryReason}` : primaryReason,
+    recovery_reason: zoomRecoveryReason || (isAudioSource ? `Audio transcription failed: ${primaryReason}` : primaryReason),
     next_best_action: recoveryAction,
-    manual_input_required: !isAudioSource && !isRetryable,
+    manual_input_required: isZoomSource || (!isAudioSource && !isRetryable),
     recovery_queue_bucket: recoveryBucket,
     last_recovery_error: primaryReason,
-    access_type: attempts.some(a => a.http_status === 403 || a.http_status === 401) ? 'auth_gated' : 'public',
-    content_classification: isAudioSource ? 'audio' : null,
+    access_type: (isZoomAuthBlocked || attempts.some(a => a.http_status === 403 || a.http_status === 401)) ? 'auth_gated' : 'public',
+    content_classification: isAudioSource ? 'audio' : isZoomSource ? 'video' : null,
+    extraction_method: isZoomSource ? 'zoom_recording_handler' : null,
   });
 
   console.log(`[Orchestrate] FAILED id=${resourceId} reason=${primaryReason} attempts=${attempts.length}`);
