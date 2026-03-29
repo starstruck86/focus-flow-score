@@ -3282,7 +3282,7 @@ Deno.serve(async (req) => {
         .single();
       if (rErr || !resource) throw new Error("Resource not found");
 
-      const result = await orchestrateEnrichment(supabase, resource, FIRECRAWL_API_KEY, !!force);
+      const result = await orchestrateEnrichment(supabase, resource, FIRECRAWL_API_KEY, !!force, user.id);
 
       if (result.final_status === 'enriched') {
         return new Response(JSON.stringify({
