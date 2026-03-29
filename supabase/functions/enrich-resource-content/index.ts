@@ -3300,7 +3300,7 @@ Deno.serve(async (req) => {
     if (resource_id && !batch) {
       const { data: resource, error: rErr } = await supabase
         .from("resources")
-        .select("id, file_url, content, enrichment_status, content_status, failure_count, content_length")
+        .select("id, file_url, content, enrichment_status, content_status, failure_count, content_length, manual_content_present")
         .eq("id", resource_id)
         .single();
       if (rErr || !resource) throw new Error("Resource not found");
