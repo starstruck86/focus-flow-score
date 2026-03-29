@@ -599,10 +599,6 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
         userId: user.id,
         file,
       });
-        resourceId,
-        userId: user.id,
-        file,
-      });
       if (result.success) {
         toast.success(result.message);
         const history = await getAttemptHistory(resourceId);
