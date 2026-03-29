@@ -57,7 +57,7 @@ export function deriveProcessingState(
       description: isManual
         ? `Resolved via ${rm || 'manual input'} — ${contentLength.toLocaleString()} chars`
         : `Content present (${contentLength.toLocaleString()} chars) — status needs sync`,
-      nextAction: status !== 'deep_enriched' ? 'Re-enrich to finalize status' : null,
+      nextAction: (status as string) !== 'deep_enriched' ? 'Re-enrich to finalize status' : null,
       retryable: false,
     };
   }
