@@ -39,6 +39,7 @@ type ActionMode = 'paste_transcript' | 'paste_content' | 'alt_url' | null;
 
 export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }: Props) {
   const qc = useQueryClient();
+  const isMobile = useIsMobile();
   const [title, setTitle] = useState(r.title);
   const [url, setUrl] = useState(r.url ?? '');
   const [description, setDescription] = useState('');
@@ -46,9 +47,11 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
   const [actionInput, setActionInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [activeAction, setActiveAction] = useState<string | null>(null);
+  const [showContentViewer, setShowContentViewer] = useState(false);
 
   const bucket = mapVerifiedToBucket(r);
   const bucketMeta = BUCKET_META[bucket];
+  const hasContent = ((r as any).contentLength ?? 0) > 0 || (r as any).manual_content_present === true;
 
   const invalidateAll = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['resources'] });
