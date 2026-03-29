@@ -780,7 +780,7 @@ export function ResourceManager() {
 
                       // Always invalidate after edge function completes
                       queryClient.invalidateQueries({ queryKey: ['resources'] });
-                      queryClient.invalidateQueries({ queryKey: [QUEUE_KEY] });
+                      queryClient.invalidateQueries({ queryKey: ['incoming-queue'] });
                       queryClient.invalidateQueries({ queryKey: ['all-resources'] });
 
                       if (result.error) {
