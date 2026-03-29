@@ -7,7 +7,7 @@ import {
   ScanSearch, RotateCcw, Filter, Lock, FileText, Link2,
   ClipboardPaste, Wrench, HandHelping, Eye, AlertTriangle,
   History, ExternalLink, CheckSquare, Search, Upload,
-  ChevronDown, ChevronUp, HelpCircle,
+  ChevronDown, ChevronUp, HelpCircle, Monitor,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
