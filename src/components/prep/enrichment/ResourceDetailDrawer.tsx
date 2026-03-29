@@ -58,6 +58,7 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
   const [splitProgress, setSplitProgress] = useState('');
   const [diagOpen, setDiagOpen] = useState(!isMobile);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [currentUserId, setCurrentUserId] = useState<string>('');
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
