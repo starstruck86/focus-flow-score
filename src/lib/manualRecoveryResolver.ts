@@ -48,7 +48,7 @@ export interface RecoveryResult {
 // ── Constants ────────────────────────────────────────────
 
 const MIN_CONTENT_LENGTH = 50;
-const ALLOWED_EXTENSIONS = ['.txt', '.vtt', '.srt', '.json', '.csv', '.md', '.html', '.htm'];
+const ALLOWED_EXTENSIONS = ['.txt', '.vtt', '.srt', '.json', '.csv', '.md', '.html', '.htm', '.zip'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 // ── Main entry point ─────────────────────────────────────
