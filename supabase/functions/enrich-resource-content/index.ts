@@ -146,6 +146,11 @@ function classifySource(url: string): SourceClassification {
       return { source_type: 'google_doc', platform: 'Google Docs', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
     }
 
+    // ── Google Slides — MUST come before generic GOOGLE_DOC_PATTERNS catch-all ──
+    if (/docs\.google\.com\/presentation/i.test(url)) {
+      return { source_type: 'google_slides', platform: 'Google Slides', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
+    }
+
     if (GOOGLE_DOC_PATTERNS.some(p => p.test(hostAndPath))) {
       return { source_type: 'google_doc', platform: 'Google', auth_required: true, transcript_available: null, downloadable: false, js_rendered: false };
     }
