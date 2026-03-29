@@ -114,7 +114,7 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
     }
   }, [r.id, currentUserId, invalidateAll, onClose]);
 
-
+  const saveFields = useCallback(async () => {
     setSaving(true);
     try {
       const updates: Record<string, any> = { last_status_change_at: new Date().toISOString() };
