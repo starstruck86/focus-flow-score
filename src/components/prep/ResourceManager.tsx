@@ -678,9 +678,15 @@ export function ResourceManager() {
               ))}
             </div>
           </ScrollArea>
+          {savingAll && (
+            <div className="space-y-1">
+              <Progress value={undefined} className="h-1.5" />
+              <p className="text-[10px] text-muted-foreground text-center">Uploading and processing...</p>
+            </div>
+          )}
           {pendingItems.some(p => p.status === 'classified') && (
             <div className="flex justify-end">
-              <Button size="sm" onClick={handleConfirmAll} disabled={savingAll}>
+              <Button size="sm" className="min-h-[44px] w-full sm:w-auto" onClick={handleConfirmAll} disabled={savingAll}>
                 {savingAll ? (
                   <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
                 ) : (
