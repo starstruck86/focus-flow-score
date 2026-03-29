@@ -42,6 +42,7 @@ type SourceType =
   | 'social'
   | 'podcast'
   | 'direct_audio'
+  | 'zoom_recording'
   | 'unknown';
 
 interface SourceClassification {
