@@ -72,6 +72,7 @@ export interface VerifiedResource {
   resolutionType: 'auto_fix' | 'manual_input' | 'system_gap';
   rootCause: string;
   requiredBuild: { type: string; description: string; suggestedImplementation: string } | null;
+  advancedExtractionAttempts: number;
 }
 
 export interface VerificationSummary {
