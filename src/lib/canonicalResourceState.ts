@@ -287,9 +287,39 @@ export function resolveCanonicalState(
     }
   }
 
-  // Zoom recording
+  // Zoom recording — try advanced extraction before manual fallback
   if (subtype === 'zoom_recording') {
-    return { ...base, state: 'needs_transcript', label: 'Needs Transcript', description: 'Zoom recording — download transcript from Zoom', nextAction: 'Paste transcript via Manual Assist', qualityScore: quality.score };
+    const advAttempts = (resource as any).advanced_extraction_attempts ?? 0;
+    const platformSt = (resource as any).platform_status as string | null;
+    if (advStatus === 'failed' && advAttempts >= 2) {
+      return { ...base, state: 'awaiting_assisted_resolution', label: 'Assisted Resolution', description: `Zoom deep extraction failed after ${advAttempts} attempts — paste transcript or upload recording`, nextAction: 'Paste transcript or upload recording', qualityScore: quality.score };
+    }
+    if (status === 'failed' && advAttempts === 0) {
+      return { ...base, state: 'advanced_extraction_pending', label: 'Try Deep Extraction', description: 'Zoom recording — advanced extraction available', nextAction: 'Try Deep Extraction', qualityScore: quality.score };
+    }
+    return { ...base, state: 'awaiting_assisted_resolution', label: 'Needs Transcript', description: platformSt || 'Zoom recording — download transcript from Zoom', nextAction: 'Paste transcript via Manual Assist', qualityScore: quality.score };
+  }
+
+  // Thinkific lesson — try advanced extraction before manual fallback
+  if (subtype === 'thinkific_lesson') {
+    const advAttempts = (resource as any).advanced_extraction_attempts ?? 0;
+    if (advStatus === 'failed' && advAttempts >= 2) {
+      return { ...base, state: 'awaiting_assisted_resolution', label: 'Assisted Resolution', description: 'Thinkific deep extraction failed — paste content or upload export', nextAction: 'Paste content or upload transcript', qualityScore: quality.score };
+    }
+    if ((status === 'failed' || enrichResult.enrichability === 'needs_auth') && advAttempts === 0) {
+      return { ...base, state: 'advanced_extraction_pending', label: 'Try Deep Extraction', description: 'Thinkific lesson — advanced extraction available', nextAction: 'Try Deep Extraction', qualityScore: quality.score };
+    }
+  }
+
+  // Circle page — try advanced extraction before manual fallback
+  if (subtype === 'auth_gated_community_page' && url?.includes('circle.so')) {
+    const advAttempts = (resource as any).advanced_extraction_attempts ?? 0;
+    if (advStatus === 'failed' && advAttempts >= 2) {
+      return { ...base, state: 'awaiting_assisted_resolution', label: 'Assisted Resolution', description: 'Circle deep extraction failed — paste content or provide access', nextAction: 'Paste content or provide access', qualityScore: quality.score };
+    }
+    if ((status === 'failed') && advAttempts === 0) {
+      return { ...base, state: 'advanced_extraction_pending', label: 'Try Deep Extraction', description: 'Circle page — advanced extraction available', nextAction: 'Try Deep Extraction', qualityScore: quality.score };
+    }
   }
 
   // ── 7. Status-based routing for remaining ──
