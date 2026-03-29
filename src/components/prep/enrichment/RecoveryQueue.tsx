@@ -93,11 +93,19 @@ function classifyRecoveryItem(v: VerifiedResource): RecoveryItem | null {
     recoveryReason = `${v.subtypeLabel} — advanced platform-specific extraction available`;
     nextBestAction = 'Try Deep Extraction';
   } else if (isPlatformResource && deepExhausted && v.enrichmentStatus !== 'deep_enriched') {
-    // Deep extraction was tried but didn't fully resolve → escalate to assisted
-    recoveryBucket = 'assisted_resolution';
-    preciseLabel = `Assisted Resolution (${platform})`;
-    recoveryReason = `Deep extraction attempted ${v.advancedExtractionAttempts}× — manual assist needed`;
-    nextBestAction = getAssistedNextAction(platform);
+    // Deep extraction was tried but didn't fully resolve
+    if (platform === 'zoom') {
+      // Zoom gets session-assisted capture before generic assisted resolution
+      recoveryBucket = 'zoom_session_assist';
+      preciseLabel = 'Capture From Browser Session';
+      recoveryReason = `Deep extraction attempted ${v.advancedExtractionAttempts}× — browser session capture available`;
+      nextBestAction = 'Use browser session to capture transcript/media';
+    } else {
+      recoveryBucket = 'assisted_resolution';
+      preciseLabel = `Assisted Resolution (${platform})`;
+      recoveryReason = `Deep extraction attempted ${v.advancedExtractionAttempts}× — manual assist needed`;
+      nextBestAction = getAssistedNextAction(platform);
+    }
   } else if (v.fixabilityBucket === 'needs_transcript') {
     recoveryBucket = 'needs_transcript';
     preciseLabel = 'Needs Transcript';
