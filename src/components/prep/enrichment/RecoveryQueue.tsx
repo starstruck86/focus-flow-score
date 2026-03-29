@@ -675,7 +675,7 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
     toast.success(`Batch retry: ${resolved}/${selectedIds.size} initiated`);
     setSelectedIds(new Set());
     setProcessing(null);
-    onItemResolved();
+    invalidateAll();
   }
 
   async function handleBatchDeepExtraction() {
@@ -694,7 +694,7 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
     toast.success(`Deep extraction: ${queued} resources queued`);
     setSelectedIds(new Set());
     setProcessing(null);
-    onItemResolved();
+    invalidateAll();
   }
 
   async function handleBatchMarkAuthRequired() {
@@ -712,7 +712,7 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
     toast.success(`${selectedIds.size} items marked as auth-required`);
     setSelectedIds(new Set());
     setProcessing(null);
-    onItemResolved();
+    invalidateAll();
   }
 
   // ── Render ──
