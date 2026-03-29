@@ -107,6 +107,12 @@ export function mapVerifiedToBucket(v: VerifiedResource): BucketFilter {
   if (['auto_fix_now', 'retry_different_strategy', 'bad_scoring_state_bug', 'already_fixed_stale_ui'].includes(v.fixabilityBucket)) return 'auto_fixable';
   if (['needs_transcript', 'needs_pasted_content', 'needs_access_auth', 'needs_alternate_source', 'accept_metadata_only'].includes(v.fixabilityBucket)) return 'needs_input';
   if (['deep_enrich_in_progress', 'queued_for_deep_enrich', 'queued_for_reenrich', 'reenrich_in_progress'].includes(v.enrichmentStatus)) return 'processing';
+  // Check for advanced extraction / assisted resolution states via platform context
+  const subtype = v.subtype;
+  if (['zoom_recording', 'thinkific_lesson'].includes(subtype) || (subtype === 'auth_gated_community_page')) {
+    if (v.failureCount === 0 || v.retryEligible) return 'advanced_extraction';
+    return 'assisted_resolution';
+  }
   return 'needs_input';
 }
 
