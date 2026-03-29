@@ -665,6 +665,9 @@ export function ResourceManager() {
                       <div className="flex items-center gap-1.5 mt-1">
                         <Badge variant="secondary" className="text-[9px] capitalize">{item.classification.resource_type}</Badge>
                         <Badge variant="outline" className="text-[9px]">{item.classification.top_folder}{item.classification.sub_folder ? ` / ${item.classification.sub_folder}` : ''}</Badge>
+                        {item.source === 'file' && item.file?.name.toLowerCase().endsWith('.zip') && (
+                          <Badge className="text-[9px] bg-amber-500/10 text-amber-600 border-amber-500/20">ZIP Import</Badge>
+                        )}
                       </div>
                     )}
                   </div>
