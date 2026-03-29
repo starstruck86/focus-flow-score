@@ -529,8 +529,7 @@ function isCircleShellOnly(text: string): boolean {
   const sample = text.slice(0, 5000);
   const authHits = CIRCLE_AUTH_PATTERNS.filter(p => p.test(sample)).length;
   const shellHits = CIRCLE_SHELL_PATTERNS.filter(p => p.test(sample)).length;
-  const lines = sample.split('
-').map(l => l.trim()).filter(Boolean);
+  const lines = sample.split('\n').map(l => l.trim()).filter(Boolean);
   const substantiveLines = lines.filter(l => l.length > 120);
 
   if (authHits >= 2 && substantiveLines.length < 3) return true;
