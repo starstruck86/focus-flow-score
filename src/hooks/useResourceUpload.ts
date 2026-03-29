@@ -247,11 +247,14 @@ export function useUploadResource() {
 
       return resource;
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (data, variables) => {
       qc.invalidateQueries({ queryKey: ['resources'] });
       qc.invalidateQueries({ queryKey: ['resource-folders'] });
-      if (isNotionZip(variables.file)) {
-        toast.success('Notion export processed — content imported and enrichment started');
+      if (isNotionZip(variables.file) && data?._zipMeta) {
+        const m = data._zipMeta;
+        toast.success(
+          `Imported Notion export: ${m.mdFileCount} page${m.mdFileCount !== 1 ? 's' : ''}, ${m.csvFileCount} table${m.csvFileCount !== 1 ? 's' : ''}, ${m.totalLength.toLocaleString()} chars`
+        );
       } else {
         toast.success('Resource uploaded and classified');
       }
