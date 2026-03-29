@@ -7,7 +7,7 @@ import {
   ScanSearch, RotateCcw, Filter, Lock, FileText, Link2,
   ClipboardPaste, Wrench, HandHelping, Eye, AlertTriangle,
   History, ExternalLink, CheckSquare, Search, Upload,
-  ChevronDown, ChevronUp, HelpCircle,
+  ChevronDown, ChevronUp, HelpCircle, Monitor,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,7 @@ import {
   getAssistedResolutionGuidance,
   type EnrichmentAttemptRecord,
 } from '@/lib/advancedExtraction';
+import { ZoomAssistPanel } from '@/components/prep/enrichment/ZoomAssistPanel';
 import type { VerifiedResource } from '@/lib/enrichmentVerification';
 
 // ── Types ────────────────────────────────────────────────
@@ -33,6 +34,7 @@ import type { VerifiedResource } from '@/lib/enrichmentVerification';
 type RecoveryFilter =
   | 'all'
   | 'deep_extraction'
+  | 'zoom_session_assist'
   | 'assisted_resolution'
   | 'needs_transcript'
   | 'auth_gated'
@@ -91,11 +93,19 @@ function classifyRecoveryItem(v: VerifiedResource): RecoveryItem | null {
     recoveryReason = `${v.subtypeLabel} — advanced platform-specific extraction available`;
     nextBestAction = 'Try Deep Extraction';
   } else if (isPlatformResource && deepExhausted && v.enrichmentStatus !== 'deep_enriched') {
-    // Deep extraction was tried but didn't fully resolve → escalate to assisted
-    recoveryBucket = 'assisted_resolution';
-    preciseLabel = `Assisted Resolution (${platform})`;
-    recoveryReason = `Deep extraction attempted ${v.advancedExtractionAttempts}× — manual assist needed`;
-    nextBestAction = getAssistedNextAction(platform);
+    // Deep extraction was tried but didn't fully resolve
+    if (platform === 'zoom') {
+      // Zoom gets session-assisted capture before generic assisted resolution
+      recoveryBucket = 'zoom_session_assist';
+      preciseLabel = 'Capture From Browser Session';
+      recoveryReason = `Deep extraction attempted ${v.advancedExtractionAttempts}× — browser session capture available`;
+      nextBestAction = 'Use browser session to capture transcript/media';
+    } else {
+      recoveryBucket = 'assisted_resolution';
+      preciseLabel = `Assisted Resolution (${platform})`;
+      recoveryReason = `Deep extraction attempted ${v.advancedExtractionAttempts}× — manual assist needed`;
+      nextBestAction = getAssistedNextAction(platform);
+    }
   } else if (v.fixabilityBucket === 'needs_transcript') {
     recoveryBucket = 'needs_transcript';
     preciseLabel = 'Needs Transcript';
@@ -197,6 +207,7 @@ function getAssistedNextAction(platform: string | null): string {
 const FILTER_META: Record<RecoveryFilter, { label: string; icon: React.ReactNode }> = {
   all: { label: 'All', icon: <Filter className="h-3 w-3" /> },
   deep_extraction: { label: 'Deep Extract', icon: <ScanSearch className="h-3 w-3" /> },
+  zoom_session_assist: { label: 'Zoom Capture', icon: <Monitor className="h-3 w-3" /> },
   assisted_resolution: { label: 'Assisted', icon: <HandHelping className="h-3 w-3" /> },
   needs_transcript: { label: 'Needs Transcript', icon: <FileText className="h-3 w-3" /> },
   auth_gated: { label: 'Auth Required', icon: <Lock className="h-3 w-3" /> },
@@ -447,7 +458,7 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
 
   const counts = useMemo(() => {
     const all = resources.map(classifyRecoveryItem).filter((i): i is RecoveryItem => i !== null);
-    const c: Record<RecoveryFilter, number> = { all: all.length, deep_extraction: 0, assisted_resolution: 0, needs_transcript: 0, auth_gated: 0, alternate_url: 0, awaiting_input: 0, system_gap: 0, retryable: 0 };
+    const c: Record<RecoveryFilter, number> = { all: all.length, deep_extraction: 0, zoom_session_assist: 0, assisted_resolution: 0, needs_transcript: 0, auth_gated: 0, alternate_url: 0, awaiting_input: 0, system_gap: 0, retryable: 0 };
     for (const item of all) c[item.recoveryBucket]++;
     return c;
   }, [resources]);
@@ -853,6 +864,20 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
                       {item.attemptCount > 0 && (
                         <span className="text-[8px] text-muted-foreground">{item.attemptCount}× failed</span>
                       )}
+                      {item.platform === 'zoom' && item.recoveryBucket === 'zoom_session_assist' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-5 text-[8px] px-1.5 gap-0.5 border-primary/40 text-primary"
+                          title="Capture From Browser Session"
+                          onClick={() => {
+                            setExpandedId(item.resource.id);
+                            loadHistory(item.resource.id);
+                          }}
+                        >
+                          <Monitor className="h-3 w-3" /> Capture
+                        </Button>
+                      )}
                       {item.deepExtractionAvailable && (
                         <Button
                           variant="outline"
@@ -887,6 +912,17 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
                     <p className="text-[9px] text-destructive truncate flex items-center gap-1">
                       <AlertTriangle className="h-2.5 w-2.5 shrink-0" /> {item.lastError}
                     </p>
+                  )}
+
+                  {/* Expanded: Zoom session assist panel (preferred for zoom) */}
+                  {isExpanded && item.platform === 'zoom' && item.resource.url && (
+                    <ZoomAssistPanel
+                      resourceId={item.resource.id}
+                      userId={user?.id || ''}
+                      resourceUrl={item.resource.url}
+                      resourceTitle={item.resource.title}
+                      onCaptureComplete={onItemResolved}
+                    />
                   )}
 
                   {/* Expanded: guided resolution panel */}
