@@ -1412,6 +1412,232 @@ async function googleDocExport(url: string, _apiKey: string): Promise<Extraction
   }
 }
 
+// ── Google Slides helpers ───────────────────────────────────
+function extractPresentationId(url: string): string | null {
+  const m = url.match(/docs\.google\.com\/presentation\/d\/([a-zA-Z0-9_-]+)/i);
+  return m?.[1] ?? null;
+}
+
+/** Export Google Slides as HTML (published view) or text */
+async function googleSlidesExport(url: string, apiKey: string): Promise<ExtractionResult> {
+  const method = 'google_slides_html_view';
+  const startMs = Date.now();
+
+  const presId = extractPresentationId(url);
+  if (!presId) {
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
+        auth_wall_detected: false, http_status: 0,
+        validation_result: 'fail', error_category: 'extraction_error',
+        error_detail: 'Could not extract presentation ID from Google Slides URL',
+      },
+    };
+  }
+
+  try {
+    // Strategy 1: Try the published HTML export (pub?output=txt)
+    const txtExportUrl = `https://docs.google.com/presentation/d/${presId}/export?format=txt`;
+    const txtResp = await fetch(txtExportUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      redirect: 'follow',
+    });
+
+    if (txtResp.ok) {
+      const text = await txtResp.text();
+      const trimmed = text.trim();
+      if (trimmed.length >= MIN_CONTENT_CHARS && !trimmed.includes('accounts.google.com')) {
+        return {
+          content: trimmed.slice(0, CONTENT_CAP),
+          attempt: {
+            method: 'google_slides_export', duration_ms: Date.now() - startMs,
+            chars_extracted: trimmed.length, timeout_hit: false,
+            auth_wall_detected: false, http_status: 200,
+            validation_result: trimmed.length >= GOOD_CONTENT_CHARS ? 'pass' : 'partial',
+            error_category: null, error_detail: null,
+          },
+        };
+      }
+    }
+
+    // Strategy 2: Try the published HTML view
+    const pubUrl = `https://docs.google.com/presentation/d/${presId}/pub`;
+    const scrapeRes = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: pubUrl,
+        formats: ["markdown"],
+        onlyMainContent: true,
+        waitFor: 5000,
+      }),
+    });
+
+    if (scrapeRes.ok) {
+      const data = await scrapeRes.json();
+      const markdown = (data.data?.markdown || data.markdown || '').trim();
+      if (markdown.length >= MIN_CONTENT_CHARS) {
+        return {
+          content: markdown.slice(0, CONTENT_CAP),
+          attempt: {
+            method: 'google_slides_pub_scrape', duration_ms: Date.now() - startMs,
+            chars_extracted: markdown.length, timeout_hit: false,
+            auth_wall_detected: false, http_status: 200,
+            validation_result: markdown.length >= GOOD_CONTENT_CHARS ? 'pass' : 'partial',
+            error_category: null, error_detail: null,
+          },
+        };
+      }
+    }
+
+    // Strategy 3: Try the embed URL
+    const embedUrl = `https://docs.google.com/presentation/d/${presId}/embed`;
+    const embedRes = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: embedUrl,
+        formats: ["markdown"],
+        onlyMainContent: false,
+        waitFor: 5000,
+      }),
+    });
+
+    if (embedRes.ok) {
+      const data = await embedRes.json();
+      const markdown = (data.data?.markdown || data.markdown || '').trim();
+      if (markdown.length >= MIN_CONTENT_CHARS) {
+        return {
+          content: markdown.slice(0, CONTENT_CAP),
+          attempt: {
+            method: 'google_slides_embed_scrape', duration_ms: Date.now() - startMs,
+            chars_extracted: markdown.length, timeout_hit: false,
+            auth_wall_detected: false, http_status: 200,
+            validation_result: markdown.length >= GOOD_CONTENT_CHARS ? 'pass' : 'partial',
+            error_category: null, error_detail: null,
+          },
+        };
+      }
+    }
+
+    // Auth detection
+    const authCheck = txtResp.status === 401 || txtResp.status === 403;
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
+        auth_wall_detected: authCheck, http_status: txtResp.status,
+        validation_result: 'fail',
+        error_category: authCheck ? 'google_slides_auth_required' : 'google_slides_extraction_failed',
+        error_detail: authCheck
+          ? 'Google Slides presentation is not publicly accessible'
+          : 'Could not extract slide content via export, pub, or embed URLs',
+      },
+    };
+  } catch (e) {
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
+        auth_wall_detected: false, http_status: 0,
+        validation_result: 'fail', error_category: 'extraction_error',
+        error_detail: `Google Slides export error: ${(e as Error).message}`,
+      },
+    };
+  }
+}
+
+/** Thinkific lesson handler — attempts scrape, then routes to auth-gated recovery with Thinkific-specific states */
+async function thinkificLessonExtract(url: string, apiKey: string): Promise<ExtractionResult> {
+  const method = 'thinkific_handler';
+  const startMs = Date.now();
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60_000);
+
+    const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url,
+        formats: ["markdown"],
+        onlyMainContent: true,
+        waitFor: 5000,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timer);
+    const durationMs = Date.now() - startMs;
+
+    if (!response.ok) {
+      const isAuth = response.status === 401 || response.status === 403;
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: isAuth, http_status: response.status,
+          validation_result: 'fail',
+          error_category: isAuth ? 'thinkific_auth_required' : `http_${response.status}`,
+          error_detail: isAuth
+            ? 'Thinkific lesson requires enrollment/login'
+            : `Thinkific returned ${response.status}`,
+        },
+      };
+    }
+
+    const data = await response.json();
+    const markdown = (data.data?.markdown || data.markdown || '').trim();
+
+    // Detect Thinkific sign-in/enrollment walls
+    const isSignInWall = /sign\s*in|log\s*in|create\s*account|enroll|start\s*course|purchase/i.test(markdown.slice(0, 1000))
+      && markdown.length < 2000;
+
+    if (isSignInWall || markdown.length < MIN_CONTENT_CHARS) {
+      const isShell = markdown.length > 0 && markdown.length < MIN_CONTENT_CHARS;
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: markdown.length, timeout_hit: false,
+          auth_wall_detected: isSignInWall, http_status: 200,
+          validation_result: 'fail',
+          error_category: isSignInWall ? 'thinkific_auth_required' : (isShell ? 'thinkific_shell_only' : 'thinkific_lesson_unavailable'),
+          error_detail: isSignInWall
+            ? 'Thinkific lesson page redirected to sign-in/enrollment'
+            : (isShell ? 'Thinkific page returned only course shell/navigation' : 'No usable lesson content found'),
+        },
+      };
+    }
+
+    // Got real content
+    return {
+      content: markdown.slice(0, CONTENT_CAP),
+      attempt: {
+        method: 'thinkific_lesson_content', duration_ms: durationMs,
+        chars_extracted: markdown.length, timeout_hit: false,
+        auth_wall_detected: false, http_status: 200,
+        validation_result: markdown.length >= GOOD_CONTENT_CHARS ? 'pass' : 'partial',
+        error_category: null, error_detail: null,
+      },
+    };
+  } catch (e) {
+    const durationMs = Date.now() - startMs;
+    const isTimeout = e instanceof DOMException && e.name === 'AbortError';
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: isTimeout,
+        auth_wall_detected: false, http_status: null,
+        validation_result: 'fail',
+        error_category: isTimeout ? 'timeout' : 'thinkific_lesson_unavailable',
+        error_detail: isTimeout ? 'Thinkific lesson page timed out' : (e as Error).message?.slice(0, 200),
+      },
+    };
+  }
+}
+
 // ── Google Drive helpers ────────────────────────────────────
 function extractDriveFileId(url: string): string | null {
   const patterns = [
