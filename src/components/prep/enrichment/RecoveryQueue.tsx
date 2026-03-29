@@ -477,7 +477,15 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
     setAttemptHistory(prev => ({ ...prev, [resourceId]: history }));
   }, [attemptHistory]);
 
-  // ── Actions ──
+  // ── Shared invalidation ──
+  const invalidateAll = useCallback(() => {
+    for (const key of getRecoveryInvalidationKeys()) {
+      queryClient.invalidateQueries({ queryKey: key });
+    }
+    onItemResolved();
+  }, [queryClient, onItemResolved]);
+
+  // ── Actions (all flow through shared resolver) ──
 
   async function handleDeepExtraction(item: RecoveryItem) {
     if (!user?.id || !item.platform) return;
@@ -486,10 +494,9 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
       const result = await triggerDeepExtraction(item.resource.id, user.id, item.platform);
       if (result.success) {
         toast.success('Deep extraction initiated');
-        // Reload attempt history
         const history = await getAttemptHistory(item.resource.id);
         setAttemptHistory(prev => ({ ...prev, [item.resource.id]: history }));
-        onItemResolved();
+        invalidateAll();
       } else {
         toast.error(result.message);
       }
@@ -513,7 +520,7 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
       }).eq('id', resourceId);
       await invokeEnrichResource({ resource_id: resourceId, force: true }, { componentName: 'RecoveryQueue', timeoutMs: 90000 });
       toast.success(isTranscript ? 'Transcription retry initiated' : 'Retry initiated');
-      onItemResolved();
+      invalidateAll();
     } catch (e: any) {
       toast.error(`Retry failed: ${e.message}`);
       await (supabase as any).from('resources').update({
@@ -527,45 +534,25 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
   }
 
   async function handlePasteContent(resourceId: string) {
-    if (!pasteContent.trim()) { toast.error('Content is empty'); return; }
-    const trimmed = pasteContent.trim();
-    if (trimmed.length < 50) { toast.error('Content too short — minimum 50 characters'); return; }
+    if (!user?.id) return;
     setProcessing(resourceId);
     try {
-      await (supabase as any).from('resources').update({
-        content: trimmed,
-        content_status: 'full',
-        enrichment_status: 'not_enriched',
-        failure_reason: null,
-        failure_count: 0,
-        content_length: trimmed.length,
-        manual_content_present: true,
-        manual_input_required: false,
-        recovery_status: 'pending_reprocess',
-        resolution_method: 'manual_paste',
-        extraction_method: 'manual_paste',
-        last_status_change_at: new Date().toISOString(),
-      }).eq('id', resourceId);
-
-      // Record attempt
-      if (user?.id) {
-        await (supabase as any).from('enrichment_attempts').insert({
-          resource_id: resourceId,
-          user_id: user.id,
-          attempt_type: 'manual_paste',
-          strategy: 'manual_paste',
-          result: 'success',
-          content_found: true,
-          content_length_extracted: trimmed.length,
-          completed_at: new Date().toISOString(),
-        });
+      const result = await resolveResourceWithManualInput({
+        mode: 'paste_content',
+        resourceId,
+        userId: user.id,
+        text: pasteContent,
+      });
+      if (result.success) {
+        toast.success(result.message);
+        setPasteContent('');
+        setExpandedId(null);
+        const history = await getAttemptHistory(resourceId);
+        setAttemptHistory(prev => ({ ...prev, [resourceId]: history }));
+        invalidateAll();
+      } else {
+        toast.error(result.message);
       }
-
-      await invokeEnrichResource({ resource_id: resourceId, force: true }, { componentName: 'RecoveryQueue', timeoutMs: 60000 });
-      toast.success('Content saved & re-enrichment triggered');
-      setPasteContent('');
-      setExpandedId(null);
-      onItemResolved();
     } catch (e: any) {
       toast.error(`Failed: ${e.message}`);
     } finally {
@@ -574,36 +561,23 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
   }
 
   async function handleAlternateUrl(resourceId: string) {
-    if (!alternateUrl.trim()) { toast.error('URL is empty'); return; }
+    if (!user?.id) return;
     setProcessing(resourceId);
     try {
-      await (supabase as any).from('resources').update({
-        file_url: alternateUrl.trim(),
-        enrichment_status: 'not_enriched',
-        failure_reason: null,
-        failure_count: 0,
-        recovery_status: 'pending_retry',
-        resolution_method: 'alternate_url',
-        extraction_method: null,
-        last_status_change_at: new Date().toISOString(),
-      }).eq('id', resourceId);
-
-      if (user?.id) {
-        await (supabase as any).from('enrichment_attempts').insert({
-          resource_id: resourceId,
-          user_id: user.id,
-          attempt_type: 'alternate_url',
-          strategy: 'url_replacement',
-          result: 'pending',
-          metadata: { new_url: alternateUrl.trim() },
-        });
+      const result = await resolveResourceWithManualInput({
+        mode: 'alternate_url',
+        resourceId,
+        userId: user.id,
+        url: alternateUrl,
+      });
+      if (result.success) {
+        toast.success(result.message);
+        setAlternateUrl('');
+        setExpandedId(null);
+        invalidateAll();
+      } else {
+        toast.error(result.message);
       }
-
-      await invokeEnrichResource({ resource_id: resourceId, force: true }, { componentName: 'RecoveryQueue', timeoutMs: 90000 });
-      toast.success('Alternate URL set & re-enrichment triggered');
-      setAlternateUrl('');
-      setExpandedId(null);
-      onItemResolved();
     } catch (e: any) {
       toast.error(`Failed: ${e.message}`);
     } finally {
@@ -615,13 +589,20 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
     if (!user?.id) return;
     setProcessing(resourceId);
     try {
-      const result = await uploadTranscriptFile(resourceId, user.id, file);
+      const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      const isTranscript = ['vtt', 'srt'].includes(ext);
+      const result = await resolveResourceWithManualInput({
+        mode: isTranscript ? 'upload_transcript' : 'upload_content',
+        resourceId,
+        userId: user.id,
+        file,
+      });
       if (result.success) {
         toast.success(result.message);
         const history = await getAttemptHistory(resourceId);
         setAttemptHistory(prev => ({ ...prev, [resourceId]: history }));
         setExpandedId(null);
-        onItemResolved();
+        invalidateAll();
       } else {
         toast.error(result.message);
       }
@@ -633,6 +614,7 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
   }
 
   async function handleMarkMetadataOnly(item: RecoveryItem) {
+    if (!user?.id) return;
     const allowed = item.recoveryBucket === 'auth_gated' || item.recoveryBucket === 'system_gap'
       || item.recoveryBucket === 'assisted_resolution'
       || item.resource.enrichability === 'needs_auth'
@@ -643,31 +625,17 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
     }
     setProcessing(item.resource.id);
     try {
-      await (supabase as any).from('resources').update({
-        enrichment_status: 'deep_enriched',
-        failure_reason: null,
-        last_quality_tier: 'metadata_only',
-        last_status_change_at: new Date().toISOString(),
-        enriched_at: new Date().toISOString(),
-        recovery_status: 'resolved_metadata_only',
-        recovery_reason: 'Intentionally accepted as metadata-only',
-        resolution_method: 'metadata_only',
-        extraction_method: 'metadata_only',
-      }).eq('id', item.resource.id);
-
-      if (user?.id) {
-        await (supabase as any).from('enrichment_attempts').insert({
-          resource_id: item.resource.id,
-          user_id: user.id,
-          attempt_type: 'metadata_only',
-          strategy: 'metadata_only_close',
-          result: 'success',
-          completed_at: new Date().toISOString(),
-        });
+      const result = await resolveResourceWithManualInput({
+        mode: 'metadata_only',
+        resourceId: item.resource.id,
+        userId: user.id,
+      });
+      if (result.success) {
+        toast.success(result.message);
+        invalidateAll();
+      } else {
+        toast.error(result.message);
       }
-
-      toast.success('Marked as metadata-only');
-      onItemResolved();
     } catch (e: any) {
       toast.error(`Failed: ${e.message}`);
     } finally {
