@@ -43,6 +43,7 @@ type SourceType =
   | 'podcast'
   | 'direct_audio'
   | 'zoom_recording'
+  | 'circle_page'
   | 'unknown';
 
 interface SourceClassification {
@@ -55,7 +56,6 @@ interface SourceClassification {
 }
 
 const AUTH_GATED_DOMAINS: Array<{ pattern: RegExp; platform: string }> = [
-  { pattern: /circle\.so/i, platform: 'Circle' },
   { pattern: /teachable\.com/i, platform: 'Teachable' },
   { pattern: /kajabi\.com/i, platform: 'Kajabi' },
   { pattern: /skool\.com/i, platform: 'Skool' },
@@ -90,10 +90,23 @@ const JS_HEAVY_DOMAINS = [
 function classifySource(url: string): SourceClassification {
   try {
     const u = new URL(url);
-    const host = u.hostname + u.pathname;
+    const host = u.hostname.toLowerCase();
+    const pathname = u.pathname || '';
+    const hostAndPath = `${u.hostname}${u.pathname}`;
+
+    // ── Circle community URLs — MUST come before generic auth-gated/webpage checks ──
+    if (/(^|\.)circle\.so$/i.test(host)) {
+      return {
+        source_type: 'circle_page',
+        platform: 'Circle',
+        auth_required: false,
+        transcript_available: null,
+        downloadable: false,
+        js_rendered: true,
+      };
+    }
 
     // ── Zoom recording URLs — MUST come before generic auth-gated check ──
-    // Matches: *.zoom.us/rec/play/... and *.zoom.us/rec/share/...
     if (/\.zoom\.us\/rec\/(play|share)\//i.test(url)) {
       return {
         source_type: 'zoom_recording', platform: 'Zoom', auth_required: false,
@@ -101,74 +114,60 @@ function classifySource(url: string): SourceClassification {
       };
     }
 
-    // Auth-gated
     for (const ag of AUTH_GATED_DOMAINS) {
-      if (ag.pattern.test(host)) {
+      if (ag.pattern.test(hostAndPath)) {
         return { source_type: 'auth_gated', platform: ag.platform, auth_required: true, transcript_available: null, downloadable: false, js_rendered: false };
       }
     }
 
-    // Google Sheets — dedicated subtype, NOT auth-gated by default
-    if (/docs\.google\.com\/spreadsheets/i.test(host) || /sheets\.google\.com/i.test(host)) {
+    if (/docs\.google\.com\/spreadsheets/i.test(hostAndPath) || /sheets\.google\.com/i.test(hostAndPath)) {
       return { source_type: 'google_sheet', platform: 'Google Sheets', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
     }
 
-    // Google Drive file links (not Docs/Sheets/Slides) — try direct download
-    if (/drive\.google\.com\/file\/d\//i.test(host) ||
+    if (/drive\.google\.com\/file\/d\//i.test(hostAndPath) ||
         /drive\.google\.com\/open\?/i.test(url) ||
         /drive\.google\.com\/uc\?/i.test(url)) {
       return { source_type: 'google_drive_file', platform: 'Google Drive', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
     }
 
-    // Google Docs — try export, not auth-gated by default (same as Sheets)
     if (/docs\.google\.com\/document/i.test(url)) {
       return { source_type: 'google_doc', platform: 'Google Docs', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
     }
 
-    // Google Slides / other Google Docs patterns
-    if (GOOGLE_DOC_PATTERNS.some(p => p.test(host))) {
+    if (GOOGLE_DOC_PATTERNS.some(p => p.test(hostAndPath))) {
       return { source_type: 'google_doc', platform: 'Google', auth_required: true, transcript_available: null, downloadable: false, js_rendered: false };
     }
 
-    // Notion
-    if (/notion\.so/i.test(host)) {
+    if (/notion\.so/i.test(hostAndPath)) {
       return { source_type: 'notion', platform: 'Notion', auth_required: true, transcript_available: null, downloadable: false, js_rendered: true };
     }
 
-    // YouTube
-    if (/youtube\.com|youtu\.be/i.test(host)) {
+    if (/youtube\.com|youtu\.be/i.test(hostAndPath)) {
       return { source_type: 'youtube', platform: 'YouTube', auth_required: false, transcript_available: true, downloadable: false, js_rendered: true };
     }
 
-    // ── Wrapped audio URL detection (Anchor.fm play links with encoded audio URL) ──
-    // MUST come before generic podcast check so embedded audio gets direct_audio routing
     const embeddedAudio = extractEmbeddedAudioUrl(url);
     if (embeddedAudio) {
       return { source_type: 'direct_audio', platform: 'Anchor.fm (wrapped)', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
     }
 
-    // Podcast platforms (generic — no embedded audio URL detected)
-    if (/spotify\.com|podcasts\.apple\.com|anchor\.fm/i.test(host)) {
+    if (/spotify\.com|podcasts\.apple\.com|anchor\.fm/i.test(hostAndPath)) {
       return { source_type: 'podcast', platform: 'Podcast', auth_required: false, transcript_available: null, downloadable: false, js_rendered: true };
     }
 
-    // Direct audio files
-    if (/\.(mp3|m4a|wav|ogg|aac|flac|opus|webm)($|\?)/i.test(u.pathname)) {
+    if (/\.(mp3|m4a|wav|ogg|aac|flac|opus|webm)($|\?)/i.test(pathname)) {
       return { source_type: 'direct_audio', platform: 'Audio', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
     }
 
-    // Social
-    if (/twitter\.com|x\.com|threads\.net|reddit\.com/i.test(host)) {
+    if (/twitter\.com|x\.com|threads\.net|reddit\.com/i.test(hostAndPath)) {
       return { source_type: 'social', platform: 'Social', auth_required: false, transcript_available: null, downloadable: false, js_rendered: true };
     }
 
-    // PDF
-    if (/\.pdf($|\?)/i.test(u.pathname)) {
+    if (/\.pdf($|\?)/i.test(pathname)) {
       return { source_type: 'pdf', platform: 'Web', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
     }
 
-    // JS-heavy
-    if (JS_HEAVY_DOMAINS.some(p => p.test(host))) {
+    if (JS_HEAVY_DOMAINS.some(p => p.test(hostAndPath))) {
       return { source_type: 'webpage_js', platform: u.hostname, auth_required: false, transcript_available: null, downloadable: false, js_rendered: true };
     }
 
@@ -482,6 +481,85 @@ function extractEmbeddedAudioUrl(url: string): string | null {
   return null;
 }
 
+const CIRCLE_AUTH_PATTERNS = [
+  /log\s*in\s*to\s*your\s*account/i,
+  /sign\s*in\s*with\s*an\s*email/i,
+  /continue\s*with\s*google/i,
+  /continue\s*with\s*(twitter|facebook|apple)/i,
+  /access\s*with\s*course\s*purchase/i,
+  /forgot\s*your\s*password/i,
+  /login\.circle\.so/i,
+];
+
+const CIRCLE_SHELL_PATTERNS = [
+  /community\s*home/i,
+  /member\s*directory/i,
+  /search\s*posts/i,
+  /join\s*the\s*community/i,
+  /circle\s*community/i,
+  /powered\s*by\s*circle/i,
+  /log\s*in/i,
+  /sign\s*up/i,
+  /continue\s*with/i,
+];
+
+function normalizeExtractedText(raw: string): string {
+  return raw
+    .replace(/\u003c/gi, '<')
+    .replace(/\u003e/gi, '>')
+    .replace(/\u0026/gi, '&')
+    .replace(/\u002f/gi, '/')
+    .replace(/\n/g, ' ')
+    .replace(/\t/g, ' ')
+    .replace(/\r/g, ' ')
+    .replace(/\"/g, '"')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isCircleShellOnly(text: string): boolean {
+  if (!text || text.length < 80) return true;
+  const sample = text.slice(0, 5000);
+  const authHits = CIRCLE_AUTH_PATTERNS.filter(p => p.test(sample)).length;
+  const shellHits = CIRCLE_SHELL_PATTERNS.filter(p => p.test(sample)).length;
+  const lines = sample.split('\n').map(l => l.trim()).filter(Boolean);
+  const substantiveLines = lines.filter(l => l.length > 120);
+
+  if (authHits >= 2 && substantiveLines.length < 3) return true;
+  if (shellHits >= 4 && substantiveLines.length < 3) return true;
+  return false;
+}
+
+function extractCirclePostBodyFromContent(text: string): string | null {
+  if (!text) return null;
+
+  const patterns = [
+    /"post_body(?:_plain_text|_text|_html)?":\s*"([\s\S]{150,}?)"/i,
+    /"trix_content":\s*"([\s\S]{150,}?)"/i,
+    /"body":\s*"([\s\S]{150,}?)","(?:body_truncated|created_at|id|name|slug|post_type)"/i,
+    /"content":\s*"([\s\S]{150,}?)","(?:slug|id|name|created_at|post_type)"/i,
+    /<article[\s\S]*?>([\s\S]{150,}?)<\/article>/i,
+    /<main[\s\S]*?>([\s\S]{150,}?)<\/main>/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    const cleaned = normalizeExtractedText(match?.[1] || '');
+    if (cleaned.length >= 150 && !isCircleShellOnly(cleaned)) {
+      return cleaned.slice(0, CONTENT_CAP);
+    }
+  }
+
+  return null;
+}
+
 // ── Zoom shell detection patterns ──
 const ZOOM_SHELL_PATTERNS = [
   /sign\s*in/i,
@@ -542,6 +620,145 @@ function extractZoomTranscriptFromContent(text: string): string | null {
   }
 
   return null;
+}
+
+/** Circle community extractor — inspect bootstrap/app state first, then classify explicit recovery */
+async function circlePageExtract(url: string, apiKey: string): Promise<ExtractionResult> {
+  const method = 'circle_handler';
+  const startMs = Date.now();
+
+  try {
+    const pathname = new URL(url).pathname;
+    if (!/\/c\//i.test(pathname)) {
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: false, http_status: 200,
+          validation_result: 'fail', error_category: 'circle_unsupported_page_type',
+          error_detail: 'Circle URL is not a supported community post/page path',
+        },
+      };
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 120_000);
+
+    const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url,
+        formats: ["markdown", "html"],
+        onlyMainContent: false,
+        waitFor: 8000,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timer);
+    const durationMs = Date.now() - startMs;
+
+    if (!response.ok) {
+      const isAuthBlocked = response.status === 401 || response.status === 403;
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: isAuthBlocked, http_status: response.status,
+          validation_result: 'fail',
+          error_category: isAuthBlocked ? 'circle_access_blocked' : `http_${response.status}`,
+          error_detail: isAuthBlocked
+            ? `Circle page returned ${response.status} — access blocked`
+            : `Circle handler returned ${response.status}`,
+        },
+      };
+    }
+
+    const data = await response.json();
+    const markdown = (data.data?.markdown || data.markdown || '').slice(0, CONTENT_CAP);
+    const html = data.data?.html || data.html || '';
+    const shellSample = `${markdown}
+${html.slice(0, 15_000)}`;
+
+    const extractedBody = extractCirclePostBodyFromContent(html)
+      || extractCirclePostBodyFromContent(markdown);
+
+    if (extractedBody && extractedBody.length >= 150) {
+      return {
+        content: extractedBody,
+        attempt: {
+          method: 'circle_page_content', duration_ms: Date.now() - startMs,
+          chars_extracted: extractedBody.length, timeout_hit: false,
+          auth_wall_detected: false, http_status: 200,
+          validation_result: extractedBody.length >= 1000 ? 'pass' : 'partial',
+          error_category: null, error_detail: null,
+        },
+      };
+    }
+
+    const normalizedMarkdown = normalizeExtractedText(markdown);
+    const hasAuthSignals = CIRCLE_AUTH_PATTERNS.some(p => p.test(shellSample));
+    if (!hasAuthSignals && normalizedMarkdown.length >= 400 && !isCircleShellOnly(normalizedMarkdown)) {
+      return {
+        content: normalizedMarkdown.slice(0, CONTENT_CAP),
+        attempt: {
+          method: 'circle_page_markdown', duration_ms: Date.now() - startMs,
+          chars_extracted: normalizedMarkdown.length, timeout_hit: false,
+          auth_wall_detected: false, http_status: 200,
+          validation_result: normalizedMarkdown.length >= 1000 ? 'pass' : 'partial',
+          error_category: null, error_detail: null,
+        },
+      };
+    }
+
+    if (hasAuthSignals) {
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: markdown.length, timeout_hit: false,
+          auth_wall_detected: true, http_status: 200,
+          validation_result: 'fail', error_category: 'circle_auth_required',
+          error_detail: 'Circle community page requires authentication — post body not accessible',
+        },
+      };
+    }
+
+    if (isCircleShellOnly(shellSample)) {
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: markdown.length, timeout_hit: false,
+          auth_wall_detected: false, http_status: 200,
+          validation_result: 'fail', error_category: 'circle_shell_only',
+          error_detail: 'Circle app shell only — no meaningful post body found',
+        },
+      };
+    }
+
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: durationMs, chars_extracted: markdown.length, timeout_hit: false,
+        auth_wall_detected: false, http_status: 200,
+        validation_result: 'fail', error_category: 'circle_post_body_not_found',
+        error_detail: 'Circle page loaded but no usable post body was found in app state or rendered content',
+      },
+    };
+  } catch (e) {
+    const durationMs = Date.now() - startMs;
+    const isTimeout = e instanceof DOMException && e.name === 'AbortError';
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: isTimeout,
+        auth_wall_detected: false, http_status: null,
+        validation_result: 'fail',
+        error_category: isTimeout ? 'timeout' : 'circle_post_body_not_found',
+        error_detail: isTimeout ? 'Circle page timed out after 120s' : (e as Error).message?.slice(0, 200),
+      },
+    };
+  }
 }
 
 /** Zoom recording extractor — attempts transcript/player data, then falls back to scraping */
@@ -1458,6 +1675,8 @@ function getMethodChain(source: SourceClassification): Array<(url: string, apiKe
       return [directAudioTranscribe];
     case 'zoom_recording':
       return [zoomRecordingExtract];
+    case 'circle_page':
+      return [circlePageExtract];
     case 'social':
       return [firecrawlScrape, firecrawlFullPage];
     case 'google_drive_file':
@@ -1672,6 +1891,36 @@ interface EnrichmentOutput {
   recovery_hint: string | null;
 }
 
+async function appendEnrichmentAuditEvent(
+  supabase: any,
+  resourceId: string,
+  entry: Record<string, any>,
+) {
+  try {
+    const { data: current } = await supabase
+      .from("resources")
+      .select("enrichment_audit_log")
+      .eq("id", resourceId)
+      .single();
+
+    const existingLog = Array.isArray((current as any)?.enrichment_audit_log)
+      ? (current as any).enrichment_audit_log
+      : [];
+
+    const auditEntry = {
+      timestamp: new Date().toISOString(),
+      ...entry,
+    };
+
+    await supabase
+      .from("resources")
+      .update({ enrichment_audit_log: [...existingLog.slice(-19), auditEntry] })
+      .eq("id", resourceId);
+  } catch (error) {
+    console.warn(`[Audit] Failed to append enrichment audit for ${resourceId}: ${(error as Error).message}`);
+  }
+}
+
 /** Update enrichment_status with audit trail */
 async function setEnrichmentStatus(
   supabase: any,
@@ -1840,21 +2089,52 @@ async function orchestrateEnrichment(
       console.log(`[Orchestrate] Auth wall detected for ${resourceId} (source=${source.source_type})`);
 
       const isZoom = source.source_type === 'zoom_recording';
+      const isCircle = source.source_type === 'circle_page';
+      const circleFailureCategory = isCircle ? (result.attempt.error_category || 'circle_auth_required') : null;
+      const circleAccessBlocked = circleFailureCategory === 'circle_access_blocked';
       const failureReason = isZoom
         ? `Zoom recording requires authentication — ${result.attempt.error_category || 'zoom_auth_required'}`
+        : isCircle
+        ? `Circle page requires authentication — ${circleFailureCategory}`
         : 'Login/signup wall detected during scraping';
+      const recoveryReason = isZoom
+        ? 'Zoom recording access blocked — requires login or shared link permissions'
+        : isCircle
+        ? (circleAccessBlocked
+            ? 'Circle community page access blocked — provide access or upload an export'
+            : `Circle community page requires manual recovery (${circleFailureCategory})`)
+        : failureReason;
+      const nextAction = isZoom
+        ? 'provide_access'
+        : isCircle
+        ? (circleAccessBlocked ? 'provide_access' : 'paste_content')
+        : 'paste_content';
 
       await setEnrichmentStatus(supabase, resourceId, 'needs_auth', {
         failure_reason: failureReason,
         recovery_status: 'auth_gated_manual_action_required',
-        recovery_reason: isZoom ? 'Zoom recording access blocked — requires login or shared link permissions' : failureReason,
-        next_best_action: isZoom ? 'provide_access' : 'paste_content',
+        recovery_reason: recoveryReason,
+        next_best_action: nextAction,
         manual_input_required: true,
         recovery_queue_bucket: 'needs_input',
         access_type: 'auth_gated',
-        content_classification: isZoom ? 'video' : null,
-        extraction_method: isZoom ? 'zoom_recording_handler' : null,
+        content_classification: isZoom ? 'video' : isCircle ? 'auth_gated' : null,
+        extraction_method: isZoom ? 'zoom_recording_handler' : isCircle ? 'circle_handler' : null,
       });
+
+      if (isCircle) {
+        await appendEnrichmentAuditEvent(supabase, resourceId, {
+          event: 'circle_resolution',
+          source_type: 'circle_page',
+          platform: 'Circle',
+          circle_resolution_status: circleFailureCategory,
+          app_shell_detected: circleFailureCategory === 'circle_auth_required' || circleFailureCategory === 'circle_shell_only',
+          access_type: 'auth_gated',
+          manual_input_required: true,
+          next_best_action: nextAction,
+          extraction_method: 'circle_handler',
+        });
+      }
 
       return {
         resource_id: resourceId, url, source_classification: { ...source, auth_required: true },
@@ -1864,6 +2144,10 @@ async function orchestrateEnrichment(
         failure_reason: failureReason,
         recovery_hint: isZoom
           ? 'This Zoom recording requires authentication. Paste the transcript, provide a public share link, or upload the recording.'
+          : isCircle
+          ? (circleAccessBlocked
+              ? 'This Circle page is access blocked. Provide access, upload an export, or paste the post body manually.'
+              : 'This Circle post requires login. Paste the post body manually or provide an export.')
           : 'Paste the content manually or provide a public link',
       };
     }
@@ -1948,6 +2232,7 @@ async function orchestrateEnrichment(
     }
 
     // FULL SUCCESS
+    const isCircleSuccess = source.source_type === 'circle_page';
     await supabase.from("resources").update({ content: bestContent }).eq("id", resourceId);
     await setEnrichmentStatus(supabase, resourceId, "deep_enriched", {
       enriched_at: new Date().toISOString(),
@@ -1965,8 +2250,26 @@ async function orchestrateEnrichment(
       recovery_queue_bucket: null,
       last_recovery_error: null,
       extraction_method: bestMethod,
-      access_type: source.auth_required ? 'auth_gated' : 'public',
+      access_type: isCircleSuccess ? 'public' : (source.auth_required ? 'auth_gated' : 'public'),
+      content_classification: source.source_type === 'direct_audio' || source.source_type === 'podcast'
+        ? 'audio'
+        : source.source_type === 'zoom_recording'
+        ? 'video'
+        : null,
     });
+    if (isCircleSuccess) {
+      await appendEnrichmentAuditEvent(supabase, resourceId, {
+        event: 'circle_resolution',
+        source_type: 'circle_page',
+        platform: 'Circle',
+        circle_resolution_status: 'circle_content_extracted',
+        app_shell_detected: false,
+        access_type: 'public',
+        manual_input_required: false,
+        next_best_action: null,
+        extraction_method: 'circle_handler',
+      });
+    }
     await supabase.from("resource_digests").delete().eq("resource_id", resourceId);
 
     console.log(`[Orchestrate] SUCCESS id=${resourceId} chars=${bestContent.length} method=${bestMethod} attempts=${attempts.length}`);
@@ -2031,8 +2334,8 @@ async function orchestrateEnrichment(
   const isRetryable = timeoutCount > 0 || attempts.some(a => a.http_status && a.http_status >= 500);
   const isAudioSource = source.source_type === 'direct_audio' || source.source_type === 'podcast';
   const isZoomSource = source.source_type === 'zoom_recording';
+  const isCircleSource = source.source_type === 'circle_page';
 
-  // Zoom-specific failure classification
   const zoomFailureCategory = isZoomSource
     ? (attempts.find(a => a.error_category?.startsWith('zoom_'))?.error_category || 'zoom_transcript_not_found')
     : null;
@@ -2043,20 +2346,34 @@ async function orchestrateEnrichment(
   );
   const isZoomShell = isZoomSource && zoomFailureCategory === 'zoom_player_shell_only';
 
-  // Audio/podcast sources that failed transcription should stay in transcription queue, not generic failure
+  const circleFailureCategory = isCircleSource
+    ? (attempts.find(a => a.error_category?.startsWith('circle_'))?.error_category || 'circle_post_body_not_found')
+    : null;
+  const isCircleAuthBlocked = isCircleSource && (
+    circleFailureCategory === 'circle_auth_required' ||
+    circleFailureCategory === 'circle_access_blocked' ||
+    attempts.some(a => a.auth_wall_detected)
+  );
+  const isCircleShell = isCircleSource && circleFailureCategory === 'circle_shell_only';
+
   const recoveryStatus = isZoomAuthBlocked ? 'auth_gated_manual_action_required'
+    : isCircleAuthBlocked ? 'auth_gated_manual_action_required'
     : isZoomShell ? 'awaiting_user_content'
     : isZoomSource ? 'awaiting_user_content'
+    : isCircleSource ? 'awaiting_user_content'
     : isAudioSource ? 'pending_transcription'
     : isRetryable ? 'failed_retryable'
     : 'awaiting_user_content';
   const recoveryAction = isZoomAuthBlocked ? 'provide_access'
+    : isCircleAuthBlocked ? (circleFailureCategory === 'circle_access_blocked' ? 'provide_access' : 'paste_content')
     : isZoomShell ? 'paste_transcript'
     : isZoomSource ? 'paste_transcript'
+    : isCircleSource ? (circleFailureCategory === 'circle_unsupported_page_type' ? 'upload_export' : 'paste_content')
     : isAudioSource ? 'start_transcription'
     : isRetryable ? 'queue_for_retry'
     : 'paste_content';
   const recoveryBucket = isZoomAuthBlocked ? 'needs_input'
+    : isCircleSource ? 'needs_input'
     : isZoomSource ? 'needs_input'
     : isAudioSource ? 'auto_fixable'
     : isRetryable ? 'retryable'
@@ -2065,6 +2382,10 @@ async function orchestrateEnrichment(
   const zoomRecoveryReason = isZoomAuthBlocked ? `Zoom recording requires authentication to access (${zoomFailureCategory})`
     : isZoomShell ? 'Zoom player shell only — no transcript or media found. Paste transcript manually or provide download.'
     : isZoomSource ? `Zoom recording extraction failed: ${zoomFailureCategory} — paste transcript or provide recording download`
+    : null;
+  const circleRecoveryReason = isCircleAuthBlocked ? `Circle page requires authentication to access (${circleFailureCategory})`
+    : isCircleShell ? 'Circle app shell only — no usable post body found. Paste content manually or provide access/export.'
+    : isCircleSource ? `Circle extraction failed: ${circleFailureCategory} — paste content, provide access, or upload an export`
     : null;
 
   await setEnrichmentStatus(supabase, resourceId, newStatus, {
@@ -2075,15 +2396,29 @@ async function orchestrateEnrichment(
     failure_count: (resource.failure_count || 0) + 1,
     // Persist recovery state
     recovery_status: recoveryStatus,
-    recovery_reason: zoomRecoveryReason || (isAudioSource ? `Audio transcription failed: ${primaryReason}` : primaryReason),
+    recovery_reason: circleRecoveryReason || zoomRecoveryReason || (isAudioSource ? `Audio transcription failed: ${primaryReason}` : primaryReason),
     next_best_action: recoveryAction,
-    manual_input_required: isZoomSource || (!isAudioSource && !isRetryable),
+    manual_input_required: isZoomSource || isCircleSource || (!isAudioSource && !isRetryable),
     recovery_queue_bucket: recoveryBucket,
     last_recovery_error: primaryReason,
-    access_type: (isZoomAuthBlocked || attempts.some(a => a.http_status === 403 || a.http_status === 401)) ? 'auth_gated' : 'public',
-    content_classification: isAudioSource ? 'audio' : isZoomSource ? 'video' : null,
-    extraction_method: isZoomSource ? 'zoom_recording_handler' : null,
+    access_type: isZoomAuthBlocked ? 'auth_gated' : isCircleAuthBlocked ? 'auth_gated' : isCircleSource ? 'unknown' : (attempts.some(a => a.http_status === 403 || a.http_status === 401) ? 'auth_gated' : 'public'),
+    content_classification: isAudioSource ? 'audio' : isZoomSource ? 'video' : isCircleSource ? 'auth_gated' : null,
+    extraction_method: isZoomSource ? 'zoom_recording_handler' : isCircleSource ? 'circle_handler' : null,
   });
+
+  if (isCircleSource) {
+    await appendEnrichmentAuditEvent(supabase, resourceId, {
+      event: 'circle_resolution',
+      source_type: 'circle_page',
+      platform: 'Circle',
+      circle_resolution_status: circleFailureCategory,
+      app_shell_detected: isCircleShell || isCircleAuthBlocked,
+      access_type: isCircleAuthBlocked ? 'auth_gated' : 'unknown',
+      manual_input_required: true,
+      next_best_action: recoveryAction,
+      extraction_method: 'circle_handler',
+    });
+  }
 
   console.log(`[Orchestrate] FAILED id=${resourceId} reason=${primaryReason} attempts=${attempts.length}`);
   return {
