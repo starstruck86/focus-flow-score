@@ -579,6 +579,53 @@ function extractCirclePostBodyFromContent(text: string): string | null {
   return null;
 }
 
+/** Extract Circle post metadata (title, author, slug) from URL + HTML even when body unavailable */
+function extractCirclePostMetadata(url: string, html: string, markdown: string): {
+  title: string | null;
+  author: string | null;
+  community: string | null;
+  slug: string | null;
+  metadataSummary: string | null;
+} {
+  const result = { title: null as string | null, author: null as string | null, community: null as string | null, slug: null as string | null, metadataSummary: null as string | null };
+
+  // Extract from URL: /c/community-name/post-slug
+  const urlMatch = url.match(/\/c\/([^/]+)\/([^/?#]+)/);
+  if (urlMatch) {
+    result.community = urlMatch[1].replace(/-/g, ' ');
+    result.slug = urlMatch[2].replace(/-/g, ' ');
+  }
+
+  const combined = `${html}\n${markdown}`;
+
+  // Title from HTML
+  const titleMatch = combined.match(/<title[^>]*>([^<]{5,})<\/title>/i);
+  if (titleMatch?.[1]) result.title = titleMatch[1].trim();
+
+  // og:title
+  const ogTitle = combined.match(/property="og:title"\s+content="([^"]+)"/i)
+    || combined.match(/content="([^"]+)"\s+property="og:title"/i);
+  if (ogTitle?.[1] && !result.title) result.title = ogTitle[1];
+
+  // Author from bootstrap JSON
+  const authorMatch = combined.match(/"(?:author_name|authorName|user_name|userName)"\s*:\s*"([^"]+)"/i);
+  if (authorMatch?.[1]) result.author = authorMatch[1];
+
+  // Post title from bootstrap JSON
+  const postTitle = combined.match(/"(?:post_title|name|title)"\s*:\s*"([^"]{5,}?)"/i);
+  if (postTitle?.[1] && !result.title) result.title = postTitle[1];
+
+  // Build summary
+  const parts: string[] = [];
+  if (result.title) parts.push(`Title: ${result.title}`);
+  if (result.author) parts.push(`Author: ${result.author}`);
+  if (result.community) parts.push(`Community: ${result.community}`);
+  if (result.slug) parts.push(`Slug: ${result.slug}`);
+  result.metadataSummary = parts.length > 0 ? parts.join(' | ') : null;
+
+  return result;
+}
+
 // ── Zoom shell detection patterns ──
 const ZOOM_SHELL_PATTERNS = [
   /sign\s*in/i,
