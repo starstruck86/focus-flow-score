@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   ArrowLeft, ExternalLink, Download, FileText, BookOpen, Target, Shield,
-  GraduationCap, MessageSquare, Presentation, Mail, Edit3, Tag,
+  GraduationCap, MessageSquare, Presentation, Mail, Edit3, Tag, Archive, Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Resource } from '@/hooks/useResources';
