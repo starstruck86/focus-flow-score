@@ -62,7 +62,7 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
 
   const bucket = mapVerifiedToBucket(r);
   const bucketMeta = BUCKET_META[bucket];
-  const hasContent = ((r as any).contentLength ?? 0) > 0 || (r as any).manual_content_present === true;
+  const hasContent = (r.contentLength ?? 0) > 0 || (r as any).manual_content_present === true || (r as any).content_length > 0;
   const canFix = isFixEligible({
     content_length: (r as any).contentLength,
     manual_content_present: (r as any).manual_content_present,
