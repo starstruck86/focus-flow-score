@@ -458,6 +458,18 @@ export function ResourceLibraryTable({
                               Drift: {drift.issues[0]}
                             </p>
                           )}
+                          {/* Manual recovery provenance badge */}
+                          {(resource as any).manual_content_present && (
+                            <Badge variant="outline" className="text-[8px] h-4 px-1 mt-0.5 border-primary/30 text-primary">
+                              {(resource as any).resolution_method === 'metadata_only' ? 'Metadata Only' :
+                               (resource as any).resolution_method === 'manual_transcript_paste' ? 'Manual Transcript' :
+                               (resource as any).resolution_method === 'manual_paste' ? 'Manual Content' :
+                               (resource as any).resolution_method === 'transcript_upload' ? 'Uploaded Transcript' :
+                               (resource as any).resolution_method === 'content_upload' ? 'Uploaded Content' :
+                               (resource as any).resolution_method === 'alternate_url' ? 'Alternate URL' :
+                               'Manual Recovery'}
+                            </Badge>
+                          )}
                           {/* Audio status inline */}
                           {isAudio && audioJob && (
                             <div className="flex items-center gap-1 mt-0.5 flex-wrap">
