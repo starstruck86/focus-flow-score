@@ -761,18 +761,41 @@ export function ResourceManager() {
                     break;
                   }
                   // Standard enrichment for non-audio
-                  toast.info(action === 're_enrich' ? 'Re-enriching...' : 'Enriching...');
-                  try {
-                    const result = await invokeEnrichResource<any>({ resource_id: resource.id, force: action === 're_enrich' });
-                    if (result.error) {
-                      toast.error(result.error.message, { description: result.error.recoveryHint });
-                      break;
+                  {
+                    const isReEnrich = action === 're_enrich';
+                    const queuedStatus = isReEnrich ? 'queued_for_reenrich' : 'queued_for_deep_enrich';
+
+                    // Optimistic UI: immediately set queued status so table/queue updates
+                    updateEnrichmentStatus.mutate(
+                      { id: resource.id, enrichment_status: queuedStatus, failure_reason: null },
+                      { onSuccess: () => queryClient.invalidateQueries({ queryKey: ['resources'] }) },
+                    );
+                    toast.info(isReEnrich ? 'Re-enriching...' : 'Enriching...');
+
+                    try {
+                      const result = await invokeEnrichResource<any>(
+                        { resource_id: resource.id, force: isReEnrich },
+                        { componentName: 'ResourceManager' },
+                      );
+
+                      // Always invalidate after edge function completes
+                      queryClient.invalidateQueries({ queryKey: ['resources'] });
+                      queryClient.invalidateQueries({ queryKey: ['incoming-queue'] });
+                      queryClient.invalidateQueries({ queryKey: ['all-resources'] });
+
+                      if (result.error) {
+                        console.error('[Enrich] Edge function error:', result.error);
+                        toast.error(result.error.message, { description: result.error.recoveryHint });
+                        break;
+                      }
+                      if (result.data?.final_status === 'enriched') toast.success('Content enriched');
+                      else if (result.data?.final_status === 'partial') toast.info('Partially enriched', { description: result.data?.recovery_hint || result.data?.failure_reason });
+                      else toast.info(result.data?.failure_reason || 'Enrichment rerouted');
+                    } catch (error: any) {
+                      console.error('[Enrich] Unexpected error:', error);
+                      queryClient.invalidateQueries({ queryKey: ['resources'] });
+                      toast.error('Enrichment failed', { description: error?.message });
                     }
-                    if (result.data?.final_status === 'enriched') toast.success('Content enriched');
-                    else if (result.data?.final_status === 'partial') toast.info('Partially enriched', { description: result.data?.recovery_hint || result.data?.failure_reason });
-                    else toast.info(result.data?.failure_reason || 'Enrichment rerouted');
-                  } catch (error: any) {
-                    toast.error('Enrichment failed', { description: error?.message });
                   }
                   break;
                 }
