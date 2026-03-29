@@ -45,6 +45,7 @@ export function ResourceFileViewer({ resource, onBack, onEdit }: Props) {
 
   const isExternal = resource.file_url?.startsWith('http://') || resource.file_url?.startsWith('https://');
   const isPdf = resource.file_url?.toLowerCase().endsWith('.pdf');
+  const isNotionZip = (resource as any).resolution_method === 'notion_zip_import' || (resource as any).extraction_method === 'notion_zip_import';
   const hasTextContent = resource.content && !resource.content.startsWith('[File:') && !resource.content.startsWith('[External');
 
   useEffect(() => {
