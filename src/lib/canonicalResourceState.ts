@@ -171,6 +171,15 @@ export function resolveCanonicalState(
     return { ...base, state: 'enriching', label: 'Processing', description: 'Enrichment running', nextAction: null, qualityScore: quality.score };
   }
 
+  // Advanced extraction states
+  const advStatus = (resource as any).advanced_extraction_status as string | null;
+  if (advStatus === 'pending') {
+    return { ...base, state: 'advanced_extraction_pending', label: 'Deep Extract Queued', description: 'Queued for advanced platform-specific extraction', nextAction: null, qualityScore: quality.score };
+  }
+  if (advStatus === 'in_progress') {
+    return { ...base, state: 'advanced_extraction_in_progress', label: 'Deep Extracting', description: 'Advanced extraction running', nextAction: null, qualityScore: quality.score };
+  }
+
   // Audio job active processing
   if (audioJob && ['queued', 'resolving', 'downloading', 'transcribing', 'assembling',
     'detecting_source_type', 'resolving_platform_metadata', 'resolving_canonical_episode_page',
