@@ -1378,7 +1378,7 @@ function getMethodChain(source: SourceClassification): Array<(url: string, apiKe
     case 'social':
       return [firecrawlScrape, firecrawlFullPage];
     case 'google_drive_file':
-      return [googleDriveDirectDownload, firecrawlScrape];
+      return [googleDriveDirectDownload, googleDrivePreviewScrape, firecrawlScrape];
     case 'google_sheet':
       return [googleSheetExport, firecrawlScrape];
     case 'google_doc':
