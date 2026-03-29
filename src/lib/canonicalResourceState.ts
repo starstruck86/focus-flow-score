@@ -383,6 +383,10 @@ export interface EnrichmentHealthStats {
   readyToEnrich: number;
   enriching: number;
   retryableFailure: number;
+  advancedExtractionPending: number;
+  advancedExtractionInProgress: number;
+  advancedExtractionFailed: number;
+  awaitingAssistedResolution: number;
   needsTranscript: number;
   needsPastedContent: number;
   needsAccessAuth: number;
