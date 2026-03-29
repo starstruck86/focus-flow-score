@@ -1,6 +1,7 @@
 /**
  * Resource Detail Drawer — Full inline editor with diagnostics and actions.
  * Parts 3 + 4 of the Enrichment Operator Console.
+ * Mobile: renders as full-screen sheet with grouped actions.
  */
 import { useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -14,11 +15,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
+  Sheet, SheetContent, SheetHeader, SheetTitle,
+} from '@/components/ui/sheet';
+import {
   X, Save, Zap, RotateCcw, FileText, ExternalLink, Trash2,
   Bookmark, SkipForward, Ban, ShieldOff, Play, Wrench,
-  Loader2, CheckCircle2, AlertTriangle, Copy, Unlock,
+  Loader2, CheckCircle2, AlertTriangle, Copy, Unlock, ArrowLeft, Eye, MoreHorizontal,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { ContentViewer } from '../ContentViewer';
+import type { VerifiedResource } from '@/lib/enrichmentVerification';
+import { mapVerifiedToBucket, BUCKET_META } from './types';
+import { classifyQuarantine, getQuarantineSubClass, shouldAutoRelease } from '@/lib/quarantineClassification';
 import type { VerifiedResource } from '@/lib/enrichmentVerification';
 import { mapVerifiedToBucket, BUCKET_META } from './types';
 import { classifyQuarantine, getQuarantineSubClass, shouldAutoRelease } from '@/lib/quarantineClassification';
