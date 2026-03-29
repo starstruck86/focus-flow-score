@@ -458,7 +458,7 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
 
   const counts = useMemo(() => {
     const all = resources.map(classifyRecoveryItem).filter((i): i is RecoveryItem => i !== null);
-    const c: Record<RecoveryFilter, number> = { all: all.length, deep_extraction: 0, assisted_resolution: 0, needs_transcript: 0, auth_gated: 0, alternate_url: 0, awaiting_input: 0, system_gap: 0, retryable: 0 };
+    const c: Record<RecoveryFilter, number> = { all: all.length, deep_extraction: 0, zoom_session_assist: 0, assisted_resolution: 0, needs_transcript: 0, auth_gated: 0, alternate_url: 0, awaiting_input: 0, system_gap: 0, retryable: 0 };
     for (const item of all) c[item.recoveryBucket]++;
     return c;
   }, [resources]);
