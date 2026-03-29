@@ -39,6 +39,29 @@ export function deriveProcessingState(
 ): ProcessingStateResult {
   const status = resource.enrichment_status;
 
+  // ── CONTENT WINS OVER FAILURE ─────────────────────────────
+  // If a resource has substantial content (manually provided or otherwise),
+  // it is COMPLETED regardless of stale enrichment_status.
+  const contentLength = (resource as any).content_length ?? 0;
+  const hasManualContent = (resource as any).manual_content_present === true;
+  const rm = (resource as any).resolution_method;
+  const hasSubstantialContent = contentLength > 1000 || hasManualContent;
+
+  if (hasSubstantialContent && (status === 'failed' || status === 'incomplete' || status === 'not_enriched' || status === 'stale' || status === 'quarantined')) {
+    const isManual = hasManualContent || rm === 'metadata_only' || rm === 'alternate_url' ||
+      rm === 'transcript_upload' || rm === 'content_upload' ||
+      (typeof rm === 'string' && rm.startsWith('manual'));
+    return {
+      state: 'COMPLETED',
+      label: isManual ? 'Manual Recovery' : 'Content Available',
+      description: isManual
+        ? `Resolved via ${rm || 'manual input'} — ${contentLength.toLocaleString()} chars`
+        : `Content present (${contentLength.toLocaleString()} chars) — status needs sync`,
+      nextAction: (status as string) !== 'deep_enriched' ? 'Re-enrich to finalize status' : null,
+      retryable: false,
+    };
+  }
+
   // Currently running
   if (
     status === 'deep_enrich_in_progress' ||
