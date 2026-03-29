@@ -22,11 +22,17 @@ import { supabase } from '@/integrations/supabase/client';
 import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  triggerDeepExtraction, getAttemptHistory, uploadTranscriptFile,
+  triggerDeepExtraction, getAttemptHistory,
   getAssistedResolutionGuidance,
   type EnrichmentAttemptRecord,
 } from '@/lib/advancedExtraction';
+import {
+  resolveResourceWithManualInput,
+  getRecoveryInvalidationKeys,
+  type RecoveryMode,
+} from '@/lib/manualRecoveryResolver';
 import { ZoomAssistPanel } from '@/components/prep/enrichment/ZoomAssistPanel';
+import { useQueryClient } from '@tanstack/react-query';
 import type { VerifiedResource } from '@/lib/enrichmentVerification';
 
 // ── Types ────────────────────────────────────────────────
