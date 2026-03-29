@@ -2625,6 +2625,7 @@ async function orchestrateEnrichment(
   resource: any,
   apiKey: string,
   force: boolean,
+  userId?: string,
 ): Promise<EnrichmentOutput> {
   const url = resource.file_url;
   const resourceId = resource.id;
