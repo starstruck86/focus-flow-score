@@ -26,6 +26,7 @@ import {
   getAssistedResolutionGuidance,
   type EnrichmentAttemptRecord,
 } from '@/lib/advancedExtraction';
+import { ZoomAssistPanel } from '@/components/prep/enrichment/ZoomAssistPanel';
 import type { VerifiedResource } from '@/lib/enrichmentVerification';
 
 // ── Types ────────────────────────────────────────────────
