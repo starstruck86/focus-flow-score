@@ -62,7 +62,7 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
 
   const bucket = mapVerifiedToBucket(r);
   const bucketMeta = BUCKET_META[bucket];
-  const hasContent = ((r as any).contentLength ?? 0) > 0 || (r as any).manual_content_present === true;
+  const hasContent = (r.contentLength ?? 0) > 0 || (r as any).manual_content_present === true || (r as any).content_length > 0;
   const canFix = isFixEligible({
     content_length: (r as any).contentLength,
     manual_content_present: (r as any).manual_content_present,
@@ -545,7 +545,7 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
 
       {/* Content Viewer */}
       <ContentViewer
-        resource={{ id: r.id, title: r.title, content: '', content_length: r.contentLength, updated_at: (r as any).lastAttemptAt || '' } as any}
+        resource={{ id: r.id, title: r.title, content: '', content_length: r.contentLength, updated_at: (r as any).lastAttemptAt || r.enrichedAt || '', resolution_method: (r as any).resolution_method, extraction_method: (r as any).extraction_method, manual_content_present: (r as any).manual_content_present } as any}
         open={showContentViewer}
         onOpenChange={setShowContentViewer}
       />
