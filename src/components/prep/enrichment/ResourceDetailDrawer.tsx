@@ -28,9 +28,6 @@ import { ContentViewer } from '../ContentViewer';
 import type { VerifiedResource } from '@/lib/enrichmentVerification';
 import { mapVerifiedToBucket, BUCKET_META } from './types';
 import { classifyQuarantine, getQuarantineSubClass, shouldAutoRelease } from '@/lib/quarantineClassification';
-import type { VerifiedResource } from '@/lib/enrichmentVerification';
-import { mapVerifiedToBucket, BUCKET_META } from './types';
-import { classifyQuarantine, getQuarantineSubClass, shouldAutoRelease } from '@/lib/quarantineClassification';
 
 interface Props {
   resource: VerifiedResource;
