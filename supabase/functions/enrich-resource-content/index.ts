@@ -2979,13 +2979,15 @@ async function orchestrateEnrichment(
     await supabase.from("resource_digests").delete().eq("resource_id", resourceId);
 
     console.log(`[Orchestrate] SUCCESS id=${resourceId} chars=${bestContent.length} method=${bestMethod} attempts=${attempts.length}`);
-    return {
+    const successOutput: EnrichmentOutput = {
       resource_id: resourceId, url, source_classification: source,
       final_status: 'enriched', method_used: bestMethod, methods_attempted: attempts,
       attempt_count: attempts.length, extracted_text_length: bestContent.length,
       completeness_score: bestQuality.score, confidence_score: Math.min(100, bestQuality.score + 10),
       missing_fields: [], failure_reason: null, recovery_hint: null,
     };
+    if (userId) await persistAttemptProvenance(supabase, userId, resourceId, source, successOutput, attempts);
+    return successOutput;
   }
 
   if (bestContent && bestQuality && bestQuality.score >= PARTIAL_MIN_SCORE) {
