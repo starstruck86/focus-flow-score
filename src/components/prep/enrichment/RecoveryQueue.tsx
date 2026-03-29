@@ -34,6 +34,7 @@ import type { VerifiedResource } from '@/lib/enrichmentVerification';
 type RecoveryFilter =
   | 'all'
   | 'deep_extraction'
+  | 'zoom_session_assist'
   | 'assisted_resolution'
   | 'needs_transcript'
   | 'auth_gated'
