@@ -134,7 +134,12 @@ export function useUploadResource() {
       // ── Notion ZIP fast-path ──
       if (isNotionZip(file)) {
         const zipResult = await extractNotionZip(file);
-        if (zipResult.totalLength < 50) throw new Error('ZIP contained no usable content');
+        if (zipResult.mdFileCount === 0 && zipResult.csvFileCount === 0) {
+          throw new Error('ZIP contains no usable Notion content');
+        }
+        if (zipResult.totalLength < 50) {
+          throw new Error('ZIP contains no usable Notion content');
+        }
 
         // Upload ZIP to storage
         const filePath = `${user.id}/${Date.now()}-${file.name}`;
