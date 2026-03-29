@@ -41,7 +41,7 @@ export function SummaryCards({ health, activeBucket, onBucketClick, deltaComplet
   // Compute bucket counts from verified resources (same logic as workbench filter)
   const bucketCounts = useMemo(() => {
     if (!verifiedResources?.length) return null;
-    const counts: Record<BucketFilter, number> = { all: verifiedResources.length, complete: 0, auto_fixable: 0, needs_input: 0, processing: 0, quarantined: 0, system_gap: 0 };
+    const counts: Record<BucketFilter, number> = { all: verifiedResources.length, complete: 0, auto_fixable: 0, advanced_extraction: 0, assisted_resolution: 0, needs_input: 0, processing: 0, quarantined: 0, system_gap: 0 };
     for (const r of verifiedResources) {
       const b = mapVerifiedToBucket(r);
       counts[b]++;
