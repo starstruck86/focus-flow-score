@@ -230,11 +230,13 @@ async function handleMetadataOnly(input: RecoveryInput): Promise<RecoveryResult>
     await (supabase as any).from('resources').update({
       enrichment_status: 'deep_enriched',
       failure_reason: null,
+      failure_count: 0,
       last_quality_tier: 'metadata_only',
       last_status_change_at: new Date().toISOString(),
       enriched_at: new Date().toISOString(),
       recovery_status: 'resolved_metadata_only',
       recovery_reason: 'Intentionally accepted as metadata-only',
+      recovery_queue_bucket: null,
       resolution_method: 'metadata_only',
       extraction_method: 'metadata_only',
       manual_input_required: false,
