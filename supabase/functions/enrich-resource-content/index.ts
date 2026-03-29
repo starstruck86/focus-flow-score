@@ -861,6 +861,10 @@ ${html.slice(0, 15_000)}`;
       };
     }
 
+    // Extract metadata even on failure — preserves useful context
+    const postMeta = extractCirclePostMetadata(url, html, markdown);
+    const metaDetail = postMeta.metadataSummary ? ` [Metadata: ${postMeta.metadataSummary}]` : '';
+
     if (hasAuthSignals) {
       return {
         content: null,
@@ -868,19 +872,24 @@ ${html.slice(0, 15_000)}`;
           method, duration_ms: durationMs, chars_extracted: markdown.length, timeout_hit: false,
           auth_wall_detected: true, http_status: 200,
           validation_result: 'fail', error_category: 'circle_auth_required',
-          error_detail: 'Circle community page requires authentication — post body not accessible',
+          error_detail: `Circle community page requires authentication — post body not accessible.${metaDetail}`,
         },
       };
     }
 
     if (isCircleShellOnly(shellSample)) {
+      // If we found metadata, report it as circle_post_metadata_found (more precise)
+      const hasMeta = !!(postMeta.title || postMeta.author);
       return {
         content: null,
         attempt: {
           method, duration_ms: durationMs, chars_extracted: markdown.length, timeout_hit: false,
           auth_wall_detected: false, http_status: 200,
-          validation_result: 'fail', error_category: 'circle_shell_only',
-          error_detail: 'Circle app shell only — no meaningful post body found',
+          validation_result: 'fail',
+          error_category: hasMeta ? 'circle_post_metadata_found' : 'circle_shell_only',
+          error_detail: hasMeta
+            ? `Circle app shell with post metadata found but no body.${metaDetail}`
+            : 'Circle app shell only — no meaningful post body or metadata found',
         },
       };
     }
@@ -890,8 +899,11 @@ ${html.slice(0, 15_000)}`;
       attempt: {
         method, duration_ms: durationMs, chars_extracted: markdown.length, timeout_hit: false,
         auth_wall_detected: false, http_status: 200,
-        validation_result: 'fail', error_category: 'circle_post_body_not_found',
-        error_detail: 'Circle page loaded but no usable post body was found in app state or rendered content',
+        validation_result: 'fail',
+        error_category: postMeta.metadataSummary ? 'circle_post_metadata_found' : 'circle_post_body_not_found',
+        error_detail: postMeta.metadataSummary
+          ? `Circle page loaded, metadata found but no usable post body.${metaDetail}`
+          : 'Circle page loaded but no usable post body was found in app state or rendered content',
       },
     };
   } catch (e) {
