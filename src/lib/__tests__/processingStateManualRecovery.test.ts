@@ -1,5 +1,6 @@
 /**
- * Regression tests: processingState correctly recognizes manual recovery states.
+ * Regression tests: processingState correctly recognizes manual recovery states,
+ * fixResourceState eligibility, and content-wins-over-failure behavior.
  */
 import { describe, it, expect, vi } from 'vitest';
 
@@ -14,6 +15,7 @@ vi.mock('@/lib/salesBrain/audioPipeline', () => ({
 }));
 
 import { deriveProcessingState } from '../processingState';
+import { isFixEligible } from '../fixResourceState';
 
 const baseResource = {
   id: 'r1',
@@ -54,6 +56,13 @@ describe('processingState manual recovery recognition', () => {
 
   it('deep_enriched + resolution_method=transcript_upload → COMPLETED / Manual Recovery', () => {
     const r = { ...baseResource, enrichment_status: 'deep_enriched', resolution_method: 'transcript_upload' } as any;
+    const ps = deriveProcessingState(r);
+    expect(ps.state).toBe('COMPLETED');
+    expect(ps.label).toBe('Manual Recovery');
+  });
+
+  it('deep_enriched + resolution_method=fixed_from_existing_content → COMPLETED / Manual Recovery', () => {
+    const r = { ...baseResource, enrichment_status: 'deep_enriched', resolution_method: 'fixed_from_existing_content' } as any;
     const ps = deriveProcessingState(r);
     expect(ps.state).toBe('COMPLETED');
     expect(ps.label).toBe('Manual Recovery');
@@ -116,5 +125,62 @@ describe('processingState manual recovery recognition', () => {
     const r = { ...baseResource, enrichment_status: 'failed', content_length: 100, failure_reason: 'timeout' } as any;
     const ps = deriveProcessingState(r);
     expect(ps.state).toBe('RETRYABLE_FAILURE');
+  });
+
+  it('failed + fixed_from_existing_content + content → COMPLETED / Manual Recovery', () => {
+    const r = { ...baseResource, enrichment_status: 'failed', content_length: 5000, resolution_method: 'fixed_from_existing_content', manual_content_present: true } as any;
+    const ps = deriveProcessingState(r);
+    expect(ps.state).toBe('COMPLETED');
+    expect(ps.label).toBe('Manual Recovery');
+  });
+});
+
+describe('isFixEligible', () => {
+  it('returns true for failed resource with substantial content', () => {
+    expect(isFixEligible({
+      content_length: 5000,
+      enrichment_status: 'failed',
+      failure_reason: 'auth_required',
+    })).toBe(true);
+  });
+
+  it('returns true for resource with manual_content_present but stale status', () => {
+    expect(isFixEligible({
+      manual_content_present: true,
+      enrichment_status: 'incomplete',
+      content_length: 100,
+    })).toBe(true);
+  });
+
+  it('returns false for resource with no content', () => {
+    expect(isFixEligible({
+      content_length: 50,
+      enrichment_status: 'failed',
+    })).toBe(false);
+  });
+
+  it('returns false for already-resolved resource', () => {
+    expect(isFixEligible({
+      content_length: 5000,
+      enrichment_status: 'deep_enriched',
+      recovery_status: 'resolved_manual',
+    })).toBe(false);
+  });
+
+  it('returns true for high-score blocked resource', () => {
+    expect(isFixEligible({
+      content_length: 80000,
+      enrichment_status: 'failed',
+      last_quality_score: 90,
+    })).toBe(true);
+  });
+
+  it('returns true when blocker fields remain despite good status', () => {
+    expect(isFixEligible({
+      content_length: 5000,
+      enrichment_status: 'deep_enriched',
+      manual_input_required: true,
+      recovery_queue_bucket: 'needs_transcript',
+    })).toBe(true);
   });
 });

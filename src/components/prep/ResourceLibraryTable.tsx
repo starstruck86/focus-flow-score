@@ -476,6 +476,8 @@ export function ResourceLibraryTable({
                                (resource as any).resolution_method === 'transcript_upload' ? 'Uploaded Transcript' :
                                (resource as any).resolution_method === 'content_upload' ? 'Uploaded Content' :
                                (resource as any).resolution_method === 'alternate_url' ? 'Alternate URL' :
+                               (resource as any).resolution_method === 'fixed_from_existing_content' ? 'Fixed From Content' :
+                               (resource as any).resolution_method === 'manual_content' ? 'Manual Content' :
                                'Manual Recovery'}
                             </Badge>
                           )}
