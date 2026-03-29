@@ -1754,17 +1754,34 @@ async function orchestrateEnrichment(
 
     // If auth wall detected, reclassify
     if (result.attempt.auth_wall_detected) {
-      console.log(`[Orchestrate] Auth wall detected for ${resourceId}`);
+      console.log(`[Orchestrate] Auth wall detected for ${resourceId} (source=${source.source_type})`);
+
+      const isZoom = source.source_type === 'zoom_recording';
+      const failureReason = isZoom
+        ? `Zoom recording requires authentication — ${result.attempt.error_category || 'zoom_auth_required'}`
+        : 'Login/signup wall detected during scraping';
+
       await setEnrichmentStatus(supabase, resourceId, 'needs_auth', {
-        failure_reason: 'Login/signup wall detected during scraping',
+        failure_reason: failureReason,
+        recovery_status: 'auth_gated_manual_action_required',
+        recovery_reason: isZoom ? 'Zoom recording access blocked — requires login or shared link permissions' : failureReason,
+        next_best_action: isZoom ? 'provide_access' : 'paste_content',
+        manual_input_required: true,
+        recovery_queue_bucket: 'needs_input',
+        access_type: 'auth_gated',
+        content_classification: isZoom ? 'video' : null,
+        extraction_method: isZoom ? 'zoom_recording_handler' : null,
       });
+
       return {
         resource_id: resourceId, url, source_classification: { ...source, auth_required: true },
         final_status: 'needs_auth', method_used: result.attempt.method, methods_attempted: attempts,
         attempt_count: attempts.length, extracted_text_length: 0, completeness_score: 0,
         confidence_score: 0, missing_fields: ['body_content'],
-        failure_reason: 'Auth wall detected — content requires login',
-        recovery_hint: 'Paste the content manually or provide a public link',
+        failure_reason: failureReason,
+        recovery_hint: isZoom
+          ? 'This Zoom recording requires authentication. Paste the transcript, provide a public share link, or upload the recording.'
+          : 'Paste the content manually or provide a public link',
       };
     }
 
