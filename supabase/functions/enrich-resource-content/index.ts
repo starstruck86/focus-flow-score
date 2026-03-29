@@ -2582,6 +2582,9 @@ async function orchestrateEnrichment(
   const isAudioSource = source.source_type === 'direct_audio' || source.source_type === 'podcast';
   const isZoomSource = source.source_type === 'zoom_recording';
   const isCircleSource = source.source_type === 'circle_page';
+  const isThinkificSource = source.source_type === 'thinkific_lesson';
+  const isGoogleDriveSource = source.source_type === 'google_drive_file';
+  const isGoogleSlidesSource = source.source_type === 'google_slides';
 
   const zoomFailureCategory = isZoomSource
     ? (attempts.find(a => a.error_category?.startsWith('zoom_'))?.error_category || 'zoom_transcript_not_found')
@@ -2603,18 +2606,47 @@ async function orchestrateEnrichment(
   );
   const isCircleShell = isCircleSource && circleFailureCategory === 'circle_shell_only';
 
+  const thinkificFailureCategory = isThinkificSource
+    ? (attempts.find(a => a.error_category?.startsWith('thinkific_'))?.error_category || 'thinkific_auth_required')
+    : null;
+  const isThinkificAuth = isThinkificSource && (
+    thinkificFailureCategory === 'thinkific_auth_required' ||
+    attempts.some(a => a.auth_wall_detected)
+  );
+
+  const driveFailureCategory = isGoogleDriveSource
+    ? (attempts.find(a => a.error_category)?.error_category || 'drive_extraction_failed')
+    : null;
+  const isDriveAuth = isGoogleDriveSource && attempts.some(a => a.auth_wall_detected || a.error_category === 'auth_failure');
+
+  const slidesFailureCategory = isGoogleSlidesSource
+    ? (attempts.find(a => a.error_category?.startsWith('google_slides_'))?.error_category || 'google_slides_extraction_failed')
+    : null;
+  const isSlidesAuth = isGoogleSlidesSource && (
+    slidesFailureCategory === 'google_slides_auth_required' ||
+    attempts.some(a => a.auth_wall_detected)
+  );
+
   const recoveryStatus = isZoomAuthBlocked ? 'auth_gated_manual_action_required'
     : isCircleAuthBlocked ? 'auth_gated_manual_action_required'
+    : isThinkificAuth ? 'auth_gated_manual_action_required'
+    : isDriveAuth ? 'auth_gated_manual_action_required'
+    : isSlidesAuth ? 'auth_gated_manual_action_required'
     : isZoomShell ? 'awaiting_user_content'
     : isZoomSource ? 'awaiting_user_content'
     : isCircleSource ? 'awaiting_user_content'
+    : isThinkificSource ? 'awaiting_user_content'
     : isAudioSource ? 'pending_transcription'
     : isRetryable ? 'failed_retryable'
     : 'awaiting_user_content';
   const recoveryAction = isZoomAuthBlocked ? 'provide_access'
     : isCircleAuthBlocked ? (circleFailureCategory === 'circle_access_blocked' ? 'provide_access' : 'paste_content')
+    : isThinkificAuth ? 'paste_content'
+    : isDriveAuth ? 'provide_access'
+    : isSlidesAuth ? 'provide_access'
     : isZoomShell ? 'paste_transcript'
     : isZoomSource ? 'paste_transcript'
+    : isThinkificSource ? 'paste_content'
     : isCircleSource ? (circleFailureCategory === 'circle_unsupported_page_type' ? 'upload_export' : 'paste_content')
     : isAudioSource ? 'start_transcription'
     : isRetryable ? 'queue_for_retry'
@@ -2622,6 +2654,9 @@ async function orchestrateEnrichment(
   const recoveryBucket = isZoomAuthBlocked ? 'needs_input'
     : isCircleSource ? 'needs_input'
     : isZoomSource ? 'needs_input'
+    : isThinkificSource ? 'needs_input'
+    : isDriveAuth ? 'needs_input'
+    : isSlidesAuth ? 'needs_input'
     : isAudioSource ? 'auto_fixable'
     : isRetryable ? 'retryable'
     : 'needs_input';
@@ -2634,6 +2669,27 @@ async function orchestrateEnrichment(
     : isCircleShell ? 'Circle app shell only — no usable post body found. Paste content manually or provide access/export.'
     : isCircleSource ? `Circle extraction failed: ${circleFailureCategory} — paste content, provide access, or upload an export`
     : null;
+  const thinkificRecoveryReason = isThinkificSource
+    ? `Thinkific lesson requires enrollment/login (${thinkificFailureCategory}) — paste content, provide access, or upload transcript`
+    : null;
+  const driveRecoveryReason = isGoogleDriveSource
+    ? (isDriveAuth ? `Google Drive file requires access permissions (${driveFailureCategory})`
+      : `Google Drive file extraction failed: ${driveFailureCategory}`)
+    : null;
+  const slidesRecoveryReason = isGoogleSlidesSource
+    ? (isSlidesAuth ? `Google Slides presentation is not publicly accessible`
+      : `Google Slides extraction failed: ${slidesFailureCategory}`)
+    : null;
+
+  // Determine extraction_method for persistence
+  const persistedExtractionMethod = isZoomSource ? 'zoom_recording_handler'
+    : isCircleSource ? 'circle_handler'
+    : isThinkificSource ? 'thinkific_handler'
+    : isGoogleDriveSource ? 'google_drive_direct_download'
+    : isGoogleSlidesSource ? 'google_slides_html_view'
+    : null;
+
+  const platformRecoveryReason = circleRecoveryReason || zoomRecoveryReason || thinkificRecoveryReason || driveRecoveryReason || slidesRecoveryReason;
 
   await setEnrichmentStatus(supabase, resourceId, newStatus, {
     failure_reason: primaryReason,
@@ -2643,14 +2699,16 @@ async function orchestrateEnrichment(
     failure_count: (resource.failure_count || 0) + 1,
     // Persist recovery state
     recovery_status: recoveryStatus,
-    recovery_reason: circleRecoveryReason || zoomRecoveryReason || (isAudioSource ? `Audio transcription failed: ${primaryReason}` : primaryReason),
+    recovery_reason: platformRecoveryReason || (isAudioSource ? `Audio transcription failed: ${primaryReason}` : primaryReason),
     next_best_action: recoveryAction,
-    manual_input_required: isZoomSource || isCircleSource || (!isAudioSource && !isRetryable),
+    manual_input_required: isZoomSource || isCircleSource || isThinkificSource || isDriveAuth || isSlidesAuth || (!isAudioSource && !isRetryable),
     recovery_queue_bucket: recoveryBucket,
     last_recovery_error: primaryReason,
-    access_type: isZoomAuthBlocked ? 'auth_gated' : isCircleAuthBlocked ? 'auth_gated' : isCircleSource ? 'unknown' : (attempts.some(a => a.http_status === 403 || a.http_status === 401) ? 'auth_gated' : 'public'),
-    content_classification: isAudioSource ? 'audio' : isZoomSource ? 'video' : isCircleSource ? 'auth_gated' : null,
-    extraction_method: isZoomSource ? 'zoom_recording_handler' : isCircleSource ? 'circle_handler' : null,
+    access_type: (isZoomAuthBlocked || isCircleAuthBlocked || isThinkificAuth || isDriveAuth || isSlidesAuth) ? 'auth_gated'
+      : isCircleSource ? 'unknown'
+      : (attempts.some(a => a.http_status === 403 || a.http_status === 401) ? 'auth_gated' : 'public'),
+    content_classification: isAudioSource ? 'audio' : isZoomSource ? 'video' : isCircleSource ? 'auth_gated' : isThinkificSource ? 'auth_gated' : null,
+    extraction_method: persistedExtractionMethod,
   });
 
   if (isCircleSource) {
