@@ -105,7 +105,7 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
     try {
       switch (action) {
         case 'fix_resource': {
-          const result = await fixResourceStateFromContent(r.id, r.userId || '', { triggerReEnrich: true });
+          const result = await fixResourceStateFromContent(r.id, currentUserId, { triggerReEnrich: true });
           if (result.success) {
             toast.success(result.message);
             invalidateAll();
