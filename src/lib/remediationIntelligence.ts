@@ -46,10 +46,11 @@ export interface RemediationPlan {
 }
 
 // ── Unsupported platform subtypes ──────────────────────────
+// NOTE: auth_gated_community_page is intentionally excluded — these have a working
+// manual paste recovery path and should be classified as 'manual_input', not 'system_gap'.
 const PLATFORM_UNSUPPORTED_SUBTYPES: ResourceSubtype[] = [
   'spotify_episode',
   'apple_podcast_episode',
-  'auth_gated_community_page',
 ];
 
 // ── Main entry point ───────────────────────────────────────
