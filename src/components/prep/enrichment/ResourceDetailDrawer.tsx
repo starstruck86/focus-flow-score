@@ -382,6 +382,9 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
                    (r as any).resolution_method === 'content_upload' ? 'Uploaded Content' :
                    (r as any).resolution_method === 'alternate_url' ? 'Alternate URL' :
                    (r as any).resolution_method === 'fixed_from_existing_content' ? 'Fixed From Existing Content' :
+                   (r as any).resolution_method === 'notion_zip_import' ? 'Notion ZIP Import' :
+                   (r as any).resolution_method === 'notion_zip_split' ? 'Notion Split' :
+                   (r as any).resolution_method === 'notion_zip_source' ? 'Notion Source (Archived)' :
                    'Manual Recovery'}
                 </Badge>
               )}
