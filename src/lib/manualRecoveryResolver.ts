@@ -182,6 +182,58 @@ async function handleFileUpload(input: RecoveryInput): Promise<RecoveryResult> {
   }
 }
 
+// ── Notion ZIP handler ───────────────────────────────────
+
+async function handleNotionZipUpload(input: RecoveryInput): Promise<RecoveryResult> {
+  const file = input.file;
+  if (!file) return { success: false, message: 'No file provided' };
+  if (file.size > 50 * 1024 * 1024) return { success: false, message: 'ZIP too large — max 50MB' };
+
+  try {
+    const result = await extractNotionZip(file);
+
+    if (result.totalLength < MIN_CONTENT_LENGTH) {
+      return { success: false, message: 'ZIP contained no usable .md or .csv content' };
+    }
+
+    // Upload original ZIP to storage
+    const filePath = `notion-exports/${input.resourceId}/${Date.now()}_${file.name}`;
+    await supabase.storage.from('resource-files').upload(filePath, file, { upsert: true });
+
+    // Save content + clear blockers
+    await updateResourceWithContent(input.resourceId, result.content, 'notion_zip_import');
+
+    // Record provenance
+    const attemptId = await recordAttempt(input.resourceId, input.userId, {
+      attemptType: 'notion_zip_upload',
+      strategy: 'zip_extraction',
+      result: 'success',
+      contentFound: true,
+      contentLength: result.totalLength,
+      metadata: {
+        filename: file.name,
+        file_size: file.size,
+        md_files: result.mdFileCount,
+        csv_files: result.csvFileCount,
+        extracted_files: result.filenames,
+        storage_path: filePath,
+      },
+    });
+
+    // Trigger re-enrichment
+    await triggerReEnrichment(input.resourceId);
+
+    return {
+      success: true,
+      message: `Notion export processed — ${result.mdFileCount} pages, ${result.csvFileCount} tables (${result.totalLength} chars) & enrichment started`,
+      contentLength: result.totalLength,
+      attemptId,
+    };
+  } catch (e: any) {
+    return { success: false, message: `ZIP processing failed: ${e.message}` };
+  }
+}
+
 // ── Alternate URL handler ────────────────────────────────
 
 async function handleAlternateUrl(input: RecoveryInput): Promise<RecoveryResult> {
