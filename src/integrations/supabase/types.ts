@@ -1257,6 +1257,78 @@ export type Database = {
         }
         Relationships: []
       }
+      enrichment_attempts: {
+        Row: {
+          attempt_type: string
+          caption_url_found: boolean | null
+          completed_at: string | null
+          content_found: boolean | null
+          content_length_extracted: number | null
+          created_at: string
+          error_message: string | null
+          failure_category: string | null
+          id: string
+          media_url_found: boolean | null
+          metadata: Json | null
+          platform: string | null
+          quality_score_after: number | null
+          resource_id: string
+          result: string
+          runtime_config_found: boolean | null
+          shell_rejected: boolean | null
+          started_at: string
+          strategy: string
+          transcript_url_found: boolean | null
+          user_id: string
+        }
+        Insert: {
+          attempt_type: string
+          caption_url_found?: boolean | null
+          completed_at?: string | null
+          content_found?: boolean | null
+          content_length_extracted?: number | null
+          created_at?: string
+          error_message?: string | null
+          failure_category?: string | null
+          id?: string
+          media_url_found?: boolean | null
+          metadata?: Json | null
+          platform?: string | null
+          quality_score_after?: number | null
+          resource_id: string
+          result?: string
+          runtime_config_found?: boolean | null
+          shell_rejected?: boolean | null
+          started_at?: string
+          strategy: string
+          transcript_url_found?: boolean | null
+          user_id: string
+        }
+        Update: {
+          attempt_type?: string
+          caption_url_found?: boolean | null
+          completed_at?: string | null
+          content_found?: boolean | null
+          content_length_extracted?: number | null
+          created_at?: string
+          error_message?: string | null
+          failure_category?: string | null
+          id?: string
+          media_url_found?: boolean | null
+          metadata?: Json | null
+          platform?: string | null
+          quality_score_after?: number | null
+          resource_id?: string
+          result?: string
+          runtime_config_found?: boolean | null
+          shell_rejected?: boolean | null
+          started_at?: string
+          strategy?: string
+          transcript_url_found?: boolean | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       error_logs: {
         Row: {
           category: string
@@ -2720,6 +2792,8 @@ export type Database = {
         Row: {
           access_type: string | null
           account_id: string | null
+          advanced_extraction_attempts: number | null
+          advanced_extraction_status: string | null
           author_or_speaker: string | null
           brain_status: string
           content: string | null
@@ -2746,6 +2820,7 @@ export type Database = {
           id: string
           is_screenshot_template: boolean | null
           is_template: boolean | null
+          last_advanced_extraction_at: string | null
           last_enrichment_attempt_at: string | null
           last_quality_score: number | null
           last_quality_tier: string | null
@@ -2756,10 +2831,12 @@ export type Database = {
           manual_input_required: boolean | null
           next_best_action: string | null
           opportunity_id: string | null
+          platform_status: string | null
           recovery_attempt_count: number | null
           recovery_queue_bucket: string | null
           recovery_reason: string | null
           recovery_status: string | null
+          resolution_method: string | null
           resource_type: string
           screenshot_structure: string | null
           source_created_at: string | null
@@ -2776,6 +2853,8 @@ export type Database = {
         Insert: {
           access_type?: string | null
           account_id?: string | null
+          advanced_extraction_attempts?: number | null
+          advanced_extraction_status?: string | null
           author_or_speaker?: string | null
           brain_status?: string
           content?: string | null
@@ -2802,6 +2881,7 @@ export type Database = {
           id?: string
           is_screenshot_template?: boolean | null
           is_template?: boolean | null
+          last_advanced_extraction_at?: string | null
           last_enrichment_attempt_at?: string | null
           last_quality_score?: number | null
           last_quality_tier?: string | null
@@ -2812,10 +2892,12 @@ export type Database = {
           manual_input_required?: boolean | null
           next_best_action?: string | null
           opportunity_id?: string | null
+          platform_status?: string | null
           recovery_attempt_count?: number | null
           recovery_queue_bucket?: string | null
           recovery_reason?: string | null
           recovery_status?: string | null
+          resolution_method?: string | null
           resource_type?: string
           screenshot_structure?: string | null
           source_created_at?: string | null
@@ -2832,6 +2914,8 @@ export type Database = {
         Update: {
           access_type?: string | null
           account_id?: string | null
+          advanced_extraction_attempts?: number | null
+          advanced_extraction_status?: string | null
           author_or_speaker?: string | null
           brain_status?: string
           content?: string | null
@@ -2858,6 +2942,7 @@ export type Database = {
           id?: string
           is_screenshot_template?: boolean | null
           is_template?: boolean | null
+          last_advanced_extraction_at?: string | null
           last_enrichment_attempt_at?: string | null
           last_quality_score?: number | null
           last_quality_tier?: string | null
@@ -2868,10 +2953,12 @@ export type Database = {
           manual_input_required?: boolean | null
           next_best_action?: string | null
           opportunity_id?: string | null
+          platform_status?: string | null
           recovery_attempt_count?: number | null
           recovery_queue_bucket?: string | null
           recovery_reason?: string | null
           recovery_status?: string | null
+          resolution_method?: string | null
           resource_type?: string
           screenshot_structure?: string | null
           source_created_at?: string | null
