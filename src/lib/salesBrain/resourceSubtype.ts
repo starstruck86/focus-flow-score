@@ -72,6 +72,7 @@ export function detectResourceSubtype(url: string | null, resourceType?: string)
   // Google Docs / Drive
   if (lower.includes('docs.google.com/document')) return 'google_doc';
   if (lower.includes('docs.google.com/spreadsheets') || lower.includes('sheets.google.com')) return 'google_sheet';
+  if (lower.includes('docs.google.com/presentation')) return 'google_slides';
   if (lower.includes('drive.google.com/file/')) return 'google_drive_file';
 
   // Auth-gated community pages — check all known gated domains
