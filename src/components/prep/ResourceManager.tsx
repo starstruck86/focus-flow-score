@@ -340,8 +340,9 @@ export function ResourceManager() {
       }
       setPendingItems(prev => prev.filter(p => p.status === 'error'));
       toast.success(`${readyItems.length} resource${readyItems.length > 1 ? 's' : ''} saved`);
-    } catch {
-      toast.error('Some items failed to save');
+    } catch (err: any) {
+      console.error('[ResourceManager] Save failed:', err);
+      toast.error(err?.message || 'Some items failed to save');
     } finally {
       setSavingAll(false);
     }
