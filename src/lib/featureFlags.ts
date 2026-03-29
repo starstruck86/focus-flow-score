@@ -35,7 +35,7 @@ const DEFAULTS: FeatureFlags = {
   ENABLE_SESSION_AUTOPILOT: false,
   ENABLE_EXECUTION_MOMENTUM: false,
   ENABLE_SALES_BRAIN: false,
-  ENFORCE_ALLOWLIST: false,
+  ENFORCE_ALLOWLIST: true,
 };
 
 export function loadFeatureFlags(): FeatureFlags {
