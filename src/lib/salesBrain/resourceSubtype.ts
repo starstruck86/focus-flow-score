@@ -75,11 +75,14 @@ export function detectResourceSubtype(url: string | null, resourceType?: string)
   if (lower.includes('docs.google.com/presentation')) return 'google_slides';
   if (lower.includes('drive.google.com/file/')) return 'google_drive_file';
 
+  // Thinkific lessons — dedicated subtype, NOT generic auth_gated
+  if (lower.includes('thinkific.com/courses/')) return 'thinkific_lesson';
+
   // Auth-gated community pages — check all known gated domains
   if (url) {
     try {
       const host = new URL(url).hostname.toLowerCase();
-      if (AUTH_GATED_DOMAINS.some(d => host.includes(d))) return 'auth_gated_community_page';
+      if (AUTH_GATED_DOMAINS.some(d => host.includes(d) && !host.includes('thinkific.com'))) return 'auth_gated_community_page';
     } catch { /* not a valid URL */ }
   }
 
