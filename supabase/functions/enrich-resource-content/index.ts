@@ -3011,7 +3011,7 @@ async function orchestrateEnrichment(
     });
 
     console.log(`[Orchestrate] PARTIAL id=${resourceId} score=${bestQuality.score} method=${bestMethod} attempts=${attempts.length}`);
-    return {
+    const partialOutput: EnrichmentOutput = {
       resource_id: resourceId, url, source_classification: source,
       final_status: 'partial', method_used: bestMethod, methods_attempted: attempts,
       attempt_count: attempts.length, extracted_text_length: bestContent.length,
@@ -3019,6 +3019,8 @@ async function orchestrateEnrichment(
       missing_fields: bestQuality.missing_fields, failure_reason: failureReason,
       recovery_hint: recoveryHint,
     };
+    if (userId) await persistAttemptProvenance(supabase, userId, resourceId, source, partialOutput, attempts);
+    return partialOutput;
   }
 
   // FAILED — no usable content from any method
