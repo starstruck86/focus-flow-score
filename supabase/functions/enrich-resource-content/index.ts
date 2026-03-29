@@ -117,9 +117,11 @@ function classifySource(url: string): SourceClassification {
     }
 
     // ── Thinkific lesson URLs — dedicated handler, NOT generic auth_gated ──
+    // auth_required MUST be false so the orchestrator runs thinkificLessonExtract
+    // instead of early-exiting with generic "Auth-gated: Thinkific"
     if (/thinkific\.com\/courses\/take\//i.test(url) || /thinkific\.com\/courses\//i.test(hostAndPath)) {
       return {
-        source_type: 'thinkific_lesson', platform: 'Thinkific', auth_required: true,
+        source_type: 'thinkific_lesson', platform: 'Thinkific', auth_required: false,
         transcript_available: null, downloadable: false, js_rendered: true,
       };
     }
