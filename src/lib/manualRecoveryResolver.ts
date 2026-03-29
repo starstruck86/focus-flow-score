@@ -117,6 +117,13 @@ async function handlePaste(input: RecoveryInput): Promise<RecoveryResult> {
 async function handleFileUpload(input: RecoveryInput): Promise<RecoveryResult> {
   const file = input.file;
   if (!file) return { success: false, message: 'No file provided' };
+
+  // Auto-detect ZIP → route to Notion ZIP handler
+  if (isNotionZip(file)) {
+    return handleNotionZipUpload(input);
+  }
+  const file = input.file;
+  if (!file) return { success: false, message: 'No file provided' };
   if (file.size > MAX_FILE_SIZE) return { success: false, message: 'File too large — max 10MB' };
 
   const ext = '.' + (file.name.split('.').pop()?.toLowerCase() || '');
