@@ -46,10 +46,11 @@ export interface RemediationPlan {
 }
 
 // ── Unsupported platform subtypes ──────────────────────────
+// NOTE: auth_gated_community_page is intentionally excluded — these have a working
+// manual paste recovery path and should be classified as 'manual_input', not 'system_gap'.
 const PLATFORM_UNSUPPORTED_SUBTYPES: ResourceSubtype[] = [
   'spotify_episode',
   'apple_podcast_episode',
-  'auth_gated_community_page',
 ];
 
 // ── Main entry point ───────────────────────────────────────
@@ -91,6 +92,21 @@ function detectSystemGap(r: VerifiedResource): RemediationPlan | null {
   const hasBinaryViolation = r.whyNotComplete?.includes('binary') ||
     r.rootCauseCategory?.includes('binary');
   if (hasBinaryViolation) {
+    // If resource is already classified as needs_auth or has a paste-content enrichability,
+    // treat as manual_input — the recovery path exists (paste content / transcription)
+    const hasRecoveryPath = r.enrichability === 'needs_auth' ||
+      r.enrichmentStatus === 'needs_transcript' ||
+      r.enrichmentStatus === 'needs_auth' ||
+      r.subtype === 'google_drive_file';
+    if (hasRecoveryPath) {
+      return {
+        resolutionType: 'manual_input',
+        rootCause: 'Binary/audio content — needs transcript extraction or manual paste',
+        failureType: 'binary_content',
+        recommendedAction: 'Route through transcription pipeline or paste transcript manually',
+        requiredBuild: null,
+      };
+    }
     return {
       resolutionType: 'system_gap',
       rootCause: 'Content stored as binary data instead of text — transcript extraction missing',

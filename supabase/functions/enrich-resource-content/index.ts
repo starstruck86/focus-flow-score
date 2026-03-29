@@ -1358,6 +1358,89 @@ async function googleDriveDirectDownload(url: string, _apiKey: string): Promise<
   }
 }
 
+/** Scrape Google Drive preview/viewer page via Firecrawl — works for PDFs, PPTX, DOCX rendered by Google */
+async function googleDrivePreviewScrape(url: string, apiKey: string): Promise<ExtractionResult> {
+  const method = 'google_drive_preview_scrape';
+  const startMs = Date.now();
+
+  const fileId = extractDriveFileId(url);
+  if (!fileId) {
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
+        auth_wall_detected: false, http_status: null,
+        validation_result: 'fail', error_category: 'parse_failure',
+        error_detail: 'Could not extract file ID for preview scrape',
+      },
+    };
+  }
+
+  // Google renders most uploaded docs via this preview URL
+  const previewUrl = `https://drive.google.com/file/d/${fileId}/preview`;
+  console.log(`[GoogleDrive] Attempting preview scrape via Firecrawl: ${previewUrl}`);
+
+  try {
+    const scrapeRes = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: previewUrl,
+        formats: ["markdown"],
+        onlyMainContent: true,
+        waitFor: 5000,
+      }),
+    });
+
+    if (!scrapeRes.ok) {
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: scrapeRes.status === 403, http_status: scrapeRes.status,
+          validation_result: 'fail', error_category: `http_${scrapeRes.status}`,
+          error_detail: `Firecrawl returned ${scrapeRes.status} for Drive preview`,
+        },
+      };
+    }
+
+    const data = await scrapeRes.json();
+    const markdown = (data.data?.markdown || data.markdown || '').trim();
+
+    if (markdown.length < MIN_CONTENT_CHARS) {
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: Date.now() - startMs, chars_extracted: markdown.length, timeout_hit: false,
+          auth_wall_detected: false, http_status: 200,
+          validation_result: 'fail', error_category: 'content_too_short',
+          error_detail: `Drive preview yielded only ${markdown.length} chars`,
+        },
+      };
+    }
+
+    return {
+      content: markdown.slice(0, CONTENT_CAP),
+      attempt: {
+        method, duration_ms: Date.now() - startMs, chars_extracted: markdown.length, timeout_hit: false,
+        auth_wall_detected: false, http_status: 200,
+        validation_result: markdown.length >= GOOD_CONTENT_CHARS ? 'pass' : 'partial',
+        error_category: null, error_detail: null,
+      },
+    };
+  } catch (e) {
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: Date.now() - startMs, chars_extracted: 0,
+        timeout_hit: String(e).includes('abort'), auth_wall_detected: false,
+        http_status: null, validation_result: 'fail',
+        error_category: 'fetch_failure', error_detail: String(e),
+      },
+    };
+  }
+}
+
 // ── Method chains per source type ──────────────────────────
 function getMethodChain(source: SourceClassification): Array<(url: string, apiKey: string) => Promise<ExtractionResult>> {
   switch (source.source_type) {
@@ -1378,7 +1461,7 @@ function getMethodChain(source: SourceClassification): Array<(url: string, apiKe
     case 'social':
       return [firecrawlScrape, firecrawlFullPage];
     case 'google_drive_file':
-      return [googleDriveDirectDownload, firecrawlScrape];
+      return [googleDriveDirectDownload, googleDrivePreviewScrape, firecrawlScrape];
     case 'google_sheet':
       return [googleSheetExport, firecrawlScrape];
     case 'google_doc':
