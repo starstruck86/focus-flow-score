@@ -183,4 +183,36 @@ describe('isFixEligible', () => {
       recovery_queue_bucket: 'needs_transcript',
     })).toBe(true);
   });
+
+  it('returns true for resource with content but no manual_content_present flag', () => {
+    expect(isFixEligible({
+      content_length: 88000,
+      enrichment_status: 'failed',
+      manual_content_present: false,
+      failure_reason: 'auth_required',
+    })).toBe(true);
+  });
+});
+
+describe('edge cases: no URL but valid manual content', () => {
+  it('no URL + manual_content_present + content_length > 1000 → COMPLETED', () => {
+    const r = { ...baseResource, file_url: '', enrichment_status: 'not_enriched', manual_content_present: true, content_length: 5000, resolution_method: 'manual_paste' } as any;
+    const ps = deriveProcessingState(r);
+    // With substantial content and manual flag, content wins
+    expect(ps.state).toBe('COMPLETED');
+  });
+
+  it('no URL + failed + content_length > 1000 → COMPLETED (content wins)', () => {
+    const r = { ...baseResource, file_url: '', enrichment_status: 'failed', content_length: 80000 } as any;
+    const ps = deriveProcessingState(r);
+    expect(ps.state).toBe('COMPLETED');
+  });
+
+  it('score 90 + content 88k + failed → COMPLETED not MANUAL_REQUIRED', () => {
+    const r = { ...baseResource, enrichment_status: 'failed', content_length: 88908, last_quality_score: 90, failure_reason: 'Zoom auth wall' } as any;
+    const ps = deriveProcessingState(r);
+    expect(ps.state).toBe('COMPLETED');
+    expect(ps.label).not.toBe('Manual Input Needed');
+    expect(ps.label).not.toBe('Needs Auth');
+  });
 });

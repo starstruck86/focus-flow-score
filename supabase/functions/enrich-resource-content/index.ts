@@ -2640,10 +2640,12 @@ async function orchestrateEnrichment(
 
   console.log(`[Orchestrate] START id=${resourceId} url=${url?.slice(0, 80)} source_type=${source.source_type} platform=${source.platform}`);
 
-  // Manual content fast-path: if user already provided content, skip URL fetching entirely.
-  // This MUST come before the no-URL guard so resources with manual content but no URL still resolve.
-  const hasManualContent = resource.manual_content_present === true &&
-    resource.content && resource.content.length >= 50;
+  // Manual content fast-path: if resource already has valid content, skip URL fetching entirely.
+  // This MUST come before the no-URL guard so resources with content but no URL still resolve.
+  // Triggers on: manual_content_present flag, OR substantial existing content (>1000 chars).
+  // This prevents stale auth/failure states from overwriting rescued content.
+  const hasManualContent = (resource.manual_content_present === true && resource.content && resource.content.length >= 50)
+    || (resource.content && resource.content.length > 1000);
   if (hasManualContent) {
     console.log(`[Orchestrate] MANUAL CONTENT FAST-PATH: id=${resourceId} contentLen=${resource.content.length}`);
     const contentText = resource.content;
