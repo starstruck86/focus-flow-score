@@ -61,6 +61,8 @@ export async function resolveResourceWithManualInput(input: RecoveryInput): Prom
     case 'upload_transcript':
     case 'upload_content':
       return handleFileUpload(input);
+    case 'upload_notion_zip':
+      return handleNotionZipUpload(input);
     case 'alternate_url':
       return handleAlternateUrl(input);
     case 'metadata_only':
