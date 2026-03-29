@@ -21,6 +21,7 @@ export type RecoveryMode =
   | 'paste_content'
   | 'upload_transcript'
   | 'upload_content'
+  | 'upload_notion_zip'
   | 'alternate_url'
   | 'metadata_only';
 
