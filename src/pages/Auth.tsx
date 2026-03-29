@@ -31,18 +31,6 @@ export default function Auth() {
     }
   };
 
-  const handleEmailSignUp = async () => {
-    if (!email || !password) return;
-    setSubmitting(true);
-    const { error } = await supabase.auth.signUp({ email, password });
-    setSubmitting(false);
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success('Account created — signing in…');
-    }
-  };
-
   const handleEmailSignIn = async () => {
     if (!email || !password) return;
     setSubmitting(true);
@@ -68,7 +56,7 @@ export default function Auth() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-display">Quota Compass</CardTitle>
-          <CardDescription>Sign in to access your personal productivity dashboard</CardDescription>
+          <CardDescription>Sign in to access your dashboard</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Button data-testid="google-sign-in" variant="outline" className="w-full h-12 gap-3" onClick={handleGoogleSignIn}>
@@ -87,13 +75,10 @@ export default function Auth() {
           </div>
 
           <Input placeholder="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} />
-          <Input placeholder="Password (min 6 chars)" type="password" value={password} onChange={e => setPassword(e.target.value)} />
-          <div className="flex gap-2">
-            <Button className="flex-1" onClick={handleEmailSignIn} disabled={submitting}>Sign In</Button>
-            <Button className="flex-1" variant="secondary" onClick={handleEmailSignUp} disabled={submitting}>Sign Up</Button>
-          </div>
+          <Input placeholder="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} />
+          <Button className="w-full" onClick={handleEmailSignIn} disabled={submitting}>Sign In</Button>
 
-          <p className="text-xs text-center text-muted-foreground">By continuing, you agree to our Terms of Service and Privacy Policy</p>
+          <p className="text-xs text-center text-muted-foreground">Access is by invitation only</p>
         </CardContent>
       </Card>
     </div>
