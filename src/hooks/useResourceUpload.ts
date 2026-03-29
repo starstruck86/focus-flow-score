@@ -134,7 +134,12 @@ export function useUploadResource() {
       // ── Notion ZIP fast-path ──
       if (isNotionZip(file)) {
         const zipResult = await extractNotionZip(file);
-        if (zipResult.totalLength < 50) throw new Error('ZIP contained no usable content');
+        if (zipResult.mdFileCount === 0 && zipResult.csvFileCount === 0) {
+          throw new Error('ZIP contains no usable Notion content');
+        }
+        if (zipResult.totalLength < 50) {
+          throw new Error('ZIP contains no usable Notion content');
+        }
 
         // Upload ZIP to storage
         const filePath = `${user.id}/${Date.now()}-${file.name}`;
@@ -193,7 +198,13 @@ export function useUploadResource() {
         // Fire-and-forget enrichment
         invokeEnrichResource({ resource_id: resource.id, force: true } as any).catch(() => {});
 
-        return resource;
+        const result = resource as any;
+        result._zipMeta = {
+          mdFileCount: zipResult.mdFileCount,
+          csvFileCount: zipResult.csvFileCount,
+          totalLength: zipResult.totalLength,
+        };
+        return result;
       }
 
       // ── Standard file upload ──
@@ -242,11 +253,14 @@ export function useUploadResource() {
 
       return resource;
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (data: any, variables) => {
       qc.invalidateQueries({ queryKey: ['resources'] });
       qc.invalidateQueries({ queryKey: ['resource-folders'] });
-      if (isNotionZip(variables.file)) {
-        toast.success('Notion export processed — content imported and enrichment started');
+      if (isNotionZip(variables.file) && data?._zipMeta) {
+        const m = data._zipMeta;
+        toast.success(
+          `Imported Notion export: ${m.mdFileCount} page${m.mdFileCount !== 1 ? 's' : ''}, ${m.csvFileCount} table${m.csvFileCount !== 1 ? 's' : ''}, ${m.totalLength.toLocaleString()} chars`
+        );
       } else {
         toast.success('Resource uploaded and classified');
       }

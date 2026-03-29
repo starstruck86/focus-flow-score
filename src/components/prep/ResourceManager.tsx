@@ -320,12 +320,23 @@ export function ResourceManager() {
     if (!readyItems.length) return;
     setSavingAll(true);
     try {
+      let lastZipResource: any = null;
       for (const item of readyItems) {
         if (item.source === 'file' && item.file && item.classification) {
-          await uploadResource.mutateAsync({ file: item.file, classification: item.classification, folderId: currentFolderId });
+          const result = await uploadResource.mutateAsync({ file: item.file, classification: item.classification, folderId: currentFolderId });
+          if (item.file.name.toLowerCase().endsWith('.zip') && result) {
+            lastZipResource = result;
+          }
         } else if (item.source === 'url' && item.url && item.classification) {
           await addUrlResource.mutateAsync({ url: item.url, classification: item.classification, folderId: currentFolderId });
         }
+      }
+      // Auto-open the resource if a single ZIP was uploaded
+      if (lastZipResource && readyItems.length === 1) {
+        // Refetch to get full resource object, then open viewer
+        queryClient.invalidateQueries({ queryKey: ['resources'] }).then(() => {
+          setViewingResource(lastZipResource);
+        });
       }
       setPendingItems(prev => prev.filter(p => p.status === 'error'));
       toast.success(`${readyItems.length} resource${readyItems.length > 1 ? 's' : ''} saved`);
@@ -654,6 +665,9 @@ export function ResourceManager() {
                       <div className="flex items-center gap-1.5 mt-1">
                         <Badge variant="secondary" className="text-[9px] capitalize">{item.classification.resource_type}</Badge>
                         <Badge variant="outline" className="text-[9px]">{item.classification.top_folder}{item.classification.sub_folder ? ` / ${item.classification.sub_folder}` : ''}</Badge>
+                        {item.source === 'file' && item.file?.name.toLowerCase().endsWith('.zip') && (
+                          <Badge className="text-[9px] bg-amber-500/10 text-amber-600 border-amber-500/20">ZIP Import</Badge>
+                        )}
                       </div>
                     )}
                   </div>
@@ -664,9 +678,15 @@ export function ResourceManager() {
               ))}
             </div>
           </ScrollArea>
+          {savingAll && (
+            <div className="space-y-1">
+              <Progress value={undefined} className="h-1.5" />
+              <p className="text-[10px] text-muted-foreground text-center">Uploading and processing...</p>
+            </div>
+          )}
           {pendingItems.some(p => p.status === 'classified') && (
             <div className="flex justify-end">
-              <Button size="sm" onClick={handleConfirmAll} disabled={savingAll}>
+              <Button size="sm" className="min-h-[44px] w-full sm:w-auto" onClick={handleConfirmAll} disabled={savingAll}>
                 {savingAll ? (
                   <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
                 ) : (
