@@ -409,6 +409,10 @@ export function computeEnrichmentHealth(
     readyToEnrich: 0,
     enriching: 0,
     retryableFailure: 0,
+    advancedExtractionPending: 0,
+    advancedExtractionInProgress: 0,
+    advancedExtractionFailed: 0,
+    awaitingAssistedResolution: 0,
     needsTranscript: 0,
     needsPastedContent: 0,
     needsAccessAuth: 0,
@@ -429,6 +433,10 @@ export function computeEnrichmentHealth(
       case 'ready_to_enrich': stats.readyToEnrich++; break;
       case 'enriching': stats.enriching++; break;
       case 'retryable_failure': stats.retryableFailure++; break;
+      case 'advanced_extraction_pending': stats.advancedExtractionPending++; break;
+      case 'advanced_extraction_in_progress': stats.advancedExtractionInProgress++; break;
+      case 'advanced_extraction_failed': stats.advancedExtractionFailed++; break;
+      case 'awaiting_assisted_resolution': stats.awaitingAssistedResolution++; break;
       case 'needs_transcript': stats.needsTranscript++; break;
       case 'needs_pasted_content': stats.needsPastedContent++; break;
       case 'needs_access_auth': stats.needsAccessAuth++; break;
@@ -440,8 +448,8 @@ export function computeEnrichmentHealth(
   }
 
   stats.completionPct = stats.total > 0 ? Math.round((stats.trulyComplete / stats.total) * 100) : 0;
-  stats.machinFixable = stats.readyToEnrich + stats.retryableFailure;
-  stats.needsInput = stats.needsTranscript + stats.needsPastedContent + stats.needsAccessAuth + stats.needsAlternateSource;
+  stats.machinFixable = stats.readyToEnrich + stats.retryableFailure + stats.advancedExtractionPending;
+  stats.needsInput = stats.needsTranscript + stats.needsPastedContent + stats.needsAccessAuth + stats.needsAlternateSource + stats.awaitingAssistedResolution;
 
   return stats;
 }
