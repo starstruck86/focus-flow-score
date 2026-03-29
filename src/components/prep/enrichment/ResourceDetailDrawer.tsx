@@ -224,26 +224,36 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
     </Button>
   );
 
-  return (
-    <div className="border-l border-border bg-background flex flex-col h-full">
+  // ── Drawer inner content (shared between desktop and mobile) ──
+  const drawerContent = (
+    <>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-foreground truncate">{r.title}</p>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <Badge variant="outline" className="text-[9px]">{r.subtypeLabel}</Badge>
-            <Badge className={cn('text-[9px]', bucketMeta.color === 'text-status-green' ? 'bg-status-green/15 text-status-green' : bucketMeta.color === 'text-destructive' ? 'bg-destructive/15 text-destructive' : 'bg-muted text-muted-foreground')}>
-              {bucketMeta.label}
-            </Badge>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border sticky top-0 bg-background z-10">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {isMobile && (
+            <Button variant="ghost" size="sm" className="h-11 w-11 p-0 shrink-0" onClick={onClose}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-foreground truncate">{r.title}</p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <Badge variant="outline" className="text-[9px]">{r.subtypeLabel}</Badge>
+              <Badge className={cn('text-[9px]', bucketMeta.color === 'text-status-green' ? 'bg-status-green/15 text-status-green' : bucketMeta.color === 'text-destructive' ? 'bg-destructive/15 text-destructive' : 'bg-muted text-muted-foreground')}>
+                {bucketMeta.label}
+              </Badge>
+            </div>
           </div>
         </div>
-        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onClose}>
-          <X className="h-4 w-4" />
-        </Button>
+        {!isMobile && (
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-4">
+        <div className={cn('space-y-4', isMobile ? 'p-4 pb-32' : 'p-4')}>
           {/* Diagnostics */}
           <div className="space-y-1.5">
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Diagnostics</p>
@@ -315,11 +325,11 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Edit Resource</p>
             <div className="space-y-1.5">
               <label className="text-[10px] text-muted-foreground">Title</label>
-              <Input value={title} onChange={e => setTitle(e.target.value)} className="h-7 text-xs" />
+              <Input value={title} onChange={e => setTitle(e.target.value)} className={cn('text-xs', isMobile ? 'h-11' : 'h-7')} />
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] text-muted-foreground">URL</label>
-              <Input value={url} onChange={e => setUrl(e.target.value)} className="h-7 text-xs" placeholder="https://…" />
+              <Input value={url} onChange={e => setUrl(e.target.value)} className={cn('text-xs', isMobile ? 'h-11' : 'h-7')} placeholder="https://…" />
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] text-muted-foreground">Description / Notes</label>
@@ -329,41 +339,53 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
 
           <Separator />
 
-          {/* Primary actions */}
-          <div className="space-y-2">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Actions</p>
-            <div className="flex flex-wrap gap-1.5">
-              <ActionBtn action="save" label="Save" icon={<Save className="h-3 w-3" />} />
-              <ActionBtn action="save_reenrich" label="Save & Re-enrich" icon={<Zap className="h-3 w-3" />} variant="default" />
-              <ActionBtn action="save_rescore" label="Save & Re-score" icon={<RotateCcw className="h-3 w-3" />} />
+          {/* ── Actions (grouped for mobile) ── */}
+          <div className="space-y-3">
+            {/* Primary */}
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Primary</p>
+              <div className={cn('flex flex-wrap gap-1.5', isMobile && 'flex-col')}>
+                <ActionBtn action="save_reenrich" label="Save & Re-enrich" icon={<Zap className="h-3 w-3" />} variant="default" />
+                <ActionBtn action="save" label="Save" icon={<Save className="h-3 w-3" />} />
+              </div>
             </div>
 
-            <div className="flex flex-wrap gap-1.5">
-              <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => setActionMode('paste_transcript')}>
-                <FileText className="h-3 w-3" /> Paste Transcript
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => setActionMode('paste_content')}>
-                <FileText className="h-3 w-3" /> Paste Content
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => setActionMode('alt_url')}>
-                <ExternalLink className="h-3 w-3" /> Alt URL
-              </Button>
+            {/* Secondary */}
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Content</p>
+              <div className={cn('flex flex-wrap gap-1.5', isMobile && 'flex-col')}>
+                {hasContent && (
+                  <Button size="sm" variant="outline" className={cn('gap-1', isMobile ? 'h-11 text-sm justify-start' : 'h-7 text-[10px]')} onClick={() => setShowContentViewer(true)}>
+                    <Eye className="h-3 w-3" /> View Content
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" className={cn('gap-1', isMobile ? 'h-11 text-sm justify-start' : 'h-7 text-[10px]')} onClick={() => setActionMode('paste_transcript')}>
+                  <FileText className="h-3 w-3" /> Paste Transcript
+                </Button>
+                <Button size="sm" variant="outline" className={cn('gap-1', isMobile ? 'h-11 text-sm justify-start' : 'h-7 text-[10px]')} onClick={() => setActionMode('paste_content')}>
+                  <FileText className="h-3 w-3" /> Paste Content
+                </Button>
+              </div>
             </div>
 
-            <div className="flex flex-wrap gap-1.5">
-              <ActionBtn action="clear_content" label="Clear Content" icon={<Trash2 className="h-3 w-3" />} />
-              <ActionBtn action="reset_ready" label="Reset to Ready" icon={<RotateCcw className="h-3 w-3" />} />
-              <ActionBtn action="accept_metadata" label="Accept Metadata" icon={<Bookmark className="h-3 w-3" />} />
-              <ActionBtn action="park" label="Park" icon={<SkipForward className="h-3 w-3" />} />
-            </div>
-
-            <div className="flex flex-wrap gap-1.5">
-              <ActionBtn action="retry_enrich" label="Retry Enrichment" icon={<Play className="h-3 w-3" />} />
-              {r.quarantined ? (
-                <ActionBtn action="unquarantine" label="Remove Quarantine" icon={<ShieldOff className="h-3 w-3" />} variant="destructive" />
-              ) : (
-                <ActionBtn action="quarantine" label="Quarantine" icon={<Ban className="h-3 w-3" />} variant="destructive" />
-              )}
+            {/* Advanced */}
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Advanced</p>
+              <div className={cn('flex flex-wrap gap-1.5', isMobile && 'flex-col')}>
+                <Button size="sm" variant="outline" className={cn('gap-1', isMobile ? 'h-11 text-sm justify-start' : 'h-7 text-[10px]')} onClick={() => setActionMode('alt_url')}>
+                  <ExternalLink className="h-3 w-3" /> Alt URL
+                </Button>
+                <ActionBtn action="accept_metadata" label="Accept Metadata" icon={<Bookmark className="h-3 w-3" />} />
+                <ActionBtn action="reset_ready" label="Reset to Ready" icon={<RotateCcw className="h-3 w-3" />} />
+                <ActionBtn action="retry_enrich" label="Retry Enrichment" icon={<Play className="h-3 w-3" />} />
+                <ActionBtn action="clear_content" label="Clear Content" icon={<Trash2 className="h-3 w-3" />} />
+                <ActionBtn action="park" label="Park" icon={<SkipForward className="h-3 w-3" />} />
+                {r.quarantined ? (
+                  <ActionBtn action="unquarantine" label="Remove Quarantine" icon={<ShieldOff className="h-3 w-3" />} variant="destructive" />
+                ) : (
+                  <ActionBtn action="quarantine" label="Quarantine" icon={<Ban className="h-3 w-3" />} variant="destructive" />
+                )}
+              </div>
             </div>
           </div>
 
@@ -376,7 +398,7 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
                   {actionMode === 'paste_transcript' ? 'Paste Transcript' : actionMode === 'paste_content' ? 'Paste Content' : 'Alternate URL'}
                 </p>
                 {actionMode === 'alt_url' ? (
-                  <Input value={actionInput} onChange={e => setActionInput(e.target.value)} placeholder="https://…" className="h-7 text-xs" autoFocus />
+                  <Input value={actionInput} onChange={e => setActionInput(e.target.value)} placeholder="https://…" className={cn('text-xs', isMobile ? 'h-11' : 'h-7')} autoFocus />
                 ) : (
                   <Textarea value={actionInput} onChange={e => setActionInput(e.target.value)}
                     placeholder={actionMode === 'paste_transcript' ? 'Paste full transcript…' : 'Paste content…'}
@@ -388,12 +410,12 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
                   </p>
                 )}
                 <div className="flex gap-1.5">
-                  <Button size="sm" className="h-7 text-[10px] gap-1" disabled={!actionInput.trim() || !!activeAction}
+                  <Button size="sm" className={cn('gap-1', isMobile ? 'h-11 text-sm' : 'h-7 text-[10px]')} disabled={!actionInput.trim() || !!activeAction}
                     onClick={() => runAction(actionMode === 'paste_transcript' ? 'submit_transcript' : actionMode === 'paste_content' ? 'submit_content' : 'submit_alt_url')}>
                     {activeAction ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
                     Submit & Re-enrich
                   </Button>
-                  <Button size="sm" variant="ghost" className="h-7 text-[10px]" onClick={() => { setActionMode(null); setActionInput(''); }}>
+                  <Button size="sm" variant="ghost" className={cn(isMobile ? 'h-11 text-sm' : 'h-7 text-[10px]')} onClick={() => { setActionMode(null); setActionInput(''); }}>
                     Cancel
                   </Button>
                 </div>
@@ -402,6 +424,48 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
           )}
         </div>
       </ScrollArea>
+
+      {/* Mobile sticky primary action */}
+      {isMobile && (
+        <div className="sticky bottom-0 px-4 py-3 border-t border-border bg-background">
+          <Button className="w-full h-12 text-sm gap-2" disabled={!!activeAction} onClick={() => runAction('save_reenrich')}>
+            {activeAction === 'save_reenrich' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+            Save & Re-enrich
+          </Button>
+        </div>
+      )}
+
+      {/* Content Viewer */}
+      <ContentViewer
+        resource={{ id: r.id, title: r.title, content: '', content_length: r.contentLength } as any}
+        open={showContentViewer}
+        onOpenChange={setShowContentViewer}
+      />
+    </>
+  );
+
+  // Mobile: render as full-screen bottom sheet
+  if (isMobile) {
+    return (
+      <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
+        <SheetContent side="bottom" className="h-[95vh] p-0 flex flex-col rounded-t-2xl">
+          <SheetHeader className="sr-only">
+            <SheetTitle>{r.title}</SheetTitle>
+          </SheetHeader>
+          {/* Drag handle */}
+          <div className="flex justify-center py-2 shrink-0">
+            <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
+          </div>
+          {drawerContent}
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  // Desktop: inline panel
+  return (
+    <div className="border-l border-border bg-background flex flex-col h-full">
+      {drawerContent}
     </div>
   );
 }
