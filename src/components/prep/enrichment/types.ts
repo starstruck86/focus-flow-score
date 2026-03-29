@@ -120,6 +120,8 @@ export const BUCKET_META: Record<BucketFilter, { label: string; color: string; i
   all: { label: 'All Resources', color: 'text-foreground', icon: 'list' },
   complete: { label: 'Complete', color: 'text-status-green', icon: 'check-circle' },
   auto_fixable: { label: 'Auto-fixable', color: 'text-primary', icon: 'zap' },
+  advanced_extraction: { label: 'Deep Extract', color: 'text-primary', icon: 'scan' },
+  assisted_resolution: { label: 'Assisted', color: 'text-status-yellow', icon: 'hand-helping' },
   needs_input: { label: 'Needs Input', color: 'text-status-yellow', icon: 'file-text' },
   processing: { label: 'Processing', color: 'text-muted-foreground', icon: 'clock' },
   quarantined: { label: 'Quarantined', color: 'text-destructive', icon: 'ban' },
