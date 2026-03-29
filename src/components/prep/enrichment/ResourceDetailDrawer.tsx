@@ -81,6 +81,33 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
     last_quality_score: (r as any).qualityScore ?? (r as any).last_quality_score,
   });
 
+  const isNotionSource = isNotionZipResource({
+    resolution_method: (r as any).resolution_method,
+    extraction_method: (r as any).extraction_method,
+    content: (r as any).content,
+  });
+
+  const handleRebuildNotion = useCallback(async () => {
+    if (!currentUserId) return;
+    setSplitting(true);
+    setSplitProgress('Starting…');
+    try {
+      const result = await splitNotionImport(r.id, currentUserId, setSplitProgress);
+      if (result.success) {
+        toast.success(`✅ ${result.message}`);
+        invalidateAll();
+        onClose();
+      } else {
+        toast.error(result.message);
+      }
+    } catch (e: any) {
+      toast.error(`Split failed: ${e.message}`);
+    } finally {
+      setSplitting(false);
+      setSplitProgress('');
+    }
+  }, [r.id, currentUserId, invalidateAll, onClose]);
+
   const invalidateAll = useCallback(() => {
     FIX_RESOURCE_INVALIDATION_KEYS.forEach(key => {
       qc.invalidateQueries({ queryKey: key });
