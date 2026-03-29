@@ -3217,17 +3217,47 @@ Deno.serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader! } } }
-    );
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // Check if caller is using the service role key (server-to-server)
+    const bearerToken = authHeader?.replace("Bearer ", "") ?? "";
+    const isServiceRole = bearerToken === serviceRoleKey;
+
+    let userId: string;
+
+    if (isServiceRole) {
+      // Service-role call: extract user from request body later, or use resource owner
+      const supabase = createClient(supabaseUrl, serviceRoleKey);
+      const body = await req.clone().json().catch(() => ({}));
+      if (body.user_id) {
+        userId = body.user_id;
+      } else if (body.resource_id) {
+        const { data: res } = await supabase.from("resources").select("user_id").eq("id", body.resource_id).single();
+        userId = res?.user_id ?? "";
+      } else {
+        userId = "";
+      }
+      if (!userId) {
+        return new Response(JSON.stringify({ error: "Service-role call requires resource_id or user_id" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      // Re-create supabase client for downstream use (service role)
+      var supabase = createClient(supabaseUrl, serviceRoleKey);
+    } else {
+      // Normal user auth
+      var supabase = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader! } },
       });
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      userId = user.id;
     }
 
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
