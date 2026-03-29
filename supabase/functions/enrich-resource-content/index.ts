@@ -2605,9 +2605,10 @@ async function setEnrichmentStatus(
     enrichment_status: status,
     last_status_change_at: now,
     last_enrichment_attempt_at: now,
-    ...extra,
   };
 
+  // Set default content_status based on enrichment status,
+  // but allow extra to override (e.g. manual content fast-path sets content_status='full')
   if (status === 'deep_enriched') update.content_status = 'enriched';
   else if (status === 'deep_enrich_in_progress' || status === 'reenrich_in_progress') update.content_status = 'enriching';
   else if (status === 'partial') update.content_status = 'partial';
@@ -2615,6 +2616,9 @@ async function setEnrichmentStatus(
   else if (status === 'unsupported') update.content_status = 'unsupported';
   else if (status === 'failed' || status === 'incomplete') update.content_status = 'placeholder';
   else if (status === 'not_enriched') update.content_status = 'placeholder';
+
+  // Spread extra AFTER defaults so caller can override content_status etc.
+  Object.assign(update, extra);
 
   await supabase.from("resources").update(update).eq("id", resourceId);
 }
@@ -2636,18 +2640,8 @@ async function orchestrateEnrichment(
 
   console.log(`[Orchestrate] START id=${resourceId} url=${url?.slice(0, 80)} source_type=${source.source_type} platform=${source.platform}`);
 
-  // No URL
-  if (!url || !url.startsWith("http")) {
-    return {
-      resource_id: resourceId, url: url || '', source_classification: source,
-      final_status: 'unsupported', method_used: null, methods_attempted: [],
-      attempt_count: 0, extracted_text_length: 0, completeness_score: 0,
-      confidence_score: 0, missing_fields: ['source_url'],
-      failure_reason: 'No valid source URL', recovery_hint: 'Add a valid HTTP URL to this resource',
-    };
-  }
-
-  // Manual content fast-path: if user already provided content, skip URL fetching
+  // Manual content fast-path: if user already provided content, skip URL fetching entirely.
+  // This MUST come before the no-URL guard so resources with manual content but no URL still resolve.
   const hasManualContent = resource.manual_content_present === true &&
     resource.content && resource.content.length >= 50;
   if (hasManualContent) {
@@ -2674,7 +2668,7 @@ async function orchestrateEnrichment(
 
     if (userId) {
       await persistAttemptProvenance(supabase, userId, resourceId, source, {
-        resource_id: resourceId, url, source_classification: source,
+        resource_id: resourceId, url: url || '', source_classification: source,
         final_status: finalStatus, method_used: 'manual_content',
         methods_attempted: ['manual_content'], attempt_count: 1,
         extracted_text_length: contentText.length,
@@ -2685,12 +2679,23 @@ async function orchestrateEnrichment(
     }
 
     return {
-      resource_id: resourceId, url, source_classification: source,
+      resource_id: resourceId, url: url || '', source_classification: source,
       final_status: finalStatus, method_used: 'manual_content',
       methods_attempted: ['manual_content'], attempt_count: 1,
       extracted_text_length: contentText.length,
       completeness_score: quality.score, confidence_score: quality.score,
       missing_fields: quality.missing_fields,
+    };
+  }
+
+  // No URL
+  if (!url || !url.startsWith("http")) {
+    return {
+      resource_id: resourceId, url: url || '', source_classification: source,
+      final_status: 'unsupported', method_used: null, methods_attempted: [],
+      attempt_count: 0, extracted_text_length: 0, completeness_score: 0,
+      confidence_score: 0, missing_fields: ['source_url'],
+      failure_reason: 'No valid source URL', recovery_hint: 'Add a valid HTTP URL to this resource',
     };
   }
 
