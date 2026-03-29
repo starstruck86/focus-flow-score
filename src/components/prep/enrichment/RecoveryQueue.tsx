@@ -207,6 +207,7 @@ function getAssistedNextAction(platform: string | null): string {
 const FILTER_META: Record<RecoveryFilter, { label: string; icon: React.ReactNode }> = {
   all: { label: 'All', icon: <Filter className="h-3 w-3" /> },
   deep_extraction: { label: 'Deep Extract', icon: <ScanSearch className="h-3 w-3" /> },
+  zoom_session_assist: { label: 'Zoom Capture', icon: <Monitor className="h-3 w-3" /> },
   assisted_resolution: { label: 'Assisted', icon: <HandHelping className="h-3 w-3" /> },
   needs_transcript: { label: 'Needs Transcript', icon: <FileText className="h-3 w-3" /> },
   auth_gated: { label: 'Auth Required', icon: <Lock className="h-3 w-3" /> },
