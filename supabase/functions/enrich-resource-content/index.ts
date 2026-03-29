@@ -2654,7 +2654,7 @@ async function orchestrateEnrichment(
     console.log(`[Orchestrate] MANUAL CONTENT FAST-PATH: id=${resourceId} contentLen=${resource.content.length}`);
     const contentText = resource.content;
     const quality = validateContentQuality(contentText, source.source_type);
-    const finalStatus = quality.score >= COMPLETE_MIN_SCORE ? 'enriched' : 'partial';
+    const finalStatus = quality.score >= PARTIAL_MIN_SCORE ? 'deep_enriched' : 'partial';
 
     await setEnrichmentStatus(supabase, resourceId, finalStatus, {
       content_status: 'full',
