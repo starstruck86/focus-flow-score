@@ -366,7 +366,7 @@ function GuidedResolutionPanel({
         <input
           ref={fileInputRef}
           type="file"
-          accept=".txt,.vtt,.srt,.json,.csv,.md,.html,.htm"
+          accept=".txt,.vtt,.srt,.json,.csv,.md,.html,.htm,.zip"
           className="hidden"
           onChange={e => {
             const file = e.target.files?.[0];
