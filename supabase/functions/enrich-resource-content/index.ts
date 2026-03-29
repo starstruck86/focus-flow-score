@@ -1373,6 +1373,8 @@ function getMethodChain(source: SourceClassification): Array<(url: string, apiKe
       return [podcastResolveAndTranscribe, directAudioTranscribe, firecrawlScrape];
     case 'direct_audio':
       return [directAudioTranscribe];
+    case 'zoom_recording':
+      return [zoomRecordingExtract];
     case 'social':
       return [firecrawlScrape, firecrawlFullPage];
     case 'google_drive_file':
