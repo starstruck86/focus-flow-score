@@ -67,7 +67,7 @@ function classifyRecoveryItem(v: VerifiedResource): RecoveryItem | null {
 
   const platform = getPlatform(v.subtype);
   const isPlatformResource = PLATFORM_SUBTYPES.includes(v.subtype);
-  const deepAvailable = isPlatformResource && v.failureCount < 3;
+  const deepAvailable = isPlatformResource && (v.advancedExtractionAttempts ?? 0) < 3;
 
   let recoveryBucket: RecoveryFilter = 'all';
   let preciseLabel = '';

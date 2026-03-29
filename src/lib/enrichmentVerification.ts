@@ -391,6 +391,7 @@ export function verifyResource(
     failureBucket,
     failureReason: resource.failure_reason ?? null,
     failureCount: resource.failure_count ?? 0,
+    advancedExtractionAttempts: (resource as any).advanced_extraction_attempts ?? 0,
     retryEligible,
     quarantined: status === 'quarantined',
     contentLength: (resource.content || '').length,
