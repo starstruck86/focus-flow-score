@@ -545,7 +545,7 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
 
       {/* Content Viewer */}
       <ContentViewer
-        resource={{ id: r.id, title: r.title, content: '', content_length: r.contentLength, updated_at: (r as any).lastAttemptAt || '' } as any}
+        resource={{ id: r.id, title: r.title, content: '', content_length: r.contentLength, updated_at: (r as any).lastAttemptAt || r.enrichedAt || '', resolution_method: (r as any).resolution_method, extraction_method: (r as any).extraction_method, manual_content_present: (r as any).manual_content_present } as any}
         open={showContentViewer}
         onOpenChange={setShowContentViewer}
       />
