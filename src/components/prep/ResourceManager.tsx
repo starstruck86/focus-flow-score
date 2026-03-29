@@ -1120,33 +1120,37 @@ export function ResourceManager() {
         resourceUrl={manualAssistResource?.file_url || null}
         audioJob={manualAssistResource ? (audioJobsMap?.get(manualAssistResource.id) || null) : null}
         onSubmit={async (data) => {
+          if (!manualAssistResource || !user?.id) return;
+
           if (data.mode === 'paste_transcript' || data.mode === 'paste_notes') {
-            // Save content to resource
-            if (manualAssistResource) {
-              await supabase.from('resources').update({
-                content: data.content,
-                enrichment_status: 'not_enriched',
-              }).eq('id', manualAssistResource.id);
-              // Update audio job
-              const job = audioJobsMap?.get(manualAssistResource.id);
-              if (job) {
-                await supabase.from('audio_jobs').update({
-                  stage: 'completed',
-                  transcript_text: data.content,
-                  transcript_word_count: data.content.split(/\s+/).filter(Boolean).length,
-                  has_transcript: true,
-                  transcript_mode: data.mode === 'paste_transcript' ? 'direct_transcription' : 'manual_assist',
-                  final_resolution_status: 'completed',
-                  failure_code: null,
-                  failure_reason: null,
-                }).eq('id', job.id);
-              }
-              queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
-              queryClient.invalidateQueries({ queryKey: ['resources'] });
-              toast.success('Content saved — ready for enrichment');
+            // Use shared recovery resolver for content paste
+            const result = await resolveResourceWithManualInput({
+              mode: data.mode === 'paste_transcript' ? 'paste_transcript' : 'paste_content',
+              resourceId: manualAssistResource.id,
+              userId: user.id,
+              text: data.content,
+            });
+            // Also update audio job if present
+            const job = audioJobsMap?.get(manualAssistResource.id);
+            if (job) {
+              await supabase.from('audio_jobs').update({
+                stage: 'completed',
+                transcript_text: data.content,
+                transcript_word_count: data.content.split(/\s+/).filter(Boolean).length,
+                has_transcript: true,
+                transcript_mode: data.mode === 'paste_transcript' ? 'direct_transcription' : 'manual_assist',
+                final_resolution_status: 'completed',
+                failure_code: null,
+                failure_reason: null,
+              }).eq('id', job.id);
             }
+            for (const key of getRecoveryInvalidationKeys()) {
+              queryClient.invalidateQueries({ queryKey: key });
+            }
+            queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+            toast.success(result.success ? (result.message || 'Content saved & re-enrichment started') : result.message);
           } else if (data.mode === 'provide_alt_url' || data.mode === 'provide_audio_url') {
-            if (manualAssistResource && data.content) {
+            if (data.content) {
               toast.info('Processing provided URL...');
               const result = await processAudioResource(manualAssistResource.id, data.content);
               queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
@@ -1157,16 +1161,24 @@ export function ResourceManager() {
               }
             }
           } else if (data.mode === 'metadata_only') {
-            const job = audioJobsMap?.get(manualAssistResource?.id || '');
+            await resolveResourceWithManualInput({
+              mode: 'metadata_only',
+              resourceId: manualAssistResource.id,
+              userId: user.id,
+            });
+            const job = audioJobsMap?.get(manualAssistResource.id);
             if (job) {
               await supabase.from('audio_jobs').update({
                 stage: 'metadata_only_complete',
                 transcript_mode: 'metadata_only',
                 final_resolution_status: 'metadata_only',
               }).eq('id', job.id);
-              queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
-              toast.success('Marked as metadata-only');
             }
+            for (const key of getRecoveryInvalidationKeys()) {
+              queryClient.invalidateQueries({ queryKey: key });
+            }
+            queryClient.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+            toast.success('Marked as metadata-only');
           }
           setManualAssistResource(null);
         }}
