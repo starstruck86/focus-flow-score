@@ -179,6 +179,24 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
         requiresAuth: false,
       };
 
+    case 'google_slides':
+      return {
+        ...base,
+        enrichability: 'fully_enrichable',
+        reason: 'Google Slides — HTML/export extraction supported.',
+        canFetchText: true,
+        canFetchMetadata: true,
+      };
+
+    case 'thinkific_lesson':
+      return {
+        ...base,
+        enrichability: 'manual_input_needed',
+        reason: 'Thinkific lesson — requires enrollment/login. Paste content manually.',
+        requiresAuth: true,
+        canFetchMetadata: false,
+      };
+
     case 'auth_gated_community_page':
       return {
         ...base,
