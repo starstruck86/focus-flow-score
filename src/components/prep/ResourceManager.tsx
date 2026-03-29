@@ -96,7 +96,7 @@ const TEMPLATE_CATEGORIES = [
   'Discovery', 'Demo', 'Follow-Up', 'Proposal', 'QBR', 'Executive', 'Battle Card', 'Other',
 ];
 
-const ACCEPTED_FILE_TYPES = '.pdf,.docx,.pptx,.txt,.md,.csv,.doc,.xlsx,.xls';
+const ACCEPTED_FILE_TYPES = '.zip,.pdf,.docx,.pptx,.txt,.md,.csv,.doc,.xlsx,.xls';
 
 export function ResourceManager() {
   const { user } = useAuth();

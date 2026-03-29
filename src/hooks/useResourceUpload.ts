@@ -242,10 +242,14 @@ export function useUploadResource() {
 
       return resource;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ['resources'] });
       qc.invalidateQueries({ queryKey: ['resource-folders'] });
-      toast.success('Resource uploaded and classified');
+      if (isNotionZip(variables.file)) {
+        toast.success('Notion export processed — content imported and enrichment started');
+      } else {
+        toast.success('Resource uploaded and classified');
+      }
     },
     onError: (e) => toast.error(`Upload failed: ${e.message}`),
   });
