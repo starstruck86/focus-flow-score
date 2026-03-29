@@ -19,6 +19,7 @@ export interface FeatureFlags {
   ENABLE_SESSION_AUTOPILOT: boolean;
   ENABLE_EXECUTION_MOMENTUM: boolean;
   ENABLE_SALES_BRAIN: boolean;
+  ENFORCE_ALLOWLIST: boolean;
 }
 
 const DEFAULTS: FeatureFlags = {
@@ -34,6 +35,7 @@ const DEFAULTS: FeatureFlags = {
   ENABLE_SESSION_AUTOPILOT: false,
   ENABLE_EXECUTION_MOMENTUM: false,
   ENABLE_SALES_BRAIN: false,
+  ENFORCE_ALLOWLIST: false,
 };
 
 export function loadFeatureFlags(): FeatureFlags {
