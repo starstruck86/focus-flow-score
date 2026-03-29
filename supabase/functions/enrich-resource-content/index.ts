@@ -3155,6 +3155,14 @@ async function orchestrateEnrichment(
 
   const platformRecoveryReason = circleRecoveryReason || zoomRecoveryReason || thinkificRecoveryReason || driveRecoveryReason || slidesRecoveryReason;
 
+  // Determine platform_status for precise failure tracking
+  const platformStatus = isZoomSource ? (zoomFailureCategory || 'zoom_extraction_failed')
+    : isCircleSource ? (circleFailureCategory || 'circle_extraction_failed')
+    : isThinkificSource ? (thinkificFailureCategory || 'thinkific_extraction_failed')
+    : isGoogleDriveSource ? (driveFailureCategory || 'drive_extraction_failed')
+    : isGoogleSlidesSource ? (slidesFailureCategory || 'google_slides_extraction_failed')
+    : null;
+
   await setEnrichmentStatus(supabase, resourceId, newStatus, {
     failure_reason: primaryReason,
     last_quality_score: bestQuality?.score || 0,
@@ -3173,6 +3181,7 @@ async function orchestrateEnrichment(
       : (attempts.some(a => a.http_status === 403 || a.http_status === 401) ? 'auth_gated' : 'public'),
     content_classification: isAudioSource ? 'audio' : isZoomSource ? 'video' : isCircleSource ? 'auth_gated' : isThinkificSource ? 'auth_gated' : null,
     extraction_method: persistedExtractionMethod,
+    platform_status: platformStatus,
   });
 
   if (isCircleSource) {
