@@ -45,6 +45,20 @@ describe('processingState manual recovery recognition', () => {
     expect(ps.label).toBe('Manual Recovery');
   });
 
+  it('deep_enriched + resolution_method=alternate_url → COMPLETED / Manual Recovery', () => {
+    const r = { ...baseResource, enrichment_status: 'deep_enriched', resolution_method: 'alternate_url' } as any;
+    const ps = deriveProcessingState(r);
+    expect(ps.state).toBe('COMPLETED');
+    expect(ps.label).toBe('Manual Recovery');
+  });
+
+  it('deep_enriched + resolution_method=transcript_upload → COMPLETED / Manual Recovery', () => {
+    const r = { ...baseResource, enrichment_status: 'deep_enriched', resolution_method: 'transcript_upload' } as any;
+    const ps = deriveProcessingState(r);
+    expect(ps.state).toBe('COMPLETED');
+    expect(ps.label).toBe('Manual Recovery');
+  });
+
   it('deep_enriched without manual flags → COMPLETED / Completed (not Manual Recovery)', () => {
     const r = { ...baseResource, enrichment_status: 'deep_enriched' } as any;
     const ps = deriveProcessingState(r);

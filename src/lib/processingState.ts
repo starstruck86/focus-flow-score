@@ -133,9 +133,11 @@ export function deriveProcessingState(
 
   // Completed enrichment
   if (status === 'deep_enriched' || (status as string) === 'enriched') {
-    const isManualRecovery = (resource as any).resolution_method?.startsWith('manual') ||
-      (resource as any).resolution_method === 'metadata_only' ||
-      (resource as any).manual_content_present === true;
+    const rm = (resource as any).resolution_method;
+    const isManualRecovery = (resource as any).manual_content_present === true ||
+      rm === 'metadata_only' || rm === 'alternate_url' ||
+      rm === 'transcript_upload' || rm === 'content_upload' ||
+      (typeof rm === 'string' && rm.startsWith('manual'));
     return {
       state: 'COMPLETED',
       label: isManualRecovery ? 'Manual Recovery' : 'Completed',

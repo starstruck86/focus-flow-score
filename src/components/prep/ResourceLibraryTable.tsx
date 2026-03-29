@@ -459,7 +459,7 @@ export function ResourceLibraryTable({
                             </p>
                           )}
                           {/* Manual recovery provenance badge */}
-                          {(resource as any).manual_content_present && (
+                          {((resource as any).manual_content_present || (resource as any).resolution_method) && (
                             <Badge variant="outline" className="text-[8px] h-4 px-1 mt-0.5 border-primary/30 text-primary">
                               {(resource as any).resolution_method === 'metadata_only' ? 'Metadata Only' :
                                (resource as any).resolution_method === 'manual_transcript_paste' ? 'Manual Transcript' :
