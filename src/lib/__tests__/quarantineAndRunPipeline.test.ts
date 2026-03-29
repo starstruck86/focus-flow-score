@@ -18,6 +18,7 @@ function makeVerified(overrides: Partial<VerifiedResource>): VerifiedResource {
     recommendedAction: 'Review', isSystemBehaviorCorrect: true,
     isMisclassified: false, isStuckInWrongQueue: false, scoreStatusContradict: false,
     resolutionType: 'auto_fix', rootCause: 'Legacy quarantine', requiredBuild: null,
+    advancedExtractionAttempts: 0,
     ...overrides,
   };
 }

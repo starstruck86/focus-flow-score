@@ -72,6 +72,7 @@ export interface VerifiedResource {
   resolutionType: 'auto_fix' | 'manual_input' | 'system_gap';
   rootCause: string;
   requiredBuild: { type: string; description: string; suggestedImplementation: string } | null;
+  advancedExtractionAttempts: number;
 }
 
 export interface VerificationSummary {
@@ -390,6 +391,7 @@ export function verifyResource(
     failureBucket,
     failureReason: resource.failure_reason ?? null,
     failureCount: resource.failure_count ?? 0,
+    advancedExtractionAttempts: (resource as any).advanced_extraction_attempts ?? 0,
     retryEligible,
     quarantined: status === 'quarantined',
     contentLength: (resource.content || '').length,
