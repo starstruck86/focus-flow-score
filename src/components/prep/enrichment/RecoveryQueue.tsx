@@ -1,27 +1,31 @@
 /**
- * Recovery Queue — Advanced resolution control center.
- * Shows strategy history, precise labels, deep extraction actions,
- * batch operations, and assisted resolution workflows.
+ * Recovery Queue — the operational center for resolving blocked resources.
+ * Phase 3: assisted resolution with file upload, smart escalation, and guided workflows.
  */
-import { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
+import {
+  ScanSearch, RotateCcw, Filter, Lock, FileText, Link2,
+  ClipboardPaste, Wrench, HandHelping, Eye, AlertTriangle,
+  History, ExternalLink, CheckSquare, Search, Upload,
+  ChevronDown, ChevronUp, HelpCircle,
+} from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import {
-  FileText, Lock, ExternalLink, Wrench, RotateCcw, ClipboardPaste,
-  Eye, Search, Filter, ScanSearch, HandHelping, Link2, Upload, History,
-  CheckSquare, ChevronDown, ChevronUp, AlertTriangle,
-} from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
-import { triggerDeepExtraction, getAttemptHistory, type EnrichmentAttemptRecord } from '@/lib/advancedExtraction';
 import { useAuth } from '@/contexts/AuthContext';
-import { toast } from 'sonner';
+import {
+  triggerDeepExtraction, getAttemptHistory, uploadTranscriptFile,
+  getAssistedResolutionGuidance,
+  type EnrichmentAttemptRecord,
+} from '@/lib/advancedExtraction';
 import type { VerifiedResource } from '@/lib/enrichmentVerification';
 
 // ── Types ────────────────────────────────────────────────
@@ -49,6 +53,11 @@ interface RecoveryItem {
   platform: string | null;
 }
 
+interface Props {
+  resources: VerifiedResource[];
+  onItemResolved: () => void;
+}
+
 // ── Classification ──────────────────────────────────────
 
 const PLATFORM_SUBTYPES = ['zoom_recording', 'thinkific_lesson', 'auth_gated_community_page', 'google_drive_file', 'google_slides'];
@@ -68,38 +77,66 @@ function classifyRecoveryItem(v: VerifiedResource): RecoveryItem | null {
   const platform = getPlatform(v.subtype);
   const isPlatformResource = PLATFORM_SUBTYPES.includes(v.subtype);
   const deepAvailable = isPlatformResource && (v.advancedExtractionAttempts ?? 0) < 3;
+  const deepExhausted = isPlatformResource && (v.advancedExtractionAttempts ?? 0) >= 1;
 
   let recoveryBucket: RecoveryFilter = 'all';
   let preciseLabel = '';
   let recoveryReason = '';
   let nextBestAction = '';
 
-  // Platform-specific with deep extraction available
-  if (isPlatformResource && deepAvailable && !['auto_fix_now', 'retry_different_strategy', 'bad_scoring_state_bug', 'already_fixed_stale_ui', 'truly_complete'].includes(v.fixabilityBucket)) {
+  // Platform-specific with deep extraction available AND not yet tried
+  if (isPlatformResource && deepAvailable && !deepExhausted && !['auto_fix_now', 'retry_different_strategy', 'bad_scoring_state_bug', 'already_fixed_stale_ui', 'truly_complete'].includes(v.fixabilityBucket)) {
     recoveryBucket = 'deep_extraction';
     preciseLabel = `Try Deep Extraction (${platform})`;
     recoveryReason = `${v.subtypeLabel} — advanced platform-specific extraction available`;
     nextBestAction = 'Try Deep Extraction';
+  } else if (isPlatformResource && deepExhausted && v.enrichmentStatus !== 'deep_enriched') {
+    // Deep extraction was tried but didn't fully resolve → escalate to assisted
+    recoveryBucket = 'assisted_resolution';
+    preciseLabel = `Assisted Resolution (${platform})`;
+    recoveryReason = `Deep extraction attempted ${v.advancedExtractionAttempts}× — manual assist needed`;
+    nextBestAction = getAssistedNextAction(platform);
   } else if (v.fixabilityBucket === 'needs_transcript') {
     recoveryBucket = 'needs_transcript';
     preciseLabel = 'Needs Transcript';
     recoveryReason = 'Audio/video content — transcript not yet extracted';
-    nextBestAction = deepAvailable ? 'Try Deep Extraction or paste transcript' : 'Paste transcript';
+    nextBestAction = deepAvailable ? 'Try Deep Extraction or paste transcript' : 'Upload transcript file or paste text';
   } else if (v.fixabilityBucket === 'needs_access_auth') {
-    recoveryBucket = 'auth_gated';
-    preciseLabel = 'Requires Login';
-    recoveryReason = 'Content behind authentication wall';
-    nextBestAction = 'Paste content or provide access';
+    if (isPlatformResource && deepAvailable) {
+      recoveryBucket = 'deep_extraction';
+      preciseLabel = `Try Deep Extraction (${platform})`;
+      recoveryReason = `${v.subtypeLabel} — auth-gated but deep extraction may resolve`;
+      nextBestAction = 'Try Deep Extraction first';
+    } else {
+      recoveryBucket = 'auth_gated';
+      preciseLabel = 'Requires Login';
+      recoveryReason = 'Content behind authentication wall';
+      nextBestAction = 'Paste content, upload file, or provide access';
+    }
   } else if (v.fixabilityBucket === 'needs_alternate_source') {
-    recoveryBucket = 'alternate_url';
-    preciseLabel = 'Alternate URL Needed';
-    recoveryReason = 'Source URL failed multiple times';
-    nextBestAction = 'Provide an alternate URL';
+    if (isPlatformResource && deepAvailable) {
+      recoveryBucket = 'deep_extraction';
+      preciseLabel = `Try Deep Extraction (${platform})`;
+      recoveryReason = `${v.subtypeLabel} — previous extraction failed, deep extraction available`;
+      nextBestAction = 'Try Deep Extraction';
+    } else {
+      recoveryBucket = 'alternate_url';
+      preciseLabel = 'Alternate URL Needed';
+      recoveryReason = 'Source URL failed multiple times';
+      nextBestAction = 'Provide an alternate URL';
+    }
   } else if (v.fixabilityBucket === 'needs_pasted_content') {
-    recoveryBucket = 'awaiting_input';
-    preciseLabel = 'Awaiting Manual Content';
-    recoveryReason = 'Content could not be extracted automatically';
-    nextBestAction = 'Paste content manually';
+    if (isPlatformResource && deepAvailable) {
+      recoveryBucket = 'deep_extraction';
+      preciseLabel = `Try Deep Extraction (${platform})`;
+      recoveryReason = `${v.subtypeLabel} — deep extraction available before manual paste`;
+      nextBestAction = 'Try Deep Extraction';
+    } else {
+      recoveryBucket = 'awaiting_input';
+      preciseLabel = 'Awaiting Manual Content';
+      recoveryReason = 'Content could not be extracted automatically';
+      nextBestAction = 'Paste content or upload file';
+    }
   } else if (v.resolutionType === 'system_gap') {
     recoveryBucket = 'system_gap';
     preciseLabel = 'System Gap';
@@ -108,20 +145,28 @@ function classifyRecoveryItem(v: VerifiedResource): RecoveryItem | null {
   } else if (['auto_fix_now', 'retry_different_strategy', 'bad_scoring_state_bug', 'already_fixed_stale_ui'].includes(v.fixabilityBucket)) {
     recoveryBucket = 'retryable';
     preciseLabel = 'Auto-Retryable';
-    recoveryReason = 'Can be retried automatically';
+    recoveryReason = v.rootCause || 'Can be auto-fixed with retry';
     nextBestAction = 'Retry enrichment';
+  } else if (v.fixabilityBucket === 'accept_metadata_only') {
+    recoveryBucket = 'assisted_resolution';
+    preciseLabel = 'Metadata Only Candidate';
+    recoveryReason = 'Only metadata available — accept or provide full content';
+    nextBestAction = 'Accept as metadata-only or paste full content';
   } else if (v.fixabilityBucket === 'needs_quarantine') {
-    recoveryBucket = 'retryable';
-    preciseLabel = 'Quarantine Review';
-    recoveryReason = v.failureReason || 'Quarantined';
-    nextBestAction = 'Review and retry or provide content';
-  } else if (isPlatformResource && !deepAvailable) {
+    recoveryBucket = 'system_gap';
+    preciseLabel = 'Quarantined';
+    recoveryReason = v.failureReason || 'Quarantined — review needed';
+    nextBestAction = 'Review and retry or paste content';
+  } else if (isPlatformResource && deepAvailable) {
+    recoveryBucket = 'deep_extraction';
+    preciseLabel = `Try Deep Extraction (${platform})`;
+    recoveryReason = `${v.subtypeLabel} — advanced platform-specific extraction available`;
+    nextBestAction = 'Try Deep Extraction';
+  } else {
     recoveryBucket = 'assisted_resolution';
     preciseLabel = 'Assisted Resolution';
     recoveryReason = `${v.subtypeLabel} — deep extraction exhausted`;
     nextBestAction = 'Paste content, upload file, or provide alternate URL';
-  } else {
-    return null;
   }
 
   return {
@@ -135,6 +180,16 @@ function classifyRecoveryItem(v: VerifiedResource): RecoveryItem | null {
     deepExtractionAvailable: deepAvailable,
     platform,
   };
+}
+
+function getAssistedNextAction(platform: string | null): string {
+  switch (platform) {
+    case 'zoom': return 'Upload Zoom transcript (.vtt/.txt) or paste content';
+    case 'thinkific': return 'Log in and paste lesson content';
+    case 'circle': return 'Log in and paste post content';
+    case 'google_drive': return 'Download file and upload or paste content';
+    default: return 'Paste content, upload file, or provide alternate URL';
+  }
 }
 
 // ── Filter meta ─────────────────────────────────────────
@@ -158,19 +213,24 @@ function AttemptHistoryPanel({ attempts }: { attempts: EnrichmentAttemptRecord[]
   return (
     <div className="space-y-1">
       <p className="text-[9px] font-medium text-muted-foreground flex items-center gap-1"><History className="h-3 w-3" /> Strategy History</p>
-      {attempts.slice(0, 5).map(a => (
-        <div key={a.id} className="flex items-center gap-2 text-[9px]">
-          <Badge variant={a.result === 'success' ? 'default' : a.result === 'failed' ? 'destructive' : 'secondary'} className="text-[7px] h-3">
-            {a.result}
-          </Badge>
-          <span className="truncate">{a.strategy}</span>
-          <span className="text-muted-foreground shrink-0">{new Date(a.started_at).toLocaleDateString()}</span>
-          <div className="flex gap-1 ml-auto">
-            {a.content_found && <Badge variant="outline" className="text-[6px] h-2.5">content</Badge>}
-            {a.transcript_url_found && <Badge variant="outline" className="text-[6px] h-2.5">transcript</Badge>}
-            {a.media_url_found && <Badge variant="outline" className="text-[6px] h-2.5">media</Badge>}
-            {a.shell_rejected && <Badge variant="outline" className="text-[6px] h-2.5 border-destructive text-destructive">shell</Badge>}
-            {a.runtime_config_found && <Badge variant="outline" className="text-[6px] h-2.5">runtime</Badge>}
+      {attempts.map(a => (
+        <div key={a.id} className="text-[8px] border border-border rounded px-2 py-1 space-y-0.5">
+          <div className="flex justify-between">
+            <span className="font-medium">{a.strategy}</span>
+            <Badge variant={a.result === 'success' ? 'default' : a.result === 'pending' ? 'secondary' : 'destructive'} className="text-[7px] h-3">
+              {a.result}
+            </Badge>
+          </div>
+          {a.platform && <span className="text-muted-foreground">Platform: {a.platform}</span>}
+          {a.failure_category && <span className="text-destructive"> | {a.failure_category}</span>}
+          <div className="flex gap-2 text-muted-foreground flex-wrap">
+            {a.content_found && <span className="text-green-500">✓ content</span>}
+            {a.transcript_url_found && <span className="text-green-500">✓ transcript</span>}
+            {a.media_url_found && <span className="text-green-500">✓ media</span>}
+            {a.caption_url_found && <span className="text-green-500">✓ captions</span>}
+            {a.shell_rejected && <span className="text-destructive">✗ shell</span>}
+            {a.runtime_config_found && <span className="text-green-500">✓ runtime</span>}
+            {a.content_length_extracted > 0 && <span>{a.content_length_extracted} chars</span>}
           </div>
         </div>
       ))}
@@ -178,12 +238,193 @@ function AttemptHistoryPanel({ attempts }: { attempts: EnrichmentAttemptRecord[]
   );
 }
 
-// ── Main Component ──────────────────────────────────────
+// ── Guided Resolution Panel ─────────────────────────────
 
-interface Props {
-  resources: VerifiedResource[];
-  onItemResolved: () => void;
+function GuidedResolutionPanel({
+  item,
+  pasteContent,
+  setPasteContent,
+  alternateUrl,
+  setAlternateUrl,
+  isProcessing,
+  onPaste,
+  onAltUrl,
+  onUpload,
+  onMetadataOnly,
+  onDeepExtract,
+  attempts,
+}: {
+  item: RecoveryItem;
+  pasteContent: string;
+  setPasteContent: (v: string) => void;
+  alternateUrl: string;
+  setAlternateUrl: (v: string) => void;
+  isProcessing: boolean;
+  onPaste: () => void;
+  onAltUrl: () => void;
+  onUpload: (file: File) => void;
+  onMetadataOnly: () => void;
+  onDeepExtract: () => void;
+  attempts: EnrichmentAttemptRecord[];
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const guidance = getAssistedResolutionGuidance(item.platform, item.lastError);
+  const [showGuidance, setShowGuidance] = useState(false);
+
+  const canMetadataOnly = item.recoveryBucket === 'auth_gated' || item.recoveryBucket === 'system_gap'
+    || item.recoveryBucket === 'assisted_resolution'
+    || item.resource.enrichability === 'needs_auth'
+    || item.resource.resolutionType === 'system_gap';
+
+  return (
+    <div className="space-y-3 pt-2 border-t border-border">
+      {/* Source URL */}
+      {item.resource.url && (
+        <a href={item.resource.url} target="_blank" rel="noopener noreferrer" className="text-[9px] text-primary hover:underline flex items-center gap-1">
+          <ExternalLink className="h-3 w-3" /> Open source URL
+        </a>
+      )}
+
+      {/* Platform-specific guidance */}
+      <button
+        className="text-[9px] text-primary flex items-center gap-1 hover:underline"
+        onClick={() => setShowGuidance(!showGuidance)}
+      >
+        <HelpCircle className="h-3 w-3" />
+        {showGuidance ? 'Hide' : 'Show'} resolution guide
+        {showGuidance ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+      </button>
+
+      {showGuidance && (
+        <div className="bg-accent/20 rounded-md p-2 space-y-1.5">
+          <p className="text-[9px] font-medium text-foreground">How to resolve this:</p>
+          {guidance.steps.map((step, i) => (
+            <p key={i} className="text-[8px] text-muted-foreground">{step}</p>
+          ))}
+          {guidance.tips.length > 0 && (
+            <>
+              <p className="text-[8px] font-medium text-muted-foreground mt-1">Tips:</p>
+              {guidance.tips.map((tip, i) => (
+                <p key={i} className="text-[8px] text-muted-foreground italic">• {tip}</p>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Strategy history */}
+      <AttemptHistoryPanel attempts={attempts} />
+
+      {/* Strategy checklist */}
+      <div className="grid grid-cols-2 gap-1 text-[8px]">
+        <div className="flex items-center gap-1">
+          <CheckSquare className={cn('h-2.5 w-2.5', item.attemptCount > 0 ? 'text-green-500' : 'text-muted-foreground')} />
+          Basic extraction: {item.attemptCount > 0 ? 'Yes' : 'No'}
+        </div>
+        <div className="flex items-center gap-1">
+          <CheckSquare className={cn('h-2.5 w-2.5', (item.resource.advancedExtractionAttempts ?? 0) > 0 ? 'text-green-500' : 'text-muted-foreground')} />
+          Deep extraction: {(item.resource.advancedExtractionAttempts ?? 0) > 0 ? `${item.resource.advancedExtractionAttempts}× tried` : item.deepExtractionAvailable ? 'Available' : 'N/A'}
+        </div>
+      </div>
+
+      {/* Deep extraction button if still available */}
+      {item.deepExtractionAvailable && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-6 text-[10px] w-full border-primary/40 text-primary"
+          onClick={onDeepExtract}
+          disabled={isProcessing}
+        >
+          <ScanSearch className="h-3 w-3 mr-1" /> Try Deep Extraction ({3 - (item.resource.advancedExtractionAttempts ?? 0)} attempts remaining)
+        </Button>
+      )}
+
+      {/* File upload */}
+      <div className="space-y-1">
+        <p className="text-[9px] font-medium text-muted-foreground flex items-center gap-1">
+          <Upload className="h-3 w-3" /> Upload Transcript / Content File
+        </p>
+        <p className="text-[8px] text-muted-foreground">Supports .txt, .vtt, .srt, .json, .csv, .md, .html</p>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".txt,.vtt,.srt,.json,.csv,.md,.html,.htm"
+          className="hidden"
+          onChange={e => {
+            const file = e.target.files?.[0];
+            if (file) onUpload(file);
+            e.target.value = '';
+          }}
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-6 text-[10px]"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isProcessing}
+        >
+          <Upload className="h-3 w-3 mr-1" /> Choose File
+        </Button>
+      </div>
+
+      {/* Paste content */}
+      <div className="space-y-1">
+        <p className="text-[9px] font-medium text-muted-foreground">Paste Content / Transcript</p>
+        <Textarea
+          placeholder="Paste content, transcript, or summary here..."
+          value={pasteContent}
+          onChange={e => setPasteContent(e.target.value)}
+          className="text-[10px] min-h-[60px]"
+        />
+        {pasteContent.trim().length > 0 && (
+          <p className="text-[8px] text-muted-foreground">{pasteContent.trim().length} characters</p>
+        )}
+        <Button
+          size="sm"
+          className="h-6 text-[10px]"
+          onClick={onPaste}
+          disabled={isProcessing || !pasteContent.trim()}
+        >
+          <ClipboardPaste className="h-3 w-3 mr-1" /> Save & Re-enrich
+        </Button>
+      </div>
+
+      {/* Alternate URL */}
+      <div className="space-y-1">
+        <p className="text-[9px] font-medium text-muted-foreground">Replace Source URL</p>
+        <Input
+          placeholder="https://direct-link-to-content..."
+          value={alternateUrl}
+          onChange={e => setAlternateUrl(e.target.value)}
+          className="h-7 text-[10px]"
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-6 text-[10px]"
+          onClick={onAltUrl}
+          disabled={isProcessing || !alternateUrl.trim()}
+        >
+          <Link2 className="h-3 w-3 mr-1" /> Replace URL & Re-enrich
+        </Button>
+      </div>
+
+      {/* Metadata only */}
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-6 text-[10px]"
+        onClick={onMetadataOnly}
+        disabled={isProcessing || !canMetadataOnly}
+      >
+        <Eye className="h-3 w-3 mr-1" /> Metadata Only (Intentional Close)
+      </Button>
+    </div>
+  );
 }
+
+// ── Main Component ─────────────────────────────────────
 
 export function RecoveryQueue({ resources, onItemResolved }: Props) {
   const { user } = useAuth();
@@ -227,6 +468,9 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
       const result = await triggerDeepExtraction(item.resource.id, user.id, item.platform);
       if (result.success) {
         toast.success('Deep extraction initiated');
+        // Reload attempt history
+        const history = await getAttemptHistory(item.resource.id);
+        setAttemptHistory(prev => ({ ...prev, [item.resource.id]: history }));
         onItemResolved();
       } else {
         toast.error(result.message);
@@ -349,12 +593,34 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
     }
   }
 
+  async function handleFileUpload(resourceId: string, file: File) {
+    if (!user?.id) return;
+    setProcessing(resourceId);
+    try {
+      const result = await uploadTranscriptFile(resourceId, user.id, file);
+      if (result.success) {
+        toast.success(result.message);
+        const history = await getAttemptHistory(resourceId);
+        setAttemptHistory(prev => ({ ...prev, [resourceId]: history }));
+        setExpandedId(null);
+        onItemResolved();
+      } else {
+        toast.error(result.message);
+      }
+    } catch (e: any) {
+      toast.error(`Upload failed: ${e.message}`);
+    } finally {
+      setProcessing(null);
+    }
+  }
+
   async function handleMarkMetadataOnly(item: RecoveryItem) {
     const allowed = item.recoveryBucket === 'auth_gated' || item.recoveryBucket === 'system_gap'
+      || item.recoveryBucket === 'assisted_resolution'
       || item.resource.enrichability === 'needs_auth'
       || item.resource.resolutionType === 'system_gap';
     if (!allowed) {
-      toast.error('Metadata-only is only allowed for auth-gated or system gap resources.');
+      toast.error('Metadata-only is only allowed for auth-gated, assisted, or system gap resources.');
       return;
     }
     setProcessing(item.resource.id);
@@ -370,6 +636,18 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
         resolution_method: 'metadata_only',
         extraction_method: 'metadata_only',
       }).eq('id', item.resource.id);
+
+      if (user?.id) {
+        await (supabase as any).from('enrichment_attempts').insert({
+          resource_id: item.resource.id,
+          user_id: user.id,
+          attempt_type: 'metadata_only',
+          strategy: 'metadata_only_close',
+          result: 'success',
+          completed_at: new Date().toISOString(),
+        });
+      }
+
       toast.success('Marked as metadata-only');
       onItemResolved();
     } catch (e: any) {
@@ -564,11 +842,16 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
                         <Badge variant="secondary" className="text-[8px] h-3.5">{item.preciseLabel}</Badge>
                         <Badge variant="outline" className="text-[7px] h-3">{item.resource.subtypeLabel}</Badge>
                         {item.platform && <Badge variant="outline" className="text-[7px] h-3 border-primary/30 text-primary">{item.platform}</Badge>}
+                        {(item.resource.advancedExtractionAttempts ?? 0) > 0 && (
+                          <Badge variant="outline" className="text-[7px] h-3 border-yellow-500/30 text-yellow-500">
+                            {item.resource.advancedExtractionAttempts}× deep
+                          </Badge>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       {item.attemptCount > 0 && (
-                        <span className="text-[8px] text-muted-foreground">{item.attemptCount} att.</span>
+                        <span className="text-[8px] text-muted-foreground">{item.attemptCount}× failed</span>
                       )}
                       {item.deepExtractionAvailable && (
                         <Button
@@ -606,81 +889,22 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
                     </p>
                   )}
 
-                  {/* Expanded: full resolution panel */}
+                  {/* Expanded: guided resolution panel */}
                   {isExpanded && (
-                    <div className="space-y-3 pt-2 border-t border-border">
-                      {/* Source URL */}
-                      {item.resource.url && (
-                        <a href={item.resource.url} target="_blank" rel="noopener noreferrer" className="text-[9px] text-primary hover:underline flex items-center gap-1">
-                          <ExternalLink className="h-3 w-3" /> Open source URL
-                        </a>
-                      )}
-
-                      {/* Strategy history */}
-                      <AttemptHistoryPanel attempts={attemptHistory[item.resource.id] || []} />
-
-                      {/* Strategy checklist */}
-                      <div className="grid grid-cols-2 gap-1 text-[8px]">
-                        <div className="flex items-center gap-1">
-                          <CheckSquare className={cn('h-2.5 w-2.5', item.attemptCount > 0 ? 'text-status-green' : 'text-muted-foreground')} />
-                          Basic extraction: {item.attemptCount > 0 ? 'Yes' : 'No'}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <CheckSquare className={cn('h-2.5 w-2.5', item.resource.failureCount >= 2 ? 'text-status-green' : 'text-muted-foreground')} />
-                          Advanced extraction: {item.resource.failureCount >= 2 ? 'Attempted' : item.deepExtractionAvailable ? 'Available' : 'N/A'}
-                        </div>
-                      </div>
-
-                      {/* Paste content */}
-                      <div className="space-y-1">
-                        <p className="text-[9px] font-medium text-muted-foreground">Paste Content / Transcript</p>
-                        <Textarea
-                          placeholder="Paste content, transcript, or summary here..."
-                          value={pasteContent}
-                          onChange={e => setPasteContent(e.target.value)}
-                          className="text-[10px] min-h-[60px]"
-                        />
-                        <Button
-                          size="sm"
-                          className="h-6 text-[10px]"
-                          onClick={() => handlePasteContent(item.resource.id)}
-                          disabled={isProcessing || !pasteContent.trim()}
-                        >
-                          <ClipboardPaste className="h-3 w-3 mr-1" /> Save & Re-enrich
-                        </Button>
-                      </div>
-
-                      {/* Alternate URL */}
-                      <div className="space-y-1">
-                        <p className="text-[9px] font-medium text-muted-foreground">Replace Source URL</p>
-                        <Input
-                          placeholder="https://direct-link-to-content..."
-                          value={alternateUrl}
-                          onChange={e => setAlternateUrl(e.target.value)}
-                          className="h-7 text-[10px]"
-                        />
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-6 text-[10px]"
-                          onClick={() => handleAlternateUrl(item.resource.id)}
-                          disabled={isProcessing || !alternateUrl.trim()}
-                        >
-                          <Link2 className="h-3 w-3 mr-1" /> Replace URL & Re-enrich
-                        </Button>
-                      </div>
-
-                      {/* Metadata only */}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-6 text-[10px]"
-                        onClick={() => handleMarkMetadataOnly(item)}
-                        disabled={isProcessing || !(item.recoveryBucket === 'auth_gated' || item.recoveryBucket === 'system_gap')}
-                      >
-                        <Eye className="h-3 w-3 mr-1" /> Metadata Only (Intentional Close)
-                      </Button>
-                    </div>
+                    <GuidedResolutionPanel
+                      item={item}
+                      pasteContent={pasteContent}
+                      setPasteContent={setPasteContent}
+                      alternateUrl={alternateUrl}
+                      setAlternateUrl={setAlternateUrl}
+                      isProcessing={isProcessing}
+                      onPaste={() => handlePasteContent(item.resource.id)}
+                      onAltUrl={() => handleAlternateUrl(item.resource.id)}
+                      onUpload={(file) => handleFileUpload(item.resource.id, file)}
+                      onMetadataOnly={() => handleMarkMetadataOnly(item)}
+                      onDeepExtract={() => handleDeepExtraction(item)}
+                      attempts={attemptHistory[item.resource.id] || []}
+                    />
                   )}
                 </div>
               );
