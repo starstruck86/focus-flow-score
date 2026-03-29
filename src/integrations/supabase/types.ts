@@ -260,6 +260,42 @@ export type Database = {
         }
         Relationships: []
       }
+      approved_users: {
+        Row: {
+          approved_at: string
+          approved_by: string | null
+          created_at: string
+          email: string
+          id: string
+          is_active: boolean
+          role: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          approved_at?: string
+          approved_by?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          is_active?: boolean
+          role?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          approved_at?: string
+          approved_by?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          is_active?: boolean
+          role?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       audio_jobs: {
         Row: {
           attempts_count: number
@@ -3862,7 +3898,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_approved_user: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
