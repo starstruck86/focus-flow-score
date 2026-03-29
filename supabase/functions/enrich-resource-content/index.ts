@@ -2337,12 +2337,23 @@ async function orchestrateEnrichment(
 
       const isZoom = source.source_type === 'zoom_recording';
       const isCircle = source.source_type === 'circle_page';
+      const isThinkific = source.source_type === 'thinkific_lesson';
+      const isDrive = source.source_type === 'google_drive_file';
+      const isSlides = source.source_type === 'google_slides';
       const circleFailureCategory = isCircle ? (result.attempt.error_category || 'circle_auth_required') : null;
       const circleAccessBlocked = circleFailureCategory === 'circle_access_blocked';
+      const thinkificFailureCat = isThinkific ? (result.attempt.error_category || 'thinkific_auth_required') : null;
+
       const failureReason = isZoom
         ? `Zoom recording requires authentication — ${result.attempt.error_category || 'zoom_auth_required'}`
         : isCircle
         ? `Circle page requires authentication — ${circleFailureCategory}`
+        : isThinkific
+        ? `Thinkific lesson requires enrollment/login — ${thinkificFailureCat}`
+        : isDrive
+        ? `Google Drive file requires access permissions`
+        : isSlides
+        ? `Google Slides presentation is not publicly accessible`
         : 'Login/signup wall detected during scraping';
       const recoveryReason = isZoom
         ? 'Zoom recording access blocked — requires login or shared link permissions'
@@ -2350,12 +2361,28 @@ async function orchestrateEnrichment(
         ? (circleAccessBlocked
             ? 'Circle community page access blocked — provide access or upload an export'
             : `Circle community page requires manual recovery (${circleFailureCategory})`)
+        : isThinkific
+        ? `Thinkific lesson requires enrollment — paste content, provide access, or upload transcript`
+        : isDrive
+        ? 'Google Drive file is not publicly shared — provide access or upload the file'
+        : isSlides
+        ? 'Google Slides presentation is not publicly shared — provide access or paste content'
         : failureReason;
       const nextAction = isZoom
         ? 'provide_access'
         : isCircle
         ? (circleAccessBlocked ? 'provide_access' : 'paste_content')
+        : isThinkific ? 'paste_content'
+        : isDrive ? 'provide_access'
+        : isSlides ? 'provide_access'
         : 'paste_content';
+
+      const persistedMethod = isZoom ? 'zoom_recording_handler'
+        : isCircle ? 'circle_handler'
+        : isThinkific ? 'thinkific_handler'
+        : isDrive ? 'google_drive_direct_download'
+        : isSlides ? 'google_slides_html_view'
+        : null;
 
       await setEnrichmentStatus(supabase, resourceId, 'needs_auth', {
         failure_reason: failureReason,
@@ -2365,8 +2392,8 @@ async function orchestrateEnrichment(
         manual_input_required: true,
         recovery_queue_bucket: 'needs_input',
         access_type: 'auth_gated',
-        content_classification: isZoom ? 'video' : isCircle ? 'auth_gated' : null,
-        extraction_method: isZoom ? 'zoom_recording_handler' : isCircle ? 'circle_handler' : null,
+        content_classification: isZoom ? 'video' : (isCircle || isThinkific) ? 'auth_gated' : null,
+        extraction_method: persistedMethod,
       });
 
       if (isCircle) {
@@ -2395,6 +2422,12 @@ async function orchestrateEnrichment(
           ? (circleAccessBlocked
               ? 'This Circle page is access blocked. Provide access, upload an export, or paste the post body manually.'
               : 'This Circle post requires login. Paste the post body manually or provide an export.')
+          : isThinkific
+          ? 'This Thinkific lesson requires enrollment. Paste the content, provide access, or upload a transcript.'
+          : isDrive
+          ? 'This Google Drive file is not publicly shared. Share the file publicly or upload it manually.'
+          : isSlides
+          ? 'This Google Slides presentation is not publicly shared. Share it publicly or paste the content.'
           : 'Paste the content manually or provide a public link',
       };
     }
