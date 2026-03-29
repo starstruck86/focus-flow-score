@@ -161,6 +161,7 @@ export function deriveProcessingState(
     const isManualRecovery = (resource as any).manual_content_present === true ||
       rm === 'metadata_only' || rm === 'alternate_url' ||
       rm === 'transcript_upload' || rm === 'content_upload' ||
+      rm === 'fixed_from_existing_content' || rm === 'manual_content' ||
       (typeof rm === 'string' && rm.startsWith('manual'));
     return {
       state: 'COMPLETED',
