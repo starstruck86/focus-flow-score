@@ -662,6 +662,68 @@ function extractZoomTranscriptFromContent(text: string): string | null {
   return null;
 }
 
+/** Extract Zoom runtime config from raw HTML script tags */
+function extractZoomRuntimeConfig(rawHtml: string): {
+  mediaUrl: string | null;
+  captionUrl: string | null;
+  meetingTopic: string | null;
+  recordFileId: string | null;
+} {
+  const result = { mediaUrl: null as string | null, captionUrl: null as string | null, meetingTopic: null as string | null, recordFileId: null as string | null };
+  if (!rawHtml) return result;
+
+  // Extract all script tag contents for deep inspection
+  const scriptContents: string[] = [];
+  const scriptRegex = /<script[^>]*>([\s\S]*?)<\/script>/gi;
+  let match;
+  while ((match = scriptRegex.exec(rawHtml)) !== null) {
+    if (match[1] && match[1].trim().length > 20) {
+      scriptContents.push(match[1]);
+    }
+  }
+  const allScripts = scriptContents.join('\n');
+
+  // Media URL patterns — Zoom embeds video URLs in various config objects
+  const mediaPatterns = [
+    /"viewMp4Url"\s*:\s*"(https?:[^"]+)"/i,
+    /"shareMp4Url"\s*:\s*"(https?:[^"]+)"/i,
+    /"fileUrl"\s*:\s*"(https?:[^"]+)"/i,
+    /"play_url"\s*:\s*"(https?:[^"]+)"/i,
+    /"recording_play_url"\s*:\s*"(https?:[^"]+)"/i,
+    /"mp4_url"\s*:\s*"(https?:[^"]+)"/i,
+    /"download_url"\s*:\s*"(https?:[^"]+\.mp4[^"]*)"/i,
+    /"media_url"\s*:\s*"(https?:[^"]+)"/i,
+  ];
+  for (const pat of mediaPatterns) {
+    const m = allScripts.match(pat) || rawHtml.match(pat);
+    if (m?.[1]) { result.mediaUrl = m[1].replace(/\\u002F/g, '/').replace(/\\\//g, '/'); break; }
+  }
+
+  // Caption/transcript URL patterns
+  const captionPatterns = [
+    /"cc_url"\s*:\s*"(https?:[^"]+)"/i,
+    /"transcript_url"\s*:\s*"(https?:[^"]+)"/i,
+    /"caption_url"\s*:\s*"(https?:[^"]+)"/i,
+    /"closedCaptionUrl"\s*:\s*"(https?:[^"]+)"/i,
+    /"vtt_url"\s*:\s*"(https?:[^"]+)"/i,
+    /"subtitleUrl"\s*:\s*"(https?:[^"]+)"/i,
+  ];
+  for (const pat of captionPatterns) {
+    const m = allScripts.match(pat) || rawHtml.match(pat);
+    if (m?.[1]) { result.captionUrl = m[1].replace(/\\u002F/g, '/').replace(/\\\//g, '/'); break; }
+  }
+
+  // Meeting topic
+  const topicMatch = allScripts.match(/"topic"\s*:\s*"([^"]+)"/i) || rawHtml.match(/"topic"\s*:\s*"([^"]+)"/i);
+  if (topicMatch?.[1]) result.meetingTopic = topicMatch[1];
+
+  // Record file ID (for potential API calls)
+  const fileIdMatch = allScripts.match(/"fileId"\s*:\s*"([^"]+)"/i) || allScripts.match(/"recordFileId"\s*:\s*"([^"]+)"/i);
+  if (fileIdMatch?.[1]) result.recordFileId = fileIdMatch[1];
+
+  return result;
+}
+
 /** Circle community extractor — inspect bootstrap/app state first, then classify explicit recovery */
 async function circlePageExtract(url: string, apiKey: string): Promise<ExtractionResult> {
   const method = 'circle_handler';
