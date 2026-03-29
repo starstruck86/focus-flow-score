@@ -73,8 +73,8 @@ export async function triggerDeepExtraction(
       { componentName: 'AdvancedExtraction', timeoutMs: 120000 },
     );
 
-    // After enrichment returns, check the resource state to close the attempt
-    await closeAttemptFromResourceState(resourceId, attemptId);
+    // Poll for resource state to stabilise (edge function may still be writing)
+    await closeAttemptWithRetry(resourceId, attemptId, 4, 1500);
   } catch (e: any) {
     // Update attempt as failed
     if (attemptId) {
@@ -95,6 +95,37 @@ export async function triggerDeepExtraction(
   }
 
   return { success: true, status: 'queued', message: 'Advanced extraction initiated' };
+}
+
+/**
+ * Poll resource state until enrichment_status changes from 'not_enriched',
+ * then close the attempt. Handles the race where the edge function hasn't
+ * finished writing back yet.
+ */
+async function closeAttemptWithRetry(
+  resourceId: string,
+  attemptId: string | null,
+  maxRetries: number,
+  delayMs: number,
+) {
+  if (!attemptId) return;
+
+  for (let i = 0; i < maxRetries; i++) {
+    const { data: resource } = await (supabase as any)
+      .from('resources')
+      .select('enrichment_status')
+      .eq('id', resourceId)
+      .single();
+
+    // If the enrichment status has moved past 'not_enriched', the edge function is done
+    if (resource && resource.enrichment_status !== 'not_enriched') {
+      break;
+    }
+    // Wait before retrying
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+
+  await closeAttemptFromResourceState(resourceId, attemptId);
 }
 
 /**
