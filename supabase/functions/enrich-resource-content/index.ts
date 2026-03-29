@@ -863,24 +863,27 @@ ${html.slice(0, 15_000)}`;
   }
 }
 
-/** Zoom recording extractor — attempts transcript/player data, then falls back to scraping */
+/** Zoom recording extractor — deep runtime resolution with transcript/media fallback */
 async function zoomRecordingExtract(url: string, apiKey: string): Promise<ExtractionResult> {
   const method = 'zoom_recording_handler';
   const startMs = Date.now();
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
   try {
-    // Step 1: Fetch the page via Firecrawl with JS rendering + wait for player to load
+    // Step 1: Fetch page with rawHtml to inspect script tags for runtime config
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 120_000);
 
+    console.log(`[Zoom] Fetching with rawHtml for runtime config extraction: ${url.slice(0, 80)}`);
     const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         url,
-        formats: ["markdown", "html"],
+        formats: ["markdown", "html", "rawHtml"],
         onlyMainContent: false,
-        waitFor: 8000,
+        waitFor: 12000,
       }),
       signal: controller.signal,
     });
@@ -890,7 +893,6 @@ async function zoomRecordingExtract(url: string, apiKey: string): Promise<Extrac
 
     if (!response.ok) {
       const status = response.status;
-      // 403/401 = auth required for this recording
       if (status === 403 || status === 401) {
         return {
           content: null,
@@ -916,8 +918,9 @@ async function zoomRecordingExtract(url: string, apiKey: string): Promise<Extrac
     const data = await response.json();
     const markdown = (data.data?.markdown || data.markdown || "").slice(0, CONTENT_CAP);
     const html = data.data?.html || data.html || "";
+    const rawHtml = data.data?.rawHtml || data.rawHtml || "";
 
-    // Step 2: Check for embedded transcript in HTML or markdown
+    // Step 2: Check for embedded transcript in rendered HTML/markdown
     const transcriptFromHtml = extractZoomTranscriptFromContent(html);
     const transcriptFromMd = extractZoomTranscriptFromContent(markdown);
     const foundTranscript = transcriptFromHtml || transcriptFromMd;
@@ -936,14 +939,13 @@ async function zoomRecordingExtract(url: string, apiKey: string): Promise<Extrac
       };
     }
 
-    // Step 2b: If we found a caption URL, try to fetch it
+    // Step 2b: If we found a caption URL from rendered content, try to fetch it
     if (foundTranscript?.startsWith('[CAPTION_URL:')) {
       const captionUrl = foundTranscript.slice(13, -1);
       try {
         const capResp = await fetch(captionUrl);
         if (capResp.ok) {
           const capText = await capResp.text();
-          // Parse VTT/SRT
           const lines = capText.split('\n')
             .filter(l => !/^\d+$/.test(l.trim()) && !/-->/.test(l) && !/^WEBVTT/i.test(l.trim()) && l.trim().length > 0);
           const transcript = lines.join(' ').replace(/\s+/g, ' ').trim();
@@ -959,27 +961,121 @@ async function zoomRecordingExtract(url: string, apiKey: string): Promise<Extrac
               },
             };
           }
+        } else {
+          await capResp.text(); // consume body
         }
       } catch (e) {
         console.log(`[Zoom] Caption URL fetch failed: ${(e as Error).message}`);
       }
     }
 
-    // Step 3: Check if we got Zoom shell only (no real content)
+    // Step 3: Deep runtime config extraction from rawHtml script tags
+    console.log(`[Zoom] Attempting runtime config extraction from rawHtml (${rawHtml.length} chars)`);
+    const runtimeConfig = extractZoomRuntimeConfig(rawHtml);
+    console.log(`[Zoom] Runtime config: mediaUrl=${!!runtimeConfig.mediaUrl}, captionUrl=${!!runtimeConfig.captionUrl}, topic=${runtimeConfig.meetingTopic}, fileId=${runtimeConfig.recordFileId}`);
+
+    // Step 3a: If runtime config has a caption/transcript URL, fetch it
+    if (runtimeConfig.captionUrl) {
+      console.log(`[Zoom] Found runtime caption URL: ${runtimeConfig.captionUrl.slice(0, 80)}`);
+      try {
+        const capResp = await fetch(runtimeConfig.captionUrl);
+        if (capResp.ok) {
+          const capText = await capResp.text();
+          const lines = capText.split('\n')
+            .filter(l => !/^\d+$/.test(l.trim()) && !/-->/.test(l) && !/^WEBVTT/i.test(l.trim()) && l.trim().length > 0);
+          const transcript = lines.join(' ').replace(/\s+/g, ' ').trim();
+          if (transcript.length >= 100) {
+            console.log(`[Zoom] Runtime caption transcript resolved: ${transcript.length} chars`);
+            return {
+              content: transcript.slice(0, CONTENT_CAP),
+              attempt: {
+                method: 'zoom_runtime_caption', duration_ms: Date.now() - startMs,
+                chars_extracted: transcript.length, timeout_hit: false,
+                auth_wall_detected: false, http_status: 200,
+                validation_result: transcript.length >= 500 ? 'pass' : 'partial',
+                error_category: null, error_detail: null,
+              },
+            };
+          }
+        } else {
+          await capResp.text(); // consume body
+          console.log(`[Zoom] Runtime caption URL returned ${capResp.status}`);
+        }
+      } catch (e) {
+        console.log(`[Zoom] Runtime caption fetch failed: ${(e as Error).message}`);
+      }
+    }
+
+    // Step 3b: If runtime config has a media URL, attempt audio transcription
+    if (runtimeConfig.mediaUrl) {
+      console.log(`[Zoom] Found runtime media URL, attempting transcription: ${runtimeConfig.mediaUrl.slice(0, 80)}`);
+      try {
+        const transcribeResp = await fetch(`${supabaseUrl}/functions/v1/transcribe-audio`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ audio_url: runtimeConfig.mediaUrl }),
+        });
+        const transcribeData = await transcribeResp.json();
+        if (transcribeData.transcript && transcribeData.transcript.length >= 100) {
+          console.log(`[Zoom] Media transcription succeeded: ${transcribeData.transcript.length} chars`);
+          return {
+            content: transcribeData.transcript.slice(0, CONTENT_CAP),
+            attempt: {
+              method: 'zoom_media_transcribe', duration_ms: Date.now() - startMs,
+              chars_extracted: transcribeData.transcript.length, timeout_hit: false,
+              auth_wall_detected: false, http_status: 200,
+              validation_result: transcribeData.transcript.length >= 500 ? 'pass' : 'partial',
+              error_category: null, error_detail: null,
+            },
+          };
+        } else {
+          console.log(`[Zoom] Media transcription returned insufficient text: ${transcribeData.transcript?.length || 0} chars`);
+        }
+      } catch (e) {
+        console.log(`[Zoom] Media transcription failed: ${(e as Error).message}`);
+      }
+    }
+
+    // Step 3c: Also check rawHtml for transcript content (script tags may contain it)
+    const transcriptFromRaw = extractZoomTranscriptFromContent(rawHtml);
+    if (transcriptFromRaw && !transcriptFromRaw.startsWith('[CAPTION_URL:') && transcriptFromRaw.length >= 100) {
+      console.log(`[Zoom] Found transcript in rawHtml: ${transcriptFromRaw.length} chars`);
+      return {
+        content: transcriptFromRaw.slice(0, CONTENT_CAP),
+        attempt: {
+          method: 'zoom_rawhtml_transcript', duration_ms: Date.now() - startMs,
+          chars_extracted: transcriptFromRaw.length, timeout_hit: false,
+          auth_wall_detected: false, http_status: 200,
+          validation_result: transcriptFromRaw.length >= 500 ? 'pass' : 'partial',
+          error_category: null, error_detail: null,
+        },
+      };
+    }
+
+    // Step 4: Check if we got Zoom shell only (no real content)
     if (isZoomShellOnly(markdown)) {
-      console.log(`[Zoom] Shell-only content detected for ${url.slice(0, 80)}`);
+      // Distinguish: did we find runtime config but couldn't resolve, or was it truly empty?
+      const hasRuntimeHints = !!(runtimeConfig.mediaUrl || runtimeConfig.captionUrl || runtimeConfig.recordFileId || runtimeConfig.meetingTopic);
+      const errorCategory = hasRuntimeHints ? 'zoom_runtime_resolution_incomplete' : 'zoom_player_shell_only';
+      const errorDetail = hasRuntimeHints
+        ? `Zoom player config found (media=${!!runtimeConfig.mediaUrl}, caption=${!!runtimeConfig.captionUrl}, topic=${runtimeConfig.meetingTopic}) but content could not be resolved`
+        : 'Zoom page returned generic navigation/shell — no recording content or runtime config found';
+      console.log(`[Zoom] ${errorCategory} for ${url.slice(0, 80)}`);
       return {
         content: null,
         attempt: {
           method, duration_ms: Date.now() - startMs, chars_extracted: markdown.length, timeout_hit: false,
           auth_wall_detected: false, http_status: 200,
-          validation_result: 'fail', error_category: 'zoom_player_shell_only',
-          error_detail: 'Zoom page returned generic navigation/shell — no recording content found',
+          validation_result: 'fail', error_category: errorCategory,
+          error_detail: errorDetail,
         },
       };
     }
 
-    // Step 4: If markdown has substantial content (meeting details, chat, etc.) use it
+    // Step 5: If markdown has substantial content (meeting details, chat, etc.) use it
     if (markdown.length >= 200) {
       return {
         content: markdown,
@@ -993,14 +1089,18 @@ async function zoomRecordingExtract(url: string, apiKey: string): Promise<Extrac
       };
     }
 
-    // No usable content
+    // No usable content — classify precisely based on what we found
+    const hasRuntimeHints = !!(runtimeConfig.mediaUrl || runtimeConfig.captionUrl || runtimeConfig.recordFileId);
     return {
       content: null,
       attempt: {
         method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
         auth_wall_detected: false, http_status: 200,
-        validation_result: 'fail', error_category: 'zoom_transcript_not_found',
-        error_detail: 'Zoom recording page loaded but no transcript, captions, or media asset found',
+        validation_result: 'fail',
+        error_category: hasRuntimeHints ? 'zoom_runtime_resolution_incomplete' : 'zoom_transcript_not_found',
+        error_detail: hasRuntimeHints
+          ? `Zoom runtime config partially resolved (media=${!!runtimeConfig.mediaUrl}, caption=${!!runtimeConfig.captionUrl}) but no usable content extracted`
+          : 'Zoom recording page loaded but no transcript, captions, or media asset found in rendered or raw HTML',
       },
     };
   } catch (e) {
