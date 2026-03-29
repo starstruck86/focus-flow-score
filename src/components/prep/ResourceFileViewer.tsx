@@ -90,8 +90,23 @@ export function ResourceFileViewer({ resource, onBack, onEdit }: Props) {
 
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="secondary" className="text-xs capitalize">{resource.resource_type}</Badge>
+          {isNotionZip && (
+            <Badge className="text-xs bg-amber-500/10 text-amber-600 border-amber-500/20 gap-1">
+              <Archive className="h-3 w-3" /> Notion ZIP Import
+            </Badge>
+          )}
           {resource.is_template && <Badge variant="outline" className="text-xs">Template</Badge>}
           {resource.template_category && <Badge variant="outline" className="text-xs">{resource.template_category}</Badge>}
+          {(resource as any).content_length > 0 && (
+            <Badge variant="outline" className="text-xs text-muted-foreground">
+              {((resource as any).content_length as number).toLocaleString()} chars
+            </Badge>
+          )}
+          {(resource as any).enrichment_status && (
+            <Badge variant="outline" className="text-xs gap-1">
+              <Zap className="h-3 w-3" /> {(resource as any).enrichment_status}
+            </Badge>
+          )}
           <span className="text-[10px] text-muted-foreground">v{resource.current_version}</span>
           <span className="text-[10px] text-muted-foreground">
             Updated {new Date(resource.updated_at).toLocaleDateString()}
