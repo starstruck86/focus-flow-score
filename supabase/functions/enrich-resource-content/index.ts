@@ -3226,10 +3226,10 @@ Deno.serve(async (req) => {
     const isServiceRole = bearerToken === serviceRoleKey;
 
     let userId: string;
+    let supabase: ReturnType<typeof createClient>;
 
     if (isServiceRole) {
-      // Service-role call: extract user from request body later, or use resource owner
-      const supabase = createClient(supabaseUrl, serviceRoleKey);
+      supabase = createClient(supabaseUrl, serviceRoleKey);
       const body = await req.clone().json().catch(() => ({}));
       if (body.user_id) {
         userId = body.user_id;
@@ -3244,11 +3244,8 @@ Deno.serve(async (req) => {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      // Re-create supabase client for downstream use (service role)
-      var supabase = createClient(supabaseUrl, serviceRoleKey);
     } else {
-      // Normal user auth
-      var supabase = createClient(supabaseUrl, anonKey, {
+      supabase = createClient(supabaseUrl, anonKey, {
         global: { headers: { Authorization: authHeader! } },
       });
       const { data: { user }, error: authError } = await supabase.auth.getUser();
