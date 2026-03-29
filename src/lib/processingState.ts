@@ -132,7 +132,7 @@ export function deriveProcessingState(
   }
 
   // Completed enrichment
-  if (status === 'deep_enriched' || status === 'enriched') {
+  if (status === 'deep_enriched' || (status as string) === 'enriched') {
     const isManualRecovery = (resource as any).resolution_method?.startsWith('manual') ||
       (resource as any).resolution_method === 'metadata_only' ||
       (resource as any).manual_content_present === true;
