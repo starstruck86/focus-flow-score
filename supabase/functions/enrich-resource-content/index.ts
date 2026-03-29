@@ -1792,23 +1792,24 @@ async function googleSlidesExport(url: string, apiKey: string): Promise<Extracti
   }
 }
 
-/** Thinkific lesson handler — attempts scrape, then routes to auth-gated recovery with Thinkific-specific states */
+/** Thinkific lesson handler — deep inspection with HTML/rawHtml for lesson metadata, transcripts, assets */
 async function thinkificLessonExtract(url: string, apiKey: string): Promise<ExtractionResult> {
   const method = 'thinkific_handler';
   const startMs = Date.now();
 
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 60_000);
+    const timer = setTimeout(() => controller.abort(), 90_000);
 
+    // Request HTML + rawHtml for deeper inspection of embedded lesson data
     const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         url,
-        formats: ["markdown"],
-        onlyMainContent: true,
-        waitFor: 5000,
+        formats: ["markdown", "html", "rawHtml"],
+        onlyMainContent: false,
+        waitFor: 8000,
       }),
       signal: controller.signal,
     });
@@ -1834,28 +1835,151 @@ async function thinkificLessonExtract(url: string, apiKey: string): Promise<Extr
 
     const data = await response.json();
     const markdown = (data.data?.markdown || data.markdown || '').trim();
+    const html = data.data?.html || data.html || '';
+    const rawHtml = data.data?.rawHtml || data.rawHtml || '';
 
     // Detect Thinkific sign-in/enrollment walls
-    const isSignInWall = /sign\s*in|log\s*in|create\s*account|enroll|start\s*course|purchase/i.test(markdown.slice(0, 1000))
+    const combined = `${markdown}\n${html.slice(0, 3000)}`;
+    const isSignInWall = /sign\s*in|log\s*in|create\s*account|enroll|start\s*course|purchase/i.test(combined.slice(0, 2000))
       && markdown.length < 2000;
+
+    // Deep inspection: look for embedded lesson data in script tags
+    const scriptContents: string[] = [];
+    const scriptRegex = /<script[^>]*>([\s\S]*?)<\/script>/gi;
+    let scriptMatch;
+    while ((scriptMatch = scriptRegex.exec(rawHtml)) !== null) {
+      if (scriptMatch[1] && scriptMatch[1].trim().length > 50) {
+        scriptContents.push(scriptMatch[1]);
+      }
+    }
+    const allScripts = scriptContents.join('\n');
+
+    // Look for lesson content in embedded JSON
+    const lessonContentPatterns = [
+      /"lesson_content(?:_html)?":\s*"([\s\S]{100,}?)"/i,
+      /"body(?:_html|_text)?":\s*"([\s\S]{100,}?)"/i,
+      /"content(?:_html)?":\s*"([\s\S]{100,}?)","(?:id|slug|position|chapter)"/i,
+      /"description":\s*"([\s\S]{100,}?)","(?:id|slug|position|chapter|lesson_type)"/i,
+    ];
+    for (const pat of lessonContentPatterns) {
+      const m = allScripts.match(pat) || rawHtml.match(pat);
+      if (m?.[1]) {
+        const cleaned = normalizeExtractedText(m[1]);
+        if (cleaned.length >= 150) {
+          console.log(`[Thinkific] Extracted embedded lesson content: ${cleaned.length} chars`);
+          return {
+            content: cleaned.slice(0, CONTENT_CAP),
+            attempt: {
+              method: 'thinkific_embedded_content', duration_ms: Date.now() - startMs,
+              chars_extracted: cleaned.length, timeout_hit: false,
+              auth_wall_detected: false, http_status: 200,
+              validation_result: cleaned.length >= 1000 ? 'pass' : 'partial',
+              error_category: null, error_detail: null,
+            },
+          };
+        }
+      }
+    }
+
+    // Look for transcript/video/asset URLs
+    const transcriptUrlPatterns = [
+      /"transcript_url":\s*"(https?:[^"]+)"/i,
+      /"video_transcript":\s*"(https?:[^"]+)"/i,
+      /"caption(?:_url|Url)":\s*"(https?:[^"]+)"/i,
+      /"subtitle(?:_url|Url)":\s*"(https?:[^"]+)"/i,
+    ];
+    let foundTranscriptUrl: string | null = null;
+    for (const pat of transcriptUrlPatterns) {
+      const m = allScripts.match(pat) || rawHtml.match(pat);
+      if (m?.[1]) { foundTranscriptUrl = m[1]; break; }
+    }
+
+    if (foundTranscriptUrl) {
+      console.log(`[Thinkific] Found transcript asset URL: ${foundTranscriptUrl.slice(0, 80)}`);
+      try {
+        const capResp = await fetch(foundTranscriptUrl);
+        if (capResp.ok) {
+          const capText = await capResp.text();
+          const lines = capText.split('\n')
+            .filter(l => !/^\d+$/.test(l.trim()) && !/-->/.test(l) && !/^WEBVTT/i.test(l.trim()) && l.trim().length > 0);
+          const transcript = lines.join(' ').replace(/\s+/g, ' ').trim();
+          if (transcript.length >= 100) {
+            return {
+              content: transcript.slice(0, CONTENT_CAP),
+              attempt: {
+                method: 'thinkific_transcript_asset', duration_ms: Date.now() - startMs,
+                chars_extracted: transcript.length, timeout_hit: false,
+                auth_wall_detected: false, http_status: 200,
+                validation_result: transcript.length >= 500 ? 'pass' : 'partial',
+                error_category: null, error_detail: null,
+              },
+            };
+          }
+        }
+      } catch (e) {
+        console.log(`[Thinkific] Transcript asset fetch failed: ${(e as Error).message}`);
+      }
+      // Still report that we found the URL even if fetch failed
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: false, http_status: 200,
+          validation_result: 'fail', error_category: 'thinkific_transcript_asset_found',
+          error_detail: `Transcript asset URL found (${foundTranscriptUrl.slice(0, 80)}) but could not be fetched successfully`,
+        },
+      };
+    }
+
+    // Look for downloadable asset links (PDF, video, etc.)
+    const assetPatterns = [
+      /"(?:download_url|file_url|asset_url|video_url)":\s*"(https?:[^"]+)"/i,
+      /"(?:wistia_id|wistia_video_id)":\s*"([^"]+)"/i,
+    ];
+    let foundAssetHint: string | null = null;
+    for (const pat of assetPatterns) {
+      const m = allScripts.match(pat) || rawHtml.match(pat);
+      if (m?.[1]) { foundAssetHint = m[1]; break; }
+    }
+
+    // Extract lesson metadata (title, course name, lesson type)
+    const lessonTitle = allScripts.match(/"lesson_name":\s*"([^"]+)"/i)?.[1]
+      || allScripts.match(/"name":\s*"([^"]{5,}?)"/i)?.[1]
+      || rawHtml.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim();
+    const courseName = allScripts.match(/"course_name":\s*"([^"]+)"/i)?.[1];
+    const lessonType = allScripts.match(/"lesson_type":\s*"([^"]+)"/i)?.[1]
+      || allScripts.match(/"content_type":\s*"([^"]+)"/i)?.[1];
+
+    const metaParts: string[] = [];
+    if (lessonTitle) metaParts.push(`Lesson: ${lessonTitle}`);
+    if (courseName) metaParts.push(`Course: ${courseName}`);
+    if (lessonType) metaParts.push(`Type: ${lessonType}`);
+    if (foundAssetHint) metaParts.push(`Asset hint: ${foundAssetHint.slice(0, 60)}`);
+    const metaSummary = metaParts.length > 0 ? ` [${metaParts.join(' | ')}]` : '';
 
     if (isSignInWall || markdown.length < MIN_CONTENT_CHARS) {
       const isShell = markdown.length > 0 && markdown.length < MIN_CONTENT_CHARS;
+      const hasLessonMeta = !!(lessonTitle || courseName || lessonType);
+
       return {
         content: null,
         attempt: {
           method, duration_ms: durationMs, chars_extracted: markdown.length, timeout_hit: false,
           auth_wall_detected: isSignInWall, http_status: 200,
           validation_result: 'fail',
-          error_category: isSignInWall ? 'thinkific_auth_required' : (isShell ? 'thinkific_shell_only' : 'thinkific_lesson_unavailable'),
+          error_category: isSignInWall ? 'thinkific_auth_required'
+            : hasLessonMeta ? 'thinkific_lesson_metadata_found'
+            : (isShell ? 'thinkific_shell_only' : 'thinkific_lesson_unavailable'),
           error_detail: isSignInWall
-            ? 'Thinkific lesson page redirected to sign-in/enrollment'
-            : (isShell ? 'Thinkific page returned only course shell/navigation' : 'No usable lesson content found'),
+            ? `Thinkific lesson page redirected to sign-in/enrollment.${metaSummary}`
+            : hasLessonMeta
+            ? `Thinkific lesson metadata found but content requires enrollment.${metaSummary}`
+            : (isShell ? `Thinkific page returned only course shell/navigation.${metaSummary}` : `No usable lesson content found.${metaSummary}`),
         },
       };
     }
 
-    // Got real content
+    // Got real content from markdown
     return {
       content: markdown.slice(0, CONTENT_CAP),
       attempt: {
@@ -1876,7 +2000,7 @@ async function thinkificLessonExtract(url: string, apiKey: string): Promise<Extr
         auth_wall_detected: false, http_status: null,
         validation_result: 'fail',
         error_category: isTimeout ? 'timeout' : 'thinkific_lesson_unavailable',
-        error_detail: isTimeout ? 'Thinkific lesson page timed out' : (e as Error).message?.slice(0, 200),
+        error_detail: isTimeout ? 'Thinkific lesson page timed out after 90s' : (e as Error).message?.slice(0, 200),
       },
     };
   }
