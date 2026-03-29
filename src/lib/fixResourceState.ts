@@ -150,7 +150,8 @@ export async function fixResourceStateFromContent(
   });
 
   // Optionally trigger re-enrichment (uses manual content fast-path)
-  if (options?.triggerReEnrich && previousStatus !== 'deep_enriched') {
+  // Always re-enrich when requested — even if already deep_enriched — to recompute quality score
+  if (options?.triggerReEnrich) {
     try {
       await invokeEnrichResource(
         { resource_id: resourceId, force: true },
