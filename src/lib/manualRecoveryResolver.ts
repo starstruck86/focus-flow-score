@@ -122,8 +122,7 @@ async function handleFileUpload(input: RecoveryInput): Promise<RecoveryResult> {
   if (isNotionZip(file)) {
     return handleNotionZipUpload(input);
   }
-  const file = input.file;
-  if (!file) return { success: false, message: 'No file provided' };
+
   if (file.size > MAX_FILE_SIZE) return { success: false, message: 'File too large — max 10MB' };
 
   const ext = '.' + (file.name.split('.').pop()?.toLowerCase() || '');
