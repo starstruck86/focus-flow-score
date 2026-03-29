@@ -490,6 +490,27 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
                 <Button size="sm" variant="outline" className={cn('gap-1.5', isMobile ? 'h-11 text-sm justify-start min-h-[44px]' : 'h-7 text-[10px]')} onClick={() => setActionMode('paste_content')}>
                   <FileText className="h-3 w-3" /> Paste Content
                 </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className={cn('gap-1.5', isMobile ? 'h-11 text-sm justify-start min-h-[44px]' : 'h-7 text-[10px]')}
+                  disabled={uploading || !!activeAction}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                  Upload File
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".zip,.txt,.md,.csv,.vtt,.srt"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileUpload(file);
+                    e.target.value = '';
+                  }}
+                />
               </div>
             </div>
 
