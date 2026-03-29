@@ -599,7 +599,8 @@ const ZOOM_SHELL_PATTERNS = [
 /** Detect whether Zoom page content is just the generic shell/nav (no recording content) */
 function isZoomShellOnly(text: string): boolean {
   if (!text || text.length < 50) return true;
-  const sample = text.slice(0, 3000);
+  // Check a larger sample for long pages (Zoom shell can be 30K+ chars)
+  const sample = text.slice(0, 8000);
   const shellHits = ZOOM_SHELL_PATTERNS.filter(p => p.test(sample)).length;
   // If >4 shell patterns match and content is short, it's just the shell
   if (shellHits >= 4 && text.length < 3000) return true;
@@ -607,6 +608,26 @@ function isZoomShellOnly(text: string): boolean {
   const lines = sample.split('\n').filter(l => l.trim().length > 0);
   const substantiveLines = lines.filter(l => l.trim().length > 80);
   if (substantiveLines.length < 3 && shellHits >= 3) return true;
+
+  // ── CRITICAL GUARDRAIL for long Zoom pages ──
+  // A Zoom recording page with real content (meeting details, chat, transcript)
+  // should NOT start with "Skip to Main Content" or navigation links.
+  // If the first 2000 chars are dominated by Zoom product nav, it's shell regardless of length.
+  const head = text.slice(0, 2000).toLowerCase();
+  const navSignals = [
+    'skip to main content', 'skip to content',
+    'accessibility overview', 'sign in', 'join a meeting',
+    'host a meeting', 'zoom workplace', 'zoom phone',
+    'plans & pricing', 'contact sales', 'request a demo',
+    'download the app', 'zoom blog', 'learning center',
+    'zoom community', 'support', 'zoom events',
+  ];
+  const headNavHits = navSignals.filter(s => head.includes(s)).length;
+  // If 5+ nav signals in the first 2000 chars, it's definitely shell
+  if (headNavHits >= 5) return true;
+  // If starts with "skip to" AND has 3+ nav signals, it's shell
+  if ((head.startsWith('[skip to') || head.includes('skip to main content')) && headNavHits >= 3) return true;
+
   return false;
 }
 
