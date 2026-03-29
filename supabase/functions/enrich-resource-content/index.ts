@@ -2653,9 +2653,10 @@ async function orchestrateEnrichment(
   if (hasManualContent) {
     console.log(`[Orchestrate] MANUAL CONTENT FAST-PATH: id=${resourceId} contentLen=${resource.content.length}`);
     const contentText = resource.content;
-    const quality = scoreContent(contentText, url);
+    const quality = validateContentQuality(contentText, source.source_type);
+    const finalStatus = quality.score >= COMPLETE_MIN_SCORE ? 'enriched' : 'partial';
 
-    await setEnrichmentStatus(supabase, resourceId, quality.completeness >= COMPLETE_MIN_SCORE ? 'enriched' : 'partial', {
+    await setEnrichmentStatus(supabase, resourceId, finalStatus, {
       content_status: 'full',
       enrichment_version: ENRICHMENT_VERSION,
       failure_reason: null,
@@ -2668,22 +2669,22 @@ async function orchestrateEnrichment(
     if (userId) {
       await persistAttemptProvenance(supabase, userId, resourceId, source, {
         resource_id: resourceId, url, source_classification: source,
-        final_status: 'enriched', method_used: 'manual_content',
+        final_status: finalStatus, method_used: 'manual_content',
         methods_attempted: ['manual_content'], attempt_count: 1,
         extracted_text_length: contentText.length,
-        completeness_score: quality.completeness,
-        confidence_score: quality.completeness,
-        missing_fields: [],
+        completeness_score: quality.score,
+        confidence_score: quality.score,
+        missing_fields: quality.missing_fields,
       }, []);
     }
 
     return {
       resource_id: resourceId, url, source_classification: source,
-      final_status: quality.completeness >= COMPLETE_MIN_SCORE ? 'enriched' : 'partial',
-      method_used: 'manual_content', methods_attempted: ['manual_content'],
-      attempt_count: 1, extracted_text_length: contentText.length,
-      completeness_score: quality.completeness, confidence_score: quality.completeness,
-      missing_fields: [],
+      final_status: finalStatus, method_used: 'manual_content',
+      methods_attempted: ['manual_content'], attempt_count: 1,
+      extracted_text_length: contentText.length,
+      completeness_score: quality.score, confidence_score: quality.score,
+      missing_fields: quality.missing_fields,
     };
   }
 
