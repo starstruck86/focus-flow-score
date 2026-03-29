@@ -32,6 +32,7 @@ import { resolveResourceWithManualInput, type RecoveryMode } from '@/lib/manualR
 import type { VerifiedResource } from '@/lib/enrichmentVerification';
 import { mapVerifiedToBucket, BUCKET_META } from './types';
 import { classifyQuarantine, getQuarantineSubClass, shouldAutoRelease } from '@/lib/quarantineClassification';
+import { isNotionZipResource, splitNotionImport } from '@/lib/notionZipSplitter';
 
 interface Props {
   resource: VerifiedResource;
@@ -53,6 +54,8 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [showContentViewer, setShowContentViewer] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [splitting, setSplitting] = useState(false);
+  const [splitProgress, setSplitProgress] = useState('');
   const [diagOpen, setDiagOpen] = useState(!isMobile);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [currentUserId, setCurrentUserId] = useState<string>('');
@@ -78,6 +81,12 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
     last_quality_score: (r as any).qualityScore ?? (r as any).last_quality_score,
   });
 
+  const isNotionSource = isNotionZipResource({
+    resolution_method: (r as any).resolution_method,
+    extraction_method: (r as any).extraction_method,
+    content: (r as any).content,
+  });
+
   const invalidateAll = useCallback(() => {
     FIX_RESOURCE_INVALIDATION_KEYS.forEach(key => {
       qc.invalidateQueries({ queryKey: key });
@@ -85,6 +94,27 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
     qc.invalidateQueries({ queryKey: ['audio-jobs-map'] });
     onResourceUpdated();
   }, [qc, onResourceUpdated]);
+
+  const handleRebuildNotion = useCallback(async () => {
+    if (!currentUserId) return;
+    setSplitting(true);
+    setSplitProgress('Starting…');
+    try {
+      const result = await splitNotionImport(r.id, currentUserId, setSplitProgress);
+      if (result.success) {
+        toast.success(`✅ ${result.message}`);
+        invalidateAll();
+        onClose();
+      } else {
+        toast.error(result.message);
+      }
+    } catch (e: any) {
+      toast.error(`Split failed: ${e.message}`);
+    } finally {
+      setSplitting(false);
+      setSplitProgress('');
+    }
+  }, [r.id, currentUserId, invalidateAll, onClose]);
 
   const handleFileUpload = useCallback(async (file: File) => {
     if (!currentUserId) return;
@@ -352,6 +382,9 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
                    (r as any).resolution_method === 'content_upload' ? 'Uploaded Content' :
                    (r as any).resolution_method === 'alternate_url' ? 'Alternate URL' :
                    (r as any).resolution_method === 'fixed_from_existing_content' ? 'Fixed From Existing Content' :
+                   (r as any).resolution_method === 'notion_zip_import' ? 'Notion ZIP Import' :
+                   (r as any).resolution_method === 'notion_zip_split' ? 'Notion Split' :
+                   (r as any).resolution_method === 'notion_zip_source' ? 'Notion Source (Archived)' :
                    'Manual Recovery'}
                 </Badge>
               )}
@@ -511,6 +544,18 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
                     e.target.value = '';
                   }}
                 />
+                {isNotionSource && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className={cn('gap-1.5 border-primary/30 text-primary', isMobile ? 'h-11 text-sm justify-start min-h-[44px]' : 'h-7 text-[10px]')}
+                    disabled={splitting || !!activeAction}
+                    onClick={handleRebuildNotion}
+                  >
+                    {splitting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wrench className="h-3 w-3" />}
+                    {splitting ? splitProgress : 'Rebuild Notion Import'}
+                  </Button>
+                )}
               </div>
             </div>
 
