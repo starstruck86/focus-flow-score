@@ -4,6 +4,7 @@ import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { isNotionZip, extractNotionZip } from '@/lib/notionZipExtractor';
 
 export const CORE_FOLDERS = [
   'Frameworks',
