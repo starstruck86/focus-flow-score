@@ -10,7 +10,9 @@ export const RESOURCE_SUBTYPES = [
   'youtube_video',
   'google_doc',
   'google_sheet',
+  'google_slides',
   'google_drive_file',
+  'thinkific_lesson',
   'zoom_recording',
   'spotify_episode',
   'apple_podcast_episode',
@@ -70,13 +72,17 @@ export function detectResourceSubtype(url: string | null, resourceType?: string)
   // Google Docs / Drive
   if (lower.includes('docs.google.com/document')) return 'google_doc';
   if (lower.includes('docs.google.com/spreadsheets') || lower.includes('sheets.google.com')) return 'google_sheet';
+  if (lower.includes('docs.google.com/presentation')) return 'google_slides';
   if (lower.includes('drive.google.com/file/')) return 'google_drive_file';
+
+  // Thinkific lessons — dedicated subtype, NOT generic auth_gated
+  if (lower.includes('thinkific.com/courses/')) return 'thinkific_lesson';
 
   // Auth-gated community pages — check all known gated domains
   if (url) {
     try {
       const host = new URL(url).hostname.toLowerCase();
-      if (AUTH_GATED_DOMAINS.some(d => host.includes(d))) return 'auth_gated_community_page';
+      if (AUTH_GATED_DOMAINS.some(d => host.includes(d) && !host.includes('thinkific.com'))) return 'auth_gated_community_page';
     } catch { /* not a valid URL */ }
   }
 
@@ -171,6 +177,24 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
         canFetchText: true,
         canFetchMetadata: true,
         requiresAuth: false,
+      };
+
+    case 'google_slides':
+      return {
+        ...base,
+        enrichability: 'fully_enrichable',
+        reason: 'Google Slides — HTML/export extraction supported.',
+        canFetchText: true,
+        canFetchMetadata: true,
+      };
+
+    case 'thinkific_lesson':
+      return {
+        ...base,
+        enrichability: 'manual_input_needed',
+        reason: 'Thinkific lesson — requires enrollment/login. Paste content manually.',
+        requiresAuth: true,
+        canFetchMetadata: false,
       };
 
     case 'auth_gated_community_page':
@@ -284,7 +308,9 @@ export function getSubtypeLabel(subtype: ResourceSubtype): string {
     youtube_video: 'YouTube Video',
     google_doc: 'Google Doc',
     google_sheet: 'Google Sheet',
+    google_slides: 'Google Slides',
     google_drive_file: 'Google Drive File',
+    thinkific_lesson: 'Thinkific Lesson',
     zoom_recording: 'Zoom Recording',
     spotify_episode: 'Spotify Episode',
     apple_podcast_episode: 'Apple Podcast',

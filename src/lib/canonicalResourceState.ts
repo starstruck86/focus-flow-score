@@ -78,7 +78,9 @@ function getSourceRouter(subtype: ResourceSubtype): string {
     case 'audio_file': return 'direct_transcription';
     case 'google_doc': return 'document_extraction';
     case 'google_sheet': return 'spreadsheet_extraction';
+    case 'google_slides': return 'document_extraction';
     case 'google_drive_file': return 'document_extraction';
+    case 'thinkific_lesson': return 'manual_input';
     case 'auth_gated_community_page': return 'manual_input';
     case 'zoom_recording': return 'transcript_needed';
     case 'web_article': return 'text_extraction';
@@ -93,7 +95,9 @@ const SUBTYPE_LABELS: Record<ResourceSubtype, string> = {
   youtube_video: 'YouTube Video',
   google_doc: 'Google Doc',
   google_sheet: 'Google Sheet',
+  google_slides: 'Google Slides',
   google_drive_file: 'Google Drive File',
+  thinkific_lesson: 'Thinkific Lesson',
   zoom_recording: 'Zoom Recording',
   spotify_episode: 'Spotify Episode',
   apple_podcast_episode: 'Apple Podcast',

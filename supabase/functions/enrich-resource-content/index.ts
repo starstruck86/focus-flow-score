@@ -36,9 +36,11 @@ type SourceType =
   | 'youtube'
   | 'google_doc'
   | 'google_sheet'
+  | 'google_slides'
   | 'google_drive_file'
   | 'notion'
   | 'auth_gated'
+  | 'thinkific_lesson'
   | 'social'
   | 'podcast'
   | 'direct_audio'
@@ -107,14 +109,24 @@ function classifySource(url: string): SourceClassification {
     }
 
     // ── Zoom recording URLs — MUST come before generic auth-gated check ──
-    if (/\.zoom\.us\/rec\/(play|share)\//i.test(url)) {
+    if (/\.zoom\.us\/rec\/(play|share)\//i.test(url) || /\.zoom\.us\/rec\//.test(url)) {
       return {
         source_type: 'zoom_recording', platform: 'Zoom', auth_required: false,
         transcript_available: null, downloadable: false, js_rendered: true,
       };
     }
 
+    // ── Thinkific lesson URLs — dedicated handler, NOT generic auth_gated ──
+    if (/thinkific\.com\/courses\/take\//i.test(url) || /thinkific\.com\/courses\//i.test(hostAndPath)) {
+      return {
+        source_type: 'thinkific_lesson', platform: 'Thinkific', auth_required: true,
+        transcript_available: null, downloadable: false, js_rendered: true,
+      };
+    }
+
     for (const ag of AUTH_GATED_DOMAINS) {
+      // Skip Thinkific here — handled above as thinkific_lesson
+      if (ag.platform === 'Thinkific') continue;
       if (ag.pattern.test(hostAndPath)) {
         return { source_type: 'auth_gated', platform: ag.platform, auth_required: true, transcript_available: null, downloadable: false, js_rendered: false };
       }
@@ -132,6 +144,11 @@ function classifySource(url: string): SourceClassification {
 
     if (/docs\.google\.com\/document/i.test(url)) {
       return { source_type: 'google_doc', platform: 'Google Docs', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
+    }
+
+    // ── Google Slides — MUST come before generic GOOGLE_DOC_PATTERNS catch-all ──
+    if (/docs\.google\.com\/presentation/i.test(url)) {
+      return { source_type: 'google_slides', platform: 'Google Slides', auth_required: false, transcript_available: null, downloadable: true, js_rendered: false };
     }
 
     if (GOOGLE_DOC_PATTERNS.some(p => p.test(hostAndPath))) {
@@ -1395,6 +1412,232 @@ async function googleDocExport(url: string, _apiKey: string): Promise<Extraction
   }
 }
 
+// ── Google Slides helpers ───────────────────────────────────
+function extractPresentationId(url: string): string | null {
+  const m = url.match(/docs\.google\.com\/presentation\/d\/([a-zA-Z0-9_-]+)/i);
+  return m?.[1] ?? null;
+}
+
+/** Export Google Slides as HTML (published view) or text */
+async function googleSlidesExport(url: string, apiKey: string): Promise<ExtractionResult> {
+  const method = 'google_slides_html_view';
+  const startMs = Date.now();
+
+  const presId = extractPresentationId(url);
+  if (!presId) {
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
+        auth_wall_detected: false, http_status: 0,
+        validation_result: 'fail', error_category: 'extraction_error',
+        error_detail: 'Could not extract presentation ID from Google Slides URL',
+      },
+    };
+  }
+
+  try {
+    // Strategy 1: Try the published HTML export (pub?output=txt)
+    const txtExportUrl = `https://docs.google.com/presentation/d/${presId}/export?format=txt`;
+    const txtResp = await fetch(txtExportUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      redirect: 'follow',
+    });
+
+    if (txtResp.ok) {
+      const text = await txtResp.text();
+      const trimmed = text.trim();
+      if (trimmed.length >= MIN_CONTENT_CHARS && !trimmed.includes('accounts.google.com')) {
+        return {
+          content: trimmed.slice(0, CONTENT_CAP),
+          attempt: {
+            method: 'google_slides_export', duration_ms: Date.now() - startMs,
+            chars_extracted: trimmed.length, timeout_hit: false,
+            auth_wall_detected: false, http_status: 200,
+            validation_result: trimmed.length >= GOOD_CONTENT_CHARS ? 'pass' : 'partial',
+            error_category: null, error_detail: null,
+          },
+        };
+      }
+    }
+
+    // Strategy 2: Try the published HTML view
+    const pubUrl = `https://docs.google.com/presentation/d/${presId}/pub`;
+    const scrapeRes = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: pubUrl,
+        formats: ["markdown"],
+        onlyMainContent: true,
+        waitFor: 5000,
+      }),
+    });
+
+    if (scrapeRes.ok) {
+      const data = await scrapeRes.json();
+      const markdown = (data.data?.markdown || data.markdown || '').trim();
+      if (markdown.length >= MIN_CONTENT_CHARS) {
+        return {
+          content: markdown.slice(0, CONTENT_CAP),
+          attempt: {
+            method: 'google_slides_pub_scrape', duration_ms: Date.now() - startMs,
+            chars_extracted: markdown.length, timeout_hit: false,
+            auth_wall_detected: false, http_status: 200,
+            validation_result: markdown.length >= GOOD_CONTENT_CHARS ? 'pass' : 'partial',
+            error_category: null, error_detail: null,
+          },
+        };
+      }
+    }
+
+    // Strategy 3: Try the embed URL
+    const embedUrl = `https://docs.google.com/presentation/d/${presId}/embed`;
+    const embedRes = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: embedUrl,
+        formats: ["markdown"],
+        onlyMainContent: false,
+        waitFor: 5000,
+      }),
+    });
+
+    if (embedRes.ok) {
+      const data = await embedRes.json();
+      const markdown = (data.data?.markdown || data.markdown || '').trim();
+      if (markdown.length >= MIN_CONTENT_CHARS) {
+        return {
+          content: markdown.slice(0, CONTENT_CAP),
+          attempt: {
+            method: 'google_slides_embed_scrape', duration_ms: Date.now() - startMs,
+            chars_extracted: markdown.length, timeout_hit: false,
+            auth_wall_detected: false, http_status: 200,
+            validation_result: markdown.length >= GOOD_CONTENT_CHARS ? 'pass' : 'partial',
+            error_category: null, error_detail: null,
+          },
+        };
+      }
+    }
+
+    // Auth detection
+    const authCheck = txtResp.status === 401 || txtResp.status === 403;
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
+        auth_wall_detected: authCheck, http_status: txtResp.status,
+        validation_result: 'fail',
+        error_category: authCheck ? 'google_slides_auth_required' : 'google_slides_extraction_failed',
+        error_detail: authCheck
+          ? 'Google Slides presentation is not publicly accessible'
+          : 'Could not extract slide content via export, pub, or embed URLs',
+      },
+    };
+  } catch (e) {
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
+        auth_wall_detected: false, http_status: 0,
+        validation_result: 'fail', error_category: 'extraction_error',
+        error_detail: `Google Slides export error: ${(e as Error).message}`,
+      },
+    };
+  }
+}
+
+/** Thinkific lesson handler — attempts scrape, then routes to auth-gated recovery with Thinkific-specific states */
+async function thinkificLessonExtract(url: string, apiKey: string): Promise<ExtractionResult> {
+  const method = 'thinkific_handler';
+  const startMs = Date.now();
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60_000);
+
+    const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url,
+        formats: ["markdown"],
+        onlyMainContent: true,
+        waitFor: 5000,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timer);
+    const durationMs = Date.now() - startMs;
+
+    if (!response.ok) {
+      const isAuth = response.status === 401 || response.status === 403;
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: isAuth, http_status: response.status,
+          validation_result: 'fail',
+          error_category: isAuth ? 'thinkific_auth_required' : `http_${response.status}`,
+          error_detail: isAuth
+            ? 'Thinkific lesson requires enrollment/login'
+            : `Thinkific returned ${response.status}`,
+        },
+      };
+    }
+
+    const data = await response.json();
+    const markdown = (data.data?.markdown || data.markdown || '').trim();
+
+    // Detect Thinkific sign-in/enrollment walls
+    const isSignInWall = /sign\s*in|log\s*in|create\s*account|enroll|start\s*course|purchase/i.test(markdown.slice(0, 1000))
+      && markdown.length < 2000;
+
+    if (isSignInWall || markdown.length < MIN_CONTENT_CHARS) {
+      const isShell = markdown.length > 0 && markdown.length < MIN_CONTENT_CHARS;
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: durationMs, chars_extracted: markdown.length, timeout_hit: false,
+          auth_wall_detected: isSignInWall, http_status: 200,
+          validation_result: 'fail',
+          error_category: isSignInWall ? 'thinkific_auth_required' : (isShell ? 'thinkific_shell_only' : 'thinkific_lesson_unavailable'),
+          error_detail: isSignInWall
+            ? 'Thinkific lesson page redirected to sign-in/enrollment'
+            : (isShell ? 'Thinkific page returned only course shell/navigation' : 'No usable lesson content found'),
+        },
+      };
+    }
+
+    // Got real content
+    return {
+      content: markdown.slice(0, CONTENT_CAP),
+      attempt: {
+        method: 'thinkific_lesson_content', duration_ms: durationMs,
+        chars_extracted: markdown.length, timeout_hit: false,
+        auth_wall_detected: false, http_status: 200,
+        validation_result: markdown.length >= GOOD_CONTENT_CHARS ? 'pass' : 'partial',
+        error_category: null, error_detail: null,
+      },
+    };
+  } catch (e) {
+    const durationMs = Date.now() - startMs;
+    const isTimeout = e instanceof DOMException && e.name === 'AbortError';
+    return {
+      content: null,
+      attempt: {
+        method, duration_ms: durationMs, chars_extracted: 0, timeout_hit: isTimeout,
+        auth_wall_detected: false, http_status: null,
+        validation_result: 'fail',
+        error_category: isTimeout ? 'timeout' : 'thinkific_lesson_unavailable',
+        error_detail: isTimeout ? 'Thinkific lesson page timed out' : (e as Error).message?.slice(0, 200),
+      },
+    };
+  }
+}
+
 // ── Google Drive helpers ────────────────────────────────────
 function extractDriveFileId(url: string): string | null {
   const patterns = [
@@ -1685,6 +1928,10 @@ function getMethodChain(source: SourceClassification): Array<(url: string, apiKe
       return [googleSheetExport, firecrawlScrape];
     case 'google_doc':
       return [googleDocExport, firecrawlScrape];
+    case 'google_slides':
+      return [googleSlidesExport, firecrawlScrape];
+    case 'thinkific_lesson':
+      return [thinkificLessonExtract];
     case 'auth_gated':
     case 'notion':
       return []; // No methods — immediately classified
@@ -2090,12 +2337,23 @@ async function orchestrateEnrichment(
 
       const isZoom = source.source_type === 'zoom_recording';
       const isCircle = source.source_type === 'circle_page';
+      const isThinkific = source.source_type === 'thinkific_lesson';
+      const isDrive = source.source_type === 'google_drive_file';
+      const isSlides = source.source_type === 'google_slides';
       const circleFailureCategory = isCircle ? (result.attempt.error_category || 'circle_auth_required') : null;
       const circleAccessBlocked = circleFailureCategory === 'circle_access_blocked';
+      const thinkificFailureCat = isThinkific ? (result.attempt.error_category || 'thinkific_auth_required') : null;
+
       const failureReason = isZoom
         ? `Zoom recording requires authentication — ${result.attempt.error_category || 'zoom_auth_required'}`
         : isCircle
         ? `Circle page requires authentication — ${circleFailureCategory}`
+        : isThinkific
+        ? `Thinkific lesson requires enrollment/login — ${thinkificFailureCat}`
+        : isDrive
+        ? `Google Drive file requires access permissions`
+        : isSlides
+        ? `Google Slides presentation is not publicly accessible`
         : 'Login/signup wall detected during scraping';
       const recoveryReason = isZoom
         ? 'Zoom recording access blocked — requires login or shared link permissions'
@@ -2103,12 +2361,28 @@ async function orchestrateEnrichment(
         ? (circleAccessBlocked
             ? 'Circle community page access blocked — provide access or upload an export'
             : `Circle community page requires manual recovery (${circleFailureCategory})`)
+        : isThinkific
+        ? `Thinkific lesson requires enrollment — paste content, provide access, or upload transcript`
+        : isDrive
+        ? 'Google Drive file is not publicly shared — provide access or upload the file'
+        : isSlides
+        ? 'Google Slides presentation is not publicly shared — provide access or paste content'
         : failureReason;
       const nextAction = isZoom
         ? 'provide_access'
         : isCircle
         ? (circleAccessBlocked ? 'provide_access' : 'paste_content')
+        : isThinkific ? 'paste_content'
+        : isDrive ? 'provide_access'
+        : isSlides ? 'provide_access'
         : 'paste_content';
+
+      const persistedMethod = isZoom ? 'zoom_recording_handler'
+        : isCircle ? 'circle_handler'
+        : isThinkific ? 'thinkific_handler'
+        : isDrive ? 'google_drive_direct_download'
+        : isSlides ? 'google_slides_html_view'
+        : null;
 
       await setEnrichmentStatus(supabase, resourceId, 'needs_auth', {
         failure_reason: failureReason,
@@ -2118,8 +2392,8 @@ async function orchestrateEnrichment(
         manual_input_required: true,
         recovery_queue_bucket: 'needs_input',
         access_type: 'auth_gated',
-        content_classification: isZoom ? 'video' : isCircle ? 'auth_gated' : null,
-        extraction_method: isZoom ? 'zoom_recording_handler' : isCircle ? 'circle_handler' : null,
+        content_classification: isZoom ? 'video' : (isCircle || isThinkific) ? 'auth_gated' : null,
+        extraction_method: persistedMethod,
       });
 
       if (isCircle) {
@@ -2148,6 +2422,12 @@ async function orchestrateEnrichment(
           ? (circleAccessBlocked
               ? 'This Circle page is access blocked. Provide access, upload an export, or paste the post body manually.'
               : 'This Circle post requires login. Paste the post body manually or provide an export.')
+          : isThinkific
+          ? 'This Thinkific lesson requires enrollment. Paste the content, provide access, or upload a transcript.'
+          : isDrive
+          ? 'This Google Drive file is not publicly shared. Share the file publicly or upload it manually.'
+          : isSlides
+          ? 'This Google Slides presentation is not publicly shared. Share it publicly or paste the content.'
           : 'Paste the content manually or provide a public link',
       };
     }
@@ -2335,6 +2615,9 @@ async function orchestrateEnrichment(
   const isAudioSource = source.source_type === 'direct_audio' || source.source_type === 'podcast';
   const isZoomSource = source.source_type === 'zoom_recording';
   const isCircleSource = source.source_type === 'circle_page';
+  const isThinkificSource = source.source_type === 'thinkific_lesson';
+  const isGoogleDriveSource = source.source_type === 'google_drive_file';
+  const isGoogleSlidesSource = source.source_type === 'google_slides';
 
   const zoomFailureCategory = isZoomSource
     ? (attempts.find(a => a.error_category?.startsWith('zoom_'))?.error_category || 'zoom_transcript_not_found')
@@ -2356,18 +2639,47 @@ async function orchestrateEnrichment(
   );
   const isCircleShell = isCircleSource && circleFailureCategory === 'circle_shell_only';
 
+  const thinkificFailureCategory = isThinkificSource
+    ? (attempts.find(a => a.error_category?.startsWith('thinkific_'))?.error_category || 'thinkific_auth_required')
+    : null;
+  const isThinkificAuth = isThinkificSource && (
+    thinkificFailureCategory === 'thinkific_auth_required' ||
+    attempts.some(a => a.auth_wall_detected)
+  );
+
+  const driveFailureCategory = isGoogleDriveSource
+    ? (attempts.find(a => a.error_category)?.error_category || 'drive_extraction_failed')
+    : null;
+  const isDriveAuth = isGoogleDriveSource && attempts.some(a => a.auth_wall_detected || a.error_category === 'auth_failure');
+
+  const slidesFailureCategory = isGoogleSlidesSource
+    ? (attempts.find(a => a.error_category?.startsWith('google_slides_'))?.error_category || 'google_slides_extraction_failed')
+    : null;
+  const isSlidesAuth = isGoogleSlidesSource && (
+    slidesFailureCategory === 'google_slides_auth_required' ||
+    attempts.some(a => a.auth_wall_detected)
+  );
+
   const recoveryStatus = isZoomAuthBlocked ? 'auth_gated_manual_action_required'
     : isCircleAuthBlocked ? 'auth_gated_manual_action_required'
+    : isThinkificAuth ? 'auth_gated_manual_action_required'
+    : isDriveAuth ? 'auth_gated_manual_action_required'
+    : isSlidesAuth ? 'auth_gated_manual_action_required'
     : isZoomShell ? 'awaiting_user_content'
     : isZoomSource ? 'awaiting_user_content'
     : isCircleSource ? 'awaiting_user_content'
+    : isThinkificSource ? 'awaiting_user_content'
     : isAudioSource ? 'pending_transcription'
     : isRetryable ? 'failed_retryable'
     : 'awaiting_user_content';
   const recoveryAction = isZoomAuthBlocked ? 'provide_access'
     : isCircleAuthBlocked ? (circleFailureCategory === 'circle_access_blocked' ? 'provide_access' : 'paste_content')
+    : isThinkificAuth ? 'paste_content'
+    : isDriveAuth ? 'provide_access'
+    : isSlidesAuth ? 'provide_access'
     : isZoomShell ? 'paste_transcript'
     : isZoomSource ? 'paste_transcript'
+    : isThinkificSource ? 'paste_content'
     : isCircleSource ? (circleFailureCategory === 'circle_unsupported_page_type' ? 'upload_export' : 'paste_content')
     : isAudioSource ? 'start_transcription'
     : isRetryable ? 'queue_for_retry'
@@ -2375,6 +2687,9 @@ async function orchestrateEnrichment(
   const recoveryBucket = isZoomAuthBlocked ? 'needs_input'
     : isCircleSource ? 'needs_input'
     : isZoomSource ? 'needs_input'
+    : isThinkificSource ? 'needs_input'
+    : isDriveAuth ? 'needs_input'
+    : isSlidesAuth ? 'needs_input'
     : isAudioSource ? 'auto_fixable'
     : isRetryable ? 'retryable'
     : 'needs_input';
@@ -2387,6 +2702,27 @@ async function orchestrateEnrichment(
     : isCircleShell ? 'Circle app shell only — no usable post body found. Paste content manually or provide access/export.'
     : isCircleSource ? `Circle extraction failed: ${circleFailureCategory} — paste content, provide access, or upload an export`
     : null;
+  const thinkificRecoveryReason = isThinkificSource
+    ? `Thinkific lesson requires enrollment/login (${thinkificFailureCategory}) — paste content, provide access, or upload transcript`
+    : null;
+  const driveRecoveryReason = isGoogleDriveSource
+    ? (isDriveAuth ? `Google Drive file requires access permissions (${driveFailureCategory})`
+      : `Google Drive file extraction failed: ${driveFailureCategory}`)
+    : null;
+  const slidesRecoveryReason = isGoogleSlidesSource
+    ? (isSlidesAuth ? `Google Slides presentation is not publicly accessible`
+      : `Google Slides extraction failed: ${slidesFailureCategory}`)
+    : null;
+
+  // Determine extraction_method for persistence
+  const persistedExtractionMethod = isZoomSource ? 'zoom_recording_handler'
+    : isCircleSource ? 'circle_handler'
+    : isThinkificSource ? 'thinkific_handler'
+    : isGoogleDriveSource ? 'google_drive_direct_download'
+    : isGoogleSlidesSource ? 'google_slides_html_view'
+    : null;
+
+  const platformRecoveryReason = circleRecoveryReason || zoomRecoveryReason || thinkificRecoveryReason || driveRecoveryReason || slidesRecoveryReason;
 
   await setEnrichmentStatus(supabase, resourceId, newStatus, {
     failure_reason: primaryReason,
@@ -2396,14 +2732,16 @@ async function orchestrateEnrichment(
     failure_count: (resource.failure_count || 0) + 1,
     // Persist recovery state
     recovery_status: recoveryStatus,
-    recovery_reason: circleRecoveryReason || zoomRecoveryReason || (isAudioSource ? `Audio transcription failed: ${primaryReason}` : primaryReason),
+    recovery_reason: platformRecoveryReason || (isAudioSource ? `Audio transcription failed: ${primaryReason}` : primaryReason),
     next_best_action: recoveryAction,
-    manual_input_required: isZoomSource || isCircleSource || (!isAudioSource && !isRetryable),
+    manual_input_required: isZoomSource || isCircleSource || isThinkificSource || isDriveAuth || isSlidesAuth || (!isAudioSource && !isRetryable),
     recovery_queue_bucket: recoveryBucket,
     last_recovery_error: primaryReason,
-    access_type: isZoomAuthBlocked ? 'auth_gated' : isCircleAuthBlocked ? 'auth_gated' : isCircleSource ? 'unknown' : (attempts.some(a => a.http_status === 403 || a.http_status === 401) ? 'auth_gated' : 'public'),
-    content_classification: isAudioSource ? 'audio' : isZoomSource ? 'video' : isCircleSource ? 'auth_gated' : null,
-    extraction_method: isZoomSource ? 'zoom_recording_handler' : isCircleSource ? 'circle_handler' : null,
+    access_type: (isZoomAuthBlocked || isCircleAuthBlocked || isThinkificAuth || isDriveAuth || isSlidesAuth) ? 'auth_gated'
+      : isCircleSource ? 'unknown'
+      : (attempts.some(a => a.http_status === 403 || a.http_status === 401) ? 'auth_gated' : 'public'),
+    content_classification: isAudioSource ? 'audio' : isZoomSource ? 'video' : isCircleSource ? 'auth_gated' : isThinkificSource ? 'auth_gated' : null,
+    extraction_method: persistedExtractionMethod,
   });
 
   if (isCircleSource) {
