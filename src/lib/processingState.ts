@@ -148,7 +148,7 @@ export function deriveProcessingState(
   }
 
   // Partial enrichment (manual content that scored low)
-  if (status === 'partial') {
+  if ((status as string) === 'partial') {
     return {
       state: 'COMPLETED',
       label: 'Partial',
