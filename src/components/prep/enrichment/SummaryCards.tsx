@@ -43,14 +43,14 @@ function computePlatformBreakdown(resources: VerifiedResource[]) {
   const platforms: Record<string, { total: number; resolved: number; failureCategories: Record<string, number> }> = {};
 
   for (const r of resources) {
-    const platform = r.platform || 'Unknown';
+    const platform = (r as any).platform || r.subtype || 'Unknown';
     if (!platforms[platform]) platforms[platform] = { total: 0, resolved: 0, failureCategories: {} };
     platforms[platform].total++;
     if (r.fixabilityBucket === 'truly_complete') {
       platforms[platform].resolved++;
-    } else if (r.failureCategory) {
-      platforms[platform].failureCategories[r.failureCategory] =
-        (platforms[platform].failureCategories[r.failureCategory] || 0) + 1;
+    } else if (r.failureBucket) {
+      platforms[platform].failureCategories[r.failureBucket] =
+        (platforms[platform].failureCategories[r.failureBucket] || 0) + 1;
     }
   }
 
