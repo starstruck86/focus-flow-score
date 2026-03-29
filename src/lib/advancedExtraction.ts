@@ -16,6 +16,7 @@ export interface AdvancedExtractionResult {
 /**
  * Trigger deep extraction for a resource.
  * Sets advanced_extraction_status to 'pending', bumps attempts, then invokes enrichment.
+ * After enrichment completes (or fails), closes the pending attempt record.
  */
 export async function triggerDeepExtraction(
   resourceId: string,
@@ -42,7 +43,7 @@ export async function triggerDeepExtraction(
   const now = new Date().toISOString();
 
   // Record attempt start
-  await (supabase as any).from('enrichment_attempts').insert({
+  const { data: attemptRow } = await (supabase as any).from('enrichment_attempts').insert({
     resource_id: resourceId,
     user_id: userId,
     attempt_type: 'advanced_extraction',
@@ -50,7 +51,9 @@ export async function triggerDeepExtraction(
     platform,
     started_at: now,
     result: 'pending',
-  });
+  }).select('id').single();
+
+  const attemptId = attemptRow?.id;
 
   // Update resource state
   await (supabase as any).from('resources').update({
@@ -69,8 +72,19 @@ export async function triggerDeepExtraction(
       { resource_id: resourceId, force: true },
       { componentName: 'AdvancedExtraction', timeoutMs: 120000 },
     );
+
+    // After enrichment returns, check the resource state to close the attempt
+    await closeAttemptFromResourceState(resourceId, attemptId);
   } catch (e: any) {
     // Update attempt as failed
+    if (attemptId) {
+      await (supabase as any).from('enrichment_attempts').update({
+        completed_at: new Date().toISOString(),
+        result: 'failed',
+        error_message: e.message,
+      }).eq('id', attemptId);
+    }
+
     await (supabase as any).from('resources').update({
       advanced_extraction_status: 'failed',
       last_recovery_error: e.message,
@@ -81,6 +95,57 @@ export async function triggerDeepExtraction(
   }
 
   return { success: true, status: 'queued', message: 'Advanced extraction initiated' };
+}
+
+/**
+ * After enrichment completes, read the resource state and close the pending attempt.
+ */
+async function closeAttemptFromResourceState(resourceId: string, attemptId: string | null) {
+  if (!attemptId) return;
+
+  const { data: resource } = await (supabase as any)
+    .from('resources')
+    .select('enrichment_status, failure_reason, content_length, last_quality_score, platform_status, extraction_method, content')
+    .eq('id', resourceId)
+    .single();
+
+  if (!resource) return;
+
+  const contentLength = resource.content?.length ?? resource.content_length ?? 0;
+  const isSuccess = resource.enrichment_status === 'deep_enriched' || resource.enrichment_status === 'enriched';
+  const isPartial = contentLength > 0 && !isSuccess;
+
+  const result = isSuccess ? 'success' : isPartial ? 'partial' : 'failed';
+
+  // Determine what was found from platform_status and extraction_method
+  const ps = (resource.platform_status || '') as string;
+  const em = (resource.extraction_method || '') as string;
+
+  await (supabase as any).from('enrichment_attempts').update({
+    completed_at: new Date().toISOString(),
+    result,
+    failure_category: resource.failure_reason || ps || null,
+    content_found: contentLength > 100,
+    content_length_extracted: contentLength,
+    quality_score_after: resource.last_quality_score ?? null,
+    shell_rejected: ps.includes('shell_only') || ps.includes('shell'),
+    runtime_config_found: ps.includes('runtime') || em.includes('runtime'),
+    transcript_url_found: em.includes('transcript') || em.includes('caption'),
+    media_url_found: em.includes('media') || em.includes('audio'),
+    caption_url_found: em.includes('caption') || ps.includes('caption'),
+    error_message: isSuccess ? null : (resource.failure_reason || null),
+  }).eq('id', attemptId);
+
+  // Update advanced_extraction_status based on result
+  const advStatus = isSuccess ? 'completed' : 'failed';
+  const recoveryStatus = isSuccess
+    ? 'resolved_complete'
+    : 'advanced_extraction_failed';
+
+  await (supabase as any).from('resources').update({
+    advanced_extraction_status: advStatus,
+    recovery_status: recoveryStatus,
+  }).eq('id', resourceId);
 }
 
 /**
@@ -161,4 +226,178 @@ export async function getAttemptHistory(resourceId: string): Promise<EnrichmentA
     .order('started_at', { ascending: false });
   if (error) return [];
   return (data || []) as EnrichmentAttemptRecord[];
+}
+
+/**
+ * Upload a file to the resource-files bucket and use its text content for enrichment.
+ */
+export async function uploadTranscriptFile(
+  resourceId: string,
+  userId: string,
+  file: File,
+): Promise<{ success: boolean; message: string }> {
+  // Validate file
+  const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+  const ALLOWED_TYPES = ['text/plain', 'text/vtt', 'text/srt', 'application/json', 'text/csv', 'text/markdown', 'text/html'];
+  const ALLOWED_EXTENSIONS = ['.txt', '.vtt', '.srt', '.json', '.csv', '.md', '.html', '.htm'];
+
+  if (file.size > MAX_SIZE) {
+    return { success: false, message: 'File too large — max 10MB' };
+  }
+
+  const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+  const isAllowedType = ALLOWED_TYPES.includes(file.type) || ALLOWED_EXTENSIONS.includes(ext);
+  if (!isAllowedType) {
+    return { success: false, message: `Unsupported file type. Allowed: ${ALLOWED_EXTENSIONS.join(', ')}` };
+  }
+
+  try {
+    // Read file text
+    const text = await file.text();
+    if (text.length < 50) {
+      return { success: false, message: 'File content too short — minimum 50 characters' };
+    }
+
+    // Clean VTT/SRT if needed
+    let cleanedText = text;
+    if (ext === '.vtt' || ext === '.srt') {
+      cleanedText = cleanTranscriptFormat(text);
+    }
+
+    // Upload file to storage
+    const filePath = `transcripts/${resourceId}/${Date.now()}_${file.name}`;
+    await supabase.storage.from('resource-files').upload(filePath, file, { upsert: true });
+
+    // Update resource with extracted text
+    await (supabase as any).from('resources').update({
+      content: cleanedText,
+      content_status: 'full',
+      enrichment_status: 'not_enriched',
+      failure_reason: null,
+      failure_count: 0,
+      content_length: cleanedText.length,
+      manual_content_present: true,
+      manual_input_required: false,
+      recovery_status: 'pending_reprocess',
+      resolution_method: 'transcript_upload',
+      extraction_method: 'transcript_upload',
+      last_status_change_at: new Date().toISOString(),
+    }).eq('id', resourceId);
+
+    // Record attempt
+    await (supabase as any).from('enrichment_attempts').insert({
+      resource_id: resourceId,
+      user_id: userId,
+      attempt_type: 'transcript_upload',
+      strategy: `file_upload_${ext}`,
+      result: 'success',
+      content_found: true,
+      content_length_extracted: cleanedText.length,
+      completed_at: new Date().toISOString(),
+      metadata: { filename: file.name, file_size: file.size, file_type: file.type, storage_path: filePath },
+    });
+
+    // Re-enrich
+    await invokeEnrichResource(
+      { resource_id: resourceId, force: true },
+      { componentName: 'TranscriptUpload', timeoutMs: 90000 },
+    );
+
+    return { success: true, message: `Transcript uploaded (${cleanedText.length} chars) & re-enrichment triggered` };
+  } catch (e: any) {
+    return { success: false, message: e.message };
+  }
+}
+
+/**
+ * Clean VTT/SRT transcript format into plain text.
+ */
+function cleanTranscriptFormat(text: string): string {
+  return text
+    .replace(/WEBVTT[\s\S]*?\n\n/, '') // Remove VTT header
+    .replace(/\d+\n/g, '') // Remove sequence numbers (SRT)
+    .replace(/\d{2}:\d{2}:\d{2}[.,]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[.,]\d{3}/g, '') // Remove timestamps
+    .replace(/<[^>]+>/g, '') // Remove HTML tags
+    .replace(/\n{3,}/g, '\n\n') // Normalize whitespace
+    .trim();
+}
+
+/**
+ * Get platform-specific guidance for assisted resolution.
+ */
+export function getAssistedResolutionGuidance(platform: string | null, failureCategory: string | null): {
+  steps: string[];
+  tips: string[];
+  preferredMethod: 'paste' | 'upload' | 'alt_url';
+} {
+  const base = {
+    steps: ['Open the source URL in your browser', 'Copy the content', 'Paste it below or upload a file'],
+    tips: ['Longer content produces better digests', 'Include the full text, not just a summary'],
+    preferredMethod: 'paste' as const,
+  };
+
+  switch (platform) {
+    case 'zoom':
+      return {
+        steps: [
+          '1. Open the Zoom recording in your browser',
+          '2. Click the "Transcript" tab (if available)',
+          '3. Click "Download" → choose .vtt or .txt format',
+          '4. Upload the downloaded transcript file below',
+        ],
+        tips: [
+          'Most Zoom recordings have transcripts available via the Transcript tab',
+          'VTT and SRT formats are automatically cleaned on upload',
+          'If no transcript tab exists, try the Audio Transcript option in recording settings',
+        ],
+        preferredMethod: 'upload',
+      };
+
+    case 'thinkific':
+      return {
+        steps: [
+          '1. Log into your Thinkific course',
+          '2. Navigate to the lesson',
+          '3. Select all text content (Ctrl+A / Cmd+A)',
+          '4. Copy and paste below',
+        ],
+        tips: [
+          'Include video transcripts if the lesson has embedded videos',
+          'Capture any downloadable resources or PDFs',
+        ],
+        preferredMethod: 'paste',
+      };
+
+    case 'circle':
+      return {
+        steps: [
+          '1. Log into Circle community',
+          '2. Open the post/discussion',
+          '3. Select and copy the post content',
+          '4. Paste below',
+        ],
+        tips: [
+          'Include the post title and author if not already captured',
+          'Copy comments too if they contain valuable content',
+        ],
+        preferredMethod: 'paste',
+      };
+
+    case 'google_drive':
+      return {
+        steps: [
+          '1. Open the file in Google Drive',
+          '2. Try File → Download as → Plain Text or PDF',
+          '3. Upload the downloaded file or paste the content',
+        ],
+        tips: [
+          'If the file is a presentation, try downloading as PDF for best results',
+          'For spreadsheets, download as CSV',
+        ],
+        preferredMethod: 'upload',
+      };
+
+    default:
+      return base;
+  }
 }
