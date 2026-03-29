@@ -87,6 +87,14 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
     content: (r as any).content,
   });
 
+  const invalidateAll = useCallback(() => {
+    FIX_RESOURCE_INVALIDATION_KEYS.forEach(key => {
+      qc.invalidateQueries({ queryKey: key });
+    });
+    qc.invalidateQueries({ queryKey: ['audio-jobs-map'] });
+    onResourceUpdated();
+  }, [qc, onResourceUpdated]);
+
   const handleRebuildNotion = useCallback(async () => {
     if (!currentUserId) return;
     setSplitting(true);
@@ -107,14 +115,6 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
       setSplitProgress('');
     }
   }, [r.id, currentUserId, invalidateAll, onClose]);
-
-  const invalidateAll = useCallback(() => {
-    FIX_RESOURCE_INVALIDATION_KEYS.forEach(key => {
-      qc.invalidateQueries({ queryKey: key });
-    });
-    qc.invalidateQueries({ queryKey: ['audio-jobs-map'] });
-    onResourceUpdated();
-  }, [qc, onResourceUpdated]);
 
   const handleFileUpload = useCallback(async (file: File) => {
     if (!currentUserId) return;
