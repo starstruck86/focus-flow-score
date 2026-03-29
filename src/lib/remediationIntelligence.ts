@@ -92,6 +92,21 @@ function detectSystemGap(r: VerifiedResource): RemediationPlan | null {
   const hasBinaryViolation = r.whyNotComplete?.includes('binary') ||
     r.rootCauseCategory?.includes('binary');
   if (hasBinaryViolation) {
+    // If resource already has a recovery path (pending_transcription, auto_fixable),
+    // treat as manual_input — the pipeline knows what to do, it just needs a retry or paste
+    const hasRecoveryPath = r.recoveryStatus === 'pending_transcription' ||
+      r.recoveryQueueBucket === 'auto_fixable' ||
+      r.nextBestAction === 'start_transcription' ||
+      r.nextBestAction === 'paste_content';
+    if (hasRecoveryPath) {
+      return {
+        resolutionType: 'manual_input',
+        rootCause: 'Binary/audio content — needs transcript extraction or manual paste',
+        failureType: 'binary_content',
+        recommendedAction: 'Route through transcription pipeline or paste transcript manually',
+        requiredBuild: null,
+      };
+    }
     return {
       resolutionType: 'system_gap',
       rootCause: 'Content stored as binary data instead of text — transcript extraction missing',
