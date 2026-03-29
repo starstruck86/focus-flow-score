@@ -2812,7 +2812,7 @@ async function orchestrateEnrichment(
     zoomFailureCategory === 'zoom_recording_access_blocked' ||
     attempts.some(a => a.auth_wall_detected)
   );
-  const isZoomShell = isZoomSource && zoomFailureCategory === 'zoom_player_shell_only';
+  const isZoomShell = isZoomSource && (zoomFailureCategory === 'zoom_player_shell_only' || zoomFailureCategory === 'zoom_runtime_resolution_incomplete');
 
   const circleFailureCategory = isCircleSource
     ? (attempts.find(a => a.error_category?.startsWith('circle_'))?.error_category || 'circle_post_body_not_found')
