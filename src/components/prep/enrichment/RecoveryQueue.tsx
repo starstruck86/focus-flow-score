@@ -900,6 +900,17 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
                     </p>
                   )}
 
+                  {/* Expanded: Zoom session assist panel (preferred for zoom) */}
+                  {isExpanded && item.platform === 'zoom' && item.resource.url && (
+                    <ZoomAssistPanel
+                      resourceId={item.resource.id}
+                      userId={user?.id || ''}
+                      resourceUrl={item.resource.url}
+                      resourceTitle={item.resource.title}
+                      onCaptureComplete={onItemResolved}
+                    />
+                  )}
+
                   {/* Expanded: guided resolution panel */}
                   {isExpanded && (
                     <GuidedResolutionPanel
