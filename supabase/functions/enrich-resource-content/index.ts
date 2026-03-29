@@ -3221,15 +3221,21 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // Check if caller is using the service role key (server-to-server)
-    const bearerToken = authHeader?.replace("Bearer ", "") ?? "";
-    const isServiceRole = bearerToken === serviceRoleKey;
-    console.log(`[enrich] auth: hasHeader=${!!authHeader}, isServiceRole=${isServiceRole}, srkLen=${serviceRoleKey?.length}, tokenLen=${bearerToken.length}, match=${bearerToken.substring(0,20)}===${serviceRoleKey?.substring(0,20)}`);
-
     let userId: string;
     let supabase: ReturnType<typeof createClient>;
 
-    if (isServiceRole) {
+    // Try user auth first
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader! } },
+    });
+    const { data: { user }, error: authError } = await userClient.auth.getUser();
+
+    if (user) {
+      // Authenticated user call
+      userId = user.id;
+      supabase = userClient;
+    } else {
+      // Fallback: service-role / internal call — use admin client
       supabase = createClient(supabaseUrl, serviceRoleKey);
       const body = await req.clone().json().catch(() => ({}));
       if (body.user_id) {
@@ -3241,21 +3247,10 @@ Deno.serve(async (req) => {
         userId = "";
       }
       if (!userId) {
-        return new Response(JSON.stringify({ error: "Service-role call requires resource_id or user_id" }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-    } else {
-      supabase = createClient(supabaseUrl, anonKey, {
-        global: { headers: { Authorization: authHeader! } },
-      });
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
           status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      userId = user.id;
     }
 
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
