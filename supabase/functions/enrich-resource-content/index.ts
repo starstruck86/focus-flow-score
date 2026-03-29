@@ -3224,7 +3224,7 @@ Deno.serve(async (req) => {
     // Check if caller is using the service role key (server-to-server)
     const bearerToken = authHeader?.replace("Bearer ", "") ?? "";
     const isServiceRole = bearerToken === serviceRoleKey;
-    console.log(`[enrich] auth check: hasAuthHeader=${!!authHeader}, isServiceRole=${isServiceRole}`);
+    console.log(`[enrich] auth: hasHeader=${!!authHeader}, isServiceRole=${isServiceRole}, srkLen=${serviceRoleKey?.length}, tokenLen=${bearerToken.length}, match=${bearerToken.substring(0,20)}===${serviceRoleKey?.substring(0,20)}`);
 
     let userId: string;
     let supabase: ReturnType<typeof createClient>;
