@@ -366,7 +366,7 @@ function GuidedResolutionPanel({
         <input
           ref={fileInputRef}
           type="file"
-          accept=".txt,.vtt,.srt,.json,.csv,.md,.html,.htm"
+          accept=".txt,.vtt,.srt,.json,.csv,.md,.html,.htm,.zip"
           className="hidden"
           onChange={e => {
             const file = e.target.files?.[0];
@@ -590,9 +590,11 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
     setProcessing(resourceId);
     try {
       const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      const isZip = ext === 'zip';
       const isTranscript = ['vtt', 'srt'].includes(ext);
+      const mode = isZip ? 'upload_notion_zip' : isTranscript ? 'upload_transcript' : 'upload_content';
       const result = await resolveResourceWithManualInput({
-        mode: isTranscript ? 'upload_transcript' : 'upload_content',
+        mode: mode as any,
         resourceId,
         userId: user.id,
         file,

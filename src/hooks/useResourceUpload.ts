@@ -4,6 +4,7 @@ import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { isNotionZip, extractNotionZip } from '@/lib/notionZipExtractor';
 
 export const CORE_FOLDERS = [
   'Frameworks',
@@ -130,7 +131,72 @@ export function useUploadResource() {
     }) => {
       if (!user) throw new Error('Not authenticated');
 
-      // Upload file to storage
+      // ── Notion ZIP fast-path ──
+      if (isNotionZip(file)) {
+        const zipResult = await extractNotionZip(file);
+        if (zipResult.totalLength < 50) throw new Error('ZIP contained no usable content');
+
+        // Upload ZIP to storage
+        const filePath = `${user.id}/${Date.now()}-${file.name}`;
+        await supabase.storage.from('resource-files').upload(filePath, file);
+
+        // Resolve folder
+        let finalFolderId = folderId;
+        if (!finalFolderId && classification.top_folder) {
+          finalFolderId = await resolveFolderHierarchy(user.id, classification.top_folder, classification.sub_folder);
+        }
+
+        const { data: resource, error: resourceError } = await supabase
+          .from('resources')
+          .insert({
+            user_id: user.id,
+            title: classification.title,
+            description: classification.description,
+            resource_type: classification.resource_type,
+            tags: classification.tags,
+            folder_id: finalFolderId,
+            file_url: filePath,
+            content: zipResult.content,
+            content_status: 'full',
+            content_length: zipResult.totalLength,
+            manual_content_present: true,
+            resolution_method: 'notion_zip_import',
+            extraction_method: 'notion_zip_import',
+          } as any)
+          .select()
+          .single();
+        if (resourceError) throw resourceError;
+
+        await supabase.from('resource_versions').insert({
+          resource_id: resource.id,
+          user_id: user.id,
+          version_number: 1,
+          title: classification.title,
+          content: zipResult.content,
+          change_summary: `Notion ZIP import — ${zipResult.mdFileCount} pages, ${zipResult.csvFileCount} tables`,
+        });
+
+        // Record provenance
+        await (supabase as any).from('enrichment_attempts').insert({
+          resource_id: resource.id,
+          user_id: user.id,
+          attempt_type: 'notion_zip_upload',
+          strategy: 'zip_extraction',
+          result: 'success',
+          content_found: true,
+          content_length_extracted: zipResult.totalLength,
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+          metadata: { md_files: zipResult.mdFileCount, csv_files: zipResult.csvFileCount, filenames: zipResult.filenames },
+        });
+
+        // Fire-and-forget enrichment
+        invokeEnrichResource({ resource_id: resource.id, force: true } as any).catch(() => {});
+
+        return resource;
+      }
+
+      // ── Standard file upload ──
       const filePath = `${user.id}/${Date.now()}-${file.name}`;
       const { error: uploadError } = await supabase.storage
         .from('resource-files')
