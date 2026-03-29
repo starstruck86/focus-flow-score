@@ -195,6 +195,7 @@ async function handleAlternateUrl(input: RecoveryInput): Promise<RecoveryResult>
       next_best_action: null,
       last_recovery_error: null,
       platform_status: null,
+      recovery_queue_bucket: null,
       advanced_extraction_status: null,
       resolution_method: 'alternate_url',
       extraction_method: null,
