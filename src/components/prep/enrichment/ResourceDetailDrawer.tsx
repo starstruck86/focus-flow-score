@@ -3,7 +3,7 @@
  * Parts 3 + 4 of the Enrichment Operator Console.
  * Mobile: renders as full-screen sheet with grouped actions.
  */
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
 import { useQueryClient } from '@tanstack/react-query';
@@ -22,12 +22,13 @@ import {
   X, Save, Zap, RotateCcw, FileText, ExternalLink, Trash2,
   Bookmark, SkipForward, Ban, ShieldOff, Play, Wrench,
   Loader2, CheckCircle2, AlertTriangle, Copy, Unlock, ArrowLeft, Eye, MoreHorizontal,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, Upload,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ContentViewer } from '../ContentViewer';
 import { isFixEligible, fixResourceStateFromContent, FIX_RESOURCE_INVALIDATION_KEYS } from '@/lib/fixResourceState';
+import { resolveResourceWithManualInput, type RecoveryMode } from '@/lib/manualRecoveryResolver';
 import type { VerifiedResource } from '@/lib/enrichmentVerification';
 import { mapVerifiedToBucket, BUCKET_META } from './types';
 import { classifyQuarantine, getQuarantineSubClass, shouldAutoRelease } from '@/lib/quarantineClassification';
@@ -51,7 +52,9 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
   const [saving, setSaving] = useState(false);
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [showContentViewer, setShowContentViewer] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [diagOpen, setDiagOpen] = useState(!isMobile);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [currentUserId, setCurrentUserId] = useState<string>('');
 
   useEffect(() => {
@@ -82,6 +85,34 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
     qc.invalidateQueries({ queryKey: ['audio-jobs-map'] });
     onResourceUpdated();
   }, [qc, onResourceUpdated]);
+
+  const handleFileUpload = useCallback(async (file: File) => {
+    if (!currentUserId) return;
+    setUploading(true);
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      const isZip = ext === 'zip';
+      const isTranscript = ['vtt', 'srt'].includes(ext);
+      const mode: RecoveryMode = isZip ? 'upload_notion_zip' : isTranscript ? 'upload_transcript' : 'upload_content';
+      const result = await resolveResourceWithManualInput({
+        mode,
+        resourceId: r.id,
+        userId: currentUserId,
+        file,
+      });
+      if (result.success) {
+        toast.success(isZip ? 'Notion export processed — content imported and enrichment started' : result.message);
+        invalidateAll();
+        onClose();
+      } else {
+        toast.error(result.message);
+      }
+    } catch (e: any) {
+      toast.error(`Upload failed: ${e.message}`);
+    } finally {
+      setUploading(false);
+    }
+  }, [r.id, currentUserId, invalidateAll, onClose]);
 
   const saveFields = useCallback(async () => {
     setSaving(true);
@@ -459,6 +490,27 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
                 <Button size="sm" variant="outline" className={cn('gap-1.5', isMobile ? 'h-11 text-sm justify-start min-h-[44px]' : 'h-7 text-[10px]')} onClick={() => setActionMode('paste_content')}>
                   <FileText className="h-3 w-3" /> Paste Content
                 </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className={cn('gap-1.5', isMobile ? 'h-11 text-sm justify-start min-h-[44px]' : 'h-7 text-[10px]')}
+                  disabled={uploading || !!activeAction}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                  Upload File
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".zip,.txt,.md,.csv,.vtt,.srt"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileUpload(file);
+                    e.target.value = '';
+                  }}
+                />
               </div>
             </div>
 
