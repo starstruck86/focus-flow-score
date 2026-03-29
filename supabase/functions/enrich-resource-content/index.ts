@@ -3281,7 +3281,7 @@ Deno.serve(async (req) => {
 
       const results: EnrichmentOutput[] = [];
       for (const resource of resources || []) {
-        const result = await orchestrateEnrichment(supabase, resource, FIRECRAWL_API_KEY, !!force, user.id);
+        const result = await orchestrateEnrichment(supabase, resource, FIRECRAWL_API_KEY, !!force, userId);
         results.push(result);
         await new Promise(r => setTimeout(r, 1000));
       }
