@@ -320,12 +320,23 @@ export function ResourceManager() {
     if (!readyItems.length) return;
     setSavingAll(true);
     try {
+      let lastZipResource: any = null;
       for (const item of readyItems) {
         if (item.source === 'file' && item.file && item.classification) {
-          await uploadResource.mutateAsync({ file: item.file, classification: item.classification, folderId: currentFolderId });
+          const result = await uploadResource.mutateAsync({ file: item.file, classification: item.classification, folderId: currentFolderId });
+          if (item.file.name.toLowerCase().endsWith('.zip') && result) {
+            lastZipResource = result;
+          }
         } else if (item.source === 'url' && item.url && item.classification) {
           await addUrlResource.mutateAsync({ url: item.url, classification: item.classification, folderId: currentFolderId });
         }
+      }
+      // Auto-open the resource if a single ZIP was uploaded
+      if (lastZipResource && readyItems.length === 1) {
+        // Refetch to get full resource object, then open viewer
+        queryClient.invalidateQueries({ queryKey: ['resources'] }).then(() => {
+          setViewingResource(lastZipResource);
+        });
       }
       setPendingItems(prev => prev.filter(p => p.status === 'error'));
       toast.success(`${readyItems.length} resource${readyItems.length > 1 ? 's' : ''} saved`);
