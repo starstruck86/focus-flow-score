@@ -132,13 +132,29 @@ export function deriveProcessingState(
   }
 
   // Completed enrichment
-  if (status === 'deep_enriched') {
+  if (status === 'deep_enriched' || (status as string) === 'enriched') {
+    const isManualRecovery = (resource as any).resolution_method?.startsWith('manual') ||
+      (resource as any).resolution_method === 'metadata_only' ||
+      (resource as any).manual_content_present === true;
     return {
       state: 'COMPLETED',
-      label: 'Completed',
-      description: 'Enrichment complete',
+      label: isManualRecovery ? 'Manual Recovery' : 'Completed',
+      description: isManualRecovery
+        ? `Resolved via manual content (${(resource as any).resolution_method || 'manual'})`
+        : 'Enrichment complete',
       nextAction: null,
       retryable: false,
+    };
+  }
+
+  // Partial enrichment (manual content that scored low)
+  if ((status as string) === 'partial') {
+    return {
+      state: 'COMPLETED',
+      label: 'Partial',
+      description: 'Content available but scored below full enrichment threshold',
+      nextAction: null,
+      retryable: true,
     };
   }
 
