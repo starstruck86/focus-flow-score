@@ -3,7 +3,7 @@
  * Uses mapVerifiedToBucket for consistent counts with the workbench.
  */
 import { useMemo } from 'react';
-import { CheckCircle2, Zap, FileText, Clock, Ban, Wrench } from 'lucide-react';
+import { CheckCircle2, Zap, FileText, Clock, Ban, Wrench, ScanSearch, HandHelping } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { BucketFilter } from './types';
