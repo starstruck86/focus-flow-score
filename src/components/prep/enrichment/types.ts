@@ -104,7 +104,7 @@ export function mapVerifiedToBucket(v: VerifiedResource): BucketFilter {
   if (v.quarantined || v.fixabilityBucket === 'needs_quarantine') return 'quarantined';
   if (['auto_fix_now', 'retry_different_strategy', 'bad_scoring_state_bug', 'already_fixed_stale_ui'].includes(v.fixabilityBucket)) return 'auto_fixable';
   if (['needs_transcript', 'needs_pasted_content', 'needs_access_auth', 'needs_alternate_source', 'accept_metadata_only'].includes(v.fixabilityBucket)) return 'needs_input';
-  if (v.enrichmentStatus === 'deep_enrich_in_progress' || v.enrichmentStatus === 'queued_for_deep_enrich') return 'processing';
+  if (['deep_enrich_in_progress', 'queued_for_deep_enrich', 'queued_for_reenrich', 'reenrich_in_progress'].includes(v.enrichmentStatus)) return 'processing';
   return 'needs_input';
 }
 
