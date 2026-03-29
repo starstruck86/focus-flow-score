@@ -92,12 +92,12 @@ function detectSystemGap(r: VerifiedResource): RemediationPlan | null {
   const hasBinaryViolation = r.whyNotComplete?.includes('binary') ||
     r.rootCauseCategory?.includes('binary');
   if (hasBinaryViolation) {
-    // If resource already has a recovery path (pending_transcription, auto_fixable),
-    // treat as manual_input — the pipeline knows what to do, it just needs a retry or paste
-    const hasRecoveryPath = r.recoveryStatus === 'pending_transcription' ||
-      r.recoveryQueueBucket === 'auto_fixable' ||
-      r.nextBestAction === 'start_transcription' ||
-      r.nextBestAction === 'paste_content';
+    // If resource is already classified as needs_auth or has a paste-content enrichability,
+    // treat as manual_input — the recovery path exists (paste content / transcription)
+    const hasRecoveryPath = r.enrichability === 'needs_auth' ||
+      r.enrichmentStatus === 'needs_transcript' ||
+      r.enrichmentStatus === 'needs_auth' ||
+      r.subtype === 'google_drive_file';
     if (hasRecoveryPath) {
       return {
         resolutionType: 'manual_input',
