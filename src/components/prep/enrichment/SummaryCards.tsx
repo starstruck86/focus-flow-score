@@ -1,6 +1,7 @@
 /**
  * Clickable summary cards for enrichment buckets.
  * Uses mapVerifiedToBucket for consistent counts with the workbench.
+ * Phase 2: includes platform breakdown reporting.
  */
 import { useMemo } from 'react';
 import { CheckCircle2, Zap, FileText, Clock, Ban, Wrench, ScanSearch, HandHelping } from 'lucide-react';
@@ -37,6 +38,28 @@ const CARD_DEFS: Array<{
   { bucket: 'system_gap', icon: <Wrench className="h-4 w-4" />, healthKey: 'systemGap', label: 'System Gap', color: 'text-destructive', bg: 'bg-destructive/10 border-destructive/30' },
 ];
 
+/** Compute platform-level breakdown from verified resources */
+function computePlatformBreakdown(resources: VerifiedResource[]) {
+  const platforms: Record<string, { total: number; resolved: number; failureCategories: Record<string, number> }> = {};
+
+  for (const r of resources) {
+    const platform = (r as any).platform || r.subtype || 'Unknown';
+    if (!platforms[platform]) platforms[platform] = { total: 0, resolved: 0, failureCategories: {} };
+    platforms[platform].total++;
+    if (r.fixabilityBucket === 'truly_complete') {
+      platforms[platform].resolved++;
+    } else if (r.failureBucket) {
+      platforms[platform].failureCategories[r.failureBucket] =
+        (platforms[platform].failureCategories[r.failureBucket] || 0) + 1;
+    }
+  }
+
+  return Object.entries(platforms)
+    .filter(([_, v]) => v.total > 1 || v.total - v.resolved > 0)
+    .sort((a, b) => (b[1].total - b[1].resolved) - (a[1].total - a[1].resolved))
+    .slice(0, 6);
+}
+
 export function SummaryCards({ health, activeBucket, onBucketClick, deltaComplete, verifiedResources }: Props) {
   // Compute bucket counts from verified resources (same logic as workbench filter)
   const bucketCounts = useMemo(() => {
@@ -47,6 +70,11 @@ export function SummaryCards({ health, activeBucket, onBucketClick, deltaComplet
       counts[b]++;
     }
     return counts;
+  }, [verifiedResources]);
+
+  const platformBreakdown = useMemo(() => {
+    if (!verifiedResources?.length) return [];
+    return computePlatformBreakdown(verifiedResources);
   }, [verifiedResources]);
 
   const getCount = (card: typeof CARD_DEFS[number]) => {
@@ -103,6 +131,28 @@ export function SummaryCards({ health, activeBucket, onBucketClick, deltaComplet
           );
         })}
       </div>
+
+      {/* Platform breakdown — Phase 2 reporting */}
+      {platformBreakdown.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {platformBreakdown.map(([platform, stats]) => {
+            const remaining = stats.total - stats.resolved;
+            if (remaining === 0) return null;
+            const topFailure = Object.entries(stats.failureCategories).sort((a, b) => b[1] - a[1])[0];
+            return (
+              <div key={platform} className="flex items-center gap-1 rounded border border-border px-1.5 py-0.5">
+                <span className="text-[9px] font-medium text-foreground">{platform}</span>
+                <span className="text-[9px] text-muted-foreground">{stats.resolved}/{stats.total}</span>
+                {topFailure && (
+                  <span className="text-[8px] text-destructive/70 truncate max-w-[80px]" title={topFailure[0]}>
+                    {topFailure[0].replace(/_/g, ' ')}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Active filter indicator */}
       {activeBucket !== 'all' && (

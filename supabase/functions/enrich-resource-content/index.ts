@@ -579,6 +579,53 @@ function extractCirclePostBodyFromContent(text: string): string | null {
   return null;
 }
 
+/** Extract Circle post metadata (title, author, slug) from URL + HTML even when body unavailable */
+function extractCirclePostMetadata(url: string, html: string, markdown: string): {
+  title: string | null;
+  author: string | null;
+  community: string | null;
+  slug: string | null;
+  metadataSummary: string | null;
+} {
+  const result = { title: null as string | null, author: null as string | null, community: null as string | null, slug: null as string | null, metadataSummary: null as string | null };
+
+  // Extract from URL: /c/community-name/post-slug
+  const urlMatch = url.match(/\/c\/([^/]+)\/([^/?#]+)/);
+  if (urlMatch) {
+    result.community = urlMatch[1].replace(/-/g, ' ');
+    result.slug = urlMatch[2].replace(/-/g, ' ');
+  }
+
+  const combined = `${html}\n${markdown}`;
+
+  // Title from HTML
+  const titleMatch = combined.match(/<title[^>]*>([^<]{5,})<\/title>/i);
+  if (titleMatch?.[1]) result.title = titleMatch[1].trim();
+
+  // og:title
+  const ogTitle = combined.match(/property="og:title"\s+content="([^"]+)"/i)
+    || combined.match(/content="([^"]+)"\s+property="og:title"/i);
+  if (ogTitle?.[1] && !result.title) result.title = ogTitle[1];
+
+  // Author from bootstrap JSON
+  const authorMatch = combined.match(/"(?:author_name|authorName|user_name|userName)"\s*:\s*"([^"]+)"/i);
+  if (authorMatch?.[1]) result.author = authorMatch[1];
+
+  // Post title from bootstrap JSON
+  const postTitle = combined.match(/"(?:post_title|name|title)"\s*:\s*"([^"]{5,}?)"/i);
+  if (postTitle?.[1] && !result.title) result.title = postTitle[1];
+
+  // Build summary
+  const parts: string[] = [];
+  if (result.title) parts.push(`Title: ${result.title}`);
+  if (result.author) parts.push(`Author: ${result.author}`);
+  if (result.community) parts.push(`Community: ${result.community}`);
+  if (result.slug) parts.push(`Slug: ${result.slug}`);
+  result.metadataSummary = parts.length > 0 ? parts.join(' | ') : null;
+
+  return result;
+}
+
 // ── Zoom shell detection patterns ──
 const ZOOM_SHELL_PATTERNS = [
   /sign\s*in/i,
@@ -814,6 +861,10 @@ ${html.slice(0, 15_000)}`;
       };
     }
 
+    // Extract metadata even on failure — preserves useful context
+    const postMeta = extractCirclePostMetadata(url, html, markdown);
+    const metaDetail = postMeta.metadataSummary ? ` [Metadata: ${postMeta.metadataSummary}]` : '';
+
     if (hasAuthSignals) {
       return {
         content: null,
@@ -821,19 +872,24 @@ ${html.slice(0, 15_000)}`;
           method, duration_ms: durationMs, chars_extracted: markdown.length, timeout_hit: false,
           auth_wall_detected: true, http_status: 200,
           validation_result: 'fail', error_category: 'circle_auth_required',
-          error_detail: 'Circle community page requires authentication — post body not accessible',
+          error_detail: `Circle community page requires authentication — post body not accessible.${metaDetail}`,
         },
       };
     }
 
     if (isCircleShellOnly(shellSample)) {
+      // If we found metadata, report it as circle_post_metadata_found (more precise)
+      const hasMeta = !!(postMeta.title || postMeta.author);
       return {
         content: null,
         attempt: {
           method, duration_ms: durationMs, chars_extracted: markdown.length, timeout_hit: false,
           auth_wall_detected: false, http_status: 200,
-          validation_result: 'fail', error_category: 'circle_shell_only',
-          error_detail: 'Circle app shell only — no meaningful post body found',
+          validation_result: 'fail',
+          error_category: hasMeta ? 'circle_post_metadata_found' : 'circle_shell_only',
+          error_detail: hasMeta
+            ? `Circle app shell with post metadata found but no body.${metaDetail}`
+            : 'Circle app shell only — no meaningful post body or metadata found',
         },
       };
     }
@@ -843,8 +899,11 @@ ${html.slice(0, 15_000)}`;
       attempt: {
         method, duration_ms: durationMs, chars_extracted: markdown.length, timeout_hit: false,
         auth_wall_detected: false, http_status: 200,
-        validation_result: 'fail', error_category: 'circle_post_body_not_found',
-        error_detail: 'Circle page loaded but no usable post body was found in app state or rendered content',
+        validation_result: 'fail',
+        error_category: postMeta.metadataSummary ? 'circle_post_metadata_found' : 'circle_post_body_not_found',
+        error_detail: postMeta.metadataSummary
+          ? `Circle page loaded, metadata found but no usable post body.${metaDetail}`
+          : 'Circle page loaded but no usable post body was found in app state or rendered content',
       },
     };
   } catch (e) {
@@ -1733,23 +1792,24 @@ async function googleSlidesExport(url: string, apiKey: string): Promise<Extracti
   }
 }
 
-/** Thinkific lesson handler — attempts scrape, then routes to auth-gated recovery with Thinkific-specific states */
+/** Thinkific lesson handler — deep inspection with HTML/rawHtml for lesson metadata, transcripts, assets */
 async function thinkificLessonExtract(url: string, apiKey: string): Promise<ExtractionResult> {
   const method = 'thinkific_handler';
   const startMs = Date.now();
 
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 60_000);
+    const timer = setTimeout(() => controller.abort(), 90_000);
 
+    // Request HTML + rawHtml for deeper inspection of embedded lesson data
     const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         url,
-        formats: ["markdown"],
-        onlyMainContent: true,
-        waitFor: 5000,
+        formats: ["markdown", "html", "rawHtml"],
+        onlyMainContent: false,
+        waitFor: 8000,
       }),
       signal: controller.signal,
     });
@@ -1775,28 +1835,151 @@ async function thinkificLessonExtract(url: string, apiKey: string): Promise<Extr
 
     const data = await response.json();
     const markdown = (data.data?.markdown || data.markdown || '').trim();
+    const html = data.data?.html || data.html || '';
+    const rawHtml = data.data?.rawHtml || data.rawHtml || '';
 
     // Detect Thinkific sign-in/enrollment walls
-    const isSignInWall = /sign\s*in|log\s*in|create\s*account|enroll|start\s*course|purchase/i.test(markdown.slice(0, 1000))
+    const combined = `${markdown}\n${html.slice(0, 3000)}`;
+    const isSignInWall = /sign\s*in|log\s*in|create\s*account|enroll|start\s*course|purchase/i.test(combined.slice(0, 2000))
       && markdown.length < 2000;
+
+    // Deep inspection: look for embedded lesson data in script tags
+    const scriptContents: string[] = [];
+    const scriptRegex = /<script[^>]*>([\s\S]*?)<\/script>/gi;
+    let scriptMatch;
+    while ((scriptMatch = scriptRegex.exec(rawHtml)) !== null) {
+      if (scriptMatch[1] && scriptMatch[1].trim().length > 50) {
+        scriptContents.push(scriptMatch[1]);
+      }
+    }
+    const allScripts = scriptContents.join('\n');
+
+    // Look for lesson content in embedded JSON
+    const lessonContentPatterns = [
+      /"lesson_content(?:_html)?":\s*"([\s\S]{100,}?)"/i,
+      /"body(?:_html|_text)?":\s*"([\s\S]{100,}?)"/i,
+      /"content(?:_html)?":\s*"([\s\S]{100,}?)","(?:id|slug|position|chapter)"/i,
+      /"description":\s*"([\s\S]{100,}?)","(?:id|slug|position|chapter|lesson_type)"/i,
+    ];
+    for (const pat of lessonContentPatterns) {
+      const m = allScripts.match(pat) || rawHtml.match(pat);
+      if (m?.[1]) {
+        const cleaned = normalizeExtractedText(m[1]);
+        if (cleaned.length >= 150) {
+          console.log(`[Thinkific] Extracted embedded lesson content: ${cleaned.length} chars`);
+          return {
+            content: cleaned.slice(0, CONTENT_CAP),
+            attempt: {
+              method: 'thinkific_embedded_content', duration_ms: Date.now() - startMs,
+              chars_extracted: cleaned.length, timeout_hit: false,
+              auth_wall_detected: false, http_status: 200,
+              validation_result: cleaned.length >= 1000 ? 'pass' : 'partial',
+              error_category: null, error_detail: null,
+            },
+          };
+        }
+      }
+    }
+
+    // Look for transcript/video/asset URLs
+    const transcriptUrlPatterns = [
+      /"transcript_url":\s*"(https?:[^"]+)"/i,
+      /"video_transcript":\s*"(https?:[^"]+)"/i,
+      /"caption(?:_url|Url)":\s*"(https?:[^"]+)"/i,
+      /"subtitle(?:_url|Url)":\s*"(https?:[^"]+)"/i,
+    ];
+    let foundTranscriptUrl: string | null = null;
+    for (const pat of transcriptUrlPatterns) {
+      const m = allScripts.match(pat) || rawHtml.match(pat);
+      if (m?.[1]) { foundTranscriptUrl = m[1]; break; }
+    }
+
+    if (foundTranscriptUrl) {
+      console.log(`[Thinkific] Found transcript asset URL: ${foundTranscriptUrl.slice(0, 80)}`);
+      try {
+        const capResp = await fetch(foundTranscriptUrl);
+        if (capResp.ok) {
+          const capText = await capResp.text();
+          const lines = capText.split('\n')
+            .filter(l => !/^\d+$/.test(l.trim()) && !/-->/.test(l) && !/^WEBVTT/i.test(l.trim()) && l.trim().length > 0);
+          const transcript = lines.join(' ').replace(/\s+/g, ' ').trim();
+          if (transcript.length >= 100) {
+            return {
+              content: transcript.slice(0, CONTENT_CAP),
+              attempt: {
+                method: 'thinkific_transcript_asset', duration_ms: Date.now() - startMs,
+                chars_extracted: transcript.length, timeout_hit: false,
+                auth_wall_detected: false, http_status: 200,
+                validation_result: transcript.length >= 500 ? 'pass' : 'partial',
+                error_category: null, error_detail: null,
+              },
+            };
+          }
+        }
+      } catch (e) {
+        console.log(`[Thinkific] Transcript asset fetch failed: ${(e as Error).message}`);
+      }
+      // Still report that we found the URL even if fetch failed
+      return {
+        content: null,
+        attempt: {
+          method, duration_ms: Date.now() - startMs, chars_extracted: 0, timeout_hit: false,
+          auth_wall_detected: false, http_status: 200,
+          validation_result: 'fail', error_category: 'thinkific_transcript_asset_found',
+          error_detail: `Transcript asset URL found (${foundTranscriptUrl.slice(0, 80)}) but could not be fetched successfully`,
+        },
+      };
+    }
+
+    // Look for downloadable asset links (PDF, video, etc.)
+    const assetPatterns = [
+      /"(?:download_url|file_url|asset_url|video_url)":\s*"(https?:[^"]+)"/i,
+      /"(?:wistia_id|wistia_video_id)":\s*"([^"]+)"/i,
+    ];
+    let foundAssetHint: string | null = null;
+    for (const pat of assetPatterns) {
+      const m = allScripts.match(pat) || rawHtml.match(pat);
+      if (m?.[1]) { foundAssetHint = m[1]; break; }
+    }
+
+    // Extract lesson metadata (title, course name, lesson type)
+    const lessonTitle = allScripts.match(/"lesson_name":\s*"([^"]+)"/i)?.[1]
+      || allScripts.match(/"name":\s*"([^"]{5,}?)"/i)?.[1]
+      || rawHtml.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim();
+    const courseName = allScripts.match(/"course_name":\s*"([^"]+)"/i)?.[1];
+    const lessonType = allScripts.match(/"lesson_type":\s*"([^"]+)"/i)?.[1]
+      || allScripts.match(/"content_type":\s*"([^"]+)"/i)?.[1];
+
+    const metaParts: string[] = [];
+    if (lessonTitle) metaParts.push(`Lesson: ${lessonTitle}`);
+    if (courseName) metaParts.push(`Course: ${courseName}`);
+    if (lessonType) metaParts.push(`Type: ${lessonType}`);
+    if (foundAssetHint) metaParts.push(`Asset hint: ${foundAssetHint.slice(0, 60)}`);
+    const metaSummary = metaParts.length > 0 ? ` [${metaParts.join(' | ')}]` : '';
 
     if (isSignInWall || markdown.length < MIN_CONTENT_CHARS) {
       const isShell = markdown.length > 0 && markdown.length < MIN_CONTENT_CHARS;
+      const hasLessonMeta = !!(lessonTitle || courseName || lessonType);
+
       return {
         content: null,
         attempt: {
           method, duration_ms: durationMs, chars_extracted: markdown.length, timeout_hit: false,
           auth_wall_detected: isSignInWall, http_status: 200,
           validation_result: 'fail',
-          error_category: isSignInWall ? 'thinkific_auth_required' : (isShell ? 'thinkific_shell_only' : 'thinkific_lesson_unavailable'),
+          error_category: isSignInWall ? 'thinkific_auth_required'
+            : hasLessonMeta ? 'thinkific_lesson_metadata_found'
+            : (isShell ? 'thinkific_shell_only' : 'thinkific_lesson_unavailable'),
           error_detail: isSignInWall
-            ? 'Thinkific lesson page redirected to sign-in/enrollment'
-            : (isShell ? 'Thinkific page returned only course shell/navigation' : 'No usable lesson content found'),
+            ? `Thinkific lesson page redirected to sign-in/enrollment.${metaSummary}`
+            : hasLessonMeta
+            ? `Thinkific lesson metadata found but content requires enrollment.${metaSummary}`
+            : (isShell ? `Thinkific page returned only course shell/navigation.${metaSummary}` : `No usable lesson content found.${metaSummary}`),
         },
       };
     }
 
-    // Got real content
+    // Got real content from markdown
     return {
       content: markdown.slice(0, CONTENT_CAP),
       attempt: {
@@ -1817,7 +2000,7 @@ async function thinkificLessonExtract(url: string, apiKey: string): Promise<Extr
         auth_wall_detected: false, http_status: null,
         validation_result: 'fail',
         error_category: isTimeout ? 'timeout' : 'thinkific_lesson_unavailable',
-        error_detail: isTimeout ? 'Thinkific lesson page timed out' : (e as Error).message?.slice(0, 200),
+        error_detail: isTimeout ? 'Thinkific lesson page timed out after 90s' : (e as Error).message?.slice(0, 200),
       },
     };
   }
@@ -2353,6 +2536,63 @@ async function appendEnrichmentAuditEvent(
   }
 }
 
+/** Persist structured attempt provenance to enrichment_attempts table */
+async function persistAttemptProvenance(
+  supabase: any,
+  userId: string,
+  resourceId: string,
+  source: SourceClassification,
+  output: EnrichmentOutput,
+  attempts: ExtractionAttempt[],
+) {
+  try {
+    const bestAttempt = attempts.find(a => a.validation_result === 'pass')
+      || attempts.find(a => a.validation_result === 'partial')
+      || attempts[attempts.length - 1];
+    if (!bestAttempt && attempts.length === 0) return;
+
+    const startedAt = bestAttempt
+      ? new Date(Date.now() - (bestAttempt.duration_ms || 0)).toISOString()
+      : new Date().toISOString();
+
+    await supabase.from('enrichment_attempts').insert({
+      resource_id: resourceId,
+      user_id: userId,
+      attempt_type: 'enrichment',
+      strategy: bestAttempt?.method || source.source_type,
+      platform: source.platform,
+      started_at: startedAt,
+      completed_at: new Date().toISOString(),
+      result: output.final_status === 'enriched' ? 'success'
+        : output.final_status === 'partial' ? 'partial'
+        : 'failed',
+      failure_category: bestAttempt?.error_category || null,
+      content_found: (output.extracted_text_length || 0) > 200,
+      transcript_url_found: attempts.some(a =>
+        a.method?.includes('caption') || a.method?.includes('transcript') || a.error_category?.includes('transcript')),
+      media_url_found: attempts.some(a =>
+        a.method?.includes('media') || a.method?.includes('transcribe')),
+      caption_url_found: attempts.some(a =>
+        a.method === 'zoom_caption_url' || a.method === 'zoom_runtime_caption'),
+      shell_rejected: attempts.some(a =>
+        a.error_category?.includes('shell_only') || a.error_category?.includes('shell')),
+      runtime_config_found: attempts.some(a =>
+        a.method?.includes('runtime') || a.error_category?.includes('runtime')),
+      content_length_extracted: output.extracted_text_length || 0,
+      quality_score_after: output.completeness_score || null,
+      error_message: output.failure_reason?.slice(0, 500) || null,
+      metadata: {
+        methods_attempted: attempts.map(a => a.method),
+        attempt_count: attempts.length,
+        source_type: source.source_type,
+        total_duration_ms: attempts.reduce((s, a) => s + a.duration_ms, 0),
+      },
+    });
+  } catch (e) {
+    console.warn(`[Provenance] Failed to persist attempt for ${resourceId}: ${(e as Error).message}`);
+  }
+}
+
 /** Update enrichment_status with audit trail */
 async function setEnrichmentStatus(
   supabase: any,
@@ -2385,6 +2625,7 @@ async function orchestrateEnrichment(
   resource: any,
   apiKey: string,
   force: boolean,
+  userId?: string,
 ): Promise<EnrichmentOutput> {
   const url = resource.file_url;
   const resourceId = resource.id;
@@ -2738,13 +2979,15 @@ async function orchestrateEnrichment(
     await supabase.from("resource_digests").delete().eq("resource_id", resourceId);
 
     console.log(`[Orchestrate] SUCCESS id=${resourceId} chars=${bestContent.length} method=${bestMethod} attempts=${attempts.length}`);
-    return {
+    const successOutput: EnrichmentOutput = {
       resource_id: resourceId, url, source_classification: source,
       final_status: 'enriched', method_used: bestMethod, methods_attempted: attempts,
       attempt_count: attempts.length, extracted_text_length: bestContent.length,
       completeness_score: bestQuality.score, confidence_score: Math.min(100, bestQuality.score + 10),
       missing_fields: [], failure_reason: null, recovery_hint: null,
     };
+    if (userId) await persistAttemptProvenance(supabase, userId, resourceId, source, successOutput, attempts);
+    return successOutput;
   }
 
   if (bestContent && bestQuality && bestQuality.score >= PARTIAL_MIN_SCORE) {
@@ -2768,7 +3011,7 @@ async function orchestrateEnrichment(
     });
 
     console.log(`[Orchestrate] PARTIAL id=${resourceId} score=${bestQuality.score} method=${bestMethod} attempts=${attempts.length}`);
-    return {
+    const partialOutput: EnrichmentOutput = {
       resource_id: resourceId, url, source_classification: source,
       final_status: 'partial', method_used: bestMethod, methods_attempted: attempts,
       attempt_count: attempts.length, extracted_text_length: bestContent.length,
@@ -2776,6 +3019,8 @@ async function orchestrateEnrichment(
       missing_fields: bestQuality.missing_fields, failure_reason: failureReason,
       recovery_hint: recoveryHint,
     };
+    if (userId) await persistAttemptProvenance(supabase, userId, resourceId, source, partialOutput, attempts);
+    return partialOutput;
   }
 
   // FAILED — no usable content from any method
@@ -2910,6 +3155,14 @@ async function orchestrateEnrichment(
 
   const platformRecoveryReason = circleRecoveryReason || zoomRecoveryReason || thinkificRecoveryReason || driveRecoveryReason || slidesRecoveryReason;
 
+  // Determine platform_status for precise failure tracking
+  const platformStatus = isZoomSource ? (zoomFailureCategory || 'zoom_extraction_failed')
+    : isCircleSource ? (circleFailureCategory || 'circle_extraction_failed')
+    : isThinkificSource ? (thinkificFailureCategory || 'thinkific_extraction_failed')
+    : isGoogleDriveSource ? (driveFailureCategory || 'drive_extraction_failed')
+    : isGoogleSlidesSource ? (slidesFailureCategory || 'google_slides_extraction_failed')
+    : null;
+
   await setEnrichmentStatus(supabase, resourceId, newStatus, {
     failure_reason: primaryReason,
     last_quality_score: bestQuality?.score || 0,
@@ -2928,6 +3181,7 @@ async function orchestrateEnrichment(
       : (attempts.some(a => a.http_status === 403 || a.http_status === 401) ? 'auth_gated' : 'public'),
     content_classification: isAudioSource ? 'audio' : isZoomSource ? 'video' : isCircleSource ? 'auth_gated' : isThinkificSource ? 'auth_gated' : null,
     extraction_method: persistedExtractionMethod,
+    platform_status: platformStatus,
   });
 
   if (isCircleSource) {
@@ -2945,7 +3199,7 @@ async function orchestrateEnrichment(
   }
 
   console.log(`[Orchestrate] FAILED id=${resourceId} reason=${primaryReason} attempts=${attempts.length}`);
-  return {
+  const failedOutput: EnrichmentOutput = {
     resource_id: resourceId, url, source_classification: source,
     final_status: 'failed', method_used: bestMethod, methods_attempted: attempts,
     attempt_count: attempts.length, extracted_text_length: bestContent?.length || 0,
@@ -2953,6 +3207,8 @@ async function orchestrateEnrichment(
     missing_fields: bestQuality?.missing_fields || ['body_content'],
     failure_reason: primaryReason, recovery_hint: recoveryHint,
   };
+  if (userId) await persistAttemptProvenance(supabase, userId, resourceId, source, failedOutput, attempts);
+  return failedOutput;
 }
 
 // ── HTTP handler ───────────────────────────────────────────
@@ -2995,7 +3251,7 @@ Deno.serve(async (req) => {
 
       const results: EnrichmentOutput[] = [];
       for (const resource of resources || []) {
-        const result = await orchestrateEnrichment(supabase, resource, FIRECRAWL_API_KEY, !!force);
+        const result = await orchestrateEnrichment(supabase, resource, FIRECRAWL_API_KEY, !!force, user.id);
         results.push(result);
         await new Promise(r => setTimeout(r, 1000));
       }
@@ -3026,7 +3282,7 @@ Deno.serve(async (req) => {
         .single();
       if (rErr || !resource) throw new Error("Resource not found");
 
-      const result = await orchestrateEnrichment(supabase, resource, FIRECRAWL_API_KEY, !!force);
+      const result = await orchestrateEnrichment(supabase, resource, FIRECRAWL_API_KEY, !!force, user.id);
 
       if (result.final_status === 'enriched') {
         return new Response(JSON.stringify({
@@ -3060,7 +3316,7 @@ Deno.serve(async (req) => {
 
       const results: EnrichmentOutput[] = [];
       for (const resource of placeholders || []) {
-        const result = await orchestrateEnrichment(supabase, resource, FIRECRAWL_API_KEY, false);
+        const result = await orchestrateEnrichment(supabase, resource, FIRECRAWL_API_KEY, false, user.id);
         results.push(result);
         await new Promise(r => setTimeout(r, 1000));
       }
