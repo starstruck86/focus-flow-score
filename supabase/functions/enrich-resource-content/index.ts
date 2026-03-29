@@ -109,14 +109,24 @@ function classifySource(url: string): SourceClassification {
     }
 
     // ── Zoom recording URLs — MUST come before generic auth-gated check ──
-    if (/\.zoom\.us\/rec\/(play|share)\//i.test(url)) {
+    if (/\.zoom\.us\/rec\/(play|share)\//i.test(url) || /\.zoom\.us\/rec\//.test(url)) {
       return {
         source_type: 'zoom_recording', platform: 'Zoom', auth_required: false,
         transcript_available: null, downloadable: false, js_rendered: true,
       };
     }
 
+    // ── Thinkific lesson URLs — dedicated handler, NOT generic auth_gated ──
+    if (/thinkific\.com\/courses\/take\//i.test(url) || /thinkific\.com\/courses\//i.test(hostAndPath)) {
+      return {
+        source_type: 'thinkific_lesson', platform: 'Thinkific', auth_required: true,
+        transcript_available: null, downloadable: false, js_rendered: true,
+      };
+    }
+
     for (const ag of AUTH_GATED_DOMAINS) {
+      // Skip Thinkific here — handled above as thinkific_lesson
+      if (ag.platform === 'Thinkific') continue;
       if (ag.pattern.test(hostAndPath)) {
         return { source_type: 'auth_gated', platform: ag.platform, auth_required: true, transcript_available: null, downloadable: false, js_rendered: false };
       }
