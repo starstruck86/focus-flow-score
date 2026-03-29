@@ -86,7 +86,35 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
     onResourceUpdated();
   }, [qc, onResourceUpdated]);
 
-  const saveFields = useCallback(async () => {
+  const handleFileUpload = useCallback(async (file: File) => {
+    if (!currentUserId) return;
+    setUploading(true);
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      const isZip = ext === 'zip';
+      const isTranscript = ['vtt', 'srt'].includes(ext);
+      const mode: RecoveryMode = isZip ? 'upload_notion_zip' : isTranscript ? 'upload_transcript' : 'upload_content';
+      const result = await resolveResourceWithManualInput({
+        mode,
+        resourceId: r.id,
+        userId: currentUserId,
+        file,
+      });
+      if (result.success) {
+        toast.success(isZip ? 'Notion export processed — content imported and enrichment started' : result.message);
+        invalidateAll();
+        onClose();
+      } else {
+        toast.error(result.message);
+      }
+    } catch (e: any) {
+      toast.error(`Upload failed: ${e.message}`);
+    } finally {
+      setUploading(false);
+    }
+  }, [r.id, currentUserId, invalidateAll, onClose]);
+
+
     setSaving(true);
     try {
       const updates: Record<string, any> = { last_status_change_at: new Date().toISOString() };
