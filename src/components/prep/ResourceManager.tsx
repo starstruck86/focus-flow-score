@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { invokeEnrichResource } from '@/lib/invokeEnrichResource';
+import { resolveResourceWithManualInput, getRecoveryInvalidationKeys } from '@/lib/manualRecoveryResolver';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
