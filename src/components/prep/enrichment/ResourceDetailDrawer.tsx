@@ -52,6 +52,7 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
   const [saving, setSaving] = useState(false);
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [showContentViewer, setShowContentViewer] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [diagOpen, setDiagOpen] = useState(!isMobile);
   const [currentUserId, setCurrentUserId] = useState<string>('');
 
