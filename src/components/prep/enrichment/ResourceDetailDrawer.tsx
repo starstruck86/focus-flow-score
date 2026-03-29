@@ -215,7 +215,7 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
   }) => (
     <Button
       size="sm" variant={variant}
-      className="h-7 text-[10px] gap-1"
+      className={cn('gap-1', isMobile ? 'h-11 text-sm justify-start' : 'h-7 text-[10px]')}
       disabled={!!activeAction || disabled}
       onClick={() => runAction(action)}
     >
