@@ -1930,17 +1930,42 @@ async function orchestrateEnrichment(
   const newStatus = isReenrich ? resource.enrichment_status : 'failed';
   const isRetryable = timeoutCount > 0 || attempts.some(a => a.http_status && a.http_status >= 500);
   const isAudioSource = source.source_type === 'direct_audio' || source.source_type === 'podcast';
+  const isZoomSource = source.source_type === 'zoom_recording';
+
+  // Zoom-specific failure classification
+  const zoomFailureCategory = isZoomSource
+    ? (attempts.find(a => a.error_category?.startsWith('zoom_'))?.error_category || 'zoom_transcript_not_found')
+    : null;
+  const isZoomAuthBlocked = isZoomSource && (
+    zoomFailureCategory === 'zoom_auth_required' ||
+    zoomFailureCategory === 'zoom_recording_access_blocked' ||
+    attempts.some(a => a.auth_wall_detected)
+  );
+  const isZoomShell = isZoomSource && zoomFailureCategory === 'zoom_player_shell_only';
 
   // Audio/podcast sources that failed transcription should stay in transcription queue, not generic failure
-  const recoveryStatus = isAudioSource ? 'pending_transcription'
+  const recoveryStatus = isZoomAuthBlocked ? 'auth_gated_manual_action_required'
+    : isZoomShell ? 'awaiting_user_content'
+    : isZoomSource ? 'awaiting_user_content'
+    : isAudioSource ? 'pending_transcription'
     : isRetryable ? 'failed_retryable'
     : 'awaiting_user_content';
-  const recoveryAction = isAudioSource ? 'start_transcription'
+  const recoveryAction = isZoomAuthBlocked ? 'provide_access'
+    : isZoomShell ? 'paste_transcript'
+    : isZoomSource ? 'paste_transcript'
+    : isAudioSource ? 'start_transcription'
     : isRetryable ? 'queue_for_retry'
     : 'paste_content';
-  const recoveryBucket = isAudioSource ? 'auto_fixable'
+  const recoveryBucket = isZoomAuthBlocked ? 'needs_input'
+    : isZoomSource ? 'needs_input'
+    : isAudioSource ? 'auto_fixable'
     : isRetryable ? 'retryable'
     : 'needs_input';
+
+  const zoomRecoveryReason = isZoomAuthBlocked ? `Zoom recording requires authentication to access (${zoomFailureCategory})`
+    : isZoomShell ? 'Zoom player shell only — no transcript or media found. Paste transcript manually or provide download.'
+    : isZoomSource ? `Zoom recording extraction failed: ${zoomFailureCategory} — paste transcript or provide recording download`
+    : null;
 
   await setEnrichmentStatus(supabase, resourceId, newStatus, {
     failure_reason: primaryReason,
@@ -1950,13 +1975,14 @@ async function orchestrateEnrichment(
     failure_count: (resource.failure_count || 0) + 1,
     // Persist recovery state
     recovery_status: recoveryStatus,
-    recovery_reason: isAudioSource ? `Audio transcription failed: ${primaryReason}` : primaryReason,
+    recovery_reason: zoomRecoveryReason || (isAudioSource ? `Audio transcription failed: ${primaryReason}` : primaryReason),
     next_best_action: recoveryAction,
-    manual_input_required: !isAudioSource && !isRetryable,
+    manual_input_required: isZoomSource || (!isAudioSource && !isRetryable),
     recovery_queue_bucket: recoveryBucket,
     last_recovery_error: primaryReason,
-    access_type: attempts.some(a => a.http_status === 403 || a.http_status === 401) ? 'auth_gated' : 'public',
-    content_classification: isAudioSource ? 'audio' : null,
+    access_type: (isZoomAuthBlocked || attempts.some(a => a.http_status === 403 || a.http_status === 401)) ? 'auth_gated' : 'public',
+    content_classification: isAudioSource ? 'audio' : isZoomSource ? 'video' : null,
+    extraction_method: isZoomSource ? 'zoom_recording_handler' : null,
   });
 
   console.log(`[Orchestrate] FAILED id=${resourceId} reason=${primaryReason} attempts=${attempts.length}`);
