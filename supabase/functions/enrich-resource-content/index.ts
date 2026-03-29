@@ -1928,6 +1928,10 @@ function getMethodChain(source: SourceClassification): Array<(url: string, apiKe
       return [googleSheetExport, firecrawlScrape];
     case 'google_doc':
       return [googleDocExport, firecrawlScrape];
+    case 'google_slides':
+      return [googleSlidesExport, firecrawlScrape];
+    case 'thinkific_lesson':
+      return [thinkificLessonExtract];
     case 'auth_gated':
     case 'notion':
       return []; // No methods — immediately classified
