@@ -864,6 +864,20 @@ export function RecoveryQueue({ resources, onItemResolved }: Props) {
                       {item.attemptCount > 0 && (
                         <span className="text-[8px] text-muted-foreground">{item.attemptCount}× failed</span>
                       )}
+                      {item.platform === 'zoom' && item.recoveryBucket === 'zoom_session_assist' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-5 text-[8px] px-1.5 gap-0.5 border-primary/40 text-primary"
+                          title="Capture From Browser Session"
+                          onClick={() => {
+                            setExpandedId(item.resource.id);
+                            loadHistory(item.resource.id);
+                          }}
+                        >
+                          <Monitor className="h-3 w-3" /> Capture
+                        </Button>
+                      )}
                       {item.deepExtractionAvailable && (
                         <Button
                           variant="outline"
