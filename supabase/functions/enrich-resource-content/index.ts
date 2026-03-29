@@ -2536,6 +2536,63 @@ async function appendEnrichmentAuditEvent(
   }
 }
 
+/** Persist structured attempt provenance to enrichment_attempts table */
+async function persistAttemptProvenance(
+  supabase: any,
+  userId: string,
+  resourceId: string,
+  source: SourceClassification,
+  output: EnrichmentOutput,
+  attempts: ExtractionAttempt[],
+) {
+  try {
+    const bestAttempt = attempts.find(a => a.validation_result === 'pass')
+      || attempts.find(a => a.validation_result === 'partial')
+      || attempts[attempts.length - 1];
+    if (!bestAttempt && attempts.length === 0) return;
+
+    const startedAt = bestAttempt
+      ? new Date(Date.now() - (bestAttempt.duration_ms || 0)).toISOString()
+      : new Date().toISOString();
+
+    await supabase.from('enrichment_attempts').insert({
+      resource_id: resourceId,
+      user_id: userId,
+      attempt_type: 'enrichment',
+      strategy: bestAttempt?.method || source.source_type,
+      platform: source.platform,
+      started_at: startedAt,
+      completed_at: new Date().toISOString(),
+      result: output.final_status === 'enriched' ? 'success'
+        : output.final_status === 'partial' ? 'partial'
+        : 'failed',
+      failure_category: bestAttempt?.error_category || null,
+      content_found: (output.extracted_text_length || 0) > 200,
+      transcript_url_found: attempts.some(a =>
+        a.method?.includes('caption') || a.method?.includes('transcript') || a.error_category?.includes('transcript')),
+      media_url_found: attempts.some(a =>
+        a.method?.includes('media') || a.method?.includes('transcribe')),
+      caption_url_found: attempts.some(a =>
+        a.method === 'zoom_caption_url' || a.method === 'zoom_runtime_caption'),
+      shell_rejected: attempts.some(a =>
+        a.error_category?.includes('shell_only') || a.error_category?.includes('shell')),
+      runtime_config_found: attempts.some(a =>
+        a.method?.includes('runtime') || a.error_category?.includes('runtime')),
+      content_length_extracted: output.extracted_text_length || 0,
+      quality_score_after: output.completeness_score || null,
+      error_message: output.failure_reason?.slice(0, 500) || null,
+      metadata: {
+        methods_attempted: attempts.map(a => a.method),
+        attempt_count: attempts.length,
+        source_type: source.source_type,
+        total_duration_ms: attempts.reduce((s, a) => s + a.duration_ms, 0),
+      },
+    });
+  } catch (e) {
+    console.warn(`[Provenance] Failed to persist attempt for ${resourceId}: ${(e as Error).message}`);
+  }
+}
+
 /** Update enrichment_status with audit trail */
 async function setEnrichmentStatus(
   supabase: any,
