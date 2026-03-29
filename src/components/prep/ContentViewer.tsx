@@ -46,12 +46,12 @@ export function ContentViewer({ resource, open, onOpenChange }: Props) {
     }
     // Otherwise fetch from DB
     setLoading(true);
-    supabase
+    (supabase
       .from('resources')
       .select('content')
       .eq('id', resource.id)
-      .single()
-      .then(({ data }) => {
+      .single() as any)
+      .then(({ data }: any) => {
         setContent(data?.content ?? '');
       })
       .finally(() => setLoading(false));
