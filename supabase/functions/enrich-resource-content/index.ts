@@ -3370,7 +3370,7 @@ Deno.serve(async (req) => {
       const batchLimit = Math.min(limit || 50, 50);
       const { data: placeholders, error: qErr } = await supabase
         .from("resources")
-        .select("id, file_url, content, enrichment_status, failure_count, content_length")
+        .select("id, file_url, content, enrichment_status, failure_count, content_length, manual_content_present")
         .in("enrichment_status", ["not_enriched", "incomplete", "partial", "failed"])
         .like("file_url", "http%")
         .limit(batchLimit);
