@@ -2640,6 +2640,54 @@ async function orchestrateEnrichment(
 
   console.log(`[Orchestrate] START id=${resourceId} url=${url?.slice(0, 80)} source_type=${source.source_type} platform=${source.platform}`);
 
+  // Manual content fast-path: if user already provided content, skip URL fetching entirely.
+  // This MUST come before the no-URL guard so resources with manual content but no URL still resolve.
+  const hasManualContent = resource.manual_content_present === true &&
+    resource.content && resource.content.length >= 50;
+  if (hasManualContent) {
+    console.log(`[Orchestrate] MANUAL CONTENT FAST-PATH: id=${resourceId} contentLen=${resource.content.length}`);
+    const contentText = resource.content;
+    const quality = validateContentQuality(contentText, source.source_type);
+    const finalStatus = quality.score >= PARTIAL_MIN_SCORE ? 'deep_enriched' : 'partial';
+
+    await setEnrichmentStatus(supabase, resourceId, finalStatus, {
+      content_status: 'full',
+      enrichment_version: ENRICHMENT_VERSION,
+      enriched_at: new Date().toISOString(),
+      // Clear ALL stale blockers — manual content must never regress
+      failure_reason: null,
+      failure_count: 0,
+      recovery_status: 'resolved_manual',
+      recovery_reason: null,
+      next_best_action: null,
+      last_recovery_error: null,
+      manual_input_required: false,
+      recovery_queue_bucket: null,
+      platform_status: null,
+    });
+
+    if (userId) {
+      await persistAttemptProvenance(supabase, userId, resourceId, source, {
+        resource_id: resourceId, url: url || '', source_classification: source,
+        final_status: finalStatus, method_used: 'manual_content',
+        methods_attempted: ['manual_content'], attempt_count: 1,
+        extracted_text_length: contentText.length,
+        completeness_score: quality.score,
+        confidence_score: quality.score,
+        missing_fields: quality.missing_fields,
+      }, []);
+    }
+
+    return {
+      resource_id: resourceId, url: url || '', source_classification: source,
+      final_status: finalStatus, method_used: 'manual_content',
+      methods_attempted: ['manual_content'], attempt_count: 1,
+      extracted_text_length: contentText.length,
+      completeness_score: quality.score, confidence_score: quality.score,
+      missing_fields: quality.missing_fields,
+    };
+  }
+
   // No URL
   if (!url || !url.startsWith("http")) {
     return {
