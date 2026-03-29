@@ -54,6 +54,7 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
   const [showContentViewer, setShowContentViewer] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [diagOpen, setDiagOpen] = useState(!isMobile);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [currentUserId, setCurrentUserId] = useState<string>('');
 
   useEffect(() => {
