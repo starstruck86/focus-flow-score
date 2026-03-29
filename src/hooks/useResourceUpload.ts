@@ -247,7 +247,7 @@ export function useUploadResource() {
 
       return resource;
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (data: any, variables) => {
       qc.invalidateQueries({ queryKey: ['resources'] });
       qc.invalidateQueries({ queryKey: ['resource-folders'] });
       if (isNotionZip(variables.file) && data?._zipMeta) {
