@@ -32,6 +32,7 @@ import { resolveResourceWithManualInput, type RecoveryMode } from '@/lib/manualR
 import type { VerifiedResource } from '@/lib/enrichmentVerification';
 import { mapVerifiedToBucket, BUCKET_META } from './types';
 import { classifyQuarantine, getQuarantineSubClass, shouldAutoRelease } from '@/lib/quarantineClassification';
+import { isNotionZipResource, splitNotionImport } from '@/lib/notionZipSplitter';
 
 interface Props {
   resource: VerifiedResource;
