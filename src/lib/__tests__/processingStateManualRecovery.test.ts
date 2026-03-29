@@ -84,4 +84,37 @@ describe('processingState manual recovery recognition', () => {
     const ps = deriveProcessingState(r);
     expect(ps.state).toBe('READY');
   });
+
+  // ── Content-wins-over-failure tests ──────────────────────
+  it('failed + content_length > 1000 → COMPLETED (content wins)', () => {
+    const r = { ...baseResource, enrichment_status: 'failed', content_length: 80000, failure_reason: 'auth_required' } as any;
+    const ps = deriveProcessingState(r);
+    expect(ps.state).toBe('COMPLETED');
+    expect(ps.label).toContain('Content Available');
+  });
+
+  it('failed + manual_content_present → COMPLETED / Manual Recovery', () => {
+    const r = { ...baseResource, enrichment_status: 'failed', manual_content_present: true, resolution_method: 'manual_paste', content_length: 500 } as any;
+    const ps = deriveProcessingState(r);
+    expect(ps.state).toBe('COMPLETED');
+    expect(ps.label).toBe('Manual Recovery');
+  });
+
+  it('incomplete + content_length > 1000 → COMPLETED', () => {
+    const r = { ...baseResource, enrichment_status: 'incomplete', content_length: 5000 } as any;
+    const ps = deriveProcessingState(r);
+    expect(ps.state).toBe('COMPLETED');
+  });
+
+  it('quarantined + content_length > 1000 → COMPLETED (not quarantined)', () => {
+    const r = { ...baseResource, enrichment_status: 'quarantined', content_length: 2000 } as any;
+    const ps = deriveProcessingState(r);
+    expect(ps.state).toBe('COMPLETED');
+  });
+
+  it('failed + content_length < 1000 + no manual → still RETRYABLE_FAILURE', () => {
+    const r = { ...baseResource, enrichment_status: 'failed', content_length: 100, failure_reason: 'timeout' } as any;
+    const ps = deriveProcessingState(r);
+    expect(ps.state).toBe('RETRYABLE_FAILURE');
+  });
 });
