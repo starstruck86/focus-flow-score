@@ -198,7 +198,13 @@ export function useUploadResource() {
         // Fire-and-forget enrichment
         invokeEnrichResource({ resource_id: resource.id, force: true } as any).catch(() => {});
 
-        return resource;
+        const result = resource as any;
+        result._zipMeta = {
+          mdFileCount: zipResult.mdFileCount,
+          csvFileCount: zipResult.csvFileCount,
+          totalLength: zipResult.totalLength,
+        };
+        return result;
       }
 
       // ── Standard file upload ──
