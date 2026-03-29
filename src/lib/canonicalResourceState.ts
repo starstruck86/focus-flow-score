@@ -262,44 +262,6 @@ export function resolveCanonicalState(
     }
   }
 
-  // Auth-gated routing
-  if (enrichResult.enrichability === 'needs_auth' || subtype === 'auth_gated_community_page') {
-    return { ...base, state: 'needs_access_auth', label: 'Needs Auth', description: enrichResult.reason || 'Login required', nextAction: 'Paste content via Manual Assist', qualityScore: quality.score };
-  }
-
-  // Google Drive — only route to auth if actually failed after direct-download attempt
-  if (subtype === 'google_drive_file') {
-    if (status === 'needs_auth') {
-      return { ...base, state: 'needs_access_auth', label: 'Needs Auth', description: 'Google Drive permissions block download — share file or paste content', nextAction: 'Update sharing to "Anyone with the link" or paste content', qualityScore: quality.score };
-    }
-    if (status === 'not_enriched' || !status) {
-      return { ...base, state: 'ready_to_enrich', label: 'Ready', description: 'Google Drive file — direct download will be attempted', nextAction: 'Run enrichment', qualityScore: quality.score };
-    }
-  }
-
-  // Google Sheet — dedicated routing, not generic google_doc
-  if (subtype === 'google_sheet') {
-    if (status === 'needs_auth') {
-      return { ...base, state: 'needs_access_auth', label: 'Needs Auth', description: 'Google Sheet requires sharing permissions', nextAction: 'Set sharing to "Anyone with the link"', qualityScore: quality.score };
-    }
-    if (status === 'not_enriched' || !status) {
-      return { ...base, state: 'ready_to_enrich', label: 'Ready', description: 'Google Sheet — CSV export will be attempted', nextAction: 'Run enrichment', qualityScore: quality.score };
-    }
-  }
-
-  // Zoom recording — try advanced extraction before manual fallback
-  if (subtype === 'zoom_recording') {
-    const advAttempts = (resource as any).advanced_extraction_attempts ?? 0;
-    const platformSt = (resource as any).platform_status as string | null;
-    if (advStatus === 'failed' && advAttempts >= 2) {
-      return { ...base, state: 'awaiting_assisted_resolution', label: 'Assisted Resolution', description: `Zoom deep extraction failed after ${advAttempts} attempts — paste transcript or upload recording`, nextAction: 'Paste transcript or upload recording', qualityScore: quality.score };
-    }
-    if (status === 'failed' && advAttempts === 0) {
-      return { ...base, state: 'advanced_extraction_pending', label: 'Try Deep Extraction', description: 'Zoom recording — advanced extraction available', nextAction: 'Try Deep Extraction', qualityScore: quality.score };
-    }
-    return { ...base, state: 'awaiting_assisted_resolution', label: 'Needs Transcript', description: platformSt || 'Zoom recording — download transcript from Zoom', nextAction: 'Paste transcript via Manual Assist', qualityScore: quality.score };
-  }
-
   // Thinkific lesson — try advanced extraction before manual fallback
   if (subtype === 'thinkific_lesson') {
     const advAttempts = (resource as any).advanced_extraction_attempts ?? 0;
@@ -309,17 +271,26 @@ export function resolveCanonicalState(
     if ((status === 'failed' || enrichResult.enrichability === 'needs_auth') && advAttempts === 0) {
       return { ...base, state: 'advanced_extraction_pending', label: 'Try Deep Extraction', description: 'Thinkific lesson — advanced extraction available', nextAction: 'Try Deep Extraction', qualityScore: quality.score };
     }
+    // Fallback for thinkific
+    return { ...base, state: 'needs_access_auth', label: 'Needs Auth', description: 'Thinkific lesson requires login', nextAction: 'Paste content via Manual Assist', qualityScore: quality.score };
   }
 
   // Circle page — try advanced extraction before manual fallback
-  if (subtype === 'auth_gated_community_page' && url?.includes('circle.so')) {
+  if (subtype === 'auth_gated_community_page') {
     const advAttempts = (resource as any).advanced_extraction_attempts ?? 0;
-    if (advStatus === 'failed' && advAttempts >= 2) {
+    const isCircle = url?.includes('circle.so');
+    if (isCircle && advStatus === 'failed' && advAttempts >= 2) {
       return { ...base, state: 'awaiting_assisted_resolution', label: 'Assisted Resolution', description: 'Circle deep extraction failed — paste content or provide access', nextAction: 'Paste content or provide access', qualityScore: quality.score };
     }
-    if ((status === 'failed') && advAttempts === 0) {
+    if (isCircle && status === 'failed' && advAttempts === 0) {
       return { ...base, state: 'advanced_extraction_pending', label: 'Try Deep Extraction', description: 'Circle page — advanced extraction available', nextAction: 'Try Deep Extraction', qualityScore: quality.score };
     }
+    return { ...base, state: 'needs_access_auth', label: 'Needs Auth', description: enrichResult.reason || 'Login required', nextAction: 'Paste content via Manual Assist', qualityScore: quality.score };
+  }
+
+  // Auth-gated routing (remaining)
+  if (enrichResult.enrichability === 'needs_auth') {
+    return { ...base, state: 'needs_access_auth', label: 'Needs Auth', description: enrichResult.reason || 'Login required', nextAction: 'Paste content via Manual Assist', qualityScore: quality.score };
   }
 
   // ── 7. Status-based routing for remaining ──
