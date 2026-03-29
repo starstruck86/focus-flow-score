@@ -2647,11 +2647,50 @@ async function orchestrateEnrichment(
     };
   }
 
+  // Manual content fast-path: if user already provided content, skip URL fetching
+  const hasManualContent = resource.manual_content_present === true &&
+    resource.content && resource.content.length >= 50;
+  if (hasManualContent) {
+    console.log(`[Orchestrate] MANUAL CONTENT FAST-PATH: id=${resourceId} contentLen=${resource.content.length}`);
+    const contentText = resource.content;
+    const quality = scoreContent(contentText, url);
+
+    await setEnrichmentStatus(supabase, resourceId, quality.completeness >= COMPLETE_MIN_SCORE ? 'enriched' : 'partial', {
+      content_status: 'full',
+      enrichment_version: ENRICHMENT_VERSION,
+      failure_reason: null,
+      recovery_status: 'resolved_manual',
+      manual_input_required: false,
+      recovery_queue_bucket: null,
+      platform_status: null,
+    });
+
+    if (userId) {
+      await persistAttemptProvenance(supabase, userId, resourceId, source, {
+        resource_id: resourceId, url, source_classification: source,
+        final_status: 'enriched', method_used: 'manual_content',
+        methods_attempted: ['manual_content'], attempt_count: 1,
+        extracted_text_length: contentText.length,
+        completeness_score: quality.completeness,
+        confidence_score: quality.completeness,
+        missing_fields: [],
+      }, []);
+    }
+
+    return {
+      resource_id: resourceId, url, source_classification: source,
+      final_status: quality.completeness >= COMPLETE_MIN_SCORE ? 'enriched' : 'partial',
+      method_used: 'manual_content', methods_attempted: ['manual_content'],
+      attempt_count: 1, extracted_text_length: contentText.length,
+      completeness_score: quality.completeness, confidence_score: quality.completeness,
+      missing_fields: [],
+    };
+  }
+
   // Auth-gated — immediate classification
   if (source.auth_required) {
     await setEnrichmentStatus(supabase, resourceId, 'needs_auth', {
       failure_reason: `Auth-gated source (${source.platform}) — requires login to access content`,
-      // Persist recovery state
       recovery_status: 'auth_gated_manual_action_required',
       recovery_reason: `Auth-gated: ${source.platform}`,
       next_best_action: 'paste_content',
