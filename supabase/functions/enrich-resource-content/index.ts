@@ -2647,11 +2647,51 @@ async function orchestrateEnrichment(
     };
   }
 
+  // Manual content fast-path: if user already provided content, skip URL fetching
+  const hasManualContent = resource.manual_content_present === true &&
+    resource.content && resource.content.length >= 50;
+  if (hasManualContent) {
+    console.log(`[Orchestrate] MANUAL CONTENT FAST-PATH: id=${resourceId} contentLen=${resource.content.length}`);
+    const contentText = resource.content;
+    const quality = validateContentQuality(contentText, source.source_type);
+    const finalStatus = quality.score >= COMPLETE_MIN_SCORE ? 'enriched' : 'partial';
+
+    await setEnrichmentStatus(supabase, resourceId, finalStatus, {
+      content_status: 'full',
+      enrichment_version: ENRICHMENT_VERSION,
+      failure_reason: null,
+      recovery_status: 'resolved_manual',
+      manual_input_required: false,
+      recovery_queue_bucket: null,
+      platform_status: null,
+    });
+
+    if (userId) {
+      await persistAttemptProvenance(supabase, userId, resourceId, source, {
+        resource_id: resourceId, url, source_classification: source,
+        final_status: finalStatus, method_used: 'manual_content',
+        methods_attempted: ['manual_content'], attempt_count: 1,
+        extracted_text_length: contentText.length,
+        completeness_score: quality.score,
+        confidence_score: quality.score,
+        missing_fields: quality.missing_fields,
+      }, []);
+    }
+
+    return {
+      resource_id: resourceId, url, source_classification: source,
+      final_status: finalStatus, method_used: 'manual_content',
+      methods_attempted: ['manual_content'], attempt_count: 1,
+      extracted_text_length: contentText.length,
+      completeness_score: quality.score, confidence_score: quality.score,
+      missing_fields: quality.missing_fields,
+    };
+  }
+
   // Auth-gated — immediate classification
   if (source.auth_required) {
     await setEnrichmentStatus(supabase, resourceId, 'needs_auth', {
       failure_reason: `Auth-gated source (${source.platform}) — requires login to access content`,
-      // Persist recovery state
       recovery_status: 'auth_gated_manual_action_required',
       recovery_reason: `Auth-gated: ${source.platform}`,
       next_best_action: 'paste_content',
@@ -3217,17 +3257,40 @@ Deno.serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader! } } }
-    );
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    let userId: string;
+    let supabase: ReturnType<typeof createClient>;
+
+    // Try user auth first
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader! } },
+    });
+    const { data: { user }, error: authError } = await userClient.auth.getUser();
+
+    if (user) {
+      // Authenticated user call
+      userId = user.id;
+      supabase = userClient;
+    } else {
+      // Fallback: service-role / internal call — use admin client
+      supabase = createClient(supabaseUrl, serviceRoleKey);
+      const body = await req.clone().json().catch(() => ({}));
+      if (body.user_id) {
+        userId = body.user_id;
+      } else if (body.resource_id) {
+        const { data: res } = await supabase.from("resources").select("user_id").eq("id", body.resource_id).single();
+        userId = res?.user_id ?? "";
+      } else {
+        userId = "";
+      }
+      if (!userId) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
@@ -3244,14 +3307,14 @@ Deno.serve(async (req) => {
     if (resource_ids && Array.isArray(resource_ids) && resource_ids.length > 0) {
       const { data: resources, error: qErr } = await supabase
         .from("resources")
-        .select("id, file_url, content, enrichment_status, content_status, failure_count, content_length")
+        .select("id, file_url, content, enrichment_status, content_status, failure_count, content_length, manual_content_present")
         .in("id", resource_ids.slice(0, 50));
 
       if (qErr) throw new Error("Query failed");
 
       const results: EnrichmentOutput[] = [];
       for (const resource of resources || []) {
-        const result = await orchestrateEnrichment(supabase, resource, FIRECRAWL_API_KEY, !!force, user.id);
+        const result = await orchestrateEnrichment(supabase, resource, FIRECRAWL_API_KEY, !!force, userId);
         results.push(result);
         await new Promise(r => setTimeout(r, 1000));
       }
@@ -3277,12 +3340,12 @@ Deno.serve(async (req) => {
     if (resource_id && !batch) {
       const { data: resource, error: rErr } = await supabase
         .from("resources")
-        .select("id, file_url, content, enrichment_status, content_status, failure_count, content_length")
+        .select("id, file_url, content, enrichment_status, content_status, failure_count, content_length, manual_content_present")
         .eq("id", resource_id)
         .single();
       if (rErr || !resource) throw new Error("Resource not found");
 
-      const result = await orchestrateEnrichment(supabase, resource, FIRECRAWL_API_KEY, !!force, user.id);
+      const result = await orchestrateEnrichment(supabase, resource, FIRECRAWL_API_KEY, !!force, userId);
 
       if (result.final_status === 'enriched') {
         return new Response(JSON.stringify({
@@ -3307,7 +3370,7 @@ Deno.serve(async (req) => {
       const batchLimit = Math.min(limit || 50, 50);
       const { data: placeholders, error: qErr } = await supabase
         .from("resources")
-        .select("id, file_url, content, enrichment_status, failure_count, content_length")
+        .select("id, file_url, content, enrichment_status, failure_count, content_length, manual_content_present")
         .in("enrichment_status", ["not_enriched", "incomplete", "partial", "failed"])
         .like("file_url", "http%")
         .limit(batchLimit);
@@ -3316,7 +3379,7 @@ Deno.serve(async (req) => {
 
       const results: EnrichmentOutput[] = [];
       for (const resource of placeholders || []) {
-        const result = await orchestrateEnrichment(supabase, resource, FIRECRAWL_API_KEY, false, user.id);
+        const result = await orchestrateEnrichment(supabase, resource, FIRECRAWL_API_KEY, false, userId);
         results.push(result);
         await new Promise(r => setTimeout(r, 1000));
       }
