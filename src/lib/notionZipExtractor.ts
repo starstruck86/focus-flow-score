@@ -39,6 +39,28 @@ export async function extractNotionZip(file: File): Promise<NotionZipResult> {
     throw new Error(`ZIP too large or failed to parse: ${e.message || 'unknown error'}`);
   }
 
+  // Check for nested ZIP (Notion wraps large exports in a ZIP-inside-ZIP)
+  const topEntries = Object.entries(zip.files).filter(([, f]) => !f.dir);
+  const nestedZips = topEntries.filter(([p]) => p.toLowerCase().endsWith('.zip'));
+  if (nestedZips.length > 0 && topEntries.length === nestedZips.length) {
+    console.log('[NotionZIP] Detected nested ZIP export, unwrapping', nestedZips.length, 'inner archive(s)');
+    const merged = new JSZip();
+    for (const [name, zipFile] of nestedZips) {
+      try {
+        const innerBuf = await zipFile.async('arraybuffer');
+        const innerZip = await JSZip.loadAsync(innerBuf);
+        for (const [innerPath, innerFile] of Object.entries(innerZip.files)) {
+          if (!innerFile.dir) {
+            merged.files[innerPath] = innerFile;
+          }
+        }
+      } catch (e: any) {
+        console.warn(`[NotionZIP] Failed to unwrap nested ZIP ${name}:`, e.message);
+      }
+    }
+    zip = merged;
+  }
+
   const mdContents: { name: string; text: string }[] = [];
   const csvContents: { name: string; text: string }[] = [];
 
