@@ -20,6 +20,7 @@ import { ChapterDetailSheet } from './ChapterDetailSheet';
 import { KnowledgeItemDrawer } from './KnowledgeItemDrawer';
 import { ExtractKnowledgeDialog } from './ExtractKnowledgeDialog';
 import { RoleplayPreviewSheet } from './RoleplayPreviewSheet';
+import { ResourceReadinessSheet } from './ResourceReadinessSheet';
 import type { RoleplayPlan } from '@/components/dave/tools/intelligence/roleplayPlan';
 import { queryKnowledge } from '@/lib/knowledgeRetrieval';
 import {
