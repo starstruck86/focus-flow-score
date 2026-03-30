@@ -80,7 +80,7 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
     setSplitProgress('Parsing sections…');
     try {
       const result = await splitNotionImport(r.id, user.id, (msg) => setSplitProgress(msg));
-      toast.success(`Split into ${result.created} resources`);
+      toast.success(`Split into ${result.resourcesCreated} resources`);
       FIX_RESOURCE_INVALIDATION_KEYS.forEach(k => qc.invalidateQueries({ queryKey: k }));
       onResourceUpdated?.();
       onOpenChange(false);
