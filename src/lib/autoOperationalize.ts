@@ -122,12 +122,27 @@ export async function autoOperationalizeResource(
   stagesCompleted.push('uploaded');
 
   // ── STAGE 1: Content Ready ──
-  const contentLength = r.content_length ?? (r.content?.length ?? 0);
-  const isContentBacked = contentLength >= MIN_CONTENT_LENGTH || r.manual_content_present === true;
+  // Use actual content length if content_length field is stale or missing
+  const actualContentLength = r.content?.length ?? 0;
+  const contentLength = r.content_length ?? actualContentLength;
+  const effectiveLength = Math.max(contentLength, actualContentLength);
+  const isContentBacked = effectiveLength >= MIN_CONTENT_LENGTH || r.manual_content_present === true;
+
+  // ── Diagnostic logging ──
+  log.info('Pipeline start', {
+    resourceId,
+    title: r.title?.slice(0, 60),
+    content_length_field: r.content_length,
+    actual_content_length: actualContentLength,
+    effective_length: effectiveLength,
+    enrichment_status: r.enrichment_status,
+    manual_content_present: r.manual_content_present,
+  });
 
   if (!isContentBacked) {
+    log.info('Pipeline stopped: content too short', { resourceId, effectiveLength });
     return makeResult(resourceId, r.title, stagesCompleted, 'uploaded', tagsAdded, 0, 0, false, true,
-      `Content too short (${contentLength} chars) — needs enrichment or manual input`);
+      `Content too short (${effectiveLength} chars) — needs enrichment or manual input`);
   }
   stagesCompleted.push('content_ready');
 
@@ -191,7 +206,7 @@ export async function autoOperationalizeResource(
   const existingItems = (existingKI ?? []) as any[];
   const hasExistingKI = existingItems.length > 0;
 
-  if (!hasExistingKI && contentLength >= MIN_CONTENT_FOR_EXTRACTION) {
+  if (!hasExistingKI && effectiveLength >= MIN_CONTENT_FOR_EXTRACTION) {
     // Extract knowledge heuristically
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData?.user?.id;
@@ -199,17 +214,34 @@ export async function autoOperationalizeResource(
       return makeResult(resourceId, r.title, stagesCompleted, 'tagged', tagsAdded, 0, 0, false, true, 'User not authenticated');
     }
 
+    // Guard: ensure content is actually present (content_length may be stale)
+    const contentForExtraction = r.content || '';
+    if (contentForExtraction.length < 100) {
+      log.warn('Content field empty/truncated despite content_length', {
+        resourceId, content_length: r.content_length, actual: contentForExtraction.length,
+      });
+      needsReview = true;
+      reason = `Content field empty (${contentForExtraction.length} chars actual) despite content_length=${r.content_length} — re-enrich needed`;
+      return makeResult(resourceId, r.title, stagesCompleted, 'tagged', tagsAdded, 0, 0, false, true, reason);
+    }
+
     const source: ExtractionSource = {
       resourceId,
       userId,
       title: r.title,
-      content: r.content,
+      content: contentForExtraction,
       description: r.description,
       tags: allTags,
       resourceType: r.resource_type ?? 'document',
     };
 
     const extracted = extractKnowledgeHeuristic(source);
+    log.info('Extraction result', {
+      resourceId, hasExistingKI, extracted: extracted.length,
+      contentPassed: contentForExtraction.length,
+      activatable: extracted.filter(e => (e.confidence_score ?? 0) >= AUTO_ACTIVATE_CONFIDENCE).length,
+    });
+
     if (extracted.length > 0) {
       const { data: inserted, error: insErr } = await supabase
         .from('knowledge_items' as any)
@@ -220,7 +252,11 @@ export async function autoOperationalizeResource(
         knowledgeExtracted = inserted.length;
         existingItems.push(...(inserted as any[]));
         log.info('Extracted knowledge items', { resourceId, count: knowledgeExtracted });
+      } else if (insErr) {
+        log.warn('Failed to insert extracted knowledge', { resourceId, error: insErr.message });
       }
+    } else {
+      log.warn('Extraction returned 0 items', { resourceId, contentLength: contentForExtraction.length });
     }
   } else if (hasExistingKI) {
     knowledgeExtracted = existingItems.length;
@@ -518,4 +554,146 @@ function makeResult(
     needsReview,
     reason,
   };
+}
+
+// ── Extraction Coverage ────────────────────────────────────
+
+export interface ExtractionCoverage {
+  enrichedResources: number;
+  withKnowledgeItems: number;
+  operationalizedResources: number;
+  noKnowledgeYet: number;
+  contentEmptyDespiteLength: number;
+}
+
+export async function getExtractionCoverage(): Promise<ExtractionCoverage> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+  if (!userId) return { enrichedResources: 0, withKnowledgeItems: 0, operationalizedResources: 0, noKnowledgeYet: 0, contentEmptyDespiteLength: 0 };
+
+  // Enriched resources
+  const { data: enriched } = await supabase
+    .from('resources')
+    .select('id, content_length, content')
+    .eq('user_id', userId)
+    .in('enrichment_status', ['enriched', 'deep_enriched', 'verified']);
+
+  const enrichedList = (enriched ?? []) as any[];
+
+  // KI per resource
+  const { data: kiData } = await supabase
+    .from('knowledge_items' as any)
+    .select('source_resource_id, active, applies_to_contexts')
+    .eq('user_id', userId);
+
+  const kiList = (kiData ?? []) as any[];
+  const kiByResource = new Map<string, any[]>();
+  for (const ki of kiList) {
+    if (!ki.source_resource_id) continue;
+    const arr = kiByResource.get(ki.source_resource_id) ?? [];
+    arr.push(ki);
+    kiByResource.set(ki.source_resource_id, arr);
+  }
+
+  let withKI = 0;
+  let operationalized = 0;
+  let contentEmpty = 0;
+
+  for (const r of enrichedList) {
+    const items = kiByResource.get(r.id);
+    if (items && items.length > 0) {
+      withKI++;
+      const hasActiveWithCtx = items.some((ki: any) =>
+        ki.active && Array.isArray(ki.applies_to_contexts) && ki.applies_to_contexts.length > 0
+      );
+      if (hasActiveWithCtx) operationalized++;
+    }
+    const actualLen = r.content?.length ?? 0;
+    if ((r.content_length ?? 0) > 300 && actualLen < 100) contentEmpty++;
+  }
+
+  return {
+    enrichedResources: enrichedList.length,
+    withKnowledgeItems: withKI,
+    operationalizedResources: operationalized,
+    noKnowledgeYet: enrichedList.length - withKI,
+    contentEmptyDespiteLength: contentEmpty,
+  };
+}
+
+// ── Force Extract All ──────────────────────────────────────
+
+export interface ForceExtractResult {
+  eligible: number;
+  processed: number;
+  newKnowledgeItems: number;
+  becameOperationalized: number;
+  stillNeedsReview: number;
+  contentEmpty: number;
+  errors: string[];
+}
+
+/**
+ * Force-extract knowledge from all resources with content_length > 300
+ * and no existing knowledge items. Ignores prior pipeline state.
+ */
+export async function forceExtractAll(
+  onProgress?: (processed: number, total: number) => void,
+): Promise<ForceExtractResult> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+  if (!userId) return { eligible: 0, processed: 0, newKnowledgeItems: 0, becameOperationalized: 0, stillNeedsReview: 0, contentEmpty: 0, errors: [] };
+
+  // Find resources with content but no KI
+  const { data: resources } = await supabase
+    .from('resources')
+    .select('id, title, content, content_length, description, resource_type, tags')
+    .eq('user_id', userId)
+    .gte('content_length', 300);
+
+  const allResources = (resources ?? []) as any[];
+
+  // Get resources that already have KI
+  const { data: existingKIData } = await supabase
+    .from('knowledge_items' as any)
+    .select('source_resource_id')
+    .eq('user_id', userId);
+
+  const hasKI = new Set((existingKIData ?? []).map((k: any) => k.source_resource_id).filter(Boolean));
+  const eligible = allResources.filter(r => !hasKI.has(r.id));
+
+  const result: ForceExtractResult = {
+    eligible: eligible.length,
+    processed: 0,
+    newKnowledgeItems: 0,
+    becameOperationalized: 0,
+    stillNeedsReview: 0,
+    contentEmpty: 0,
+    errors: [],
+  };
+
+  for (let i = 0; i < eligible.length; i++) {
+    const r = eligible[i];
+    try {
+      const actualContent = r.content || '';
+      if (actualContent.length < 100) {
+        result.contentEmpty++;
+        log.warn('forceExtract: content empty', { resourceId: r.id, content_length: r.content_length, actual: actualContent.length });
+        continue;
+      }
+
+      // Run the full pipeline instead of just extraction
+      const pipelineResult = await autoOperationalizeResource(r.id);
+      result.processed++;
+      result.newKnowledgeItems += pipelineResult.knowledgeExtracted;
+      if (pipelineResult.operationalized) result.becameOperationalized++;
+      if (pipelineResult.needsReview) result.stillNeedsReview++;
+    } catch (err: any) {
+      result.errors.push(`${r.id}: ${err?.message ?? 'unknown'}`);
+    }
+    onProgress?.(i + 1, eligible.length);
+  }
+
+  log.info('forceExtractAll complete', result);
+  return result;
 }

@@ -33,7 +33,7 @@ import {
   type ReadinessBucket,
   type AuditedResource,
 } from '@/lib/resourceAudit';
-import { autoOperationalizeBatch, summarizeBatchResults, derivePipelineStage, getStageLabel, autoOperationalizeAllResources, countEligibleResources, type BackfillSummary } from '@/lib/autoOperationalize';
+import { autoOperationalizeBatch, summarizeBatchResults, derivePipelineStage, getStageLabel, autoOperationalizeAllResources, countEligibleResources, forceExtractAll, getExtractionCoverage, type BackfillSummary, type ForceExtractResult, type ExtractionCoverage } from '@/lib/autoOperationalize';
 import { auditPipelineIntegrity, auditKnowledgeUtilization, getSystemMetrics, type PipelineIntegrityResult, type KnowledgeUtilResult, type SystemMetrics } from '@/lib/salesBrainAudit';
 import { toast } from 'sonner';
 import {
@@ -152,6 +152,11 @@ const BULK_ACTION_DESCRIPTIONS: Record<string, { title: string; safe: string; wo
     safe: 'Only processes resources in fixable/extractable/needs-tagging/ready buckets. Faster and more targeted than full backfill.',
     wontDo: 'Will not touch junk, missing-content, or already-operationalized resources. Will not auto-activate low-confidence items.',
   },
+  forceExtract: {
+    title: 'Force Extract All Missing Knowledge',
+    safe: 'Runs extraction on all enriched resources with content_length > 300 that have no knowledge items yet. Then runs the full pipeline.',
+    wontDo: 'Will not overwrite existing knowledge items. Will not auto-activate low-confidence items.',
+  },
 };
 
 // ── Component ──────────────────────────────────────────────
@@ -166,12 +171,19 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
   const [lastBackfillResult, setLastBackfillResult] = useState<BackfillSummary | null>(null);
   const [deepAudit, setDeepAudit] = useState<{ pipeline?: PipelineIntegrityResult; knowledge?: KnowledgeUtilResult; metrics?: SystemMetrics } | null>(null);
   const [deepAuditLoading, setDeepAuditLoading] = useState(false);
+  const [extractionCoverage, setExtractionCoverage] = useState<ExtractionCoverage | null>(null);
+  const [forceExtractProgress, setForceExtractProgress] = useState<{ processed: number; total: number } | null>(null);
+  const [lastForceExtract, setLastForceExtract] = useState<ForceExtractResult | null>(null);
 
   const runAudit = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await auditResourceReadiness();
+      const [result, coverage] = await Promise.all([
+        auditResourceReadiness(),
+        getExtractionCoverage(),
+      ]);
       setAudit(result);
+      setExtractionCoverage(coverage);
     } catch {
       toast.error('Audit failed');
     } finally {
@@ -215,12 +227,22 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
         toast.success(`Backfill complete: ${result.operationalized} operationalized, ${result.totalKnowledgeExtracted} extracted, ${result.totalKnowledgeActivated} activated`);
         if (result.needsReview > 0) toast.info(`${result.needsReview} resources need manual review`);
         if (result.errors > 0) toast.warning(`${result.errors} errors during processing`);
+      } else if (type === 'forceExtract') {
+        setForceExtractProgress({ processed: 0, total: 0 });
+        const extractResult = await forceExtractAll((processed, total) => {
+          setForceExtractProgress({ processed, total });
+        });
+        setForceExtractProgress(null);
+        setLastForceExtract(extractResult);
+        toast.success(`Force extract: ${extractResult.newKnowledgeItems} items created, ${extractResult.becameOperationalized} operationalized`);
+        if (extractResult.contentEmpty > 0) toast.warning(`${extractResult.contentEmpty} resources had empty content despite content_length`);
       }
     } catch {
       toast.error('Action failed');
     }
     setActionLoading(null);
     setBackfillProgress(null);
+    setForceExtractProgress(null);
     await runAudit();
   };
 
@@ -397,6 +419,56 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                           <span>Tags added:</span><span className="font-medium text-foreground">{lastBackfillResult.totalTagsAdded}</span>
                           <span>Need review:</span><span className={cn('font-medium', lastBackfillResult.needsReview > 0 ? 'text-amber-500' : 'text-foreground')}>{lastBackfillResult.needsReview}</span>
                           {lastBackfillResult.errors > 0 && (<><span>Errors:</span><span className="font-medium text-destructive">{lastBackfillResult.errors}</span></>)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Extraction Coverage ── */}
+                  <div className="pt-1.5 border-t border-border/50 space-y-1.5">
+                    <p className="text-[10px] font-medium text-muted-foreground">Extraction Coverage</p>
+                    {extractionCoverage ? (
+                      <div className="rounded-md border border-primary/20 bg-primary/5 p-2 text-[10px] space-y-1">
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
+                          <span>Enriched resources:</span><span className="font-medium text-foreground">{extractionCoverage.enrichedResources}</span>
+                          <span>With knowledge items:</span><span className="font-medium text-foreground">{extractionCoverage.withKnowledgeItems}</span>
+                          <span>Operationalized:</span><span className="font-medium text-emerald-600">{extractionCoverage.operationalizedResources}</span>
+                          <span>No knowledge yet:</span><span className={cn('font-medium', extractionCoverage.noKnowledgeYet > 0 ? 'text-amber-500' : 'text-foreground')}>{extractionCoverage.noKnowledgeYet}</span>
+                          {extractionCoverage.contentEmptyDespiteLength > 0 && (
+                            <><span>Content empty (stale):</span><span className="font-medium text-destructive">{extractionCoverage.contentEmptyDespiteLength}</span></>
+                          )}
+                        </div>
+                        {extractionCoverage.noKnowledgeYet > 0 && (
+                          <div className="pt-1">
+                            <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 border-amber-500/30" disabled={!!actionLoading}
+                              onClick={() => setConfirmAction({ type: 'forceExtract' })}>
+                              {actionLoading === 'forceExtract' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3 text-amber-500" />}
+                              Force Extract All ({extractionCoverage.noKnowledgeYet})
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-muted-foreground italic">Run audit to see coverage</p>
+                    )}
+                    {forceExtractProgress && (
+                      <div className="text-[10px] text-muted-foreground flex items-center gap-2">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Force extracting {forceExtractProgress.processed} / {forceExtractProgress.total}…
+                      </div>
+                    )}
+                    {lastForceExtract && !forceExtractProgress && (
+                      <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-2 text-[10px] space-y-0.5">
+                        <p className="font-medium text-foreground">Force Extract Results</p>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
+                          <span>Eligible:</span><span className="font-medium text-foreground">{lastForceExtract.eligible}</span>
+                          <span>Processed:</span><span className="font-medium text-foreground">{lastForceExtract.processed}</span>
+                          <span>New KI created:</span><span className="font-medium text-foreground">{lastForceExtract.newKnowledgeItems}</span>
+                          <span>Became operationalized:</span><span className="font-medium text-emerald-600">{lastForceExtract.becameOperationalized}</span>
+                          <span>Needs review:</span><span className={cn('font-medium', lastForceExtract.stillNeedsReview > 0 ? 'text-amber-500' : 'text-foreground')}>{lastForceExtract.stillNeedsReview}</span>
+                          {lastForceExtract.contentEmpty > 0 && (
+                            <><span>Content empty:</span><span className="font-medium text-destructive">{lastForceExtract.contentEmpty}</span></>
+                          )}
                         </div>
                       </div>
                     )}
