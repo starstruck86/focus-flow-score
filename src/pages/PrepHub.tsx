@@ -12,6 +12,7 @@ import { VoiceCommandButton } from '@/components/VoiceCommandButton';
 // Execute tab components
 import { ExecutionWorkbench } from '@/components/prep/ExecutionWorkbench';
 import { ContentBuilder } from '@/components/prep/ContentBuilder';
+import { MeetingPrepEngine } from '@/components/prep/MeetingPrepEngine';
 
 // Learn tab components
 import { PlaybookEngine } from '@/components/prep/PlaybookEngine';
