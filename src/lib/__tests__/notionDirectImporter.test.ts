@@ -64,7 +64,7 @@ describe('isMeaningfulNotionPage / passesQualityCheck', () => {
   });
 
   it('accepts short but meaningful page over 200 chars', () => {
-    const text = 'When negotiating enterprise deals, always anchor on value before discussing price. The three-step framework involves understanding their current cost of inaction, quantifying the business impact, and then positioning your solution as the bridge between their current state and desired outcome.';
+    const text = 'When negotiating enterprise deals, always anchor on value before discussing price.\nThe three-step framework involves understanding their current cost of inaction, quantifying the business impact.\nThen position your solution as the bridge between their current state and desired outcome for maximum leverage.';
     expect(text.length).toBeGreaterThan(200);
     expect(isMeaningfulNotionPage(text)).toBe(true);
   });
