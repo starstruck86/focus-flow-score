@@ -184,6 +184,18 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
                 </p>
               </div>
             </div>
+            {/* Focus item */}
+            {roleplaySession.focusItemTitle && (
+              <p className="pl-6 text-[10px] font-medium text-primary">
+                🎯 Focus: {roleplaySession.focusItemTitle}
+              </p>
+            )}
+            {/* Competitor context */}
+            {roleplaySession.competitorContext && (
+              <p className="pl-6 text-[10px] text-destructive">
+                ⚔️ Competitor context: {roleplaySession.competitorContext}
+              </p>
+            )}
             {/* Show grounded tactics */}
             {groundingItems.length > 0 && (
               <div className="pl-6 space-y-0.5">
@@ -204,11 +216,6 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
                   </p>
                 )}
               </div>
-            )}
-            {roleplaySession.knowledgeGrounding && (
-              <p className="text-[10px] text-muted-foreground pl-6 whitespace-pre-line">
-                {roleplaySession.knowledgeGrounding}
-              </p>
             )}
           </CardContent>
         </Card>
