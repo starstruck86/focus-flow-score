@@ -200,11 +200,23 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
         const summary = summarizeBatchResults(results);
         toast.success(`Auto-operationalized: ${summary.operationalized} fully operationalized, ${summary.totalKnowledgeExtracted} extracted, ${summary.totalKnowledgeActivated} activated`);
         if (summary.needsReview > 0) toast.info(`${summary.needsReview} resources need manual review`);
+      } else if (type === 'backfillAll' || type === 'backfillSmart') {
+        const mode = type === 'backfillAll' ? 'all' : 'smart';
+        setBackfillProgress({ processed: 0, total: 0 });
+        const result = await autoOperationalizeAllResources(mode, (processed, total) => {
+          setBackfillProgress({ processed, total });
+        });
+        setBackfillProgress(null);
+        setLastBackfillResult(result);
+        toast.success(`Backfill complete: ${result.operationalized} operationalized, ${result.totalKnowledgeExtracted} extracted, ${result.totalKnowledgeActivated} activated`);
+        if (result.needsReview > 0) toast.info(`${result.needsReview} resources need manual review`);
+        if (result.errors > 0) toast.warning(`${result.errors} errors during processing`);
       }
     } catch {
       toast.error('Action failed');
     }
     setActionLoading(null);
+    setBackfillProgress(null);
     await runAudit();
   };
 
