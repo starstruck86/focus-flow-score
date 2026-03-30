@@ -2,7 +2,7 @@
  * ChapterDetailSheet — shows knowledge items within a chapter
  */
 
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
