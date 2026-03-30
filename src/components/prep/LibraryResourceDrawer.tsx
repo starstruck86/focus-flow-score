@@ -100,6 +100,8 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
   const hasContent = contentLength > 0 || r.manual_content_present;
   const showNotionCTA = isNotionSource(r);
   const showFixCTA = !loading && isFixEligible(r);
+  const isArchive = isNotionSourceArchive(r);
+  const showDeleteJunkCTA = !loading && (isArchive || isNotionSource(r));
 
   const handleSplit = async () => {
     if (!user?.id) return;
