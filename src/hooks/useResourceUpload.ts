@@ -211,7 +211,8 @@ export function useUploadResource() {
       if (isNotionZip(variables.file) && data?._zipMeta) {
         const m = data._zipMeta;
         toast.success(
-          `Imported Notion export: ${m.mdFileCount} page${m.mdFileCount !== 1 ? 's' : ''}, ${m.csvFileCount} table${m.csvFileCount !== 1 ? 's' : ''}, ${m.totalLength.toLocaleString()} chars`
+          `Imported Notion export: ${m.mdFileCount} page${m.mdFileCount !== 1 ? 's' : ''}, ${m.csvFileCount} database${m.csvFileCount !== 1 ? 's' : ''}, ${m.skipped ?? 0} skipped`,
+          { id: 'notion-import-progress' }
         );
       } else {
         toast.success('Resource uploaded and classified');
