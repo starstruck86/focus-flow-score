@@ -56,7 +56,7 @@ export default function PrepHub() {
 
           {/* ═══ PREP ═══ */}
           <TabsContent value="prep" className="mt-3">
-            <PrepWorkspace />
+            <PrepCommandCenter />
           </TabsContent>
 
           {/* ═══ KNOWLEDGE ═══ */}
