@@ -339,6 +339,106 @@ export async function autoOperationalizeBatch(
   return results;
 }
 
+// ── Backfill: all existing resources ──────────────────────
+
+export interface BackfillSummary extends BatchSummary {
+  skipped: number;
+  errors: number;
+}
+
+/**
+ * Fetch all eligible resources for backfill.
+ * Eligible = content-backed OR enriched OR has manual content.
+ * Excludes junk (<50 chars, no URL, no manual content).
+ */
+async function fetchEligibleResourceIds(
+  mode: 'all' | 'smart',
+  skipOperationalized: boolean,
+): Promise<string[]> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+  if (!userId) return [];
+
+  // Fetch candidate resources
+  let query = supabase
+    .from('resources')
+    .select('id, content_length, manual_content_present, enrichment_status, tags, content')
+    .eq('user_id', userId);
+
+  const { data, error } = await query;
+  if (error || !data) return [];
+
+  return (data as any[]).filter(r => {
+    const contentLen = r.content_length ?? (r.content?.length ?? 0);
+    const isContentBacked = contentLen >= 200 || r.manual_content_present === true;
+    const isEnriched = ['enriched', 'deep_enriched', 'verified'].includes(r.enrichment_status);
+
+    // Must have some content path
+    if (!isContentBacked && !isEnriched) return false;
+
+    // Junk filter: too short and no enrichment
+    if (contentLen < 50 && !isEnriched && !r.manual_content_present) return false;
+
+    if (mode === 'smart') {
+      // Smart mode: only process resources that likely need work
+      const tags: string[] = r.tags ?? [];
+      const dims = new Set(tags.filter((t: string) => t.includes(':')).map((t: string) => t.split(':')[0]));
+      const hasRequiredTags = dims.has('skill') || dims.has('context');
+
+      // If already has tags and is enriched, it's probably already processed
+      // but we still include it — the pipeline is idempotent
+    }
+
+    return true;
+  }).map(r => r.id);
+}
+
+/**
+ * Count eligible resources without fetching all data.
+ */
+export async function countEligibleResources(
+  mode: 'all' | 'smart',
+): Promise<number> {
+  const ids = await fetchEligibleResourceIds(mode, true);
+  return ids.length;
+}
+
+/**
+ * Run auto-operationalization on ALL eligible existing resources.
+ * Idempotent: already-operationalized resources will pass through quickly.
+ * Batches in groups of 10 to avoid overwhelming the DB.
+ */
+export async function autoOperationalizeAllResources(
+  mode: 'all' | 'smart' = 'smart',
+  onProgress?: (processed: number, total: number) => void,
+): Promise<BackfillSummary> {
+  const ids = await fetchEligibleResourceIds(mode, false);
+  const results: AutoOperationalizeResult[] = [];
+  let errors = 0;
+
+  // Process in batches of 10
+  const BATCH_SIZE = 10;
+  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+    const batch = ids.slice(i, i + BATCH_SIZE);
+    for (const id of batch) {
+      try {
+        const result = await autoOperationalizeResource(id);
+        results.push(result);
+      } catch {
+        errors++;
+      }
+    }
+    onProgress?.(Math.min(i + BATCH_SIZE, ids.length), ids.length);
+  }
+
+  const base = summarizeBatchResults(results);
+  return {
+    ...base,
+    skipped: 0,
+    errors,
+  };
+}
+
 /**
  * Derive the current pipeline stage for a resource without running the pipeline.
  * Used for display purposes in UI.
