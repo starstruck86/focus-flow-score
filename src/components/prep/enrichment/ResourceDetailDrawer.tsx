@@ -22,7 +22,7 @@ import {
   X, Save, Zap, RotateCcw, FileText, ExternalLink, Trash2,
   Bookmark, SkipForward, Ban, ShieldOff, Play, Wrench,
   Loader2, CheckCircle2, AlertTriangle, Copy, Unlock, ArrowLeft, Eye, MoreHorizontal,
-  ChevronDown, ChevronRight, Upload,
+  ChevronDown, ChevronRight, Upload, FolderTree,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
