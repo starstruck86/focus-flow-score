@@ -26,8 +26,6 @@ export function PrepCommandCenter() {
         onChangeStage={setActiveStage}
       />
 
-      {/* Promotion Engine — classify & promote enriched resources */}
-      <PromotionEngine />
     </div>
   );
 }
