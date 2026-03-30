@@ -293,6 +293,31 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
                 {r.last_quality_score != null && <p>Quality: {r.last_quality_score}/100</p>}
                 {r.updated_at && <p>Updated: {new Date(r.updated_at).toLocaleDateString()}</p>}
               </div>
+
+              {/* Danger zone */}
+              <div className="pt-2 border-t border-border space-y-2">
+                <p className="text-[10px] font-semibold text-destructive/70 uppercase tracking-wider">Danger</p>
+                <Button
+                  variant="destructive"
+                  className="w-full min-h-[44px] gap-2 justify-start"
+                  onClick={async () => {
+                    if (!confirm('Delete this resource? This cannot be undone.')) return;
+                    try {
+                      const { deleteResourceWithCleanup } = await import('@/lib/resourceDelete');
+                      await deleteResourceWithCleanup(r.id);
+                      toast.success('Resource deleted');
+                      FIX_RESOURCE_INVALIDATION_KEYS.forEach(k => qc.invalidateQueries({ queryKey: k }));
+                      onResourceUpdated?.();
+                      onOpenChange(false);
+                    } catch (e: any) {
+                      toast.error(e.message || 'Delete failed');
+                    }
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Resource
+                </Button>
+              </div>
             </div>
           </ScrollArea>
         </SheetContent>
