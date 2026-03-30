@@ -51,6 +51,7 @@ export function deriveProcessingState(
     const isManual = hasManualContent || rm === 'metadata_only' || rm === 'alternate_url' ||
       rm === 'transcript_upload' || rm === 'content_upload' ||
       rm === 'fixed_from_existing_content' || rm === 'manual_content' ||
+      rm === 'notion_zip_import' || rm === 'notion_zip_split' ||
       (typeof rm === 'string' && rm.startsWith('manual'));
     return {
       state: 'COMPLETED',
