@@ -313,6 +313,21 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                       {actionLoading === 'activate' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
                       Activate High-Confidence
                     </Button>
+                    {/* Auto-Operationalize: targets ready + extractable + needs_tagging */}
+                    {(audit.counts.ready + audit.counts.extractable_not_operationalized + audit.counts.needs_tagging) > 0 && (
+                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 border-primary/30" disabled={!!actionLoading}
+                        onClick={() => {
+                          const ids = [
+                            ...audit.buckets.extractable_not_operationalized,
+                            ...audit.buckets.needs_tagging,
+                            ...audit.buckets.ready,
+                          ].map(r => r.id);
+                          setConfirmAction({ type: 'autoOp', ids });
+                        }}>
+                        {actionLoading === 'autoOp' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Rocket className="h-3 w-3" />}
+                        Auto-Operationalize {audit.counts.ready + audit.counts.extractable_not_operationalized + audit.counts.needs_tagging}
+                      </Button>
+                    )}
                     {audit.counts.junk_or_low_signal > 0 && (
                       <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-destructive" disabled={!!actionLoading}
                         onClick={() => setConfirmAction({ type: 'delete', ids: audit.buckets.junk_or_low_signal.map(r => r.id) })}>
