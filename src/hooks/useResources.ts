@@ -273,14 +273,39 @@ export function useDeleteResource() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('resources').delete().eq('id', id);
-      if (error) throw error;
+      const { deleteResourceWithCleanup } = await import('@/lib/resourceDelete');
+      await deleteResourceWithCleanup(id);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['resources'] });
+      const { getDeleteInvalidationKeys } = require('@/lib/resourceDelete');
+      for (const key of getDeleteInvalidationKeys()) {
+        qc.invalidateQueries({ queryKey: key });
+      }
       toast.success('Resource deleted');
     },
     onError: () => toast.error('Failed to delete resource'),
+  });
+}
+
+export function useBulkDeleteResources() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { bulkDeleteResources } = await import('@/lib/resourceDelete');
+      return bulkDeleteResources(ids);
+    },
+    onSuccess: (result) => {
+      const { getDeleteInvalidationKeys } = require('@/lib/resourceDelete');
+      for (const key of getDeleteInvalidationKeys()) {
+        qc.invalidateQueries({ queryKey: key });
+      }
+      if (result.errors.length > 0) {
+        toast.error(`Deleted ${result.deleted}, ${result.errors.length} failed`);
+      } else {
+        toast.success(`Deleted ${result.deleted} resources`);
+      }
+    },
+    onError: () => toast.error('Bulk delete failed'),
   });
 }
 

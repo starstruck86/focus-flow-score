@@ -730,6 +730,15 @@ export function ResourceLibraryTable({
               <Zap className="h-3 w-3" />
               Deep Enrich Selected
             </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 text-xs gap-1"
+              onClick={() => onAction('bulk_delete', { id: '' } as Resource)}
+            >
+              <Trash2 className="h-3 w-3" />
+              Delete Selected
+            </Button>
             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onToggleSelectAll}>
               <X className="h-3 w-3 mr-1" /> Clear
             </Button>

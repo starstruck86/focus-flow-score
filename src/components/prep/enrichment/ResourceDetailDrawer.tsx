@@ -617,6 +617,7 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
                 ) : (
                   <ActionBtn action="quarantine" label="Quarantine" icon={<Ban className="h-3 w-3" />} variant="destructive" />
                 )}
+                <ActionBtn action="delete_resource" label="Delete Resource" icon={<Trash2 className="h-3 w-3" />} variant="destructive" />
               </div>
             </div>
           </div>
