@@ -135,6 +135,11 @@ const BULK_ACTION_DESCRIPTIONS: Record<string, { title: string; safe: string; wo
     safe: 'Activates extracted knowledge items with confidence ≥70% that already have applies_to_contexts.',
     wontDo: 'Will not activate items without contexts. Will not activate low-confidence items.',
   },
+  autoOp: {
+    title: 'Auto-Operationalize Ready Resources',
+    safe: 'Runs the full pipeline (tag → extract → activate) on content-backed resources that are not yet operationalized.',
+    wontDo: 'Will not touch junk, missing-content, or already-operationalized resources. Will not auto-activate low-confidence items.',
+  },
 };
 
 // ── Component ──────────────────────────────────────────────
