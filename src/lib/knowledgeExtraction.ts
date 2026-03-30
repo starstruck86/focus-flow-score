@@ -237,17 +237,19 @@ function buildContexts(chapter: string, type: string): string[] {
  */
 export async function extractKnowledgeAI(source: ExtractionSource): Promise<KnowledgeItemInsert[]> {
   try {
-    const result = await trackedInvoke('extract-knowledge', {
-      resourceId: source.resourceId,
-      title: source.title,
-      content: source.content?.slice(0, 12000),
-      description: source.description,
-      tags: source.tags,
-      resourceType: source.resourceType,
+    const result = await trackedInvoke<{ items?: any[] }>('extract-knowledge', {
+      body: {
+        resourceId: source.resourceId,
+        title: source.title,
+        content: source.content?.slice(0, 12000),
+        description: source.description,
+        tags: source.tags,
+        resourceType: source.resourceType,
+      },
     });
 
-    if (result?.items && Array.isArray(result.items)) {
-      return (result.items as any[]).map(item => ({
+    if (result?.data?.items && Array.isArray(result.data.items)) {
+      return result.data.items.map(item => ({
         user_id: source.userId,
         source_resource_id: source.resourceId,
         source_doctrine_id: null,
