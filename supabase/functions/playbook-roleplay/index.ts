@@ -37,6 +37,11 @@ serve(async (req) => {
 
     // Build system prompt based on mode
     let systemPrompt = scenario;
+
+    // Inject knowledge grounding if provided
+    if (knowledgeGrounding && mode !== 'feedback') {
+      systemPrompt = `${scenario}\n\n--- ACTIVE KNOWLEDGE GROUNDING ---\n${knowledgeGrounding}\n--- END KNOWLEDGE ---\nUse the above knowledge to evaluate the rep's responses. Reward when they use these tactics correctly. Punish when they deviate.`;
+    }
     
     if (mode === 'feedback') {
       systemPrompt = `You are an elite sales coach who has just observed a live roleplay session. The scenario was:
