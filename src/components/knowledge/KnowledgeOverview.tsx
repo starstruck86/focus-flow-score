@@ -5,16 +5,16 @@
  * All counts from canonical lifecycle only.
  */
 
-import { memo, useMemo } from 'react';
+import { memo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-  CheckCircle2, AlertTriangle, ArrowRight, Brain, Zap, Ban, Info,
+  CheckCircle2, AlertTriangle, ArrowRight, Brain, Ban, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useCanonicalLifecycle, STAGE_LABELS, BLOCKED_LABELS } from '@/hooks/useCanonicalLifecycle';
-import type { LifecycleSummary, CanonicalResourceStatus } from '@/lib/canonicalLifecycle';
+import { useCanonicalLifecycle, BLOCKED_LABELS } from '@/hooks/useCanonicalLifecycle';
+import type { LifecycleSummary } from '@/lib/canonicalLifecycle';
 
 interface Props {
   onNavigateToResources?: () => void;
@@ -27,7 +27,7 @@ export const KnowledgeOverview = memo(function KnowledgeOverview({
   onNavigateToAudit,
   onNavigateToKnowledgeItems,
 }: Props) {
-  const { summary, loading, refetch } = useCanonicalLifecycle();
+  const { summary, loading } = useCanonicalLifecycle();
 
   if (loading || !summary) {
     return (
@@ -42,13 +42,8 @@ export const KnowledgeOverview = memo(function KnowledgeOverview({
     + summary.blocked.no_activation + summary.blocked.missing_contexts
     + summary.blocked.stale_blocker_state;
 
-  // "What should I do next?" — prioritized actions
   const nextActions = buildNextActions(summary, totalBlocked);
 
-  // Top resources by lifecycle stage
-  const neverUsed = summary.resources.filter(
-    r => r.active_ki_count > 0 && r.active_ki_with_context_count === 0
-  );
   const biggestLeak = summary.blocked.no_extraction > 0
     ? 'no_extraction'
     : summary.blocked.missing_contexts > 0
@@ -60,17 +55,22 @@ export const KnowledgeOverview = memo(function KnowledgeOverview({
   return (
     <div className="space-y-4">
       {/* Source of truth notice */}
-      <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-        <Info className="h-3 w-3 shrink-0" />
-        All counts from the canonical lifecycle model — one source of truth for every surface.
-      </p>
+      <div className="flex items-start gap-2 text-[10px] text-muted-foreground rounded-md border border-border bg-muted/30 p-2">
+        <Info className="h-3 w-3 shrink-0 mt-0.5" />
+        <div>
+          <p><strong>Resources</strong> are your raw source material.</p>
+          <p><strong>Knowledge Items</strong> are actionable tactics extracted from resources.</p>
+          <p><strong>Lifecycle</strong> tracks each resource from upload to fully usable.</p>
+          <p><strong>Usage</strong> proves whether knowledge is actually being used in prep, practice, and Dave.</p>
+        </div>
+      </div>
 
-      {/* ── Primary Funnel ── */}
+      {/* ── Primary 3 Numbers ── */}
       <div className="grid grid-cols-3 gap-2">
         <FunnelCard
           label="Total Resources"
           value={summary.total_resources}
-          sublabel="Raw source material in library"
+          sublabel="In your library"
           color="text-foreground"
         />
         <FunnelCard
@@ -83,7 +83,7 @@ export const KnowledgeOverview = memo(function KnowledgeOverview({
         <FunnelCard
           label="Blocked"
           value={totalBlocked}
-          sublabel="Need action to become usable"
+          sublabel="Need action"
           color="text-destructive"
           warn={totalBlocked > 0}
         />
@@ -108,7 +108,7 @@ export const KnowledgeOverview = memo(function KnowledgeOverview({
                 <BlockerRow label="Needs context repair" count={summary.blocked.missing_contexts} />
               )}
               {summary.blocked.empty_content > 0 && (
-                <BlockerRow label="Empty content" count={summary.blocked.empty_content} />
+                <BlockerRow label="Missing content" count={summary.blocked.empty_content} />
               )}
               {summary.blocked.stale_blocker_state > 0 && (
                 <BlockerRow label="Needs review" count={summary.blocked.stale_blocker_state} />
@@ -132,24 +132,6 @@ export const KnowledgeOverview = memo(function KnowledgeOverview({
           </CardContent>
         </Card>
       )}
-
-      {/* ── Lifecycle Pipeline ── */}
-      <Card>
-        <CardContent className="p-3 space-y-2">
-          <p className="text-xs font-medium text-foreground">Lifecycle Pipeline</p>
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
-            <MiniStat label="Uploaded" value={summary.total_resources} />
-            <MiniStat label="Content Ready" value={summary.content_ready} />
-            <MiniStat label="Enriched" value={summary.enriched} />
-            <MiniStat label="With Knowledge" value={summary.with_knowledge} />
-            <MiniStat label="Activated" value={summary.activated} />
-            <MiniStat label="Ready to Use" value={summary.operationalized} accent />
-          </div>
-          <p className="text-[9px] text-muted-foreground">
-            Resources → Content → Knowledge → Activation → Operationalized
-          </p>
-        </CardContent>
-      </Card>
 
       {/* ── Biggest Leak ── */}
       {biggestLeak && (
@@ -212,15 +194,6 @@ function BlockerRow({ label, count }: { label: string; count: number }) {
     <div className="flex items-center justify-between text-xs">
       <span className="text-muted-foreground">{label}</span>
       <Badge variant="outline" className="text-[10px] text-destructive">{count}</Badge>
-    </div>
-  );
-}
-
-function MiniStat({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
-  return (
-    <div className="rounded-lg border border-border p-1.5 text-center">
-      <p className={cn('text-sm font-bold', accent ? 'text-emerald-600' : 'text-foreground')}>{value}</p>
-      <p className="text-[8px] text-muted-foreground leading-tight">{label}</p>
     </div>
   );
 }
