@@ -1,0 +1,1 @@
+ALTER TABLE public.knowledge_items ADD COLUMN IF NOT EXISTS activation_metadata jsonb DEFAULT NULL;
