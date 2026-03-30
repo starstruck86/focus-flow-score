@@ -45,13 +45,15 @@ export function deriveProcessingState(
   const contentLength = (resource as any).content_length ?? 0;
   const hasManualContent = (resource as any).manual_content_present === true;
   const rm = (resource as any).resolution_method;
-  const hasSubstantialContent = contentLength > 1000 || hasManualContent;
+  const isNotionDirect = rm === 'notion_zip_page_import' || rm === 'notion_zip_database_import' || rm === 'notion_zip_page_chunk';
+  const hasSubstantialContent = contentLength > 1000 || hasManualContent || (isNotionDirect && contentLength > 0);
 
   if (hasSubstantialContent && (status === 'failed' || status === 'incomplete' || status === 'not_enriched' || status === 'stale' || status === 'quarantined')) {
     const isManual = hasManualContent || rm === 'metadata_only' || rm === 'alternate_url' ||
       rm === 'transcript_upload' || rm === 'content_upload' ||
       rm === 'fixed_from_existing_content' || rm === 'manual_content' ||
       rm === 'notion_zip_import' || rm === 'notion_zip_split' ||
+      isNotionDirect ||
       (typeof rm === 'string' && rm.startsWith('manual'));
     return {
       state: 'COMPLETED',
@@ -164,6 +166,7 @@ export function deriveProcessingState(
       rm === 'transcript_upload' || rm === 'content_upload' ||
       rm === 'fixed_from_existing_content' || rm === 'manual_content' ||
       rm === 'notion_zip_import' || rm === 'notion_zip_split' ||
+      rm === 'notion_zip_page_import' || rm === 'notion_zip_database_import' || rm === 'notion_zip_page_chunk' ||
       (typeof rm === 'string' && rm.startsWith('manual'));
     return {
       state: 'COMPLETED',
