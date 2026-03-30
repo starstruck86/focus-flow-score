@@ -166,6 +166,9 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
   const [lastBackfillResult, setLastBackfillResult] = useState<BackfillSummary | null>(null);
   const [deepAudit, setDeepAudit] = useState<{ pipeline?: PipelineIntegrityResult; knowledge?: KnowledgeUtilResult; metrics?: SystemMetrics } | null>(null);
   const [deepAuditLoading, setDeepAuditLoading] = useState(false);
+  const [extractionCoverage, setExtractionCoverage] = useState<ExtractionCoverage | null>(null);
+  const [forceExtractProgress, setForceExtractProgress] = useState<{ processed: number; total: number } | null>(null);
+  const [lastForceExtract, setLastForceExtract] = useState<ForceExtractResult | null>(null);
 
   const runAudit = useCallback(async () => {
     setLoading(true);
