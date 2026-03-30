@@ -183,6 +183,11 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
           if (!error) deleted++;
         }
         toast.success(`Deleted ${deleted} junk resources`);
+      } else if (type === 'autoOp' && ids) {
+        const results = await autoOperationalizeBatch(ids);
+        const summary = summarizeBatchResults(results);
+        toast.success(`Auto-operationalized: ${summary.operationalized} fully operationalized, ${summary.totalKnowledgeExtracted} extracted, ${summary.totalKnowledgeActivated} activated`);
+        if (summary.needsReview > 0) toast.info(`${summary.needsReview} resources need manual review`);
       }
     } catch {
       toast.error('Action failed');
