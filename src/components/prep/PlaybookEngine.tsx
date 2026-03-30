@@ -5,7 +5,7 @@
  * built on real knowledge_items from the database.
  */
 
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useCallback, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useKnowledgeStats, type KnowledgeItem } from '@/hooks/useKnowledgeItems';
+import { useChapterRoleplay } from '@/hooks/useChapterRoleplay';
 import { ChapterDetailSheet } from './ChapterDetailSheet';
 import { KnowledgeItemDrawer } from './KnowledgeItemDrawer';
 import { ExtractKnowledgeDialog } from './ExtractKnowledgeDialog';
