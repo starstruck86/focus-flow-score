@@ -149,6 +149,15 @@ export function useChapterRoleplay() {
         return;
       }
 
+      // Log roleplay grounding telemetry
+      logKnowledgeUsage(buildUsageEntries(items as any[], 'roleplay_grounding', {
+        context_type: salesContext?.context_type ?? 'roleplay',
+        stage: salesContext?.stage,
+        persona: salesContext?.persona,
+        account_name: salesContext?.account_name,
+        competitor: salesContext?.competitors?.[0],
+      }));
+
       // Find the focus item if specified
       const focusItem = knowledgeItemId
         ? items.find(i => i.id === knowledgeItemId)
