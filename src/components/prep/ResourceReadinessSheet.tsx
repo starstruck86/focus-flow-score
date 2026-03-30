@@ -164,6 +164,8 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
   const [confirmAction, setConfirmAction] = useState<{ type: string; ids?: string[] } | null>(null);
   const [backfillProgress, setBackfillProgress] = useState<{ processed: number; total: number } | null>(null);
   const [lastBackfillResult, setLastBackfillResult] = useState<BackfillSummary | null>(null);
+  const [deepAudit, setDeepAudit] = useState<{ pipeline?: PipelineIntegrityResult; knowledge?: KnowledgeUtilResult; metrics?: SystemMetrics } | null>(null);
+  const [deepAuditLoading, setDeepAuditLoading] = useState(false);
 
   const runAudit = useCallback(async () => {
     setLoading(true);
