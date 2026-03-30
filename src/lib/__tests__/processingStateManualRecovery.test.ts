@@ -154,11 +154,6 @@ describe('processingState manual recovery recognition', () => {
     expect(ps.state).toBe('COMPLETED');
     expect(ps.label).toBe('Manual Recovery');
   });
-    const r = { ...baseResource, enrichment_status: 'failed', content_length: 5000, resolution_method: 'fixed_from_existing_content', manual_content_present: true } as any;
-    const ps = deriveProcessingState(r);
-    expect(ps.state).toBe('COMPLETED');
-    expect(ps.label).toBe('Manual Recovery');
-  });
 });
 
 describe('isFixEligible', () => {
