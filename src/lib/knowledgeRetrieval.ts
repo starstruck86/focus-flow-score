@@ -128,13 +128,23 @@ export async function getRoleplayKnowledge(chapter?: string): Promise<{
  * A resource is operationalized when it has at least one active knowledge item
  */
 export async function getOperationalizedCount(): Promise<{ operationalized: number; total: number }> {
+  // A resource is operationalized when it has at least one ACTIVE knowledge item
+  // that is available to at least one downstream context (dave, roleplay, prep, etc.)
   const { data: activeItems } = await supabase
     .from(TABLE)
-    .select('source_resource_id')
+    .select('source_resource_id, applies_to_contexts')
     .eq('active', true)
     .not('source_resource_id', 'is', null);
 
-  const uniqueResourceIds = new Set((activeItems ?? []).map((i: any) => i.source_resource_id));
+  // Only count resources whose active items actually have downstream contexts
+  const uniqueResourceIds = new Set(
+    (activeItems ?? [])
+      .filter((i: any) => {
+        const contexts = i.applies_to_contexts;
+        return Array.isArray(contexts) && contexts.length > 0;
+      })
+      .map((i: any) => i.source_resource_id)
+  );
 
   const { count } = await supabase
     .from('resources')
