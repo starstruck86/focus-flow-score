@@ -242,7 +242,21 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
             </div>
           )}
 
-          <ScrollArea className="flex-1 min-h-0">
+          {/* Delete Junk Notion Resources CTA */}
+          {showDeleteJunkCTA && (
+            <div className="px-4 pt-2 shrink-0">
+              <Button
+                className="w-full min-h-[44px] gap-2"
+                variant="outline"
+                onClick={handleDeleteJunk}
+                disabled={deletingJunk}
+              >
+                {deletingJunk ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                {deletingJunk ? 'Cleaning up…' : 'Delete Junk Notion Resources'}
+              </Button>
+            </div>
+          )}
+
             <div className="p-4 space-y-3">
               {/* View Content */}
               {hasContent && (
