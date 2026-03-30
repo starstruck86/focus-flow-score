@@ -1,6 +1,7 @@
 /**
- * LibraryResourceDrawer — Lightweight detail sheet for Library tab resources.
- * Surfaces: View Content, Rebuild Notion Import, Fix Resource CTAs.
+ * LibraryResourceDrawer — Detail sheet for resources.
+ * Surfaces: Lifecycle stage, blocked reason, next action, View Content, Fix CTAs.
+ * Uses canonical lifecycle for stage display.
  */
 import { useState, useEffect } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
