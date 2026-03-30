@@ -222,12 +222,22 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
         toast.success(`Backfill complete: ${result.operationalized} operationalized, ${result.totalKnowledgeExtracted} extracted, ${result.totalKnowledgeActivated} activated`);
         if (result.needsReview > 0) toast.info(`${result.needsReview} resources need manual review`);
         if (result.errors > 0) toast.warning(`${result.errors} errors during processing`);
+      } else if (type === 'forceExtract') {
+        setForceExtractProgress({ processed: 0, total: 0 });
+        const extractResult = await forceExtractAll((processed, total) => {
+          setForceExtractProgress({ processed, total });
+        });
+        setForceExtractProgress(null);
+        setLastForceExtract(extractResult);
+        toast.success(`Force extract: ${extractResult.newKnowledgeItems} items created, ${extractResult.becameOperationalized} operationalized`);
+        if (extractResult.contentEmpty > 0) toast.warning(`${extractResult.contentEmpty} resources had empty content despite content_length`);
       }
     } catch {
       toast.error('Action failed');
     }
     setActionLoading(null);
     setBackfillProgress(null);
+    setForceExtractProgress(null);
     await runAudit();
   };
 
