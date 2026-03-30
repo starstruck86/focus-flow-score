@@ -537,6 +537,13 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
             </div>
           </div>
 
+          {/* Auto-operationalize result */}
+          {autoOpResult && (
+            <div className="px-1">
+              <AutoOperationalizeResultCard result={autoOpResult} />
+            </div>
+          )}
+
           <Separator />
 
           {/* ── Actions (grouped) ── */}
