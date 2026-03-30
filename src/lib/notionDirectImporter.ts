@@ -91,21 +91,48 @@ export function cleanNotionTitle(filename: string, content?: string): string {
 
 // ── Content Quality Filter ───────────────────────────────────
 
+/**
+ * Checks if content is meaningful enough to create a resource.
+ * Reusable for both import-time filtering and post-hoc junk detection.
+ */
 export function passesQualityCheck(content: string): boolean {
+  return isMeaningfulNotionPage(content);
+}
+
+/**
+ * Core heuristic: is this enough real content to be a useful resource?
+ * Used at import time to skip junk, and post-import to identify junk children.
+ */
+export function isMeaningfulNotionPage(content: string): boolean {
   const trimmed = content.trim();
+
+  // Hard minimum: must have at least 200 chars
   if (trimmed.length < MIN_CONTENT_LENGTH) return false;
 
+  // Must have enough words
   const words = trimmed.split(/\s+/).filter(w => w.length > 0);
   if (words.length < MIN_WORD_COUNT) return false;
 
-  // Check alphabetic ratio
+  // Must have enough alphabetic characters (not just symbols/numbers)
   const alphaChars = (trimmed.match(/[a-zA-Z]/g) || []).length;
+  if (alphaChars < 50) return false;
   if (trimmed.length > 0 && alphaChars / trimmed.length < MIN_ALPHA_RATIO) return false;
 
-  // Skip mostly-heading pages (>80% lines are headings or empty)
+  // Skip mostly-heading / separator / empty pages (>80% noise lines)
   const lines = trimmed.split('\n');
-  const noiseLines = lines.filter(l => /^#{1,6}\s/.test(l.trim()) || /^#{1,6}\s*$/.test(l.trim()) || l.trim() === '' || /^[-=_*]{3,}$/.test(l.trim()));
+  const noiseLines = lines.filter(l => {
+    const t = l.trim();
+    return t === ''
+      || /^#{1,6}\s/.test(t)
+      || /^#{1,6}\s*$/.test(t)
+      || /^[-=_*]{3,}$/.test(t)
+      || /^>\s*$/.test(t); // empty blockquotes
+  });
   if (lines.length > 3 && noiseLines.length / lines.length > 0.8) return false;
+
+  // Must have at least some real sentence-like content (lines with 20+ chars)
+  const substantiveLines = lines.filter(l => l.trim().length >= 20 && !/^#{1,6}\s/.test(l.trim()));
+  if (substantiveLines.length < 2) return false;
 
   return true;
 }
