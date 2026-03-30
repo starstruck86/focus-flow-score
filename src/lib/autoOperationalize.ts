@@ -78,7 +78,7 @@ export interface AutoOperationalizeResult {
 
 // ── Auto-activation thresholds ─────────────────────────────
 
-const AUTO_ACTIVATE_CONFIDENCE = 0.65;
+const AUTO_ACTIVATE_CONFIDENCE = 0.55;
 const MIN_CONTENT_LENGTH = 200;
 const MIN_CONTENT_FOR_EXTRACTION = 300;
 const MIN_TACTIC_SUMMARY_LENGTH = 20;
