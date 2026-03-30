@@ -419,6 +419,55 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                     )}
                   </div>
 
+                  {/* ── Extraction Coverage ── */}
+                  <div className="pt-1.5 border-t border-border/50 space-y-1.5">
+                    <p className="text-[10px] font-medium text-muted-foreground">Extraction Coverage</p>
+                    {extractionCoverage ? (
+                      <div className="rounded-md border border-primary/20 bg-primary/5 p-2 text-[10px] space-y-1">
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
+                          <span>Enriched resources:</span><span className="font-medium text-foreground">{extractionCoverage.enrichedResources}</span>
+                          <span>With knowledge items:</span><span className="font-medium text-foreground">{extractionCoverage.withKnowledgeItems}</span>
+                          <span>Operationalized:</span><span className="font-medium text-emerald-600">{extractionCoverage.operationalizedResources}</span>
+                          <span>No knowledge yet:</span><span className={cn('font-medium', extractionCoverage.noKnowledgeYet > 0 ? 'text-amber-500' : 'text-foreground')}>{extractionCoverage.noKnowledgeYet}</span>
+                          {extractionCoverage.contentEmptyDespiteLength > 0 && (
+                            <><span>Content empty (stale):</span><span className="font-medium text-destructive">{extractionCoverage.contentEmptyDespiteLength}</span></>
+                          )}
+                        </div>
+                        {extractionCoverage.noKnowledgeYet > 0 && (
+                          <div className="pt-1">
+                            <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 border-amber-500/30" disabled={!!actionLoading}
+                              onClick={() => setConfirmAction({ type: 'forceExtract' })}>
+                              {actionLoading === 'forceExtract' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3 text-amber-500" />}
+                              Force Extract All ({extractionCoverage.noKnowledgeYet})
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-muted-foreground italic">Run audit to see coverage</p>
+                    )}
+                    {forceExtractProgress && (
+                      <div className="text-[10px] text-muted-foreground flex items-center gap-2">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Force extracting {forceExtractProgress.processed} / {forceExtractProgress.total}…
+                      </div>
+                    )}
+                    {lastForceExtract && !forceExtractProgress && (
+                      <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-2 text-[10px] space-y-0.5">
+                        <p className="font-medium text-foreground">Force Extract Results</p>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
+                          <span>Eligible:</span><span className="font-medium text-foreground">{lastForceExtract.eligible}</span>
+                          <span>Processed:</span><span className="font-medium text-foreground">{lastForceExtract.processed}</span>
+                          <span>New KI created:</span><span className="font-medium text-foreground">{lastForceExtract.newKnowledgeItems}</span>
+                          <span>Became operationalized:</span><span className="font-medium text-emerald-600">{lastForceExtract.becameOperationalized}</span>
+                          <span>Needs review:</span><span className={cn('font-medium', lastForceExtract.stillNeedsReview > 0 ? 'text-amber-500' : 'text-foreground')}>{lastForceExtract.stillNeedsReview}</span>
+                          {lastForceExtract.contentEmpty > 0 && (
+                            <><span>Content empty:</span><span className="font-medium text-destructive">{lastForceExtract.contentEmpty}</span></>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                   {/* ── Deep Audit ── */}
                   <div className="pt-1.5 border-t border-border/50 space-y-1.5">
                     <div className="flex items-center justify-between">
