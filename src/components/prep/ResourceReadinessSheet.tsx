@@ -424,7 +424,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                     )}
                   </div>
 
-                  {/* ── Extraction Coverage & Validation Summary ── */}
+                  {/* ── Pipeline Validation Summary ── */}
                   <div className="pt-1.5 border-t border-border/50 space-y-1.5">
                     <p className="text-[10px] font-medium text-muted-foreground">Pipeline Validation Summary</p>
                     {extractionCoverage ? (
@@ -435,8 +435,9 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                           <span>Operationalized:</span><span className="font-medium text-emerald-600">{extractionCoverage.operationalizedResources} ({extractionCoverage.opCoveragePct}%)</span>
                           <span>No knowledge yet:</span><span className={cn('font-medium', extractionCoverage.noKnowledgeYet > 0 ? 'text-amber-500' : 'text-foreground')}>{extractionCoverage.noKnowledgeYet}</span>
                         </div>
+
                         {/* Blocked-by breakdown */}
-                        {(extractionCoverage.blockedByEmptyContent > 0 || extractionCoverage.blockedByNoExtraction > 0 || extractionCoverage.blockedByActivationCriteria > 0) && (
+                        {(extractionCoverage.blockedByEmptyContent > 0 || extractionCoverage.blockedByNoExtraction > 0 || extractionCoverage.blockedByActivationCriteria > 0 || extractionCoverage.blockedByMissingContexts > 0 || extractionCoverage.blockedByStaleBlockerState > 0) && (
                           <div className="pt-1 border-t border-border/30">
                             <p className="font-medium text-foreground mb-0.5">Blocked Resources</p>
                             <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
@@ -449,9 +450,48 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                               {extractionCoverage.blockedByActivationCriteria > 0 && (
                                 <><span>Activation criteria unmet:</span><span className="font-medium text-orange-500">{extractionCoverage.blockedByActivationCriteria}</span></>
                               )}
+                              {extractionCoverage.blockedByMissingContexts > 0 && (
+                                <><span>Active but no contexts:</span><span className="font-medium text-orange-500">{extractionCoverage.blockedByMissingContexts}</span></>
+                              )}
+                              {extractionCoverage.blockedByStaleBlockerState > 0 && (
+                                <><span>Stale blocker state:</span><span className="font-medium text-destructive">{extractionCoverage.blockedByStaleBlockerState}</span></>
+                              )}
                             </div>
                           </div>
                         )}
+
+                        {/* Examples per failure class */}
+                        {Object.entries(extractionCoverage.examples).map(([reason, items]) => {
+                          const exampleItems = items as BlockedExample[];
+                          if (exampleItems.length === 0 || reason === 'operationalized') return null;
+                          return (
+                            <Collapsible key={reason}>
+                              <CollapsibleTrigger className="w-full flex items-center justify-between p-1 rounded hover:bg-accent/50 text-[10px]">
+                                <span className="font-medium text-foreground capitalize">
+                                  {(reason as string).replace(/_/g, ' ')} — {exampleItems.length} example{exampleItems.length > 1 ? 's' : ''}
+                                </span>
+                                <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                              </CollapsibleTrigger>
+                              <CollapsibleContent>
+                                <div className="space-y-1 pl-1 pt-0.5">
+                                  {exampleItems.map(ex => (
+                                    <div key={ex.id} className="p-1.5 rounded border border-border/50 bg-card text-[9px] space-y-0.5">
+                                      <p className="font-medium text-foreground truncate">{ex.title}</p>
+                                      <div className="flex flex-wrap gap-x-3 gap-y-0 text-muted-foreground">
+                                        <span>content_length: {ex.contentLengthField}</span>
+                                        <span>actual: {ex.actualContentLength}</span>
+                                        <span>KI: {ex.kiCount}</span>
+                                        <span>active: {ex.activeKiCount}</span>
+                                      </div>
+                                      <p className="text-muted-foreground italic">{ex.detail}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </CollapsibleContent>
+                            </Collapsible>
+                          );
+                        })}
+
                         {extractionCoverage.noKnowledgeYet > 0 && (
                           <div className="pt-1">
                             <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 border-amber-500/30" disabled={!!actionLoading}
