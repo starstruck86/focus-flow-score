@@ -424,20 +424,34 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                     )}
                   </div>
 
-                  {/* ── Extraction Coverage ── */}
+                  {/* ── Extraction Coverage & Validation Summary ── */}
                   <div className="pt-1.5 border-t border-border/50 space-y-1.5">
-                    <p className="text-[10px] font-medium text-muted-foreground">Extraction Coverage</p>
+                    <p className="text-[10px] font-medium text-muted-foreground">Pipeline Validation Summary</p>
                     {extractionCoverage ? (
                       <div className="rounded-md border border-primary/20 bg-primary/5 p-2 text-[10px] space-y-1">
                         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
                           <span>Enriched resources:</span><span className="font-medium text-foreground">{extractionCoverage.enrichedResources}</span>
-                          <span>With knowledge items:</span><span className="font-medium text-foreground">{extractionCoverage.withKnowledgeItems}</span>
-                          <span>Operationalized:</span><span className="font-medium text-emerald-600">{extractionCoverage.operationalizedResources}</span>
+                          <span>With knowledge items:</span><span className="font-medium text-foreground">{extractionCoverage.withKnowledgeItems} ({extractionCoverage.kiCoveragePct}%)</span>
+                          <span>Operationalized:</span><span className="font-medium text-emerald-600">{extractionCoverage.operationalizedResources} ({extractionCoverage.opCoveragePct}%)</span>
                           <span>No knowledge yet:</span><span className={cn('font-medium', extractionCoverage.noKnowledgeYet > 0 ? 'text-amber-500' : 'text-foreground')}>{extractionCoverage.noKnowledgeYet}</span>
-                          {extractionCoverage.contentEmptyDespiteLength > 0 && (
-                            <><span>Content empty (stale):</span><span className="font-medium text-destructive">{extractionCoverage.contentEmptyDespiteLength}</span></>
-                          )}
                         </div>
+                        {/* Blocked-by breakdown */}
+                        {(extractionCoverage.blockedByEmptyContent > 0 || extractionCoverage.blockedByNoExtraction > 0 || extractionCoverage.blockedByActivationCriteria > 0) && (
+                          <div className="pt-1 border-t border-border/30">
+                            <p className="font-medium text-foreground mb-0.5">Blocked Resources</p>
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
+                              {extractionCoverage.blockedByEmptyContent > 0 && (
+                                <><span>Empty content (stale length):</span><span className="font-medium text-destructive">{extractionCoverage.blockedByEmptyContent}</span></>
+                              )}
+                              {extractionCoverage.blockedByNoExtraction > 0 && (
+                                <><span>Extraction not run:</span><span className="font-medium text-amber-500">{extractionCoverage.blockedByNoExtraction}</span></>
+                              )}
+                              {extractionCoverage.blockedByActivationCriteria > 0 && (
+                                <><span>Activation criteria unmet:</span><span className="font-medium text-orange-500">{extractionCoverage.blockedByActivationCriteria}</span></>
+                              )}
+                            </div>
+                          </div>
+                        )}
                         {extractionCoverage.noKnowledgeYet > 0 && (
                           <div className="pt-1">
                             <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 border-amber-500/30" disabled={!!actionLoading}
