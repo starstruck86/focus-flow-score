@@ -240,16 +240,17 @@ export async function auditResourceReadiness(): Promise<AuditSummary> {
       action = 'Review manually — may need enrichment or manual input';
     }
     // 4. EXTRACTABLE_NOT_OPERATIONALIZED — enriched with content but no active KI
-    else if (hasCnt && ENRICHED_STATUSES.includes(status) && (ki.total === 0 || ki.active === 0)) {
-      if (ki.total > 0 && ki.active === 0) {
-        bucket = 'extractable_not_operationalized';
-        reason = `Has ${ki.total} extracted knowledge item(s) but 0 active`;
-        action = 'Activate extracted knowledge items';
-      } else {
-        bucket = 'extractable_not_operationalized';
-        reason = `Enriched (${status}) with ${r.content_length ?? 0} chars but 0 knowledge items extracted`;
-        action = 'Ready for knowledge extraction';
-      }
+    else if (hasCnt && ENRICHED_STATUSES.includes(status) && ki.total === 0) {
+      bucket = 'extractable_not_operationalized';
+      reason = `Enriched (${status}) with ${r.content_length ?? 0} chars but 0 knowledge items extracted`;
+      action = 'Ready for knowledge extraction';
+    }
+    // 4b. LOW_QUALITY_EXTRACTION — has KI but 0 activatable (all below threshold or missing fields)
+    else if (hasCnt && ENRICHED_STATUSES.includes(status) && ki.total > 0 && ki.active === 0) {
+      // Check if any items could be activated (have sufficient confidence)
+      bucket = 'low_quality_extraction';
+      reason = `Has ${ki.total} extracted knowledge item(s) but 0 are activatable — likely summary-style, not actionable tactics`;
+      action = 'Re-extract with tactic-focused extraction or review items manually';
     }
     // 5. NEEDS_TAGGING — missing REQUIRED tags (skill or context) only
     else if (hasCnt && ENRICHED_STATUSES.includes(status) && missingRequired.length > 0) {
