@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { DealStageNav } from './DealStageNav';
 import { StageWorkspace } from './StageWorkspace';
+import { PromotionEngine } from './PromotionEngine';
 import { STAGES } from './stageConfig';
 
 export function PrepCommandCenter() {
@@ -24,6 +25,9 @@ export function PrepCommandCenter() {
         stage={stage}
         onChangeStage={setActiveStage}
       />
+
+      {/* Promotion Engine — classify & promote enriched resources */}
+      <PromotionEngine />
     </div>
   );
 }
