@@ -20,7 +20,7 @@ import { Separator } from '@/components/ui/separator';
 import {
   Loader2, RefreshCw, Wrench, Sparkles, Zap, Trash2, Tag, CheckCircle2,
   AlertTriangle, XCircle, FileText, Brain, HelpCircle, Info, ArrowRight,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, Rocket,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -32,6 +32,7 @@ import {
   type ReadinessBucket,
   type AuditedResource,
 } from '@/lib/resourceAudit';
+import { autoOperationalizeBatch, summarizeBatchResults, derivePipelineStage, getStageLabel } from '@/lib/autoOperationalize';
 import { toast } from 'sonner';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
