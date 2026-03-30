@@ -134,117 +134,29 @@ export function useUploadResource() {
 
       // ── Notion ZIP fast-path ──
       if (isNotionZip(file)) {
-        console.log('[ZipUpload] ZIP size:', file.size, 'name:', file.name);
+        console.log('[ZipUpload] Using direct importer for:', file.name, 'size:', file.size);
 
-        // Stage 1: Extract
-        toast.info('Reading ZIP…');
-        let zipResult: Awaited<ReturnType<typeof extractNotionZip>>;
-        try {
-          zipResult = await extractNotionZip(file);
-        } catch (e: any) {
-          console.error('[ZipUpload] Extraction failed:', e);
-          throw new Error(e.message || 'ZIP too large or failed to parse');
+        const result = await importNotionZipDirect(file, user.id, (p) => {
+          toast.info(p.message, { id: 'notion-import-progress' });
+        });
+
+        if (!result.success && result.pagesCreated === 0 && result.databasesCreated === 0) {
+          throw new Error(result.message);
         }
 
-        console.log('[ZipUpload] Extracted length:', zipResult.totalLength, 'md:', zipResult.mdFileCount, 'csv:', zipResult.csvFileCount);
-
-        if (zipResult.mdFileCount === 0 && zipResult.csvFileCount === 0) {
-          throw new Error('ZIP contains no usable Notion content');
-        }
-        if (zipResult.totalLength < 50) {
-          throw new Error('ZIP contains no usable Notion content');
-        }
-
-        // Stage 2: Upload ZIP to storage (with fallback)
-        toast.info('Saving file…');
-        const filePath = `${user.id}/${Date.now()}-${file.name}`;
-        let storedFilePath: string | null = filePath;
-        try {
-          const { error: storageError } = await supabase.storage.from('resource-files').upload(filePath, file);
-          if (storageError) {
-            console.warn('[ZipUpload] Storage upload failed, continuing without file:', storageError.message);
-            storedFilePath = null;
-          }
-        } catch (e: any) {
-          console.warn('[ZipUpload] Storage upload error, continuing without file:', e.message);
-          storedFilePath = null;
-        }
-
-        // Stage 3: Resolve folder
-        let finalFolderId = folderId;
-        if (!finalFolderId && classification.top_folder) {
-          finalFolderId = await resolveFolderHierarchy(user.id, classification.top_folder, classification.sub_folder);
-        }
-
-        // Stage 4: Insert resource
-        toast.info('Saving resource…');
-        const { data: resource, error: resourceError } = await supabase
-          .from('resources')
-          .insert({
-            user_id: user.id,
-            title: classification.title,
-            description: classification.description,
-            resource_type: classification.resource_type,
-            tags: classification.tags,
-            folder_id: finalFolderId,
-            file_url: storedFilePath,
-            content: zipResult.content,
-            content_status: 'full',
-            content_length: zipResult.totalLength,
-            manual_content_present: true,
-            resolution_method: 'notion_zip_import',
-            extraction_method: 'notion_zip_import',
-          } as any)
-          .select()
-          .single();
-        if (resourceError) {
-          console.error('[ZipUpload] Database insert failed:', resourceError);
-          throw new Error(`Database insert failed: ${resourceError.message}`);
-        }
-
-        // Stage 5: Version + provenance (best-effort)
-        try {
-          await supabase.from('resource_versions').insert({
-            resource_id: resource.id,
-            user_id: user.id,
-            version_number: 1,
-            title: classification.title,
-            content: zipResult.content,
-            change_summary: `Notion ZIP import — ${zipResult.mdFileCount} pages, ${zipResult.csvFileCount} tables`,
-          });
-        } catch (e: any) {
-          console.warn('[ZipUpload] Version insert failed:', e.message);
-        }
-
-        try {
-          await (supabase as any).from('enrichment_attempts').insert({
-            resource_id: resource.id,
-            user_id: user.id,
-            attempt_type: 'notion_zip_upload',
-            strategy: 'zip_extraction',
-            result: 'success',
-            content_found: true,
-            content_length_extracted: zipResult.totalLength,
-            started_at: new Date().toISOString(),
-            completed_at: new Date().toISOString(),
-            metadata: { md_files: zipResult.mdFileCount, csv_files: zipResult.csvFileCount, filenames: zipResult.filenames },
-          });
-        } catch (e: any) {
-          console.warn('[ZipUpload] Provenance insert failed:', e.message);
-        }
-
-        // Fire-and-forget enrichment
-        invokeEnrichResource({ resource_id: resource.id, force: true } as any).catch(() => {});
-
-        console.log('[ZipUpload] Done. Resource:', resource.id);
-
-        const result = resource as any;
-        result._zipMeta = {
-          mdFileCount: zipResult.mdFileCount,
-          csvFileCount: zipResult.csvFileCount,
-          totalLength: zipResult.totalLength,
+        // Return a synthetic resource object for onSuccess
+        const synthetic = {
+          id: result.sourceArchiveId || 'import-complete',
+          title: file.name.replace(/\.zip$/i, ''),
+          _zipMeta: {
+            mdFileCount: result.pagesCreated + result.chunksCreated,
+            csvFileCount: result.databasesCreated,
+            totalLength: 0,
+            skipped: result.skipped,
+            importGroupId: result.importGroupId,
+          },
         };
-        return result;
+        return synthetic as any;
       }
 
       // ── Standard file upload ──
