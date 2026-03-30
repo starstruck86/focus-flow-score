@@ -16,6 +16,7 @@ import {
   MoreHorizontal, Zap, RefreshCw, RotateCcw, Trash2,
   Eye, AlertTriangle, CheckCircle2, FileText,
   Filter, X, FileAudio, HelpCircle, Info, Inbox, ShieldAlert,
+  Star, BookOpen, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type EnrichmentStatus } from '@/lib/resourceEligibility';
@@ -36,7 +37,8 @@ import {
   deriveProcessingState, getProcessingStateColor,
 } from '@/lib/processingState';
 import { routeFailure, getFailureBucketActions } from '@/lib/failureRouting';
-import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
+import { useCanonicalLifecycle, type BlockedReason } from '@/hooks/useCanonicalLifecycle';
+import { useInUseResources } from '@/hooks/useInUseResources';
 import type { AudioFailureCode, AudioPipelineStage } from '@/lib/salesBrain/audioPipeline';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import type { Resource } from '@/hooks/useResources';
@@ -62,84 +64,55 @@ interface ResourceLibraryTableProps {
   audioJobsMap?: Map<string, AudioJobRecord>;
 }
 
-// ── Saved views ────────────────────────────────────────────
-// Saved view filters use a function that receives the resource and optionally an audioJobsMap
-// We can't use deriveProcessingState directly in static filter since it needs audioJob,
-// so we use heuristic filters that approximate canonical states
-// Helper: resource has substantial content and should not appear in blocked views
-function hasSubstantialContent(r: Resource): boolean {
-  const rm = (r as any).resolution_method;
-  const isNotion = typeof rm === 'string' && rm.startsWith('notion_zip_');
-  const threshold = isNotion ? 200 : 1000;
-  return ((r as any).content_length ?? 0) > threshold || (r as any).manual_content_present === true;
+// ── Lifecycle-based quick filters ──────────────────────────
+type LifecycleFilter = 'all' | 'ready' | 'in_use' | 'blocked' | 'needs_extraction' | 'needs_activation' | 'needs_context' | 'needs_review' | 'missing_content';
+
+const LIFECYCLE_FILTER_LABELS: Record<LifecycleFilter, string> = {
+  all: 'All',
+  ready: 'Ready to Use',
+  in_use: 'In Use',
+  blocked: 'Blocked',
+  needs_extraction: 'Needs Extraction',
+  needs_activation: 'Needs Activation',
+  needs_context: 'Needs Context Repair',
+  needs_review: 'Needs Review',
+  missing_content: 'Missing Content',
+};
+
+const LIFECYCLE_FILTER_ICONS: Record<LifecycleFilter, React.ReactNode> = {
+  all: <FileText className="h-3 w-3" />,
+  ready: <CheckCircle2 className="h-3 w-3" />,
+  in_use: <Activity className="h-3 w-3" />,
+  blocked: <ShieldAlert className="h-3 w-3" />,
+  needs_extraction: <Zap className="h-3 w-3" />,
+  needs_activation: <Zap className="h-3 w-3" />,
+  needs_context: <HelpCircle className="h-3 w-3" />,
+  needs_review: <AlertTriangle className="h-3 w-3" />,
+  missing_content: <Inbox className="h-3 w-3" />,
+};
+
+// ── Next best action for blocked resources ─────────────────
+function getNextBestAction(blocked: BlockedReason | string): string {
+  switch (blocked) {
+    case 'no_extraction': return 'Run extraction';
+    case 'no_activation': return 'Activate KI';
+    case 'missing_contexts': return 'Repair contexts';
+    case 'empty_content': return 'Re-enrich content';
+    case 'stale_blocker_state': return 'Review stale state';
+    default: return '';
+  }
 }
 
-const SAVED_VIEWS: SavedView[] = [
-  {
-    id: 'all', label: 'All', icon: <FileText className="h-3 w-3" />,
-    filter: () => true,
-  },
-  {
-    id: 'needs_action', label: 'Needs Action', icon: <Zap className="h-3 w-3" />,
-    filter: (r) => {
-      if (hasSubstantialContent(r)) return false;
-      const status = r.enrichment_status;
-      if (!status || status === 'not_enriched' || status === 'incomplete' || status === 'failed') return true;
-      const ea = classifyEnrichabilityForResource(r);
-      return ea.enrichability === 'manual_input_needed' || ea.enrichability === 'needs_auth';
-    },
-  },
-  {
-    id: 'retryable', label: 'Retryable', icon: <RefreshCw className="h-3 w-3" />,
-    filter: (r) => {
-      if (hasSubstantialContent(r)) return false;
-      const status = r.enrichment_status;
-      if (status === 'failed' || status === 'incomplete' || status === 'stale' || status === 'quarantined') return true;
-      if ((r as any).last_quality_tier === 'shallow' && status === 'deep_enriched') return true;
-      return false;
-    },
-  },
-  {
-    id: 'manual', label: 'Manual Required', icon: <HelpCircle className="h-3 w-3" />,
-    filter: (r) => {
-      if (hasSubstantialContent(r)) return false;
-      const ea = classifyEnrichabilityForResource(r);
-      return ea.enrichability === 'manual_input_needed' || ea.enrichability === 'needs_auth' || ea.enrichability === 'metadata_only';
-    },
-  },
-  {
-    id: 'recent', label: 'Recently Added', icon: <FileText className="h-3 w-3" />,
-    filter: (r) => Date.now() - new Date(r.created_at).getTime() < 7 * 86400000,
-  },
-  {
-    id: 'completed', label: 'Completed', icon: <CheckCircle2 className="h-3 w-3" />,
-    filter: (r) => r.enrichment_status === 'deep_enriched' || hasSubstantialContent(r),
-  },
-  {
-    id: 'audio', label: 'Audio', icon: <FileAudio className="h-3 w-3" />,
-    filter: (r) => isAudioResource(r.file_url, r.resource_type),
-  },
-  {
-    id: 'needs_input', label: 'Needs Input', icon: <Inbox className="h-3 w-3" />,
-    filter: (r) => {
-      if (hasSubstantialContent(r)) return false;
-      const status = r.enrichment_status;
-      if (status === 'quarantined') return true;
-      if (status === 'failed' || status === 'incomplete') {
-        const ea = classifyEnrichabilityForResource(r);
-        return ea.enrichability === 'manual_input_needed'
-          || ea.enrichability === 'needs_auth'
-          || ea.enrichability === 'metadata_only';
-      }
-      const ea = classifyEnrichabilityForResource(r);
-      return ea.enrichability === 'manual_input_needed' || ea.enrichability === 'needs_auth';
-    },
-  },
-  {
-    id: 'quarantined', label: 'Quarantined', icon: <ShieldAlert className="h-3 w-3" />,
-    filter: (r) => r.enrichment_status === 'quarantined' && !hasSubstantialContent(r),
-  },
-];
+function getBlockedLabel(blocked: string): string {
+  switch (blocked) {
+    case 'no_extraction': return 'Needs extraction';
+    case 'no_activation': return 'Needs activation';
+    case 'missing_contexts': return 'Needs context repair';
+    case 'empty_content': return 'Missing content';
+    case 'stale_blocker_state': return 'Needs review';
+    default: return '';
+  }
+}
 
 // (Action helpers removed — action column now uses deriveProcessingState directly)
 
@@ -195,16 +168,17 @@ export function ResourceLibraryTable({
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
-  const [activeView, setActiveView] = useState('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [lifecycleFilter, setLifecycleFilter] = useState<LifecycleFilter>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [density, setDensity] = useState<Density>('comfortable');
   const [showScrollTop, setShowScrollTop] = useState(false);
   const { summary: lifecycle } = useCanonicalLifecycle();
+  const { data: inUseData } = useInUseResources();
+  const inUseIds = inUseData?.inUseResourceIds ?? new Set<string>();
 
   // Build a quick lookup for canonical status per resource
   const lifecycleMap = useMemo(() => {
-    const map = new Map<string, { stage: string; blocked: string; kiCount: number; activeKi: number }>();
+    const map = new Map<string, { stage: string; blocked: string; kiCount: number; activeKi: number; activeKiWithCtx: number }>();
     if (!lifecycle) return map;
     for (const r of lifecycle.resources) {
       map.set(r.resource_id, {
@@ -212,10 +186,36 @@ export function ResourceLibraryTable({
         blocked: r.blocked_reason,
         kiCount: r.knowledge_item_count,
         activeKi: r.active_ki_count,
+        activeKiWithCtx: r.active_ki_with_context_count,
       });
     }
     return map;
   }, [lifecycle]);
+
+  // Lifecycle filter counts from canonical data
+  const filterCounts = useMemo(() => {
+    const counts: Record<LifecycleFilter, number> = {
+      all: resources.length,
+      ready: 0, in_use: 0, blocked: 0,
+      needs_extraction: 0, needs_activation: 0,
+      needs_context: 0, needs_review: 0, missing_content: 0,
+    };
+    for (const r of resources) {
+      const lc = lifecycleMap.get(r.id);
+      if (!lc) continue;
+      if (lc.stage === 'operationalized') counts.ready++;
+      if (inUseIds.has(r.id)) counts.in_use++;
+      if (lc.blocked !== 'none') {
+        counts.blocked++;
+        if (lc.blocked === 'no_extraction') counts.needs_extraction++;
+        if (lc.blocked === 'no_activation') counts.needs_activation++;
+        if (lc.blocked === 'missing_contexts') counts.needs_context++;
+        if (lc.blocked === 'stale_blocker_state') counts.needs_review++;
+        if (lc.blocked === 'empty_content') counts.missing_content++;
+      }
+    }
+    return counts;
+  }, [resources, lifecycleMap, inUseIds]);
 
   const scrollBodyRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -229,25 +229,35 @@ export function ResourceLibraryTable({
     }
   }, [sortKey]);
 
-  const viewFilter = useMemo(
-    () => SAVED_VIEWS.find(v => v.id === activeView)?.filter || (() => true),
-    [activeView]
-  );
-
   const filtered = useMemo(() => {
-    let result = resources.filter(viewFilter);
+    let result = [...resources];
+    // Apply lifecycle filter
+    if (lifecycleFilter !== 'all') {
+      result = result.filter(r => {
+        const lc = lifecycleMap.get(r.id);
+        if (!lc) return false;
+        switch (lifecycleFilter) {
+          case 'ready': return lc.stage === 'operationalized';
+          case 'in_use': return inUseIds.has(r.id);
+          case 'blocked': return lc.blocked !== 'none';
+          case 'needs_extraction': return lc.blocked === 'no_extraction';
+          case 'needs_activation': return lc.blocked === 'no_activation';
+          case 'needs_context': return lc.blocked === 'missing_contexts';
+          case 'needs_review': return lc.blocked === 'stale_blocker_state';
+          case 'missing_content': return lc.blocked === 'empty_content';
+          default: return true;
+        }
+      });
+    }
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(r => r.title.toLowerCase().includes(q));
-    }
-    if (statusFilter !== 'all') {
-      result = result.filter(r => r.enrichment_status === statusFilter);
     }
     if (typeFilter !== 'all') {
       result = result.filter(r => r.resource_type === typeFilter);
     }
     return sortResources(result, sortKey, sortDir);
-  }, [resources, viewFilter, search, statusFilter, typeFilter, sortKey, sortDir]);
+  }, [resources, lifecycleFilter, lifecycleMap, inUseIds, search, typeFilter, sortKey, sortDir]);
 
   const allSelected = filtered.length > 0 && filtered.every(r => selectedIds.has(r.id));
 
@@ -284,21 +294,44 @@ export function ResourceLibraryTable({
 
   return (
     <div ref={shellRef} className="flex flex-col" style={{ height: 'calc(100vh - 160px)', minHeight: '450px' }}>
-      {/* Saved views — pinned top */}
+      {/* Lifecycle summary strip */}
+      <div className="flex items-center gap-3 py-2 px-1 shrink-0 border-b border-border mb-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">Total</span>
+          <span className="text-sm font-semibold">{filterCounts.all}</span>
+        </div>
+        <div className="h-4 w-px bg-border" />
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">Ready to Use</span>
+          <span className="text-sm font-semibold text-emerald-600">{filterCounts.ready}</span>
+        </div>
+        <div className="h-4 w-px bg-border" />
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">In Use</span>
+          <span className="text-sm font-semibold text-blue-600">{filterCounts.in_use}</span>
+        </div>
+        <div className="h-4 w-px bg-border" />
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">Blocked</span>
+          <span className="text-sm font-semibold text-destructive">{filterCounts.blocked}</span>
+        </div>
+      </div>
+
+      {/* Lifecycle quick filters */}
       <div className="flex items-center gap-1 overflow-x-auto pb-1 shrink-0">
-        {SAVED_VIEWS.map(view => (
+        {(Object.keys(LIFECYCLE_FILTER_LABELS) as LifecycleFilter[]).map(key => (
           <Button
-            key={view.id}
-            variant={activeView === view.id ? 'default' : 'ghost'}
+            key={key}
+            variant={lifecycleFilter === key ? 'default' : 'ghost'}
             size="sm"
-            className={cn('h-7 text-xs gap-1 shrink-0', activeView === view.id && 'shadow-sm')}
-            onClick={() => setActiveView(view.id)}
+            className={cn('h-7 text-xs gap-1 shrink-0', lifecycleFilter === key && 'shadow-sm')}
+            onClick={() => setLifecycleFilter(key)}
           >
-            {view.icon}
-            {view.label}
-            {view.id !== 'all' && (
+            {LIFECYCLE_FILTER_ICONS[key]}
+            {LIFECYCLE_FILTER_LABELS[key]}
+            {key !== 'all' && (
               <span className="ml-0.5 opacity-70">
-                ({resources.filter(view.filter).length})
+                ({filterCounts[key]})
               </span>
             )}
           </Button>
@@ -316,22 +349,6 @@ export function ResourceLibraryTable({
             className="pl-8 h-8 text-xs"
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="h-8 w-[140px] text-xs">
-            <Filter className="h-3 w-3 mr-1" />
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="not_enriched">Not Enriched</SelectItem>
-            <SelectItem value="deep_enriched">Enriched</SelectItem>
-            <SelectItem value="incomplete">Incomplete</SelectItem>
-            <SelectItem value="failed">Failed</SelectItem>
-            <SelectItem value="queued_for_reenrich">Re-enrich Queued</SelectItem>
-            <SelectItem value="duplicate">Duplicate</SelectItem>
-            <SelectItem value="superseded">Superseded</SelectItem>
-          </SelectContent>
-        </Select>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
           <SelectTrigger className="h-8 w-[130px] text-xs">
             <SelectValue placeholder="Type" />
@@ -343,12 +360,12 @@ export function ResourceLibraryTable({
             ))}
           </SelectContent>
         </Select>
-        {(statusFilter !== 'all' || typeFilter !== 'all' || search) && (
+        {(lifecycleFilter !== 'all' || typeFilter !== 'all' || search) && (
           <Button
             variant="ghost"
             size="sm"
             className="h-8 text-xs gap-1"
-            onClick={() => { setStatusFilter('all'); setTypeFilter('all'); setSearch(''); }}
+            onClick={() => { setLifecycleFilter('all'); setTypeFilter('all'); setSearch(''); }}
           >
             <X className="h-3 w-3" /> Clear
           </Button>
@@ -482,7 +499,7 @@ export function ResourceLibraryTable({
                       </td>
                       <td className="px-3 align-middle">
                         <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <p className="text-sm font-medium text-foreground truncate max-w-[220px]">{resource.title}</p>
                             {lc && (
                               <Badge variant="outline" className={cn(
@@ -499,6 +516,11 @@ export function ResourceLibraryTable({
                                  'Uploaded'}
                               </Badge>
                             )}
+                            {inUseIds.has(resource.id) && (
+                              <Badge variant="outline" className="text-[8px] h-4 px-1 shrink-0 border-blue-500/40 text-blue-600">
+                                In Use
+                              </Badge>
+                            )}
                             {lc && lc.kiCount > 0 && (
                               <span className="text-[8px] text-muted-foreground shrink-0">
                                 {lc.activeKi}/{lc.kiCount} KI
@@ -506,13 +528,14 @@ export function ResourceLibraryTable({
                             )}
                           </div>
                           {lc && lc.blocked !== 'none' && (
-                            <p className="text-[9px] text-destructive/80 mt-0.5">
-                              {lc.blocked === 'no_extraction' ? 'Needs extraction' :
-                               lc.blocked === 'no_activation' ? 'Needs activation' :
-                               lc.blocked === 'missing_contexts' ? 'Needs context repair' :
-                               lc.blocked === 'empty_content' ? 'Missing content' :
-                               lc.blocked === 'stale_blocker_state' ? 'Needs review' : ''}
-                            </p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <p className="text-[9px] text-destructive/80">
+                                {getBlockedLabel(lc.blocked)}
+                              </p>
+                              <span className="text-[9px] text-primary/80 font-medium">
+                                → {getNextBestAction(lc.blocked)}
+                              </span>
+                            </div>
                           )}
                           {drift.hasDrift && (
                             <p className="text-[10px] text-status-yellow flex items-center gap-0.5 mt-0.5">
@@ -736,6 +759,13 @@ export function ResourceLibraryTable({
                               }
                               return items;
                             })()}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => onAction('mark_template', resource)}>
+                              <Star className="h-3.5 w-3.5 mr-2" /> Use as Template
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onAction('mark_example', resource)}>
+                              <BookOpen className="h-3.5 w-3.5 mr-2" /> Mark as Example
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => onAction('reset', resource)}>
                               <RotateCcw className="h-3.5 w-3.5 mr-2" /> Reset Status
