@@ -2,17 +2,19 @@
  * LibraryResourceDrawer — Lightweight detail sheet for Library tab resources.
  * Surfaces: View Content, Rebuild Notion Import, Fix Resource CTAs.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowLeft, Eye, FolderTree, Wrench, Edit3, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 import { ContentViewer } from '@/components/prep/ContentViewer';
 import { isNotionZipResource, splitNotionImport } from '@/lib/notionZipSplitter';
 import { isFixEligible, fixResourceStateFromContent, FIX_RESOURCE_INVALIDATION_KEYS } from '@/lib/fixResourceState';
