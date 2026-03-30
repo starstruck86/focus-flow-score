@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { useCallback } from 'react';
 import type { EnrichmentStatus } from '@/lib/resourceEligibility';
+import { autoOperationalizeResource } from '@/lib/autoOperationalize';
 
 export type ResourceFolder = {
   id: string;
