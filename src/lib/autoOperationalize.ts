@@ -81,6 +81,14 @@ export interface AutoOperationalizeResult {
 const AUTO_ACTIVATE_CONFIDENCE = 0.65;
 const MIN_CONTENT_LENGTH = 200;
 const MIN_CONTENT_FOR_EXTRACTION = 300;
+const MIN_TACTIC_SUMMARY_LENGTH = 20;
+const ACTIVATION_RULE_VERSION = '2.0';
+
+// Vague/generic patterns that indicate low-quality extraction
+const VAGUE_PATTERNS = [
+  /^(this is|it is|you should|they said|the speaker|important to)/i,
+  /^(use|do|try|make sure|remember to|always|never) /i,
+];
 
 // ── Core Orchestrator ──────────────────────────────────────
 
