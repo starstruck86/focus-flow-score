@@ -230,6 +230,49 @@ export function classifyResources(resources: ClassifiableResource[]): Map<string
   return map;
 }
 
+// ── Upside scoring ─────────────────────────────────────────
+
+export interface UpsideScore {
+  total: number;
+  factors: string[];
+}
+
+export function computeUpsideScore(r: ClassifiableResource, c: ClassificationResult): UpsideScore {
+  let total = 0;
+  const factors: string[] = [];
+
+  // Multi-use potential
+  if (c.detectedUseCases.length >= 3) { total += 25; factors.push(`${c.detectedUseCases.length} use cases`); }
+  else if (c.detectedUseCases.length >= 2) { total += 15; factors.push(`${c.detectedUseCases.length} use cases`); }
+  else if (c.detectedUseCases.length === 1) { total += 5; }
+
+  // Capability richness
+  if (c.capabilities.length >= 3) { total += 20; factors.push(`${c.capabilities.length} capabilities`); }
+  else if (c.capabilities.length >= 1) { total += 10; factors.push(`${c.capabilities.length} cap.`); }
+
+  // Confidence
+  if (c.confidence === 'high') { total += 25; factors.push('high confidence'); }
+  else if (c.confidence === 'medium') { total += 10; }
+
+  // Promotable role value
+  if (c.role === 'template') { total += 15; factors.push('template-ready'); }
+  else if (c.role === 'example') { total += 12; factors.push('example-ready'); }
+  else if (c.role === 'knowledge') { total += 8; factors.push('knowledge-ready'); }
+
+  // Content richness
+  const len = r.content_length || 0;
+  if (len > 2000) { total += 10; factors.push('rich content'); }
+  else if (len > 500) { total += 5; }
+
+  // Already strong example
+  if (r.is_strong_example) { total += 10; factors.push('strong example'); }
+
+  // Not stuck
+  if (!c.stuckReason) { total += 5; factors.push('actionable'); }
+
+  return { total: Math.min(100, total), factors };
+}
+
 // Bucket summary for header stats
 export interface BucketSummary {
   promote_template: number;
