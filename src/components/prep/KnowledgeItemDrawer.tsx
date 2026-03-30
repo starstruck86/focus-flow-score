@@ -288,6 +288,30 @@ export function KnowledgeItemDrawer({ itemId, open, onOpenChange }: Props) {
                 )}
               </div>
 
+              {/* Activation provenance */}
+              {item.active && (item as any).activation_metadata && (() => {
+                const meta = (item as any).activation_metadata;
+                return (
+                  <div className="rounded-md border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 p-2.5 space-y-1">
+                    <p className="text-[10px] font-medium text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                      <Zap className="h-3 w-3" />
+                      {meta.activation_source === 'auto_pipeline' ? 'Auto-Activated by Pipeline' : 'Manually Activated'}
+                    </p>
+                    {meta.activation_reason && (
+                      <p className="text-[10px] text-muted-foreground">Why: {meta.activation_reason}</p>
+                    )}
+                    {meta.activation_timestamp && (
+                      <p className="text-[10px] text-muted-foreground">
+                        When: {new Date(meta.activation_timestamp).toLocaleString()}
+                      </p>
+                    )}
+                    {meta.activation_rule_version && (
+                      <p className="text-[10px] text-muted-foreground">Rule v{meta.activation_rule_version}</p>
+                    )}
+                  </div>
+                );
+              })()}
+
               <Separator />
 
               {/* Actions */}

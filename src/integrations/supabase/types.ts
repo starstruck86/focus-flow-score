@@ -1644,6 +1644,7 @@ export type Database = {
       }
       knowledge_items: {
         Row: {
+          activation_metadata: Json | null
           active: boolean
           applies_to_contexts: string[]
           chapter: string
@@ -1669,6 +1670,7 @@ export type Database = {
           why_it_matters: string | null
         }
         Insert: {
+          activation_metadata?: Json | null
           active?: boolean
           applies_to_contexts?: string[]
           chapter: string
@@ -1694,6 +1696,7 @@ export type Database = {
           why_it_matters?: string | null
         }
         Update: {
+          activation_metadata?: Json | null
           active?: boolean
           applies_to_contexts?: string[]
           chapter?: string
