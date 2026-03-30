@@ -678,7 +678,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                           <span>Eligible:</span><span className="font-medium text-foreground">{lastForceExtract.eligible}</span>
                           <span>Processed:</span><span className="font-medium text-foreground">{lastForceExtract.processed}</span>
                           <span>New KI created:</span><span className="font-medium text-foreground">{lastForceExtract.newKnowledgeItems}</span>
-                          <span>Became operationalized:</span><span className="font-medium text-emerald-600">{lastForceExtract.becameOperationalized}</span>
+                          <span>Became ready to use:</span><span className="font-medium text-emerald-600">{lastForceExtract.becameOperationalized}</span>
                           <span>Needs review:</span><span className={cn('font-medium', lastForceExtract.stillNeedsReview > 0 ? 'text-amber-500' : 'text-foreground')}>{lastForceExtract.stillNeedsReview}</span>
                           {lastForceExtract.contentEmpty > 0 && (
                             <><span>Content empty:</span><span className="font-medium text-destructive">{lastForceExtract.contentEmpty}</span></>
