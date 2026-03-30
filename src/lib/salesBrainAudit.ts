@@ -8,6 +8,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { createLogger } from '@/lib/logger';
 import { derivePipelineStage, type PipelineStage } from '@/lib/autoOperationalize';
+import { getKnowledgeUsageStats, type KnowledgeUsageStats } from '@/lib/knowledgeUsageLogger';
 
 const log = createLogger('SalesBrainAudit');
 
