@@ -21,6 +21,8 @@ import { KnowledgeItemDrawer } from './KnowledgeItemDrawer';
 import { ExtractKnowledgeDialog } from './ExtractKnowledgeDialog';
 import { RoleplayPreviewSheet } from './RoleplayPreviewSheet';
 import { ResourceReadinessSheet } from './ResourceReadinessSheet';
+import { LifecycleSummaryBar } from './LifecycleSummaryBar';
+import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
 import type { RoleplayPlan } from '@/components/dave/tools/intelligence/roleplayPlan';
 import { queryKnowledge } from '@/lib/knowledgeRetrieval';
 import {
@@ -49,6 +51,7 @@ const CHAPTERS = [
 export const PlaybookEngine = memo(function PlaybookEngine() {
   const stats = useKnowledgeStats();
   const { session: roleplaySession } = useChapterRoleplay();
+  const { summary: lifecycle } = useCanonicalLifecycle();
   const [selectedChapter, setSelectedChapter] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [extractOpen, setExtractOpen] = useState(false);
@@ -88,22 +91,17 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
     launchPreview(chapter);
   }, [launchPreview]);
 
-  // Operationalized metrics
+  // Operationalized metrics — CANONICAL SOURCE OF TRUTH
   const opMetrics = useMemo(() => {
-    const operationalizedIds = new Set<string>();
-    const allSourceIds = new Set<string>();
-    for (const item of stats.items) {
-      if (item.source_resource_id) allSourceIds.add(item.source_resource_id);
-      if (item.active && item.source_resource_id && item.applies_to_contexts?.length > 0) {
-        operationalizedIds.add(item.source_resource_id);
-      }
-    }
+    if (!lifecycle) return { operationalized: 0, total: 0, percent: 0 };
     return {
-      operationalized: operationalizedIds.size,
-      extracted: allSourceIds.size,
-      percent: allSourceIds.size > 0 ? Math.round((operationalizedIds.size / allSourceIds.size) * 100) : 0,
+      operationalized: lifecycle.operationalized,
+      total: lifecycle.total_resources,
+      percent: lifecycle.total_resources > 0
+        ? Math.round((lifecycle.operationalized / lifecycle.total_resources) * 100)
+        : 0,
     };
-  }, [stats.items]);
+  }, [lifecycle]);
 
   // Build chapter summary for active roleplay grounding proof
   const groundingItems = useMemo(() => {
@@ -127,7 +125,7 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
         <StatCard label="Total" value={stats.total} icon={<Brain className="h-3.5 w-3.5" />} />
       </div>
 
-      {/* Operationalized metric */}
+      {/* Canonical lifecycle summary — SINGLE SOURCE OF TRUTH */}
       {stats.total > 0 && (
         <Collapsible open={opDrilldownOpen} onOpenChange={setOpDrilldownOpen}>
           <CollapsibleTrigger asChild>
@@ -136,7 +134,7 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
                 <div className="flex items-center gap-1.5">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
                   <span className="text-sm font-medium text-foreground">
-                    {opMetrics.operationalized} / {opMetrics.extracted} resources operationalized
+                    {opMetrics.operationalized} / {opMetrics.total} resources operationalized
                   </span>
                   <span className="text-xs text-muted-foreground">({opMetrics.percent}%)</span>
                 </div>
@@ -146,7 +144,7 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
                       <Info className="h-3 w-3 text-muted-foreground" />
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-xs text-xs">
-                      A resource is operationalized when at least one active knowledge item from it is available to Dave / practice / prep.
+                      A resource is operationalized when it has at least 1 active knowledge item with non-empty applies_to_contexts. This count comes from the canonical lifecycle audit.
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -155,15 +153,8 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="mt-1 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
-              <p>
-                <span className="text-emerald-600 font-medium">{opMetrics.operationalized}</span> resource{opMetrics.operationalized !== 1 ? 's' : ''} have active knowledge items available to Dave/practice
-              </p>
-              {opMetrics.extracted - opMetrics.operationalized > 0 && (
-                <p>
-                  <span className="text-foreground font-medium">{opMetrics.extracted - opMetrics.operationalized}</span> resource{opMetrics.extracted - opMetrics.operationalized !== 1 ? 's' : ''} have extracted items but none yet activated
-                </p>
-              )}
+            <div className="mt-1 rounded-lg border border-border bg-muted/30 p-3">
+              <LifecycleSummaryBar summary={lifecycle} compact />
             </div>
           </CollapsibleContent>
         </Collapsible>

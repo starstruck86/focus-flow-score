@@ -11,7 +11,7 @@
  * - Underutilized resource grouping
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
@@ -33,7 +33,10 @@ import {
   type ReadinessBucket,
   type AuditedResource,
 } from '@/lib/resourceAudit';
-import { autoOperationalizeBatch, summarizeBatchResults, derivePipelineStage, getStageLabel, autoOperationalizeAllResources, countEligibleResources, forceExtractAll, getExtractionCoverage, type BackfillSummary, type ForceExtractResult, type ExtractionCoverage, type BlockedExample, type BlockedReason } from '@/lib/autoOperationalize';
+import { autoOperationalizeBatch, summarizeBatchResults, getStageLabel, autoOperationalizeAllResources, countEligibleResources, forceExtractAll, getExtractionCoverage, type BackfillSummary, type ForceExtractResult, type ExtractionCoverage, type BlockedExample, type BlockedReason } from '@/lib/autoOperationalize';
+import { LifecycleSummaryBar } from './LifecycleSummaryBar';
+import { useCanonicalLifecycle, STAGE_LABELS, STAGE_COLORS } from '@/hooks/useCanonicalLifecycle';
+import { deriveCanonicalStage, type LifecycleStage } from '@/lib/canonicalLifecycle';
 import { scanExistingKnowledge, executeKIBackfill, type BackfillReport } from '@/lib/kiBackfill';
 import {
   auditPipelineIntegrity, auditKnowledgeUtilization, getSystemMetrics,
@@ -218,9 +221,14 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
   const [kiBackfillProgress, setKiBackfillProgress] = useState<{ processed: number; total: number } | null>(null);
   const [kiBackfillReport, setKiBackfillReport] = useState<BackfillReport | null>(null);
   const [kiScanReport, setKiScanReport] = useState<BackfillReport | null>(null);
+  const [auditError, setAuditError] = useState<string | null>(null);
+
+  // Canonical lifecycle — SINGLE SOURCE OF TRUTH
+  const { summary: lifecycle, refetch: refetchLifecycle } = useCanonicalLifecycle();
 
   const runAudit = useCallback(async () => {
     setLoading(true);
+    setAuditError(null);
     try {
       const [result, coverage] = await Promise.all([
         auditResourceReadiness(),
@@ -228,12 +236,26 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
       ]);
       setAudit(result);
       setExtractionCoverage(coverage);
-    } catch {
-      toast.error('Audit failed');
+      // Also refresh canonical lifecycle
+      refetchLifecycle();
+    } catch (err: any) {
+      const msg = err?.message ?? 'Unknown error';
+      setAuditError(msg);
+      toast.error(`Audit failed: ${msg}`);
+      console.error('[ResourceReadiness] Audit error:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refetchLifecycle]);
+
+  // Auto-run audit when sheet opens (if not already loaded)
+  const hasAutoRun = useRef(false);
+  useEffect(() => {
+    if (open && !audit && !loading && !hasAutoRun.current) {
+      hasAutoRun.current = true;
+      runAudit();
+    }
+  }, [open, audit, loading, runAudit]);
 
   const executeAction = async (type: string, ids?: string[]) => {
     setActionLoading(type);
@@ -334,10 +356,18 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
           </SheetHeader>
 
           <ScrollArea className="h-[calc(100vh-90px)]">
-            {!audit && !loading && (
+            {!audit && !loading && !auditError && (
               <div className="p-8 text-center space-y-3">
-                <Brain className="h-8 w-8 mx-auto text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Click "Run Audit" to scan all resources</p>
+                <Loader2 className="h-6 w-6 mx-auto animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Loading audit…</p>
+              </div>
+            )}
+
+            {auditError && !audit && (
+              <div className="p-6 text-center space-y-3">
+                <AlertTriangle className="h-8 w-8 mx-auto text-destructive" />
+                <p className="text-sm text-destructive">Audit failed: {auditError}</p>
+                <Button size="sm" onClick={runAudit}>Retry</Button>
               </div>
             )}
 
@@ -350,7 +380,10 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
 
             {audit && (
               <div className="p-4 space-y-3">
-                {/* ── Summary stats ── */}
+                {/* ── Canonical Lifecycle Summary — SINGLE SOURCE OF TRUTH ── */}
+                <LifecycleSummaryBar summary={lifecycle} />
+
+                {/* ── Bucket summary stats ── */}
                 <div className="grid grid-cols-4 gap-1.5">
                   <MiniStat label="Operationalized" value={audit.counts.operationalized} accent="emerald" />
                   <MiniStat label="Extractable" value={audit.counts.extractable_not_operationalized} accent="blue" />
@@ -1094,9 +1127,9 @@ function getBottleneckLabel(r: AuditedResource): { text: string; color: string }
 function ResourceRow({ resource: r }: { resource: AuditedResource }) {
   const tagGroups = groupTagsByDimension(r.tags);
   const bottleneck = getBottleneckLabel(r);
-  const pipelineStage = derivePipelineStage(
+  const canonicalStage = deriveCanonicalStage(
     { content_length: r.contentLength, tags: r.tags, enrichment_status: r.enrichmentStatus },
-    { total: r.knowledgeItemCount, active: r.activeKnowledgeCount, hasContexts: r.hasContexts },
+    { total: r.knowledgeItemCount, active: r.activeKnowledgeCount, activeWithContexts: r.activeWithContexts },
   );
 
   // Separate tags by tier for display
@@ -1113,14 +1146,14 @@ function ResourceRow({ resource: r }: { resource: AuditedResource }) {
 
   return (
     <div className="p-2 rounded border border-border bg-card text-xs space-y-1.5">
-      {/* Title + bottleneck label + badges */}
+      {/* Title + bottleneck label + canonical stage badge */}
       <div className="flex items-start justify-between gap-1.5">
         <div className="min-w-0 flex-1">
           <p className="font-medium text-foreground truncate">{r.title}</p>
           <p className={cn('text-[9px] font-medium', bottleneck.color)}>{bottleneck.text}</p>
         </div>
         <div className="flex gap-0.5 shrink-0 flex-wrap justify-end max-w-[45%]">
-          <Badge variant="outline" className="text-[7px] h-3.5 px-1 border-primary/20">{getStageLabel(pipelineStage)}</Badge>
+          <Badge variant="outline" className={cn("text-[7px] h-3.5 px-1 border-primary/20", STAGE_COLORS[canonicalStage])}>{STAGE_LABELS[canonicalStage]}</Badge>
           {r.badges.map(b => (
             <Badge key={b} variant="outline" className="text-[7px] h-3.5 px-1">{b}</Badge>
           ))}
