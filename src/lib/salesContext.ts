@@ -217,6 +217,17 @@ export async function generatePrep(ctx: SalesContext): Promise<PrepOutput> {
     grounded_item_count: items.length,
     source_items: items.map(i => ({ id: i.id, title: i.title, chapter: i.chapter })),
   };
+
+  // Log prep usage telemetry
+  logKnowledgeUsage(buildUsageEntries(items as any[], 'prep_surface', {
+    context_type: ctx.context_type,
+    stage: ctx.stage,
+    persona: ctx.persona,
+    account_name: ctx.account_name,
+    competitor: ctx.competitors?.[0],
+  }));
+
+  return result;
 }
 
 // ── Auto-Suggest Context ────────────────────────────────────

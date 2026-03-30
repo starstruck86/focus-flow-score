@@ -9,6 +9,7 @@ import { useEffect, useCallback, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { queryKnowledge } from '@/lib/knowledgeRetrieval';
 import { queryKnowledgeByContext, type SalesContext } from '@/lib/salesContext';
+import { logKnowledgeUsage, buildUsageEntries } from '@/lib/knowledgeUsageLogger';
 import { toast } from 'sonner';
 
 export interface RoleplaySession {

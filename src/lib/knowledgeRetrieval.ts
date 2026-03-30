@@ -114,6 +114,13 @@ export async function getRoleplayKnowledge(chapter?: string): Promise<{
     maxItems: 20,
   });
 
+  // Log roleplay usage telemetry
+  if (items.length > 0) {
+    logKnowledgeUsage(buildUsageEntries(items as any[], 'roleplay_grounding', {
+      context_type: 'roleplay',
+    }));
+  }
+
   const tactics: string[] = [];
   const objections: string[] = [];
   const antiPatterns: string[] = [];
