@@ -2,17 +2,19 @@
  * LibraryResourceDrawer — Lightweight detail sheet for Library tab resources.
  * Surfaces: View Content, Rebuild Notion Import, Fix Resource CTAs.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowLeft, Eye, FolderTree, Wrench, Edit3, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 import { ContentViewer } from '@/components/prep/ContentViewer';
 import { isNotionZipResource, splitNotionImport } from '@/lib/notionZipSplitter';
 import { isFixEligible, fixResourceStateFromContent, FIX_RESOURCE_INVALIDATION_KEYS } from '@/lib/fixResourceState';
@@ -63,8 +65,31 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
   const [splitting, setSplitting] = useState(false);
   const [splitProgress, setSplitProgress] = useState('');
   const [fixing, setFixing] = useState(false);
+  const [hydrated, setHydrated] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
 
-  const r = resource as any;
+  // Fetch full resource row on open so eligibility checks have all fields
+  useEffect(() => {
+    if (!open || !resource?.id) {
+      setHydrated(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    (supabase as any)
+      .from('resources')
+      .select('*')
+      .eq('id', resource.id)
+      .single()
+      .then(({ data }: any) => {
+        if (!cancelled) setHydrated(data ?? null);
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [open, resource?.id]);
+
+  // Use hydrated row when available, fall back to prop
+  const r = (hydrated ?? resource) as any;
   const contentLength = r.content_length ?? 0;
   const rm = r.resolution_method;
   const em = r.extraction_method;
@@ -72,7 +97,7 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
   const ps = deriveProcessingState(r);
   const hasContent = contentLength > 0 || r.manual_content_present;
   const showNotionCTA = isNotionSource(r);
-  const showFixCTA = isFixEligible(r);
+  const showFixCTA = !loading && isFixEligible(r);
 
   const handleSplit = async () => {
     if (!user?.id) return;
@@ -150,6 +175,15 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
               </div>
             </div>
           </div>
+
+          {/* Loading skeleton while hydrating */}
+          {loading && (
+            <div className="px-4 pt-3 space-y-2 shrink-0">
+              <Skeleton className="h-11 w-full rounded-md" />
+              <Skeleton className="h-11 w-full rounded-md" />
+              <Skeleton className="h-4 w-2/3 rounded" />
+            </div>
+          )}
 
           {/* Notion Rebuild CTA — always above the fold */}
           {showNotionCTA && (
