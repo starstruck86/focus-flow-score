@@ -1,5 +1,5 @@
 /**
- * ExtractKnowledgeDialog — trigger extraction from enriched resources
+ * ExtractKnowledgeDialog — trigger extraction with optional auto-activate for high-confidence items
  */
 
 import { useState } from 'react';
@@ -7,7 +7,9 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Loader2, Sparkles } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Loader2, Sparkles, Zap } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useInsertKnowledgeItems, useKnowledgeItems } from '@/hooks/useKnowledgeItems';
@@ -17,7 +19,7 @@ import { toast } from 'sonner';
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  resourceId?: string; // if extracting from a specific resource
+  resourceId?: string;
 }
 
 export function ExtractKnowledgeDialog({ open, onOpenChange, resourceId }: Props) {
@@ -25,7 +27,8 @@ export function ExtractKnowledgeDialog({ open, onOpenChange, resourceId }: Props
   const insert = useInsertKnowledgeItems();
   const { data: existingItems = [] } = useKnowledgeItems();
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ extracted: number; skipped: number } | null>(null);
+  const [autoActivate, setAutoActivate] = useState(true);
+  const [result, setResult] = useState<{ extracted: number; skipped: number; activated: number } | null>(null);
 
   const handleExtract = async () => {
     if (!user) return;
@@ -33,7 +36,6 @@ export function ExtractKnowledgeDialog({ open, onOpenChange, resourceId }: Props
     setResult(null);
 
     try {
-      // Fetch enriched resources with content
       let query = supabase
         .from('resources')
         .select('id, title, content, description, tags, resource_type, content_length')
@@ -58,7 +60,6 @@ export function ExtractKnowledgeDialog({ open, onOpenChange, resourceId }: Props
         return;
       }
 
-      // Track existing source_resource_ids to avoid duplicates
       const existingSourceIds = new Set(existingItems.map(i => i.source_resource_id).filter(Boolean));
 
       const allItems = [];
@@ -86,10 +87,22 @@ export function ExtractKnowledgeDialog({ open, onOpenChange, resourceId }: Props
 
       if (allItems.length === 0) {
         toast.info(`No new knowledge found (${skipped} resources already extracted)`);
-        setResult({ extracted: 0, skipped });
+        setResult({ extracted: 0, skipped, activated: 0 });
       } else {
+        // Auto-activate high-confidence items
+        let activated = 0;
+        if (autoActivate) {
+          for (const item of allItems) {
+            if (item.confidence_score >= 0.7) {
+              item.active = true;
+              item.status = 'active' as any;
+              activated++;
+            }
+          }
+        }
+
         await insert.mutateAsync(allItems);
-        setResult({ extracted: allItems.length, skipped });
+        setResult({ extracted: allItems.length, skipped, activated });
       }
     } catch (err) {
       console.error('Extraction failed:', err);
@@ -110,13 +123,32 @@ export function ExtractKnowledgeDialog({ open, onOpenChange, resourceId }: Props
           <DialogDescription>
             {resourceId
               ? 'Extract structured knowledge items from this resource.'
-              : 'Scan all enriched resources and extract structured knowledge items for your playbooks.'}
+              : 'Scan enriched resources and extract structured knowledge for your playbooks.'}
           </DialogDescription>
         </DialogHeader>
 
+        {!result && (
+          <div className="flex items-center gap-2 py-2">
+            <Checkbox
+              id="auto-activate"
+              checked={autoActivate}
+              onCheckedChange={(c) => setAutoActivate(!!c)}
+            />
+            <Label htmlFor="auto-activate" className="text-xs text-muted-foreground cursor-pointer">
+              Auto-activate high-confidence items (≥70%)
+            </Label>
+          </div>
+        )}
+
         {result && (
-          <div className="rounded-lg bg-muted p-3 text-sm">
+          <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
             <p className="font-medium">{result.extracted} knowledge items extracted</p>
+            {result.activated > 0 && (
+              <p className="text-xs text-emerald-600 flex items-center gap-1">
+                <Zap className="h-3 w-3" />
+                {result.activated} auto-activated (high confidence)
+              </p>
+            )}
             {result.skipped > 0 && (
               <p className="text-xs text-muted-foreground">{result.skipped} resources already processed</p>
             )}
@@ -124,7 +156,7 @@ export function ExtractKnowledgeDialog({ open, onOpenChange, resourceId }: Props
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => { onOpenChange(false); setResult(null); }}>
             {result ? 'Done' : 'Cancel'}
           </Button>
           {!result && (

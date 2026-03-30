@@ -1,17 +1,17 @@
 /**
- * PlaybookEngine — the redesigned Learn tab
+ * PlaybookEngine — the Learn tab as an active playbook engine
  *
- * Replaces SalesBrainDashboard with an active playbook engine
- * built on real knowledge_items from the database.
+ * Shows knowledge stats, operationalized metrics, chapter cards with
+ * recency/counts, active roleplay grounding proof, and extraction CTAs.
  */
 
-import { memo, useState, useCallback, useMemo } from 'react';
+import { memo, useState, useCallback, useMemo, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
-  Brain, BookOpen, Zap, Shield, AlertTriangle, TrendingUp,
-  ChevronRight, Play, Sparkles, CheckCircle2, Clock, Eye,
+  Brain, Zap, Shield, AlertTriangle, Play, Sparkles,
+  CheckCircle2, Clock, ChevronRight, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useKnowledgeStats, type KnowledgeItem } from '@/hooks/useKnowledgeItems';
@@ -19,15 +19,24 @@ import { useChapterRoleplay } from '@/hooks/useChapterRoleplay';
 import { ChapterDetailSheet } from './ChapterDetailSheet';
 import { KnowledgeItemDrawer } from './KnowledgeItemDrawer';
 import { ExtractKnowledgeDialog } from './ExtractKnowledgeDialog';
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+
+/** Priority chapters first, rest after */
+const PRIORITY_IDS = ['cold_calling', 'discovery', 'competitors', 'messaging'];
 
 const CHAPTERS = [
-  { id: 'cold_calling', label: 'Cold Calling', icon: '📞' },
-  { id: 'discovery', label: 'Discovery', icon: '🔍' },
+  { id: 'cold_calling', label: 'Cold Calling', icon: '📞', priority: true },
+  { id: 'discovery', label: 'Discovery', icon: '🔍', priority: true },
+  { id: 'competitors', label: 'Competitors', icon: '⚔️', priority: true },
+  { id: 'messaging', label: 'Messaging', icon: '💬', priority: true },
   { id: 'objection_handling', label: 'Objection Handling', icon: '🛡️' },
   { id: 'negotiation', label: 'Negotiation', icon: '🤝' },
-  { id: 'competitors', label: 'Competitors', icon: '⚔️' },
   { id: 'personas', label: 'Personas', icon: '👤' },
-  { id: 'messaging', label: 'Messaging', icon: '💬' },
   { id: 'closing', label: 'Closing', icon: '🎯' },
   { id: 'stakeholder_navigation', label: 'Stakeholder Nav', icon: '🗺️' },
   { id: 'expansion', label: 'Expansion', icon: '📈' },
@@ -39,21 +48,36 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
   const [selectedChapter, setSelectedChapter] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [extractOpen, setExtractOpen] = useState(false);
+  const [opDrilldownOpen, setOpDrilldownOpen] = useState(false);
 
   const handlePractice = useCallback((chapter: string) => {
     window.dispatchEvent(new CustomEvent('dave-start-roleplay', { detail: { chapter } }));
   }, []);
 
-  // Compute operationalized resource count
-  const operationalizedCount = useMemo(() => {
-    const sourceIds = new Set<string>();
+  // Operationalized metrics
+  const opMetrics = useMemo(() => {
+    const operationalizedIds = new Set<string>();
+    const allSourceIds = new Set<string>();
     for (const item of stats.items) {
+      if (item.source_resource_id) allSourceIds.add(item.source_resource_id);
       if (item.active && item.source_resource_id && item.applies_to_contexts?.length > 0) {
-        sourceIds.add(item.source_resource_id);
+        operationalizedIds.add(item.source_resource_id);
       }
     }
-    return sourceIds.size;
+    return {
+      operationalized: operationalizedIds.size,
+      extracted: allSourceIds.size,
+      percent: allSourceIds.size > 0 ? Math.round((operationalizedIds.size / allSourceIds.size) * 100) : 0,
+    };
   }, [stats.items]);
+
+  // Build chapter summary for active roleplay grounding proof
+  const groundingItems = useMemo(() => {
+    if (!roleplaySession?.active) return [];
+    return stats.items.filter(
+      i => i.active && i.chapter === roleplaySession.chapter,
+    );
+  }, [roleplaySession, stats.items]);
 
   return (
     <div className="space-y-4">
@@ -69,7 +93,49 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
         <StatCard label="Total" value={stats.total} icon={<Brain className="h-3.5 w-3.5" />} />
       </div>
 
-      {/* Operationalized CTA */}
+      {/* Operationalized metric */}
+      {stats.total > 0 && (
+        <Collapsible open={opDrilldownOpen} onOpenChange={setOpDrilldownOpen}>
+          <CollapsibleTrigger asChild>
+            <button className="w-full flex items-center justify-between rounded-lg border border-border bg-card p-3 hover:bg-accent/30 transition-colors text-left">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                  <span className="text-sm font-medium text-foreground">
+                    {opMetrics.operationalized} / {opMetrics.extracted} resources operationalized
+                  </span>
+                  <span className="text-xs text-muted-foreground">({opMetrics.percent}%)</span>
+                </div>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3 w-3 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs text-xs">
+                      A resource is operationalized when at least one active knowledge item from it is available to Dave / practice / prep.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <ChevronRight className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', opDrilldownOpen && 'rotate-90')} />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="mt-1 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
+              <p>
+                <span className="text-emerald-600 font-medium">{opMetrics.operationalized}</span> resource{opMetrics.operationalized !== 1 ? 's' : ''} have active knowledge items available to Dave/practice
+              </p>
+              {opMetrics.extracted - opMetrics.operationalized > 0 && (
+                <p>
+                  <span className="text-foreground font-medium">{opMetrics.extracted - opMetrics.operationalized}</span> resource{opMetrics.extracted - opMetrics.operationalized !== 1 ? 's' : ''} have extracted items but none yet activated
+                </p>
+              )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
+      {/* Empty state */}
       {stats.total === 0 && (
         <Card className="border-dashed border-primary/30 bg-primary/5">
           <CardContent className="py-6 text-center space-y-3">
@@ -92,7 +158,7 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
       {stats.total > 0 && (
         <div className="flex items-center justify-between">
           <p className="text-xs text-muted-foreground">
-            {stats.active} active knowledge item{stats.active !== 1 ? 's' : ''} across {
+            {stats.active} active across {
               [...stats.byChapter.entries()].filter(([_, items]) => items.some(i => i.active)).length
             } chapters
           </p>
@@ -103,28 +169,49 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
         </div>
       )}
 
-      {/* Active roleplay indicator */}
+      {/* Active roleplay grounding proof */}
       {roleplaySession?.active && (
         <Card className="border-primary/40 bg-primary/5">
-          <CardContent className="p-3 flex items-center gap-3">
-            <Play className="h-4 w-4 text-primary animate-pulse" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-foreground">
-                Roleplay active: {roleplaySession.chapter.replace(/_/g, ' ')}
-              </p>
-              <p className="text-[10px] text-muted-foreground">
-                Grounded in {roleplaySession.groundedItemCount} active knowledge items
-              </p>
+          <CardContent className="p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Play className="h-4 w-4 text-primary animate-pulse shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-foreground">
+                  🎭 Roleplay: {roleplaySession.chapter.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  Grounded in {roleplaySession.groundedItemCount} active knowledge items
+                </p>
+              </div>
             </div>
+            {/* Show grounded tactics */}
+            {groundingItems.length > 0 && (
+              <div className="pl-6 space-y-0.5">
+                {groundingItems.slice(0, 5).map(item => (
+                  <p key={item.id} className="text-[10px] text-muted-foreground flex items-center gap-1">
+                    <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500 shrink-0" />
+                    <span className="truncate">{item.title}</span>
+                    {item.competitor_name && (
+                      <Badge variant="outline" className="text-[8px] h-3 px-1 border-destructive/30 text-destructive ml-1">
+                        vs {item.competitor_name}
+                      </Badge>
+                    )}
+                  </p>
+                ))}
+                {groundingItems.length > 5 && (
+                  <p className="text-[10px] text-muted-foreground">
+                    + {groundingItems.length - 5} more
+                  </p>
+                )}
+              </div>
+            )}
+            {roleplaySession.knowledgeGrounding && (
+              <p className="text-[10px] text-muted-foreground pl-6 whitespace-pre-line">
+                {roleplaySession.knowledgeGrounding}
+              </p>
+            )}
           </CardContent>
         </Card>
-      )}
-
-      {/* Operationalized count */}
-      {operationalizedCount > 0 && (
-        <p className="text-[10px] text-muted-foreground">
-          {operationalizedCount} resource{operationalizedCount !== 1 ? 's' : ''} operationalized — actively changing how you sell
-        </p>
       )}
 
       {/* Chapters grid */}
@@ -137,17 +224,23 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
           const lastUpdated = items.length > 0
             ? items.reduce((latest, i) => i.updated_at > latest ? i.updated_at : latest, items[0].updated_at)
             : null;
-          const recentItems = items
-            .filter(i => {
-              const age = Date.now() - new Date(i.updated_at).getTime();
-              return age < 7 * 24 * 60 * 60 * 1000; // last 7 days
-            });
+          const recentCount = items.filter(i => {
+            return Date.now() - new Date(i.updated_at).getTime() < 7 * 24 * 60 * 60 * 1000;
+          }).length;
+
+          // Competitor summary for Competitors chapter
+          const competitorNames = ch.id === 'competitors'
+            ? [...new Set(items.filter(i => i.competitor_name).map(i => i.competitor_name!))]
+            : [];
 
           return (
             <button
               key={ch.id}
               onClick={() => setSelectedChapter(ch.id)}
-              className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:bg-accent/50 transition-colors text-left w-full group"
+              className={cn(
+                'flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors text-left w-full group',
+                (ch as any).priority ? 'border-primary/20' : 'border-border',
+              )}
             >
               <span className="text-lg shrink-0">{ch.icon}</span>
               <div className="flex-1 min-w-0">
@@ -172,10 +265,18 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
                 {items.length === 0 ? (
                   <p className="text-[10px] text-muted-foreground mt-0.5">No knowledge yet</p>
                 ) : (
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    {lastUpdated && `Updated ${formatRelativeTime(lastUpdated)}`}
-                    {recentItems.length > 0 && ` · ${recentItems.length} changed this week`}
-                  </p>
+                  <div className="text-[10px] text-muted-foreground mt-0.5 space-y-0">
+                    <p>
+                      {lastUpdated && `Updated ${formatRelativeTime(lastUpdated)}`}
+                      {recentCount > 0 && ` · ${recentCount} changed this week`}
+                    </p>
+                    {competitorNames.length > 0 && (
+                      <p className="truncate">
+                        {competitorNames.slice(0, 3).map(n => `vs ${n}`).join(' · ')}
+                        {competitorNames.length > 3 && ` +${competitorNames.length - 3}`}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
               <div className="flex items-center gap-1 shrink-0">
@@ -184,6 +285,7 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
                     variant="ghost" size="icon"
                     className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
                     onClick={(e) => { e.stopPropagation(); handlePractice(ch.id); }}
+                    title="Practice this chapter"
                   >
                     <Play className="h-3.5 w-3.5 text-primary" />
                   </Button>
