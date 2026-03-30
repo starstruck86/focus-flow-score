@@ -3,17 +3,28 @@
  * 
  * MUST be the only way lifecycle stats are displayed. No tab may compute
  * its own lifecycle truth independently.
+ * 
+ * Uses human-readable labels: "Ready to Use" not "Operationalized".
  */
 
 import { memo } from 'react';
 import { cn } from '@/lib/utils';
-import { useCanonicalLifecycle, STAGE_LABELS, BLOCKED_LABELS } from '@/hooks/useCanonicalLifecycle';
+import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
 import type { LifecycleSummary } from '@/lib/canonicalLifecycle';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { ChevronDown } from 'lucide-react';
+
+/** Human-readable blocked labels */
+const HUMAN_BLOCKED_LABELS: Record<string, string> = {
+  empty_content: 'Empty content',
+  no_extraction: 'Needs extraction',
+  no_activation: 'Needs activation',
+  missing_contexts: 'Needs context repair',
+  stale_blocker_state: 'Needs review',
+};
 
 interface Props {
   /** If provided, uses this summary instead of fetching via hook */
@@ -48,11 +59,9 @@ export const LifecycleSummaryBar = memo(function LifecycleSummaryBar({ summary: 
         <span className="text-border">·</span>
         <span>{summary.content_ready} content</span>
         <span className="text-border">·</span>
-        <span>{summary.with_knowledge} KI</span>
+        <span>{summary.with_knowledge} with knowledge</span>
         <span className="text-border">·</span>
-        <span>{summary.activated} active</span>
-        <span className="text-border">·</span>
-        <span className="text-emerald-600 font-medium">{summary.operationalized} ops</span>
+        <span className="text-emerald-600 font-medium">{summary.operationalized} ready to use</span>
         {totalBlocked > 0 && (
           <>
             <span className="text-border">·</span>
@@ -70,9 +79,9 @@ export const LifecycleSummaryBar = memo(function LifecycleSummaryBar({ summary: 
         <StageStat label="Total" value={summary.total_resources} color="text-foreground" />
         <StageStat label="Enriched" value={summary.enriched} color="text-foreground" />
         <StageStat label="Content" value={summary.content_ready} color="text-amber-600" />
-        <StageStat label="With KI" value={summary.with_knowledge} color="text-blue-600" />
+        <StageStat label="With Knowledge" value={summary.with_knowledge} color="text-blue-600" />
         <StageStat label="Activated" value={summary.activated} color="text-emerald-600" />
-        <StageStat label="Operationalized" value={summary.operationalized} color="text-emerald-600" />
+        <StageStat label="Ready to Use" value={summary.operationalized} color="text-emerald-600" />
       </div>
 
       {/* Blocked breakdown */}
@@ -91,7 +100,7 @@ export const LifecycleSummaryBar = memo(function LifecycleSummaryBar({ summary: 
                 if (count === 0) return null;
                 return (
                   <div key={reason} className="contents">
-                    <span>{BLOCKED_LABELS[reason as keyof typeof BLOCKED_LABELS] ?? reason}</span>
+                    <span>{HUMAN_BLOCKED_LABELS[reason] ?? reason}</span>
                     <span className="font-medium text-destructive">{count}</span>
                   </div>
                 );
