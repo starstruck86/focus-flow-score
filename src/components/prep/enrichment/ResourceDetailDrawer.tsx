@@ -547,12 +547,16 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
                 {isNotionSource && (
                   <Button
                     size="sm"
-                    variant="outline"
-                    className={cn('gap-1.5 border-primary/30 text-primary', isMobile ? 'h-11 text-sm justify-start min-h-[44px]' : 'h-7 text-[10px]')}
+                    variant={(r.contentLength ?? 0) > 100_000 ? 'default' : 'outline'}
+                    className={cn(
+                      'gap-1.5',
+                      (r.contentLength ?? 0) > 100_000 ? '' : 'border-primary/30 text-primary',
+                      isMobile ? 'h-11 text-sm justify-start min-h-[44px] w-full' : 'h-7 text-[10px]'
+                    )}
                     disabled={splitting || !!activeAction}
                     onClick={handleRebuildNotion}
                   >
-                    {splitting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wrench className="h-3 w-3" />}
+                    {splitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderTree className="h-4 w-4" />}
                     {splitting ? splitProgress : 'Rebuild Notion Import'}
                   </Button>
                 )}
