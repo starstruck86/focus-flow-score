@@ -388,3 +388,87 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
     </>
   );
 }
+
+// ── Lifecycle panel using canonical model ──────────────────
+const HUMAN_STAGE_LABELS: Record<string, string> = {
+  uploaded: 'Uploaded',
+  content_ready: 'Content Ready',
+  tagged: 'Tagged',
+  knowledge_extracted: 'Knowledge Extracted',
+  activated: 'Activated',
+  operationalized: 'Ready to Use',
+};
+
+const HUMAN_BLOCKED_LABELS: Record<string, string> = {
+  empty_content: 'Missing Content',
+  no_extraction: 'Needs Extraction',
+  no_activation: 'Needs Activation',
+  missing_contexts: 'Needs Context Repair',
+  stale_blocker_state: 'Needs Review',
+  none: 'None',
+};
+
+const BLOCKED_ACTIONS: Record<string, string> = {
+  empty_content: 'Add content via enrichment or manual paste',
+  no_extraction: 'Run knowledge extraction on this resource',
+  no_activation: 'Activate extracted knowledge items',
+  missing_contexts: 'Add context tags to active knowledge items',
+  stale_blocker_state: 'Clear stale state and re-enrich',
+  none: 'No action needed',
+};
+
+function LifecyclePanel({ resourceId }: { resourceId: string }) {
+  const { summary } = useCanonicalLifecycle();
+  if (!summary) return null;
+
+  const status = summary.resources.find(r => r.resource_id === resourceId);
+  if (!status) return null;
+
+  const stageLabel = HUMAN_STAGE_LABELS[status.canonical_stage] ?? status.canonical_stage;
+  const blockedLabel = HUMAN_BLOCKED_LABELS[status.blocked_reason] ?? status.blocked_reason;
+  const actionLabel = BLOCKED_ACTIONS[status.blocked_reason] ?? '';
+  const isReady = status.canonical_stage === 'operationalized';
+  const isBlocked = status.blocked_reason !== 'none';
+
+  return (
+    <div className={cn(
+      'rounded-lg border p-3 space-y-2',
+      isReady ? 'border-emerald-500/30 bg-emerald-500/5' : isBlocked ? 'border-amber-500/30 bg-amber-500/5' : 'border-border bg-muted/30',
+    )}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          {isReady ? (
+            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+          ) : isBlocked ? (
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+          ) : (
+            <Info className="h-4 w-4 text-muted-foreground" />
+          )}
+          <span className={cn('text-xs font-semibold', STAGE_COLORS[status.canonical_stage])}>
+            {stageLabel}
+          </span>
+        </div>
+        <Badge variant="outline" className="text-[9px]">
+          {status.knowledge_item_count} KI · {status.active_ki_count} active · {status.active_ki_with_context_count} w/ctx
+        </Badge>
+      </div>
+
+      {isBlocked && (
+        <div className="space-y-1 text-xs">
+          <p className="text-muted-foreground">
+            <span className="font-medium text-foreground">Blocked by:</span> {blockedLabel}
+          </p>
+          <p className="text-primary/80 flex items-center gap-1">
+            <span className="font-medium">Fix:</span> {actionLabel}
+          </p>
+        </div>
+      )}
+
+      {isReady && (
+        <p className="text-[10px] text-emerald-600">
+          This resource has active knowledge items with contexts — it's influencing prep, practice, and Dave.
+        </p>
+      )}
+    </div>
+  );
+}
