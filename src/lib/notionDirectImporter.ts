@@ -104,7 +104,7 @@ export function passesQualityCheck(content: string): boolean {
 
   // Skip mostly-heading pages (>80% lines are headings or empty)
   const lines = trimmed.split('\n');
-  const noiseLines = lines.filter(l => /^#{1,6}\s*$/.test(l.trim()) || l.trim() === '' || /^[-=_*]{3,}$/.test(l.trim()));
+  const noiseLines = lines.filter(l => /^#{1,6}\s/.test(l.trim()) || /^#{1,6}\s*$/.test(l.trim()) || l.trim() === '' || /^[-=_*]{3,}$/.test(l.trim()));
   if (lines.length > 3 && noiseLines.length / lines.length > 0.8) return false;
 
   return true;
@@ -144,8 +144,19 @@ export function chunkLargePage(title: string, content: string): { title: string;
     return chunks;
   }
 
-  // Fall back to paragraph splitting
+  // Fall back to paragraph splitting, or hard-split if no paragraph breaks
   const paragraphs = content.split(/\n{2,}/);
+  if (paragraphs.length <= 1) {
+    // Hard split: no natural breaks at all
+    let idx = 1;
+    for (let pos = 0; pos < content.length; pos += MAX_PAGE_LENGTH) {
+      const slice = content.slice(pos, pos + MAX_PAGE_LENGTH);
+      chunks.push({ title: `${title} (Part ${idx})`, content: slice });
+      idx++;
+    }
+    return chunks;
+  }
+
   let current = '';
   let idx = 1;
   for (const para of paragraphs) {
