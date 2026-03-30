@@ -86,6 +86,7 @@ export default function PrepHub() {
           {/* ═══ EXECUTE ═══ */}
           <TabsContent value="execute" className="mt-3 space-y-4">
             <ExecutionWorkbench />
+            <MeetingPrepEngine />
             <ContentBuilder />
           </TabsContent>
 
