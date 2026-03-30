@@ -1380,6 +1380,182 @@ export type Database = {
         }
         Relationships: []
       }
+      execution_outputs: {
+        Row: {
+          account_id: string | null
+          account_name: string | null
+          competitor: string | null
+          content: string
+          created_at: string
+          custom_instructions: string | null
+          id: string
+          is_promoted_to_template: boolean | null
+          is_strong_example: boolean | null
+          opportunity_id: string | null
+          output_type: string
+          persona: string | null
+          reference_resource_ids: string[] | null
+          stage: string | null
+          subject_line: string | null
+          template_id_used: string | null
+          times_reused: number | null
+          title: string
+          transcript_resource_ids: string[] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          account_name?: string | null
+          competitor?: string | null
+          content?: string
+          created_at?: string
+          custom_instructions?: string | null
+          id?: string
+          is_promoted_to_template?: boolean | null
+          is_strong_example?: boolean | null
+          opportunity_id?: string | null
+          output_type?: string
+          persona?: string | null
+          reference_resource_ids?: string[] | null
+          stage?: string | null
+          subject_line?: string | null
+          template_id_used?: string | null
+          times_reused?: number | null
+          title: string
+          transcript_resource_ids?: string[] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          account_name?: string | null
+          competitor?: string | null
+          content?: string
+          created_at?: string
+          custom_instructions?: string | null
+          id?: string
+          is_promoted_to_template?: boolean | null
+          is_strong_example?: boolean | null
+          opportunity_id?: string | null
+          output_type?: string
+          persona?: string | null
+          reference_resource_ids?: string[] | null
+          stage?: string | null
+          subject_line?: string | null
+          template_id_used?: string | null
+          times_reused?: number | null
+          title?: string
+          transcript_resource_ids?: string[] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "execution_outputs_template_id_used_fkey"
+            columns: ["template_id_used"]
+            isOneToOne: false
+            referencedRelation: "execution_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      execution_templates: {
+        Row: {
+          body: string
+          competitor: string | null
+          confidence_score: number | null
+          created_at: string
+          created_by_user: boolean | null
+          id: string
+          is_favorite: boolean | null
+          is_pinned: boolean | null
+          last_used_at: string | null
+          output_type: string
+          persona: string | null
+          quality_score: number | null
+          source_output_id: string | null
+          source_resource_id: string | null
+          stage: string | null
+          status: string
+          structure_json: Json | null
+          subject_line: string | null
+          tags: string[] | null
+          template_origin: string
+          template_type: string
+          times_selected: number | null
+          times_successful: number | null
+          times_used: number | null
+          title: string
+          tone: string | null
+          updated_at: string
+          use_case: string | null
+          user_id: string
+        }
+        Insert: {
+          body?: string
+          competitor?: string | null
+          confidence_score?: number | null
+          created_at?: string
+          created_by_user?: boolean | null
+          id?: string
+          is_favorite?: boolean | null
+          is_pinned?: boolean | null
+          last_used_at?: string | null
+          output_type?: string
+          persona?: string | null
+          quality_score?: number | null
+          source_output_id?: string | null
+          source_resource_id?: string | null
+          stage?: string | null
+          status?: string
+          structure_json?: Json | null
+          subject_line?: string | null
+          tags?: string[] | null
+          template_origin?: string
+          template_type?: string
+          times_selected?: number | null
+          times_successful?: number | null
+          times_used?: number | null
+          title: string
+          tone?: string | null
+          updated_at?: string
+          use_case?: string | null
+          user_id: string
+        }
+        Update: {
+          body?: string
+          competitor?: string | null
+          confidence_score?: number | null
+          created_at?: string
+          created_by_user?: boolean | null
+          id?: string
+          is_favorite?: boolean | null
+          is_pinned?: boolean | null
+          last_used_at?: string | null
+          output_type?: string
+          persona?: string | null
+          quality_score?: number | null
+          source_output_id?: string | null
+          source_resource_id?: string | null
+          stage?: string | null
+          status?: string
+          structure_json?: Json | null
+          subject_line?: string | null
+          tags?: string[] | null
+          template_origin?: string
+          template_type?: string
+          times_selected?: number | null
+          times_successful?: number | null
+          times_used?: number | null
+          title?: string
+          tone?: string | null
+          updated_at?: string
+          use_case?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       holidays: {
         Row: {
           created_at: string
