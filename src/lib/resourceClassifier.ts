@@ -12,15 +12,25 @@ export type ResourceRole = 'template' | 'example' | 'knowledge' | 'reference';
 
 export type RoleConfidence = 'high' | 'medium' | 'low';
 
+export type ActionBucket =
+  | 'promote_template'
+  | 'promote_example'
+  | 'extract_knowledge'
+  | 'manual_review'
+  | 'reference_only';
+
 export interface ClassificationResult {
   role: ResourceRole;
+  actionBucket: ActionBucket;
   confidence: RoleConfidence;
   reason: string;
-  detectedUseCase: string | null;
+  detectedUseCases: string[];
+  capabilities: string[];
   signals: string[];
+  stuckReason: string | null;
 }
 
-interface ClassifiableResource {
+export interface ClassifiableResource {
   id: string;
   title: string;
   content: string | null;
@@ -32,6 +42,9 @@ interface ClassifiableResource {
   content_length?: number | null;
   enrichment_status: string;
   is_strong_example?: boolean;
+  content_classification?: string | null;
+  failure_reason?: string | null;
+  manual_input_required?: boolean;
 }
 
 // ── Pattern banks ──────────────────────────────────────────
@@ -71,37 +84,82 @@ const USE_CASE_MAP: Record<string, RegExp[]> = {
   'Procurement / Legal': [/procurement/i, /legal/i, /security/i, /it\s*review/i],
 };
 
+const CAPABILITY_MAP: Record<string, RegExp[]> = {
+  'roi_framing': [/roi/i, /return\s*on/i, /cost.*sav/i, /business.*case/i],
+  'executive_messaging': [/executive/i, /cfo/i, /cxo/i, /vp\s/i, /c-suite/i],
+  'objection_handling': [/objection/i, /pushback/i, /rebuttal/i, /overcome/i],
+  'champion_enablement': [/champion/i, /internal.*sell/i, /alignment/i, /mobiliz/i],
+  'discovery_questions': [/discovery/i, /question/i, /qualifying/i, /pain/i],
+  'pricing_strategy': [/pric/i, /discount/i, /negotiat/i, /anchor/i],
+  'procurement_support': [/procurement/i, /legal/i, /security/i, /compliance/i, /it\s*review/i],
+};
+
 // ── Classifier ─────────────────────────────────────────────
 
 function countMatches(text: string, patterns: RegExp[]): number {
   return patterns.filter(p => p.test(text)).length;
 }
 
-function detectUseCase(text: string): string | null {
-  let best: string | null = null;
-  let bestCount = 0;
+function detectUseCases(text: string): string[] {
+  const results: string[] = [];
   for (const [useCase, patterns] of Object.entries(USE_CASE_MAP)) {
-    const c = countMatches(text, patterns);
-    if (c > bestCount) { best = useCase; bestCount = c; }
+    if (countMatches(text, patterns) >= 1) results.push(useCase);
   }
-  return bestCount >= 1 ? best : null;
+  return results;
+}
+
+function detectCapabilities(text: string): string[] {
+  const results: string[] = [];
+  for (const [cap, patterns] of Object.entries(CAPABILITY_MAP)) {
+    if (countMatches(text, patterns) >= 1) results.push(cap);
+  }
+  return results;
+}
+
+function computeStuckReason(r: ClassifiableResource): string | null {
+  if (r.failure_reason) return `Enrichment failed: ${r.failure_reason}`;
+  if (r.manual_input_required) return 'Needs manual content input';
+  const len = r.content_length || (r.content?.length ?? 0);
+  if (len < 50) return 'Content too short for classification';
+  if (!r.content && len === 0) return 'No content extracted';
+  return null;
 }
 
 export function classifyResource(r: ClassifiableResource): ClassificationResult {
-  // Already explicitly marked
-  if (r.is_template || r.resource_type === 'template') {
-    return {
-      role: 'template',
-      confidence: 'high',
-      reason: 'Explicitly marked as template',
-      detectedUseCase: r.template_category || detectUseCase(r.title + ' ' + (r.description || '')),
-      signals: ['is_template flag set'],
-    };
-  }
-
   const text = [r.title, r.description, r.content?.slice(0, 3000)].filter(Boolean).join('\n');
   const len = r.content_length || (r.content?.length ?? 0);
   const signals: string[] = [];
+  const useCases = detectUseCases(text);
+  const capabilities = detectCapabilities(text);
+  const stuckReason = computeStuckReason(r);
+
+  // Already explicitly marked as template
+  if (r.is_template || r.resource_type === 'template') {
+    return {
+      role: 'template',
+      actionBucket: 'promote_template',
+      confidence: 'high',
+      reason: 'Explicitly marked as template',
+      detectedUseCases: useCases.length ? useCases : (r.template_category ? [r.template_category] : []),
+      capabilities,
+      signals: ['is_template flag set'],
+      stuckReason: null,
+    };
+  }
+
+  // If stuck, route to manual review
+  if (stuckReason) {
+    return {
+      role: 'reference',
+      actionBucket: 'manual_review',
+      confidence: 'low',
+      reason: stuckReason,
+      detectedUseCases: useCases,
+      capabilities,
+      signals: ['stuck resource'],
+      stuckReason,
+    };
+  }
 
   const templateHits = countMatches(text, TEMPLATE_PATTERNS);
   const knowledgeHits = countMatches(text, KNOWLEDGE_PATTERNS);
@@ -111,22 +169,18 @@ export function classifyResource(r: ClassifiableResource): ClassificationResult 
   if (knowledgeHits > 0) signals.push(`${knowledgeHits} knowledge signals`);
   if (exampleHits > 0) signals.push(`${exampleHits} example signals`);
 
-  // Structured short-form → template candidate
   const isStructured = /^(subject|to|from|hi|dear|step|agenda)/im.test(text) && len < 5000;
   if (isStructured) signals.push('structured short-form');
 
-  // Long conceptual → knowledge
   const isConceptual = len > 500 && knowledgeHits >= 2;
   if (isConceptual) signals.push('conceptual long-form');
 
-  // Short raw / messy → reference
   const isRaw = len < 200 && templateHits === 0 && knowledgeHits === 0 && exampleHits === 0;
   if (isRaw) signals.push('short/raw content');
 
-  // Score
   const scores: Record<ResourceRole, number> = {
     template: templateHits * 3 + (isStructured ? 4 : 0),
-    example: exampleHits * 3 + ((r as any).is_strong_example ? 6 : 0),
+    example: exampleHits * 3 + (r.is_strong_example ? 6 : 0),
     knowledge: knowledgeHits * 2 + (isConceptual ? 3 : 0),
     reference: isRaw ? 5 : 1,
   };
@@ -147,12 +201,23 @@ export function classifyResource(r: ClassifiableResource): ClassificationResult 
   if (topRole === 'knowledge') reasonParts.push('Contains tactics, principles, or frameworks');
   if (topRole === 'reference') reasonParts.push('Supporting material without clear reuse pattern');
 
+  // Map role → action bucket
+  const actionBucket: ActionBucket =
+    confidence === 'low' ? 'manual_review' :
+    topRole === 'template' ? 'promote_template' :
+    topRole === 'example' ? 'promote_example' :
+    topRole === 'knowledge' ? 'extract_knowledge' :
+    'reference_only';
+
   return {
     role: topRole,
+    actionBucket,
     confidence,
     reason: reasonParts.join('. ') || 'Auto-classified by content analysis',
-    detectedUseCase: detectUseCase(text),
+    detectedUseCases: useCases,
+    capabilities,
     signals,
+    stuckReason: null,
   };
 }
 
@@ -163,4 +228,39 @@ export function classifyResources(resources: ClassifiableResource[]): Map<string
     map.set(r.id, classifyResource(r));
   }
   return map;
+}
+
+// Bucket summary for header stats
+export interface BucketSummary {
+  promote_template: number;
+  promote_example: number;
+  extract_knowledge: number;
+  manual_review: number;
+  reference_only: number;
+  topStuckReasons: string[];
+}
+
+export function summarizeBuckets(classifications: Map<string, ClassificationResult>): BucketSummary {
+  const counts: Record<ActionBucket, number> = {
+    promote_template: 0,
+    promote_example: 0,
+    extract_knowledge: 0,
+    manual_review: 0,
+    reference_only: 0,
+  };
+  const stuckReasons = new Map<string, number>();
+
+  for (const c of classifications.values()) {
+    counts[c.actionBucket]++;
+    if (c.stuckReason) {
+      stuckReasons.set(c.stuckReason, (stuckReasons.get(c.stuckReason) || 0) + 1);
+    }
+  }
+
+  const topStuckReasons = [...stuckReasons.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([reason, count]) => `${reason} (${count})`);
+
+  return { ...counts, topStuckReasons };
 }

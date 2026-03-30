@@ -13,6 +13,7 @@ import { KnowledgeOverview } from './KnowledgeOverview';
 import { ResourceManager } from '@/components/prep/ResourceManager';
 import { PlaybookEngine } from '@/components/prep/PlaybookEngine';
 import { ResourceReadinessSheet } from '@/components/prep/ResourceReadinessSheet';
+import { ResourceUpsideQueue } from './ResourceUpsideQueue';
 
 export function KnowledgeWorkspace() {
   const [subTab, setSubTab] = useState('overview');
@@ -57,27 +58,24 @@ export function KnowledgeWorkspace() {
         </TabsContent>
 
         <TabsContent value="audit" className="mt-3">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
+          <div className="space-y-4">
+            {/* Resource Upside Queue — primary curation surface */}
+            <ResourceUpsideQueue />
+
+            {/* Deep audit access */}
+            <div className="flex items-center justify-between border border-border rounded-lg bg-card p-3">
               <div>
-                <p className="text-sm font-medium text-foreground">Deep Audit & Diagnostics</p>
+                <p className="text-xs font-medium text-foreground">Deep Audit & Diagnostics</p>
                 <p className="text-[10px] text-muted-foreground">
-                  Technical diagnostics, invariant checks, pipeline funnels, and remediation tools
+                  Pipeline funnels, invariant checks, and remediation tools
                 </p>
               </div>
               <button
                 onClick={() => setReadinessOpen(true)}
                 className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
               >
-                Open Audit Console
+                Open Console
               </button>
-            </div>
-            <div className="rounded-lg border border-border bg-muted/30 p-4 text-center">
-              <Shield className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-              <p className="text-sm text-muted-foreground">
-                Click "Open Audit Console" to access detailed resource readiness, pipeline validation,
-                knowledge remediation, and system health checks.
-              </p>
             </div>
           </div>
           <ResourceReadinessSheet
