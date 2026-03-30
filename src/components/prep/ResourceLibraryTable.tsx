@@ -298,8 +298,11 @@ export function ResourceLibraryTable({
     if (typeFilter !== 'all') {
       result = result.filter(r => r.resource_type === typeFilter);
     }
+    if (assetFilter !== 'all_assets') {
+      result = result.filter(r => getAssetType(r) === assetFilter);
+    }
     return sortResources(result, sortKey, sortDir);
-  }, [resources, lifecycleFilter, lifecycleMap, inUseIds, search, typeFilter, sortKey, sortDir]);
+  }, [resources, lifecycleFilter, lifecycleMap, inUseIds, search, typeFilter, assetFilter, sortKey, sortDir]);
 
   const allSelected = filtered.length > 0 && filtered.every(r => selectedIds.has(r.id));
 
