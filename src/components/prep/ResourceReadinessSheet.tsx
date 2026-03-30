@@ -66,64 +66,64 @@ const BUCKET_CONFIG: Record<ReadinessBucket, {
   help: string;
 }> = {
   operationalized: {
-    label: 'Operationalized',
+    label: 'Ready to Use',
     icon: <CheckCircle2 className="h-3.5 w-3.5" />,
     color: 'text-emerald-600',
-    help: 'Active knowledge with contexts — already influencing Dave, practice, and prep.',
+    help: 'Active knowledge with contexts — already influencing prep, practice, and Dave.',
   },
   content_backed_needs_fix: {
-    label: 'Content-Backed Needs Fix',
+    label: 'Needs Review',
     icon: <Wrench className="h-3.5 w-3.5" />,
     color: 'text-orange-500',
-    help: 'Has valid content but stuck in a stale blocker state. Fix to unlock extraction.',
+    help: 'Has valid content but stuck in a stale state. Fix to unlock extraction.',
   },
   blocked_incorrectly: {
-    label: 'Blocked Incorrectly',
+    label: 'Blocked',
     icon: <XCircle className="h-3.5 w-3.5" />,
     color: 'text-destructive',
-    help: 'Blocked or manual-required without enough content to auto-fix. Review manually.',
+    help: 'Blocked without enough content to auto-fix. Review manually.',
   },
   extractable_not_operationalized: {
-    label: 'Extractable / Not Activated',
+    label: 'Needs Extraction',
     icon: <Sparkles className="h-3.5 w-3.5" />,
     color: 'text-blue-500',
-    help: 'Enriched with content but knowledge not yet extracted or activated. High-value next step.',
+    help: 'Enriched with content but knowledge not yet extracted. High-value next step.',
   },
   low_quality_extraction: {
-    label: 'Low-Quality Extraction',
+    label: 'Needs Better Extraction',
     icon: <AlertTriangle className="h-3.5 w-3.5" />,
     color: 'text-amber-600',
-    help: 'Has knowledge items but none are activatable — likely summaries, not actionable tactics. Re-extract with tactic-focused extraction.',
+    help: 'Has knowledge items but none are usable — likely summaries, not actionable tactics.',
   },
   needs_tagging: {
     label: 'Needs Tagging',
     icon: <Tag className="h-3.5 w-3.5" />,
     color: 'text-amber-500',
-    help: 'Missing required tags (skill or context). Auto-tag to make retrievable by Dave.',
+    help: 'Missing required tags. Auto-tag to make retrievable.',
   },
   ready: {
     label: 'Ready',
     icon: <FileText className="h-3.5 w-3.5" />,
     color: 'text-primary',
-    help: 'Content-backed, enriched, and tagged. Ready for extraction or already usable.',
+    help: 'Content-backed, enriched, and tagged. Ready for extraction.',
   },
   junk_or_low_signal: {
-    label: 'Junk / Low Signal',
+    label: 'Low Value',
     icon: <Trash2 className="h-3.5 w-3.5" />,
     color: 'text-muted-foreground',
-    help: 'Very low content (<50 chars), no URL. Safe to delete if clearly not useful.',
+    help: 'Very low content, no URL. Safe to delete.',
   },
   missing_content: {
     label: 'Missing Content',
     icon: <HelpCircle className="h-3.5 w-3.5" />,
     color: 'text-muted-foreground',
-    help: 'No usable content yet. Needs enrichment or manual input to become useful.',
+    help: 'No usable content yet. Needs enrichment or manual input.',
   },
   orphaned_or_inconsistent: {
-    label: 'Orphaned / Inconsistent',
+    label: 'Needs Review',
     icon: <AlertTriangle className="h-3.5 w-3.5" />,
     color: 'text-amber-600',
-    help: 'Unusual state combination. Review manually — may need a targeted fix.',
+    help: 'Unusual state. Review manually.',
   },
 };
 
@@ -385,9 +385,9 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
 
                 {/* ── Bucket summary stats ── */}
                 <div className="grid grid-cols-4 gap-1.5">
-                  <MiniStat label="Operationalized" value={audit.counts.operationalized} accent="emerald" />
-                  <MiniStat label="Extractable" value={audit.counts.extractable_not_operationalized} accent="blue" />
-                  <MiniStat label="Needs Fix" value={audit.counts.content_backed_needs_fix} accent="orange" />
+                  <MiniStat label="Ready to Use" value={audit.counts.operationalized} accent="emerald" />
+                  <MiniStat label="Needs Extraction" value={audit.counts.extractable_not_operationalized} accent="blue" />
+                  <MiniStat label="Needs Review" value={audit.counts.content_backed_needs_fix} accent="orange" />
                   <MiniStat label="Underutilized" value={underutilizedCount} accent="amber" />
                 </div>
 
@@ -425,7 +425,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                     <span className={cn('font-medium', audit.validationSummary.tagQualityIssueCount > 0 ? 'text-amber-500' : 'text-foreground')}>
                       {audit.validationSummary.tagQualityIssueCount}
                     </span>
-                    <span>Fully operationalized:</span>
+                    <span>Ready to use:</span>
                     <span className="font-medium text-emerald-600">{audit.validationSummary.operationalizedCount}</span>
                   </div>
                 </div>
@@ -592,7 +592,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
                           <span>Enriched resources:</span><span className="font-medium text-foreground">{extractionCoverage.enrichedResources}</span>
                           <span>With knowledge items:</span><span className="font-medium text-foreground">{extractionCoverage.withKnowledgeItems} ({extractionCoverage.kiCoveragePct}%)</span>
-                          <span>Operationalized:</span><span className="font-medium text-emerald-600">{extractionCoverage.operationalizedResources} ({extractionCoverage.opCoveragePct}%)</span>
+                          <span>Ready to use:</span><span className="font-medium text-emerald-600">{extractionCoverage.operationalizedResources} ({extractionCoverage.opCoveragePct}%)</span>
                           <span>No knowledge yet:</span><span className={cn('font-medium', extractionCoverage.noKnowledgeYet > 0 ? 'text-amber-500' : 'text-foreground')}>{extractionCoverage.noKnowledgeYet}</span>
                         </div>
 
@@ -602,19 +602,19 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                             <p className="font-medium text-foreground mb-0.5">Blocked Resources</p>
                             <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
                               {extractionCoverage.blockedByEmptyContent > 0 && (
-                                <><span>Empty content (stale length):</span><span className="font-medium text-destructive">{extractionCoverage.blockedByEmptyContent}</span></>
+                                <><span>Missing content:</span><span className="font-medium text-destructive">{extractionCoverage.blockedByEmptyContent}</span></>
                               )}
                               {extractionCoverage.blockedByNoExtraction > 0 && (
-                                <><span>Extraction not run:</span><span className="font-medium text-amber-500">{extractionCoverage.blockedByNoExtraction}</span></>
+                                <><span>Needs extraction:</span><span className="font-medium text-amber-500">{extractionCoverage.blockedByNoExtraction}</span></>
                               )}
                               {extractionCoverage.blockedByActivationCriteria > 0 && (
-                                <><span>Activation criteria unmet:</span><span className="font-medium text-orange-500">{extractionCoverage.blockedByActivationCriteria}</span></>
+                                <><span>Needs activation:</span><span className="font-medium text-orange-500">{extractionCoverage.blockedByActivationCriteria}</span></>
                               )}
                               {extractionCoverage.blockedByMissingContexts > 0 && (
-                                <><span>Active but no contexts:</span><span className="font-medium text-orange-500">{extractionCoverage.blockedByMissingContexts}</span></>
+                                <><span>Needs context repair:</span><span className="font-medium text-orange-500">{extractionCoverage.blockedByMissingContexts}</span></>
                               )}
                               {extractionCoverage.blockedByStaleBlockerState > 0 && (
-                                <><span>Stale blocker state:</span><span className="font-medium text-destructive">{extractionCoverage.blockedByStaleBlockerState}</span></>
+                                <><span>Needs review:</span><span className="font-medium text-destructive">{extractionCoverage.blockedByStaleBlockerState}</span></>
                               )}
                             </div>
                           </div>
@@ -678,7 +678,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                           <span>Eligible:</span><span className="font-medium text-foreground">{lastForceExtract.eligible}</span>
                           <span>Processed:</span><span className="font-medium text-foreground">{lastForceExtract.processed}</span>
                           <span>New KI created:</span><span className="font-medium text-foreground">{lastForceExtract.newKnowledgeItems}</span>
-                          <span>Became operationalized:</span><span className="font-medium text-emerald-600">{lastForceExtract.becameOperationalized}</span>
+                          <span>Became ready to use:</span><span className="font-medium text-emerald-600">{lastForceExtract.becameOperationalized}</span>
                           <span>Needs review:</span><span className={cn('font-medium', lastForceExtract.stillNeedsReview > 0 ? 'text-amber-500' : 'text-foreground')}>{lastForceExtract.stillNeedsReview}</span>
                           {lastForceExtract.contentEmpty > 0 && (
                             <><span>Content empty:</span><span className="font-medium text-destructive">{lastForceExtract.contentEmpty}</span></>
@@ -742,7 +742,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                           <div className="pl-2 pt-1 text-[10px] space-y-1">
                             <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
                               <span>Content-backed enriched:</span><span className="font-medium text-foreground">{deepAudit.invariant.totalContentBackedEnriched}</span>
-                              <span>Operationalized:</span><span className="font-medium text-emerald-600">{deepAudit.invariant.byClass.operationalized}</span>
+                              <span>Ready to use:</span><span className="font-medium text-emerald-600">{deepAudit.invariant.byClass.operationalized}</span>
                               <span>Empty content:</span><span className={cn('font-medium', deepAudit.invariant.byClass.blocked_by_empty_content > 0 ? 'text-destructive' : 'text-foreground')}>{deepAudit.invariant.byClass.blocked_by_empty_content}</span>
                               <span>No extraction:</span><span className={cn('font-medium', deepAudit.invariant.byClass.blocked_by_no_extraction > 0 ? 'text-amber-500' : 'text-foreground')}>{deepAudit.invariant.byClass.blocked_by_no_extraction}</span>
                               <span>Activation criteria:</span><span className={cn('font-medium', deepAudit.invariant.byClass.blocked_by_activation_criteria > 0 ? 'text-orange-500' : 'text-foreground')}>{deepAudit.invariant.byClass.blocked_by_activation_criteria}</span>
@@ -872,7 +872,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                           <span>Total resources:</span><span className="font-medium text-foreground">{deepAudit.metrics.resources.total}</span>
                           <span>Content-backed:</span><span className="font-medium text-foreground">{deepAudit.metrics.resources.content_backed}</span>
                           <span>With knowledge:</span><span className="font-medium text-foreground">{deepAudit.metrics.resources.with_knowledge}</span>
-                          <span>Operationalized:</span><span className="font-medium text-emerald-600">{deepAudit.metrics.resources.operationalized}</span>
+                          <span>Ready to use:</span><span className="font-medium text-emerald-600">{deepAudit.metrics.resources.operationalized}</span>
                           <span>Stalled:</span><span className={cn('font-medium', deepAudit.metrics.resources.stalled > 0 ? 'text-amber-500' : 'text-foreground')}>{deepAudit.metrics.resources.stalled}</span>
                           <span>Coverage:</span><span className="font-medium text-foreground">{deepAudit.metrics.pipeline.coverage_pct}%</span>
                         </div>
@@ -1111,13 +1111,13 @@ function buildSweepGuidance(audit: AuditSummary): string[] {
 // ── Bottleneck label ───────────────────────────────────────
 
 function getBottleneckLabel(r: AuditedResource): { text: string; color: string } {
-  if (r.bucket === 'operationalized') return { text: 'Fully operationalized', color: 'text-emerald-600' };
-  if (r.activeKnowledgeCount > 0 && !r.hasContexts) return { text: 'Active, missing contexts', color: 'text-orange-500' };
-  if (r.knowledgeItemCount > 0 && r.activeKnowledgeCount === 0) return { text: 'Extracted, not activated', color: 'text-blue-500' };
-  if (r.bucket === 'content_backed_needs_fix') return { text: 'Content-backed but blocked', color: 'text-orange-500' };
-  if (r.bucket === 'extractable_not_operationalized' && r.knowledgeItemCount === 0) return { text: 'Ready for extraction', color: 'text-blue-500' };
+  if (r.bucket === 'operationalized') return { text: 'Ready to use', color: 'text-emerald-600' };
+  if (r.activeKnowledgeCount > 0 && !r.hasContexts) return { text: 'Needs context repair', color: 'text-orange-500' };
+  if (r.knowledgeItemCount > 0 && r.activeKnowledgeCount === 0) return { text: 'Needs activation', color: 'text-blue-500' };
+  if (r.bucket === 'content_backed_needs_fix') return { text: 'Needs review', color: 'text-orange-500' };
+  if (r.bucket === 'extractable_not_operationalized' && r.knowledgeItemCount === 0) return { text: 'Needs extraction', color: 'text-blue-500' };
   if (r.bucket === 'needs_tagging') return { text: 'Needs tagging', color: 'text-amber-500' };
-  if (r.bucket === 'junk_or_low_signal') return { text: 'Low signal', color: 'text-muted-foreground' };
+  if (r.bucket === 'junk_or_low_signal') return { text: 'Low value', color: 'text-muted-foreground' };
   if (r.bucket === 'ready') return { text: 'Ready', color: 'text-primary' };
   return { text: r.bucket.replace(/_/g, ' '), color: 'text-muted-foreground' };
 }

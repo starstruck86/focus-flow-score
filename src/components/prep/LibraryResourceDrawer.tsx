@@ -1,6 +1,7 @@
 /**
- * LibraryResourceDrawer — Lightweight detail sheet for Library tab resources.
- * Surfaces: View Content, Rebuild Notion Import, Fix Resource CTAs.
+ * LibraryResourceDrawer — Detail sheet for resources.
+ * Surfaces: Lifecycle stage, blocked reason, next action, View Content, Fix CTAs.
+ * Uses canonical lifecycle for stage display.
  */
 import { useState, useEffect } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -8,8 +9,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, Eye, FolderTree, Wrench, Edit3, Loader2, Trash2 } from 'lucide-react';
+import { ArrowLeft, Eye, FolderTree, Wrench, Edit3, Loader2, Trash2, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useCanonicalLifecycle, STAGE_COLORS } from '@/hooks/useCanonicalLifecycle';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
@@ -310,6 +312,9 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
 
           <ScrollArea className="flex-1 min-h-0">
             <div className="p-4 space-y-3">
+              {/* ── Lifecycle Status Panel ── */}
+              <LifecyclePanel resourceId={r.id} />
+
               {/* View Content */}
               {hasContent && (
                 <Button
@@ -340,8 +345,6 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
                 {r.file_url && <p className="truncate">URL: {r.file_url}</p>}
                 {rm && <p>Resolution: {resLabel || rm}</p>}
                 {em && <p>Extraction: {em.replace(/_/g, ' ')}</p>}
-                {r.enrichment_status && <p>Status: {r.enrichment_status}</p>}
-                {r.last_quality_score != null && <p>Quality: {r.last_quality_score}/100</p>}
                 {r.updated_at && <p>Updated: {new Date(r.updated_at).toLocaleDateString()}</p>}
               </div>
 
@@ -383,5 +386,89 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
         />
       )}
     </>
+  );
+}
+
+// ── Lifecycle panel using canonical model ──────────────────
+const HUMAN_STAGE_LABELS: Record<string, string> = {
+  uploaded: 'Uploaded',
+  content_ready: 'Content Ready',
+  tagged: 'Tagged',
+  knowledge_extracted: 'Knowledge Extracted',
+  activated: 'Activated',
+  operationalized: 'Ready to Use',
+};
+
+const HUMAN_BLOCKED_LABELS: Record<string, string> = {
+  empty_content: 'Missing Content',
+  no_extraction: 'Needs Extraction',
+  no_activation: 'Needs Activation',
+  missing_contexts: 'Needs Context Repair',
+  stale_blocker_state: 'Needs Review',
+  none: 'None',
+};
+
+const BLOCKED_ACTIONS: Record<string, string> = {
+  empty_content: 'Add content via enrichment or manual paste',
+  no_extraction: 'Run knowledge extraction on this resource',
+  no_activation: 'Activate extracted knowledge items',
+  missing_contexts: 'Add context tags to active knowledge items',
+  stale_blocker_state: 'Clear stale state and re-enrich',
+  none: 'No action needed',
+};
+
+function LifecyclePanel({ resourceId }: { resourceId: string }) {
+  const { summary } = useCanonicalLifecycle();
+  if (!summary) return null;
+
+  const status = summary.resources.find(r => r.resource_id === resourceId);
+  if (!status) return null;
+
+  const stageLabel = HUMAN_STAGE_LABELS[status.canonical_stage] ?? status.canonical_stage;
+  const blockedLabel = HUMAN_BLOCKED_LABELS[status.blocked_reason] ?? status.blocked_reason;
+  const actionLabel = BLOCKED_ACTIONS[status.blocked_reason] ?? '';
+  const isReady = status.canonical_stage === 'operationalized';
+  const isBlocked = status.blocked_reason !== 'none';
+
+  return (
+    <div className={cn(
+      'rounded-lg border p-3 space-y-2',
+      isReady ? 'border-emerald-500/30 bg-emerald-500/5' : isBlocked ? 'border-amber-500/30 bg-amber-500/5' : 'border-border bg-muted/30',
+    )}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          {isReady ? (
+            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+          ) : isBlocked ? (
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+          ) : (
+            <Info className="h-4 w-4 text-muted-foreground" />
+          )}
+          <span className={cn('text-xs font-semibold', STAGE_COLORS[status.canonical_stage])}>
+            {stageLabel}
+          </span>
+        </div>
+        <Badge variant="outline" className="text-[9px]">
+          {status.knowledge_item_count} KI · {status.active_ki_count} active · {status.active_ki_with_context_count} w/ctx
+        </Badge>
+      </div>
+
+      {isBlocked && (
+        <div className="space-y-1 text-xs">
+          <p className="text-muted-foreground">
+            <span className="font-medium text-foreground">Blocked by:</span> {blockedLabel}
+          </p>
+          <p className="text-primary/80 flex items-center gap-1">
+            <span className="font-medium">Fix:</span> {actionLabel}
+          </p>
+        </div>
+      )}
+
+      {isReady && (
+        <p className="text-[10px] text-emerald-600">
+          This resource has active knowledge items with contexts — it's influencing prep, practice, and Dave.
+        </p>
+      )}
+    </div>
   );
 }
