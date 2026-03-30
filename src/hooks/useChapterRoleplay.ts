@@ -226,7 +226,7 @@ export function useChapterRoleplay() {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail?.chapter) {
-        startRoleplay(detail.chapter, detail.knowledgeItemId);
+        startRoleplay(detail.chapter, detail.knowledgeItemId, detail.salesContext);
       }
     };
     window.addEventListener('dave-start-roleplay', handler);
