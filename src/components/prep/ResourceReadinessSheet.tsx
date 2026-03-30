@@ -545,12 +545,13 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                         onClick={async () => {
                           setDeepAuditLoading(true);
                           try {
-                            const [pipeline, knowledge, metrics] = await Promise.all([
-                              auditPipelineIntegrity(),
-                              auditKnowledgeUtilization(),
-                              getSystemMetrics(),
+                            const [pipeline, knowledge, metrics, invariant, resFunnel, kiFunnel, usageProof] = await Promise.all([
+                              auditPipelineIntegrity(), auditKnowledgeUtilization(), getSystemMetrics(),
+                              runInvariantCheck(), buildResourceFunnel(), buildKnowledgeFunnel(), buildUsageProof(),
                             ]);
-                            setDeepAudit({ pipeline, knowledge, metrics });
+                            const rootCauses = buildRootCauses(invariant, knowledge);
+                            const nstSummary = buildNothingSlipsSummary(metrics, invariant, resFunnel, kiFunnel);
+                            setDeepAudit({ pipeline, knowledge, metrics, invariant, resFunnel, kiFunnel, usageProof, rootCauses, summary: nstSummary });
                           } catch { toast.error('Audit failed'); }
                           setDeepAuditLoading(false);
                         }}>
