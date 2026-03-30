@@ -178,11 +178,32 @@ export function extractKnowledgeHeuristic(source: ExtractionSource): KnowledgeIt
       status: confidence >= 0.6 ? 'extracted' : 'review_needed',
       active: false,
       user_edited: false,
-      tags: [...tags, knowledgeType, signal.chapter],
-    });
-  }
+      const baseTags = [...tags, knowledgeType, signal.chapter];
+      const inferred = inferTags(text);
+      const structuredTags = mergeTags(baseTags, inferred);
 
-  // If no chapter matched but content is substantial, create a general item
+      items.push({
+        user_id: userId,
+        source_resource_id: resourceId,
+        source_doctrine_id: null,
+        title: `${title} — ${signal.chapter.replace(/_/g, ' ')}`,
+        knowledge_type: knowledgeType,
+        chapter: signal.chapter,
+        sub_chapter: subChapter,
+        competitor_name: competitor,
+        product_area: productArea,
+        applies_to_contexts: buildContexts(signal.chapter, knowledgeType),
+        tactic_summary: summary,
+        why_it_matters: null,
+        when_to_use: null,
+        when_not_to_use: null,
+        example_usage: null,
+        confidence_score: confidence,
+        status: confidence >= 0.6 ? 'extracted' : 'review_needed',
+        active: false,
+        user_edited: false,
+        tags: structuredTags,
+      });
   if (items.length === 0 && text.length > 300) {
     const knowledgeType = competitor ? 'competitive' : isProductKnowledge ? 'product' : 'skill';
     items.push({
