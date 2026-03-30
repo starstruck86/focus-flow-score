@@ -41,6 +41,7 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
     end_playbook_roleplay: () => endPlaybookRoleplay(ctx),
     get_active_knowledge: (params: { chapter?: string; competitor?: string; knowledgeType?: string }) => getActivePlaybookKnowledge(ctx, params),
     get_knowledge_for_roleplay: (params: { chapter: string; competitor?: string }) => getPlaybookKnowledgeForRoleplay(ctx, params),
+    explain_roleplay_plan: (params: { chapter?: string; knowledgeItemId?: string; competitor?: string }) => explainRoleplayPlan(ctx, params),
     ...createAccountExecutionTools(ctx),
     ...createAccountCentricTools(ctx),
     ...createExecutionSessionTools(ctx),
