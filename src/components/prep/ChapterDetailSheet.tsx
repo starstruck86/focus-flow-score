@@ -32,6 +32,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   onSelectItem: (id: string) => void;
   onPractice: (chapter: string) => void;
+  onPracticeTactic?: (chapter: string, knowledgeItemId: string) => void;
 }
 
 export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, onPractice }: Props) {
