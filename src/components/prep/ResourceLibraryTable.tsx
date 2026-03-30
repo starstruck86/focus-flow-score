@@ -168,16 +168,17 @@ export function ResourceLibraryTable({
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
-  const [activeView, setActiveView] = useState('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [lifecycleFilter, setLifecycleFilter] = useState<LifecycleFilter>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [density, setDensity] = useState<Density>('comfortable');
   const [showScrollTop, setShowScrollTop] = useState(false);
   const { summary: lifecycle } = useCanonicalLifecycle();
+  const { data: inUseData } = useInUseResources();
+  const inUseIds = inUseData?.inUseResourceIds ?? new Set<string>();
 
   // Build a quick lookup for canonical status per resource
   const lifecycleMap = useMemo(() => {
-    const map = new Map<string, { stage: string; blocked: string; kiCount: number; activeKi: number }>();
+    const map = new Map<string, { stage: string; blocked: string; kiCount: number; activeKi: number; activeKiWithCtx: number }>();
     if (!lifecycle) return map;
     for (const r of lifecycle.resources) {
       map.set(r.resource_id, {
@@ -185,10 +186,36 @@ export function ResourceLibraryTable({
         blocked: r.blocked_reason,
         kiCount: r.knowledge_item_count,
         activeKi: r.active_ki_count,
+        activeKiWithCtx: r.active_ki_with_context_count,
       });
     }
     return map;
   }, [lifecycle]);
+
+  // Lifecycle filter counts from canonical data
+  const filterCounts = useMemo(() => {
+    const counts: Record<LifecycleFilter, number> = {
+      all: resources.length,
+      ready: 0, in_use: 0, blocked: 0,
+      needs_extraction: 0, needs_activation: 0,
+      needs_context: 0, needs_review: 0, missing_content: 0,
+    };
+    for (const r of resources) {
+      const lc = lifecycleMap.get(r.id);
+      if (!lc) continue;
+      if (lc.stage === 'operationalized') counts.ready++;
+      if (inUseIds.has(r.id)) counts.in_use++;
+      if (lc.blocked !== 'none') {
+        counts.blocked++;
+        if (lc.blocked === 'no_extraction') counts.needs_extraction++;
+        if (lc.blocked === 'no_activation') counts.needs_activation++;
+        if (lc.blocked === 'missing_contexts') counts.needs_context++;
+        if (lc.blocked === 'stale_blocker_state') counts.needs_review++;
+        if (lc.blocked === 'empty_content') counts.missing_content++;
+      }
+    }
+    return counts;
+  }, [resources, lifecycleMap, inUseIds]);
 
   const scrollBodyRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -202,25 +229,35 @@ export function ResourceLibraryTable({
     }
   }, [sortKey]);
 
-  const viewFilter = useMemo(
-    () => SAVED_VIEWS.find(v => v.id === activeView)?.filter || (() => true),
-    [activeView]
-  );
-
   const filtered = useMemo(() => {
-    let result = resources.filter(viewFilter);
+    let result = [...resources];
+    // Apply lifecycle filter
+    if (lifecycleFilter !== 'all') {
+      result = result.filter(r => {
+        const lc = lifecycleMap.get(r.id);
+        if (!lc) return false;
+        switch (lifecycleFilter) {
+          case 'ready': return lc.stage === 'operationalized';
+          case 'in_use': return inUseIds.has(r.id);
+          case 'blocked': return lc.blocked !== 'none';
+          case 'needs_extraction': return lc.blocked === 'no_extraction';
+          case 'needs_activation': return lc.blocked === 'no_activation';
+          case 'needs_context': return lc.blocked === 'missing_contexts';
+          case 'needs_review': return lc.blocked === 'stale_blocker_state';
+          case 'missing_content': return lc.blocked === 'empty_content';
+          default: return true;
+        }
+      });
+    }
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(r => r.title.toLowerCase().includes(q));
-    }
-    if (statusFilter !== 'all') {
-      result = result.filter(r => r.enrichment_status === statusFilter);
     }
     if (typeFilter !== 'all') {
       result = result.filter(r => r.resource_type === typeFilter);
     }
     return sortResources(result, sortKey, sortDir);
-  }, [resources, viewFilter, search, statusFilter, typeFilter, sortKey, sortDir]);
+  }, [resources, lifecycleFilter, lifecycleMap, inUseIds, search, typeFilter, sortKey, sortDir]);
 
   const allSelected = filtered.length > 0 && filtered.every(r => selectedIds.has(r.id));
 
@@ -257,21 +294,44 @@ export function ResourceLibraryTable({
 
   return (
     <div ref={shellRef} className="flex flex-col" style={{ height: 'calc(100vh - 160px)', minHeight: '450px' }}>
-      {/* Saved views — pinned top */}
+      {/* Lifecycle summary strip */}
+      <div className="flex items-center gap-3 py-2 px-1 shrink-0 border-b border-border mb-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">Total</span>
+          <span className="text-sm font-semibold">{filterCounts.all}</span>
+        </div>
+        <div className="h-4 w-px bg-border" />
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">Ready to Use</span>
+          <span className="text-sm font-semibold text-emerald-600">{filterCounts.ready}</span>
+        </div>
+        <div className="h-4 w-px bg-border" />
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">In Use</span>
+          <span className="text-sm font-semibold text-blue-600">{filterCounts.in_use}</span>
+        </div>
+        <div className="h-4 w-px bg-border" />
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">Blocked</span>
+          <span className="text-sm font-semibold text-destructive">{filterCounts.blocked}</span>
+        </div>
+      </div>
+
+      {/* Lifecycle quick filters */}
       <div className="flex items-center gap-1 overflow-x-auto pb-1 shrink-0">
-        {SAVED_VIEWS.map(view => (
+        {(Object.keys(LIFECYCLE_FILTER_LABELS) as LifecycleFilter[]).map(key => (
           <Button
-            key={view.id}
-            variant={activeView === view.id ? 'default' : 'ghost'}
+            key={key}
+            variant={lifecycleFilter === key ? 'default' : 'ghost'}
             size="sm"
-            className={cn('h-7 text-xs gap-1 shrink-0', activeView === view.id && 'shadow-sm')}
-            onClick={() => setActiveView(view.id)}
+            className={cn('h-7 text-xs gap-1 shrink-0', lifecycleFilter === key && 'shadow-sm')}
+            onClick={() => setLifecycleFilter(key)}
           >
-            {view.icon}
-            {view.label}
-            {view.id !== 'all' && (
+            {LIFECYCLE_FILTER_ICONS[key]}
+            {LIFECYCLE_FILTER_LABELS[key]}
+            {key !== 'all' && (
               <span className="ml-0.5 opacity-70">
-                ({resources.filter(view.filter).length})
+                ({filterCounts[key]})
               </span>
             )}
           </Button>
