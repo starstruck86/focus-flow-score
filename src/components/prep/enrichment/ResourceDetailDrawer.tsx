@@ -81,11 +81,18 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
     last_quality_score: (r as any).qualityScore ?? (r as any).last_quality_score,
   });
 
-  const isNotionSource = isNotionZipResource({
-    resolution_method: (r as any).resolution_method,
-    extraction_method: (r as any).extraction_method,
-    content: (r as any).content,
-  });
+  const isNotionSource = (() => {
+    const rm = (r as any).resolution_method;
+    const em = (r as any).extraction_method;
+    if (rm === 'notion_zip_import' || rm === 'notion_zip_source' ||
+        em === 'notion_zip_import' || em === 'notion_zip_source') return true;
+    if ((r.contentLength ?? 0) > 100_000 && isNotionZipResource({
+      resolution_method: rm, extraction_method: em, content: (r as any).content,
+    })) return true;
+    return isNotionZipResource({
+      resolution_method: rm, extraction_method: em, content: (r as any).content,
+    });
+  })();
 
   const invalidateAll = useCallback(() => {
     FIX_RESOURCE_INVALIDATION_KEYS.forEach(key => {
