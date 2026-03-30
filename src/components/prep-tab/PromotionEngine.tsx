@@ -18,7 +18,7 @@ import {
 import { cn } from '@/lib/utils';
 import { classifyResources, type ResourceRole, type ClassificationResult } from '@/lib/resourceClassifier';
 import { useResources, type Resource } from '@/hooks/useResources';
-import { useKnowledgeItems } from '@/hooks/useKnowledgeItems';
+import { useInsertKnowledgeItems } from '@/hooks/useKnowledgeItems';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';

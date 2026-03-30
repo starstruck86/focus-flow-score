@@ -29,7 +29,7 @@ interface ClassifiableResource {
   is_template: boolean | null;
   template_category: string | null;
   tags: string[] | null;
-  content_length: number | null;
+  content_length?: number | null;
   enrichment_status: string;
   is_strong_example?: boolean;
 }
