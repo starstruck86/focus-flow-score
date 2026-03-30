@@ -1204,6 +1204,21 @@ export function ResourceManager() {
       />
 
       {/* Bulk selection bar moved into ResourceLibraryTable */}
+
+      {/* Library resource detail drawer */}
+      {drawerResource && (
+        <LibraryResourceDrawer
+          resource={drawerResource}
+          open={!!drawerResource}
+          onOpenChange={(open) => { if (!open) setDrawerResource(null); }}
+          onEdit={() => { setEditingResource(drawerResource); setDrawerResource(null); }}
+          onResourceUpdated={() => {
+            queryClient.invalidateQueries({ queryKey: ['resources'] });
+            queryClient.invalidateQueries({ queryKey: ['all-resources'] });
+            queryClient.invalidateQueries({ queryKey: ['resource-folders'] });
+          }}
+        />
+      )}
     </div>
   );
 }
