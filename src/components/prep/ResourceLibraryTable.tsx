@@ -16,7 +16,7 @@ import {
   MoreHorizontal, Zap, RefreshCw, RotateCcw, Trash2,
   Eye, AlertTriangle, CheckCircle2, FileText,
   Filter, X, FileAudio, HelpCircle, Info, Inbox, ShieldAlert,
-  Star, BookTemplate, Activity,
+  Star, BookOpen, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type EnrichmentStatus } from '@/lib/resourceEligibility';
