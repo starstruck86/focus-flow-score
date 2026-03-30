@@ -180,8 +180,11 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
           const result = await fixResourceStateFromContent(r.id, currentUserId, { triggerReEnrich: true });
           if (result.success) {
             toast.success(result.message);
+            // Auto-operationalize after fix
+            const opResult = await autoOperationalizeResource(r.id);
+            setAutoOpResult(opResult);
             invalidateAll();
-            onClose();
+            // Don't close — show the result
           } else {
             toast.error(result.message);
           }
