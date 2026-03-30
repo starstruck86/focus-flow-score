@@ -216,7 +216,7 @@ export function deriveProcessingState(
       };
     }
 
-    const ea = classifyEnrichability(resource.file_url, resource.resource_type);
+    const ea = classifyEnrichabilityForResource(resource);
     if (ea.enrichability === 'manual_input_needed' || ea.enrichability === 'needs_auth') {
       return {
         state: 'MANUAL_REQUIRED',
