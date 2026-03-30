@@ -450,6 +450,7 @@ function initBuckets(): Record<ReadinessBucket, AuditedResource[]> {
     content_backed_needs_fix: [],
     blocked_incorrectly: [],
     extractable_not_operationalized: [],
+    low_quality_extraction: [],
     needs_tagging: [],
     ready: [],
     junk_or_low_signal: [],

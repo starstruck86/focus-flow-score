@@ -125,7 +125,7 @@ const BUCKET_CONFIG: Record<ReadinessBucket, {
 
 // Display order matches priority order
 const BUCKET_ORDER: ReadinessBucket[] = [
-  'content_backed_needs_fix', 'extractable_not_operationalized', 'needs_tagging',
+  'content_backed_needs_fix', 'extractable_not_operationalized', 'low_quality_extraction', 'needs_tagging',
   'operationalized', 'ready', 'blocked_incorrectly',
   'missing_content', 'junk_or_low_signal', 'orphaned_or_inconsistent',
 ];
