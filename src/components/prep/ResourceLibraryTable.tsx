@@ -64,84 +64,55 @@ interface ResourceLibraryTableProps {
   audioJobsMap?: Map<string, AudioJobRecord>;
 }
 
-// ── Saved views ────────────────────────────────────────────
-// Saved view filters use a function that receives the resource and optionally an audioJobsMap
-// We can't use deriveProcessingState directly in static filter since it needs audioJob,
-// so we use heuristic filters that approximate canonical states
-// Helper: resource has substantial content and should not appear in blocked views
-function hasSubstantialContent(r: Resource): boolean {
-  const rm = (r as any).resolution_method;
-  const isNotion = typeof rm === 'string' && rm.startsWith('notion_zip_');
-  const threshold = isNotion ? 200 : 1000;
-  return ((r as any).content_length ?? 0) > threshold || (r as any).manual_content_present === true;
+// ── Lifecycle-based quick filters ──────────────────────────
+type LifecycleFilter = 'all' | 'ready' | 'in_use' | 'blocked' | 'needs_extraction' | 'needs_activation' | 'needs_context' | 'needs_review' | 'missing_content';
+
+const LIFECYCLE_FILTER_LABELS: Record<LifecycleFilter, string> = {
+  all: 'All',
+  ready: 'Ready to Use',
+  in_use: 'In Use',
+  blocked: 'Blocked',
+  needs_extraction: 'Needs Extraction',
+  needs_activation: 'Needs Activation',
+  needs_context: 'Needs Context Repair',
+  needs_review: 'Needs Review',
+  missing_content: 'Missing Content',
+};
+
+const LIFECYCLE_FILTER_ICONS: Record<LifecycleFilter, React.ReactNode> = {
+  all: <FileText className="h-3 w-3" />,
+  ready: <CheckCircle2 className="h-3 w-3" />,
+  in_use: <Activity className="h-3 w-3" />,
+  blocked: <ShieldAlert className="h-3 w-3" />,
+  needs_extraction: <Zap className="h-3 w-3" />,
+  needs_activation: <Zap className="h-3 w-3" />,
+  needs_context: <HelpCircle className="h-3 w-3" />,
+  needs_review: <AlertTriangle className="h-3 w-3" />,
+  missing_content: <Inbox className="h-3 w-3" />,
+};
+
+// ── Next best action for blocked resources ─────────────────
+function getNextBestAction(blocked: BlockedReason | string): string {
+  switch (blocked) {
+    case 'no_extraction': return 'Run extraction';
+    case 'no_activation': return 'Activate KI';
+    case 'missing_contexts': return 'Repair contexts';
+    case 'empty_content': return 'Re-enrich content';
+    case 'stale_blocker_state': return 'Review stale state';
+    default: return '';
+  }
 }
 
-const SAVED_VIEWS: SavedView[] = [
-  {
-    id: 'all', label: 'All', icon: <FileText className="h-3 w-3" />,
-    filter: () => true,
-  },
-  {
-    id: 'needs_action', label: 'Needs Action', icon: <Zap className="h-3 w-3" />,
-    filter: (r) => {
-      if (hasSubstantialContent(r)) return false;
-      const status = r.enrichment_status;
-      if (!status || status === 'not_enriched' || status === 'incomplete' || status === 'failed') return true;
-      const ea = classifyEnrichabilityForResource(r);
-      return ea.enrichability === 'manual_input_needed' || ea.enrichability === 'needs_auth';
-    },
-  },
-  {
-    id: 'retryable', label: 'Retryable', icon: <RefreshCw className="h-3 w-3" />,
-    filter: (r) => {
-      if (hasSubstantialContent(r)) return false;
-      const status = r.enrichment_status;
-      if (status === 'failed' || status === 'incomplete' || status === 'stale' || status === 'quarantined') return true;
-      if ((r as any).last_quality_tier === 'shallow' && status === 'deep_enriched') return true;
-      return false;
-    },
-  },
-  {
-    id: 'manual', label: 'Manual Required', icon: <HelpCircle className="h-3 w-3" />,
-    filter: (r) => {
-      if (hasSubstantialContent(r)) return false;
-      const ea = classifyEnrichabilityForResource(r);
-      return ea.enrichability === 'manual_input_needed' || ea.enrichability === 'needs_auth' || ea.enrichability === 'metadata_only';
-    },
-  },
-  {
-    id: 'recent', label: 'Recently Added', icon: <FileText className="h-3 w-3" />,
-    filter: (r) => Date.now() - new Date(r.created_at).getTime() < 7 * 86400000,
-  },
-  {
-    id: 'completed', label: 'Completed', icon: <CheckCircle2 className="h-3 w-3" />,
-    filter: (r) => r.enrichment_status === 'deep_enriched' || hasSubstantialContent(r),
-  },
-  {
-    id: 'audio', label: 'Audio', icon: <FileAudio className="h-3 w-3" />,
-    filter: (r) => isAudioResource(r.file_url, r.resource_type),
-  },
-  {
-    id: 'needs_input', label: 'Needs Input', icon: <Inbox className="h-3 w-3" />,
-    filter: (r) => {
-      if (hasSubstantialContent(r)) return false;
-      const status = r.enrichment_status;
-      if (status === 'quarantined') return true;
-      if (status === 'failed' || status === 'incomplete') {
-        const ea = classifyEnrichabilityForResource(r);
-        return ea.enrichability === 'manual_input_needed'
-          || ea.enrichability === 'needs_auth'
-          || ea.enrichability === 'metadata_only';
-      }
-      const ea = classifyEnrichabilityForResource(r);
-      return ea.enrichability === 'manual_input_needed' || ea.enrichability === 'needs_auth';
-    },
-  },
-  {
-    id: 'quarantined', label: 'Quarantined', icon: <ShieldAlert className="h-3 w-3" />,
-    filter: (r) => r.enrichment_status === 'quarantined' && !hasSubstantialContent(r),
-  },
-];
+function getBlockedLabel(blocked: string): string {
+  switch (blocked) {
+    case 'no_extraction': return 'Needs extraction';
+    case 'no_activation': return 'Needs activation';
+    case 'missing_contexts': return 'Needs context repair';
+    case 'empty_content': return 'Missing content';
+    case 'stale_blocker_state': return 'Needs review';
+    default: return '';
+  }
+}
 
 // (Action helpers removed — action column now uses deriveProcessingState directly)
 
