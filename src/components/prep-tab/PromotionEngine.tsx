@@ -128,7 +128,7 @@ export function PromotionEngine() {
         });
         toast.success(`"${resource.title}" saved as Strong Example`);
       } else if (targetRole === 'knowledge') {
-        createKnowledgeItem?.({
+        insertKnowledge.mutate([{
           title: resource.title,
           chapter: 'messaging',
           knowledge_type: 'tactic',
@@ -138,7 +138,8 @@ export function PromotionEngine() {
           status: 'review_needed',
           tags: resource.tags || [],
           applies_to_contexts: classification.detectedUseCase ? [classification.detectedUseCase] : [],
-        });
+          user_id: user.id,
+        } as any]);
         toast.success(`"${resource.title}" extracted as Knowledge`);
       } else {
         // reference — just tag it
