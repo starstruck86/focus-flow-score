@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { isNotionZip } from '@/lib/notionZipExtractor';
 import { importNotionZipDirect } from '@/lib/notionDirectImporter';
+import { autoOperationalizeResource } from '@/lib/autoOperationalize';
 
 export const CORE_FOLDERS = [
   'Frameworks',
