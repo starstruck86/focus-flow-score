@@ -34,6 +34,7 @@ import {
   type AuditedResource,
 } from '@/lib/resourceAudit';
 import { autoOperationalizeBatch, summarizeBatchResults, derivePipelineStage, getStageLabel, autoOperationalizeAllResources, countEligibleResources, forceExtractAll, getExtractionCoverage, type BackfillSummary, type ForceExtractResult, type ExtractionCoverage, type BlockedExample, type BlockedReason } from '@/lib/autoOperationalize';
+import { scanExistingKnowledge, executeKIBackfill, type BackfillReport } from '@/lib/kiBackfill';
 import {
   auditPipelineIntegrity, auditKnowledgeUtilization, getSystemMetrics,
   runInvariantCheck, buildResourceFunnel, buildKnowledgeFunnel, buildUsageProof, buildRootCauses, buildNothingSlipsSummary,
@@ -168,6 +169,31 @@ const BULK_ACTION_DESCRIPTIONS: Record<string, { title: string; safe: string; wo
     safe: 'Runs extraction on all enriched resources with content_length > 300 that have no knowledge items yet. Then runs the full pipeline.',
     wontDo: 'Will not overwrite existing knowledge items. Will not auto-activate low-confidence items.',
   },
+  kiScan: {
+    title: 'Scan Knowledge Items',
+    safe: 'Classifies all existing knowledge items into keep / activate / rewrite / archive without changing anything.',
+    wontDo: 'Read-only scan — no items will be modified.',
+  },
+  kiActivate: {
+    title: 'Activate Newly Qualified Items',
+    safe: 'Activates inactive knowledge items that meet the new 0.55 confidence threshold and have all required fields.',
+    wontDo: 'Will not touch user-edited items. Will not modify items that are already active.',
+  },
+  kiRewrite: {
+    title: 'Reprocess Weak Knowledge Items',
+    safe: 'Re-extracts weak/summary-like knowledge items from their source resources using improved tactic-focused extraction.',
+    wontDo: 'Will not touch user-edited items. Archives weak items and creates new actionable replacements.',
+  },
+  kiArchive: {
+    title: 'Archive Low-Value Items',
+    safe: 'Archives duplicate, vague, and non-actionable knowledge items that cannot be improved.',
+    wontDo: 'Will not touch user-edited items. Will not delete — only marks as stale/inactive.',
+  },
+  kiFull: {
+    title: 'Full Knowledge Remediation',
+    safe: 'Runs the complete backfill: activates qualified items, rewrites weak ones from source, and archives junk.',
+    wontDo: 'Will not touch user-edited items. Will not delete — only archives.',
+  },
 };
 
 // ── Component ──────────────────────────────────────────────
@@ -189,6 +215,9 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
   const [extractionCoverage, setExtractionCoverage] = useState<ExtractionCoverage | null>(null);
   const [forceExtractProgress, setForceExtractProgress] = useState<{ processed: number; total: number } | null>(null);
   const [lastForceExtract, setLastForceExtract] = useState<ForceExtractResult | null>(null);
+  const [kiBackfillProgress, setKiBackfillProgress] = useState<{ processed: number; total: number } | null>(null);
+  const [kiBackfillReport, setKiBackfillReport] = useState<BackfillReport | null>(null);
+  const [kiScanReport, setKiScanReport] = useState<BackfillReport | null>(null);
 
   const runAudit = useCallback(async () => {
     setLoading(true);
@@ -251,6 +280,21 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
         setLastForceExtract(extractResult);
         toast.success(`Force extract: ${extractResult.newKnowledgeItems} items created, ${extractResult.becameOperationalized} operationalized`);
         if (extractResult.contentEmpty > 0) toast.warning(`${extractResult.contentEmpty} resources had empty content despite content_length`);
+      } else if (type === 'kiScan') {
+        const report = await scanExistingKnowledge();
+        setKiScanReport(report);
+        toast.success(`Scanned ${report.total_scanned} items: ${report.kept} keep, ${report.activated} activate, ${report.rewritten} rewrite, ${report.archived} archive`);
+      } else if (type === 'kiActivate' || type === 'kiRewrite' || type === 'kiArchive' || type === 'kiFull') {
+        const modeMap: Record<string, 'activate' | 'rewrite' | 'archive' | 'full'> = {
+          kiActivate: 'activate', kiRewrite: 'rewrite', kiArchive: 'archive', kiFull: 'full',
+        };
+        setKiBackfillProgress({ processed: 0, total: 0 });
+        const report = await executeKIBackfill(modeMap[type], (processed, total) => {
+          setKiBackfillProgress({ processed, total });
+        });
+        setKiBackfillProgress(null);
+        setKiBackfillReport(report);
+        toast.success(`KI remediation: ${report.activated} activated, ${report.rewritten} rewritten (${report.new_items_created} new), ${report.archived} archived`);
       }
     } catch {
       toast.error('Action failed');
@@ -434,6 +478,74 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                           <span>Tags added:</span><span className="font-medium text-foreground">{lastBackfillResult.totalTagsAdded}</span>
                           <span>Need review:</span><span className={cn('font-medium', lastBackfillResult.needsReview > 0 ? 'text-amber-500' : 'text-foreground')}>{lastBackfillResult.needsReview}</span>
                           {lastBackfillResult.errors > 0 && (<><span>Errors:</span><span className="font-medium text-destructive">{lastBackfillResult.errors}</span></>)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Knowledge Item Remediation ── */}
+                  <div className="pt-1.5 border-t border-border/50 space-y-1.5">
+                    <p className="text-[10px] font-medium text-muted-foreground">Knowledge Item Remediation</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
+                        onClick={() => setConfirmAction({ type: 'kiScan' })}>
+                        {actionLoading === 'kiScan' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Brain className="h-3 w-3" />}
+                        Scan Knowledge Items
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
+                        onClick={() => setConfirmAction({ type: 'kiActivate' })}>
+                        {actionLoading === 'kiActivate' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                        Activate Qualified
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
+                        onClick={() => setConfirmAction({ type: 'kiRewrite' })}>
+                        {actionLoading === 'kiRewrite' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                        Reprocess Weak Items
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-destructive" disabled={!!actionLoading}
+                        onClick={() => setConfirmAction({ type: 'kiArchive' })}>
+                        {actionLoading === 'kiArchive' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                        Archive Low-Value
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 border-primary/30" disabled={!!actionLoading}
+                        onClick={() => setConfirmAction({ type: 'kiFull' })}>
+                        {actionLoading === 'kiFull' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Rocket className="h-3 w-3 text-primary" />}
+                        Full Remediation
+                      </Button>
+                    </div>
+                    {kiBackfillProgress && (
+                      <div className="text-[10px] text-muted-foreground flex items-center gap-2">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Remediating {kiBackfillProgress.processed} / {kiBackfillProgress.total} items…
+                      </div>
+                    )}
+                    {/* Scan results */}
+                    {kiScanReport && !kiBackfillReport && (
+                      <div className="rounded-md border border-primary/20 bg-primary/5 p-2 text-[10px] space-y-0.5">
+                        <p className="font-medium text-foreground">Scan Results (dry run)</p>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
+                          <span>Total scanned:</span><span className="font-medium text-foreground">{kiScanReport.total_scanned}</span>
+                          <span>Keep as-is:</span><span className="font-medium text-emerald-600">{kiScanReport.kept}</span>
+                          <span>Ready to activate:</span><span className="font-medium text-blue-600">{kiScanReport.activated}</span>
+                          <span>Need rewrite:</span><span className="font-medium text-amber-600">{kiScanReport.rewritten}</span>
+                          <span>Archive/delete:</span><span className="font-medium text-destructive">{kiScanReport.archived}</span>
+                          <span>Protected (user-edited):</span><span className="font-medium text-foreground">{kiScanReport.protected_skipped}</span>
+                        </div>
+                      </div>
+                    )}
+                    {/* Backfill results */}
+                    {kiBackfillReport && !kiBackfillProgress && (
+                      <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 p-2 text-[10px] space-y-0.5">
+                        <p className="font-medium text-foreground">Remediation Results</p>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
+                          <span>Total scanned:</span><span className="font-medium text-foreground">{kiBackfillReport.total_scanned}</span>
+                          <span>Kept:</span><span className="font-medium text-emerald-600">{kiBackfillReport.kept}</span>
+                          <span>Activated:</span><span className="font-medium text-blue-600">{kiBackfillReport.activated}</span>
+                          <span>Rewritten:</span><span className="font-medium text-amber-600">{kiBackfillReport.rewritten}</span>
+                          <span>New items created:</span><span className="font-medium text-primary">{kiBackfillReport.new_items_created}</span>
+                          <span>Archived:</span><span className="font-medium text-destructive">{kiBackfillReport.archived}</span>
+                          <span>Protected:</span><span className="font-medium text-foreground">{kiBackfillReport.protected_skipped}</span>
+                          {kiBackfillReport.errors > 0 && (<><span>Errors:</span><span className="font-medium text-destructive">{kiBackfillReport.errors}</span></>)}
                         </div>
                       </div>
                     )}
