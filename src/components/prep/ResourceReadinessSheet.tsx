@@ -20,7 +20,7 @@ import { Separator } from '@/components/ui/separator';
 import {
   Loader2, RefreshCw, Wrench, Sparkles, Zap, Trash2, Tag, CheckCircle2,
   AlertTriangle, XCircle, FileText, Brain, HelpCircle, Info, ArrowRight,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, Rocket,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -32,6 +32,7 @@ import {
   type ReadinessBucket,
   type AuditedResource,
 } from '@/lib/resourceAudit';
+import { autoOperationalizeBatch, summarizeBatchResults, derivePipelineStage, getStageLabel } from '@/lib/autoOperationalize';
 import { toast } from 'sonner';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -134,6 +135,11 @@ const BULK_ACTION_DESCRIPTIONS: Record<string, { title: string; safe: string; wo
     safe: 'Activates extracted knowledge items with confidence ≥70% that already have applies_to_contexts.',
     wontDo: 'Will not activate items without contexts. Will not activate low-confidence items.',
   },
+  autoOp: {
+    title: 'Auto-Operationalize Ready Resources',
+    safe: 'Runs the full pipeline (tag → extract → activate) on content-backed resources that are not yet operationalized.',
+    wontDo: 'Will not touch junk, missing-content, or already-operationalized resources. Will not auto-activate low-confidence items.',
+  },
 };
 
 // ── Component ──────────────────────────────────────────────
@@ -177,6 +183,11 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
           if (!error) deleted++;
         }
         toast.success(`Deleted ${deleted} junk resources`);
+      } else if (type === 'autoOp' && ids) {
+        const results = await autoOperationalizeBatch(ids);
+        const summary = summarizeBatchResults(results);
+        toast.success(`Auto-operationalized: ${summary.operationalized} fully operationalized, ${summary.totalKnowledgeExtracted} extracted, ${summary.totalKnowledgeActivated} activated`);
+        if (summary.needsReview > 0) toast.info(`${summary.needsReview} resources need manual review`);
       }
     } catch {
       toast.error('Action failed');
@@ -302,6 +313,21 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                       {actionLoading === 'activate' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
                       Activate High-Confidence
                     </Button>
+                    {/* Auto-Operationalize: targets ready + extractable + needs_tagging */}
+                    {(audit.counts.ready + audit.counts.extractable_not_operationalized + audit.counts.needs_tagging) > 0 && (
+                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 border-primary/30" disabled={!!actionLoading}
+                        onClick={() => {
+                          const ids = [
+                            ...audit.buckets.extractable_not_operationalized,
+                            ...audit.buckets.needs_tagging,
+                            ...audit.buckets.ready,
+                          ].map(r => r.id);
+                          setConfirmAction({ type: 'autoOp', ids });
+                        }}>
+                        {actionLoading === 'autoOp' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Rocket className="h-3 w-3" />}
+                        Auto-Operationalize {audit.counts.ready + audit.counts.extractable_not_operationalized + audit.counts.needs_tagging}
+                      </Button>
+                    )}
                     {audit.counts.junk_or_low_signal > 0 && (
                       <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-destructive" disabled={!!actionLoading}
                         onClick={() => setConfirmAction({ type: 'delete', ids: audit.buckets.junk_or_low_signal.map(r => r.id) })}>
@@ -443,6 +469,10 @@ function getBottleneckLabel(r: AuditedResource): { text: string; color: string }
 function ResourceRow({ resource: r }: { resource: AuditedResource }) {
   const tagGroups = groupTagsByDimension(r.tags);
   const bottleneck = getBottleneckLabel(r);
+  const pipelineStage = derivePipelineStage(
+    { content_length: r.contentLength, tags: r.tags, enrichment_status: r.enrichmentStatus },
+    { total: r.knowledgeItemCount, active: r.activeKnowledgeCount, hasContexts: r.hasContexts },
+  );
 
   // Separate tags by tier for display
   const requiredTags: Array<[TagDimension, string[]]> = [];
@@ -465,6 +495,7 @@ function ResourceRow({ resource: r }: { resource: AuditedResource }) {
           <p className={cn('text-[9px] font-medium', bottleneck.color)}>{bottleneck.text}</p>
         </div>
         <div className="flex gap-0.5 shrink-0 flex-wrap justify-end max-w-[45%]">
+          <Badge variant="outline" className="text-[7px] h-3.5 px-1 border-primary/20">{getStageLabel(pipelineStage)}</Badge>
           {r.badges.map(b => (
             <Badge key={b} variant="outline" className="text-[7px] h-3.5 px-1">{b}</Badge>
           ))}

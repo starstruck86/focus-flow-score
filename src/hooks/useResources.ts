@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { useCallback } from 'react';
 import type { EnrichmentStatus } from '@/lib/resourceEligibility';
+import { autoOperationalizeResource } from '@/lib/autoOperationalize';
 
 export type ResourceFolder = {
   id: string;
@@ -200,9 +201,18 @@ export function useCreateResource() {
       });
       return result;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       qc.invalidateQueries({ queryKey: ['resources'] });
       toast.success('Resource created');
+      // Fire-and-forget auto-operationalization
+      if (data?.id) {
+        autoOperationalizeResource(data.id).then(result => {
+          qc.invalidateQueries({ queryKey: ['knowledge-items'] });
+          if (result.operationalized) {
+            toast.success(`Auto-operationalized — ${result.knowledgeExtracted} extracted, ${result.knowledgeActivated} activated`);
+          }
+        }).catch(() => {});
+      }
     },
     onError: () => toast.error('Failed to create resource'),
   });

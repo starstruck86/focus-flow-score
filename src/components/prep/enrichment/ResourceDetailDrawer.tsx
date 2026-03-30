@@ -28,6 +28,9 @@ import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ContentViewer } from '../ContentViewer';
 import { isFixEligible, fixResourceStateFromContent, FIX_RESOURCE_INVALIDATION_KEYS } from '@/lib/fixResourceState';
+import { autoOperationalizeResource } from '@/lib/autoOperationalize';
+import { AutoOperationalizeResultCard } from '../AutoOperationalizeResultCard';
+import type { AutoOperationalizeResult } from '@/lib/autoOperationalize';
 import { resolveResourceWithManualInput, type RecoveryMode } from '@/lib/manualRecoveryResolver';
 import type { VerifiedResource } from '@/lib/enrichmentVerification';
 import { mapVerifiedToBucket, BUCKET_META } from './types';
@@ -55,6 +58,7 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
   const [showContentViewer, setShowContentViewer] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [splitting, setSplitting] = useState(false);
+  const [autoOpResult, setAutoOpResult] = useState<AutoOperationalizeResult | null>(null);
   const [splitProgress, setSplitProgress] = useState('');
   const [diagOpen, setDiagOpen] = useState(!isMobile);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -176,8 +180,11 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
           const result = await fixResourceStateFromContent(r.id, currentUserId, { triggerReEnrich: true });
           if (result.success) {
             toast.success(result.message);
+            // Auto-operationalize after fix
+            const opResult = await autoOperationalizeResource(r.id);
+            setAutoOpResult(opResult);
             invalidateAll();
-            onClose();
+            // Don't close — show the result
           } else {
             toast.error(result.message);
           }
@@ -529,6 +536,13 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
               <Textarea value={description} onChange={e => setDescription(e.target.value)} className="text-xs min-h-[50px]" placeholder="Operator notes…" />
             </div>
           </div>
+
+          {/* Auto-operationalize result */}
+          {autoOpResult && (
+            <div className="px-1">
+              <AutoOperationalizeResultCard result={autoOpResult} />
+            </div>
+          )}
 
           <Separator />
 
