@@ -14,7 +14,7 @@ import { ExecutionWorkbench } from '@/components/prep/ExecutionWorkbench';
 import { ContentBuilder } from '@/components/prep/ContentBuilder';
 
 // Learn tab components
-import { SalesBrainDashboard } from '@/components/prep/SalesBrainDashboard';
+import { PlaybookEngine } from '@/components/prep/PlaybookEngine';
 import { PlaybooksPanel } from '@/components/prep/PlaybooksPanel';
 
 // Ingest tab components
@@ -90,7 +90,7 @@ export default function PrepHub() {
 
           {/* ═══ LEARN ═══ */}
           <TabsContent value="learn" className="mt-3 space-y-4">
-            <SalesBrainDashboard />
+            <PlaybookEngine />
             <PlaybooksPanel />
           </TabsContent>
 

@@ -1642,6 +1642,84 @@ export type Database = {
         }
         Relationships: []
       }
+      knowledge_items: {
+        Row: {
+          active: boolean
+          applies_to_contexts: string[]
+          chapter: string
+          competitor_name: string | null
+          confidence_score: number
+          created_at: string
+          example_usage: string | null
+          id: string
+          knowledge_type: string
+          product_area: string | null
+          source_doctrine_id: string | null
+          source_resource_id: string | null
+          status: string
+          sub_chapter: string | null
+          tactic_summary: string | null
+          tags: string[]
+          title: string
+          updated_at: string
+          user_edited: boolean
+          user_id: string
+          when_not_to_use: string | null
+          when_to_use: string | null
+          why_it_matters: string | null
+        }
+        Insert: {
+          active?: boolean
+          applies_to_contexts?: string[]
+          chapter: string
+          competitor_name?: string | null
+          confidence_score?: number
+          created_at?: string
+          example_usage?: string | null
+          id?: string
+          knowledge_type?: string
+          product_area?: string | null
+          source_doctrine_id?: string | null
+          source_resource_id?: string | null
+          status?: string
+          sub_chapter?: string | null
+          tactic_summary?: string | null
+          tags?: string[]
+          title: string
+          updated_at?: string
+          user_edited?: boolean
+          user_id: string
+          when_not_to_use?: string | null
+          when_to_use?: string | null
+          why_it_matters?: string | null
+        }
+        Update: {
+          active?: boolean
+          applies_to_contexts?: string[]
+          chapter?: string
+          competitor_name?: string | null
+          confidence_score?: number
+          created_at?: string
+          example_usage?: string | null
+          id?: string
+          knowledge_type?: string
+          product_area?: string | null
+          source_doctrine_id?: string | null
+          source_resource_id?: string | null
+          status?: string
+          sub_chapter?: string | null
+          tactic_summary?: string | null
+          tags?: string[]
+          title?: string
+          updated_at?: string
+          user_edited?: boolean
+          user_id?: string
+          when_not_to_use?: string | null
+          when_to_use?: string | null
+          why_it_matters?: string | null
+        }
+        Relationships: []
+      }
       knowledge_signals: {
         Row: {
           author_or_speaker: string | null
