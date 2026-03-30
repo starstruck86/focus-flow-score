@@ -185,7 +185,7 @@ export async function autoOperationalizeResource(
   // Check for existing knowledge items first
   const { data: existingKI } = await supabase
     .from('knowledge_items' as any)
-    .select('id, active, applies_to_contexts, confidence_score, user_edited, tactic_summary, chapter')
+    .select('id, active, applies_to_contexts, confidence_score, user_edited, tactic_summary, chapter, tags')
     .eq('source_resource_id', resourceId);
 
   const existingItems = (existingKI ?? []) as any[];
