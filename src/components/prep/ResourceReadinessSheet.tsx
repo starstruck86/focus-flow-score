@@ -34,6 +34,7 @@ import {
   type AuditedResource,
 } from '@/lib/resourceAudit';
 import { autoOperationalizeBatch, summarizeBatchResults, derivePipelineStage, getStageLabel, autoOperationalizeAllResources, countEligibleResources, forceExtractAll, getExtractionCoverage, type BackfillSummary, type ForceExtractResult, type ExtractionCoverage, type BlockedExample, type BlockedReason } from '@/lib/autoOperationalize';
+import { scanExistingKnowledge, executeKIBackfill, type BackfillReport } from '@/lib/kiBackfill';
 import {
   auditPipelineIntegrity, auditKnowledgeUtilization, getSystemMetrics,
   runInvariantCheck, buildResourceFunnel, buildKnowledgeFunnel, buildUsageProof, buildRootCauses, buildNothingSlipsSummary,
