@@ -425,7 +425,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                     <span className={cn('font-medium', audit.validationSummary.tagQualityIssueCount > 0 ? 'text-amber-500' : 'text-foreground')}>
                       {audit.validationSummary.tagQualityIssueCount}
                     </span>
-                    <span>Fully operationalized:</span>
+                    <span>Ready to use:</span>
                     <span className="font-medium text-emerald-600">{audit.validationSummary.operationalizedCount}</span>
                   </div>
                 </div>
