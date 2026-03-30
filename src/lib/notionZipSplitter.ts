@@ -108,6 +108,9 @@ export function isNotionZipResource(resource: { resolution_method?: string; extr
   if (resource.resolution_method === 'notion_zip_import' || resource.extraction_method === 'notion_zip_import') {
     return true;
   }
+  if (resource.resolution_method === 'notion_zip_source' || resource.extraction_method === 'notion_zip_source') {
+    return true;
+  }
   // Check for separator pattern in content
   if (resource.content) {
     const matches = resource.content.match(SEPARATOR_REGEX);
