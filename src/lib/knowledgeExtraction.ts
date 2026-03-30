@@ -8,6 +8,7 @@
 import type { KnowledgeItemInsert } from '@/hooks/useKnowledgeItems';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { createLogger } from '@/lib/logger';
+import { inferTags, mergeTags } from '@/lib/resourceTags';
 
 const log = createLogger('KnowledgeExtraction');
 
@@ -157,6 +158,11 @@ export function extractKnowledgeHeuristic(source: ExtractionSource): KnowledgeIt
     // Extract meaningful summary from content
     const summary = extractBestSummary(text, signal.patterns);
 
+    // Build structured tags
+    const baseTags = [...tags, knowledgeType, signal.chapter];
+    const inferred = inferTags(text);
+    const structuredTags = mergeTags(baseTags, inferred);
+
     items.push({
       user_id: userId,
       source_resource_id: resourceId,
@@ -177,13 +183,17 @@ export function extractKnowledgeHeuristic(source: ExtractionSource): KnowledgeIt
       status: confidence >= 0.6 ? 'extracted' : 'review_needed',
       active: false,
       user_edited: false,
-      tags: [...tags, knowledgeType, signal.chapter],
+      tags: structuredTags,
     });
   }
 
   // If no chapter matched but content is substantial, create a general item
   if (items.length === 0 && text.length > 300) {
     const knowledgeType = competitor ? 'competitive' : isProductKnowledge ? 'product' : 'skill';
+    const baseTags = [...tags, knowledgeType];
+    const inferred = inferTags(text);
+    const structuredTags = mergeTags(baseTags, inferred);
+
     items.push({
       user_id: userId,
       source_resource_id: resourceId,
@@ -204,7 +214,7 @@ export function extractKnowledgeHeuristic(source: ExtractionSource): KnowledgeIt
       status: 'review_needed',
       active: false,
       user_edited: false,
-      tags: [...tags, knowledgeType],
+      tags: structuredTags,
     });
   }
 

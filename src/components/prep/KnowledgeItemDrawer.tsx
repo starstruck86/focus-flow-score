@@ -14,7 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import {
-  CheckCircle2, Play, Trash2, ExternalLink, Save, Zap,
+  CheckCircle2, Play, Trash2, ExternalLink, Save, Zap, X,
 } from 'lucide-react';
 import {
   useKnowledgeItems,
@@ -27,7 +27,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-
+import { groupTagsByDimension, getDimensionLabel, getDimensionColor } from '@/lib/resourceTags';
+import { cn } from '@/lib/utils';
 interface Props {
   itemId: string | null;
   open: boolean;
@@ -231,6 +232,48 @@ export function KnowledgeItemDrawer({ itemId, open, onOpenChange }: Props) {
                   rows={2} className="text-xs"
                 />
               </div>
+
+              {/* Tags */}
+              {item.tags && item.tags.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Tags</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {(() => {
+                      const groups = groupTagsByDimension(item.tags);
+                      const elements: React.ReactNode[] = [];
+                      groups.forEach((vals, dim) => {
+                        vals.forEach(v => {
+                          elements.push(
+                            <Badge
+                              key={`${dim}:${v}`}
+                              variant="outline"
+                              className={cn('text-[9px] h-5 px-1.5 gap-0.5', getDimensionColor(dim))}
+                            >
+                              {getDimensionLabel(dim)}: {v.replace(/_/g, ' ')}
+                              <button
+                                className="ml-0.5 hover:text-destructive"
+                                onClick={() => {
+                                  const newTags = item.tags.filter(t => t !== `${dim}:${v}`);
+                                  update.mutate({ id: item.id, tags: newTags } as any);
+                                }}
+                              >
+                                <X className="h-2.5 w-2.5" />
+                              </button>
+                            </Badge>
+                          );
+                        });
+                      });
+                      // Also show non-structured tags
+                      item.tags.filter(t => !t.includes(':')).forEach(t => {
+                        elements.push(
+                          <Badge key={t} variant="outline" className="text-[9px] h-5 px-1.5">{t}</Badge>
+                        );
+                      });
+                      return elements;
+                    })()}
+                  </div>
+                </div>
+              )}
 
               <Separator />
 

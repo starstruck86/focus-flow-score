@@ -22,13 +22,15 @@ export interface KnowledgeQuery {
   context?: string; // 'dave' | 'roleplay' | 'prep' | 'coaching' | 'playbooks'
   activeOnly?: boolean;
   maxItems?: number;
+  /** Tag-based filters (format: "dimension:value") */
+  tags?: string[];
 }
 
 /**
  * Retrieve knowledge items matching a query
  */
 export async function queryKnowledge(query: KnowledgeQuery = {}): Promise<KnowledgeItem[]> {
-  const { chapters, knowledgeType, competitor, productArea, context, activeOnly = true, maxItems = 20 } = query;
+  const { chapters, knowledgeType, competitor, productArea, context, activeOnly = true, maxItems = 20, tags } = query;
 
   let q = supabase.from(TABLE).select('*').order('confidence_score', { ascending: false }).limit(maxItems);
 
@@ -38,7 +40,7 @@ export async function queryKnowledge(query: KnowledgeQuery = {}): Promise<Knowle
   if (competitor) q = q.eq('competitor_name', competitor);
   if (productArea) q = q.eq('product_area', productArea);
   if (context) q = q.contains('applies_to_contexts', [context]);
-
+  if (tags?.length) q = q.contains('tags', tags);
   const { data, error } = await q;
   if (error) {
     log.error('Knowledge query failed', { error });

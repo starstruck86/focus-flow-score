@@ -5,13 +5,13 @@
  * recency/counts, active roleplay grounding proof, and extraction CTAs.
  */
 
-import { memo, useState, useCallback, useMemo, useEffect } from 'react';
+import { memo, useState, useCallback, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Brain, Zap, Shield, AlertTriangle, Play, Sparkles,
-  CheckCircle2, Clock, ChevronRight, Info,
+  CheckCircle2, Clock, ChevronRight, Info, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useKnowledgeStats, type KnowledgeItem } from '@/hooks/useKnowledgeItems';
@@ -20,6 +20,7 @@ import { ChapterDetailSheet } from './ChapterDetailSheet';
 import { KnowledgeItemDrawer } from './KnowledgeItemDrawer';
 import { ExtractKnowledgeDialog } from './ExtractKnowledgeDialog';
 import { RoleplayPreviewSheet } from './RoleplayPreviewSheet';
+import { ResourceReadinessSheet } from './ResourceReadinessSheet';
 import type { RoleplayPlan } from '@/components/dave/tools/intelligence/roleplayPlan';
 import { queryKnowledge } from '@/lib/knowledgeRetrieval';
 import {
@@ -54,6 +55,7 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
   const [opDrilldownOpen, setOpDrilldownOpen] = useState(false);
   const [previewPlan, setPreviewPlan] = useState<RoleplayPlan | null>(null);
   const [pendingPractice, setPendingPractice] = useState<{ chapter: string; knowledgeItemId?: string } | null>(null);
+  const [readinessOpen, setReadinessOpen] = useState(false);
 
   // Build preview plan from active knowledge
   const launchPreview = useCallback(async (chapter: string, knowledgeItemId?: string) => {
@@ -194,10 +196,16 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
               [...stats.byChapter.entries()].filter(([_, items]) => items.some(i => i.active)).length
             } chapters
           </p>
-          <Button variant="outline" size="sm" onClick={() => setExtractOpen(true)} className="gap-1.5 text-xs">
-            <Sparkles className="h-3 w-3" />
-            Extract More
-          </Button>
+          <div className="flex gap-1.5">
+            <Button variant="outline" size="sm" onClick={() => setReadinessOpen(true)} className="gap-1.5 text-xs">
+              <Activity className="h-3 w-3" />
+              Readiness
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setExtractOpen(true)} className="gap-1.5 text-xs">
+              <Sparkles className="h-3 w-3" />
+              Extract More
+            </Button>
+          </div>
         </div>
       )}
 
@@ -365,6 +373,12 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
       <ExtractKnowledgeDialog
         open={extractOpen}
         onOpenChange={setExtractOpen}
+      />
+
+      {/* Resource Readiness sheet */}
+      <ResourceReadinessSheet
+        open={readinessOpen}
+        onOpenChange={setReadinessOpen}
       />
     </div>
   );
