@@ -5,13 +5,13 @@
  * recency/counts, active roleplay grounding proof, and extraction CTAs.
  */
 
-import { memo, useState, useCallback, useMemo, useEffect } from 'react';
+import { memo, useState, useCallback, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Brain, Zap, Shield, AlertTriangle, Play, Sparkles,
-  CheckCircle2, Clock, ChevronRight, Info,
+  CheckCircle2, Clock, ChevronRight, Info, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useKnowledgeStats, type KnowledgeItem } from '@/hooks/useKnowledgeItems';
