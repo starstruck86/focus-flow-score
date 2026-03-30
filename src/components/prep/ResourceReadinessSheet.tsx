@@ -742,7 +742,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                           <div className="pl-2 pt-1 text-[10px] space-y-1">
                             <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
                               <span>Content-backed enriched:</span><span className="font-medium text-foreground">{deepAudit.invariant.totalContentBackedEnriched}</span>
-                              <span>Operationalized:</span><span className="font-medium text-emerald-600">{deepAudit.invariant.byClass.operationalized}</span>
+                              <span>Ready to use:</span><span className="font-medium text-emerald-600">{deepAudit.invariant.byClass.operationalized}</span>
                               <span>Empty content:</span><span className={cn('font-medium', deepAudit.invariant.byClass.blocked_by_empty_content > 0 ? 'text-destructive' : 'text-foreground')}>{deepAudit.invariant.byClass.blocked_by_empty_content}</span>
                               <span>No extraction:</span><span className={cn('font-medium', deepAudit.invariant.byClass.blocked_by_no_extraction > 0 ? 'text-amber-500' : 'text-foreground')}>{deepAudit.invariant.byClass.blocked_by_no_extraction}</span>
                               <span>Activation criteria:</span><span className={cn('font-medium', deepAudit.invariant.byClass.blocked_by_activation_criteria > 0 ? 'text-orange-500' : 'text-foreground')}>{deepAudit.invariant.byClass.blocked_by_activation_criteria}</span>
