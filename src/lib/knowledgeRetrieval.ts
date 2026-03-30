@@ -9,6 +9,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
 import { createLogger } from '@/lib/logger';
+import { logKnowledgeUsage, buildUsageEntries } from '@/lib/knowledgeUsageLogger';
 
 const log = createLogger('KnowledgeRetrieval');
 
