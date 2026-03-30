@@ -142,8 +142,11 @@ export async function auditPipelineIntegrity(): Promise<PipelineIntegrityResult>
 // ── Knowledge Utilization Audit ────────────────────────────
 
 export type KnowledgeUtilClass =
-  | 'high_value_unused'
-  | 'partially_used'
+  | 'never_used'
+  | 'rarely_used'
+  | 'used_in_prep_only'
+  | 'used_in_roleplay_only'
+  | 'used_by_dave_only'
   | 'fully_utilized'
   | 'not_retrievable'
   | 'low_confidence';
@@ -160,40 +163,49 @@ export interface KnowledgeUtilItem {
   classification: KnowledgeUtilClass;
   issue?: string;
   recommendation?: string;
+  usage?: KnowledgeUsageStats;
 }
 
 export interface KnowledgeUtilResult {
   items: KnowledgeUtilItem[];
   summary: {
     total_active: number;
-    high_value_unused: number;
-    partially_used: number;
+    never_used: number;
+    rarely_used: number;
+    used_in_prep_only: number;
+    used_in_roleplay_only: number;
+    used_by_dave_only: number;
     fully_utilized: number;
     not_retrievable: number;
     low_confidence: number;
-    by_chapter: Record<string, { active: number; retrievable: number }>;
+    by_chapter: Record<string, { active: number; used: number }>;
     unused_reasons: Record<string, number>;
+    most_used: Array<{ id: string; title: string; total_count: number }>;
   };
 }
 
 export async function auditKnowledgeUtilization(): Promise<KnowledgeUtilResult> {
-  const { data: activeKI } = await supabase
-    .from(KI_TABLE)
-    .select('*')
-    .eq('active', true);
+  const [{ data: activeKI }, usageStats] = await Promise.all([
+    supabase.from(KI_TABLE).select('*').eq('active', true),
+    getKnowledgeUsageStats(),
+  ]);
 
   const items = (activeKI ?? []) as any[];
   const result: KnowledgeUtilResult = {
     items: [],
     summary: {
       total_active: items.length,
-      high_value_unused: 0,
-      partially_used: 0,
+      never_used: 0,
+      rarely_used: 0,
+      used_in_prep_only: 0,
+      used_in_roleplay_only: 0,
+      used_by_dave_only: 0,
       fully_utilized: 0,
       not_retrievable: 0,
       low_confidence: 0,
       by_chapter: {},
       unused_reasons: {},
+      most_used: [],
     },
   };
 
@@ -201,20 +213,19 @@ export async function auditKnowledgeUtilization(): Promise<KnowledgeUtilResult> 
     const contexts: string[] = ki.applies_to_contexts ?? [];
     const tags: string[] = ki.tags ?? [];
     const conf = ki.confidence_score ?? 0;
+    const usage = usageStats.get(ki.id);
 
-    // Track chapter stats
     if (!result.summary.by_chapter[ki.chapter]) {
-      result.summary.by_chapter[ki.chapter] = { active: 0, retrievable: 0 };
+      result.summary.by_chapter[ki.chapter] = { active: 0, used: 0 };
     }
     result.summary.by_chapter[ki.chapter].active++;
+    if (usage && usage.total_count > 0) result.summary.by_chapter[ki.chapter].used++;
 
-    // Classification logic
     let classification: KnowledgeUtilClass;
     let issue: string | undefined;
     let recommendation: string | undefined;
 
     if (contexts.length === 0) {
-      // Active but no contexts → will never be retrieved by context-aware queries
       classification = 'not_retrievable';
       issue = 'Active but applies_to_contexts is empty — invisible to Dave, prep, roleplay';
       recommendation = 'Add contexts: dave, roleplay, prep, coaching';
@@ -224,26 +235,50 @@ export async function auditKnowledgeUtilization(): Promise<KnowledgeUtilResult> 
       classification = 'low_confidence';
       issue = `Low confidence (${(conf * 100).toFixed(0)}%) — may be ranked below others`;
       recommendation = 'Review and either boost confidence or deactivate';
-    } else {
-      // Check tag quality for retrieval
+    } else if (!usage || usage.total_count === 0) {
       const hasSkillTag = tags.some(t => t.startsWith('skill:'));
       const hasContextTag = tags.some(t => t.startsWith('context:'));
+      classification = 'never_used';
 
       if (!hasSkillTag && !hasContextTag) {
-        classification = 'high_value_unused';
-        issue = 'No skill or context tags — tag-based retrieval will miss this item';
-        recommendation = 'Add skill: and/or context: tags to ensure retrieval';
-        const reason = 'missing_tags';
-        result.summary.unused_reasons[reason] = (result.summary.unused_reasons[reason] ?? 0) + 1;
+        issue = 'Never used — missing skill/context tags prevents tag-based retrieval';
+        recommendation = 'Add skill: and context: tags';
+        result.summary.unused_reasons['missing_tags'] = (result.summary.unused_reasons['missing_tags'] ?? 0) + 1;
       } else if (!hasContextTag) {
-        classification = 'partially_used';
-        issue = 'Has skill tags but no context tags — only chapter-based retrieval will find it';
+        issue = 'Never used — missing context tags limits retrieval to chapter-only queries';
         recommendation = 'Add context: tags (cold_call, discovery_call, etc.)';
-        const reason = 'missing_context_tags';
-        result.summary.unused_reasons[reason] = (result.summary.unused_reasons[reason] ?? 0) + 1;
+        result.summary.unused_reasons['missing_context_tags'] = (result.summary.unused_reasons['missing_context_tags'] ?? 0) + 1;
+      } else {
+        issue = 'Never used — structurally valid but no matching workflow demand yet';
+        recommendation = 'Run prep or roleplay in matching context to verify retrieval';
+        result.summary.unused_reasons['no_matching_demand'] = (result.summary.unused_reasons['no_matching_demand'] ?? 0) + 1;
+      }
+    } else if (usage.total_count <= 2) {
+      classification = 'rarely_used';
+      issue = `Only used ${usage.total_count} time(s) — last: ${usage.last_used_at ? new Date(usage.last_used_at).toLocaleDateString() : 'unknown'}`;
+      recommendation = 'Check if chapter/tags align with common workflows';
+    } else {
+      const hasPrep = usage.prep_count > 0;
+      const hasRoleplay = usage.roleplay_count > 0;
+      const hasDave = usage.dave_count > 0;
+      const channels = [hasPrep, hasRoleplay, hasDave].filter(Boolean).length;
+
+      if (channels >= 2) {
+        classification = 'fully_utilized';
+      } else if (hasPrep && !hasRoleplay && !hasDave) {
+        classification = 'used_in_prep_only';
+        issue = `Used ${usage.prep_count}x in prep but never in roleplay or Dave`;
+        recommendation = 'Verify roleplay/Dave contexts are set';
+      } else if (hasRoleplay && !hasPrep && !hasDave) {
+        classification = 'used_in_roleplay_only';
+        issue = `Used ${usage.roleplay_count}x in roleplay but never in prep or Dave`;
+        recommendation = 'Verify prep context is set';
+      } else if (hasDave && !hasPrep && !hasRoleplay) {
+        classification = 'used_by_dave_only';
+        issue = `Used ${usage.dave_count}x by Dave but never in prep or roleplay`;
+        recommendation = 'Verify prep/roleplay contexts are set';
       } else {
         classification = 'fully_utilized';
-        result.summary.by_chapter[ki.chapter].retrievable++;
       }
     }
 
@@ -261,8 +296,16 @@ export async function auditKnowledgeUtilization(): Promise<KnowledgeUtilResult> 
       classification,
       issue,
       recommendation,
+      usage,
     });
   }
+
+  // Most-used items
+  result.summary.most_used = result.items
+    .filter(i => i.usage && i.usage.total_count > 0)
+    .sort((a, b) => (b.usage?.total_count ?? 0) - (a.usage?.total_count ?? 0))
+    .slice(0, 10)
+    .map(i => ({ id: i.id, title: i.title, total_count: i.usage!.total_count }));
 
   log.info('Knowledge utilization audit complete', result.summary);
   return result;
