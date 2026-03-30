@@ -7,6 +7,7 @@ import { bulkUpdate } from './intelligence/bulk';
 import { citeInsight, knowledgeTrends, insightReliability, recommendStrategy, recordStrategyOutcome, strategyPerformance, pipelineImpact, recordPipelineEvent, pipelineForecast } from './intelligence/knowledge';
 import { getPlaybookRecommendation } from './intelligence/playbooks';
 import { startPlaybookRoleplay, endPlaybookRoleplay } from './intelligence/playbookRoleplay';
+import { getActivePlaybookKnowledge, getPlaybookKnowledgeForRoleplay } from './intelligence/playbookKnowledge';
 import { createAccountExecutionTools } from './intelligence/accountExecution';
 import { createAccountCentricTools } from './intelligence/accountCentric';
 import { createExecutionSessionTools } from './intelligence/executionSession';
