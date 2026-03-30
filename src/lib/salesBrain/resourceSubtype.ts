@@ -287,6 +287,14 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
       };
 
     case 'no_url':
+      // Content-backed resources (e.g. Notion imports) should NOT be classified as no_source
+      if (resourceType === 'document' || resourceType === 'note') {
+        return {
+          ...base,
+          enrichability: 'manual_input_needed',
+          reason: 'No URL — content may already be present. Check resource content.',
+        };
+      }
       return {
         ...base,
         enrichability: 'no_source',

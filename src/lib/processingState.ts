@@ -45,8 +45,10 @@ export function deriveProcessingState(
   const contentLength = (resource as any).content_length ?? 0;
   const hasManualContent = (resource as any).manual_content_present === true;
   const rm = (resource as any).resolution_method;
-  const isNotionDirect = rm === 'notion_zip_page_import' || rm === 'notion_zip_database_import' || rm === 'notion_zip_page_chunk';
-  const hasSubstantialContent = contentLength > 1000 || hasManualContent || (isNotionDirect && contentLength > 0);
+  const isNotionDirect = rm === 'notion_zip_page_import' || rm === 'notion_zip_database_import' || rm === 'notion_zip_page_chunk' || rm === 'notion_zip_split';
+  // Notion resources use a lower threshold (200) since they are always content-backed
+  const contentThreshold = isNotionDirect ? 200 : 1000;
+  const hasSubstantialContent = contentLength > contentThreshold || hasManualContent;
 
   if (hasSubstantialContent && (status === 'failed' || status === 'incomplete' || status === 'not_enriched' || status === 'stale' || status === 'quarantined')) {
     const isManual = hasManualContent || rm === 'metadata_only' || rm === 'alternate_url' ||

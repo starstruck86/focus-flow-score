@@ -28,7 +28,11 @@ export function isFixEligible(resource: any): boolean {
   const contentLength = resource.content_length ?? 0;
   const manualPresent = resource.manual_content_present === true;
   const actualContent = typeof resource.content === 'string' ? resource.content.trim().length : 0;
-  const hasValidContent = contentLength > 1000 || manualPresent || actualContent > 1000;
+  const rm = resource.resolution_method || resource.extraction_method || '';
+  const isNotion = typeof rm === 'string' && rm.startsWith('notion_zip_');
+  // Notion resources have a lower threshold — they are always content-backed
+  const contentThreshold = isNotion ? 200 : 1000;
+  const hasValidContent = contentLength > contentThreshold || manualPresent || actualContent > contentThreshold;
 
   if (!hasValidContent) return false;
 
@@ -71,7 +75,10 @@ export async function fixResourceStateFromContent(
   const manualPresent = resource.manual_content_present === true;
   const actualContent = typeof resource.content === 'string' ? resource.content.trim().length : 0;
   const effectiveLength = Math.max(contentLength, actualContent);
-  const hasValidContent = effectiveLength > 1000 || manualPresent;
+  const rm = resource.resolution_method || resource.extraction_method || '';
+  const isNotion = typeof rm === 'string' && rm.startsWith('notion_zip_');
+  const threshold = isNotion ? 200 : 1000;
+  const hasValidContent = effectiveLength > threshold || manualPresent;
 
   if (!hasValidContent) {
     return { success: false, message: 'No valid content found (need >1000 chars or manual content)', fieldsCleared: [] };
@@ -172,6 +179,75 @@ export async function fixResourceStateFromContent(
     previousStatus,
     newStatus: 'deep_enriched',
   };
+}
+
+// ── Notion-specific batch fix ─────────────────────────────
+
+const NOTION_METHODS = [
+  'notion_zip_split',
+  'notion_zip_page_import',
+  'notion_zip_database_import',
+  'notion_zip_page_chunk',
+];
+
+/**
+ * Fix all Notion-imported resources that have valid content but are stuck
+ * in not_enriched / failed / manual_input_required states.
+ * Content threshold: 200 chars (Notion pages are always content-backed).
+ */
+export async function fixNotionResourcesWithContent(
+  userId: string,
+  options?: { triggerReEnrich?: boolean },
+): Promise<{ fixed: number; skipped: number; total: number; details: string[] }> {
+  const details: string[] = [];
+  let fixed = 0;
+  let skipped = 0;
+
+  const { data: candidates } = await (supabase as any)
+    .from('resources')
+    .select('id, enrichment_status, content_length, manual_content_present, resolution_method, extraction_method, last_quality_score')
+    .eq('user_id', userId)
+    .or(
+      NOTION_METHODS.map(m => `resolution_method.eq.${m}`).join(',') + ',' +
+      NOTION_METHODS.map(m => `extraction_method.eq.${m}`).join(',')
+    );
+
+  if (!candidates || candidates.length === 0) {
+    return { fixed: 0, skipped: 0, total: 0, details: ['No Notion resources found'] };
+  }
+
+  const total = candidates.length;
+
+  for (const r of candidates) {
+    const contentLength = r.content_length ?? 0;
+    const hasContent = contentLength > 200 || r.manual_content_present === true;
+
+    if (!hasContent) {
+      skipped++;
+      details.push(`⊘ ${r.id.slice(0, 8)} — content too short (${contentLength} chars)`);
+      continue;
+    }
+
+    // Already fixed?
+    if (r.enrichment_status === 'deep_enriched' && (r.last_quality_score ?? 0) > 0) {
+      skipped++;
+      continue;
+    }
+
+    const result = await fixResourceStateFromContent(r.id, userId, {
+      triggerReEnrich: options?.triggerReEnrich ?? true,
+    });
+
+    if (result.success) {
+      fixed++;
+      details.push(`✓ ${r.id.slice(0, 8)} — ${result.fieldsCleared.length} fields cleared (was: ${result.previousStatus})`);
+    } else {
+      skipped++;
+      details.push(`⊘ ${r.id.slice(0, 8)} — ${result.message}`);
+    }
+  }
+
+  return { fixed, skipped, total, details };
 }
 
 // ── Batch repair for retroactive fix ──────────────────────
