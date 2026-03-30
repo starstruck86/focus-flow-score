@@ -139,6 +139,26 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
       setFixing(false);
     }
   };
+  const handleDeleteJunk = async () => {
+    if (!user?.id) return;
+    const groupId = getImportGroupId(r);
+    if (!confirm('Delete junk Notion resources from this import? Valid resources will be preserved.')) return;
+    setDeletingJunk(true);
+    try {
+      const result = await deleteJunkNotionChildren(user.id, groupId);
+      if (result.errors.length > 0) {
+        toast.error(`Partial cleanup: ${result.errors[0]}`);
+      } else {
+        toast.success(`Deleted ${result.deleted} junk Notion resources, preserved ${result.preserved} valid`);
+      }
+      FIX_RESOURCE_INVALIDATION_KEYS.forEach(k => qc.invalidateQueries({ queryKey: k }));
+      onResourceUpdated?.();
+    } catch (e: any) {
+      toast.error(e.message || 'Cleanup failed');
+    } finally {
+      setDeletingJunk(false);
+    }
+  };
 
   return (
     <>
