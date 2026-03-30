@@ -1097,9 +1097,9 @@ function getBottleneckLabel(r: AuditedResource): { text: string; color: string }
 function ResourceRow({ resource: r }: { resource: AuditedResource }) {
   const tagGroups = groupTagsByDimension(r.tags);
   const bottleneck = getBottleneckLabel(r);
-  const pipelineStage = derivePipelineStage(
+  const canonicalStage = deriveCanonicalStage(
     { content_length: r.contentLength, tags: r.tags, enrichment_status: r.enrichmentStatus },
-    { total: r.knowledgeItemCount, active: r.activeKnowledgeCount, hasContexts: r.hasContexts },
+    { total: r.knowledgeItemCount, active: r.activeKnowledgeCount, activeWithContexts: r.activeWithContexts },
   );
 
   // Separate tags by tier for display
@@ -1116,14 +1116,14 @@ function ResourceRow({ resource: r }: { resource: AuditedResource }) {
 
   return (
     <div className="p-2 rounded border border-border bg-card text-xs space-y-1.5">
-      {/* Title + bottleneck label + badges */}
+      {/* Title + bottleneck label + canonical stage badge */}
       <div className="flex items-start justify-between gap-1.5">
         <div className="min-w-0 flex-1">
           <p className="font-medium text-foreground truncate">{r.title}</p>
           <p className={cn('text-[9px] font-medium', bottleneck.color)}>{bottleneck.text}</p>
         </div>
         <div className="flex gap-0.5 shrink-0 flex-wrap justify-end max-w-[45%]">
-          <Badge variant="outline" className="text-[7px] h-3.5 px-1 border-primary/20">{getStageLabel(pipelineStage)}</Badge>
+          <Badge variant="outline" className={cn("text-[7px] h-3.5 px-1 border-primary/20", STAGE_COLORS[canonicalStage])}>{STAGE_LABELS[canonicalStage]}</Badge>
           {r.badges.map(b => (
             <Badge key={b} variant="outline" className="text-[7px] h-3.5 px-1">{b}</Badge>
           ))}
