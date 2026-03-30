@@ -81,11 +81,18 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
     last_quality_score: (r as any).qualityScore ?? (r as any).last_quality_score,
   });
 
-  const isNotionSource = isNotionZipResource({
-    resolution_method: (r as any).resolution_method,
-    extraction_method: (r as any).extraction_method,
-    content: (r as any).content,
-  });
+  const isNotionSource = (() => {
+    const rm = (r as any).resolution_method;
+    const em = (r as any).extraction_method;
+    if (rm === 'notion_zip_import' || rm === 'notion_zip_source' ||
+        em === 'notion_zip_import' || em === 'notion_zip_source') return true;
+    if ((r.contentLength ?? 0) > 100_000 && isNotionZipResource({
+      resolution_method: rm, extraction_method: em, content: (r as any).content,
+    })) return true;
+    return isNotionZipResource({
+      resolution_method: rm, extraction_method: em, content: (r as any).content,
+    });
+  })();
 
   const invalidateAll = useCallback(() => {
     FIX_RESOURCE_INVALIDATION_KEYS.forEach(key => {
@@ -397,6 +404,29 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
           </Button>
         )}
       </div>
+
+      {/* Top-level Notion Rebuild CTA — always visible above fold */}
+      {isNotionSource && (r as any).resolution_method !== 'notion_zip_split' && (
+        <div className="px-4 py-3 border-b border-border bg-primary/5">
+          <Button
+            variant={(r.contentLength ?? 0) > 100_000 ? 'default' : 'outline'}
+            className={cn(
+              'gap-2 w-full min-h-[44px]',
+              (r.contentLength ?? 0) > 100_000 ? 'text-base font-semibold' : 'border-primary/30 text-primary',
+            )}
+            disabled={splitting || !!activeAction || !currentUserId}
+            onClick={handleRebuildNotion}
+          >
+            {splitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <FolderTree className="h-5 w-5" />}
+            {splitting ? splitProgress : 'Rebuild Notion Import'}
+          </Button>
+          {(r.contentLength ?? 0) > 50_000 && !splitting && (
+            <p className="text-[10px] text-muted-foreground mt-1.5 text-center">
+              {Math.round((r.contentLength ?? 0) / 1000)}k chars — split into individual searchable resources
+            </p>
+          )}
+        </div>
+      )}
 
       <ScrollArea className="flex-1">
         <div className={cn('space-y-4', isMobile ? 'p-4 pb-32' : 'p-4')}>
