@@ -93,7 +93,7 @@ export function ExtractKnowledgeDialog({ open, onOpenChange, resourceId }: Props
         let activated = 0;
         if (autoActivate) {
           for (const item of allItems) {
-            if (item.confidence_score >= 0.7) {
+            if (item.confidence_score >= 0.55) {
               item.active = true;
               item.status = 'active' as any;
               activated++;
