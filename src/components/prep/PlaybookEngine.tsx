@@ -19,6 +19,9 @@ import { useChapterRoleplay } from '@/hooks/useChapterRoleplay';
 import { ChapterDetailSheet } from './ChapterDetailSheet';
 import { KnowledgeItemDrawer } from './KnowledgeItemDrawer';
 import { ExtractKnowledgeDialog } from './ExtractKnowledgeDialog';
+import { RoleplayPreviewSheet } from './RoleplayPreviewSheet';
+import type { RoleplayPlan } from '@/components/dave/tools/intelligence/roleplayPlan';
+import { queryKnowledge } from '@/lib/knowledgeRetrieval';
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
