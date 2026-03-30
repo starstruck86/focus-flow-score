@@ -152,6 +152,11 @@ const BULK_ACTION_DESCRIPTIONS: Record<string, { title: string; safe: string; wo
     safe: 'Only processes resources in fixable/extractable/needs-tagging/ready buckets. Faster and more targeted than full backfill.',
     wontDo: 'Will not touch junk, missing-content, or already-operationalized resources. Will not auto-activate low-confidence items.',
   },
+  forceExtract: {
+    title: 'Force Extract All Missing Knowledge',
+    safe: 'Runs extraction on all enriched resources with content_length > 300 that have no knowledge items yet. Then runs the full pipeline.',
+    wontDo: 'Will not overwrite existing knowledge items. Will not auto-activate low-confidence items.',
+  },
 };
 
 // ── Component ──────────────────────────────────────────────
