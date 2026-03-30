@@ -405,12 +405,23 @@ export function ResourceLibraryTable({
             ))}
           </SelectContent>
         </Select>
-        {(lifecycleFilter !== 'all' || typeFilter !== 'all' || search) && (
+        <Select value={assetFilter} onValueChange={(v) => setAssetFilter(v as AssetTypeFilter)}>
+          <SelectTrigger className="h-8 w-[140px] text-xs">
+            <Star className="h-3 w-3 mr-1" />
+            <SelectValue placeholder="Asset Type" />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(ASSET_TYPE_LABELS) as AssetTypeFilter[]).map(k => (
+              <SelectItem key={k} value={k}>{ASSET_TYPE_LABELS[k]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {(lifecycleFilter !== 'all' || typeFilter !== 'all' || assetFilter !== 'all_assets' || search) && (
           <Button
             variant="ghost"
             size="sm"
             className="h-8 text-xs gap-1"
-            onClick={() => { setLifecycleFilter('all'); setTypeFilter('all'); setSearch(''); }}
+            onClick={() => { setLifecycleFilter('all'); setTypeFilter('all'); setAssetFilter('all_assets'); setSearch(''); }}
           >
             <X className="h-3 w-3" /> Clear
           </Button>
