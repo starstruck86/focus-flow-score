@@ -31,6 +31,9 @@ const RESOLUTION_LABELS: Record<string, string> = {
   alternate_url: 'Alternate URL',
   fixed_from_existing_content: 'Fixed From Existing Content',
   manual_content: 'Manual Content',
+  notion_zip_import: 'Notion ZIP Import',
+  notion_zip_split: 'Notion Split',
+  notion_zip_source: 'Notion Source (Archived)',
 };
 
 export function ContentViewer({ resource, open, onOpenChange }: Props) {

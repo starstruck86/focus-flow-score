@@ -478,6 +478,9 @@ export function ResourceLibraryTable({
                                (resource as any).resolution_method === 'alternate_url' ? 'Alternate URL' :
                                (resource as any).resolution_method === 'fixed_from_existing_content' ? 'Fixed From Content' :
                                (resource as any).resolution_method === 'manual_content' ? 'Manual Content' :
+                               (resource as any).resolution_method === 'notion_zip_import' ? 'Notion ZIP Import' :
+                               (resource as any).resolution_method === 'notion_zip_split' ? 'Notion Split' :
+                               (resource as any).resolution_method === 'notion_zip_source' ? 'Notion Source' :
                                'Manual Recovery'}
                             </Badge>
                           )}

@@ -2654,8 +2654,12 @@ async function orchestrateEnrichment(
 
     await setEnrichmentStatus(supabase, resourceId, finalStatus, {
       content_status: 'full',
+      content_length: contentText.length,
       enrichment_version: ENRICHMENT_VERSION,
+      validation_version: VALIDATION_VERSION,
       enriched_at: new Date().toISOString(),
+      last_quality_score: quality.score,
+      last_quality_tier: quality.tier,
       // Clear ALL stale blockers — manual content must never regress
       failure_reason: null,
       failure_count: 0,
