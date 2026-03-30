@@ -1,8 +1,11 @@
 /**
  * Knowledge Extraction Pipeline
  *
- * Extracts structured knowledge items from resource content using AI.
- * Falls back to heuristic extraction when AI is unavailable.
+ * Extracts ONLY actionable, execution-ready sales tactics from resource content.
+ * Each item must describe a specific action a rep can take, be testable in a call/roleplay,
+ * be tied to a moment (when to use), and phrased as a tactic, not a concept.
+ *
+ * Falls back to LLM-based extraction when heuristic returns 0 items.
  */
 
 import type { KnowledgeItemInsert } from '@/hooks/useKnowledgeItems';
@@ -20,6 +23,15 @@ export interface ExtractionSource {
   description: string | null;
   tags: string[];
   resourceType: string;
+}
+
+export interface ExtractionLog {
+  resourceId: string;
+  resourceTitle: string;
+  extracted_count: number;
+  activatable_count: number;
+  rejected_reasons: string[];
+  used_llm_fallback: boolean;
 }
 
 const CHAPTER_SIGNALS: Array<{
@@ -88,6 +100,18 @@ const CHAPTER_SIGNALS: Array<{
     patterns: [/expan(d|sion)/i, /upsell/i, /cross.sell/i, /renewal/i, /grow.*account/i],
     knowledgeType: 'skill',
   },
+  {
+    chapter: 'demo',
+    subChapters: ['demo_structure', 'storytelling', 'feature_bridging', 'interactive_demo'],
+    patterns: [/demo/i, /presentation/i, /show.*product/i, /walk.*through/i, /live.*demo/i],
+    knowledgeType: 'skill',
+  },
+  {
+    chapter: 'follow_up',
+    subChapters: ['email_follow_up', 'recap', 'next_steps', 'cadence'],
+    patterns: [/follow.up/i, /recap/i, /next step/i, /cadence/i, /sequence/i],
+    knowledgeType: 'skill',
+  },
 ];
 
 // Product knowledge detection
@@ -129,110 +153,294 @@ function classifySubChapter(text: string, subChapters: string[]): string | null 
   return subChapters[0] ?? null;
 }
 
+// ── Actionability scoring ──────────────────────────────────
+
+function scoreActionability(item: {
+  title: string;
+  tactic_summary: string | null;
+  when_to_use: string | null;
+  example_usage: string | null;
+}): { score: number; reasons: string[] } {
+  let score = 0.1; // base
+  const reasons: string[] = [];
+
+  const summary = (item.tactic_summary ?? '').trim();
+  const title = item.title.trim();
+
+  // +0.3 if actionable (title or summary starts with a verb)
+  const verbStarters = /^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|try|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|contrast|qualify|disqualify|recap|summarize)/i;
+  if (verbStarters.test(title) || verbStarters.test(summary)) {
+    score += 0.3;
+    reasons.push('actionable_verb');
+  }
+
+  // +0.2 if tied to specific moment
+  if (item.when_to_use && item.when_to_use.length >= 15) {
+    score += 0.2;
+    reasons.push('moment_tied');
+  }
+
+  // +0.2 if includes talk track / example
+  if (item.example_usage && item.example_usage.length >= 20) {
+    score += 0.2;
+    reasons.push('has_talk_track');
+  }
+
+  // +0.2 if clearly testable in roleplay (has concrete language patterns)
+  const testablePatterns = /["']|say something like|try saying|you could say|ask them|respond with|phrase it as/i;
+  const combinedText = `${summary} ${item.example_usage ?? ''}`;
+  if (testablePatterns.test(combinedText)) {
+    score += 0.2;
+    reasons.push('testable_in_roleplay');
+  }
+
+  return { score: Math.min(1.0, score), reasons };
+}
+
+// ── Tactic extraction from sentences ───────────────────────
+
+interface ExtractedTactic {
+  title: string;
+  tactic_summary: string;
+  when_to_use: string;
+  when_not_to_use: string;
+  example_usage: string;
+  chapter: string;
+  sub_chapter: string | null;
+  knowledge_type: 'skill' | 'product' | 'competitive';
+}
+
 /**
- * Heuristic extraction — produces knowledge items from resource content
+ * Attempt to extract actionable tactics from text, not summaries.
+ * Looks for imperative sentences, how-to patterns, talk tracks, etc.
+ */
+function extractTacticsFromText(
+  text: string,
+  matchedSignal: typeof CHAPTER_SIGNALS[0],
+): ExtractedTactic[] {
+  const tactics: ExtractedTactic[] = [];
+  const sentences = text
+    .split(/[.!?\n]/)
+    .map(s => s.trim())
+    .filter(s => s.length > 25 && s.length < 600);
+
+  // Patterns indicating an actionable tactic
+  const tacticIndicators = [
+    /^(ask|use|open|start|say|frame|position|challenge|reframe|bridge|pivot|anchor|present|share|probe|dig|quantify|validate|confirm|set|build|create|map|identify|test|try|respond|handle|counter|address|lead|drive|close|send|follow|schedule|push|call|email|pitch|demonstrate|show|tailor|customize|leverage|highlight|reference|compare|qualify|recap|summarize)/i,
+    /you (can|should|could|might|want to|need to)/i,
+    /try (saying|asking|opening|using|framing)/i,
+    /["'"].*["'"]/,  // contains a quote (talk track)
+    /instead of.*try/i,
+    /when.*then/i,
+    /if (they|the prospect|the buyer|the customer)/i,
+    /one (technique|approach|way|method|tactic|strategy)/i,
+  ];
+
+  // When-to-use indicators
+  const whenIndicators = [
+    /when (the|a|your|they|you)/i,
+    /if (the|a|your|they|you)/i,
+    /during (the|a|your)/i,
+    /at the (start|beginning|end|close)/i,
+    /after (the|a|your)/i,
+    /before (the|a|your)/i,
+    /in (discovery|demo|closing|negotiation|objection)/i,
+  ];
+
+  // Example/talk-track indicators
+  const exampleIndicators = [
+    /["'"].*["'"]/,
+    /say something like/i,
+    /try saying/i,
+    /for example/i,
+    /such as/i,
+    /you could say/i,
+    /phrase it/i,
+    /word it/i,
+  ];
+
+  // Anti-patterns: summaries, concepts, not tactics
+  const antiPatterns = [
+    /^(this|the|it|there|that|we|our|they|their|his|her|in this|what is|a study|research|according)/i,
+    /^(important|key|critical|essential|necessary|vital|crucial) (to|that|is)/i,
+    /is (defined|described|characterized|known|considered)/i,
+  ];
+
+  // Group sentences into potential tactics
+  for (let i = 0; i < sentences.length; i++) {
+    const s = sentences[i];
+
+    // Skip non-actionable
+    if (antiPatterns.some(p => p.test(s))) continue;
+
+    // Must match at least one tactic indicator
+    if (!tacticIndicators.some(p => p.test(s))) continue;
+
+    // Build when_to_use from nearby sentences
+    let when_to_use = '';
+    let when_not_to_use = '';
+    let example_usage = '';
+
+    // Look at surrounding sentences for context
+    const window = sentences.slice(Math.max(0, i - 2), Math.min(sentences.length, i + 4));
+    for (const nearby of window) {
+      if (nearby === s) continue;
+      if (!when_to_use && whenIndicators.some(p => p.test(nearby))) {
+        when_to_use = nearby;
+      }
+      if (!example_usage && exampleIndicators.some(p => p.test(nearby))) {
+        example_usage = nearby;
+      }
+      if (!when_not_to_use && /don't|avoid|never|not when|won't work/i.test(nearby)) {
+        when_not_to_use = nearby;
+      }
+    }
+
+    // If no example from nearby, check if the tactic itself contains a quote
+    if (!example_usage && /["'"]/.test(s)) {
+      example_usage = s;
+    }
+
+    // Build a short actionable title
+    const titleWords = s.split(/\s+/).slice(0, 8).join(' ');
+    const title = titleWords.charAt(0).toUpperCase() + titleWords.slice(1);
+
+    const subChapter = classifySubChapter(s, matchedSignal.subChapters);
+
+    tactics.push({
+      title,
+      tactic_summary: s,
+      when_to_use: when_to_use || `When in a ${matchedSignal.chapter.replace(/_/g, ' ')} conversation`,
+      when_not_to_use: when_not_to_use || '',
+      example_usage: example_usage || '',
+      chapter: matchedSignal.chapter,
+      sub_chapter: subChapter,
+      knowledge_type: matchedSignal.knowledgeType,
+    });
+  }
+
+  return tactics;
+}
+
+/**
+ * Heuristic extraction — produces ONLY actionable, execution-ready sales tactics.
+ * Returns an ExtractionLog alongside the items for auditing.
  */
 export function extractKnowledgeHeuristic(source: ExtractionSource): KnowledgeItemInsert[] {
   const { resourceId, userId, title, content, description, tags } = source;
   const text = [title, description, content].filter(Boolean).join('\n');
-  const lower = text.toLowerCase();
   const items: KnowledgeItemInsert[] = [];
+  const rejectedReasons: string[] = [];
 
   if (text.length < 100) return items;
 
-  // Detect competitor
   const competitor = detectCompetitor(text);
   const productArea = detectProductArea(text);
-
-  // Check for product knowledge
   const isProductKnowledge = PRODUCT_PATTERNS.some(p => p.test(text));
+  const lower = text.toLowerCase();
 
+  // For each matching chapter, extract specific tactics (not summaries)
   for (const signal of CHAPTER_SIGNALS) {
     const matches = signal.patterns.filter(p => p.test(lower));
     if (matches.length === 0) continue;
 
     const knowledgeType = competitor ? 'competitive' : isProductKnowledge ? 'product' : signal.knowledgeType;
-    const confidence = Math.min(0.85, 0.35 + matches.length * 0.12);
-    const subChapter = classifySubChapter(text, signal.subChapters);
+    const tactics = extractTacticsFromText(text, signal);
 
-    // Extract meaningful summary from content
-    const summary = extractBestSummary(text, signal.patterns);
+    if (tactics.length === 0) {
+      rejectedReasons.push(`${signal.chapter}: no actionable tactics found`);
+      continue;
+    }
 
-    // Build structured tags
-    const baseTags = [...tags, knowledgeType, signal.chapter];
-    const inferred = inferTags(text);
-    const structuredTags = mergeTags(baseTags, inferred);
+    for (const tactic of tactics) {
+      const baseTags = [...tags, knowledgeType, tactic.chapter];
+      const inferred = inferTags(text);
+      const structuredTags = mergeTags(baseTags, inferred);
 
-    items.push({
-      user_id: userId,
-      source_resource_id: resourceId,
-      source_doctrine_id: null,
-      title: `${title} — ${signal.chapter.replace(/_/g, ' ')}`,
-      knowledge_type: knowledgeType,
-      chapter: signal.chapter,
-      sub_chapter: subChapter,
-      competitor_name: competitor,
-      product_area: productArea,
-      applies_to_contexts: buildContexts(signal.chapter, knowledgeType),
-      tactic_summary: summary,
-      why_it_matters: null,
-      when_to_use: null,
-      when_not_to_use: null,
-      example_usage: null,
-      confidence_score: confidence,
-      status: confidence >= 0.6 ? 'extracted' : 'review_needed',
-      active: false,
-      user_edited: false,
-      tags: structuredTags,
-    });
+      const { score: confidence } = scoreActionability({
+        title: tactic.title,
+        tactic_summary: tactic.tactic_summary,
+        when_to_use: tactic.when_to_use,
+        example_usage: tactic.example_usage,
+      });
+
+      // Only create item if it passes actionability minimum
+      if (confidence < 0.3) {
+        rejectedReasons.push(`${tactic.title}: confidence too low (${(confidence * 100).toFixed(0)}%)`);
+        continue;
+      }
+
+      // Enforce structure: must have filled fields
+      if (!tactic.tactic_summary || tactic.tactic_summary.length < 20) {
+        rejectedReasons.push(`${tactic.title}: tactic_summary too short`);
+        continue;
+      }
+
+      items.push({
+        user_id: userId,
+        source_resource_id: resourceId,
+        source_doctrine_id: null,
+        title: tactic.title,
+        knowledge_type: knowledgeType,
+        chapter: tactic.chapter,
+        sub_chapter: tactic.sub_chapter,
+        competitor_name: competitor,
+        product_area: productArea,
+        applies_to_contexts: buildContexts(tactic.chapter, knowledgeType),
+        tactic_summary: tactic.tactic_summary,
+        why_it_matters: null,
+        when_to_use: tactic.when_to_use || null,
+        when_not_to_use: tactic.when_not_to_use || null,
+        example_usage: tactic.example_usage || null,
+        confidence_score: confidence,
+        status: confidence >= 0.5 ? 'extracted' : 'review_needed',
+        active: false,
+        user_edited: false,
+        tags: structuredTags,
+      });
+    }
   }
 
-  // If no chapter matched but content is substantial, create a general item
-  if (items.length === 0 && text.length > 300) {
-    const knowledgeType = competitor ? 'competitive' : isProductKnowledge ? 'product' : 'skill';
-    const baseTags = [...tags, knowledgeType];
-    const inferred = inferTags(text);
-    const structuredTags = mergeTags(baseTags, inferred);
-
-    items.push({
-      user_id: userId,
-      source_resource_id: resourceId,
-      source_doctrine_id: null,
-      title,
-      knowledge_type: knowledgeType,
-      chapter: 'messaging',
-      sub_chapter: null,
-      competitor_name: competitor,
-      product_area: productArea,
-      applies_to_contexts: ['dave', 'prep'],
-      tactic_summary: description || text.slice(0, 300),
-      why_it_matters: null,
-      when_to_use: null,
-      when_not_to_use: null,
-      example_usage: null,
-      confidence_score: 0.3,
-      status: 'review_needed',
-      active: false,
-      user_edited: false,
-      tags: structuredTags,
-    });
-  }
+  // Log extraction results
+  const activatable = items.filter(i => (i.confidence_score ?? 0) >= 0.55);
+  log.info('Heuristic extraction complete', {
+    resourceId,
+    resourceTitle: title,
+    extracted_count: items.length,
+    activatable_count: activatable.length,
+    rejected_reasons: rejectedReasons.slice(0, 10),
+    used_llm_fallback: false,
+  });
 
   return items;
 }
 
-function extractBestSummary(text: string, patterns: RegExp[]): string {
-  const sentences = text.split(/[.!?]\s+/).filter(s => s.length > 20 && s.length < 500);
-  // Find sentences matching the patterns
-  const relevant = sentences.filter(s => patterns.some(p => p.test(s)));
-  if (relevant.length > 0) return relevant.slice(0, 3).join('. ') + '.';
-  // Fall back to first meaningful sentences
-  return sentences.slice(0, 3).join('. ') + '.';
+/**
+ * Get a structured extraction log without producing items.
+ */
+export function getExtractionLog(source: ExtractionSource, items: KnowledgeItemInsert[], usedLlm: boolean): ExtractionLog {
+  const activatable = items.filter(i => (i.confidence_score ?? 0) >= 0.55);
+  const reasons: string[] = [];
+  if (items.length === 0) reasons.push('no_tactics_found');
+  else {
+    const lowConf = items.filter(i => (i.confidence_score ?? 0) < 0.55);
+    if (lowConf.length > 0) reasons.push(`${lowConf.length} items below activation threshold`);
+    const missingFields = items.filter(i => !i.when_to_use || !i.tactic_summary);
+    if (missingFields.length > 0) reasons.push(`${missingFields.length} items missing required fields`);
+  }
+  return {
+    resourceId: source.resourceId,
+    resourceTitle: source.title,
+    extracted_count: items.length,
+    activatable_count: activatable.length,
+    rejected_reasons: reasons,
+    used_llm_fallback: usedLlm,
+  };
 }
 
 function buildContexts(chapter: string, type: string): string[] {
   const contexts = ['dave'];
-  if (['cold_calling', 'discovery', 'objection_handling', 'negotiation', 'closing'].includes(chapter)) {
+  if (['cold_calling', 'discovery', 'objection_handling', 'negotiation', 'closing', 'demo', 'follow_up'].includes(chapter)) {
     contexts.push('roleplay', 'coaching');
   }
   if (type === 'competitive' || type === 'product') {
@@ -243,15 +451,18 @@ function buildContexts(chapter: string, type: string): string[] {
 }
 
 /**
- * AI-powered extraction using edge function
+ * LLM-based fallback extraction via edge function.
+ * Called when heuristic returns 0 items for content-backed resources.
  */
-export async function extractKnowledgeAI(source: ExtractionSource): Promise<KnowledgeItemInsert[]> {
+export async function extractKnowledgeLLMFallback(source: ExtractionSource): Promise<KnowledgeItemInsert[]> {
   try {
-    const result = await trackedInvoke<{ items?: any[] }>('extract-knowledge', {
+    log.info('Running LLM fallback extraction', { resourceId: source.resourceId, title: source.title });
+
+    const result = await trackedInvoke<{ items?: any[] }>('extract-tactics', {
       body: {
         resourceId: source.resourceId,
         title: source.title,
-        content: source.content?.slice(0, 12000),
+        content: source.content?.slice(0, 15000),
         description: source.description,
         tags: source.tags,
         resourceType: source.resourceType,
@@ -259,33 +470,79 @@ export async function extractKnowledgeAI(source: ExtractionSource): Promise<Know
     });
 
     if (result?.data?.items && Array.isArray(result.data.items)) {
-      return result.data.items.map(item => ({
-        user_id: source.userId,
-        source_resource_id: source.resourceId,
-        source_doctrine_id: null,
-        title: item.title || source.title,
-        knowledge_type: item.knowledge_type || 'skill',
-        chapter: item.chapter || 'messaging',
-        sub_chapter: item.sub_chapter || null,
-        competitor_name: item.competitor_name || null,
-        product_area: item.product_area || null,
-        applies_to_contexts: item.applies_to_contexts || ['dave'],
-        tactic_summary: item.tactic_summary || null,
-        why_it_matters: item.why_it_matters || null,
-        when_to_use: item.when_to_use || null,
-        when_not_to_use: item.when_not_to_use || null,
-        example_usage: item.example_usage || null,
-        confidence_score: item.confidence_score || 0.5,
-        status: item.confidence_score >= 0.7 ? 'extracted' : 'review_needed',
-        active: false,
-        user_edited: false,
-        tags: item.tags || [...source.tags],
-      }));
+      const items: KnowledgeItemInsert[] = [];
+      for (const item of result.data.items) {
+        // Enforce structure: skip items missing required fields
+        if (!item.tactic_summary || item.tactic_summary.length < 20) continue;
+        if (!item.when_to_use || item.when_to_use.length < 10) continue;
+        if (!item.title) continue;
+
+        const { score: confidence } = scoreActionability({
+          title: item.title,
+          tactic_summary: item.tactic_summary,
+          when_to_use: item.when_to_use,
+          example_usage: item.example_usage,
+        });
+
+        items.push({
+          user_id: source.userId,
+          source_resource_id: source.resourceId,
+          source_doctrine_id: null,
+          title: item.title,
+          knowledge_type: item.knowledge_type || 'skill',
+          chapter: item.chapter || 'messaging',
+          sub_chapter: item.sub_chapter || null,
+          competitor_name: item.competitor_name || detectCompetitor(item.tactic_summary || ''),
+          product_area: item.product_area || null,
+          applies_to_contexts: item.applies_to_contexts || buildContexts(item.chapter || 'messaging', item.knowledge_type || 'skill'),
+          tactic_summary: item.tactic_summary,
+          why_it_matters: item.why_it_matters || null,
+          when_to_use: item.when_to_use,
+          when_not_to_use: item.when_not_to_use || null,
+          example_usage: item.example_usage || null,
+          confidence_score: confidence,
+          status: confidence >= 0.5 ? 'extracted' : 'review_needed',
+          active: false,
+          user_edited: false,
+          tags: [...source.tags, item.knowledge_type || 'skill', item.chapter || 'messaging'],
+        });
+      }
+
+      log.info('LLM fallback extraction complete', {
+        resourceId: source.resourceId,
+        extracted: items.length,
+        activatable: items.filter(i => (i.confidence_score ?? 0) >= 0.55).length,
+      });
+
+      return items;
     }
   } catch (err) {
-    log.warn('AI extraction failed, falling back to heuristic', { error: err });
+    log.warn('LLM fallback extraction failed', { resourceId: source.resourceId, error: err });
   }
 
-  // Fallback to heuristic
-  return extractKnowledgeHeuristic(source);
+  return [];
+}
+
+/**
+ * AI-powered extraction using edge function (legacy compat)
+ */
+export async function extractKnowledgeAI(source: ExtractionSource): Promise<KnowledgeItemInsert[]> {
+  // Try heuristic first
+  const heuristicItems = extractKnowledgeHeuristic(source);
+
+  // If heuristic produced results, use them
+  if (heuristicItems.length > 0) return heuristicItems;
+
+  // LLM fallback for content-backed resources with 0 heuristic results
+  if ((source.content?.length ?? 0) >= 100) {
+    const llmItems = await extractKnowledgeLLMFallback(source);
+    if (llmItems.length > 0) return llmItems;
+  }
+
+  log.warn('Both heuristic and LLM extraction returned 0 items', {
+    resourceId: source.resourceId,
+    contentLength: source.content?.length ?? 0,
+  });
+
+  return [];
 }
