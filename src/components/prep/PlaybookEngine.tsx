@@ -196,10 +196,16 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
               [...stats.byChapter.entries()].filter(([_, items]) => items.some(i => i.active)).length
             } chapters
           </p>
-          <Button variant="outline" size="sm" onClick={() => setExtractOpen(true)} className="gap-1.5 text-xs">
-            <Sparkles className="h-3 w-3" />
-            Extract More
-          </Button>
+          <div className="flex gap-1.5">
+            <Button variant="outline" size="sm" onClick={() => setReadinessOpen(true)} className="gap-1.5 text-xs">
+              <Activity className="h-3 w-3" />
+              Readiness
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setExtractOpen(true)} className="gap-1.5 text-xs">
+              <Sparkles className="h-3 w-3" />
+              Extract More
+            </Button>
+          </div>
         </div>
       )}
 
