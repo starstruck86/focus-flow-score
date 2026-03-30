@@ -252,10 +252,15 @@ export function KnowledgeItemDrawer({ itemId, open, onOpenChange }: Props) {
                 )}
 
                 {item.active && (
-                  <Button variant="outline" className="w-full h-11 gap-2" onClick={handlePractice}>
-                    <Play className="h-4 w-4" />
-                    Practice with Dave
-                  </Button>
+                  <div className="space-y-1.5">
+                    <Button variant="outline" className="w-full h-11 gap-2" onClick={handlePractice}>
+                      <Play className="h-4 w-4" />
+                      Practice with Dave
+                    </Button>
+                    <p className="text-[10px] text-muted-foreground text-center">
+                      Dave will use this item + {item.chapter.replace(/_/g, ' ')} active knowledge to ground the roleplay
+                    </p>
+                  </div>
                 )}
 
                 <Button variant="destructive" className="w-full h-11 gap-2" onClick={() => setDeleteConfirm(true)}>

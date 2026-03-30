@@ -30,13 +30,18 @@ serve(async (req) => {
       });
     }
 
-    const { messages, scenario, mode } = await req.json();
+    const { messages, scenario, mode, knowledgeGrounding } = await req.json();
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
     // Build system prompt based on mode
     let systemPrompt = scenario;
+
+    // Inject knowledge grounding if provided
+    if (knowledgeGrounding && mode !== 'feedback') {
+      systemPrompt = `${scenario}\n\n--- ACTIVE KNOWLEDGE GROUNDING ---\n${knowledgeGrounding}\n--- END KNOWLEDGE ---\nUse the above knowledge to evaluate the rep's responses. Reward when they use these tactics correctly. Punish when they deviate.`;
+    }
     
     if (mode === 'feedback') {
       systemPrompt = `You are an elite sales coach who has just observed a live roleplay session. The scenario was:
