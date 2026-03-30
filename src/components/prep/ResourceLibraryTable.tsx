@@ -84,7 +84,7 @@ const SAVED_VIEWS: SavedView[] = [
       if (hasSubstantialContent(r)) return false;
       const status = r.enrichment_status;
       if (!status || status === 'not_enriched' || status === 'incomplete' || status === 'failed') return true;
-      const ea = classifyEnrichability(r.file_url, r.resource_type);
+      const ea = classifyEnrichabilityForResource(r);
       return ea.enrichability === 'manual_input_needed' || ea.enrichability === 'needs_auth';
     },
   },
@@ -102,7 +102,7 @@ const SAVED_VIEWS: SavedView[] = [
     id: 'manual', label: 'Manual Required', icon: <HelpCircle className="h-3 w-3" />,
     filter: (r) => {
       if (hasSubstantialContent(r)) return false;
-      const ea = classifyEnrichability(r.file_url, r.resource_type);
+      const ea = classifyEnrichabilityForResource(r);
       return ea.enrichability === 'manual_input_needed' || ea.enrichability === 'needs_auth' || ea.enrichability === 'metadata_only';
     },
   },
@@ -125,12 +125,12 @@ const SAVED_VIEWS: SavedView[] = [
       const status = r.enrichment_status;
       if (status === 'quarantined') return true;
       if (status === 'failed' || status === 'incomplete') {
-        const ea = classifyEnrichability(r.file_url, r.resource_type);
+        const ea = classifyEnrichabilityForResource(r);
         return ea.enrichability === 'manual_input_needed'
           || ea.enrichability === 'needs_auth'
           || ea.enrichability === 'metadata_only';
       }
-      const ea = classifyEnrichability(r.file_url, r.resource_type);
+      const ea = classifyEnrichabilityForResource(r);
       return ea.enrichability === 'manual_input_needed' || ea.enrichability === 'needs_auth';
     },
   },
