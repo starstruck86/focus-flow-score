@@ -22,6 +22,7 @@ import { Zap, RefreshCw, RotateCcw,
   GraduationCap, MessageSquare, Loader2, Check, X, AlertTriangle, Globe, Radar, ListVideo, Podcast,
 } from 'lucide-react';
 import { ResourceLibraryTable } from './ResourceLibraryTable';
+import { LibraryResourceDrawer } from './LibraryResourceDrawer';
 import { ResourceAudioInspector } from './ResourceAudioInspector';
 import { ManualTranscriptAssist } from './ManualTranscriptAssist';
 import { cn } from '@/lib/utils';
