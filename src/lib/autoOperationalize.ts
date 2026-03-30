@@ -233,38 +233,59 @@ export async function autoOperationalizeResource(
   }
   stagesCompleted.push('knowledge_extracted');
 
-  // ── STAGE 4: Auto-Activation ──
-  // Only activate items meeting strict criteria
-  const activatable = existingItems.filter((ki: any) => {
+  // ── STAGE 4: Auto-Activation (hardened) ──
+  const activatable: Array<{ item: any; reason: string }> = [];
+  for (const ki of existingItems) {
     // Never touch user-edited items
-    if (ki.user_edited) return false;
+    if (ki.user_edited) continue;
     // Already active — skip
-    if (ki.active) return false;
+    if (ki.active) continue;
     // Must meet confidence threshold
-    if ((ki.confidence_score ?? 0) < AUTO_ACTIVATE_CONFIDENCE) return false;
-    // Must have tactic_summary
-    if (!ki.tactic_summary) return false;
+    const conf = ki.confidence_score ?? 0;
+    if (conf < AUTO_ACTIVATE_CONFIDENCE) continue;
+    // Must have non-trivial tactic_summary
+    const summary = (ki.tactic_summary ?? '').trim();
+    if (!summary || summary.length < MIN_TACTIC_SUMMARY_LENGTH) continue;
+    // Must not be vague/generic
+    if (VAGUE_PATTERNS.some(p => p.test(summary))) continue;
     // Must have chapter
-    if (!ki.chapter) return false;
+    if (!ki.chapter) continue;
     // Must have applies_to_contexts
-    if (!Array.isArray(ki.applies_to_contexts) || ki.applies_to_contexts.length === 0) return false;
-    return true;
-  });
+    if (!Array.isArray(ki.applies_to_contexts) || ki.applies_to_contexts.length === 0) continue;
+    // Must have at least one structured tag (required tier: skill or context)
+    const tags: string[] = ki.tags ?? [];
+    const hasRequiredTag = tags.some((t: string) => t.startsWith('skill:') || t.startsWith('context:'));
+    if (!hasRequiredTag) continue;
+    // Build activation reason
+    const reason = `confidence=${(conf * 100).toFixed(0)}%, chapter=${ki.chapter}, contexts=${ki.applies_to_contexts.length}, tags=${tags.length}`;
+    activatable.push({ item: ki, reason });
+  }
 
   if (activatable.length > 0) {
-    const ids = activatable.map((ki: any) => ki.id);
-    const { error: actErr } = await supabase
-      .from('knowledge_items' as any)
-      .update({
-        active: true,
-        status: 'active',
-        updated_at: new Date().toISOString(),
-      } as any)
-      .in('id', ids);
-
-    if (!actErr) {
-      knowledgeActivated = ids.length;
-      log.info('Auto-activated knowledge items', { resourceId, count: knowledgeActivated });
+    const now = new Date().toISOString();
+    // Activate each item with provenance metadata
+    for (const { item: ki, reason } of activatable) {
+      const provenance = {
+        activation_source: 'auto_pipeline',
+        activation_reason: reason,
+        activation_timestamp: now,
+        activation_resource_id: resourceId,
+        activation_confidence_at_time: ki.confidence_score,
+        activation_rule_version: ACTIVATION_RULE_VERSION,
+      };
+      const { error: actErr } = await supabase
+        .from('knowledge_items' as any)
+        .update({
+          active: true,
+          status: 'active',
+          activation_metadata: provenance,
+          updated_at: now,
+        } as any)
+        .eq('id', ki.id);
+      if (!actErr) knowledgeActivated++;
+    }
+    if (knowledgeActivated > 0) {
+      log.info('Auto-activated knowledge items with provenance', { resourceId, count: knowledgeActivated });
     }
   }
 
