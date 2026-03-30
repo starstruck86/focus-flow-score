@@ -69,6 +69,11 @@ export async function getDaveKnowledgeContext(opts?: {
 
   if (items.length === 0) return '';
 
+  // Log Dave usage telemetry
+  logKnowledgeUsage(buildUsageEntries(items as any[], 'dave_response_grounding', {
+    competitor: opts?.competitor,
+  }));
+
   const sections: string[] = [];
 
   // Group by chapter
