@@ -526,7 +526,7 @@ export async function importNotionZipDirect(
   }
 }
 
-// ── Cleanup: delete children from an import group ────────────
+// ── Cleanup: delete ALL children from an import group ────────
 
 export async function deleteImportGroupChildren(
   importGroupId: string,
@@ -544,15 +544,105 @@ export async function deleteImportGroupChildren(
   if (!children?.length) return { deleted: 0, errors: [] };
 
   const ids = children.map((c: any) => c.id);
+  return batchDeleteResources(ids);
+}
+
+// ── Cleanup: delete JUNK children only ──────────────────────
+
+const NOTION_CHILD_METHODS = [
+  'notion_zip_split',
+  'notion_zip_page_import',
+  'notion_zip_database_import',
+  'notion_zip_page_chunk',
+];
+
+/**
+ * Finds junk Notion child resources from a given source/import group.
+ * Returns IDs of resources that are clearly junk based on content quality.
+ */
+export async function findJunkNotionChildren(
+  userId: string,
+  importGroupId?: string | null,
+): Promise<{ junkIds: string[]; totalChildren: number; error?: string }> {
+  // Build query for Notion children
+  let query = (supabase as any)
+    .from('resources')
+    .select('id, content_length, content, resolution_method, extraction_method, enrichment_status, manual_input_required, file_url')
+    .eq('user_id', userId)
+    .neq('resolution_method', 'notion_zip_source_archive');
+
+  // Scope to import group if known
+  if (importGroupId) {
+    query = query.contains('tags', [`notion-group:${importGroupId}`]);
+  } else {
+    // Fallback: match by resolution/extraction method
+    query = query.or(
+      NOTION_CHILD_METHODS.map(m => `resolution_method.eq.${m}`).join(',') + ',' +
+      NOTION_CHILD_METHODS.map(m => `extraction_method.eq.${m}`).join(',')
+    );
+  }
+
+  const { data: children, error } = await query;
+  if (error) return { junkIds: [], totalChildren: 0, error: error.message };
+  if (!children?.length) return { junkIds: [], totalChildren: 0 };
+
+  const junkIds: string[] = [];
+  for (const child of children) {
+    const len = child.content_length ?? 0;
+    const content = child.content ?? '';
+
+    // Clearly junk: very short content
+    if (len < 200) {
+      junkIds.push(child.id);
+      continue;
+    }
+
+    // Run quality check on actual content if available
+    if (content && !isMeaningfulNotionPage(content)) {
+      junkIds.push(child.id);
+      continue;
+    }
+  }
+
+  return { junkIds, totalChildren: children.length };
+}
+
+/**
+ * Deletes junk Notion children and their related records.
+ */
+export async function deleteJunkNotionChildren(
+  userId: string,
+  importGroupId?: string | null,
+): Promise<{ deleted: number; preserved: number; errors: string[] }> {
+  const { junkIds, totalChildren, error } = await findJunkNotionChildren(userId, importGroupId);
+  if (error) return { deleted: 0, preserved: totalChildren, errors: [error] };
+  if (junkIds.length === 0) return { deleted: 0, preserved: totalChildren, errors: [] };
+
+  // Clean up related records first (best-effort)
+  for (const table of ['enrichment_attempts', 'intelligence_units', 'knowledge_signals'] as const) {
+    try {
+      for (let i = 0; i < junkIds.length; i += BATCH_SIZE) {
+        await (supabase as any).from(table).delete().in('resource_id', junkIds.slice(i, i + BATCH_SIZE));
+      }
+    } catch { /* non-fatal */ }
+  }
+
+  const result = await batchDeleteResources(junkIds);
+  return { deleted: result.deleted, preserved: totalChildren - junkIds.length, errors: result.errors };
+}
+
+async function batchDeleteResources(ids: string[]): Promise<{ deleted: number; errors: string[] }> {
   const errs: string[] = [];
+  let deleted = 0;
 
   for (let i = 0; i < ids.length; i += BATCH_SIZE) {
     const batch = ids.slice(i, i + BATCH_SIZE);
     const { error } = await supabase.from('resources').delete().in('id', batch);
     if (error) errs.push(error.message);
+    else deleted += batch.length;
   }
 
-  return { deleted: ids.length - (errs.length * BATCH_SIZE), errors: errs };
+  return { deleted, errors: errs };
 }
 
 // ── Detect import group from a resource ──────────────────────
