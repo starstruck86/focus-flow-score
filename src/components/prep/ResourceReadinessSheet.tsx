@@ -872,7 +872,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                           <span>Total resources:</span><span className="font-medium text-foreground">{deepAudit.metrics.resources.total}</span>
                           <span>Content-backed:</span><span className="font-medium text-foreground">{deepAudit.metrics.resources.content_backed}</span>
                           <span>With knowledge:</span><span className="font-medium text-foreground">{deepAudit.metrics.resources.with_knowledge}</span>
-                          <span>Operationalized:</span><span className="font-medium text-emerald-600">{deepAudit.metrics.resources.operationalized}</span>
+                          <span>Ready to use:</span><span className="font-medium text-emerald-600">{deepAudit.metrics.resources.operationalized}</span>
                           <span>Stalled:</span><span className={cn('font-medium', deepAudit.metrics.resources.stalled > 0 ? 'text-amber-500' : 'text-foreground')}>{deepAudit.metrics.resources.stalled}</span>
                           <span>Coverage:</span><span className="font-medium text-foreground">{deepAudit.metrics.pipeline.coverage_pct}%</span>
                         </div>
