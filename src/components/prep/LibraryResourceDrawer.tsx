@@ -255,6 +255,29 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
                 {deletingJunk ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                 {deletingJunk ? 'Cleaning up…' : 'Delete Junk Notion Resources'}
               </Button>
+              {/* Fix All Notion Resources */}
+              <Button
+                className="w-full min-h-[44px] gap-2"
+                variant="outline"
+                onClick={async () => {
+                  if (!user?.id) return;
+                  setFixingAll(true);
+                  try {
+                    const result = await fixNotionResourcesWithContent(user.id, { triggerReEnrich: true });
+                    toast.success(`Fixed ${result.fixed} Notion resources — content activated and scored`);
+                    FIX_RESOURCE_INVALIDATION_KEYS.forEach(k => qc.invalidateQueries({ queryKey: k }));
+                    onResourceUpdated?.();
+                  } catch (e: any) {
+                    toast.error(e.message || 'Fix failed');
+                  } finally {
+                    setFixingAll(false);
+                  }
+                }}
+                disabled={fixingAll}
+              >
+                {fixingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
+                {fixingAll ? 'Fixing all Notion resources…' : 'Fix All Notion Resources'}
+              </Button>
               {isArchive && (
                 <Button
                   className="w-full min-h-[44px] gap-2"
