@@ -35,6 +35,7 @@ const CHAPTERS = [
 
 export const PlaybookEngine = memo(function PlaybookEngine() {
   const stats = useKnowledgeStats();
+  const { session: roleplaySession } = useChapterRoleplay();
   const [selectedChapter, setSelectedChapter] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [extractOpen, setExtractOpen] = useState(false);
@@ -42,6 +43,17 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
   const handlePractice = useCallback((chapter: string) => {
     window.dispatchEvent(new CustomEvent('dave-start-roleplay', { detail: { chapter } }));
   }, []);
+
+  // Compute operationalized resource count
+  const operationalizedCount = useMemo(() => {
+    const sourceIds = new Set<string>();
+    for (const item of stats.items) {
+      if (item.active && item.source_resource_id && item.applies_to_contexts?.length > 0) {
+        sourceIds.add(item.source_resource_id);
+      }
+    }
+    return sourceIds.size;
+  }, [stats.items]);
 
   return (
     <div className="space-y-4">
