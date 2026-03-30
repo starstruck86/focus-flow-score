@@ -221,9 +221,14 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
   const [kiBackfillProgress, setKiBackfillProgress] = useState<{ processed: number; total: number } | null>(null);
   const [kiBackfillReport, setKiBackfillReport] = useState<BackfillReport | null>(null);
   const [kiScanReport, setKiScanReport] = useState<BackfillReport | null>(null);
+  const [auditError, setAuditError] = useState<string | null>(null);
+
+  // Canonical lifecycle — SINGLE SOURCE OF TRUTH
+  const { summary: lifecycle, refetch: refetchLifecycle } = useCanonicalLifecycle();
 
   const runAudit = useCallback(async () => {
     setLoading(true);
+    setAuditError(null);
     try {
       const [result, coverage] = await Promise.all([
         auditResourceReadiness(),
@@ -231,12 +236,26 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
       ]);
       setAudit(result);
       setExtractionCoverage(coverage);
-    } catch {
-      toast.error('Audit failed');
+      // Also refresh canonical lifecycle
+      refetchLifecycle();
+    } catch (err: any) {
+      const msg = err?.message ?? 'Unknown error';
+      setAuditError(msg);
+      toast.error(`Audit failed: ${msg}`);
+      console.error('[ResourceReadiness] Audit error:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refetchLifecycle]);
+
+  // Auto-run audit when sheet opens (if not already loaded)
+  const hasAutoRun = useRef(false);
+  useEffect(() => {
+    if (open && !audit && !loading && !hasAutoRun.current) {
+      hasAutoRun.current = true;
+      runAudit();
+    }
+  }, [open, audit, loading, runAudit]);
 
   const executeAction = async (type: string, ids?: string[]) => {
     setActionLoading(type);
