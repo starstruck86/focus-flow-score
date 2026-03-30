@@ -38,6 +38,8 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
     get_playbook_recommendation: (params: { blockType?: string; dealStage?: string; dealStatus?: string; accountName?: string }) => getPlaybookRecommendation(ctx, params),
     start_playbook_roleplay: (params: { playbookTitle?: string; accountName?: string; dealStage?: string; dealStatus?: string; objection?: string }) => startPlaybookRoleplay(ctx, params),
     end_playbook_roleplay: () => endPlaybookRoleplay(ctx),
+    get_active_knowledge: (params: { chapter?: string; competitor?: string; knowledgeType?: string }) => getActivePlaybookKnowledge(ctx, params),
+    get_knowledge_for_roleplay: (params: { chapter: string; competitor?: string }) => getPlaybookKnowledgeForRoleplay(ctx, params),
     ...createAccountExecutionTools(ctx),
     ...createAccountCentricTools(ctx),
     ...createExecutionSessionTools(ctx),
