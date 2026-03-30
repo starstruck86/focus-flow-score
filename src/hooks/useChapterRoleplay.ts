@@ -114,15 +114,34 @@ Respond as a buyer at the opening of a call. Be natural, slightly distracted.`;
 export function useChapterRoleplay() {
   const [session, setSessionState] = useState<RoleplaySession | null>(getSession);
 
-  const startRoleplay = useCallback(async (chapter: string, knowledgeItemId?: string) => {
+  const startRoleplay = useCallback(async (chapter: string, knowledgeItemId?: string, salesContext?: SalesContext) => {
     try {
-      // Fetch active knowledge for the chapter
-      const items = await queryKnowledge({
-        chapters: [chapter],
-        context: 'roleplay',
-        activeOnly: true,
-        maxItems: 15,
-      });
+      // If salesContext is provided, use context-aware retrieval for richer grounding
+      let items;
+      if (salesContext) {
+        items = await queryKnowledgeByContext(
+          { ...salesContext },
+          { maxItems: 15 },
+        );
+        // Also include chapter-specific items
+        const chapterItems = await queryKnowledge({
+          chapters: [chapter],
+          context: 'roleplay',
+          activeOnly: true,
+          maxItems: 10,
+        });
+        const seen = new Set(items.map(i => i.id));
+        for (const ci of chapterItems) {
+          if (!seen.has(ci.id)) items.push(ci);
+        }
+      } else {
+        items = await queryKnowledge({
+          chapters: [chapter],
+          context: 'roleplay',
+          activeOnly: true,
+          maxItems: 15,
+        });
+      }
 
       if (items.length === 0) {
         toast.error(`No active knowledge in ${chapter.replace(/_/g, ' ')}. Activate some items first.`);
