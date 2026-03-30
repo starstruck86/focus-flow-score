@@ -510,7 +510,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                         <CollapsibleTrigger className="w-full flex items-center justify-between p-1.5 rounded hover:bg-accent/50 text-[10px]">
                           <span className="font-medium text-foreground flex items-center gap-1">
                             <Brain className="h-3 w-3 text-blue-500" />
-                            Knowledge Utilization ({deepAudit.knowledge.summary.high_value_unused + deepAudit.knowledge.summary.not_retrievable} issues)
+                            Knowledge Utilization ({deepAudit.knowledge.summary.never_used + deepAudit.knowledge.summary.not_retrievable} unused)
                           </span>
                           <ChevronDown className="h-3 w-3 text-muted-foreground" />
                         </CollapsibleTrigger>
@@ -518,8 +518,11 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                           <div className="space-y-1 pl-2 pt-1 text-[10px]">
                             <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
                               <span>Fully utilized:</span><span className="font-medium text-emerald-600">{deepAudit.knowledge.summary.fully_utilized}</span>
-                              <span>Partially used:</span><span className="font-medium text-amber-500">{deepAudit.knowledge.summary.partially_used}</span>
-                              <span>High-value unused:</span><span className={cn('font-medium', deepAudit.knowledge.summary.high_value_unused > 0 ? 'text-destructive' : 'text-foreground')}>{deepAudit.knowledge.summary.high_value_unused}</span>
+                              <span>Prep only:</span><span className="font-medium text-blue-500">{deepAudit.knowledge.summary.used_in_prep_only}</span>
+                              <span>Roleplay only:</span><span className="font-medium text-blue-500">{deepAudit.knowledge.summary.used_in_roleplay_only}</span>
+                              <span>Dave only:</span><span className="font-medium text-blue-500">{deepAudit.knowledge.summary.used_by_dave_only}</span>
+                              <span>Rarely used:</span><span className="font-medium text-amber-500">{deepAudit.knowledge.summary.rarely_used}</span>
+                              <span>Never used:</span><span className={cn('font-medium', deepAudit.knowledge.summary.never_used > 0 ? 'text-destructive' : 'text-foreground')}>{deepAudit.knowledge.summary.never_used}</span>
                               <span>Not retrievable:</span><span className={cn('font-medium', deepAudit.knowledge.summary.not_retrievable > 0 ? 'text-destructive' : 'text-foreground')}>{deepAudit.knowledge.summary.not_retrievable}</span>
                             </div>
                             {Object.entries(deepAudit.knowledge.summary.unused_reasons).length > 0 && (
@@ -530,7 +533,15 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                                 ))}
                               </div>
                             )}
-                            {deepAudit.knowledge.items.filter(i => i.classification === 'high_value_unused' || i.classification === 'not_retrievable').slice(0, 5).map(ki => (
+                            {deepAudit.knowledge.summary.most_used.length > 0 && (
+                              <div className="pt-1 border-t border-border/30">
+                                <p className="font-medium text-foreground mb-0.5">Most used:</p>
+                                {deepAudit.knowledge.summary.most_used.slice(0, 5).map(ki => (
+                                  <p key={ki.id} className="text-muted-foreground pl-2 truncate">• {ki.title} ({ki.total_count}x)</p>
+                                ))}
+                              </div>
+                            )}
+                            {deepAudit.knowledge.items.filter(i => i.classification === 'never_used' || i.classification === 'not_retrievable').slice(0, 5).map(ki => (
                               <div key={ki.id} className="pl-2 border-l-2 border-amber-500/30 py-0.5">
                                 <p className="font-medium text-foreground truncate">{ki.title}</p>
                                 <p className="text-muted-foreground">{ki.issue}</p>
