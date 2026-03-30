@@ -133,6 +133,27 @@ describe('processingState manual recovery recognition', () => {
     expect(ps.state).toBe('COMPLETED');
     expect(ps.label).toBe('Manual Recovery');
   });
+
+  it('deep_enriched + resolution_method=notion_zip_import → COMPLETED / Manual Recovery', () => {
+    const r = { ...baseResource, enrichment_status: 'deep_enriched', resolution_method: 'notion_zip_import', manual_content_present: true, content_length: 50000 } as any;
+    const ps = deriveProcessingState(r);
+    expect(ps.state).toBe('COMPLETED');
+    expect(ps.label).toBe('Manual Recovery');
+  });
+
+  it('deep_enriched + resolution_method=notion_zip_split → COMPLETED / Manual Recovery', () => {
+    const r = { ...baseResource, enrichment_status: 'deep_enriched', resolution_method: 'notion_zip_split', manual_content_present: true, content_length: 3000 } as any;
+    const ps = deriveProcessingState(r);
+    expect(ps.state).toBe('COMPLETED');
+    expect(ps.label).toBe('Manual Recovery');
+  });
+
+  it('failed + notion_zip_import + content → COMPLETED (content wins)', () => {
+    const r = { ...baseResource, enrichment_status: 'failed', content_length: 80000, resolution_method: 'notion_zip_import', manual_content_present: true } as any;
+    const ps = deriveProcessingState(r);
+    expect(ps.state).toBe('COMPLETED');
+    expect(ps.label).toBe('Manual Recovery');
+  });
 });
 
 describe('isFixEligible', () => {
