@@ -2,9 +2,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { Copy, RotateCcw, Save } from 'lucide-react';
+import { Copy, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
+import { EvidencePanel, type EvidenceData } from './EvidencePanel';
+import { SaveActions } from './SaveActions';
 
 interface Props {
   output: string;
@@ -14,11 +15,15 @@ interface Props {
   sources: string[];
   isGenerating: boolean;
   onRegenerate: () => void;
+  evidence: EvidenceData | null;
+  actionLabel: string;
+  accountName?: string;
 }
 
 export function PrepOutput({
   output, onOutputChange, subjectLine, onSubjectChange,
   sources, isGenerating, onRegenerate,
+  evidence, actionLabel, accountName,
 }: Props) {
   if (!output && !isGenerating) return null;
 
@@ -39,11 +44,11 @@ export function PrepOutput({
           <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onRegenerate} disabled={isGenerating}>
             <RotateCcw className="h-3 w-3 mr-1" /> Regenerate
           </Button>
-          <Button size="sm" variant="ghost" className="h-7 text-xs" disabled>
-            <Save className="h-3 w-3 mr-1" /> Save
-          </Button>
         </div>
       </div>
+
+      {/* Evidence panel — what grounded this output */}
+      <EvidencePanel evidence={evidence} />
 
       {subjectLine && (
         <div>
@@ -61,16 +66,17 @@ export function PrepOutput({
         onChange={e => onOutputChange(e.target.value)}
         rows={16}
         placeholder={isGenerating ? 'Generating…' : ''}
-        className="text-sm font-mono leading-relaxed"
+        className="text-sm leading-relaxed"
       />
 
-      {sources.length > 0 && (
-        <div className="flex flex-wrap gap-1 items-center">
-          <span className="text-[9px] text-muted-foreground">Sources:</span>
-          {sources.map((s, i) => (
-            <Badge key={i} variant="outline" className="text-[9px]">{s}</Badge>
-          ))}
-        </div>
+      {/* Save actions */}
+      {output && (
+        <SaveActions
+          output={output}
+          subjectLine={subjectLine}
+          actionLabel={actionLabel}
+          accountName={accountName}
+        />
       )}
     </div>
   );
