@@ -244,7 +244,7 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
 
           {/* Delete Junk Notion Resources CTA */}
           {showDeleteJunkCTA && (
-            <div className="px-4 pt-2 shrink-0">
+            <div className="px-4 pt-2 shrink-0 space-y-2">
               <Button
                 className="w-full min-h-[44px] gap-2"
                 variant="outline"
@@ -254,6 +254,33 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
                 {deletingJunk ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                 {deletingJunk ? 'Cleaning up…' : 'Delete Junk Notion Resources'}
               </Button>
+              {isArchive && (
+                <Button
+                  className="w-full min-h-[44px] gap-2"
+                  variant="destructive"
+                  onClick={async () => {
+                    const groupId = getImportGroupId(r);
+                    if (!groupId || !user?.id) return;
+                    if (!confirm('Delete ALL generated resources from this Notion import? This cannot be undone.')) return;
+                    try {
+                      const result = await deleteImportGroupChildren(groupId, user.id);
+                      if (result.errors.length > 0) {
+                        toast.error(`Partial: ${result.errors[0]}`);
+                      } else {
+                        toast.success(`Deleted ${result.deleted} generated resources`);
+                      }
+                      FIX_RESOURCE_INVALIDATION_KEYS.forEach(k => qc.invalidateQueries({ queryKey: k }));
+                      onResourceUpdated?.();
+                    } catch (e: any) {
+                      toast.error(e.message || 'Delete failed');
+                    }
+                  }}
+                  disabled={deletingJunk}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete All Generated Resources
+                </Button>
+              )}
             </div>
           )}
 
