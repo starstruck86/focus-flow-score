@@ -34,7 +34,12 @@ import {
   type AuditedResource,
 } from '@/lib/resourceAudit';
 import { autoOperationalizeBatch, summarizeBatchResults, derivePipelineStage, getStageLabel, autoOperationalizeAllResources, countEligibleResources, forceExtractAll, getExtractionCoverage, type BackfillSummary, type ForceExtractResult, type ExtractionCoverage, type BlockedExample, type BlockedReason } from '@/lib/autoOperationalize';
-import { auditPipelineIntegrity, auditKnowledgeUtilization, getSystemMetrics, type PipelineIntegrityResult, type KnowledgeUtilResult, type SystemMetrics } from '@/lib/salesBrainAudit';
+import {
+  auditPipelineIntegrity, auditKnowledgeUtilization, getSystemMetrics,
+  runInvariantCheck, buildResourceFunnel, buildKnowledgeFunnel, buildUsageProof, buildRootCauses, buildNothingSlipsSummary,
+  type PipelineIntegrityResult, type KnowledgeUtilResult, type SystemMetrics,
+  type InvariantCheckResult, type ResourceFunnel, type KnowledgeFunnel, type UsageProof, type RootCauseReport, type NothingSlipsSummary,
+} from '@/lib/salesBrainAudit';
 import { toast } from 'sonner';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
