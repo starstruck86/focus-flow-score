@@ -446,11 +446,7 @@ export function ResourceManager() {
   };
 
   const handleResourceClick = (resource: Resource) => {
-    if (resource.file_url) {
-      setViewingResource(resource);
-    } else {
-      setEditingResource(resource);
-    }
+    setDrawerResource(resource);
   };
 
   if (editingResource) {
