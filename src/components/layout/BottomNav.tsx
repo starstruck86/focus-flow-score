@@ -8,7 +8,7 @@ import {
   DollarSign,
   Settings,
   Compass,
-  FileText,
+  Brain,
   Crosshair,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -45,7 +45,7 @@ export const navRow1: NavItemDef[] = [
 ];
 
 export const navRow2: NavItemDef[] = [
-  { to: '/prep', label: 'Sales Brain', icon: FileText, color: 'prep' },
+  { to: '/prep', label: 'Sales Brain', icon: Brain, color: 'prep' },
   { to: '/coach', label: 'Coach', icon: Compass, color: 'coach' },
   { to: '/trends', label: 'Trends', icon: TrendingUp, color: 'trends' },
   { to: '/quota', label: 'Quota', icon: DollarSign, color: 'quota' },
