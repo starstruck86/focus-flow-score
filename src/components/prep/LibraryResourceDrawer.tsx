@@ -69,7 +69,7 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
   const rm = r.resolution_method;
   const em = r.extraction_method;
   const resLabel = rm ? (RESOLUTION_LABELS[rm] || rm.replace(/_/g, ' ')) : null;
-  const ps = getProcessingState(r);
+  const ps = deriveProcessingState(r);
   const hasContent = contentLength > 0 || r.manual_content_present;
   const showNotionCTA = isNotionSource(r);
   const showFixCTA = isFixEligible(r);
