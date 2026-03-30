@@ -1,21 +1,23 @@
 /**
  * StageWorkspace — the main execution workspace for each deal lifecycle stage.
- * Contains: Context, What Works, Recommended Actions, Best Assets, Execution, Output, Next Steps.
+ * Contains: Context, Proactive Guidance, What Works, Recommended Actions, Best Assets, Execution, Output, Next Steps.
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { ContextInputSection } from './ContextInputSection';
+import { ProactiveGuidance } from './ProactiveGuidance';
 import { WhatActuallyWorks } from './WhatActuallyWorks';
 import { BestAssets } from './BestAssets';
 import { ActionExecutionPanel } from './ActionExecutionPanel';
 import { PrepOutput } from './PrepOutput';
 import { NextStepGuidance } from './NextStepGuidance';
 import { fetchRankedResources, type RankedResource } from './resourceRanking';
+import { rankActions } from './actionRanking';
 import type { ContextItem } from './contextTypes';
 import type { EvidenceData } from './EvidencePanel';
 import type { StageConfig, StageAction } from './stageConfig';
@@ -98,8 +100,20 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
     }
   }
 
+  // Dynamically ranked actions
+  const rankedStageActions = useMemo(() => {
+    return rankActions(stage.actions, {
+      persona,
+      competitor,
+      hasContext: contextItems.length > 0,
+      templates: rankedTemplates,
+      knowledgeItems: rankedKI,
+    });
+  }, [stage.actions, persona, competitor, contextItems.length, rankedTemplates, rankedKI]);
+
   const getContextText = useCallback(() => {
     return contextItems
+      .filter(item => item.parseStatus === 'parsed')
       .map(item => item.type === 'image' ? `[Image: ${item.label}]` : item.content)
       .filter(Boolean)
       .join('\n\n');
@@ -171,6 +185,7 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
   }, [selectedAction, accountName, stage, persona, competitor, contextItems, user, getContextText]);
 
   const handleSelectActionById = (actionId: string) => {
+    // Search current stage first, then all stages
     const action = stage.actions.find(a => a.id === actionId);
     if (action) setSelectedAction(action);
   };
@@ -205,6 +220,16 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
         onContextItemsChange={setContextItems}
       />
 
+      {/* Proactive Guidance */}
+      <ProactiveGuidance
+        stageId={stage.id}
+        persona={persona}
+        competitor={competitor}
+        hasContext={contextItems.length > 0}
+        onSelectAction={handleSelectActionById}
+        onChangeStage={onChangeStage}
+      />
+
       {/* 2. What Actually Works */}
       <WhatActuallyWorks
         stageId={stage.id}
@@ -213,11 +238,11 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
         competitor={competitor}
       />
 
-      {/* 3. Recommended Actions */}
+      {/* 3. Recommended Actions (dynamically ranked) */}
       <div className="space-y-2">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Recommended Actions</h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-          {stage.actions.map(a => {
+          {rankedStageActions.map((a, idx) => {
             const Icon = a.icon;
             const active = selectedAction?.id === a.id;
             return (
@@ -225,12 +250,17 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
                 key={a.id}
                 onClick={() => setSelectedAction(a)}
                 className={cn(
-                  'flex flex-col items-start gap-1.5 p-3 rounded-lg border text-left transition-all',
+                  'flex flex-col items-start gap-1.5 p-3 rounded-lg border text-left transition-all relative',
                   active
                     ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/30'
                     : 'border-border hover:border-primary/40 hover:bg-accent/30'
                 )}
               >
+                {idx === 0 && (persona || competitor) && (
+                  <Badge className="absolute -top-1.5 -right-1.5 text-[8px] px-1 py-0 h-3.5 bg-primary text-primary-foreground">
+                    Best fit
+                  </Badge>
+                )}
                 <Icon className={cn('h-4 w-4', active ? 'text-primary' : 'text-muted-foreground')} />
                 <span className={cn('text-xs font-medium leading-tight', active && 'text-primary')}>{a.label}</span>
                 <span className="text-[10px] text-muted-foreground leading-snug line-clamp-2">{a.description}</span>

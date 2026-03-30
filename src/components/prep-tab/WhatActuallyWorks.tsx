@@ -1,6 +1,6 @@
 /**
  * "What Actually Works" evidence panel.
- * Shows ranked tactics with confidence levels.
+ * Shows ranked tactics with confidence levels, improved scoring.
  */
 
 import { useState, useEffect } from 'react';
@@ -35,42 +35,80 @@ export function WhatActuallyWorks({ stageId, defaultTactics, persona, competitor
   async function computeTactics() {
     if (!user) return;
 
-    // Fetch knowledge items matching this stage's keywords
-    const { data: ki } = await supabase
-      .from('knowledge_items')
-      .select('title, tactic_summary, tags, confidence_score, chapter')
-      .eq('user_id', user.id)
-      .eq('active', true)
-      .limit(50);
+    // Fetch knowledge items + templates + examples in parallel
+    const [kiRes, tplRes, exRes] = await Promise.all([
+      supabase
+        .from('knowledge_items')
+        .select('title, tactic_summary, tags, confidence_score, chapter')
+        .eq('user_id', user.id)
+        .eq('active', true)
+        .limit(50),
+      supabase
+        .from('execution_templates' as any)
+        .select('title, output_type, stage, times_used, is_pinned, tags')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .limit(20),
+      supabase
+        .from('execution_outputs')
+        .select('title, output_type, stage, is_strong_example, times_reused')
+        .eq('user_id', user.id)
+        .eq('is_strong_example', true)
+        .limit(15),
+    ]);
 
-    const items = ki || [];
+    const items = kiRes.data || [];
+    const templates = (tplRes.data || []) as any[];
+    const examples = (exRes.data || []) as any[];
 
     const computed: ComputedTactic[] = defaultTactics.map(dt => {
-      // Count how many knowledge items match this tactic's keywords
-      const matching = items.filter(item => {
+      // Count matching knowledge items
+      const matchingKI = items.filter(item => {
         const text = `${item.title} ${item.tactic_summary || ''} ${(item.tags || []).join(' ')} ${item.chapter}`.toLowerCase();
         return dt.keywords.some(kw => text.includes(kw));
       });
 
-      const sourceCount = matching.length;
-      // Estimate usage from template data (simplified)
-      let confidence: 'HIGH' | 'MED' | 'LOW' = 'LOW';
-      let reason = '';
+      // Count matching templates by usage
+      const matchingTpl = templates.filter(t => {
+        const text = `${t.title} ${t.output_type} ${t.stage || ''} ${(t.tags || []).join(' ')}`.toLowerCase();
+        return dt.keywords.some(kw => text.includes(kw));
+      });
+      const templateUsage = matchingTpl.reduce((sum: number, t: any) => sum + (t.times_used || 0), 0);
 
-      if (sourceCount >= 3) {
+      // Count matching strong examples
+      const matchingEx = examples.filter(e => {
+        const text = `${e.title} ${e.output_type} ${e.stage || ''}`.toLowerCase();
+        return dt.keywords.some(kw => text.includes(kw));
+      });
+      const exampleReuse = matchingEx.reduce((sum: number, e: any) => sum + (e.times_reused || 0), 0);
+
+      const sourceCount = matchingKI.length;
+      const avgConfidence = matchingKI.length > 0
+        ? matchingKI.reduce((s, k) => s + k.confidence_score, 0) / matchingKI.length
+        : 0;
+
+      // Combined scoring
+      let confidence: 'HIGH' | 'MED' | 'LOW' = 'LOW';
+      const parts: string[] = [];
+
+      if (sourceCount > 0) parts.push(`${sourceCount} source${sourceCount > 1 ? 's' : ''}`);
+      if (templateUsage > 0) parts.push(`${templateUsage} template use${templateUsage > 1 ? 's' : ''}`);
+      if (matchingEx.length > 0) parts.push(`${matchingEx.length} strong example${matchingEx.length > 1 ? 's' : ''}`);
+
+      const totalSignal = sourceCount + templateUsage + matchingEx.length * 2;
+
+      if (totalSignal >= 5 || (sourceCount >= 3 && avgConfidence >= 0.7)) {
         confidence = 'HIGH';
-        reason = `${sourceCount} sources support this`;
-      } else if (sourceCount >= 1) {
+      } else if (totalSignal >= 2 || sourceCount >= 1) {
         confidence = 'MED';
-        reason = `${sourceCount} source${sourceCount > 1 ? 's' : ''}`;
-      } else {
-        reason = 'Best practice — build evidence';
       }
+
+      const reason = parts.length > 0 ? parts.join(' + ') : 'Best practice — build evidence';
 
       return { statement: dt.statement, confidence, reason };
     });
 
-    // Also surface any high-confidence knowledge items for this stage
+    // Surface high-confidence knowledge items for this stage
     const stageKI = items.filter(item => {
       const text = `${item.chapter} ${(item.tags || []).join(' ')}`.toLowerCase();
       return text.includes(stageId) && item.confidence_score >= 0.7;
@@ -81,7 +119,7 @@ export function WhatActuallyWorks({ stageId, defaultTactics, persona, competitor
         computed.push({
           statement: item.tactic_summary || item.title,
           confidence: item.confidence_score >= 0.8 ? 'HIGH' : 'MED',
-          reason: `From: ${item.chapter}`,
+          reason: `From: ${item.chapter} (confidence ${Math.round(item.confidence_score * 100)}%)`,
         });
       }
     });
