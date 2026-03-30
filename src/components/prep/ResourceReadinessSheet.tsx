@@ -280,6 +280,21 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
         setLastForceExtract(extractResult);
         toast.success(`Force extract: ${extractResult.newKnowledgeItems} items created, ${extractResult.becameOperationalized} operationalized`);
         if (extractResult.contentEmpty > 0) toast.warning(`${extractResult.contentEmpty} resources had empty content despite content_length`);
+      } else if (type === 'kiScan') {
+        const report = await scanExistingKnowledge();
+        setKiScanReport(report);
+        toast.success(`Scanned ${report.total_scanned} items: ${report.kept} keep, ${report.activated} activate, ${report.rewritten} rewrite, ${report.archived} archive`);
+      } else if (type === 'kiActivate' || type === 'kiRewrite' || type === 'kiArchive' || type === 'kiFull') {
+        const modeMap: Record<string, 'activate' | 'rewrite' | 'archive' | 'full'> = {
+          kiActivate: 'activate', kiRewrite: 'rewrite', kiArchive: 'archive', kiFull: 'full',
+        };
+        setKiBackfillProgress({ processed: 0, total: 0 });
+        const report = await executeKIBackfill(modeMap[type], (processed, total) => {
+          setKiBackfillProgress({ processed, total });
+        });
+        setKiBackfillProgress(null);
+        setKiBackfillReport(report);
+        toast.success(`KI remediation: ${report.activated} activated, ${report.rewritten} rewritten (${report.new_items_created} new), ${report.archived} archived`);
       }
     } catch {
       toast.error('Action failed');
