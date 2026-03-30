@@ -14,7 +14,7 @@ import { ExecutionWorkbench } from '@/components/prep/ExecutionWorkbench';
 import { ContentBuilder } from '@/components/prep/ContentBuilder';
 
 // Learn tab components
-import { SalesBrainDashboard } from '@/components/prep/SalesBrainDashboard';
+import { PlaybookEngine } from '@/components/prep/PlaybookEngine';
 import { PlaybooksPanel } from '@/components/prep/PlaybooksPanel';
 
 // Ingest tab components
