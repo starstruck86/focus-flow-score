@@ -5,7 +5,7 @@ import { Crosshair, Brain, Download } from 'lucide-react';
 import { VoiceCommandButton } from '@/components/VoiceCommandButton';
 
 // Consolidated workspaces
-import { PrepWorkspace } from '@/components/prep-tab/PrepWorkspace';
+import { PrepCommandCenter } from '@/components/prep-tab/PrepCommandCenter';
 import { KnowledgeWorkspace } from '@/components/knowledge/KnowledgeWorkspace';
 import { IngestWorkspace } from '@/components/ingest/IngestWorkspace';
 
