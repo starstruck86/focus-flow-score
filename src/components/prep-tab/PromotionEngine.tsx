@@ -156,7 +156,7 @@ export function PromotionEngine() {
     } catch (e) {
       toast.error('Promotion failed');
     }
-  }, [user, qc, createKnowledgeItem]);
+  }, [user, qc, insertKnowledge]);
 
   const totalCandidates = candidates.length;
   const totalPromoted = promoted.size;
