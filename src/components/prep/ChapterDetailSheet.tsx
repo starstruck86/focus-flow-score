@@ -35,7 +35,7 @@ interface Props {
   onPracticeTactic?: (chapter: string, knowledgeItemId: string) => void;
 }
 
-export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, onPractice }: Props) {
+export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, onPractice, onPracticeTactic }: Props) {
   const { data: items = [] } = useKnowledgeItems(chapter ?? undefined);
   const update = useUpdateKnowledgeItem();
 
