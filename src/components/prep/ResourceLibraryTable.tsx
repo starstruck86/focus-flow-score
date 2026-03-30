@@ -209,9 +209,11 @@ export function ResourceLibraryTable({
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [lifecycleFilter, setLifecycleFilter] = useState<LifecycleFilter>('all');
+  const [assetFilter, setAssetFilter] = useState<AssetTypeFilter>('all_assets');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [density, setDensity] = useState<Density>('comfortable');
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const { summary: lifecycle } = useCanonicalLifecycle();
   const { data: inUseData } = useInUseResources();
   const inUseIds = inUseData?.inUseResourceIds ?? new Set<string>();
