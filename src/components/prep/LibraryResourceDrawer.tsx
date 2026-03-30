@@ -66,6 +66,7 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
   const [splitting, setSplitting] = useState(false);
   const [splitProgress, setSplitProgress] = useState('');
   const [fixing, setFixing] = useState(false);
+  const [deletingJunk, setDeletingJunk] = useState(false);
   const [hydrated, setHydrated] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
