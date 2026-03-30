@@ -310,6 +310,36 @@ export function classifyEnrichability(url: string | null, resourceType?: string)
   }
 }
 
+const NOTION_METHODS = ['notion_zip_split', 'notion_zip_page_import', 'notion_zip_database_import', 'notion_zip_page_chunk'];
+
+/**
+ * Content-aware enrichability classification.
+ * For Notion-derived resources with valid content, always returns 'fully_enrichable'
+ * regardless of URL presence.
+ */
+export function classifyEnrichabilityForResource(resource: any): EnrichabilityResult {
+  const rm = resource?.resolution_method || resource?.extraction_method || '';
+  const isNotion = typeof rm === 'string' && NOTION_METHODS.includes(rm);
+  const contentLength = resource?.content_length ?? 0;
+  const hasContent = contentLength > 200 || resource?.manual_content_present === true;
+
+  if (isNotion && hasContent) {
+    return {
+      subtype: detectResourceSubtype(resource?.file_url ?? null, resource?.resource_type),
+      enrichability: 'fully_enrichable',
+      reason: 'Notion import — content already present',
+      canFetchText: true,
+      canFetchTranscript: false,
+      canFetchMetadata: false,
+      requiresAuth: false,
+      isDynamic: false,
+    };
+  }
+
+  return classifyEnrichability(resource?.file_url ?? null, resource?.resource_type);
+}
+
+
 // ── UI helpers ─────────────────────────────────────────────
 export function getSubtypeLabel(subtype: ResourceSubtype): string {
   const labels: Record<ResourceSubtype, string> = {
