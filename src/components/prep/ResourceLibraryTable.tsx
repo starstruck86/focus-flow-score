@@ -16,6 +16,7 @@ import {
   MoreHorizontal, Zap, RefreshCw, RotateCcw, Trash2,
   Eye, AlertTriangle, CheckCircle2, FileText,
   Filter, X, FileAudio, HelpCircle, Info, Inbox, ShieldAlert,
+  Star, BookTemplate, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type EnrichmentStatus } from '@/lib/resourceEligibility';
@@ -36,7 +37,8 @@ import {
   deriveProcessingState, getProcessingStateColor,
 } from '@/lib/processingState';
 import { routeFailure, getFailureBucketActions } from '@/lib/failureRouting';
-import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
+import { useCanonicalLifecycle, type BlockedReason } from '@/hooks/useCanonicalLifecycle';
+import { useInUseResources } from '@/hooks/useInUseResources';
 import type { AudioFailureCode, AudioPipelineStage } from '@/lib/salesBrain/audioPipeline';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import type { Resource } from '@/hooks/useResources';
