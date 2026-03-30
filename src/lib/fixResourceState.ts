@@ -28,7 +28,11 @@ export function isFixEligible(resource: any): boolean {
   const contentLength = resource.content_length ?? 0;
   const manualPresent = resource.manual_content_present === true;
   const actualContent = typeof resource.content === 'string' ? resource.content.trim().length : 0;
-  const hasValidContent = contentLength > 1000 || manualPresent || actualContent > 1000;
+  const rm = resource.resolution_method || resource.extraction_method || '';
+  const isNotion = typeof rm === 'string' && rm.startsWith('notion_zip_');
+  // Notion resources have a lower threshold — they are always content-backed
+  const contentThreshold = isNotion ? 200 : 1000;
+  const hasValidContent = contentLength > contentThreshold || manualPresent || actualContent > contentThreshold;
 
   if (!hasValidContent) return false;
 
