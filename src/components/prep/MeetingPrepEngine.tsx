@@ -92,7 +92,7 @@ export function MeetingPrepEngine() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Call Type</Label>
-                <Select value={ctx.context_type || ''} onValueChange={v => update({ context_type: v })}>
+                <Select value={ctx.context_type || '__unset__'} onValueChange={v => update({ context_type: v === '__unset__' ? undefined : v })}>
                   <SelectTrigger className="h-8 text-xs">
                     <SelectValue placeholder="Select..." />
                   </SelectTrigger>
@@ -108,7 +108,7 @@ export function MeetingPrepEngine() {
 
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Stage</Label>
-                <Select value={ctx.stage || ''} onValueChange={v => update({ stage: v })}>
+                <Select value={ctx.stage || '__unset__'} onValueChange={v => update({ stage: v === '__unset__' ? undefined : v })}>
                   <SelectTrigger className="h-8 text-xs">
                     <SelectValue placeholder="Select..." />
                   </SelectTrigger>
