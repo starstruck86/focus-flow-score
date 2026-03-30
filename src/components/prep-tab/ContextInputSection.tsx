@@ -155,10 +155,12 @@ export function ContextInputSection({
             </SelectContent>
           </Select>
         </div>
-        <div>
-          <Label className="text-[10px] text-muted-foreground">Stage</Label>
-          <Input value={stage} onChange={e => onStageChange(e.target.value)} placeholder="e.g. Discovery" className="h-8 text-xs" />
-        </div>
+        {stage && (
+          <div>
+            <Label className="text-[10px] text-muted-foreground">Stage</Label>
+            <Input value={stage} readOnly className="h-8 text-xs bg-muted/50 cursor-default" />
+          </div>
+        )}
         <div>
           <Label className="text-[10px] text-muted-foreground">Persona</Label>
           <Input value={persona} onChange={e => onPersonaChange(e.target.value)} placeholder="e.g. VP Marketing" className="h-8 text-xs" />
