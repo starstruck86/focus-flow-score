@@ -405,6 +405,29 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
         )}
       </div>
 
+      {/* Top-level Notion Rebuild CTA — always visible above fold */}
+      {isNotionSource && (r as any).resolution_method !== 'notion_zip_split' && (
+        <div className="px-4 py-3 border-b border-border bg-primary/5">
+          <Button
+            variant={(r.contentLength ?? 0) > 100_000 ? 'default' : 'outline'}
+            className={cn(
+              'gap-2 w-full min-h-[44px]',
+              (r.contentLength ?? 0) > 100_000 ? 'text-base font-semibold' : 'border-primary/30 text-primary',
+            )}
+            disabled={splitting || !!activeAction || !currentUserId}
+            onClick={handleRebuildNotion}
+          >
+            {splitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <FolderTree className="h-5 w-5" />}
+            {splitting ? splitProgress : 'Rebuild Notion Import'}
+          </Button>
+          {(r.contentLength ?? 0) > 50_000 && !splitting && (
+            <p className="text-[10px] text-muted-foreground mt-1.5 text-center">
+              {Math.round((r.contentLength ?? 0) / 1000)}k chars — split into individual searchable resources
+            </p>
+          )}
+        </div>
+      )}
+
       <ScrollArea className="flex-1">
         <div className={cn('space-y-4', isMobile ? 'p-4 pb-32' : 'p-4')}>
           {/* Diagnostics — collapsible on mobile */}
