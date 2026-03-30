@@ -343,6 +343,15 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
         onOpenChange={(open) => { if (!open) setSelectedChapter(null); }}
         onSelectItem={setSelectedItemId}
         onPractice={handlePractice}
+        onPracticeTactic={(chapter, itemId) => launchPreview(chapter, itemId)}
+      />
+
+      {/* Roleplay preview sheet */}
+      <RoleplayPreviewSheet
+        plan={previewPlan}
+        open={!!previewPlan}
+        onOpenChange={(open) => { if (!open) { setPreviewPlan(null); setPendingPractice(null); } }}
+        onStart={handleStartFromPreview}
       />
 
       {/* Knowledge item drawer */}
