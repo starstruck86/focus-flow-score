@@ -30,7 +30,7 @@ export interface KnowledgeQuery {
  * Retrieve knowledge items matching a query
  */
 export async function queryKnowledge(query: KnowledgeQuery = {}): Promise<KnowledgeItem[]> {
-  const { chapters, knowledgeType, competitor, productArea, context, activeOnly = true, maxItems = 20 } = query;
+  const { chapters, knowledgeType, competitor, productArea, context, activeOnly = true, maxItems = 20, tags } = query;
 
   let q = supabase.from(TABLE).select('*').order('confidence_score', { ascending: false }).limit(maxItems);
 
