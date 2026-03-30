@@ -140,6 +140,16 @@ const BULK_ACTION_DESCRIPTIONS: Record<string, { title: string; safe: string; wo
     safe: 'Runs the full pipeline (tag → extract → activate) on content-backed resources that are not yet operationalized.',
     wontDo: 'Will not touch junk, missing-content, or already-operationalized resources. Will not auto-activate low-confidence items.',
   },
+  backfillAll: {
+    title: 'Operationalize All Existing Resources',
+    safe: 'Runs the full pipeline on ALL eligible content-backed resources. Idempotent — already-processed resources pass through quickly.',
+    wontDo: 'Will not touch junk or missing-content resources. Will not auto-activate low-confidence items. Will not overwrite user-edited knowledge.',
+  },
+  backfillSmart: {
+    title: 'Operationalize All Eligible (Smart)',
+    safe: 'Only processes resources in fixable/extractable/needs-tagging/ready buckets. Faster and more targeted than full backfill.',
+    wontDo: 'Will not touch junk, missing-content, or already-operationalized resources. Will not auto-activate low-confidence items.',
+  },
 };
 
 // ── Component ──────────────────────────────────────────────
@@ -150,6 +160,8 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
   const [expandedBucket, setExpandedBucket] = useState<ReadinessBucket | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ type: string; ids?: string[] } | null>(null);
+  const [backfillProgress, setBackfillProgress] = useState<{ processed: number; total: number } | null>(null);
+  const [lastBackfillResult, setLastBackfillResult] = useState<BackfillSummary | null>(null);
 
   const runAudit = useCallback(async () => {
     setLoading(true);
