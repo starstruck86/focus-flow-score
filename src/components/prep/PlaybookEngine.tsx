@@ -52,6 +52,7 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
   const stats = useKnowledgeStats();
   const { session: roleplaySession } = useChapterRoleplay();
   const { summary: lifecycle } = useCanonicalLifecycle();
+  const [selectedChapter, setSelectedChapter] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [extractOpen, setExtractOpen] = useState(false);
   const [opDrilldownOpen, setOpDrilldownOpen] = useState(false);
