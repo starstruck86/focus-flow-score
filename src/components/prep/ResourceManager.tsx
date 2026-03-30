@@ -835,6 +835,15 @@ export function ResourceManager() {
                 case 'delete':
                   deleteResource.mutate(resource.id);
                   break;
+                case 'bulk_delete': {
+                  const ids = Array.from(selectedResourceIds);
+                  if (ids.length === 0) break;
+                  if (!confirm(`Delete ${ids.length} resources? This cannot be undone.`)) break;
+                  bulkDelete.mutate(ids, {
+                    onSuccess: () => setSelectedResourceIds(new Set()),
+                  });
+                  break;
+                }
                 case 'bulk_enrich':
                   setShowDeepEnrich(true);
                   break;
