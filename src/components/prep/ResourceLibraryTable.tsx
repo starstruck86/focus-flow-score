@@ -25,6 +25,7 @@ import {
 import { detectDrift } from '@/lib/resourceLifecycle';
 import {
   detectResourceSubtype, getSubtypeLabel, classifyEnrichability,
+  classifyEnrichabilityForResource,
   getEnrichabilityColor,
 } from '@/lib/salesBrain/resourceSubtype';
 import {
