@@ -602,19 +602,19 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                             <p className="font-medium text-foreground mb-0.5">Blocked Resources</p>
                             <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
                               {extractionCoverage.blockedByEmptyContent > 0 && (
-                                <><span>Empty content (stale length):</span><span className="font-medium text-destructive">{extractionCoverage.blockedByEmptyContent}</span></>
+                                <><span>Missing content:</span><span className="font-medium text-destructive">{extractionCoverage.blockedByEmptyContent}</span></>
                               )}
                               {extractionCoverage.blockedByNoExtraction > 0 && (
-                                <><span>Extraction not run:</span><span className="font-medium text-amber-500">{extractionCoverage.blockedByNoExtraction}</span></>
+                                <><span>Needs extraction:</span><span className="font-medium text-amber-500">{extractionCoverage.blockedByNoExtraction}</span></>
                               )}
                               {extractionCoverage.blockedByActivationCriteria > 0 && (
-                                <><span>Activation criteria unmet:</span><span className="font-medium text-orange-500">{extractionCoverage.blockedByActivationCriteria}</span></>
+                                <><span>Needs activation:</span><span className="font-medium text-orange-500">{extractionCoverage.blockedByActivationCriteria}</span></>
                               )}
                               {extractionCoverage.blockedByMissingContexts > 0 && (
-                                <><span>Active but no contexts:</span><span className="font-medium text-orange-500">{extractionCoverage.blockedByMissingContexts}</span></>
+                                <><span>Needs context repair:</span><span className="font-medium text-orange-500">{extractionCoverage.blockedByMissingContexts}</span></>
                               )}
                               {extractionCoverage.blockedByStaleBlockerState > 0 && (
-                                <><span>Stale blocker state:</span><span className="font-medium text-destructive">{extractionCoverage.blockedByStaleBlockerState}</span></>
+                                <><span>Needs review:</span><span className="font-medium text-destructive">{extractionCoverage.blockedByStaleBlockerState}</span></>
                               )}
                             </div>
                           </div>
