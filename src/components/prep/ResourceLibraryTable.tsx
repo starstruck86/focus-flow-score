@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -91,6 +91,46 @@ const LIFECYCLE_FILTER_ICONS: Record<LifecycleFilter, React.ReactNode> = {
   missing_content: <Inbox className="h-3 w-3" />,
 };
 
+// ── Template status filter ────────────────────────────────
+type AssetTypeFilter = 'all_assets' | 'template' | 'example' | 'reference' | 'working_asset' | 'untagged';
+
+const ASSET_TYPE_LABELS: Record<AssetTypeFilter, string> = {
+  all_assets: 'All Assets',
+  template: 'Templates',
+  example: 'Examples',
+  reference: 'References',
+  working_asset: 'Working Assets',
+  untagged: 'Untagged',
+};
+
+function getAssetType(r: Resource): AssetTypeFilter {
+  if (r.is_template) return 'template';
+  const tc = r.template_category?.toLowerCase();
+  if (tc === 'example') return 'example';
+  if (tc === 'reference') return 'reference';
+  if (tc === 'working_asset') return 'working_asset';
+  return 'untagged';
+}
+
+function getAssetTypeLabel(r: Resource): string {
+  const t = getAssetType(r);
+  if (t === 'untagged') return '';
+  return ASSET_TYPE_LABELS[t].replace(/s$/, ''); // singular
+}
+
+// ── Lifecycle stage label (user-facing) ───────────────────
+function getStageFriendlyLabel(stage: string): string {
+  switch (stage) {
+    case 'operationalized': return '✓ Ready to Use';
+    case 'activated': return 'Activated';
+    case 'knowledge_extracted': return 'Knowledge Extracted';
+    case 'tagged': return 'Tagged';
+    case 'content_ready': return 'Content Ready';
+    case 'uploaded': return 'Uploaded';
+    default: return stage;
+  }
+}
+
 // ── Next best action for blocked resources ─────────────────
 function getNextBestAction(blocked: BlockedReason | string): string {
   switch (blocked) {
@@ -169,9 +209,11 @@ export function ResourceLibraryTable({
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [lifecycleFilter, setLifecycleFilter] = useState<LifecycleFilter>('all');
+  const [assetFilter, setAssetFilter] = useState<AssetTypeFilter>('all_assets');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [density, setDensity] = useState<Density>('comfortable');
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const { summary: lifecycle } = useCanonicalLifecycle();
   const { data: inUseData } = useInUseResources();
   const inUseIds = inUseData?.inUseResourceIds ?? new Set<string>();
@@ -256,8 +298,11 @@ export function ResourceLibraryTable({
     if (typeFilter !== 'all') {
       result = result.filter(r => r.resource_type === typeFilter);
     }
+    if (assetFilter !== 'all_assets') {
+      result = result.filter(r => getAssetType(r) === assetFilter);
+    }
     return sortResources(result, sortKey, sortDir);
-  }, [resources, lifecycleFilter, lifecycleMap, inUseIds, search, typeFilter, sortKey, sortDir]);
+  }, [resources, lifecycleFilter, lifecycleMap, inUseIds, search, typeFilter, assetFilter, sortKey, sortDir]);
 
   const allSelected = filtered.length > 0 && filtered.every(r => selectedIds.has(r.id));
 
@@ -360,12 +405,23 @@ export function ResourceLibraryTable({
             ))}
           </SelectContent>
         </Select>
-        {(lifecycleFilter !== 'all' || typeFilter !== 'all' || search) && (
+        <Select value={assetFilter} onValueChange={(v) => setAssetFilter(v as AssetTypeFilter)}>
+          <SelectTrigger className="h-8 w-[140px] text-xs">
+            <Star className="h-3 w-3 mr-1" />
+            <SelectValue placeholder="Asset Type" />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(ASSET_TYPE_LABELS) as AssetTypeFilter[]).map(k => (
+              <SelectItem key={k} value={k}>{ASSET_TYPE_LABELS[k]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {(lifecycleFilter !== 'all' || typeFilter !== 'all' || assetFilter !== 'all_assets' || search) && (
           <Button
             variant="ghost"
             size="sm"
             className="h-8 text-xs gap-1"
-            onClick={() => { setLifecycleFilter('all'); setTypeFilter('all'); setSearch(''); }}
+            onClick={() => { setLifecycleFilter('all'); setTypeFilter('all'); setAssetFilter('all_assets'); setSearch(''); }}
           >
             <X className="h-3 w-3" /> Clear
           </Button>
@@ -481,15 +537,16 @@ export function ResourceLibraryTable({
                   const lc = lifecycleMap.get(resource.id);
 
                   return (
+                    <React.Fragment key={resource.id}>
                     <tr
-                      key={resource.id}
                       className={cn(
                         'cursor-pointer border-b border-border transition-colors hover:bg-muted/50',
                         DENSITY_ROW_CLASS[density],
                         isSelected && 'bg-primary/5',
+                        expandedId === resource.id && 'bg-muted/30 border-b-0',
                         drift.hasDrift && 'border-l-2 border-l-status-yellow',
                       )}
-                      onClick={() => onResourceClick(resource)}
+                      onClick={() => setExpandedId(prev => prev === resource.id ? null : resource.id)}
                     >
                       <td className="px-3 align-middle" onClick={e => e.stopPropagation()}>
                         <Checkbox
@@ -781,6 +838,78 @@ export function ResourceLibraryTable({
                         </DropdownMenu>
                       </td>
                     </tr>
+                    {/* Expanded lifecycle detail panel */}
+                    {expandedId === resource.id && (
+                      <tr className="bg-muted/20 border-b border-border">
+                        <td colSpan={12} className="px-4 py-3">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                            <div>
+                              <p className="text-muted-foreground mb-0.5">Lifecycle Stage</p>
+                              <p className="font-medium">{lc ? getStageFriendlyLabel(lc.stage) : 'Unknown'}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground mb-0.5">Status</p>
+                              <p className="font-medium">
+                                {lc?.blocked !== 'none' ? (
+                                  <span className="text-destructive">{getBlockedLabel(lc!.blocked)}</span>
+                                ) : (
+                                  <span className="text-emerald-600">No blockers</span>
+                                )}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground mb-0.5">Next Best Action</p>
+                              <p className="font-medium text-primary">
+                                {lc?.blocked !== 'none' ? getNextBestAction(lc!.blocked) : 'None needed'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground mb-0.5">In Use</p>
+                              <p className="font-medium">
+                                {inUseIds.has(resource.id) ? (
+                                  <span className="text-blue-600">Yes</span>
+                                ) : 'No'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground mb-0.5">Knowledge Items</p>
+                              <p className="font-medium">{lc?.kiCount ?? 0} total, {lc?.activeKi ?? 0} active, {lc?.activeKiWithCtx ?? 0} with contexts</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground mb-0.5">Asset Type</p>
+                              <p className="font-medium">{getAssetTypeLabel(resource) || 'Untagged'}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground mb-0.5">Last Updated</p>
+                              <p className="font-medium">{formatDate(resource.updated_at)}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground mb-0.5">Resource Type</p>
+                              <p className="font-medium capitalize">{resource.resource_type}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 mt-3 pt-2 border-t border-border">
+                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); onResourceClick(resource); }}>
+                              <Eye className="h-3 w-3 mr-1" /> Full Details
+                            </Button>
+                            {lc?.blocked === 'no_extraction' && (
+                              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); onAction('deep_enrich', resource); }}>
+                                <Zap className="h-3 w-3 mr-1" /> Run Extraction
+                              </Button>
+                            )}
+                            {lc?.blocked === 'empty_content' && (
+                              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); onAction('deep_enrich', resource); }}>
+                                <RefreshCw className="h-3 w-3 mr-1" /> Re-enrich
+                              </Button>
+                            )}
+                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); onAction('mark_template', resource); }}>
+                              <Star className="h-3 w-3 mr-1" /> Use as Template
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })
               )}
@@ -800,27 +929,45 @@ export function ResourceLibraryTable({
           </button>
         )}
 
+        {/* Contextual bulk action for filtered views (no selection needed) */}
+        {!hasSelection && lifecycleFilter !== 'all' && filtered.length > 0 && (
+          <div className="absolute bottom-0 left-0 right-0 z-20 flex items-center gap-3 bg-card/95 backdrop-blur-sm border-t border-border px-4 py-2">
+            <span className="text-sm font-medium">{filtered.length} {LIFECYCLE_FILTER_LABELS[lifecycleFilter]}</span>
+            {(lifecycleFilter === 'needs_extraction' || lifecycleFilter === 'missing_content') && (
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
+                onClick={() => onAction('bulk_enrich_filtered', { id: '' } as Resource)}>
+                <Zap className="h-3 w-3" />
+                Enrich All {filtered.length}
+              </Button>
+            )}
+            {lifecycleFilter === 'needs_activation' && (
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
+                onClick={() => onAction('bulk_activate_filtered', { id: '' } as Resource)}>
+                <CheckCircle2 className="h-3 w-3" />
+                Activate All {filtered.length}
+              </Button>
+            )}
+          </div>
+        )}
+
         {/* Sticky bulk action bar — inside the table shell at the bottom */}
         {hasSelection && (
           <div className="absolute bottom-0 left-0 right-0 z-20 flex items-center gap-3 bg-card/95 backdrop-blur-sm border-t border-border px-4 py-2">
             <span className="text-sm font-medium">{selectedIds.size} selected</span>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs gap-1"
-              onClick={() => onAction('bulk_enrich', { id: '' } as Resource)}
-            >
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
+              onClick={() => onAction('bulk_enrich', { id: '' } as Resource)}>
               <Zap className="h-3 w-3" />
-              Deep Enrich Selected
+              Enrich Selected
             </Button>
-            <Button
-              size="sm"
-              variant="destructive"
-              className="h-7 text-xs gap-1"
-              onClick={() => onAction('bulk_delete', { id: '' } as Resource)}
-            >
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
+              onClick={() => onAction('bulk_mark_template', { id: '' } as Resource)}>
+              <Star className="h-3 w-3" />
+              Mark as Template
+            </Button>
+            <Button size="sm" variant="destructive" className="h-7 text-xs gap-1"
+              onClick={() => onAction('bulk_delete', { id: '' } as Resource)}>
               <Trash2 className="h-3 w-3" />
-              Delete Selected
+              Delete
             </Button>
             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onToggleSelectAll}>
               <X className="h-3 w-3 mr-1" /> Clear
