@@ -55,6 +55,7 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
   const [opDrilldownOpen, setOpDrilldownOpen] = useState(false);
   const [previewPlan, setPreviewPlan] = useState<RoleplayPlan | null>(null);
   const [pendingPractice, setPendingPractice] = useState<{ chapter: string; knowledgeItemId?: string } | null>(null);
+  const [readinessOpen, setReadinessOpen] = useState(false);
 
   // Build preview plan from active knowledge
   const launchPreview = useCallback(async (chapter: string, knowledgeItemId?: string) => {
