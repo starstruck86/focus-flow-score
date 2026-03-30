@@ -7,6 +7,7 @@ import { describe, it, expect, vi } from 'vitest';
 // Mock dependencies that processingState imports
 vi.mock('@/lib/salesBrain/resourceSubtype', () => ({
   classifyEnrichability: vi.fn().mockReturnValue({ enrichability: 'fully_enrichable', reason: 'ok' }),
+  classifyEnrichabilityForResource: vi.fn().mockReturnValue({ enrichability: 'fully_enrichable', reason: 'ok' }),
 }));
 vi.mock('@/lib/salesBrain/audioPipeline', () => ({
   isAudioResource: vi.fn().mockReturnValue(false),

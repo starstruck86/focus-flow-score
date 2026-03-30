@@ -7,7 +7,7 @@
 
 import type { Resource } from '@/hooks/useResources';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
-import { classifyEnrichability, type EnrichabilityState } from '@/lib/salesBrain/resourceSubtype';
+import { classifyEnrichabilityForResource, type EnrichabilityState } from '@/lib/salesBrain/resourceSubtype';
 import { isAudioResource, detectAudioSubtype, getAudioStrategy } from '@/lib/salesBrain/audioPipeline';
 
 export type ProcessingState =
@@ -216,7 +216,7 @@ export function deriveProcessingState(
       };
     }
 
-    const ea = classifyEnrichability(resource.file_url, resource.resource_type);
+    const ea = classifyEnrichabilityForResource(resource);
     if (ea.enrichability === 'manual_input_needed' || ea.enrichability === 'needs_auth') {
       return {
         state: 'MANUAL_REQUIRED',
@@ -310,7 +310,7 @@ export function deriveProcessingState(
       };
     }
 
-    const ea = classifyEnrichability(resource.file_url, resource.resource_type);
+    const ea = classifyEnrichabilityForResource(resource);
     if (ea.enrichability === 'manual_input_needed') {
       return {
         state: 'MANUAL_REQUIRED',
