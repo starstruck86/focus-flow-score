@@ -36,6 +36,7 @@ import {
   deriveProcessingState, getProcessingStateColor,
 } from '@/lib/processingState';
 import { routeFailure, getFailureBucketActions } from '@/lib/failureRouting';
+import { useCanonicalLifecycle } from '@/hooks/useCanonicalLifecycle';
 import type { AudioFailureCode, AudioPipelineStage } from '@/lib/salesBrain/audioPipeline';
 import type { AudioJobRecord } from '@/lib/salesBrain/audioOrchestrator';
 import type { Resource } from '@/hooks/useResources';
@@ -199,6 +200,22 @@ export function ResourceLibraryTable({
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [density, setDensity] = useState<Density>('comfortable');
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const { summary: lifecycle } = useCanonicalLifecycle();
+
+  // Build a quick lookup for canonical status per resource
+  const lifecycleMap = useMemo(() => {
+    const map = new Map<string, { stage: string; blocked: string; kiCount: number; activeKi: number }>();
+    if (!lifecycle) return map;
+    for (const r of lifecycle.resources) {
+      map.set(r.resource_id, {
+        stage: r.canonical_stage,
+        blocked: r.blocked_reason,
+        kiCount: r.knowledge_item_count,
+        activeKi: r.active_ki_count,
+      });
+    }
+    return map;
+  }, [lifecycle]);
 
   const scrollBodyRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -444,6 +461,7 @@ export function ResourceLibraryTable({
                   const isSelected = selectedIds.has(resource.id);
                   const isAudio = isAudioResource(resource.file_url, resource.resource_type);
                   const audioJob = audioJobsMap?.get(resource.id) || null;
+                  const lc = lifecycleMap.get(resource.id);
 
                   return (
                     <tr
@@ -464,7 +482,38 @@ export function ResourceLibraryTable({
                       </td>
                       <td className="px-3 align-middle">
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate max-w-[280px]">{resource.title}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm font-medium text-foreground truncate max-w-[220px]">{resource.title}</p>
+                            {lc && (
+                              <Badge variant="outline" className={cn(
+                                'text-[8px] h-4 px-1 shrink-0',
+                                lc.stage === 'operationalized' ? 'border-emerald-500/40 text-emerald-600' :
+                                lc.blocked !== 'none' ? 'border-destructive/40 text-destructive' :
+                                'border-border text-muted-foreground'
+                              )}>
+                                {lc.stage === 'operationalized' ? '✓ Ready' :
+                                 lc.stage === 'activated' ? 'Activated' :
+                                 lc.stage === 'knowledge_extracted' ? 'Extracted' :
+                                 lc.stage === 'tagged' ? 'Tagged' :
+                                 lc.stage === 'content_ready' ? 'Content' :
+                                 'Uploaded'}
+                              </Badge>
+                            )}
+                            {lc && lc.kiCount > 0 && (
+                              <span className="text-[8px] text-muted-foreground shrink-0">
+                                {lc.activeKi}/{lc.kiCount} KI
+                              </span>
+                            )}
+                          </div>
+                          {lc && lc.blocked !== 'none' && (
+                            <p className="text-[9px] text-destructive/80 mt-0.5">
+                              {lc.blocked === 'no_extraction' ? 'Needs extraction' :
+                               lc.blocked === 'no_activation' ? 'Needs activation' :
+                               lc.blocked === 'missing_contexts' ? 'Needs context repair' :
+                               lc.blocked === 'empty_content' ? 'Missing content' :
+                               lc.blocked === 'stale_blocker_state' ? 'Needs review' : ''}
+                            </p>
+                          )}
                           {drift.hasDrift && (
                             <p className="text-[10px] text-status-yellow flex items-center gap-0.5 mt-0.5">
                               <AlertTriangle className="h-2.5 w-2.5" />
