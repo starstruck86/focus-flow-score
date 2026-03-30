@@ -85,6 +85,12 @@ const BUCKET_CONFIG: Record<ReadinessBucket, {
     color: 'text-blue-500',
     help: 'Enriched with content but knowledge not yet extracted or activated. High-value next step.',
   },
+  low_quality_extraction: {
+    label: 'Low-Quality Extraction',
+    icon: <AlertTriangle className="h-3.5 w-3.5" />,
+    color: 'text-amber-600',
+    help: 'Has knowledge items but none are activatable — likely summaries, not actionable tactics. Re-extract with tactic-focused extraction.',
+  },
   needs_tagging: {
     label: 'Needs Tagging',
     icon: <Tag className="h-3.5 w-3.5" />,
@@ -119,7 +125,7 @@ const BUCKET_CONFIG: Record<ReadinessBucket, {
 
 // Display order matches priority order
 const BUCKET_ORDER: ReadinessBucket[] = [
-  'content_backed_needs_fix', 'extractable_not_operationalized', 'needs_tagging',
+  'content_backed_needs_fix', 'extractable_not_operationalized', 'low_quality_extraction', 'needs_tagging',
   'operationalized', 'ready', 'blocked_incorrectly',
   'missing_content', 'junk_or_low_signal', 'orphaned_or_inconsistent',
 ];
