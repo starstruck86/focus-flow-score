@@ -176,6 +176,15 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
             </div>
           </div>
 
+          {/* Loading skeleton while hydrating */}
+          {loading && (
+            <div className="px-4 pt-3 space-y-2 shrink-0">
+              <Skeleton className="h-11 w-full rounded-md" />
+              <Skeleton className="h-11 w-full rounded-md" />
+              <Skeleton className="h-4 w-2/3 rounded" />
+            </div>
+          )}
+
           {/* Notion Rebuild CTA — always above the fold */}
           {showNotionCTA && (
             <div className="px-4 pt-3 shrink-0">
