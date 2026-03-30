@@ -200,6 +200,22 @@ export function ResourceLibraryTable({
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [density, setDensity] = useState<Density>('comfortable');
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const { summary: lifecycle } = useCanonicalLifecycle();
+
+  // Build a quick lookup for canonical status per resource
+  const lifecycleMap = useMemo(() => {
+    const map = new Map<string, { stage: string; blocked: string; kiCount: number; activeKi: number }>();
+    if (!lifecycle) return map;
+    for (const r of lifecycle.resources) {
+      map.set(r.resource_id, {
+        stage: r.canonical_stage,
+        blocked: r.blocked_reason,
+        kiCount: r.knowledge_item_count,
+        activeKi: r.active_ki_count,
+      });
+    }
+    return map;
+  }, [lifecycle]);
 
   const scrollBodyRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
