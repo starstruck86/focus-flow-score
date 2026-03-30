@@ -214,7 +214,7 @@ export async function autoOperationalizeResource(
       const { data: inserted, error: insErr } = await supabase
         .from('knowledge_items' as any)
         .insert(extracted as any)
-        .select('id, active, applies_to_contexts, confidence_score, user_edited, tactic_summary, chapter');
+        .select('id, active, applies_to_contexts, confidence_score, user_edited, tactic_summary, chapter, tags');
 
       if (!insErr && inserted) {
         knowledgeExtracted = inserted.length;
