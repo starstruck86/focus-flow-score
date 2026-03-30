@@ -461,6 +461,7 @@ export function ResourceLibraryTable({
                   const isSelected = selectedIds.has(resource.id);
                   const isAudio = isAudioResource(resource.file_url, resource.resource_type);
                   const audioJob = audioJobsMap?.get(resource.id) || null;
+                  const lc = lifecycleMap.get(resource.id);
 
                   return (
                     <tr
