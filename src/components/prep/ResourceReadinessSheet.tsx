@@ -360,6 +360,43 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                       </Button>
                     )}
                   </div>
+
+                  {/* ── Backfill actions ── */}
+                  <div className="pt-1.5 border-t border-border/50 space-y-1.5">
+                    <p className="text-[10px] font-medium text-muted-foreground">Backfill All Existing Resources</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 border-emerald-500/30" disabled={!!actionLoading}
+                        onClick={() => setConfirmAction({ type: 'backfillSmart' })}>
+                        {actionLoading === 'backfillSmart' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Rocket className="h-3 w-3 text-emerald-600" />}
+                        Operationalize All Eligible
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
+                        onClick={() => setConfirmAction({ type: 'backfillAll' })}>
+                        {actionLoading === 'backfillAll' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Rocket className="h-3 w-3" />}
+                        Operationalize All Resources
+                      </Button>
+                    </div>
+                    {backfillProgress && (
+                      <div className="text-[10px] text-muted-foreground flex items-center gap-2">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Processing {backfillProgress.processed} / {backfillProgress.total} resources…
+                      </div>
+                    )}
+                    {lastBackfillResult && !backfillProgress && (
+                      <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 p-2 text-[10px] space-y-0.5">
+                        <p className="font-medium text-foreground">Last Backfill Results</p>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
+                          <span>Total processed:</span><span className="font-medium text-foreground">{lastBackfillResult.total}</span>
+                          <span>Operationalized:</span><span className="font-medium text-emerald-600">{lastBackfillResult.operationalized}</span>
+                          <span>KI extracted:</span><span className="font-medium text-foreground">{lastBackfillResult.totalKnowledgeExtracted}</span>
+                          <span>KI activated:</span><span className="font-medium text-foreground">{lastBackfillResult.totalKnowledgeActivated}</span>
+                          <span>Tags added:</span><span className="font-medium text-foreground">{lastBackfillResult.totalTagsAdded}</span>
+                          <span>Need review:</span><span className={cn('font-medium', lastBackfillResult.needsReview > 0 ? 'text-amber-500' : 'text-foreground')}>{lastBackfillResult.needsReview}</span>
+                          {lastBackfillResult.errors > 0 && (<><span>Errors:</span><span className="font-medium text-destructive">{lastBackfillResult.errors}</span></>)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <Separator />
