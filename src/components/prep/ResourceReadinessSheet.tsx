@@ -173,8 +173,12 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
   const runAudit = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await auditResourceReadiness();
+      const [result, coverage] = await Promise.all([
+        auditResourceReadiness(),
+        getExtractionCoverage(),
+      ]);
       setAudit(result);
+      setExtractionCoverage(coverage);
     } catch {
       toast.error('Audit failed');
     } finally {
