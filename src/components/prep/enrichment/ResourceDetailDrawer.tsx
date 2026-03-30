@@ -58,6 +58,7 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
   const [showContentViewer, setShowContentViewer] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [splitting, setSplitting] = useState(false);
+  const [autoOpResult, setAutoOpResult] = useState<AutoOperationalizeResult | null>(null);
   const [splitProgress, setSplitProgress] = useState('');
   const [diagOpen, setDiagOpen] = useState(!isMobile);
   const fileInputRef = useRef<HTMLInputElement>(null);
