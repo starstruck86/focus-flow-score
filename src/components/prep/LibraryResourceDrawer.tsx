@@ -312,6 +312,9 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
 
           <ScrollArea className="flex-1 min-h-0">
             <div className="p-4 space-y-3">
+              {/* ── Lifecycle Status Panel ── */}
+              <LifecyclePanel resourceId={r.id} />
+
               {/* View Content */}
               {hasContent && (
                 <Button
@@ -342,8 +345,6 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
                 {r.file_url && <p className="truncate">URL: {r.file_url}</p>}
                 {rm && <p>Resolution: {resLabel || rm}</p>}
                 {em && <p>Extraction: {em.replace(/_/g, ' ')}</p>}
-                {r.enrichment_status && <p>Status: {r.enrichment_status}</p>}
-                {r.last_quality_score != null && <p>Quality: {r.last_quality_score}/100</p>}
                 {r.updated_at && <p>Updated: {new Date(r.updated_at).toLocaleDateString()}</p>}
               </div>
 
