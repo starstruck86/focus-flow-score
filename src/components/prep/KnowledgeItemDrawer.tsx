@@ -1,5 +1,6 @@
 /**
  * KnowledgeItemDrawer — detailed view/edit of a single knowledge item
+ * with one-click approve+activate and tactic-specific practice
  */
 
 import { useEffect, useState } from 'react';
@@ -13,7 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import {
-  CheckCircle2, Play, Trash2, ExternalLink, Save,
+  CheckCircle2, Play, Trash2, ExternalLink, Save, Zap,
 } from 'lucide-react';
 import {
   useKnowledgeItems,
@@ -81,9 +82,9 @@ export function KnowledgeItemDrawer({ itemId, open, onOpenChange }: Props) {
     toast.success('Knowledge item updated');
   };
 
-  const handleActivate = () => {
+  const handleApproveActivate = () => {
     update.mutate({ id: item.id, active: true, status: 'active' });
-    toast.success('Knowledge item activated — now available to Dave');
+    toast.success(`"${item.title}" approved + activated — now available to Dave`);
   };
 
   const handleDeactivate = () => {
@@ -96,11 +97,20 @@ export function KnowledgeItemDrawer({ itemId, open, onOpenChange }: Props) {
     onOpenChange(false);
   };
 
-  const handlePractice = () => {
+  const handlePracticeTactic = () => {
     window.dispatchEvent(new CustomEvent('dave-start-roleplay', {
       detail: { chapter: item.chapter, knowledgeItemId: item.id },
     }));
+    toast.success(`🎯 Practice focused on: "${item.title}"`);
   };
+
+  const handlePracticeChapter = () => {
+    window.dispatchEvent(new CustomEvent('dave-start-roleplay', {
+      detail: { chapter: item.chapter },
+    }));
+  };
+
+  const chapterLabel = item.chapter.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
   return (
     <>
@@ -108,9 +118,13 @@ export function KnowledgeItemDrawer({ itemId, open, onOpenChange }: Props) {
         <SheetContent side="right" className="w-full sm:max-w-md p-0">
           <SheetHeader className="p-4 pb-2 border-b border-border">
             <SheetTitle className="text-sm">Knowledge Item</SheetTitle>
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5 flex-wrap">
               <Badge variant="outline" className="text-[9px]">{item.status}</Badge>
               <Badge variant="outline" className="text-[9px]">{item.knowledge_type}</Badge>
+              <Badge variant="outline" className="text-[9px]">{chapterLabel}</Badge>
+              {item.competitor_name && (
+                <Badge variant="outline" className="text-[9px] border-destructive/30 text-destructive">vs {item.competitor_name}</Badge>
+              )}
               {item.active && (
                 <Badge className="text-[9px] bg-emerald-500/10 text-emerald-600 border-0">Active</Badge>
               )}
@@ -241,9 +255,13 @@ export function KnowledgeItemDrawer({ itemId, open, onOpenChange }: Props) {
                 </Button>
 
                 {!item.active ? (
-                  <Button variant="outline" className="w-full h-11 gap-2 text-emerald-600 border-emerald-600/30" onClick={handleActivate}>
-                    <CheckCircle2 className="h-4 w-4" />
-                    Activate — Make Available to Dave
+                  <Button
+                    variant="outline"
+                    className="w-full h-11 gap-2 text-emerald-600 border-emerald-600/30"
+                    onClick={handleApproveActivate}
+                  >
+                    <Zap className="h-4 w-4" />
+                    Approve + Activate
                   </Button>
                 ) : (
                   <Button variant="outline" className="w-full h-11 gap-2" onClick={handleDeactivate}>
@@ -252,14 +270,19 @@ export function KnowledgeItemDrawer({ itemId, open, onOpenChange }: Props) {
                 )}
 
                 {item.active && (
-                  <div className="space-y-1.5">
-                    <Button variant="outline" className="w-full h-11 gap-2" onClick={handlePractice}>
+                  <div className="space-y-2">
+                    <Button variant="outline" className="w-full h-11 gap-2 border-primary/30 text-primary" onClick={handlePracticeTactic}>
                       <Play className="h-4 w-4" />
-                      Practice with Dave
+                      Practice This Tactic
                     </Button>
                     <p className="text-[10px] text-muted-foreground text-center">
-                      Dave will use this item + {item.chapter.replace(/_/g, ' ')} active knowledge to ground the roleplay
+                      🎯 Roleplay will focus on "{item.title}" — Dave tests whether you can execute this specific tactic
                     </p>
+
+                    <Button variant="ghost" className="w-full h-9 gap-2 text-xs text-muted-foreground" onClick={handlePracticeChapter}>
+                      <Play className="h-3 w-3" />
+                      Practice Full {chapterLabel} Chapter
+                    </Button>
                   </div>
                 )}
 

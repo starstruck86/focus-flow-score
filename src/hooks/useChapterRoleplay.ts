@@ -14,8 +14,10 @@ export interface RoleplaySession {
   active: boolean;
   chapter: string;
   knowledgeItemId?: string;
+  focusItemTitle?: string;
   knowledgeGrounding: string;
   groundedItemCount: number;
+  competitorContext?: string;
   startedAt: number;
 }
 
@@ -143,12 +145,17 @@ export function useChapterRoleplay() {
         .map(i => `• ${i.title}`)
         .join('\n');
 
+      // Find competitor context
+      const competitors = [...new Set(items.filter(i => i.competitor_name).map(i => i.competitor_name!))];
+
       const newSession: RoleplaySession = {
         active: true,
         chapter,
         knowledgeItemId,
+        focusItemTitle: focusItem?.title,
         knowledgeGrounding: groundingSummary,
         groundedItemCount: items.length,
+        competitorContext: competitors.length > 0 ? competitors.join(', ') : undefined,
         startedAt: Date.now(),
       };
 

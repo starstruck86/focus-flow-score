@@ -1,15 +1,17 @@
 /**
  * ChapterDetailSheet — shows knowledge items within a chapter
+ * with approve+activate quick action and tactic-specific practice
  */
 
-import { useMemo, useCallback } from 'react';
+import { useMemo } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Play, CheckCircle2, Clock, AlertTriangle, Eye, Sparkles } from 'lucide-react';
+import { Play, CheckCircle2, Clock, AlertTriangle, Eye, Sparkles, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useKnowledgeItems, useUpdateKnowledgeItem, type KnowledgeItem } from '@/hooks/useKnowledgeItems';
+import { toast } from 'sonner';
 
 const CHAPTER_LABELS: Record<string, string> = {
   cold_calling: 'Cold Calling',
@@ -57,28 +59,26 @@ export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, 
   const lastUpdated = items.length > 0
     ? items.reduce((latest, i) => i.updated_at > latest ? i.updated_at : latest, items[0].updated_at)
     : null;
+  const competitorNames = [...new Set(items.filter(i => i.competitor_name).map(i => i.competitor_name!))];
 
-  const handleActivate = (item: KnowledgeItem) => {
-    update.mutate({
-      id: item.id,
-      active: true,
-      status: 'active',
-    });
+  const handleApproveActivate = (item: KnowledgeItem) => {
+    update.mutate({ id: item.id, active: true, status: 'active' });
+    toast.success(`"${item.title}" approved + activated`);
   };
 
-  const handleApprove = (item: KnowledgeItem) => {
-    update.mutate({
-      id: item.id,
-      status: 'approved',
-    });
+  const handleActivate = (item: KnowledgeItem) => {
+    update.mutate({ id: item.id, active: true, status: 'active' });
   };
 
   const handleDeactivate = (item: KnowledgeItem) => {
-    update.mutate({
-      id: item.id,
-      active: false,
-      status: 'approved',
-    });
+    update.mutate({ id: item.id, active: false, status: 'approved' });
+  };
+
+  const handlePracticeTactic = (item: KnowledgeItem) => {
+    window.dispatchEvent(new CustomEvent('dave-start-roleplay', {
+      detail: { chapter: item.chapter, knowledgeItemId: item.id },
+    }));
+    toast.success(`🎯 Practice focused on: "${item.title}"`);
   };
 
   return (
@@ -90,7 +90,7 @@ export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, 
             {activeCount > 0 && (
               <Button size="sm" className="gap-1.5 h-8" onClick={() => onPractice(chapter)}>
                 <Play className="h-3 w-3" />
-                Practice with Dave
+                Practice Chapter
               </Button>
             )}
           </div>
@@ -111,6 +111,11 @@ export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, 
               </>
             )}
           </div>
+          {competitorNames.length > 0 && (
+            <p className="text-[10px] text-muted-foreground">
+              Competitors: {competitorNames.join(', ')}
+            </p>
+          )}
 
           {/* Knowledge grounding indicator */}
           {activeCount > 0 && (
@@ -121,7 +126,7 @@ export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, 
           )}
         </SheetHeader>
 
-        <ScrollArea className="h-[calc(100vh-100px)]">
+        <ScrollArea className="h-[calc(100vh-130px)]">
           <div className="p-4 space-y-4">
             {grouped.length === 0 && (
               <div className="text-center py-8">
@@ -142,9 +147,10 @@ export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, 
                       key={item.id}
                       item={item}
                       onSelect={() => onSelectItem(item.id)}
+                      onApproveActivate={() => handleApproveActivate(item)}
                       onActivate={() => handleActivate(item)}
-                      onApprove={() => handleApprove(item)}
                       onDeactivate={() => handleDeactivate(item)}
+                      onPracticeTactic={() => handlePracticeTactic(item)}
                     />
                   ))}
                 </div>
@@ -157,12 +163,13 @@ export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, 
   );
 }
 
-function KnowledgeCard({ item, onSelect, onActivate, onApprove, onDeactivate }: {
+function KnowledgeCard({ item, onSelect, onApproveActivate, onActivate, onDeactivate, onPracticeTactic }: {
   item: KnowledgeItem;
   onSelect: () => void;
+  onApproveActivate: () => void;
   onActivate: () => void;
-  onApprove: () => void;
   onDeactivate: () => void;
+  onPracticeTactic: () => void;
 }) {
   const statusConfig = {
     extracted: { label: 'Extracted', color: 'bg-blue-500/10 text-blue-600', icon: Eye },
@@ -174,6 +181,8 @@ function KnowledgeCard({ item, onSelect, onActivate, onApprove, onDeactivate }: 
 
   const config = statusConfig[item.status] || statusConfig.extracted;
   const StatusIcon = config.icon;
+  const isHighConfidence = item.confidence_score >= 0.7;
+  const canQuickActivate = !item.active && (item.status === 'extracted' || item.status === 'review_needed' || item.status === 'approved');
 
   return (
     <div
@@ -182,7 +191,7 @@ function KnowledgeCard({ item, onSelect, onActivate, onApprove, onDeactivate }: 
     >
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-1">
+          <div className="flex items-center gap-1.5 mb-1 flex-wrap">
             <Badge className={cn('text-[9px] h-4 px-1.5 border-0', config.color)}>
               <StatusIcon className="h-2.5 w-2.5 mr-0.5" />
               {config.label}
@@ -195,6 +204,11 @@ function KnowledgeCard({ item, onSelect, onActivate, onApprove, onDeactivate }: 
                 vs {item.competitor_name}
               </Badge>
             )}
+            {isHighConfidence && canQuickActivate && (
+              <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-emerald-500/30 text-emerald-600">
+                high confidence
+              </Badge>
+            )}
           </div>
           <p className="text-sm font-medium text-foreground truncate">{item.title}</p>
           {item.tactic_summary && (
@@ -204,24 +218,23 @@ function KnowledgeCard({ item, onSelect, onActivate, onApprove, onDeactivate }: 
       </div>
 
       {/* Actions */}
-      <div className="flex gap-1.5 mt-2" onClick={e => e.stopPropagation()}>
-        {!item.active && item.status !== 'active' && (
-          <>
-            {item.status === 'extracted' || item.status === 'review_needed' ? (
-              <Button variant="outline" size="sm" className="h-7 text-[10px]" onClick={onApprove}>
-                Approve
-              </Button>
-            ) : null}
-            <Button size="sm" className="h-7 text-[10px] gap-1" onClick={onActivate}>
-              <CheckCircle2 className="h-3 w-3" />
-              Activate
-            </Button>
-          </>
+      <div className="flex gap-1.5 mt-2 flex-wrap" onClick={e => e.stopPropagation()}>
+        {canQuickActivate && (
+          <Button size="sm" className="h-7 text-[10px] gap-1" onClick={onApproveActivate}>
+            <Zap className="h-3 w-3" />
+            {isHighConfidence ? 'Approve + Activate' : 'Activate'}
+          </Button>
         )}
         {item.active && (
-          <Button variant="outline" size="sm" className="h-7 text-[10px]" onClick={onDeactivate}>
-            Deactivate
-          </Button>
+          <>
+            <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" onClick={onPracticeTactic}>
+              <Play className="h-3 w-3" />
+              Practice This Tactic
+            </Button>
+            <Button variant="outline" size="sm" className="h-7 text-[10px]" onClick={onDeactivate}>
+              Deactivate
+            </Button>
+          </>
         )}
       </div>
     </div>
