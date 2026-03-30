@@ -32,9 +32,10 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   onSelectItem: (id: string) => void;
   onPractice: (chapter: string) => void;
+  onPracticeTactic?: (chapter: string, knowledgeItemId: string) => void;
 }
 
-export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, onPractice }: Props) {
+export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, onPractice, onPracticeTactic }: Props) {
   const { data: items = [] } = useKnowledgeItems(chapter ?? undefined);
   const update = useUpdateKnowledgeItem();
 
@@ -75,10 +76,14 @@ export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, 
   };
 
   const handlePracticeTactic = (item: KnowledgeItem) => {
-    window.dispatchEvent(new CustomEvent('dave-start-roleplay', {
-      detail: { chapter: item.chapter, knowledgeItemId: item.id },
-    }));
-    toast.success(`🎯 Practice focused on: "${item.title}"`);
+    if (onPracticeTactic) {
+      onPracticeTactic(item.chapter, item.id);
+    } else {
+      window.dispatchEvent(new CustomEvent('dave-start-roleplay', {
+        detail: { chapter: item.chapter, knowledgeItemId: item.id },
+      }));
+      toast.success(`🎯 Practice focused on: "${item.title}"`);
+    }
   };
 
   return (

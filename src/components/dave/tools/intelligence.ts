@@ -8,6 +8,7 @@ import { citeInsight, knowledgeTrends, insightReliability, recommendStrategy, re
 import { getPlaybookRecommendation } from './intelligence/playbooks';
 import { startPlaybookRoleplay, endPlaybookRoleplay } from './intelligence/playbookRoleplay';
 import { getActivePlaybookKnowledge, getPlaybookKnowledgeForRoleplay } from './intelligence/playbookKnowledge';
+import { explainRoleplayPlan } from './intelligence/roleplayPlan';
 import { createAccountExecutionTools } from './intelligence/accountExecution';
 import { createAccountCentricTools } from './intelligence/accountCentric';
 import { createExecutionSessionTools } from './intelligence/executionSession';
@@ -40,6 +41,7 @@ export function createIntelligenceTools(ctx: ToolContext): ToolMap {
     end_playbook_roleplay: () => endPlaybookRoleplay(ctx),
     get_active_knowledge: (params: { chapter?: string; competitor?: string; knowledgeType?: string }) => getActivePlaybookKnowledge(ctx, params),
     get_knowledge_for_roleplay: (params: { chapter: string; competitor?: string }) => getPlaybookKnowledgeForRoleplay(ctx, params),
+    explain_roleplay_plan: (params: { chapter?: string; knowledgeItemId?: string; competitor?: string }) => explainRoleplayPlan(ctx, params),
     ...createAccountExecutionTools(ctx),
     ...createAccountCentricTools(ctx),
     ...createExecutionSessionTools(ctx),

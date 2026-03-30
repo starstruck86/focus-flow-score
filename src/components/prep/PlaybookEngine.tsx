@@ -19,6 +19,9 @@ import { useChapterRoleplay } from '@/hooks/useChapterRoleplay';
 import { ChapterDetailSheet } from './ChapterDetailSheet';
 import { KnowledgeItemDrawer } from './KnowledgeItemDrawer';
 import { ExtractKnowledgeDialog } from './ExtractKnowledgeDialog';
+import { RoleplayPreviewSheet } from './RoleplayPreviewSheet';
+import type { RoleplayPlan } from '@/components/dave/tools/intelligence/roleplayPlan';
+import { queryKnowledge } from '@/lib/knowledgeRetrieval';
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
@@ -49,10 +52,39 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [extractOpen, setExtractOpen] = useState(false);
   const [opDrilldownOpen, setOpDrilldownOpen] = useState(false);
+  const [previewPlan, setPreviewPlan] = useState<RoleplayPlan | null>(null);
+  const [pendingPractice, setPendingPractice] = useState<{ chapter: string; knowledgeItemId?: string } | null>(null);
+
+  // Build preview plan from active knowledge
+  const launchPreview = useCallback(async (chapter: string, knowledgeItemId?: string) => {
+    const items = await queryKnowledge({
+      chapters: [chapter],
+      context: 'roleplay',
+      activeOnly: true,
+      maxItems: 15,
+    });
+    if (items.length === 0) {
+      // No items, skip preview and dispatch directly
+      window.dispatchEvent(new CustomEvent('dave-start-roleplay', { detail: { chapter, knowledgeItemId } }));
+      return;
+    }
+    const { buildPlan } = await import('@/components/dave/tools/intelligence/roleplayPlan');
+    const plan = buildPlan(chapter, items, knowledgeItemId);
+    setPreviewPlan(plan);
+    setPendingPractice({ chapter, knowledgeItemId });
+  }, []);
+
+  const handleStartFromPreview = useCallback(() => {
+    if (pendingPractice) {
+      window.dispatchEvent(new CustomEvent('dave-start-roleplay', { detail: pendingPractice }));
+    }
+    setPreviewPlan(null);
+    setPendingPractice(null);
+  }, [pendingPractice]);
 
   const handlePractice = useCallback((chapter: string) => {
-    window.dispatchEvent(new CustomEvent('dave-start-roleplay', { detail: { chapter } }));
-  }, []);
+    launchPreview(chapter);
+  }, [launchPreview]);
 
   // Operationalized metrics
   const opMetrics = useMemo(() => {
@@ -311,6 +343,15 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
         onOpenChange={(open) => { if (!open) setSelectedChapter(null); }}
         onSelectItem={setSelectedItemId}
         onPractice={handlePractice}
+        onPracticeTactic={(chapter, itemId) => launchPreview(chapter, itemId)}
+      />
+
+      {/* Roleplay preview sheet */}
+      <RoleplayPreviewSheet
+        plan={previewPlan}
+        open={!!previewPlan}
+        onOpenChange={(open) => { if (!open) { setPreviewPlan(null); setPendingPractice(null); } }}
+        onStart={handleStartFromPreview}
       />
 
       {/* Knowledge item drawer */}
