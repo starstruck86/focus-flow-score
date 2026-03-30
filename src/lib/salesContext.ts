@@ -7,6 +7,7 @@
 
 import { queryKnowledge, type KnowledgeQuery } from './knowledgeRetrieval';
 import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
+import { logKnowledgeUsage, buildUsageEntries } from '@/lib/knowledgeUsageLogger';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('SalesContext');
