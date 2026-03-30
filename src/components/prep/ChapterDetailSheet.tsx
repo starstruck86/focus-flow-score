@@ -76,10 +76,14 @@ export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, 
   };
 
   const handlePracticeTactic = (item: KnowledgeItem) => {
-    window.dispatchEvent(new CustomEvent('dave-start-roleplay', {
-      detail: { chapter: item.chapter, knowledgeItemId: item.id },
-    }));
-    toast.success(`🎯 Practice focused on: "${item.title}"`);
+    if (onPracticeTactic) {
+      onPracticeTactic(item.chapter, item.id);
+    } else {
+      window.dispatchEvent(new CustomEvent('dave-start-roleplay', {
+        detail: { chapter: item.chapter, knowledgeItemId: item.id },
+      }));
+      toast.success(`🎯 Practice focused on: "${item.title}"`);
+    }
   };
 
   return (
