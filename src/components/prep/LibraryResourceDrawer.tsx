@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { ContentViewer } from '@/components/prep/ContentViewer';
 import { isNotionZipResource, splitNotionImport } from '@/lib/notionZipSplitter';
-import { isNotionSourceArchive, isNotionDirectImport, getImportGroupId, deleteImportGroupChildren } from '@/lib/notionDirectImporter';
+import { isNotionSourceArchive, isNotionDirectImport, getImportGroupId, deleteImportGroupChildren, deleteJunkNotionChildren } from '@/lib/notionDirectImporter';
 import { isFixEligible, fixResourceStateFromContent, FIX_RESOURCE_INVALIDATION_KEYS } from '@/lib/fixResourceState';
 import { deriveProcessingState } from '@/lib/processingState';
 import type { Resource } from '@/hooks/useResources';
