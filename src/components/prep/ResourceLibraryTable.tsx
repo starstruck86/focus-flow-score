@@ -764,7 +764,7 @@ export function ResourceLibraryTable({
                               <Star className="h-3.5 w-3.5 mr-2" /> Use as Template
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => onAction('mark_example', resource)}>
-                              <BookTemplate className="h-3.5 w-3.5 mr-2" /> Mark as Example
+                              <BookOpen className="h-3.5 w-3.5 mr-2" /> Mark as Example
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => onAction('reset', resource)}>
