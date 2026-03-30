@@ -1,10 +1,9 @@
 /**
- * Best Assets panel — auto-filtered templates, examples, and knowledge items
- * ranked by relevance to current stage and context.
+ * Best Assets panel — Gold Standard Templates, Strong Examples, and Supporting Knowledge.
  */
 
 import { Badge } from '@/components/ui/badge';
-import { FileText, BookOpen, Brain } from 'lucide-react';
+import { FileText, BookOpen, Brain, Crown } from 'lucide-react';
 import type { RankedResource } from './resourceRanking';
 
 interface Props {
@@ -14,21 +13,49 @@ interface Props {
   isLoading?: boolean;
 }
 
-function AssetSection({ icon: Icon, label, items }: { icon: React.ElementType; label: string; items: RankedResource[] }) {
+function AssetSection({
+  icon: Icon,
+  label,
+  items,
+  isGold,
+}: {
+  icon: React.ElementType;
+  label: string;
+  items: RankedResource[];
+  isGold?: boolean;
+}) {
   if (items.length === 0) return null;
 
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
-        <Icon className="h-3 w-3" /> {label}
+        <Icon className={`h-3 w-3 ${isGold ? 'text-amber-500' : ''}`} />
+        {label}
+        {isGold && <Crown className="h-2.5 w-2.5 text-amber-500" />}
       </div>
       <div className="space-y-1">
         {items.map(item => (
-          <div key={item.id} className="flex items-start gap-2 py-1.5 px-2.5 rounded-md bg-muted/20 border border-border">
+          <div
+            key={item.id}
+            className={`flex items-start gap-2 py-1.5 px-2.5 rounded-md border ${
+              isGold
+                ? 'bg-amber-500/5 border-amber-500/20'
+                : 'bg-muted/20 border-border'
+            }`}
+          >
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium truncate">{item.title}</p>
+              <div className="flex items-center gap-1">
+                <p className="text-xs font-medium truncate">{item.title}</p>
+                {item.score >= 5 && (
+                  <Badge variant="outline" className="text-[8px] px-1 py-0 h-3.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20">
+                    Top match
+                  </Badge>
+                )}
+              </div>
               {item.reasons.length > 0 && (
-                <p className="text-[10px] text-muted-foreground mt-0.5">{item.reasons.slice(0, 2).join(' · ')}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  {item.reasons.slice(0, 3).join(' · ')}
+                </p>
               )}
             </div>
           </div>
@@ -59,9 +86,9 @@ export function BestAssets({ templates, examples, knowledgeItems, isLoading }: P
         <Badge variant="secondary" className="text-[9px]">{total} matched</Badge>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
-        <AssetSection icon={FileText} label="Templates" items={templates} />
-        <AssetSection icon={BookOpen} label="Examples" items={examples} />
-        <AssetSection icon={Brain} label="Knowledge" items={knowledgeItems} />
+        <AssetSection icon={FileText} label="Gold Standard Templates" items={templates} isGold />
+        <AssetSection icon={BookOpen} label="Strong Examples" items={examples} />
+        <AssetSection icon={Brain} label="Supporting Knowledge" items={knowledgeItems} />
       </div>
     </div>
   );

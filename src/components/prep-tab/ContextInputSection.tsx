@@ -4,10 +4,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Upload, FileText, Image, X, Plus } from 'lucide-react';
+import { Upload, FileText, Image, X, Plus, CheckCircle2, AlertCircle, Clock, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { ContextItem } from './contextTypes';
-import { createId } from './contextTypes';
+import type { ContextItem, ParseStatus } from './contextTypes';
+import { createId, parseStatusLabel, parseStatusColor } from './contextTypes';
 
 interface Props {
   accounts: { id: string; name: string }[];
@@ -21,6 +21,16 @@ interface Props {
   onCompetitorChange: (v: string) => void;
   contextItems: ContextItem[];
   onContextItemsChange: (items: ContextItem[]) => void;
+}
+
+function parseStatusIcon(s: ParseStatus) {
+  switch (s) {
+    case 'parsed': return CheckCircle2;
+    case 'reference_only': return AlertCircle;
+    case 'image_preview': return Eye;
+    case 'pending': return Clock;
+    case 'unsupported': return AlertCircle;
+  }
 }
 
 export function ContextInputSection({
@@ -48,6 +58,7 @@ export function ContextInputSection({
           fileName: file.name,
           mimeType: file.type,
           previewUrl: url,
+          parseStatus: 'image_preview',
         });
       } else if (
         file.type.startsWith('text/') ||
@@ -63,6 +74,7 @@ export function ContextInputSection({
           content: text,
           fileName: file.name,
           mimeType: file.type,
+          parseStatus: 'parsed',
         });
       } else if (
         file.type === 'application/pdf' ||
@@ -70,7 +82,6 @@ export function ContextInputSection({
         file.name.endsWith('.docx') ||
         file.name.endsWith('.pptx')
       ) {
-        // For PDFs/docs — store as attached context asset
         newItems.push({
           id: createId(),
           label: file.name,
@@ -78,6 +89,7 @@ export function ContextInputSection({
           content: `[Document attached: ${file.name}]`,
           fileName: file.name,
           mimeType: file.type || 'application/octet-stream',
+          parseStatus: 'reference_only',
         });
       } else {
         newItems.push({
@@ -87,6 +99,7 @@ export function ContextInputSection({
           content: `[File: ${file.name} (${file.type || 'unknown'})]`,
           fileName: file.name,
           mimeType: file.type,
+          parseStatus: 'unsupported',
         });
       }
     }
@@ -111,6 +124,7 @@ export function ContextInputSection({
         label: 'Pasted text',
         type: 'text',
         content: droppedText,
+        parseStatus: 'parsed',
       }]);
     }
   }, [contextItems, onContextItemsChange, processFiles]);
@@ -122,6 +136,7 @@ export function ContextInputSection({
       label: `Note (${pasteText.slice(0, 30).trim()}…)`,
       type: 'text',
       content: pasteText,
+      parseStatus: 'parsed',
     }]);
     setPasteText('');
     setShowTextInput(false);
@@ -192,32 +207,37 @@ export function ContextInputSection({
           </div>
         ) : (
           <div className="p-2.5 space-y-2">
-            {/* Context chips */}
+            {/* Context chips with parse status */}
             <div className="flex flex-wrap gap-1.5">
-              {contextItems.map(item => (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/60 border border-border text-xs group"
-                >
-                  {item.type === 'image' ? (
-                    <>
-                      {item.previewUrl && (
-                        <img src={item.previewUrl} alt="" className="h-4 w-4 rounded object-cover" />
-                      )}
-                      <Image className="h-3 w-3 text-muted-foreground" />
-                    </>
-                  ) : (
-                    <FileText className="h-3 w-3 text-muted-foreground" />
-                  )}
-                  <span className="max-w-[120px] truncate">{item.label}</span>
-                  <button
-                    onClick={() => handleRemoveItem(item.id)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+              {contextItems.map(item => {
+                const StatusIcon = parseStatusIcon(item.parseStatus);
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/60 border border-border text-xs group"
+                    title={parseStatusLabel(item.parseStatus)}
                   >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
+                    {item.type === 'image' ? (
+                      <>
+                        {item.previewUrl && (
+                          <img src={item.previewUrl} alt="" className="h-4 w-4 rounded object-cover" />
+                        )}
+                        <Image className="h-3 w-3 text-muted-foreground" />
+                      </>
+                    ) : (
+                      <FileText className="h-3 w-3 text-muted-foreground" />
+                    )}
+                    <span className="max-w-[120px] truncate">{item.label}</span>
+                    <StatusIcon className={cn('h-2.5 w-2.5', parseStatusColor(item.parseStatus))} />
+                    <button
+                      onClick={() => handleRemoveItem(item.id)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              })}
 
               {/* Add more buttons */}
               <button
