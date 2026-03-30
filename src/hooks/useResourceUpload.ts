@@ -298,10 +298,21 @@ export function useAddUrlResource() {
 
       return resource;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       qc.invalidateQueries({ queryKey: ['resources'] });
       qc.invalidateQueries({ queryKey: ['resource-folders'] });
       toast.success('Link added and classified');
+      // Fire-and-forget auto-operationalization for URL resources with content
+      if (data?.id) {
+        autoOperationalizeResource(data.id).then(result => {
+          qc.invalidateQueries({ queryKey: ['knowledge-items'] });
+          if (result.operationalized) {
+            toast.success(`Auto-operationalized — ${result.knowledgeExtracted} extracted, ${result.knowledgeActivated} activated`);
+          } else if (result.stagesCompleted.includes('knowledge_extracted')) {
+            toast.info(`${result.knowledgeExtracted} knowledge items extracted — review to activate`);
+          }
+        }).catch(() => { /* non-fatal */ });
+      }
     },
     onError: (e) => toast.error(`Failed to add link: ${e.message}`),
   });
