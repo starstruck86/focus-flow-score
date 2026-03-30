@@ -29,28 +29,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { groupTagsByDimension, getDimensionLabel, getDimensionColor } from '@/lib/resourceTags';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
-import {
-  CheckCircle2, Play, Trash2, ExternalLink, Save, Zap,
-} from 'lucide-react';
-import {
-  useKnowledgeItems,
-  useUpdateKnowledgeItem,
-  useDeleteKnowledgeItem,
-  type KnowledgeItem,
-} from '@/hooks/useKnowledgeItems';
-import { toast } from 'sonner';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-
 interface Props {
   itemId: string | null;
   open: boolean;
