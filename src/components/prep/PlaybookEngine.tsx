@@ -103,6 +103,30 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
         </div>
       )}
 
+      {/* Active roleplay indicator */}
+      {roleplaySession?.active && (
+        <Card className="border-primary/40 bg-primary/5">
+          <CardContent className="p-3 flex items-center gap-3">
+            <Play className="h-4 w-4 text-primary animate-pulse" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-foreground">
+                Roleplay active: {roleplaySession.chapter.replace(/_/g, ' ')}
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                Grounded in {roleplaySession.groundedItemCount} active knowledge items
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Operationalized count */}
+      {operationalizedCount > 0 && (
+        <p className="text-[10px] text-muted-foreground">
+          {operationalizedCount} resource{operationalizedCount !== 1 ? 's' : ''} operationalized — actively changing how you sell
+        </p>
+      )}
+
       {/* Chapters grid */}
       <div className="grid gap-2">
         {CHAPTERS.map(ch => {
@@ -110,6 +134,14 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
           const activeCount = items.filter(i => i.active).length;
           const newCount = items.filter(i => i.status === 'extracted').length;
           const reviewCount = items.filter(i => i.status === 'review_needed').length;
+          const lastUpdated = items.length > 0
+            ? items.reduce((latest, i) => i.updated_at > latest ? i.updated_at : latest, items[0].updated_at)
+            : null;
+          const recentItems = items
+            .filter(i => {
+              const age = Date.now() - new Date(i.updated_at).getTime();
+              return age < 7 * 24 * 60 * 60 * 1000; // last 7 days
+            });
 
           return (
             <button
@@ -119,7 +151,7 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
             >
               <span className="text-lg shrink-0">{ch.icon}</span>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-medium text-foreground">{ch.label}</span>
                   {activeCount > 0 && (
                     <Badge variant="secondary" className="text-[10px] h-4 px-1.5 bg-emerald-500/10 text-emerald-600 border-0">
@@ -137,8 +169,13 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
                     </Badge>
                   )}
                 </div>
-                {items.length === 0 && (
+                {items.length === 0 ? (
                   <p className="text-[10px] text-muted-foreground mt-0.5">No knowledge yet</p>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {lastUpdated && `Updated ${formatRelativeTime(lastUpdated)}`}
+                    {recentItems.length > 0 && ` · ${recentItems.length} changed this week`}
+                  </p>
                 )}
               </div>
               <div className="flex items-center gap-1 shrink-0">
