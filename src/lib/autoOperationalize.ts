@@ -13,7 +13,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { inferTags, mergeTags, type StructuredTag } from './resourceTags';
-import { extractKnowledgeHeuristic, type ExtractionSource } from './knowledgeExtraction';
+import { extractKnowledgeHeuristic, extractKnowledgeLLMFallback, type ExtractionSource } from './knowledgeExtraction';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('AutoOperationalize');
