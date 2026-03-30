@@ -28,7 +28,7 @@ import { ManualTranscriptAssist } from './ManualTranscriptAssist';
 import { cn } from '@/lib/utils';
 import {
   useResourceFolders, useResources, useCreateFolder, useCreateResource,
-  useDeleteResource, useDeleteFolder, useRenameFolder, useUpdateResource,
+  useDeleteResource, useBulkDeleteResources, useDeleteFolder, useRenameFolder, useUpdateResource,
   useOperationalizeResource, useResourceSuggestions, useUpdateEnrichmentStatus,
   type Resource, type ResourceFolder, type ResourceSuggestion,
 } from '@/hooks/useResources';
