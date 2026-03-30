@@ -483,6 +483,74 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                     )}
                   </div>
 
+                  {/* ── Knowledge Item Remediation ── */}
+                  <div className="pt-1.5 border-t border-border/50 space-y-1.5">
+                    <p className="text-[10px] font-medium text-muted-foreground">Knowledge Item Remediation</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
+                        onClick={() => setConfirmAction({ type: 'kiScan' })}>
+                        {actionLoading === 'kiScan' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Brain className="h-3 w-3" />}
+                        Scan Knowledge Items
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
+                        onClick={() => setConfirmAction({ type: 'kiActivate' })}>
+                        {actionLoading === 'kiActivate' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                        Activate Qualified
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
+                        onClick={() => setConfirmAction({ type: 'kiRewrite' })}>
+                        {actionLoading === 'kiRewrite' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                        Reprocess Weak Items
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-destructive" disabled={!!actionLoading}
+                        onClick={() => setConfirmAction({ type: 'kiArchive' })}>
+                        {actionLoading === 'kiArchive' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                        Archive Low-Value
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 border-primary/30" disabled={!!actionLoading}
+                        onClick={() => setConfirmAction({ type: 'kiFull' })}>
+                        {actionLoading === 'kiFull' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Rocket className="h-3 w-3 text-primary" />}
+                        Full Remediation
+                      </Button>
+                    </div>
+                    {kiBackfillProgress && (
+                      <div className="text-[10px] text-muted-foreground flex items-center gap-2">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Remediating {kiBackfillProgress.processed} / {kiBackfillProgress.total} items…
+                      </div>
+                    )}
+                    {/* Scan results */}
+                    {kiScanReport && !kiBackfillReport && (
+                      <div className="rounded-md border border-primary/20 bg-primary/5 p-2 text-[10px] space-y-0.5">
+                        <p className="font-medium text-foreground">Scan Results (dry run)</p>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
+                          <span>Total scanned:</span><span className="font-medium text-foreground">{kiScanReport.total_scanned}</span>
+                          <span>Keep as-is:</span><span className="font-medium text-emerald-600">{kiScanReport.kept}</span>
+                          <span>Ready to activate:</span><span className="font-medium text-blue-600">{kiScanReport.activated}</span>
+                          <span>Need rewrite:</span><span className="font-medium text-amber-600">{kiScanReport.rewritten}</span>
+                          <span>Archive/delete:</span><span className="font-medium text-destructive">{kiScanReport.archived}</span>
+                          <span>Protected (user-edited):</span><span className="font-medium text-foreground">{kiScanReport.protected_skipped}</span>
+                        </div>
+                      </div>
+                    )}
+                    {/* Backfill results */}
+                    {kiBackfillReport && !kiBackfillProgress && (
+                      <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 p-2 text-[10px] space-y-0.5">
+                        <p className="font-medium text-foreground">Remediation Results</p>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
+                          <span>Total scanned:</span><span className="font-medium text-foreground">{kiBackfillReport.total_scanned}</span>
+                          <span>Kept:</span><span className="font-medium text-emerald-600">{kiBackfillReport.kept}</span>
+                          <span>Activated:</span><span className="font-medium text-blue-600">{kiBackfillReport.activated}</span>
+                          <span>Rewritten:</span><span className="font-medium text-amber-600">{kiBackfillReport.rewritten}</span>
+                          <span>New items created:</span><span className="font-medium text-primary">{kiBackfillReport.new_items_created}</span>
+                          <span>Archived:</span><span className="font-medium text-destructive">{kiBackfillReport.archived}</span>
+                          <span>Protected:</span><span className="font-medium text-foreground">{kiBackfillReport.protected_skipped}</span>
+                          {kiBackfillReport.errors > 0 && (<><span>Errors:</span><span className="font-medium text-destructive">{kiBackfillReport.errors}</span></>)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* ── Pipeline Validation Summary ── */}
                   <div className="pt-1.5 border-t border-border/50 space-y-1.5">
                     <p className="text-[10px] font-medium text-muted-foreground">Pipeline Validation Summary</p>
