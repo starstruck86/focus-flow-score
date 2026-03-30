@@ -104,7 +104,7 @@ export function passesQualityCheck(content: string): boolean {
 
   // Skip mostly-heading pages (>80% lines are headings or empty)
   const lines = trimmed.split('\n');
-  const noiseLines = lines.filter(l => /^#{1,6}\s*$/.test(l.trim()) || l.trim() === '' || /^[-=_*]{3,}$/.test(l.trim()));
+  const noiseLines = lines.filter(l => /^#{1,6}\s/.test(l.trim()) || /^#{1,6}\s*$/.test(l.trim()) || l.trim() === '' || /^[-=_*]{3,}$/.test(l.trim()));
   if (lines.length > 3 && noiseLines.length / lines.length > 0.8) return false;
 
   return true;
