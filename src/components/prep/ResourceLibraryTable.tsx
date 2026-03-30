@@ -537,8 +537,6 @@ export function ResourceLibraryTable({
                               </span>
                             </div>
                           )}
-                            </p>
-                          )}
                           {drift.hasDrift && (
                             <p className="text-[10px] text-status-yellow flex items-center gap-0.5 mt-0.5">
                               <AlertTriangle className="h-2.5 w-2.5" />
