@@ -328,6 +328,14 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
           toast.success('Removed from quarantine');
           break;
         }
+        case 'delete_resource': {
+          if (!confirm('Delete this resource? This cannot be undone.')) return;
+          const { deleteResourceWithCleanup } = await import('@/lib/resourceDelete');
+          await deleteResourceWithCleanup(r.id);
+          toast.success('Resource deleted');
+          onClose();
+          break;
+        }
         case 'retry_enrich': {
           await supabase.from('resources').update({
             enrichment_status: 'not_enriched',
@@ -617,6 +625,7 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
                 ) : (
                   <ActionBtn action="quarantine" label="Quarantine" icon={<Ban className="h-3 w-3" />} variant="destructive" />
                 )}
+                <ActionBtn action="delete_resource" label="Delete Resource" icon={<Trash2 className="h-3 w-3" />} variant="destructive" />
               </div>
             </div>
           </div>

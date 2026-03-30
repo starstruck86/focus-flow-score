@@ -244,7 +244,7 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
 
           {/* Delete Junk Notion Resources CTA */}
           {showDeleteJunkCTA && (
-            <div className="px-4 pt-2 shrink-0">
+            <div className="px-4 pt-2 shrink-0 space-y-2">
               <Button
                 className="w-full min-h-[44px] gap-2"
                 variant="outline"
@@ -254,6 +254,33 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
                 {deletingJunk ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                 {deletingJunk ? 'Cleaning up…' : 'Delete Junk Notion Resources'}
               </Button>
+              {isArchive && (
+                <Button
+                  className="w-full min-h-[44px] gap-2"
+                  variant="destructive"
+                  onClick={async () => {
+                    const groupId = getImportGroupId(r);
+                    if (!groupId || !user?.id) return;
+                    if (!confirm('Delete ALL generated resources from this Notion import? This cannot be undone.')) return;
+                    try {
+                      const result = await deleteImportGroupChildren(groupId, user.id);
+                      if (result.errors.length > 0) {
+                        toast.error(`Partial: ${result.errors[0]}`);
+                      } else {
+                        toast.success(`Deleted ${result.deleted} generated resources`);
+                      }
+                      FIX_RESOURCE_INVALIDATION_KEYS.forEach(k => qc.invalidateQueries({ queryKey: k }));
+                      onResourceUpdated?.();
+                    } catch (e: any) {
+                      toast.error(e.message || 'Delete failed');
+                    }
+                  }}
+                  disabled={deletingJunk}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete All Generated Resources
+                </Button>
+              )}
             </div>
           )}
 
@@ -292,6 +319,31 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
                 {r.enrichment_status && <p>Status: {r.enrichment_status}</p>}
                 {r.last_quality_score != null && <p>Quality: {r.last_quality_score}/100</p>}
                 {r.updated_at && <p>Updated: {new Date(r.updated_at).toLocaleDateString()}</p>}
+              </div>
+
+              {/* Danger zone */}
+              <div className="pt-2 border-t border-border space-y-2">
+                <p className="text-[10px] font-semibold text-destructive/70 uppercase tracking-wider">Danger</p>
+                <Button
+                  variant="destructive"
+                  className="w-full min-h-[44px] gap-2 justify-start"
+                  onClick={async () => {
+                    if (!confirm('Delete this resource? This cannot be undone.')) return;
+                    try {
+                      const { deleteResourceWithCleanup } = await import('@/lib/resourceDelete');
+                      await deleteResourceWithCleanup(r.id);
+                      toast.success('Resource deleted');
+                      FIX_RESOURCE_INVALIDATION_KEYS.forEach(k => qc.invalidateQueries({ queryKey: k }));
+                      onResourceUpdated?.();
+                      onOpenChange(false);
+                    } catch (e: any) {
+                      toast.error(e.message || 'Delete failed');
+                    }
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Resource
+                </Button>
               </div>
             </div>
           </ScrollArea>

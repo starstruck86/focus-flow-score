@@ -28,7 +28,7 @@ import { ManualTranscriptAssist } from './ManualTranscriptAssist';
 import { cn } from '@/lib/utils';
 import {
   useResourceFolders, useResources, useCreateFolder, useCreateResource,
-  useDeleteResource, useDeleteFolder, useRenameFolder, useUpdateResource,
+  useDeleteResource, useBulkDeleteResources, useDeleteFolder, useRenameFolder, useUpdateResource,
   useOperationalizeResource, useResourceSuggestions, useUpdateEnrichmentStatus,
   type Resource, type ResourceFolder, type ResourceSuggestion,
 } from '@/hooks/useResources';
@@ -157,6 +157,7 @@ export function ResourceManager() {
   const createFolder = useCreateFolder();
   const createResource = useCreateResource();
   const deleteResource = useDeleteResource();
+  const bulkDelete = useBulkDeleteResources();
   const deleteFolder = useDeleteFolder();
   const renameFolder = useRenameFolder();
   const updateResource = useUpdateResource();
@@ -834,6 +835,15 @@ export function ResourceManager() {
                 case 'delete':
                   deleteResource.mutate(resource.id);
                   break;
+                case 'bulk_delete': {
+                  const ids = Array.from(selectedResourceIds);
+                  if (ids.length === 0) break;
+                  if (!confirm(`Delete ${ids.length} resources? This cannot be undone.`)) break;
+                  bulkDelete.mutate(ids, {
+                    onSuccess: () => setSelectedResourceIds(new Set()),
+                  });
+                  break;
+                }
                 case 'bulk_enrich':
                   setShowDeepEnrich(true);
                   break;
