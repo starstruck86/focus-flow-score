@@ -564,12 +564,21 @@ export interface ExtractionCoverage {
   operationalizedResources: number;
   noKnowledgeYet: number;
   contentEmptyDespiteLength: number;
+  /** Percentage of enriched that have KI */
+  kiCoveragePct: number;
+  /** Percentage of enriched that are operationalized */
+  opCoveragePct: number;
+  /** Breakdown of why resources are blocked */
+  blockedByEmptyContent: number;
+  blockedByNoExtraction: number;
+  blockedByActivationCriteria: number;
 }
 
 export async function getExtractionCoverage(): Promise<ExtractionCoverage> {
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData?.user?.id;
-  if (!userId) return { enrichedResources: 0, withKnowledgeItems: 0, operationalizedResources: 0, noKnowledgeYet: 0, contentEmptyDespiteLength: 0 };
+  const empty: ExtractionCoverage = { enrichedResources: 0, withKnowledgeItems: 0, operationalizedResources: 0, noKnowledgeYet: 0, contentEmptyDespiteLength: 0, kiCoveragePct: 0, opCoveragePct: 0, blockedByEmptyContent: 0, blockedByNoExtraction: 0, blockedByActivationCriteria: 0 };
+  if (!userId) return empty;
 
   // Enriched resources
   const { data: enriched } = await supabase
@@ -598,26 +607,48 @@ export async function getExtractionCoverage(): Promise<ExtractionCoverage> {
   let withKI = 0;
   let operationalized = 0;
   let contentEmpty = 0;
+  let blockedByNoExtraction = 0;
+  let blockedByActivationCriteria = 0;
 
   for (const r of enrichedList) {
+    const actualLen = r.content?.length ?? 0;
     const items = kiByResource.get(r.id);
+
+    // Safety rule: actual content must be >= 100
+    if ((r.content_length ?? 0) > 300 && actualLen < 100) {
+      contentEmpty++;
+      continue;
+    }
+
     if (items && items.length > 0) {
       withKI++;
       const hasActiveWithCtx = items.some((ki: any) =>
         ki.active && Array.isArray(ki.applies_to_contexts) && ki.applies_to_contexts.length > 0
       );
-      if (hasActiveWithCtx) operationalized++;
+      if (hasActiveWithCtx) {
+        operationalized++;
+      } else {
+        // Has KI but none active with contexts
+        blockedByActivationCriteria++;
+      }
+    } else if (actualLen >= 100) {
+      // Has content but no KI extracted
+      blockedByNoExtraction++;
     }
-    const actualLen = r.content?.length ?? 0;
-    if ((r.content_length ?? 0) > 300 && actualLen < 100) contentEmpty++;
   }
 
+  const total = enrichedList.length;
   return {
-    enrichedResources: enrichedList.length,
+    enrichedResources: total,
     withKnowledgeItems: withKI,
     operationalizedResources: operationalized,
-    noKnowledgeYet: enrichedList.length - withKI,
+    noKnowledgeYet: total - withKI - contentEmpty,
     contentEmptyDespiteLength: contentEmpty,
+    kiCoveragePct: total > 0 ? Math.round((withKI / total) * 100) : 0,
+    opCoveragePct: total > 0 ? Math.round((operationalized / total) * 100) : 0,
+    blockedByEmptyContent: contentEmpty,
+    blockedByNoExtraction,
+    blockedByActivationCriteria,
   };
 }
 
