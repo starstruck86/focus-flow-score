@@ -220,6 +220,17 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
   );
 });
 
+function formatRelativeTime(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return `${Math.floor(days / 7)}w ago`;
+}
+
 function StatCard({ label, value, icon, color }: {
   label: string; value: number; icon: React.ReactNode; color?: string;
 }) {
