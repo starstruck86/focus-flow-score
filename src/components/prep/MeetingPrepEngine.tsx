@@ -108,7 +108,7 @@ export function MeetingPrepEngine() {
 
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Stage</Label>
-                <Select value={ctx.stage || ''} onValueChange={v => update({ stage: v })}>
+                <Select value={ctx.stage || '__unset__'} onValueChange={v => update({ stage: v === '__unset__' ? undefined : v })}>
                   <SelectTrigger className="h-8 text-xs">
                     <SelectValue placeholder="Select..." />
                   </SelectTrigger>
