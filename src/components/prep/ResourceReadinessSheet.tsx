@@ -169,6 +169,31 @@ const BULK_ACTION_DESCRIPTIONS: Record<string, { title: string; safe: string; wo
     safe: 'Runs extraction on all enriched resources with content_length > 300 that have no knowledge items yet. Then runs the full pipeline.',
     wontDo: 'Will not overwrite existing knowledge items. Will not auto-activate low-confidence items.',
   },
+  kiScan: {
+    title: 'Scan Knowledge Items',
+    safe: 'Classifies all existing knowledge items into keep / activate / rewrite / archive without changing anything.',
+    wontDo: 'Read-only scan — no items will be modified.',
+  },
+  kiActivate: {
+    title: 'Activate Newly Qualified Items',
+    safe: 'Activates inactive knowledge items that meet the new 0.55 confidence threshold and have all required fields.',
+    wontDo: 'Will not touch user-edited items. Will not modify items that are already active.',
+  },
+  kiRewrite: {
+    title: 'Reprocess Weak Knowledge Items',
+    safe: 'Re-extracts weak/summary-like knowledge items from their source resources using improved tactic-focused extraction.',
+    wontDo: 'Will not touch user-edited items. Archives weak items and creates new actionable replacements.',
+  },
+  kiArchive: {
+    title: 'Archive Low-Value Items',
+    safe: 'Archives duplicate, vague, and non-actionable knowledge items that cannot be improved.',
+    wontDo: 'Will not touch user-edited items. Will not delete — only marks as stale/inactive.',
+  },
+  kiFull: {
+    title: 'Full Knowledge Remediation',
+    safe: 'Runs the complete backfill: activates qualified items, rewrites weak ones from source, and archives junk.',
+    wontDo: 'Will not touch user-edited items. Will not delete — only archives.',
+  },
 };
 
 // ── Component ──────────────────────────────────────────────
