@@ -1,5 +1,7 @@
 /**
- * Resource Readiness — lightweight admin view for auditing resource health.
+ * Resource Readiness — admin control center for auditing resource health.
+ * Shows deterministic bucket classifications with "why this bucket?" explanations,
+ * quick badges, tag quality issues, and safe bulk actions.
  */
 
 import { useState, useCallback } from 'react';
@@ -10,7 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
   Loader2, RefreshCw, Wrench, Sparkles, Zap, Trash2, Tag, CheckCircle2,
-  AlertTriangle, XCircle, FileText, Brain, HelpCircle,
+  AlertTriangle, XCircle, FileText, Brain, HelpCircle, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -37,20 +39,20 @@ interface Props {
 
 const BUCKET_CONFIG: Record<ReadinessBucket, { label: string; icon: React.ReactNode; color: string }> = {
   operationalized: { label: 'Operationalized', icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-600' },
-  ready: { label: 'Ready', icon: <FileText className="h-3.5 w-3.5" />, color: 'text-primary' },
-  extractable_not_operationalized: { label: 'Extractable / Not Activated', icon: <Sparkles className="h-3.5 w-3.5" />, color: 'text-blue-500' },
-  needs_tagging: { label: 'Needs Tagging', icon: <Tag className="h-3.5 w-3.5" />, color: 'text-amber-500' },
   content_backed_needs_fix: { label: 'Content-Backed Needs Fix', icon: <Wrench className="h-3.5 w-3.5" />, color: 'text-orange-500' },
   blocked_incorrectly: { label: 'Blocked Incorrectly', icon: <XCircle className="h-3.5 w-3.5" />, color: 'text-destructive' },
-  missing_content: { label: 'Missing Content', icon: <HelpCircle className="h-3.5 w-3.5" />, color: 'text-muted-foreground' },
+  extractable_not_operationalized: { label: 'Extractable / Not Activated', icon: <Sparkles className="h-3.5 w-3.5" />, color: 'text-blue-500' },
+  needs_tagging: { label: 'Needs Tagging', icon: <Tag className="h-3.5 w-3.5" />, color: 'text-amber-500' },
+  ready: { label: 'Ready', icon: <FileText className="h-3.5 w-3.5" />, color: 'text-primary' },
   junk_or_low_signal: { label: 'Junk / Low Signal', icon: <Trash2 className="h-3.5 w-3.5" />, color: 'text-muted-foreground' },
+  missing_content: { label: 'Missing Content', icon: <HelpCircle className="h-3.5 w-3.5" />, color: 'text-muted-foreground' },
   orphaned_or_inconsistent: { label: 'Orphaned / Inconsistent', icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-amber-600' },
 };
 
 const BUCKET_ORDER: ReadinessBucket[] = [
-  'operationalized', 'ready', 'extractable_not_operationalized', 'needs_tagging',
-  'content_backed_needs_fix', 'blocked_incorrectly', 'missing_content',
-  'junk_or_low_signal', 'orphaned_or_inconsistent',
+  'operationalized', 'content_backed_needs_fix', 'blocked_incorrectly',
+  'extractable_not_operationalized', 'needs_tagging', 'ready',
+  'junk_or_low_signal', 'missing_content', 'orphaned_or_inconsistent',
 ];
 
 export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
@@ -158,9 +160,28 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                 {/* Summary grid */}
                 <div className="grid grid-cols-3 gap-2">
                   <MiniStat label="Operationalized" value={audit.counts.operationalized} color="text-emerald-600" />
-                  <MiniStat label="Ready" value={audit.counts.ready} color="text-primary" />
+                  <MiniStat label="Extractable" value={audit.counts.extractable_not_operationalized} color="text-blue-500" />
                   <MiniStat label="Needs Fix" value={audit.counts.content_backed_needs_fix + audit.counts.blocked_incorrectly} color="text-orange-500" />
                 </div>
+
+                {/* Validation summary */}
+                {audit.validationSummary && (
+                  <div className="rounded-md border border-border bg-muted/30 p-2.5 space-y-1">
+                    <p className="text-[10px] font-medium text-foreground flex items-center gap-1">
+                      <Info className="h-3 w-3" /> Validation Summary
+                    </p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[10px] text-muted-foreground">
+                      <span>Missing required tags:</span>
+                      <span className="font-medium text-foreground">{audit.validationSummary.missingRequiredTags}</span>
+                      <span>Active but inconsistent:</span>
+                      <span className="font-medium text-foreground">{audit.validationSummary.activeButInconsistent}</span>
+                      <span>Tag quality issues:</span>
+                      <span className="font-medium text-foreground">{audit.validationSummary.tagQualityIssueCount}</span>
+                      <span>Operationalized:</span>
+                      <span className="font-medium text-emerald-600">{audit.validationSummary.operationalizedCount}</span>
+                    </div>
+                  </div>
+                )}
 
                 <Separator />
 
@@ -169,43 +190,24 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                   <p className="text-xs font-medium text-foreground">Bulk Actions</p>
                   <div className="flex flex-wrap gap-1.5">
                     {audit.counts.content_backed_needs_fix > 0 && (
-                      <Button
-                        variant="outline" size="sm"
-                        className="h-7 text-[10px] gap-1"
-                        disabled={!!actionLoading}
-                        onClick={handleFixContentBacked}
-                      >
+                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading} onClick={handleFixContentBacked}>
                         {actionLoading === 'fix' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wrench className="h-3 w-3" />}
                         Fix {audit.counts.content_backed_needs_fix} Content-Backed
                       </Button>
                     )}
                     {audit.counts.needs_tagging > 0 && (
-                      <Button
-                        variant="outline" size="sm"
-                        className="h-7 text-[10px] gap-1"
-                        disabled={!!actionLoading}
-                        onClick={handleAutoTag}
-                      >
+                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading} onClick={handleAutoTag}>
                         {actionLoading === 'tag' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Tag className="h-3 w-3" />}
                         Auto-tag {audit.counts.needs_tagging}
                       </Button>
                     )}
-                    <Button
-                      variant="outline" size="sm"
-                      className="h-7 text-[10px] gap-1"
-                      disabled={!!actionLoading}
-                      onClick={handleActivateHighConfidence}
-                    >
+                    <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading} onClick={handleActivateHighConfidence}>
                       {actionLoading === 'activate' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
                       Activate High-Confidence
                     </Button>
                     {audit.counts.junk_or_low_signal > 0 && (
-                      <Button
-                        variant="outline" size="sm"
-                        className="h-7 text-[10px] gap-1 text-destructive"
-                        disabled={!!actionLoading}
-                        onClick={() => setDeleteConfirm(audit.buckets.junk_or_low_signal.map(r => r.id))}
-                      >
+                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-destructive" disabled={!!actionLoading}
+                        onClick={() => setDeleteConfirm(audit.buckets.junk_or_low_signal.map(r => r.id))}>
                         <Trash2 className="h-3 w-3" />
                         Delete {audit.counts.junk_or_low_signal} Junk
                       </Button>
@@ -284,13 +286,20 @@ function ResourceRow({ resource: r }: { resource: AuditedResource }) {
   const tagGroups = groupTagsByDimension(r.tags);
 
   return (
-    <div className="p-2 rounded border border-border bg-card text-xs space-y-1">
+    <div className="p-2 rounded border border-border bg-card text-xs space-y-1.5">
+      {/* Title + badges */}
       <div className="flex items-start justify-between gap-2">
         <p className="font-medium text-foreground truncate flex-1">{r.title}</p>
-        {r.isNotionDerived && (
-          <Badge variant="outline" className="text-[8px] h-3.5 px-1 shrink-0">Notion</Badge>
-        )}
+        <div className="flex gap-0.5 shrink-0">
+          {r.badges.map(b => (
+            <Badge key={b} variant="outline" className="text-[7px] h-3.5 px-1">
+              {b}
+            </Badge>
+          ))}
+        </div>
       </div>
+
+      {/* Stats row */}
       <div className="flex items-center gap-2 flex-wrap text-[10px] text-muted-foreground">
         <span>{r.contentLength} chars</span>
         <span>·</span>
@@ -304,21 +313,44 @@ function ResourceRow({ resource: r }: { resource: AuditedResource }) {
         {r.knowledgeItemCount > 0 && (
           <>
             <span>·</span>
-            <span>{r.activeKnowledgeCount}/{r.knowledgeItemCount} KI active</span>
+            <span>
+              {r.activeWithContexts}/{r.activeKnowledgeCount}/{r.knowledgeItemCount} KI
+              <span className="text-muted-foreground/60"> (ctx/active/total)</span>
+            </span>
           </>
         )}
       </div>
+
       {/* Tags */}
       {tagGroups.size > 0 && (
         <div className="flex flex-wrap gap-0.5">
-          {[...tagGroups.entries()].slice(0, 3).map(([dim, vals]) => (
+          {[...tagGroups.entries()].slice(0, 4).map(([dim, vals]) => (
             <Badge key={dim} variant="outline" className={cn('text-[8px] h-3.5 px-1', getDimensionColor(dim))}>
               {getDimensionLabel(dim)}: {vals.slice(0, 2).join(', ')}
             </Badge>
           ))}
         </div>
       )}
-      <p className="text-[10px] text-muted-foreground italic">{r.recommendedAction}</p>
+
+      {/* Tag quality issues */}
+      {r.tagQualityIssues.length > 0 && (
+        <div className="space-y-0.5">
+          {r.tagQualityIssues.map((issue, i) => (
+            <p key={i} className="text-[9px] text-amber-600 flex items-center gap-1">
+              <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+              {issue.message}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {/* Why this bucket? + recommended action */}
+      <div className="border-t border-border/50 pt-1 space-y-0.5">
+        <p className="text-[9px] text-muted-foreground">
+          <span className="font-medium">Why:</span> {r.bucketReason}
+        </p>
+        <p className="text-[9px] text-primary/80 italic">{r.recommendedAction}</p>
+      </div>
     </div>
   );
 }
