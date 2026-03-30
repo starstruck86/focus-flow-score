@@ -41,11 +41,11 @@ export async function queryKnowledgeByContext(
   if (ctx.context_type) tags.push(`context:${ctx.context_type}`);
 
   // Fetch active items with light filters — broader pool
+  // Don't hardcode context:'prep' — let the caller's context_type drive relevance scoring
   const items = await queryKnowledge({
     activeOnly: true,
     tags: tags.length ? tags : undefined,
     maxItems: Math.min(max * 3, 60), // fetch extra to rank
-    context: 'prep',
   });
 
   // Also fetch competitor-specific items separately if competitor set

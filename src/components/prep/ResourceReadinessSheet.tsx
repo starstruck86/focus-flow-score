@@ -13,6 +13,7 @@
 
 import { useState, useCallback } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -33,6 +34,7 @@ import {
   type AuditedResource,
 } from '@/lib/resourceAudit';
 import { autoOperationalizeBatch, summarizeBatchResults, derivePipelineStage, getStageLabel, autoOperationalizeAllResources, countEligibleResources, type BackfillSummary } from '@/lib/autoOperationalize';
+import { auditPipelineIntegrity, auditKnowledgeUtilization, getSystemMetrics, type PipelineIntegrityResult, type KnowledgeUtilResult, type SystemMetrics } from '@/lib/salesBrainAudit';
 import { toast } from 'sonner';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -162,6 +164,8 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
   const [confirmAction, setConfirmAction] = useState<{ type: string; ids?: string[] } | null>(null);
   const [backfillProgress, setBackfillProgress] = useState<{ processed: number; total: number } | null>(null);
   const [lastBackfillResult, setLastBackfillResult] = useState<BackfillSummary | null>(null);
+  const [deepAudit, setDeepAudit] = useState<{ pipeline?: PipelineIntegrityResult; knowledge?: KnowledgeUtilResult; metrics?: SystemMetrics } | null>(null);
+  const [deepAuditLoading, setDeepAuditLoading] = useState(false);
 
   const runAudit = useCallback(async () => {
     setLoading(true);
@@ -395,6 +399,147 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                           {lastBackfillResult.errors > 0 && (<><span>Errors:</span><span className="font-medium text-destructive">{lastBackfillResult.errors}</span></>)}
                         </div>
                       </div>
+                    )}
+                  </div>
+
+                  {/* ── Deep Audit ── */}
+                  <div className="pt-1.5 border-t border-border/50 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-medium text-muted-foreground">System Health Audit</p>
+                      <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1" disabled={deepAuditLoading}
+                        onClick={async () => {
+                          setDeepAuditLoading(true);
+                          try {
+                            const [pipeline, knowledge, metrics] = await Promise.all([
+                              auditPipelineIntegrity(),
+                              auditKnowledgeUtilization(),
+                              getSystemMetrics(),
+                            ]);
+                            setDeepAudit({ pipeline, knowledge, metrics });
+                          } catch { toast.error('Audit failed'); }
+                          setDeepAuditLoading(false);
+                        }}>
+                        {deepAuditLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Brain className="h-3 w-3" />}
+                        Run Deep Audit
+                      </Button>
+                    </div>
+
+                    {deepAudit?.metrics && (
+                      <div className="rounded-md border border-primary/20 bg-primary/5 p-2 text-[10px] space-y-1">
+                        <p className="font-medium text-foreground">System Metrics</p>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
+                          <span>Total resources:</span><span className="font-medium text-foreground">{deepAudit.metrics.resources.total}</span>
+                          <span>Content-backed:</span><span className="font-medium text-foreground">{deepAudit.metrics.resources.content_backed}</span>
+                          <span>With knowledge:</span><span className="font-medium text-foreground">{deepAudit.metrics.resources.with_knowledge}</span>
+                          <span>Operationalized:</span><span className="font-medium text-emerald-600">{deepAudit.metrics.resources.operationalized}</span>
+                          <span>Stalled:</span><span className={cn('font-medium', deepAudit.metrics.resources.stalled > 0 ? 'text-amber-500' : 'text-foreground')}>{deepAudit.metrics.resources.stalled}</span>
+                          <span>Coverage:</span><span className="font-medium text-foreground">{deepAudit.metrics.pipeline.coverage_pct}%</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground pt-1 border-t border-border/30">
+                          <span>Total KI:</span><span className="font-medium text-foreground">{deepAudit.metrics.knowledge.total}</span>
+                          <span>Active KI:</span><span className="font-medium text-emerald-600">{deepAudit.metrics.knowledge.active}</span>
+                          <span>Retrievable KI:</span><span className="font-medium text-foreground">{deepAudit.metrics.knowledge.retrievable}</span>
+                          <span>Pending review:</span><span className={cn('font-medium', deepAudit.metrics.knowledge.review_needed > 0 ? 'text-amber-500' : 'text-foreground')}>{deepAudit.metrics.knowledge.review_needed}</span>
+                          <span>Auto-activated:</span><span className="font-medium text-foreground">{deepAudit.metrics.pipeline.auto_activated_count}</span>
+                          <span>Avg confidence:</span><span className="font-medium text-foreground">{deepAudit.metrics.pipeline.avg_confidence}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {deepAudit?.pipeline && (
+                      <Collapsible>
+                        <CollapsibleTrigger className="w-full flex items-center justify-between p-1.5 rounded hover:bg-accent/50 text-[10px]">
+                          <span className="font-medium text-foreground flex items-center gap-1">
+                            <AlertTriangle className="h-3 w-3 text-amber-500" />
+                            Pipeline Bottlenecks ({deepAudit.pipeline.summary.stalledCount} stalled)
+                          </span>
+                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="space-y-1 pl-2 pt-1 text-[10px]">
+                            {deepAudit.pipeline.stalled_before_tagging.length > 0 && (
+                              <div>
+                                <p className="font-medium text-amber-600">Stalled before tagging: {deepAudit.pipeline.stalled_before_tagging.length}</p>
+                                {deepAudit.pipeline.stalled_before_tagging.slice(0, 3).map(r => (
+                                  <p key={r.id} className="text-muted-foreground pl-2 truncate">• {r.title}</p>
+                                ))}
+                              </div>
+                            )}
+                            {deepAudit.pipeline.stalled_before_extraction.length > 0 && (
+                              <div>
+                                <p className="font-medium text-blue-500">Stalled before extraction: {deepAudit.pipeline.stalled_before_extraction.length}</p>
+                                {deepAudit.pipeline.stalled_before_extraction.slice(0, 3).map(r => (
+                                  <p key={r.id} className="text-muted-foreground pl-2 truncate">• {r.title}</p>
+                                ))}
+                              </div>
+                            )}
+                            {deepAudit.pipeline.stalled_before_activation.length > 0 && (
+                              <div>
+                                <p className="font-medium text-orange-500">Stalled before activation: {deepAudit.pipeline.stalled_before_activation.length}</p>
+                                {deepAudit.pipeline.stalled_before_activation.slice(0, 3).map(r => (
+                                  <p key={r.id} className="text-muted-foreground pl-2 truncate">• {r.title}</p>
+                                ))}
+                              </div>
+                            )}
+                            {deepAudit.pipeline.activated_but_not_retrievable.length > 0 && (
+                              <div>
+                                <p className="font-medium text-orange-500">Active but not retrievable: {deepAudit.pipeline.activated_but_not_retrievable.length}</p>
+                                {deepAudit.pipeline.activated_but_not_retrievable.slice(0, 3).map(r => (
+                                  <p key={r.id} className="text-muted-foreground pl-2 truncate">• {r.title} — {r.issue}</p>
+                                ))}
+                              </div>
+                            )}
+                            {deepAudit.pipeline.inconsistent_state.length > 0 && (
+                              <div>
+                                <p className="font-medium text-destructive">Inconsistent state: {deepAudit.pipeline.inconsistent_state.length}</p>
+                                {deepAudit.pipeline.inconsistent_state.slice(0, 3).map(r => (
+                                  <p key={r.id} className="text-muted-foreground pl-2 truncate">• {r.title} — {r.issue}</p>
+                                ))}
+                              </div>
+                            )}
+                            {deepAudit.pipeline.summary.stalledCount === 0 && (
+                              <p className="text-emerald-600 font-medium">✓ No pipeline bottlenecks detected</p>
+                            )}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )}
+
+                    {deepAudit?.knowledge && (
+                      <Collapsible>
+                        <CollapsibleTrigger className="w-full flex items-center justify-between p-1.5 rounded hover:bg-accent/50 text-[10px]">
+                          <span className="font-medium text-foreground flex items-center gap-1">
+                            <Brain className="h-3 w-3 text-blue-500" />
+                            Knowledge Utilization ({deepAudit.knowledge.summary.high_value_unused + deepAudit.knowledge.summary.not_retrievable} issues)
+                          </span>
+                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="space-y-1 pl-2 pt-1 text-[10px]">
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
+                              <span>Fully utilized:</span><span className="font-medium text-emerald-600">{deepAudit.knowledge.summary.fully_utilized}</span>
+                              <span>Partially used:</span><span className="font-medium text-amber-500">{deepAudit.knowledge.summary.partially_used}</span>
+                              <span>High-value unused:</span><span className={cn('font-medium', deepAudit.knowledge.summary.high_value_unused > 0 ? 'text-destructive' : 'text-foreground')}>{deepAudit.knowledge.summary.high_value_unused}</span>
+                              <span>Not retrievable:</span><span className={cn('font-medium', deepAudit.knowledge.summary.not_retrievable > 0 ? 'text-destructive' : 'text-foreground')}>{deepAudit.knowledge.summary.not_retrievable}</span>
+                            </div>
+                            {Object.entries(deepAudit.knowledge.summary.unused_reasons).length > 0 && (
+                              <div className="pt-1 border-t border-border/30">
+                                <p className="font-medium text-foreground mb-0.5">Root causes:</p>
+                                {Object.entries(deepAudit.knowledge.summary.unused_reasons).map(([reason, count]) => (
+                                  <p key={reason} className="text-muted-foreground pl-2">• {reason.replace(/_/g, ' ')}: {count as number}</p>
+                                ))}
+                              </div>
+                            )}
+                            {deepAudit.knowledge.items.filter(i => i.classification === 'high_value_unused' || i.classification === 'not_retrievable').slice(0, 5).map(ki => (
+                              <div key={ki.id} className="pl-2 border-l-2 border-amber-500/30 py-0.5">
+                                <p className="font-medium text-foreground truncate">{ki.title}</p>
+                                <p className="text-muted-foreground">{ki.issue}</p>
+                                <p className="text-primary/80">{ki.recommendation}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
                     )}
                   </div>
                 </div>
