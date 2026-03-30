@@ -22,6 +22,8 @@ export interface KnowledgeQuery {
   context?: string; // 'dave' | 'roleplay' | 'prep' | 'coaching' | 'playbooks'
   activeOnly?: boolean;
   maxItems?: number;
+  /** Tag-based filters (format: "dimension:value") */
+  tags?: string[];
 }
 
 /**
