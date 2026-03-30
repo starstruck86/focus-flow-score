@@ -135,7 +135,7 @@ export function ExtractKnowledgeDialog({ open, onOpenChange, resourceId }: Props
               onCheckedChange={(c) => setAutoActivate(!!c)}
             />
             <Label htmlFor="auto-activate" className="text-xs text-muted-foreground cursor-pointer">
-              Auto-activate high-confidence items (≥70%)
+              Auto-activate high-confidence items (≥55%)
             </Label>
           </div>
         )}
