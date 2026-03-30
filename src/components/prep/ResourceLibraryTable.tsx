@@ -499,7 +499,7 @@ export function ResourceLibraryTable({
                       </td>
                       <td className="px-3 align-middle">
                         <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <p className="text-sm font-medium text-foreground truncate max-w-[220px]">{resource.title}</p>
                             {lc && (
                               <Badge variant="outline" className={cn(
@@ -516,6 +516,11 @@ export function ResourceLibraryTable({
                                  'Uploaded'}
                               </Badge>
                             )}
+                            {inUseIds.has(resource.id) && (
+                              <Badge variant="outline" className="text-[8px] h-4 px-1 shrink-0 border-blue-500/40 text-blue-600">
+                                In Use
+                              </Badge>
+                            )}
                             {lc && lc.kiCount > 0 && (
                               <span className="text-[8px] text-muted-foreground shrink-0">
                                 {lc.activeKi}/{lc.kiCount} KI
@@ -523,12 +528,15 @@ export function ResourceLibraryTable({
                             )}
                           </div>
                           {lc && lc.blocked !== 'none' && (
-                            <p className="text-[9px] text-destructive/80 mt-0.5">
-                              {lc.blocked === 'no_extraction' ? 'Needs extraction' :
-                               lc.blocked === 'no_activation' ? 'Needs activation' :
-                               lc.blocked === 'missing_contexts' ? 'Needs context repair' :
-                               lc.blocked === 'empty_content' ? 'Missing content' :
-                               lc.blocked === 'stale_blocker_state' ? 'Needs review' : ''}
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <p className="text-[9px] text-destructive/80">
+                                {getBlockedLabel(lc.blocked)}
+                              </p>
+                              <span className="text-[9px] text-primary/80 font-medium">
+                                → {getNextBestAction(lc.blocked)}
+                              </span>
+                            </div>
+                          )}
                             </p>
                           )}
                           {drift.hasDrift && (
