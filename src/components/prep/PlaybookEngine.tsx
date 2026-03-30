@@ -143,9 +143,9 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
                     <TooltipTrigger asChild>
                       <Info className="h-3 w-3 text-muted-foreground" />
                     </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-xs text-xs">
-                      A resource is operationalized when it has at least 1 active knowledge item with non-empty applies_to_contexts. This count comes from the canonical lifecycle audit.
-                    </TooltipContent>
+                     <TooltipContent side="top" className="max-w-xs text-xs">
+                       A resource is ready to use when it has at least 1 active knowledge item with contexts assigned. This count comes from the canonical lifecycle audit.
+                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </div>
