@@ -6,6 +6,7 @@
 export {
   detectResourceSubtype,
   classifyEnrichability,
+  classifyEnrichabilityForResource,
   getSubtypeLabel,
   getEnrichabilityLabel,
   getEnrichabilityColor,
