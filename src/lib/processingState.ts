@@ -166,6 +166,7 @@ export function deriveProcessingState(
       rm === 'transcript_upload' || rm === 'content_upload' ||
       rm === 'fixed_from_existing_content' || rm === 'manual_content' ||
       rm === 'notion_zip_import' || rm === 'notion_zip_split' ||
+      rm === 'notion_zip_page_import' || rm === 'notion_zip_database_import' || rm === 'notion_zip_page_chunk' ||
       (typeof rm === 'string' && rm.startsWith('manual'));
     return {
       state: 'COMPLETED',
