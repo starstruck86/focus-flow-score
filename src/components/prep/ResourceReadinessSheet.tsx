@@ -190,6 +190,9 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
   const [extractionCoverage, setExtractionCoverage] = useState<ExtractionCoverage | null>(null);
   const [forceExtractProgress, setForceExtractProgress] = useState<{ processed: number; total: number } | null>(null);
   const [lastForceExtract, setLastForceExtract] = useState<ForceExtractResult | null>(null);
+  const [kiBackfillProgress, setKiBackfillProgress] = useState<{ processed: number; total: number } | null>(null);
+  const [kiBackfillReport, setKiBackfillReport] = useState<BackfillReport | null>(null);
+  const [kiScanReport, setKiScanReport] = useState<BackfillReport | null>(null);
 
   const runAudit = useCallback(async () => {
     setLoading(true);
