@@ -537,15 +537,16 @@ export function ResourceLibraryTable({
                   const lc = lifecycleMap.get(resource.id);
 
                   return (
+                    <React.Fragment key={resource.id}>
                     <tr
-                      key={resource.id}
                       className={cn(
                         'cursor-pointer border-b border-border transition-colors hover:bg-muted/50',
                         DENSITY_ROW_CLASS[density],
                         isSelected && 'bg-primary/5',
+                        expandedId === resource.id && 'bg-muted/30 border-b-0',
                         drift.hasDrift && 'border-l-2 border-l-status-yellow',
                       )}
-                      onClick={() => onResourceClick(resource)}
+                      onClick={() => setExpandedId(prev => prev === resource.id ? null : resource.id)}
                     >
                       <td className="px-3 align-middle" onClick={e => e.stopPropagation()}>
                         <Checkbox
