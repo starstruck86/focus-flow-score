@@ -2,10 +2,10 @@
  * Prep Deal Mode — the primary execution surface.
  *
  * Sections:
- * 1. Context Input (account, stage, persona, competitor, drag-and-drop)
+ * 1. Context Input (account, stage, persona, competitor, context items)
  * 2. Suggested Actions (button grid)
  * 3. Action Execution Panel (selected action + generate)
- * 4. Output (formatted, copyable)
+ * 4. Output (formatted, copyable, with evidence + save)
  */
 
 import { useState, useCallback } from 'react';
@@ -17,6 +17,9 @@ import { ContextInputSection } from './ContextInputSection';
 import { ActionGrid, type PrepAction } from './ActionGrid';
 import { ActionExecutionPanel } from './ActionExecutionPanel';
 import { PrepOutput } from './PrepOutput';
+import { fetchRankedResources, type RankedResource } from './resourceRanking';
+import type { ContextItem } from './contextTypes';
+import type { EvidenceData } from './EvidencePanel';
 
 export function PrepDealMode() {
   const { user } = useAuth();
@@ -27,7 +30,7 @@ export function PrepDealMode() {
   const [stage, setStage] = useState('');
   const [persona, setPersona] = useState('');
   const [competitor, setCompetitor] = useState('');
-  const [contextText, setContextText] = useState('');
+  const [contextItems, setContextItems] = useState<ContextItem[]>([]);
 
   // Action state
   const [selectedAction, setSelectedAction] = useState<PrepAction | null>(null);
@@ -37,6 +40,7 @@ export function PrepDealMode() {
   const [subjectLine, setSubjectLine] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [sources, setSources] = useState<string[]>([]);
+  const [evidence, setEvidence] = useState<EvidenceData | null>(null);
 
   // Accounts
   const { data: accounts = [] } = useQuery({
@@ -57,43 +61,64 @@ export function PrepDealMode() {
     setAccountName(accounts.find(a => a.id === id)?.name || '');
   }, [accounts]);
 
+  // Combine context items into text for the prompt
+  const getContextText = useCallback(() => {
+    return contextItems
+      .map(item => {
+        if (item.type === 'image') return `[Image attached: ${item.label}]`;
+        return item.content;
+      })
+      .filter(Boolean)
+      .join('\n\n');
+  }, [contextItems]);
+
   const handleGenerate = useCallback(async () => {
-    if (!selectedAction) return;
+    if (!selectedAction || !user) return;
     setIsGenerating(true);
     setSources([]);
     setOutput('');
     setSubjectLine('');
+    setEvidence(null);
 
     try {
-      // Fetch relevant resources for context injection
-      let resourceContext = '';
-      if (user) {
-        const { data: templates } = await supabase
-          .from('execution_templates')
-          .select('title, body')
-          .eq('user_id', user.id)
-          .eq('status', 'active')
-          .order('times_used', { ascending: false })
-          .limit(3);
+      const contextText = getContextText();
 
-        const { data: knowledgeItems } = await supabase
-          .from('knowledge_items')
-          .select('title, tactic_summary, when_to_use')
-          .eq('user_id', user.id)
-          .eq('active', true)
-          .limit(5);
+      // Fetch relevance-ranked resources
+      const ranked = await fetchRankedResources({
+        userId: user.id,
+        actionId: selectedAction.id,
+        stage: stage || undefined,
+        persona: persona || undefined,
+        competitor: competitor || undefined,
+        contextText: contextText || undefined,
+      });
 
-        const parts: string[] = [];
-        if (templates?.length) {
-          parts.push('RELEVANT TEMPLATES:\n' + templates.map(t => `- ${t.title}: ${t.body.slice(0, 300)}`).join('\n'));
-        }
-        if (knowledgeItems?.length) {
-          parts.push('RELEVANT KNOWLEDGE:\n' + knowledgeItems.map(k =>
-            `- ${k.title}: ${k.tactic_summary || ''} ${k.when_to_use ? `(Use when: ${k.when_to_use})` : ''}`
-          ).join('\n'));
-        }
-        resourceContext = parts.join('\n\n');
+      // Build resource context string for the prompt
+      const resourceParts: string[] = [];
+      if (ranked.templates.length) {
+        resourceParts.push('TEMPLATES:\n' + ranked.templates.map(t =>
+          `- ${t.title} (${t.reasons.join(', ')}):\n${t.body}`
+        ).join('\n\n'));
       }
+      if (ranked.examples.length) {
+        resourceParts.push('EXAMPLES:\n' + ranked.examples.map(e =>
+          `- ${e.title} (${e.reasons.join(', ')}):\n${e.body}`
+        ).join('\n\n'));
+      }
+      if (ranked.knowledgeItems.length) {
+        resourceParts.push('KNOWLEDGE:\n' + ranked.knowledgeItems.map(k =>
+          `- ${k.title}: ${k.body}`
+        ).join('\n'));
+      }
+      const resourceContext = resourceParts.join('\n\n');
+
+      // Store evidence for display
+      setEvidence({
+        templates: ranked.templates,
+        examples: ranked.examples,
+        knowledgeItems: ranked.knowledgeItems,
+        contextItems,
+      });
 
       const { data, error } = await supabase.functions.invoke('generate-execution-draft', {
         body: {
@@ -121,7 +146,7 @@ export function PrepDealMode() {
     } finally {
       setIsGenerating(false);
     }
-  }, [selectedAction, accountName, stage, persona, competitor, contextText, user]);
+  }, [selectedAction, accountName, stage, persona, competitor, contextItems, user, getContextText]);
 
   return (
     <div className="space-y-5">
@@ -136,8 +161,8 @@ export function PrepDealMode() {
         onPersonaChange={setPersona}
         competitor={competitor}
         onCompetitorChange={setCompetitor}
-        contextText={contextText}
-        onContextTextChange={setContextText}
+        contextItems={contextItems}
+        onContextItemsChange={setContextItems}
       />
 
       {/* Section 2: Actions */}
@@ -165,6 +190,9 @@ export function PrepDealMode() {
         sources={sources}
         isGenerating={isGenerating}
         onRegenerate={handleGenerate}
+        evidence={evidence}
+        actionLabel={selectedAction?.label || ''}
+        accountName={accountName}
       />
     </div>
   );
