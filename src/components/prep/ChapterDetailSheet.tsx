@@ -94,11 +94,31 @@ export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, 
               </Button>
             )}
           </div>
-          <div className="flex gap-2 text-xs text-muted-foreground">
+          <div className="flex gap-2 text-xs text-muted-foreground flex-wrap">
             <span>{items.length} items</span>
             <span>·</span>
             <span className="text-emerald-600">{activeCount} active</span>
+            {contextCount > 0 && (
+              <>
+                <span>·</span>
+                <span>{contextCount} available to Dave</span>
+              </>
+            )}
+            {lastUpdated && (
+              <>
+                <span>·</span>
+                <span>Updated {new Date(lastUpdated).toLocaleDateString()}</span>
+              </>
+            )}
           </div>
+
+          {/* Knowledge grounding indicator */}
+          {activeCount > 0 && (
+            <div className="mt-1 flex items-center gap-1.5 text-[10px] text-primary">
+              <CheckCircle2 className="h-3 w-3" />
+              <span>Dave will use {activeCount} active items when you practice this chapter</span>
+            </div>
+          )}
         </SheetHeader>
 
         <ScrollArea className="h-[calc(100vh-100px)]">
