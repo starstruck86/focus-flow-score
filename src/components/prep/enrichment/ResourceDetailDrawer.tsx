@@ -660,7 +660,12 @@ export function ResourceDetailDrawer({ resource: r, onClose, onResourceUpdated }
       {/* Mobile sticky primary action */}
       {isMobile && (
         <div className="sticky bottom-0 px-4 py-3 border-t border-border bg-background safe-area-pb">
-          {canFix ? (
+          {isNotionSource && (r as any).resolution_method !== 'notion_zip_split' ? (
+            <Button className="w-full h-12 text-sm gap-2 min-h-[48px]" disabled={splitting || !!activeAction || !currentUserId} onClick={handleRebuildNotion}>
+              {splitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderTree className="h-4 w-4" />}
+              {splitting ? splitProgress : 'Rebuild Notion Import'}
+            </Button>
+          ) : canFix ? (
             <Button className="w-full h-12 text-sm gap-2 min-h-[48px]" disabled={!!activeAction} onClick={() => runAction('fix_resource')}>
               {activeAction === 'fix_resource' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
               {activeAction === 'fix_resource' ? 'Fixing…' : 'Fix Resource'}
