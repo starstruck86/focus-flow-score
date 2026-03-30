@@ -91,21 +91,48 @@ export function cleanNotionTitle(filename: string, content?: string): string {
 
 // ── Content Quality Filter ───────────────────────────────────
 
+/**
+ * Checks if content is meaningful enough to create a resource.
+ * Reusable for both import-time filtering and post-hoc junk detection.
+ */
 export function passesQualityCheck(content: string): boolean {
+  return isMeaningfulNotionPage(content);
+}
+
+/**
+ * Core heuristic: is this enough real content to be a useful resource?
+ * Used at import time to skip junk, and post-import to identify junk children.
+ */
+export function isMeaningfulNotionPage(content: string): boolean {
   const trimmed = content.trim();
+
+  // Hard minimum: must have at least 200 chars
   if (trimmed.length < MIN_CONTENT_LENGTH) return false;
 
+  // Must have enough words
   const words = trimmed.split(/\s+/).filter(w => w.length > 0);
   if (words.length < MIN_WORD_COUNT) return false;
 
-  // Check alphabetic ratio
+  // Must have enough alphabetic characters (not just symbols/numbers)
   const alphaChars = (trimmed.match(/[a-zA-Z]/g) || []).length;
+  if (alphaChars < 50) return false;
   if (trimmed.length > 0 && alphaChars / trimmed.length < MIN_ALPHA_RATIO) return false;
 
-  // Skip mostly-heading pages (>80% lines are headings or empty)
+  // Skip mostly-heading / separator / empty pages (>80% noise lines)
   const lines = trimmed.split('\n');
-  const noiseLines = lines.filter(l => /^#{1,6}\s/.test(l.trim()) || /^#{1,6}\s*$/.test(l.trim()) || l.trim() === '' || /^[-=_*]{3,}$/.test(l.trim()));
+  const noiseLines = lines.filter(l => {
+    const t = l.trim();
+    return t === ''
+      || /^#{1,6}\s/.test(t)
+      || /^#{1,6}\s*$/.test(t)
+      || /^[-=_*]{3,}$/.test(t)
+      || /^>\s*$/.test(t); // empty blockquotes
+  });
   if (lines.length > 3 && noiseLines.length / lines.length > 0.8) return false;
+
+  // Must have at least some real sentence-like content (lines with 20+ chars)
+  const substantiveLines = lines.filter(l => l.trim().length >= 20 && !/^#{1,6}\s/.test(l.trim()));
+  if (substantiveLines.length < 2) return false;
 
   return true;
 }
@@ -499,7 +526,7 @@ export async function importNotionZipDirect(
   }
 }
 
-// ── Cleanup: delete children from an import group ────────────
+// ── Cleanup: delete ALL children from an import group ────────
 
 export async function deleteImportGroupChildren(
   importGroupId: string,
@@ -517,15 +544,105 @@ export async function deleteImportGroupChildren(
   if (!children?.length) return { deleted: 0, errors: [] };
 
   const ids = children.map((c: any) => c.id);
+  return batchDeleteResources(ids);
+}
+
+// ── Cleanup: delete JUNK children only ──────────────────────
+
+const NOTION_CHILD_METHODS = [
+  'notion_zip_split',
+  'notion_zip_page_import',
+  'notion_zip_database_import',
+  'notion_zip_page_chunk',
+];
+
+/**
+ * Finds junk Notion child resources from a given source/import group.
+ * Returns IDs of resources that are clearly junk based on content quality.
+ */
+export async function findJunkNotionChildren(
+  userId: string,
+  importGroupId?: string | null,
+): Promise<{ junkIds: string[]; totalChildren: number; error?: string }> {
+  // Build query for Notion children
+  let query = (supabase as any)
+    .from('resources')
+    .select('id, content_length, content, resolution_method, extraction_method, enrichment_status, manual_input_required, file_url')
+    .eq('user_id', userId)
+    .neq('resolution_method', 'notion_zip_source_archive');
+
+  // Scope to import group if known
+  if (importGroupId) {
+    query = query.contains('tags', [`notion-group:${importGroupId}`]);
+  } else {
+    // Fallback: match by resolution/extraction method
+    query = query.or(
+      NOTION_CHILD_METHODS.map(m => `resolution_method.eq.${m}`).join(',') + ',' +
+      NOTION_CHILD_METHODS.map(m => `extraction_method.eq.${m}`).join(',')
+    );
+  }
+
+  const { data: children, error } = await query;
+  if (error) return { junkIds: [], totalChildren: 0, error: error.message };
+  if (!children?.length) return { junkIds: [], totalChildren: 0 };
+
+  const junkIds: string[] = [];
+  for (const child of children) {
+    const len = child.content_length ?? 0;
+    const content = child.content ?? '';
+
+    // Clearly junk: very short content
+    if (len < 200) {
+      junkIds.push(child.id);
+      continue;
+    }
+
+    // Run quality check on actual content if available
+    if (content && !isMeaningfulNotionPage(content)) {
+      junkIds.push(child.id);
+      continue;
+    }
+  }
+
+  return { junkIds, totalChildren: children.length };
+}
+
+/**
+ * Deletes junk Notion children and their related records.
+ */
+export async function deleteJunkNotionChildren(
+  userId: string,
+  importGroupId?: string | null,
+): Promise<{ deleted: number; preserved: number; errors: string[] }> {
+  const { junkIds, totalChildren, error } = await findJunkNotionChildren(userId, importGroupId);
+  if (error) return { deleted: 0, preserved: totalChildren, errors: [error] };
+  if (junkIds.length === 0) return { deleted: 0, preserved: totalChildren, errors: [] };
+
+  // Clean up related records first (best-effort)
+  for (const table of ['enrichment_attempts', 'intelligence_units', 'knowledge_signals'] as const) {
+    try {
+      for (let i = 0; i < junkIds.length; i += BATCH_SIZE) {
+        await (supabase as any).from(table).delete().in('resource_id', junkIds.slice(i, i + BATCH_SIZE));
+      }
+    } catch { /* non-fatal */ }
+  }
+
+  const result = await batchDeleteResources(junkIds);
+  return { deleted: result.deleted, preserved: totalChildren - junkIds.length, errors: result.errors };
+}
+
+async function batchDeleteResources(ids: string[]): Promise<{ deleted: number; errors: string[] }> {
   const errs: string[] = [];
+  let deleted = 0;
 
   for (let i = 0; i < ids.length; i += BATCH_SIZE) {
     const batch = ids.slice(i, i + BATCH_SIZE);
     const { error } = await supabase.from('resources').delete().in('id', batch);
     if (error) errs.push(error.message);
+    else deleted += batch.length;
   }
 
-  return { deleted: ids.length - (errs.length * BATCH_SIZE), errors: errs };
+  return { deleted, errors: errs };
 }
 
 // ── Detect import group from a resource ──────────────────────

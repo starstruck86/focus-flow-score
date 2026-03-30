@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, Eye, FolderTree, Wrench, Edit3, Loader2 } from 'lucide-react';
+import { ArrowLeft, Eye, FolderTree, Wrench, Edit3, Loader2, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/contexts/AuthContext';
@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { ContentViewer } from '@/components/prep/ContentViewer';
 import { isNotionZipResource, splitNotionImport } from '@/lib/notionZipSplitter';
-import { isNotionSourceArchive, isNotionDirectImport, getImportGroupId, deleteImportGroupChildren } from '@/lib/notionDirectImporter';
+import { isNotionSourceArchive, isNotionDirectImport, getImportGroupId, deleteImportGroupChildren, deleteJunkNotionChildren } from '@/lib/notionDirectImporter';
 import { isFixEligible, fixResourceStateFromContent, FIX_RESOURCE_INVALIDATION_KEYS } from '@/lib/fixResourceState';
 import { deriveProcessingState } from '@/lib/processingState';
 import type { Resource } from '@/hooks/useResources';
@@ -66,6 +66,7 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
   const [splitting, setSplitting] = useState(false);
   const [splitProgress, setSplitProgress] = useState('');
   const [fixing, setFixing] = useState(false);
+  const [deletingJunk, setDeletingJunk] = useState(false);
   const [hydrated, setHydrated] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
@@ -99,6 +100,8 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
   const hasContent = contentLength > 0 || r.manual_content_present;
   const showNotionCTA = isNotionSource(r);
   const showFixCTA = !loading && isFixEligible(r);
+  const isArchive = isNotionSourceArchive(r);
+  const showDeleteJunkCTA = !loading && (isArchive || isNotionSource(r));
 
   const handleSplit = async () => {
     if (!user?.id) return;
@@ -134,6 +137,26 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
       toast.error(e.message || 'Fix failed');
     } finally {
       setFixing(false);
+    }
+  };
+  const handleDeleteJunk = async () => {
+    if (!user?.id) return;
+    const groupId = getImportGroupId(r);
+    if (!confirm('Delete junk Notion resources from this import? Valid resources will be preserved.')) return;
+    setDeletingJunk(true);
+    try {
+      const result = await deleteJunkNotionChildren(user.id, groupId);
+      if (result.errors.length > 0) {
+        toast.error(`Partial cleanup: ${result.errors[0]}`);
+      } else {
+        toast.success(`Deleted ${result.deleted} junk Notion resources, preserved ${result.preserved} valid`);
+      }
+      FIX_RESOURCE_INVALIDATION_KEYS.forEach(k => qc.invalidateQueries({ queryKey: k }));
+      onResourceUpdated?.();
+    } catch (e: any) {
+      toast.error(e.message || 'Cleanup failed');
+    } finally {
+      setDeletingJunk(false);
     }
   };
 
@@ -215,6 +238,21 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
               >
                 {fixing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
                 {fixing ? 'Fixing…' : 'Fix Resource'}
+              </Button>
+            </div>
+          )}
+
+          {/* Delete Junk Notion Resources CTA */}
+          {showDeleteJunkCTA && (
+            <div className="px-4 pt-2 shrink-0">
+              <Button
+                className="w-full min-h-[44px] gap-2"
+                variant="outline"
+                onClick={handleDeleteJunk}
+                disabled={deletingJunk}
+              >
+                {deletingJunk ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                {deletingJunk ? 'Cleaning up…' : 'Delete Junk Notion Resources'}
               </Button>
             </div>
           )}
