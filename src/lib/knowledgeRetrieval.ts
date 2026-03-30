@@ -40,7 +40,7 @@ export async function queryKnowledge(query: KnowledgeQuery = {}): Promise<Knowle
   if (competitor) q = q.eq('competitor_name', competitor);
   if (productArea) q = q.eq('product_area', productArea);
   if (context) q = q.contains('applies_to_contexts', [context]);
-
+  if (tags?.length) q = q.contains('tags', tags);
   const { data, error } = await q;
   if (error) {
     log.error('Knowledge query failed', { error });
