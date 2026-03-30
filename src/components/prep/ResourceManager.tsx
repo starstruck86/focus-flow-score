@@ -22,6 +22,7 @@ import { Zap, RefreshCw, RotateCcw,
   GraduationCap, MessageSquare, Loader2, Check, X, AlertTriangle, Globe, Radar, ListVideo, Podcast,
 } from 'lucide-react';
 import { ResourceLibraryTable } from './ResourceLibraryTable';
+import { LibraryResourceDrawer } from './LibraryResourceDrawer';
 import { ResourceAudioInspector } from './ResourceAudioInspector';
 import { ManualTranscriptAssist } from './ManualTranscriptAssist';
 import { cn } from '@/lib/utils';
@@ -143,6 +144,7 @@ export function ResourceManager() {
   const [showDeepEnrich, setShowDeepEnrich] = useState(false);
   const [inspectingAudioResource, setInspectingAudioResource] = useState<Resource | null>(null);
   const [manualAssistResource, setManualAssistResource] = useState<Resource | null>(null);
+  const [drawerResource, setDrawerResource] = useState<Resource | null>(null);
 
   // AI Generate / Transform states
   const [showAIGenerate, setShowAIGenerate] = useState(false);
@@ -446,11 +448,7 @@ export function ResourceManager() {
   };
 
   const handleResourceClick = (resource: Resource) => {
-    if (resource.file_url) {
-      setViewingResource(resource);
-    } else {
-      setEditingResource(resource);
-    }
+    setDrawerResource(resource);
   };
 
   if (editingResource) {
@@ -1206,6 +1204,21 @@ export function ResourceManager() {
       />
 
       {/* Bulk selection bar moved into ResourceLibraryTable */}
+
+      {/* Library resource detail drawer */}
+      {drawerResource && (
+        <LibraryResourceDrawer
+          resource={drawerResource}
+          open={!!drawerResource}
+          onOpenChange={(open) => { if (!open) setDrawerResource(null); }}
+          onEdit={() => { setEditingResource(drawerResource); setDrawerResource(null); }}
+          onResourceUpdated={() => {
+            queryClient.invalidateQueries({ queryKey: ['resources'] });
+            queryClient.invalidateQueries({ queryKey: ['all-resources'] });
+            queryClient.invalidateQueries({ queryKey: ['resource-folders'] });
+          }}
+        />
+      )}
     </div>
   );
 }
