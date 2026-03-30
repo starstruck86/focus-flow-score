@@ -43,7 +43,10 @@ export function isFixEligible(resource: any): boolean {
   // Also eligible if score is high but status doesn't reflect it
   const highScoreBlocked = (resource.last_quality_score ?? 0) >= 80 && isBlockedStatus;
 
-  return isBlockedStatus || hasBlockerFields || highScoreBlocked;
+  // Eligible if has valid content but score is 0/null (needs rescoring)
+  const zeroScoreWithContent = hasValidContent && (resource.last_quality_score == null || resource.last_quality_score === 0);
+
+  return isBlockedStatus || hasBlockerFields || highScoreBlocked || zeroScoreWithContent;
 }
 
 // ── Fix a single resource ─────────────────────────────────
