@@ -385,9 +385,9 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
 
                 {/* ── Bucket summary stats ── */}
                 <div className="grid grid-cols-4 gap-1.5">
-                  <MiniStat label="Operationalized" value={audit.counts.operationalized} accent="emerald" />
-                  <MiniStat label="Extractable" value={audit.counts.extractable_not_operationalized} accent="blue" />
-                  <MiniStat label="Needs Fix" value={audit.counts.content_backed_needs_fix} accent="orange" />
+                  <MiniStat label="Ready to Use" value={audit.counts.operationalized} accent="emerald" />
+                  <MiniStat label="Needs Extraction" value={audit.counts.extractable_not_operationalized} accent="blue" />
+                  <MiniStat label="Needs Review" value={audit.counts.content_backed_needs_fix} accent="orange" />
                   <MiniStat label="Underutilized" value={underutilizedCount} accent="amber" />
                 </div>
 
