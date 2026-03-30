@@ -143,6 +143,7 @@ export function ResourceManager() {
   const [showDeepEnrich, setShowDeepEnrich] = useState(false);
   const [inspectingAudioResource, setInspectingAudioResource] = useState<Resource | null>(null);
   const [manualAssistResource, setManualAssistResource] = useState<Resource | null>(null);
+  const [drawerResource, setDrawerResource] = useState<Resource | null>(null);
 
   // AI Generate / Transform states
   const [showAIGenerate, setShowAIGenerate] = useState(false);
