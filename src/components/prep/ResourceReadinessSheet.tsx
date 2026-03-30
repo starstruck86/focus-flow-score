@@ -469,6 +469,10 @@ function getBottleneckLabel(r: AuditedResource): { text: string; color: string }
 function ResourceRow({ resource: r }: { resource: AuditedResource }) {
   const tagGroups = groupTagsByDimension(r.tags);
   const bottleneck = getBottleneckLabel(r);
+  const pipelineStage = derivePipelineStage(
+    { content_length: r.contentLength, tags: r.tags, enrichment_status: r.enrichmentStatus },
+    { total: r.knowledgeItemCount, active: r.activeKnowledgeCount, hasContexts: r.hasContexts },
+  );
 
   // Separate tags by tier for display
   const requiredTags: Array<[TagDimension, string[]]> = [];
