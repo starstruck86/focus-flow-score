@@ -257,6 +257,7 @@ export function LibraryResourceDrawer({ resource, open, onOpenChange, onEdit, on
             </div>
           )}
 
+          <ScrollArea className="flex-1 min-h-0">
             <div className="p-4 space-y-3">
               {/* View Content */}
               {hasContent && (
