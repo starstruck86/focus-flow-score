@@ -75,7 +75,10 @@ export async function fixResourceStateFromContent(
   const manualPresent = resource.manual_content_present === true;
   const actualContent = typeof resource.content === 'string' ? resource.content.trim().length : 0;
   const effectiveLength = Math.max(contentLength, actualContent);
-  const hasValidContent = effectiveLength > 1000 || manualPresent;
+  const rm = resource.resolution_method || resource.extraction_method || '';
+  const isNotion = typeof rm === 'string' && rm.startsWith('notion_zip_');
+  const threshold = isNotion ? 200 : 1000;
+  const hasValidContent = effectiveLength > threshold || manualPresent;
 
   if (!hasValidContent) {
     return { success: false, message: 'No valid content found (need >1000 chars or manual content)', fieldsCleared: [] };
