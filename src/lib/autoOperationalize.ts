@@ -242,10 +242,27 @@ export async function autoOperationalizeResource(
       activatable: extracted.filter(e => (e.confidence_score ?? 0) >= AUTO_ACTIVATE_CONFIDENCE).length,
     });
 
-    if (extracted.length > 0) {
+    // LLM fallback if heuristic returned 0 items
+    let finalExtracted = extracted;
+    if (extracted.length === 0 && contentForExtraction.length >= 100) {
+      log.info('Heuristic returned 0, running LLM fallback', { resourceId });
+      try {
+        const llmItems = await extractKnowledgeLLMFallback(source);
+        if (llmItems.length > 0) {
+          finalExtracted = llmItems;
+          log.info('LLM fallback produced items', { resourceId, count: llmItems.length });
+        } else {
+          log.warn('LLM fallback also returned 0 items', { resourceId });
+        }
+      } catch (err) {
+        log.warn('LLM fallback failed', { resourceId, error: err });
+      }
+    }
+
+    if (finalExtracted.length > 0) {
       const { data: inserted, error: insErr } = await supabase
         .from('knowledge_items' as any)
-        .insert(extracted as any)
+        .insert(finalExtracted as any)
         .select('id, active, applies_to_contexts, confidence_score, user_edited, tactic_summary, chapter, tags');
 
       if (!insErr && inserted) {
@@ -256,7 +273,7 @@ export async function autoOperationalizeResource(
         log.warn('Failed to insert extracted knowledge', { resourceId, error: insErr.message });
       }
     } else {
-      log.warn('Extraction returned 0 items', { resourceId, contentLength: contentForExtraction.length });
+      log.warn('Both heuristic and LLM extraction returned 0 items', { resourceId, contentLength: contentForExtraction.length });
     }
   } else if (hasExistingKI) {
     knowledgeExtracted = existingItems.length;
