@@ -206,7 +206,7 @@ export async function autoOperationalizeResource(
   const existingItems = (existingKI ?? []) as any[];
   const hasExistingKI = existingItems.length > 0;
 
-  if (!hasExistingKI && contentLength >= MIN_CONTENT_FOR_EXTRACTION) {
+  if (!hasExistingKI && effectiveLength >= MIN_CONTENT_FOR_EXTRACTION) {
     // Extract knowledge heuristically
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData?.user?.id;
@@ -214,17 +214,34 @@ export async function autoOperationalizeResource(
       return makeResult(resourceId, r.title, stagesCompleted, 'tagged', tagsAdded, 0, 0, false, true, 'User not authenticated');
     }
 
+    // Guard: ensure content is actually present (content_length may be stale)
+    const contentForExtraction = r.content || '';
+    if (contentForExtraction.length < 100) {
+      log.warn('Content field empty/truncated despite content_length', {
+        resourceId, content_length: r.content_length, actual: contentForExtraction.length,
+      });
+      needsReview = true;
+      reason = `Content field empty (${contentForExtraction.length} chars actual) despite content_length=${r.content_length} — re-enrich needed`;
+      return makeResult(resourceId, r.title, stagesCompleted, 'tagged', tagsAdded, 0, 0, false, true, reason);
+    }
+
     const source: ExtractionSource = {
       resourceId,
       userId,
       title: r.title,
-      content: r.content,
+      content: contentForExtraction,
       description: r.description,
       tags: allTags,
       resourceType: r.resource_type ?? 'document',
     };
 
     const extracted = extractKnowledgeHeuristic(source);
+    log.info('Extraction result', {
+      resourceId, hasExistingKI, extracted: extracted.length,
+      contentPassed: contentForExtraction.length,
+      activatable: extracted.filter(e => (e.confidence_score ?? 0) >= AUTO_ACTIVATE_CONFIDENCE).length,
+    });
+
     if (extracted.length > 0) {
       const { data: inserted, error: insErr } = await supabase
         .from('knowledge_items' as any)
@@ -235,7 +252,11 @@ export async function autoOperationalizeResource(
         knowledgeExtracted = inserted.length;
         existingItems.push(...(inserted as any[]));
         log.info('Extracted knowledge items', { resourceId, count: knowledgeExtracted });
+      } else if (insErr) {
+        log.warn('Failed to insert extracted knowledge', { resourceId, error: insErr.message });
       }
+    } else {
+      log.warn('Extraction returned 0 items', { resourceId, contentLength: contentForExtraction.length });
     }
   } else if (hasExistingKI) {
     knowledgeExtracted = existingItems.length;
