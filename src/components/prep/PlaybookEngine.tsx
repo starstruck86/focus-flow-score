@@ -374,6 +374,12 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
         open={extractOpen}
         onOpenChange={setExtractOpen}
       />
+
+      {/* Resource Readiness sheet */}
+      <ResourceReadinessSheet
+        open={readinessOpen}
+        onOpenChange={setReadinessOpen}
+      />
     </div>
   );
 });
