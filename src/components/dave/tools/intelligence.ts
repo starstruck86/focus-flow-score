@@ -8,6 +8,7 @@ import { citeInsight, knowledgeTrends, insightReliability, recommendStrategy, re
 import { getPlaybookRecommendation } from './intelligence/playbooks';
 import { startPlaybookRoleplay, endPlaybookRoleplay } from './intelligence/playbookRoleplay';
 import { getActivePlaybookKnowledge, getPlaybookKnowledgeForRoleplay } from './intelligence/playbookKnowledge';
+import { explainRoleplayPlan } from './intelligence/roleplayPlan';
 import { createAccountExecutionTools } from './intelligence/accountExecution';
 import { createAccountCentricTools } from './intelligence/accountCentric';
 import { createExecutionSessionTools } from './intelligence/executionSession';
