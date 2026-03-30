@@ -1111,13 +1111,13 @@ function buildSweepGuidance(audit: AuditSummary): string[] {
 // ── Bottleneck label ───────────────────────────────────────
 
 function getBottleneckLabel(r: AuditedResource): { text: string; color: string } {
-  if (r.bucket === 'operationalized') return { text: 'Fully operationalized', color: 'text-emerald-600' };
-  if (r.activeKnowledgeCount > 0 && !r.hasContexts) return { text: 'Active, missing contexts', color: 'text-orange-500' };
-  if (r.knowledgeItemCount > 0 && r.activeKnowledgeCount === 0) return { text: 'Extracted, not activated', color: 'text-blue-500' };
-  if (r.bucket === 'content_backed_needs_fix') return { text: 'Content-backed but blocked', color: 'text-orange-500' };
-  if (r.bucket === 'extractable_not_operationalized' && r.knowledgeItemCount === 0) return { text: 'Ready for extraction', color: 'text-blue-500' };
+  if (r.bucket === 'operationalized') return { text: 'Ready to use', color: 'text-emerald-600' };
+  if (r.activeKnowledgeCount > 0 && !r.hasContexts) return { text: 'Needs context repair', color: 'text-orange-500' };
+  if (r.knowledgeItemCount > 0 && r.activeKnowledgeCount === 0) return { text: 'Needs activation', color: 'text-blue-500' };
+  if (r.bucket === 'content_backed_needs_fix') return { text: 'Needs review', color: 'text-orange-500' };
+  if (r.bucket === 'extractable_not_operationalized' && r.knowledgeItemCount === 0) return { text: 'Needs extraction', color: 'text-blue-500' };
   if (r.bucket === 'needs_tagging') return { text: 'Needs tagging', color: 'text-amber-500' };
-  if (r.bucket === 'junk_or_low_signal') return { text: 'Low signal', color: 'text-muted-foreground' };
+  if (r.bucket === 'junk_or_low_signal') return { text: 'Low value', color: 'text-muted-foreground' };
   if (r.bucket === 'ready') return { text: 'Ready', color: 'text-primary' };
   return { text: r.bucket.replace(/_/g, ' '), color: 'text-muted-foreground' };
 }
