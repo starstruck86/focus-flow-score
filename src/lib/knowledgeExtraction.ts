@@ -8,6 +8,7 @@
 import type { KnowledgeItemInsert } from '@/hooks/useKnowledgeItems';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { createLogger } from '@/lib/logger';
+import { inferTags, mergeTags } from '@/lib/resourceTags';
 
 const log = createLogger('KnowledgeExtraction');
 
