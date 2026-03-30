@@ -53,6 +53,10 @@ export function ChapterDetailSheet({ chapter, open, onOpenChange, onSelectItem, 
   if (!chapter) return null;
 
   const activeCount = items.filter(i => i.active).length;
+  const contextCount = items.filter(i => i.active && i.applies_to_contexts?.length > 0).length;
+  const lastUpdated = items.length > 0
+    ? items.reduce((latest, i) => i.updated_at > latest ? i.updated_at : latest, items[0].updated_at)
+    : null;
 
   const handleActivate = (item: KnowledgeItem) => {
     update.mutate({
