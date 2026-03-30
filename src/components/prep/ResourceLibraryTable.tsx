@@ -66,7 +66,10 @@ interface ResourceLibraryTableProps {
 // so we use heuristic filters that approximate canonical states
 // Helper: resource has substantial content and should not appear in blocked views
 function hasSubstantialContent(r: Resource): boolean {
-  return ((r as any).content_length ?? 0) > 1000 || (r as any).manual_content_present === true;
+  const rm = (r as any).resolution_method;
+  const isNotion = typeof rm === 'string' && rm.startsWith('notion_zip_');
+  const threshold = isNotion ? 200 : 1000;
+  return ((r as any).content_length ?? 0) > threshold || (r as any).manual_content_present === true;
 }
 
 const SAVED_VIEWS: SavedView[] = [
