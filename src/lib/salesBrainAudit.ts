@@ -1,8 +1,8 @@
 /**
  * Sales Brain — Full System Audit
  *
- * Pipeline integrity, knowledge utilization, and system metrics.
- * Provides actionable diagnostics for the entire resource → knowledge → usage chain.
+ * Pipeline integrity, knowledge utilization, system metrics,
+ * invariant checks, resource/KI funnels, usage proof, root cause grouping.
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -53,7 +53,6 @@ export async function auditPipelineIntegrity(): Promise<PipelineIntegrityResult>
   const items = (resources ?? []) as any[];
   const kiList = (allKI ?? []) as any[];
 
-  // Index KI by resource
   const kiByResource = new Map<string, any[]>();
   for (const ki of kiList) {
     if (!ki.source_resource_id) continue;
@@ -112,16 +111,12 @@ export async function auditPipelineIntegrity(): Promise<PipelineIntegrityResult>
       entry.recommendation = 'Add contexts (dave, roleplay, prep) to active items';
       result.activated_but_not_retrievable.push(entry);
     } else if (stage === 'operationalized') {
-      // Check if any active KI has been recently created (proxy for "used")
       result.fully_utilized.push(entry);
     }
 
-    // Inconsistency: has active KI but resource is marked failed/junk
     if (activeKIs.length > 0 && (r.enrichment_status === 'failed' || r.enrichment_status === 'not_enriched')) {
       result.inconsistent_state.push({
-        id: r.id,
-        title: r.title,
-        stage,
+        id: r.id, title: r.title, stage,
         issue: `Resource status is '${r.enrichment_status}' but has ${activeKIs.length} active KI(s)`,
         recommendation: 'Update enrichment_status to reflect actual state',
       });
@@ -195,17 +190,10 @@ export async function auditKnowledgeUtilization(): Promise<KnowledgeUtilResult> 
     items: [],
     summary: {
       total_active: items.length,
-      never_used: 0,
-      rarely_used: 0,
-      used_in_prep_only: 0,
-      used_in_roleplay_only: 0,
-      used_by_dave_only: 0,
-      fully_utilized: 0,
-      not_retrievable: 0,
-      low_confidence: 0,
-      by_chapter: {},
-      unused_reasons: {},
-      most_used: [],
+      never_used: 0, rarely_used: 0, used_in_prep_only: 0,
+      used_in_roleplay_only: 0, used_by_dave_only: 0,
+      fully_utilized: 0, not_retrievable: 0, low_confidence: 0,
+      by_chapter: {}, unused_reasons: {}, most_used: [],
     },
   };
 
@@ -285,22 +273,13 @@ export async function auditKnowledgeUtilization(): Promise<KnowledgeUtilResult> 
     result.summary[classification]++;
 
     result.items.push({
-      id: ki.id,
-      title: ki.title,
-      chapter: ki.chapter,
-      confidence_score: conf,
-      knowledge_type: ki.knowledge_type,
-      competitor_name: ki.competitor_name,
-      applies_to_contexts: contexts,
-      tags,
-      classification,
-      issue,
-      recommendation,
-      usage,
+      id: ki.id, title: ki.title, chapter: ki.chapter,
+      confidence_score: conf, knowledge_type: ki.knowledge_type,
+      competitor_name: ki.competitor_name, applies_to_contexts: contexts,
+      tags, classification, issue, recommendation, usage,
     });
   }
 
-  // Most-used items
   result.summary.most_used = result.items
     .filter(i => i.usage && i.usage.total_count > 0)
     .sort((a, b) => (b.usage?.total_count ?? 0) - (a.usage?.total_count ?? 0))
@@ -337,17 +316,15 @@ export interface SystemMetrics {
   pipeline: {
     auto_activated_count: number;
     avg_confidence: number;
-    coverage_pct: number; // % of content-backed resources that are operationalized
+    coverage_pct: number;
   };
 }
 
 export async function getSystemMetrics(): Promise<SystemMetrics> {
-  // Fetch resources
   const { data: resources } = await supabase
     .from('resources')
     .select('id, content_length, manual_content_present, tags, enrichment_status, content');
 
-  // Fetch knowledge items
   const { data: allKI } = await supabase
     .from(KI_TABLE)
     .select('id, source_resource_id, active, status, confidence_score, chapter, knowledge_type, applies_to_contexts, tags, activation_metadata');
@@ -355,7 +332,6 @@ export async function getSystemMetrics(): Promise<SystemMetrics> {
   const rList = (resources ?? []) as any[];
   const kiList = (allKI ?? []) as any[];
 
-  // Index KI by resource
   const kiByResource = new Map<string, any[]>();
   for (const ki of kiList) {
     if (ki.source_resource_id) {
@@ -364,7 +340,6 @@ export async function getSystemMetrics(): Promise<SystemMetrics> {
     }
   }
 
-  // Resource metrics
   let contentBacked = 0, enriched = 0, tagged = 0, withKnowledge = 0, operationalized = 0, stalled = 0;
   const byStage: Record<PipelineStage, number> = { uploaded: 0, content_ready: 0, tagged: 0, knowledge_extracted: 0, activated: 0, operationalized: 0 };
 
@@ -394,7 +369,6 @@ export async function getSystemMetrics(): Promise<SystemMetrics> {
     if (isCB && stage !== 'operationalized' && stage !== 'uploaded') stalled++;
   }
 
-  // Knowledge metrics
   const activeKIs = kiList.filter((k: any) => k.active);
   const extractedPending = kiList.filter((k: any) => k.status === 'extracted').length;
   const reviewNeeded = kiList.filter((k: any) => k.status === 'review_needed').length;
@@ -418,30 +392,560 @@ export async function getSystemMetrics(): Promise<SystemMetrics> {
   const coveragePct = contentBacked > 0 ? (operationalized / contentBacked) * 100 : 0;
 
   return {
-    resources: {
-      total: rList.length,
-      content_backed: contentBacked,
-      enriched,
-      tagged,
-      with_knowledge: withKnowledge,
-      operationalized,
-      stalled,
-      by_stage: byStage,
-    },
-    knowledge: {
-      total: kiList.length,
-      active: activeKIs.length,
-      extracted_pending: extractedPending,
-      review_needed: reviewNeeded,
-      stale: staleKI,
-      retrievable,
-      by_chapter: byChapter,
-      by_type: byType,
-    },
-    pipeline: {
-      auto_activated_count: autoActivated,
-      avg_confidence: Math.round(avgConfidence * 100) / 100,
-      coverage_pct: Math.round(coveragePct * 10) / 10,
-    },
+    resources: { total: rList.length, content_backed: contentBacked, enriched, tagged, with_knowledge: withKnowledge, operationalized, stalled, by_stage: byStage },
+    knowledge: { total: kiList.length, active: activeKIs.length, extracted_pending: extractedPending, review_needed: reviewNeeded, stale: staleKI, retrievable, by_chapter: byChapter, by_type: byType },
+    pipeline: { auto_activated_count: autoActivated, avg_confidence: Math.round(avgConfidence * 100) / 100, coverage_pct: Math.round(coveragePct * 10) / 10 },
   };
+}
+
+// ══════════════════════════════════════════════════════════════
+// ── INVARIANT CHECK ──────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+export type InvariantClass =
+  | 'operationalized'
+  | 'blocked_by_empty_content'
+  | 'blocked_by_no_extraction'
+  | 'blocked_by_activation_criteria'
+  | 'blocked_by_missing_contexts'
+  | 'blocked_by_stale_blocker_state'
+  | 'invariant_violation';
+
+export interface InvariantExample {
+  id: string;
+  title: string;
+  contentLengthField: number;
+  actualContentLength: number;
+  kiCount: number;
+  activeKiCount: number;
+  activeWithContextsCount: number;
+  assignedClasses: string[];
+  reason: string;
+}
+
+export interface InvariantCheckResult {
+  totalContentBackedEnriched: number;
+  byClass: Record<InvariantClass, number>;
+  violations: InvariantExample[];
+  healthy: boolean;
+}
+
+export async function runInvariantCheck(): Promise<InvariantCheckResult> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+  if (!userId) return { totalContentBackedEnriched: 0, byClass: emptyInvariantCounts(), violations: [], healthy: true };
+
+  const { data: res } = await supabase.from('resources')
+    .select('id, title, content_length, content, enrichment_status, manual_input_required, recovery_queue_bucket, failure_reason')
+    .eq('user_id', userId);
+
+  const { data: kiData } = await supabase.from(KI_TABLE)
+    .select('source_resource_id, active, applies_to_contexts')
+    .eq('user_id', userId);
+
+  const resList = (res ?? []) as any[];
+  const kiList = (kiData ?? []) as any[];
+  const enrichedStatuses = ['enriched', 'deep_enriched', 'verified'];
+
+  const kiByResource = new Map<string, any[]>();
+  for (const ki of kiList) {
+    if (ki.source_resource_id) {
+      const arr = kiByResource.get(ki.source_resource_id) ?? [];
+      arr.push(ki);
+      kiByResource.set(ki.source_resource_id, arr);
+    }
+  }
+
+  const counts = emptyInvariantCounts();
+  const violations: InvariantExample[] = [];
+
+  // Only check enriched, content-backed resources
+  const eligible = resList.filter(r => {
+    if (!enrichedStatuses.includes(r.enrichment_status)) return false;
+    const actualLen = r.content?.length ?? 0;
+    const fieldLen = r.content_length ?? 0;
+    return Math.max(actualLen, fieldLen) >= 200;
+  });
+
+  for (const r of eligible) {
+    const actualLen = r.content?.length ?? 0;
+    const fieldLen = r.content_length ?? 0;
+    const items = kiByResource.get(r.id) ?? [];
+    const activeItems = items.filter((k: any) => k.active);
+    const activeWithCtx = activeItems.filter((k: any) => Array.isArray(k.applies_to_contexts) && k.applies_to_contexts.length > 0);
+    const isStaleBlocker = r.manual_input_required || r.recovery_queue_bucket || r.enrichment_status === 'failed';
+
+    const classes: InvariantClass[] = [];
+
+    // Classify
+    if (fieldLen > 300 && actualLen < 100) {
+      classes.push('blocked_by_empty_content');
+    } else if (isStaleBlocker) {
+      classes.push('blocked_by_stale_blocker_state');
+    } else if (items.length === 0) {
+      classes.push('blocked_by_no_extraction');
+    } else if (activeItems.length === 0) {
+      classes.push('blocked_by_activation_criteria');
+    } else if (activeWithCtx.length === 0) {
+      classes.push('blocked_by_missing_contexts');
+    } else {
+      classes.push('operationalized');
+    }
+
+    if (classes.length === 0) {
+      classes.push('invariant_violation');
+    } else if (classes.length > 1) {
+      // Multi-class = violation
+      counts['invariant_violation']++;
+      if (violations.length < 10) {
+        violations.push({
+          id: r.id, title: r.title ?? '(untitled)',
+          contentLengthField: fieldLen, actualContentLength: actualLen,
+          kiCount: items.length, activeKiCount: activeItems.length,
+          activeWithContextsCount: activeWithCtx.length,
+          assignedClasses: classes, reason: `Assigned to multiple classes: ${classes.join(', ')}`,
+        });
+      }
+      continue;
+    }
+
+    counts[classes[0]]++;
+  }
+
+  return {
+    totalContentBackedEnriched: eligible.length,
+    byClass: counts,
+    violations,
+    healthy: violations.length === 0,
+  };
+}
+
+function emptyInvariantCounts(): Record<InvariantClass, number> {
+  return {
+    operationalized: 0, blocked_by_empty_content: 0, blocked_by_no_extraction: 0,
+    blocked_by_activation_criteria: 0, blocked_by_missing_contexts: 0,
+    blocked_by_stale_blocker_state: 0, invariant_violation: 0,
+  };
+}
+
+// ══════════════════════════════════════════════════════════════
+// ── RESOURCE FUNNEL ──────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+export interface FunnelStage {
+  label: string;
+  count: number;
+  pct: number; // pct of total
+  dropoffPct: number; // dropoff from previous stage
+}
+
+export interface ResourceFunnel {
+  stages: FunnelStage[];
+  usedInPrep: number;
+  usedInRoleplay: number;
+  usedByDave: number;
+  fullyUtilized: number;
+}
+
+export interface KnowledgeFunnel {
+  stages: FunnelStage[];
+  avgConfidence: number;
+  autoActivatedCount: number;
+  manuallyActivatedCount: number;
+  userEditedCount: number;
+  usedInPrep: number;
+  usedInRoleplay: number;
+  usedByDave: number;
+  fullyUtilized: number;
+  neverUsed: number;
+}
+
+export async function buildResourceFunnel(): Promise<ResourceFunnel> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+  if (!userId) return { stages: [], usedInPrep: 0, usedInRoleplay: 0, usedByDave: 0, fullyUtilized: 0 };
+
+  const { data: res } = await supabase.from('resources')
+    .select('id, content_length, content, enrichment_status, manual_content_present, tags')
+    .eq('user_id', userId);
+  const { data: kiData } = await supabase.from(KI_TABLE)
+    .select('source_resource_id, active, applies_to_contexts, tags')
+    .eq('user_id', userId);
+
+  const rList = (res ?? []) as any[];
+  const kiList = (kiData ?? []) as any[];
+  const usageStats = await getKnowledgeUsageStats();
+
+  const kiByResource = new Map<string, any[]>();
+  for (const ki of kiList) {
+    if (ki.source_resource_id) {
+      const arr = kiByResource.get(ki.source_resource_id) ?? [];
+      arr.push(ki);
+      kiByResource.set(ki.source_resource_id, arr);
+    }
+  }
+
+  const enrichedStatuses = ['enriched', 'deep_enriched', 'verified'];
+  const total = rList.length;
+  const enriched = rList.filter(r => enrichedStatuses.includes(r.enrichment_status));
+  const contentBacked = enriched.filter(r => {
+    const len = Math.max(r.content_length ?? 0, r.content?.length ?? 0);
+    return len >= 200 || r.manual_content_present;
+  });
+  const withKI = contentBacked.filter(r => (kiByResource.get(r.id) ?? []).length > 0);
+  const withActiveKI = withKI.filter(r => (kiByResource.get(r.id) ?? []).some((k: any) => k.active));
+  const withActiveCtx = withActiveKI.filter(r =>
+    (kiByResource.get(r.id) ?? []).some((k: any) => k.active && Array.isArray(k.applies_to_contexts) && k.applies_to_contexts.length > 0)
+  );
+
+  // Usage by resource — check if any KI from this resource was used
+  let usedInPrep = 0, usedInRoleplay = 0, usedByDave = 0, fullyUtilized = 0;
+  for (const r of withActiveCtx) {
+    const kis = kiByResource.get(r.id) ?? [];
+    let rPrep = false, rRole = false, rDave = false;
+    for (const ki of kis) {
+      const u = usageStats.get(ki.id);
+      if (!u) continue;
+      if (u.prep_count > 0) rPrep = true;
+      if (u.roleplay_count > 0) rRole = true;
+      if (u.dave_count > 0) rDave = true;
+    }
+    if (rPrep) usedInPrep++;
+    if (rRole) usedInRoleplay++;
+    if (rDave) usedByDave++;
+    const channels = [rPrep, rRole, rDave].filter(Boolean).length;
+    if (channels >= 2) fullyUtilized++;
+  }
+
+  const usedInAny = new Set<string>();
+  for (const r of withActiveCtx) {
+    const kis = kiByResource.get(r.id) ?? [];
+    for (const ki of kis) {
+      const u = usageStats.get(ki.id);
+      if (u && u.total_count > 0) { usedInAny.add(r.id); break; }
+    }
+  }
+
+  function stage(label: string, count: number, prev: number): FunnelStage {
+    return { label, count, pct: total > 0 ? Math.round((count / total) * 100) : 0, dropoffPct: prev > 0 ? Math.round(((prev - count) / prev) * 100) : 0 };
+  }
+
+  return {
+    stages: [
+      stage('Total resources', total, total),
+      stage('Enriched', enriched.length, total),
+      stage('Content-backed enriched', contentBacked.length, enriched.length),
+      stage('With knowledge items', withKI.length, contentBacked.length),
+      stage('With active KI', withActiveKI.length, withKI.length),
+      stage('Active KI + contexts', withActiveCtx.length, withActiveKI.length),
+      stage('Actually used', usedInAny.size, withActiveCtx.length),
+      stage('Fully utilized (2+ channels)', fullyUtilized, usedInAny.size),
+    ],
+    usedInPrep, usedInRoleplay, usedByDave, fullyUtilized,
+  };
+}
+
+export async function buildKnowledgeFunnel(): Promise<KnowledgeFunnel> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+  if (!userId) return emptyKIFunnel();
+
+  const { data: kiData } = await supabase.from(KI_TABLE)
+    .select('id, active, status, confidence_score, applies_to_contexts, tags, user_edited, activation_metadata')
+    .eq('user_id', userId);
+
+  const kiList = (kiData ?? []) as any[];
+  const usageStats = await getKnowledgeUsageStats();
+
+  const total = kiList.length;
+  const extracted = kiList.filter(k => k.status === 'extracted' || k.status === 'review_needed' || k.status === 'active' || k.active);
+  const reviewNeeded = kiList.filter(k => k.status === 'review_needed');
+  const approved = kiList.filter(k => k.status === 'active' || k.active);
+  const active = kiList.filter(k => k.active);
+  const activeWithCtx = active.filter(k => Array.isArray(k.applies_to_contexts) && k.applies_to_contexts.length > 0);
+  const taggedSkillCtx = activeWithCtx.filter(k => (k.tags ?? []).some((t: string) => t.startsWith('skill:') || t.startsWith('context:')));
+
+  let usedInPrep = 0, usedInRoleplay = 0, usedByDave = 0, fullyUtilized = 0, neverUsed = 0;
+  for (const ki of active) {
+    const u = usageStats.get(ki.id);
+    if (!u || u.total_count === 0) { neverUsed++; continue; }
+    if (u.prep_count > 0) usedInPrep++;
+    if (u.roleplay_count > 0) usedInRoleplay++;
+    if (u.dave_count > 0) usedByDave++;
+    const ch = [u.prep_count > 0, u.roleplay_count > 0, u.dave_count > 0].filter(Boolean).length;
+    if (ch >= 2) fullyUtilized++;
+  }
+
+  const confs = active.map(k => k.confidence_score ?? 0);
+  const avg = confs.length > 0 ? confs.reduce((a, b) => a + b, 0) / confs.length : 0;
+  const autoActivated = kiList.filter(k => k.activation_metadata?.activation_source === 'auto_pipeline').length;
+  const manuallyActivated = active.length - autoActivated;
+  const userEdited = kiList.filter(k => k.user_edited).length;
+
+  function stage(label: string, count: number, prev: number): FunnelStage {
+    return { label, count, pct: total > 0 ? Math.round((count / total) * 100) : 0, dropoffPct: prev > 0 ? Math.round(((prev - count) / prev) * 100) : 0 };
+  }
+
+  return {
+    stages: [
+      stage('Total KI', total, total),
+      stage('Extracted', extracted.length, total),
+      stage('Review needed', reviewNeeded.length, extracted.length),
+      stage('Approved/active', approved.length, extracted.length),
+      stage('Active', active.length, approved.length),
+      stage('Active + contexts', activeWithCtx.length, active.length),
+      stage('Tagged (skill/context)', taggedSkillCtx.length, activeWithCtx.length),
+      stage('Used in prep', usedInPrep, taggedSkillCtx.length),
+      stage('Used in roleplay', usedInRoleplay, taggedSkillCtx.length),
+      stage('Used by Dave', usedByDave, taggedSkillCtx.length),
+      stage('Fully utilized', fullyUtilized, taggedSkillCtx.length),
+      stage('Never used', neverUsed, active.length),
+    ],
+    avgConfidence: Math.round(avg * 100) / 100,
+    autoActivatedCount: autoActivated,
+    manuallyActivatedCount: Math.max(0, manuallyActivated),
+    userEditedCount: userEdited,
+    usedInPrep, usedInRoleplay, usedByDave, fullyUtilized, neverUsed,
+  };
+}
+
+function emptyKIFunnel(): KnowledgeFunnel {
+  return { stages: [], avgConfidence: 0, autoActivatedCount: 0, manuallyActivatedCount: 0, userEditedCount: 0, usedInPrep: 0, usedInRoleplay: 0, usedByDave: 0, fullyUtilized: 0, neverUsed: 0 };
+}
+
+// ══════════════════════════════════════════════════════════════
+// ── USAGE PROOF ──────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+export interface UsageProofResource {
+  id: string;
+  title: string;
+  kiCount: number;
+  activeKiCount: number;
+  prepCount: number;
+  roleplayCount: number;
+  daveCount: number;
+  lastUsedAt: string | null;
+}
+
+export interface UsageProofKI {
+  id: string;
+  title: string;
+  chapter: string;
+  confidence: number;
+  contexts: string[];
+  prepCount: number;
+  roleplayCount: number;
+  daveCount: number;
+  lastUsedAt: string | null;
+}
+
+export interface NeverUsedKI {
+  id: string;
+  title: string;
+  chapter: string;
+  confidence: number;
+  contexts: string[];
+  tags: string[];
+  issue: string;
+  recommendation: string;
+}
+
+export interface UsageProof {
+  topResources: UsageProofResource[];
+  topKI: UsageProofKI[];
+  neverUsedKI: NeverUsedKI[];
+}
+
+export async function buildUsageProof(): Promise<UsageProof> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+  if (!userId) return { topResources: [], topKI: [], neverUsedKI: [] };
+
+  const [{ data: res }, { data: kiData }, usageStats] = await Promise.all([
+    supabase.from('resources').select('id, title').eq('user_id', userId),
+    supabase.from(KI_TABLE).select('id, title, source_resource_id, active, chapter, confidence_score, applies_to_contexts, tags').eq('user_id', userId),
+    getKnowledgeUsageStats(),
+  ]);
+
+  const rList = (res ?? []) as any[];
+  const kiList = (kiData ?? []) as any[];
+
+  const kiByResource = new Map<string, any[]>();
+  for (const ki of kiList) {
+    if (ki.source_resource_id) {
+      const arr = kiByResource.get(ki.source_resource_id) ?? [];
+      arr.push(ki);
+      kiByResource.set(ki.source_resource_id, arr);
+    }
+  }
+
+  // Top resources by total usage
+  const resourceUsage: UsageProofResource[] = [];
+  for (const r of rList) {
+    const kis = kiByResource.get(r.id) ?? [];
+    if (kis.length === 0) continue;
+    let prep = 0, role = 0, dave = 0;
+    let lastUsed: string | null = null;
+    for (const ki of kis) {
+      const u = usageStats.get(ki.id);
+      if (!u) continue;
+      prep += u.prep_count;
+      role += u.roleplay_count;
+      dave += u.dave_count;
+      if (u.last_used_at && (!lastUsed || u.last_used_at > lastUsed)) lastUsed = u.last_used_at;
+    }
+    if (prep + role + dave > 0) {
+      resourceUsage.push({
+        id: r.id, title: r.title ?? '(untitled)',
+        kiCount: kis.length, activeKiCount: kis.filter((k: any) => k.active).length,
+        prepCount: prep, roleplayCount: role, daveCount: dave, lastUsedAt: lastUsed,
+      });
+    }
+  }
+  resourceUsage.sort((a, b) => (b.prepCount + b.roleplayCount + b.daveCount) - (a.prepCount + a.roleplayCount + a.daveCount));
+
+  // Top KI by usage
+  const kiUsage: UsageProofKI[] = [];
+  const neverUsedItems: NeverUsedKI[] = [];
+  for (const ki of kiList) {
+    if (!ki.active) continue;
+    const u = usageStats.get(ki.id);
+    const contexts: string[] = ki.applies_to_contexts ?? [];
+    const tags: string[] = ki.tags ?? [];
+
+    if (!u || u.total_count === 0) {
+      if (neverUsedItems.length < 15) {
+        const hasSkill = tags.some(t => t.startsWith('skill:'));
+        const hasCtxTag = tags.some(t => t.startsWith('context:'));
+        let issue = 'Structurally valid but no demand yet';
+        let recommendation = 'Run prep/roleplay in matching context';
+        if (contexts.length === 0) { issue = 'No applies_to_contexts'; recommendation = 'Add contexts: dave, prep, roleplay'; }
+        else if (!hasSkill && !hasCtxTag) { issue = 'Missing skill/context tags'; recommendation = 'Add structured tags'; }
+        neverUsedItems.push({
+          id: ki.id, title: ki.title, chapter: ki.chapter,
+          confidence: ki.confidence_score ?? 0, contexts, tags, issue, recommendation,
+        });
+      }
+      continue;
+    }
+
+    kiUsage.push({
+      id: ki.id, title: ki.title, chapter: ki.chapter,
+      confidence: ki.confidence_score ?? 0, contexts,
+      prepCount: u.prep_count, roleplayCount: u.roleplay_count, daveCount: u.dave_count,
+      lastUsedAt: u.last_used_at,
+    });
+  }
+  kiUsage.sort((a, b) => (b.prepCount + b.roleplayCount + b.daveCount) - (a.prepCount + a.roleplayCount + a.daveCount));
+
+  return {
+    topResources: resourceUsage.slice(0, 10),
+    topKI: kiUsage.slice(0, 10),
+    neverUsedKI: neverUsedItems.slice(0, 10),
+  };
+}
+
+// ══════════════════════════════════════════════════════════════
+// ── ROOT CAUSE GROUPING ──────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+export interface RootCauseGroup {
+  label: string;
+  count: number;
+  examples: Array<{ id: string; title: string }>;
+}
+
+export interface RootCauseReport {
+  resourceCauses: RootCauseGroup[];
+  knowledgeCauses: RootCauseGroup[];
+}
+
+export function buildRootCauses(
+  invariant: InvariantCheckResult,
+  knowledgeUtil: KnowledgeUtilResult,
+): RootCauseReport {
+  const resCauses: RootCauseGroup[] = [];
+
+  const addResGroup = (label: string, cls: InvariantClass) => {
+    if (invariant.byClass[cls] > 0) {
+      resCauses.push({ label, count: invariant.byClass[cls], examples: [] });
+    }
+  };
+
+  addResGroup('Empty actual content', 'blocked_by_empty_content');
+  addResGroup('Extraction returned zero', 'blocked_by_no_extraction');
+  addResGroup('Extracted but none activated', 'blocked_by_activation_criteria');
+  addResGroup('Active but no contexts', 'blocked_by_missing_contexts');
+  addResGroup('Stale blocker state', 'blocked_by_stale_blocker_state');
+  if (invariant.violations.length > 0) {
+    resCauses.push({ label: 'Invariant violation', count: invariant.violations.length, examples: invariant.violations.slice(0, 5).map(v => ({ id: v.id, title: v.title })) });
+  }
+
+  // Knowledge causes
+  const kiCauses: RootCauseGroup[] = [];
+  const addKIGroup = (label: string, filter: (i: KnowledgeUtilItem) => boolean) => {
+    const matching = knowledgeUtil.items.filter(filter);
+    if (matching.length > 0) {
+      kiCauses.push({ label, count: matching.length, examples: matching.slice(0, 5).map(i => ({ id: i.id, title: i.title })) });
+    }
+  };
+
+  addKIGroup('Missing contexts', i => i.classification === 'not_retrievable');
+  addKIGroup('Missing skill/context tags', i => i.classification === 'never_used' && !(i.tags ?? []).some(t => t.startsWith('skill:') || t.startsWith('context:')));
+  addKIGroup('Low confidence', i => i.classification === 'low_confidence');
+  addKIGroup('Never used (retrievable)', i => i.classification === 'never_used' && i.applies_to_contexts.length > 0 && (i.tags ?? []).some(t => t.startsWith('skill:') || t.startsWith('context:')));
+  addKIGroup('Single-channel usage', i => ['used_in_prep_only', 'used_in_roleplay_only', 'used_by_dave_only'].includes(i.classification));
+
+  return { resourceCauses: resCauses, knowledgeCauses: kiCauses };
+}
+
+// ══════════════════════════════════════════════════════════════
+// ── NOTHING SLIPS THROUGH SUMMARY ────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+export interface NothingSlipsSummary {
+  lines: string[];
+  nextSteps: string[];
+  biggestLeak: string;
+}
+
+export function buildNothingSlipsSummary(
+  metrics: SystemMetrics,
+  invariant: InvariantCheckResult,
+  resFunnel: ResourceFunnel,
+  kiFunnel: KnowledgeFunnel,
+): NothingSlipsSummary {
+  const lines = [
+    `${metrics.resources.total} total resources`,
+    `${metrics.resources.enriched} enriched`,
+    `${metrics.resources.content_backed} content-backed`,
+    `${metrics.resources.with_knowledge} with knowledge items`,
+    `${metrics.resources.operationalized} operationalized`,
+    `${resFunnel.usedInPrep + resFunnel.usedInRoleplay + resFunnel.usedByDave > 0 ? `${new Set([...Array(resFunnel.usedInPrep), ...Array(resFunnel.usedInRoleplay), ...Array(resFunnel.usedByDave)]).size} actually used` : '0 actually used'}`,
+    `${invariant.violations.length} invariant violations`,
+  ];
+
+  // Find biggest leak
+  const leaks: Array<[string, number]> = [
+    ['empty content', invariant.byClass.blocked_by_empty_content],
+    ['no extraction', invariant.byClass.blocked_by_no_extraction],
+    ['activation criteria', invariant.byClass.blocked_by_activation_criteria],
+    ['missing contexts', invariant.byClass.blocked_by_missing_contexts],
+    ['stale blocker', invariant.byClass.blocked_by_stale_blocker_state],
+    ['never-used active KI', kiFunnel.neverUsed],
+  ];
+  leaks.sort((a, b) => b[1] - a[1]);
+  const biggestLeak = leaks[0][1] > 0 ? `${leaks[0][0]} (${leaks[0][1]} resources/items)` : 'No significant leaks detected';
+
+  const nextSteps: string[] = [];
+  if (invariant.byClass.blocked_by_empty_content > 0) nextSteps.push(`Fix ${invariant.byClass.blocked_by_empty_content} resources with empty content (re-enrich)`);
+  if (invariant.byClass.blocked_by_no_extraction > 0) nextSteps.push(`Force extract ${invariant.byClass.blocked_by_no_extraction} resources with no KI`);
+  if (invariant.byClass.blocked_by_activation_criteria > 0) nextSteps.push(`Review ${invariant.byClass.blocked_by_activation_criteria} extracted-but-inactive resources`);
+  if (invariant.byClass.blocked_by_missing_contexts > 0) nextSteps.push(`Repair contexts on ${invariant.byClass.blocked_by_missing_contexts} active-but-unreachable items`);
+  if (kiFunnel.neverUsed > 0) nextSteps.push(`Investigate ${kiFunnel.neverUsed} never-used active KI`);
+  if (invariant.byClass.blocked_by_stale_blocker_state > 0) nextSteps.push(`Clear ${invariant.byClass.blocked_by_stale_blocker_state} stale blockers`);
+  if (nextSteps.length === 0) nextSteps.push('Pipeline is healthy — continue using prep, roleplay, and Dave to generate usage proof');
+
+  return { lines, nextSteps, biggestLeak };
 }

@@ -34,7 +34,12 @@ import {
   type AuditedResource,
 } from '@/lib/resourceAudit';
 import { autoOperationalizeBatch, summarizeBatchResults, derivePipelineStage, getStageLabel, autoOperationalizeAllResources, countEligibleResources, forceExtractAll, getExtractionCoverage, type BackfillSummary, type ForceExtractResult, type ExtractionCoverage, type BlockedExample, type BlockedReason } from '@/lib/autoOperationalize';
-import { auditPipelineIntegrity, auditKnowledgeUtilization, getSystemMetrics, type PipelineIntegrityResult, type KnowledgeUtilResult, type SystemMetrics } from '@/lib/salesBrainAudit';
+import {
+  auditPipelineIntegrity, auditKnowledgeUtilization, getSystemMetrics,
+  runInvariantCheck, buildResourceFunnel, buildKnowledgeFunnel, buildUsageProof, buildRootCauses, buildNothingSlipsSummary,
+  type PipelineIntegrityResult, type KnowledgeUtilResult, type SystemMetrics,
+  type InvariantCheckResult, type ResourceFunnel, type KnowledgeFunnel, type UsageProof, type RootCauseReport, type NothingSlipsSummary,
+} from '@/lib/salesBrainAudit';
 import { toast } from 'sonner';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -169,7 +174,11 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
   const [confirmAction, setConfirmAction] = useState<{ type: string; ids?: string[] } | null>(null);
   const [backfillProgress, setBackfillProgress] = useState<{ processed: number; total: number } | null>(null);
   const [lastBackfillResult, setLastBackfillResult] = useState<BackfillSummary | null>(null);
-  const [deepAudit, setDeepAudit] = useState<{ pipeline?: PipelineIntegrityResult; knowledge?: KnowledgeUtilResult; metrics?: SystemMetrics } | null>(null);
+  const [deepAudit, setDeepAudit] = useState<{
+    pipeline?: PipelineIntegrityResult; knowledge?: KnowledgeUtilResult; metrics?: SystemMetrics;
+    invariant?: InvariantCheckResult; resFunnel?: ResourceFunnel; kiFunnel?: KnowledgeFunnel;
+    usageProof?: UsageProof; rootCauses?: RootCauseReport; summary?: NothingSlipsSummary;
+  } | null>(null);
   const [deepAuditLoading, setDeepAuditLoading] = useState(false);
   const [extractionCoverage, setExtractionCoverage] = useState<ExtractionCoverage | null>(null);
   const [forceExtractProgress, setForceExtractProgress] = useState<{ processed: number; total: number } | null>(null);
@@ -536,12 +545,13 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                         onClick={async () => {
                           setDeepAuditLoading(true);
                           try {
-                            const [pipeline, knowledge, metrics] = await Promise.all([
-                              auditPipelineIntegrity(),
-                              auditKnowledgeUtilization(),
-                              getSystemMetrics(),
+                            const [pipeline, knowledge, metrics, invariant, resFunnel, kiFunnel, usageProof] = await Promise.all([
+                              auditPipelineIntegrity(), auditKnowledgeUtilization(), getSystemMetrics(),
+                              runInvariantCheck(), buildResourceFunnel(), buildKnowledgeFunnel(), buildUsageProof(),
                             ]);
-                            setDeepAudit({ pipeline, knowledge, metrics });
+                            const rootCauses = buildRootCauses(invariant, knowledge);
+                            const nstSummary = buildNothingSlipsSummary(metrics, invariant, resFunnel, kiFunnel);
+                            setDeepAudit({ pipeline, knowledge, metrics, invariant, resFunnel, kiFunnel, usageProof, rootCauses, summary: nstSummary });
                           } catch { toast.error('Audit failed'); }
                           setDeepAuditLoading(false);
                         }}>
@@ -549,6 +559,160 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                         Run Deep Audit
                       </Button>
                     </div>
+
+                    {/* ── Nothing Slips Through Summary ── */}
+                    {deepAudit?.summary && (
+                      <div className="rounded-md border-2 border-primary/30 bg-primary/5 p-2.5 text-[10px] space-y-1.5">
+                        <p className="text-xs font-semibold text-foreground">Nothing Slips Through</p>
+                        <div className="space-y-0.5 text-muted-foreground">
+                          {deepAudit.summary.lines.map((line, i) => (<p key={i}>• {line}</p>))}
+                        </div>
+                        <p className="font-medium text-foreground pt-0.5">Biggest leak: <span className="text-destructive">{deepAudit.summary.biggestLeak}</span></p>
+                        <div className="pt-1 border-t border-border/30">
+                          <p className="font-semibold text-foreground mb-0.5">What should I do next?</p>
+                          {deepAudit.summary.nextSteps.map((step, i) => (
+                            <p key={i} className="text-muted-foreground"><span className="font-bold text-primary">{i + 1}.</span> {step}</p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Invariant Check ── */}
+                    {deepAudit?.invariant && (
+                      <Collapsible>
+                        <CollapsibleTrigger className="w-full flex items-center justify-between p-1.5 rounded hover:bg-accent/50 text-[10px]">
+                          <span className="font-medium text-foreground flex items-center gap-1">
+                            {deepAudit.invariant.healthy ? <CheckCircle2 className="h-3 w-3 text-emerald-600" /> : <AlertTriangle className="h-3 w-3 text-destructive" />}
+                            Invariant Check ({deepAudit.invariant.violations.length} violations)
+                          </span>
+                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="pl-2 pt-1 text-[10px] space-y-1">
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
+                              <span>Content-backed enriched:</span><span className="font-medium text-foreground">{deepAudit.invariant.totalContentBackedEnriched}</span>
+                              <span>Operationalized:</span><span className="font-medium text-emerald-600">{deepAudit.invariant.byClass.operationalized}</span>
+                              <span>Empty content:</span><span className={cn('font-medium', deepAudit.invariant.byClass.blocked_by_empty_content > 0 ? 'text-destructive' : 'text-foreground')}>{deepAudit.invariant.byClass.blocked_by_empty_content}</span>
+                              <span>No extraction:</span><span className={cn('font-medium', deepAudit.invariant.byClass.blocked_by_no_extraction > 0 ? 'text-amber-500' : 'text-foreground')}>{deepAudit.invariant.byClass.blocked_by_no_extraction}</span>
+                              <span>Activation criteria:</span><span className={cn('font-medium', deepAudit.invariant.byClass.blocked_by_activation_criteria > 0 ? 'text-orange-500' : 'text-foreground')}>{deepAudit.invariant.byClass.blocked_by_activation_criteria}</span>
+                              <span>Missing contexts:</span><span className={cn('font-medium', deepAudit.invariant.byClass.blocked_by_missing_contexts > 0 ? 'text-orange-500' : 'text-foreground')}>{deepAudit.invariant.byClass.blocked_by_missing_contexts}</span>
+                              <span>Violations:</span><span className={cn('font-medium', deepAudit.invariant.violations.length > 0 ? 'text-destructive' : 'text-emerald-600')}>{deepAudit.invariant.violations.length}</span>
+                            </div>
+                            {deepAudit.invariant.violations.slice(0, 10).map(v => (
+                              <div key={v.id} className="p-1 border border-destructive/20 rounded bg-card space-y-0.5">
+                                <p className="font-medium text-foreground truncate">{v.title}</p>
+                                <div className="flex flex-wrap gap-x-3 text-muted-foreground">
+                                  <span>KI:{v.kiCount} active:{v.activeKiCount} w/ctx:{v.activeWithContextsCount}</span>
+                                </div>
+                                <p className="text-destructive italic">{v.reason}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )}
+
+                    {/* ── Resource Funnel ── */}
+                    {deepAudit?.resFunnel && deepAudit.resFunnel.stages.length > 0 && (
+                      <Collapsible>
+                        <CollapsibleTrigger className="w-full flex items-center justify-between p-1.5 rounded hover:bg-accent/50 text-[10px]">
+                          <span className="font-medium text-foreground flex items-center gap-1"><Rocket className="h-3 w-3 text-primary" /> Resource Funnel</span>
+                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="pl-2 pt-1 text-[10px] space-y-0.5">
+                            {deepAudit.resFunnel.stages.map((s, i) => (
+                              <div key={i} className="flex items-center gap-1.5">
+                                <span className="w-[160px] truncate font-medium text-foreground">{s.label}</span>
+                                <span className="font-bold text-foreground w-8 text-right">{s.count}</span>
+                                <span className="text-muted-foreground w-10 text-right">({s.pct}%)</span>
+                                {i > 0 && s.dropoffPct > 0 && <span className="text-destructive text-[9px]">↓{s.dropoffPct}%</span>}
+                              </div>
+                            ))}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )}
+
+                    {/* ── KI Funnel ── */}
+                    {deepAudit?.kiFunnel && deepAudit.kiFunnel.stages.length > 0 && (
+                      <Collapsible>
+                        <CollapsibleTrigger className="w-full flex items-center justify-between p-1.5 rounded hover:bg-accent/50 text-[10px]">
+                          <span className="font-medium text-foreground flex items-center gap-1"><Brain className="h-3 w-3 text-blue-500" /> Knowledge Item Funnel</span>
+                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="pl-2 pt-1 text-[10px] space-y-0.5">
+                            {deepAudit.kiFunnel.stages.map((s, i) => (
+                              <div key={i} className="flex items-center gap-1.5">
+                                <span className="w-[160px] truncate font-medium text-foreground">{s.label}</span>
+                                <span className="font-bold text-foreground w-8 text-right">{s.count}</span>
+                                <span className="text-muted-foreground w-10 text-right">({s.pct}%)</span>
+                                {i > 0 && i < 7 && s.dropoffPct > 0 && <span className="text-destructive text-[9px]">↓{s.dropoffPct}%</span>}
+                              </div>
+                            ))}
+                            <div className="pt-1 border-t border-border/30 grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
+                              <span>Avg confidence:</span><span className="font-medium text-foreground">{deepAudit.kiFunnel.avgConfidence}</span>
+                              <span>Auto-activated:</span><span className="font-medium text-foreground">{deepAudit.kiFunnel.autoActivatedCount}</span>
+                              <span>Never used:</span><span className={cn('font-medium', deepAudit.kiFunnel.neverUsed > 0 ? 'text-destructive' : 'text-emerald-600')}>{deepAudit.kiFunnel.neverUsed}</span>
+                            </div>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )}
+
+                    {/* ── Usage Proof ── */}
+                    {deepAudit?.usageProof && (
+                      <Collapsible>
+                        <CollapsibleTrigger className="w-full flex items-center justify-between p-1.5 rounded hover:bg-accent/50 text-[10px]">
+                          <span className="font-medium text-foreground flex items-center gap-1"><Zap className="h-3 w-3 text-emerald-600" /> Usage Proof</span>
+                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="pl-2 pt-1 text-[10px] space-y-2">
+                            {deepAudit.usageProof.topResources.length > 0 && (<div>
+                              <p className="font-semibold text-foreground mb-0.5">Top Used Resources</p>
+                              {deepAudit.usageProof.topResources.slice(0, 5).map(r => (
+                                <div key={r.id} className="flex items-center gap-2 py-0.5 text-muted-foreground">
+                                  <span className="flex-1 truncate font-medium text-foreground">{r.title}</span>
+                                  <span>P:{r.prepCount}</span><span>R:{r.roleplayCount}</span><span>D:{r.daveCount}</span>
+                                </div>
+                              ))}
+                            </div>)}
+                            {deepAudit.usageProof.neverUsedKI.length > 0 && (<div>
+                              <p className="font-semibold text-destructive mb-0.5">Never-Used Active KI</p>
+                              {deepAudit.usageProof.neverUsedKI.slice(0, 5).map(ki => (
+                                <div key={ki.id} className="p-1 border border-border/50 rounded bg-card space-y-0.5">
+                                  <p className="font-medium text-foreground truncate">{ki.title}</p>
+                                  <p className="text-amber-500 italic">{ki.issue}</p>
+                                </div>
+                              ))}
+                            </div>)}
+                            {deepAudit.usageProof.topResources.length === 0 && <p className="text-muted-foreground italic">No usage telemetry yet.</p>}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )}
+
+                    {/* ── Root Causes ── */}
+                    {deepAudit?.rootCauses && (
+                      <Collapsible>
+                        <CollapsibleTrigger className="w-full flex items-center justify-between p-1.5 rounded hover:bg-accent/50 text-[10px]">
+                          <span className="font-medium text-foreground flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-amber-500" /> Root Causes</span>
+                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="pl-2 pt-1 text-[10px] space-y-1.5">
+                            {deepAudit.rootCauses.resourceCauses.map(g => (
+                              <p key={g.label} className="text-muted-foreground">• {g.label}: <span className="font-medium text-foreground">{g.count}</span></p>
+                            ))}
+                            {deepAudit.rootCauses.knowledgeCauses.map(g => (
+                              <p key={g.label} className="text-muted-foreground">• {g.label}: <span className="font-medium text-foreground">{g.count}</span></p>
+                            ))}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )}
 
                     {deepAudit?.metrics && (
                       <div className="rounded-md border border-primary/20 bg-primary/5 p-2 text-[10px] space-y-1">
