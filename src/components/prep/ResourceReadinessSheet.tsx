@@ -592,7 +592,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
                           <span>Enriched resources:</span><span className="font-medium text-foreground">{extractionCoverage.enrichedResources}</span>
                           <span>With knowledge items:</span><span className="font-medium text-foreground">{extractionCoverage.withKnowledgeItems} ({extractionCoverage.kiCoveragePct}%)</span>
-                          <span>Operationalized:</span><span className="font-medium text-emerald-600">{extractionCoverage.operationalizedResources} ({extractionCoverage.opCoveragePct}%)</span>
+                          <span>Ready to use:</span><span className="font-medium text-emerald-600">{extractionCoverage.operationalizedResources} ({extractionCoverage.opCoveragePct}%)</span>
                           <span>No knowledge yet:</span><span className={cn('font-medium', extractionCoverage.noKnowledgeYet > 0 ? 'text-amber-500' : 'text-foreground')}>{extractionCoverage.noKnowledgeYet}</span>
                         </div>
 
