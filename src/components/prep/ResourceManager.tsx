@@ -157,6 +157,7 @@ export function ResourceManager() {
   const createFolder = useCreateFolder();
   const createResource = useCreateResource();
   const deleteResource = useDeleteResource();
+  const bulkDelete = useBulkDeleteResources();
   const deleteFolder = useDeleteFolder();
   const renameFolder = useRenameFolder();
   const updateResource = useUpdateResource();
