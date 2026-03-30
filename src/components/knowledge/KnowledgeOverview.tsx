@@ -10,10 +10,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-  CheckCircle2, AlertTriangle, ArrowRight, Brain, Ban, Info,
+  CheckCircle2, AlertTriangle, ArrowRight, Brain, Ban, Info, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCanonicalLifecycle, BLOCKED_LABELS } from '@/hooks/useCanonicalLifecycle';
+import { useInUseResources } from '@/hooks/useInUseResources';
 import type { LifecycleSummary } from '@/lib/canonicalLifecycle';
 
 interface Props {
@@ -28,6 +29,7 @@ export const KnowledgeOverview = memo(function KnowledgeOverview({
   onNavigateToKnowledgeItems,
 }: Props) {
   const { summary, loading } = useCanonicalLifecycle();
+  const { data: inUseData } = useInUseResources();
 
   if (loading || !summary) {
     return (
@@ -42,6 +44,7 @@ export const KnowledgeOverview = memo(function KnowledgeOverview({
     + summary.blocked.no_activation + summary.blocked.missing_contexts
     + summary.blocked.stale_blocker_state;
 
+  const inUseCount = inUseData?.count ?? 0;
   const nextActions = buildNextActions(summary, totalBlocked);
 
   const biggestLeak = summary.blocked.no_extraction > 0
@@ -81,11 +84,11 @@ export const KnowledgeOverview = memo(function KnowledgeOverview({
           accent
         />
         <FunnelCard
-          label="Blocked"
-          value={totalBlocked}
-          sublabel="Need action"
-          color="text-destructive"
-          warn={totalBlocked > 0}
+          label="In Use"
+          value={inUseCount}
+          sublabel="Used in prep, roleplay, or Dave"
+          color="text-primary"
+          icon={<Activity className="h-3 w-3 text-primary mx-auto mb-0.5" />}
         />
       </div>
 
@@ -95,7 +98,7 @@ export const KnowledgeOverview = memo(function KnowledgeOverview({
           <CardContent className="p-3 space-y-2">
             <p className="text-xs font-medium text-foreground flex items-center gap-1.5">
               <Ban className="h-3.5 w-3.5 text-destructive" />
-              Why resources are blocked
+              {totalBlocked} blocked — why
             </p>
             <div className="space-y-1">
               {summary.blocked.no_extraction > 0 && (
@@ -175,12 +178,13 @@ export const KnowledgeOverview = memo(function KnowledgeOverview({
   );
 });
 
-function FunnelCard({ label, value, sublabel, color, accent, warn }: {
-  label: string; value: number; sublabel: string; color: string; accent?: boolean; warn?: boolean;
+function FunnelCard({ label, value, sublabel, color, accent, warn, icon }: {
+  label: string; value: number; sublabel: string; color: string; accent?: boolean; warn?: boolean; icon?: React.ReactNode;
 }) {
   return (
     <Card className={cn(accent && 'border-emerald-500/30', warn && 'border-destructive/30')}>
       <CardContent className="p-3 text-center">
+        {icon}
         <p className={cn('text-2xl font-bold', color)}>{value}</p>
         <p className="text-xs font-medium text-foreground">{label}</p>
         <p className="text-[9px] text-muted-foreground">{sublabel}</p>
