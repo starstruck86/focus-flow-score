@@ -14,8 +14,10 @@ export interface RoleplaySession {
   active: boolean;
   chapter: string;
   knowledgeItemId?: string;
+  focusItemTitle?: string;
   knowledgeGrounding: string;
   groundedItemCount: number;
+  competitorContext?: string;
   startedAt: number;
 }
 
