@@ -356,10 +356,18 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
           </SheetHeader>
 
           <ScrollArea className="h-[calc(100vh-90px)]">
-            {!audit && !loading && (
+            {!audit && !loading && !auditError && (
               <div className="p-8 text-center space-y-3">
-                <Brain className="h-8 w-8 mx-auto text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Click "Run Audit" to scan all resources</p>
+                <Loader2 className="h-6 w-6 mx-auto animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Loading audit…</p>
+              </div>
+            )}
+
+            {auditError && !audit && (
+              <div className="p-6 text-center space-y-3">
+                <AlertTriangle className="h-8 w-8 mx-auto text-destructive" />
+                <p className="text-sm text-destructive">Audit failed: {auditError}</p>
+                <Button size="sm" onClick={runAudit}>Retry</Button>
               </div>
             )}
 
@@ -372,7 +380,10 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
 
             {audit && (
               <div className="p-4 space-y-3">
-                {/* ── Summary stats ── */}
+                {/* ── Canonical Lifecycle Summary — SINGLE SOURCE OF TRUTH ── */}
+                <LifecycleSummaryBar summary={lifecycle} />
+
+                {/* ── Bucket summary stats ── */}
                 <div className="grid grid-cols-4 gap-1.5">
                   <MiniStat label="Operationalized" value={audit.counts.operationalized} accent="emerald" />
                   <MiniStat label="Extractable" value={audit.counts.extractable_not_operationalized} accent="blue" />
