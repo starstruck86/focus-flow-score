@@ -495,6 +495,7 @@ function ResourceRow({ resource: r }: { resource: AuditedResource }) {
           <p className={cn('text-[9px] font-medium', bottleneck.color)}>{bottleneck.text}</p>
         </div>
         <div className="flex gap-0.5 shrink-0 flex-wrap justify-end max-w-[45%]">
+          <Badge variant="outline" className="text-[7px] h-3.5 px-1 border-primary/20">{getStageLabel(pipelineStage)}</Badge>
           {r.badges.map(b => (
             <Badge key={b} variant="outline" className="text-[7px] h-3.5 px-1">{b}</Badge>
           ))}
