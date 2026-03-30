@@ -233,6 +233,48 @@ export function KnowledgeItemDrawer({ itemId, open, onOpenChange }: Props) {
                 />
               </div>
 
+              {/* Tags */}
+              {item.tags && item.tags.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Tags</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {(() => {
+                      const groups = groupTagsByDimension(item.tags);
+                      const elements: React.ReactNode[] = [];
+                      groups.forEach((vals, dim) => {
+                        vals.forEach(v => {
+                          elements.push(
+                            <Badge
+                              key={`${dim}:${v}`}
+                              variant="outline"
+                              className={cn('text-[9px] h-5 px-1.5 gap-0.5', getDimensionColor(dim))}
+                            >
+                              {getDimensionLabel(dim)}: {v.replace(/_/g, ' ')}
+                              <button
+                                className="ml-0.5 hover:text-destructive"
+                                onClick={() => {
+                                  const newTags = item.tags.filter(t => t !== `${dim}:${v}`);
+                                  update.mutate({ id: item.id, tags: newTags } as any);
+                                }}
+                              >
+                                <X className="h-2.5 w-2.5" />
+                              </button>
+                            </Badge>
+                          );
+                        });
+                      });
+                      // Also show non-structured tags
+                      item.tags.filter(t => !t.includes(':')).forEach(t => {
+                        elements.push(
+                          <Badge key={t} variant="outline" className="text-[9px] h-5 px-1.5">{t}</Badge>
+                        );
+                      });
+                      return elements;
+                    })()}
+                  </div>
+                </div>
+              )}
+
               <Separator />
 
               {/* Meta */}
