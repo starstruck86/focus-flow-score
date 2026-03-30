@@ -75,12 +75,12 @@ export function PromotionEngine() {
   const { data: resources = [] } = useResources();
   const { user } = useAuth();
   const qc = useQueryClient();
-  const { createKnowledgeItem } = useKnowledgeItems();
+  const insertKnowledge = useInsertKnowledgeItems();
 
-  // Only classify enriched/complete resources that aren't already promoted
+  // Only classify deep_enriched resources that aren't already promoted
   const candidates = useMemo(() =>
     resources.filter(r =>
-      r.enrichment_status === 'enriched' &&
+      r.enrichment_status === 'deep_enriched' &&
       !r.is_template &&
       r.content && r.content.length > 50
     ), [resources]);
