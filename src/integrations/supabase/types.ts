@@ -1759,6 +1759,54 @@ export type Database = {
         }
         Relationships: []
       }
+      knowledge_usage_log: {
+        Row: {
+          account_name: string | null
+          chapter: string | null
+          competitor: string | null
+          context_type: string | null
+          created_at: string
+          event_type: string
+          id: string
+          knowledge_item_id: string
+          persona: string | null
+          session_id: string | null
+          source_resource_id: string | null
+          stage: string | null
+          user_id: string
+        }
+        Insert: {
+          account_name?: string | null
+          chapter?: string | null
+          competitor?: string | null
+          context_type?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          knowledge_item_id: string
+          persona?: string | null
+          session_id?: string | null
+          source_resource_id?: string | null
+          stage?: string | null
+          user_id: string
+        }
+        Update: {
+          account_name?: string | null
+          chapter?: string | null
+          competitor?: string | null
+          context_type?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          knowledge_item_id?: string
+          persona?: string | null
+          session_id?: string | null
+          source_resource_id?: string | null
+          stage?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       mock_call_sessions: {
         Row: {
           call_type: string

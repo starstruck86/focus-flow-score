@@ -9,6 +9,7 @@ import { useEffect, useCallback, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { queryKnowledge } from '@/lib/knowledgeRetrieval';
 import { queryKnowledgeByContext, type SalesContext } from '@/lib/salesContext';
+import { logKnowledgeUsage, buildUsageEntries } from '@/lib/knowledgeUsageLogger';
 import { toast } from 'sonner';
 
 export interface RoleplaySession {
@@ -147,6 +148,15 @@ export function useChapterRoleplay() {
         toast.error(`No active knowledge in ${chapter.replace(/_/g, ' ')}. Activate some items first.`);
         return;
       }
+
+      // Log roleplay grounding telemetry
+      logKnowledgeUsage(buildUsageEntries(items as any[], 'roleplay_grounding', {
+        context_type: salesContext?.context_type ?? 'roleplay',
+        stage: salesContext?.stage,
+        persona: salesContext?.persona,
+        account_name: salesContext?.account_name,
+        competitor: salesContext?.competitors?.[0],
+      }));
 
       // Find the focus item if specified
       const focusItem = knowledgeItemId

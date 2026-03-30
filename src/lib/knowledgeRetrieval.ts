@@ -9,6 +9,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
 import { createLogger } from '@/lib/logger';
+import { logKnowledgeUsage, buildUsageEntries } from '@/lib/knowledgeUsageLogger';
 
 const log = createLogger('KnowledgeRetrieval');
 
@@ -68,6 +69,11 @@ export async function getDaveKnowledgeContext(opts?: {
 
   if (items.length === 0) return '';
 
+  // Log Dave usage telemetry
+  logKnowledgeUsage(buildUsageEntries(items as any[], 'dave_response_grounding', {
+    competitor: opts?.competitor,
+  }));
+
   const sections: string[] = [];
 
   // Group by chapter
@@ -107,6 +113,13 @@ export async function getRoleplayKnowledge(chapter?: string): Promise<{
     activeOnly: true,
     maxItems: 20,
   });
+
+  // Log roleplay usage telemetry
+  if (items.length > 0) {
+    logKnowledgeUsage(buildUsageEntries(items as any[], 'roleplay_grounding', {
+      context_type: 'roleplay',
+    }));
+  }
 
   const tactics: string[] = [];
   const objections: string[] = [];

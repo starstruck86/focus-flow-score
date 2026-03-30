@@ -7,6 +7,7 @@
 
 import { queryKnowledge, type KnowledgeQuery } from './knowledgeRetrieval';
 import type { KnowledgeItem } from '@/hooks/useKnowledgeItems';
+import { logKnowledgeUsage, buildUsageEntries } from '@/lib/knowledgeUsageLogger';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('SalesContext');
@@ -204,6 +205,15 @@ export async function generatePrep(ctx: SalesContext): Promise<PrepOutput> {
     questions_to_ask.push('Who else is involved in this decision?');
     questions_to_ask.push('What happens if you don\'t solve this?');
   }
+
+  // Log prep usage telemetry
+  logKnowledgeUsage(buildUsageEntries(items as any[], 'prep_surface', {
+    context_type: ctx.context_type,
+    stage: ctx.stage,
+    persona: ctx.persona,
+    account_name: ctx.account_name,
+    competitor: ctx.competitors?.[0],
+  }));
 
   return {
     context_summary,
