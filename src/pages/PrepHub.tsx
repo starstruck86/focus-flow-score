@@ -90,7 +90,7 @@ export default function PrepHub() {
 
           {/* ═══ LEARN ═══ */}
           <TabsContent value="learn" className="mt-3 space-y-4">
-            <SalesBrainDashboard />
+            <PlaybookEngine />
             <PlaybooksPanel />
           </TabsContent>
 
