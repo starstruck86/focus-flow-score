@@ -16,7 +16,7 @@ import { toast } from 'sonner';
 import { ContentViewer } from '@/components/prep/ContentViewer';
 import { isNotionZipResource, splitNotionImport } from '@/lib/notionZipSplitter';
 import { isFixEligible, fixResourceStateFromContent, FIX_RESOURCE_INVALIDATION_KEYS } from '@/lib/fixResourceState';
-import { getProcessingState } from '@/lib/processingState';
+import { deriveProcessingState } from '@/lib/processingState';
 import type { Resource } from '@/hooks/useResources';
 
 const RESOLUTION_LABELS: Record<string, string> = {
