@@ -349,22 +349,6 @@ export function ResourceLibraryTable({
             className="pl-8 h-8 text-xs"
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="h-8 w-[140px] text-xs">
-            <Filter className="h-3 w-3 mr-1" />
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="not_enriched">Not Enriched</SelectItem>
-            <SelectItem value="deep_enriched">Enriched</SelectItem>
-            <SelectItem value="incomplete">Incomplete</SelectItem>
-            <SelectItem value="failed">Failed</SelectItem>
-            <SelectItem value="queued_for_reenrich">Re-enrich Queued</SelectItem>
-            <SelectItem value="duplicate">Duplicate</SelectItem>
-            <SelectItem value="superseded">Superseded</SelectItem>
-          </SelectContent>
-        </Select>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
           <SelectTrigger className="h-8 w-[130px] text-xs">
             <SelectValue placeholder="Type" />
@@ -376,12 +360,12 @@ export function ResourceLibraryTable({
             ))}
           </SelectContent>
         </Select>
-        {(statusFilter !== 'all' || typeFilter !== 'all' || search) && (
+        {(lifecycleFilter !== 'all' || typeFilter !== 'all' || search) && (
           <Button
             variant="ghost"
             size="sm"
             className="h-8 text-xs gap-1"
-            onClick={() => { setStatusFilter('all'); setTypeFilter('all'); setSearch(''); }}
+            onClick={() => { setLifecycleFilter('all'); setTypeFilter('all'); setSearch(''); }}
           >
             <X className="h-3 w-3" /> Clear
           </Button>
