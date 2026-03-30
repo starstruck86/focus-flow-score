@@ -91,6 +91,46 @@ const LIFECYCLE_FILTER_ICONS: Record<LifecycleFilter, React.ReactNode> = {
   missing_content: <Inbox className="h-3 w-3" />,
 };
 
+// ── Template status filter ────────────────────────────────
+type AssetTypeFilter = 'all_assets' | 'template' | 'example' | 'reference' | 'working_asset' | 'untagged';
+
+const ASSET_TYPE_LABELS: Record<AssetTypeFilter, string> = {
+  all_assets: 'All Assets',
+  template: 'Templates',
+  example: 'Examples',
+  reference: 'References',
+  working_asset: 'Working Assets',
+  untagged: 'Untagged',
+};
+
+function getAssetType(r: Resource): AssetTypeFilter {
+  if (r.is_template) return 'template';
+  const tc = r.template_category?.toLowerCase();
+  if (tc === 'example') return 'example';
+  if (tc === 'reference') return 'reference';
+  if (tc === 'working_asset') return 'working_asset';
+  return 'untagged';
+}
+
+function getAssetTypeLabel(r: Resource): string {
+  const t = getAssetType(r);
+  if (t === 'untagged') return '';
+  return ASSET_TYPE_LABELS[t].replace(/s$/, ''); // singular
+}
+
+// ── Lifecycle stage label (user-facing) ───────────────────
+function getStageFriendlyLabel(stage: string): string {
+  switch (stage) {
+    case 'operationalized': return '✓ Ready to Use';
+    case 'activated': return 'Activated';
+    case 'knowledge_extracted': return 'Knowledge Extracted';
+    case 'tagged': return 'Tagged';
+    case 'content_ready': return 'Content Ready';
+    case 'uploaded': return 'Uploaded';
+    default: return stage;
+  }
+}
+
 // ── Next best action for blocked resources ─────────────────
 function getNextBestAction(blocked: BlockedReason | string): string {
   switch (blocked) {
