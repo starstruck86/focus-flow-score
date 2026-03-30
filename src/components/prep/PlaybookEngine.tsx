@@ -90,22 +90,17 @@ export const PlaybookEngine = memo(function PlaybookEngine() {
     launchPreview(chapter);
   }, [launchPreview]);
 
-  // Operationalized metrics
+  // Operationalized metrics — CANONICAL SOURCE OF TRUTH
   const opMetrics = useMemo(() => {
-    const operationalizedIds = new Set<string>();
-    const allSourceIds = new Set<string>();
-    for (const item of stats.items) {
-      if (item.source_resource_id) allSourceIds.add(item.source_resource_id);
-      if (item.active && item.source_resource_id && item.applies_to_contexts?.length > 0) {
-        operationalizedIds.add(item.source_resource_id);
-      }
-    }
+    if (!lifecycle) return { operationalized: 0, total: 0, percent: 0 };
     return {
-      operationalized: operationalizedIds.size,
-      extracted: allSourceIds.size,
-      percent: allSourceIds.size > 0 ? Math.round((operationalizedIds.size / allSourceIds.size) * 100) : 0,
+      operationalized: lifecycle.operationalized,
+      total: lifecycle.total_resources,
+      percent: lifecycle.total_resources > 0
+        ? Math.round((lifecycle.operationalized / lifecycle.total_resources) * 100)
+        : 0,
     };
-  }, [stats.items]);
+  }, [lifecycle]);
 
   // Build chapter summary for active roleplay grounding proof
   const groundingItems = useMemo(() => {
