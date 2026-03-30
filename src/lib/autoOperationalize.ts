@@ -558,6 +558,25 @@ function makeResult(
 
 // ── Extraction Coverage ────────────────────────────────────
 
+export type BlockedReason =
+  | 'blocked_by_empty_content'
+  | 'blocked_by_no_extraction'
+  | 'blocked_by_activation_criteria'
+  | 'blocked_by_missing_contexts'
+  | 'blocked_by_stale_blocker_state'
+  | 'operationalized';
+
+export interface BlockedExample {
+  id: string;
+  title: string;
+  contentLengthField: number;
+  actualContentLength: number;
+  kiCount: number;
+  activeKiCount: number;
+  reason: BlockedReason;
+  detail: string;
+}
+
 export interface ExtractionCoverage {
   enrichedResources: number;
   withKnowledgeItems: number;
@@ -572,22 +591,31 @@ export interface ExtractionCoverage {
   blockedByEmptyContent: number;
   blockedByNoExtraction: number;
   blockedByActivationCriteria: number;
+  blockedByMissingContexts: number;
+  blockedByStaleBlockerState: number;
+  /** Example resources per failure class (up to 5 each) */
+  examples: Record<BlockedReason, BlockedExample[]>;
 }
 
 export async function getExtractionCoverage(): Promise<ExtractionCoverage> {
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData?.user?.id;
-  const empty: ExtractionCoverage = { enrichedResources: 0, withKnowledgeItems: 0, operationalizedResources: 0, noKnowledgeYet: 0, contentEmptyDespiteLength: 0, kiCoveragePct: 0, opCoveragePct: 0, blockedByEmptyContent: 0, blockedByNoExtraction: 0, blockedByActivationCriteria: 0 };
+  const emptyExamples: Record<BlockedReason, BlockedExample[]> = {
+    blocked_by_empty_content: [], blocked_by_no_extraction: [],
+    blocked_by_activation_criteria: [], blocked_by_missing_contexts: [],
+    blocked_by_stale_blocker_state: [], operationalized: [],
+  };
+  const empty: ExtractionCoverage = { enrichedResources: 0, withKnowledgeItems: 0, operationalizedResources: 0, noKnowledgeYet: 0, contentEmptyDespiteLength: 0, kiCoveragePct: 0, opCoveragePct: 0, blockedByEmptyContent: 0, blockedByNoExtraction: 0, blockedByActivationCriteria: 0, blockedByMissingContexts: 0, blockedByStaleBlockerState: 0, examples: emptyExamples };
   if (!userId) return empty;
 
-  // Enriched resources
-  const { data: enriched } = await supabase
+  // Enriched + stale-blocker resources
+  const { data: allResources } = await supabase
     .from('resources')
-    .select('id, content_length, content')
-    .eq('user_id', userId)
-    .in('enrichment_status', ['enriched', 'deep_enriched', 'verified']);
+    .select('id, title, content_length, content, enrichment_status, manual_input_required, recovery_queue_bucket, failure_reason')
+    .eq('user_id', userId);
 
-  const enrichedList = (enriched ?? []) as any[];
+  const resList = (allResources ?? []) as any[];
+  const enrichedStatuses = ['enriched', 'deep_enriched', 'verified'];
 
   // KI per resource
   const { data: kiData } = await supabase
@@ -609,6 +637,29 @@ export async function getExtractionCoverage(): Promise<ExtractionCoverage> {
   let contentEmpty = 0;
   let blockedByNoExtraction = 0;
   let blockedByActivationCriteria = 0;
+  let blockedByMissingContexts = 0;
+  let blockedByStaleBlockerState = 0;
+  const examples: Record<BlockedReason, BlockedExample[]> = {
+    blocked_by_empty_content: [], blocked_by_no_extraction: [],
+    blocked_by_activation_criteria: [], blocked_by_missing_contexts: [],
+    blocked_by_stale_blocker_state: [], operationalized: [],
+  };
+
+  const enrichedList = resList.filter(r => enrichedStatuses.includes(r.enrichment_status));
+
+  // Also detect stale blocker resources (content-backed but stuck)
+  const staleBlockerList = resList.filter(r => {
+    if (enrichedStatuses.includes(r.enrichment_status)) return false;
+    const actualLen = r.content?.length ?? 0;
+    const contentLen = r.content_length ?? 0;
+    const isCB = Math.max(actualLen, contentLen) >= 200;
+    return isCB && (r.manual_input_required || r.recovery_queue_bucket || r.enrichment_status === 'failed');
+  });
+
+  for (const r of staleBlockerList) {
+    blockedByStaleBlockerState++;
+    addExample(examples, 'blocked_by_stale_blocker_state', r, kiByResource, `Stale state: ${r.enrichment_status}, manual_input=${r.manual_input_required}, bucket=${r.recovery_queue_bucket ?? 'none'}`);
+  }
 
   for (const r of enrichedList) {
     const actualLen = r.content?.length ?? 0;
@@ -617,23 +668,32 @@ export async function getExtractionCoverage(): Promise<ExtractionCoverage> {
     // Safety rule: actual content must be >= 100
     if ((r.content_length ?? 0) > 300 && actualLen < 100) {
       contentEmpty++;
+      addExample(examples, 'blocked_by_empty_content', r, kiByResource, `content_length=${r.content_length} but actual=${actualLen}`);
       continue;
     }
 
     if (items && items.length > 0) {
       withKI++;
-      const hasActiveWithCtx = items.some((ki: any) =>
-        ki.active && Array.isArray(ki.applies_to_contexts) && ki.applies_to_contexts.length > 0
+      const activeItems = items.filter((ki: any) => ki.active);
+      const hasActiveWithCtx = activeItems.some((ki: any) =>
+        Array.isArray(ki.applies_to_contexts) && ki.applies_to_contexts.length > 0
       );
       if (hasActiveWithCtx) {
         operationalized++;
+        addExample(examples, 'operationalized', r, kiByResource, 'Fully operationalized');
+      } else if (activeItems.length > 0) {
+        // Active but no contexts
+        blockedByMissingContexts++;
+        addExample(examples, 'blocked_by_missing_contexts', r, kiByResource, `${activeItems.length} active KI but none have applies_to_contexts`);
       } else {
-        // Has KI but none active with contexts
+        // Has KI but none active
         blockedByActivationCriteria++;
+        addExample(examples, 'blocked_by_activation_criteria', r, kiByResource, `${items.length} KI extracted but 0 active`);
       }
     } else if (actualLen >= 100) {
       // Has content but no KI extracted
       blockedByNoExtraction++;
+      addExample(examples, 'blocked_by_no_extraction', r, kiByResource, `${actualLen} chars of content, no KI extracted`);
     }
   }
 
@@ -649,7 +709,31 @@ export async function getExtractionCoverage(): Promise<ExtractionCoverage> {
     blockedByEmptyContent: contentEmpty,
     blockedByNoExtraction,
     blockedByActivationCriteria,
+    blockedByMissingContexts,
+    blockedByStaleBlockerState,
+    examples,
   };
+}
+
+function addExample(
+  examples: Record<BlockedReason, BlockedExample[]>,
+  reason: BlockedReason,
+  r: any,
+  kiByResource: Map<string, any[]>,
+  detail: string,
+) {
+  if (examples[reason].length >= 5) return;
+  const items = kiByResource.get(r.id) ?? [];
+  examples[reason].push({
+    id: r.id,
+    title: r.title ?? '(untitled)',
+    contentLengthField: r.content_length ?? 0,
+    actualContentLength: r.content?.length ?? 0,
+    kiCount: items.length,
+    activeKiCount: items.filter((k: any) => k.active).length,
+    reason,
+    detail,
+  });
 }
 
 // ── Force Extract All ──────────────────────────────────────
