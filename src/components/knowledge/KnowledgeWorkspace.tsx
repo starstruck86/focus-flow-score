@@ -13,6 +13,7 @@ import { KnowledgeOverview } from './KnowledgeOverview';
 import { ResourceManager } from '@/components/prep/ResourceManager';
 import { PlaybookEngine } from '@/components/prep/PlaybookEngine';
 import { ResourceReadinessSheet } from '@/components/prep/ResourceReadinessSheet';
+import { ResourceUpsideQueue } from './ResourceUpsideQueue';
 
 export function KnowledgeWorkspace() {
   const [subTab, setSubTab] = useState('overview');
