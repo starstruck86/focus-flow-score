@@ -690,10 +690,10 @@ export interface ContentCluster {
 
 export interface ClusterResolution {
   clusterId: string;
-  canonicalResourceId: string;
+  canonicalResourceId: string | null;
   canonicalRole: ContentRoute;
   reasoning: string;
-  demotedMembers: Array<{ id: string; duplicateOf: string }>;
+  demotedMembers: Array<{ id: string; duplicateOf: string | null }>;
 }
 
 function buildCandidateReasoning(content: string, role: ContentRoute, score: number): string {
