@@ -526,10 +526,12 @@ export function ResourceUpsideQueue() {
 
 // ── Summary Header ─────────────────────────────────────────
 
-function SummaryHeader({ summary, totalCandidates, totalPromoted, onBulkTemplates, onBulkExamples, onBulkActivate, onStartGuided, guidedAvailable }: {
+function SummaryHeader({ summary, totalCandidates, totalPromoted, onBulkTemplates, onBulkExamples, onBulkActivate, onStartGuided, guidedAvailable, onBatchBackfill, batchRunning, batchResult }: {
   summary: BucketSummary; totalCandidates: number; totalPromoted: number;
   onBulkTemplates: () => void; onBulkExamples: () => void; onBulkActivate: () => void;
   onStartGuided: () => void; guidedAvailable: number;
+  onBatchBackfill: () => void; batchRunning: boolean;
+  batchResult: { processed: number; knowledge_created: number; templates_created: number; failed: number; remaining: number } | null;
 }) {
   return (
     <div className="border border-border rounded-lg bg-card p-4 space-y-3">
@@ -566,29 +568,48 @@ function SummaryHeader({ summary, totalCandidates, totalPromoted, onBulkTemplate
         })}
       </div>
 
+      {/* Batch result */}
+      {batchResult && (
+        <div className="rounded-md bg-muted/50 border border-border p-2.5 text-xs space-y-0.5">
+          <p className="font-medium text-foreground">
+            Batch: {batchResult.processed} processed → {batchResult.knowledge_created} actions, {batchResult.templates_created} templates
+          </p>
+          {batchResult.failed > 0 && (
+            <p className="text-destructive">{batchResult.failed} failed (need transformation)</p>
+          )}
+          {batchResult.remaining > 0 && (
+            <p className="text-muted-foreground">{batchResult.remaining} remaining — run again to continue</p>
+          )}
+        </div>
+      )}
+
       {/* Quick actions */}
       <div className="flex flex-wrap gap-1.5">
+        <Button size="sm" variant="default" className="h-7 text-[10px] gap-1" onClick={onBatchBackfill} disabled={batchRunning}>
+          {batchRunning ? <Loader2 className="h-3 w-3 animate-spin" /> : <TrendingUp className="h-3 w-3" />}
+          {batchRunning ? 'Processing...' : 'Batch Actionize (15)'}
+        </Button>
         {summary.promote_template > 0 && (
           <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onBulkTemplates}>
             <Crown className="h-3 w-3 text-amber-500" />
-            Promote Top 10 Templates
+            Promote Templates
           </Button>
         )}
         {summary.promote_example > 0 && (
           <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onBulkExamples}>
             <Star className="h-3 w-3 text-primary" />
-            Promote Top 20 Examples
+            Promote Examples
           </Button>
         )}
         {guidedAvailable > 0 && (
           <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onStartGuided}>
             <Play className="h-3 w-3 text-emerald-500" />
-            Guided Extraction ({guidedAvailable})
+            Guided ({guidedAvailable})
           </Button>
         )}
         <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onBulkActivate}>
           <Zap className="h-3 w-3 text-amber-500" />
-          Activate All High-Confidence
+          Activate All
         </Button>
       </div>
     </div>
