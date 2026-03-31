@@ -250,7 +250,7 @@ export function validateTrust(
   };
 }
 
-// ── Duplicate Suppression ──────────────────────────────────
+// ── Duplicate Suppression (content-first) ──────────────────
 
 export function deduplicateKnowledgeItems(
   newItems: KnowledgeItemInsert[],
@@ -261,15 +261,23 @@ export function deduplicateKnowledgeItems(
   const allExisting = [...existingItems];
 
   for (const item of newItems) {
-    const { score, mostSimilar } = scoreDistinctness(
-      item.title, item.tactic_summary || '', allExisting
-    );
+    const newContent = `${item.tactic_summary || ''} ${(item as any).when_to_use || ''} ${(item as any).example_usage || ''}`;
+    let maxSim = 0;
+    let mostSimilarTitle = '';
 
-    if (score < 0.35 && mostSimilar) {
-      duplicates.push({ item, similarTo: mostSimilar });
+    for (const existing of allExisting) {
+      const existingContent = `${existing.tactic_summary || ''}`;
+      const sim = computeSimilarity(newContent, existingContent);
+      if (sim > maxSim) {
+        maxSim = sim;
+        mostSimilarTitle = existing.title;
+      }
+    }
+
+    if (maxSim > 0.65 && mostSimilarTitle) {
+      duplicates.push({ item, similarTo: mostSimilarTitle });
     } else {
       kept.push(item);
-      // Add to existing pool to catch intra-batch dupes
       allExisting.push({ title: item.title, tactic_summary: item.tactic_summary });
     }
   }
@@ -283,13 +291,13 @@ export function deduplicateTemplates(
   existingTemplates: Array<{ title: string; body?: string }>
 ): boolean {
   for (const existing of existingTemplates) {
-    const titleSim = computeSimilarity(newTitle, existing.title);
-    if (titleSim > 0.7) return true; // Title too similar
-
     if (existing.body) {
-      const bodySim = computeSimilarity(newBody.slice(0, 300), existing.body.slice(0, 300));
-      if (bodySim > 0.6) return true;
+      const bodySim = computeSimilarity(newBody.slice(0, 500), existing.body.slice(0, 500));
+      if (bodySim > 0.65) return true;
     }
+    // Title is secondary fallback only
+    const titleSim = computeSimilarity(newTitle, existing.title);
+    if (titleSim > 0.85) return true;
   }
   return false;
 }
@@ -300,13 +308,13 @@ export function deduplicateExamples(
   existingExamples: Array<{ title: string; content?: string }>
 ): boolean {
   for (const existing of existingExamples) {
-    const titleSim = computeSimilarity(newTitle, existing.title);
-    if (titleSim > 0.7) return true;
-
     if (existing.content) {
-      const contentSim = computeSimilarity(newContent.slice(0, 300), existing.content.slice(0, 300));
-      if (contentSim > 0.6) return true;
+      const contentSim = computeSimilarity(newContent.slice(0, 500), existing.content.slice(0, 500));
+      if (contentSim > 0.65) return true;
     }
+    // Title is secondary fallback only
+    const titleSim = computeSimilarity(newTitle, existing.title);
+    if (titleSim > 0.85) return true;
   }
   return false;
 }
