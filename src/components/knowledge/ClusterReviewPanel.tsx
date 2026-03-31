@@ -94,7 +94,7 @@ export function ClusterReviewPanel({ resources, onResolved }: ClusterReviewPanel
       const { data } = await supabase.from('execution_templates' as any).insert({
         user_id: user.id,
         title: member.title,
-        body: shapedContent.slice(0, 5000),
+        body: shapedContent,
         template_type: 'email',
         output_type: 'custom',
         template_origin: 'promoted_from_cluster',
