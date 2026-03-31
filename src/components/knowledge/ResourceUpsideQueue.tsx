@@ -1,6 +1,13 @@
 /**
  * Resource Upside Queue — execution-improvement backlog.
- * Ranked by unlockable value, with knowledge extraction preview.
+ *
+ * Features:
+ *  - Top 25 highest-impact resources
+ *  - Guided extraction mode (1 at a time)
+ *  - Auto-activation engine
+ *  - Bulk promote templates / examples
+ *  - Quality flagging on extraction
+ *  - Actionization layer integration
  */
 
 import { useMemo, useState, useCallback } from 'react';
@@ -15,7 +22,7 @@ import {
 import {
   Crown, Star, Brain, FileText, ChevronDown, ChevronRight,
   AlertTriangle, ArrowUpRight, CheckCircle2, Sparkles, TrendingUp,
-  Archive, X, Eye, Edit3,
+  Archive, Zap, Play, SkipForward, Edit3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -127,7 +134,6 @@ export function ResourceUpsideQueue() {
   const classifications = useMemo(() => classifyResources(candidates), [candidates]);
   const summary = useMemo(() => summarizeBuckets(classifications), [classifications]);
 
-  // Build items with upside scores
   const allItems: CandidateItem[] = useMemo(() =>
     candidates.map(r => {
       const c = classifications.get(r.id)!;
@@ -136,9 +142,9 @@ export function ResourceUpsideQueue() {
     }).filter(i => !!i.classification),
   [candidates, classifications]);
 
-  // Top 20 ranked by upside
-  const top20 = useMemo(() =>
-    [...allItems].sort((a, b) => b.upside.total - a.upside.total).slice(0, 20),
+  // Top 25 ranked by upside
+  const top25 = useMemo(() =>
+    [...allItems].sort((a, b) => b.upside.total - a.upside.total).slice(0, 25),
   [allItems]);
 
   // Grouped by bucket
@@ -157,11 +163,17 @@ export function ResourceUpsideQueue() {
   }, [allItems]);
 
   const [promoted, setPromoted] = useState<Set<string>>(new Set());
+  const [guidedMode, setGuidedMode] = useState(false);
+  const [guidedIndex, setGuidedIndex] = useState(0);
   const [extractionPreview, setExtractionPreview] = useState<{
     resource: Resource;
     candidates: KnowledgeItemInsert[];
     selected: Set<number>;
+    editingIdx: number | null;
+    editText: string;
   } | null>(null);
+
+  // ── Promote handler ──────────────────────────────────────
 
   const handlePromote = useCallback(async (
     resource: Resource,
@@ -176,7 +188,19 @@ export function ResourceUpsideQueue() {
           template_category: classification.detectedUseCases[0] || 'Custom',
           resource_type: 'template',
         }).eq('id', resource.id);
-        toast.success(`"${resource.title}" promoted to Template`);
+        // Also create execution_template for immediate use
+        await supabase.from('execution_templates' as any).insert({
+          user_id: user.id,
+          title: resource.title,
+          body: resource.content || '',
+          output_type: classification.detectedUseCases[0]?.toLowerCase().replace(/[\s\/]+/g, '_') || 'custom',
+          template_type: 'other',
+          template_origin: 'promoted_from_resource',
+          status: 'active',
+          tags: classification.capabilities,
+          stage: classification.detectedUseCases[0] || null,
+        } as any);
+        toast.success(`"${resource.title}" promoted to Template — now usable in generation`);
       } else if (targetRole === 'example') {
         await supabase.from('execution_outputs').insert({
           user_id: user.id,
@@ -186,9 +210,8 @@ export function ResourceUpsideQueue() {
           is_strong_example: true,
           stage: classification.detectedUseCases[0] || null,
         });
-        toast.success(`"${resource.title}" saved as Strong Example`);
+        toast.success(`"${resource.title}" saved as Example — now visible in evidence`);
       } else if (targetRole === 'knowledge') {
-        // Show extraction preview instead of directly creating
         const source: ExtractionSource = {
           resourceId: resource.id,
           userId: user.id,
@@ -207,8 +230,10 @@ export function ResourceUpsideQueue() {
           resource,
           candidates: extracted,
           selected: new Set(extracted.map((_, i) => i)),
+          editingIdx: null,
+          editText: '',
         });
-        return; // Don't mark as promoted yet
+        return;
       } else if (targetRole === 'archive') {
         await supabase.from('resources').update({
           content_classification: 'archived',
@@ -227,22 +252,144 @@ export function ResourceUpsideQueue() {
     }
   }, [user, qc]);
 
+  // ── Save extracted knowledge ─────────────────────────────
+
   const handleSaveExtractedKnowledge = useCallback(async () => {
     if (!extractionPreview) return;
     const selected = extractionPreview.candidates.filter((_, i) => extractionPreview.selected.has(i));
-    if (selected.length === 0) {
-      toast.info('No items selected');
+    // Quality gate: flag low-quality items
+    const highQuality = selected.filter(item => {
+      const summary = item.tactic_summary || '';
+      const isGeneric = summary.length < 20 || /summary|overview|introduction|chapter/i.test(summary);
+      return !isGeneric;
+    });
+    const lowQuality = selected.length - highQuality.length;
+
+    if (highQuality.length === 0) {
+      toast.info('No high-quality items to save — all flagged as too generic');
       return;
     }
     try {
-      await insertKnowledge.mutateAsync(selected);
+      // Auto-activate high-confidence items
+      const toInsert = highQuality.map(item => ({
+        ...item,
+        status: (item.confidence_score ?? 0) >= 0.6 && item.when_to_use ? 'active' : 'review_needed',
+        active: (item.confidence_score ?? 0) >= 0.6 && !!item.when_to_use,
+      }));
+      await insertKnowledge.mutateAsync(toInsert);
+      const autoActivated = toInsert.filter(i => i.active).length;
       setPromoted(prev => new Set(prev).add(extractionPreview.resource.id));
       setExtractionPreview(null);
       qc.invalidateQueries({ queryKey: ['resources'] });
+      toast.success(`Saved ${highQuality.length} items (${autoActivated} auto-activated)${lowQuality > 0 ? `, ${lowQuality} low-quality skipped` : ''}`);
     } catch {
       toast.error('Failed to save knowledge items');
     }
   }, [extractionPreview, insertKnowledge, qc]);
+
+  // ── Bulk promote ─────────────────────────────────────────
+
+  const handleBulkPromoteTemplates = useCallback(async () => {
+    if (!user) return;
+    const items = grouped.promote_template.filter(i => !promoted.has(i.resource.id)).slice(0, 10);
+    if (items.length === 0) { toast.info('No templates to promote'); return; }
+    let count = 0;
+    for (const { resource, classification } of items) {
+      try {
+        await supabase.from('resources').update({
+          is_template: true, template_category: classification.detectedUseCases[0] || 'Custom',
+          resource_type: 'template',
+        }).eq('id', resource.id);
+        await supabase.from('execution_templates' as any).insert({
+          user_id: user.id, title: resource.title, body: resource.content || '',
+          output_type: classification.detectedUseCases[0]?.toLowerCase().replace(/[\s\/]+/g, '_') || 'custom',
+          template_type: 'other', template_origin: 'promoted_from_resource', status: 'active',
+          tags: classification.capabilities, stage: classification.detectedUseCases[0] || null,
+        } as any);
+        setPromoted(prev => new Set(prev).add(resource.id));
+        count++;
+      } catch { /* continue */ }
+    }
+    qc.invalidateQueries({ queryKey: ['resources'] });
+    toast.success(`Promoted ${count} templates — now usable in generation`);
+  }, [user, grouped.promote_template, promoted, qc]);
+
+  const handleBulkPromoteExamples = useCallback(async () => {
+    if (!user) return;
+    const items = grouped.promote_example.filter(i => !promoted.has(i.resource.id)).slice(0, 20);
+    if (items.length === 0) { toast.info('No examples to promote'); return; }
+    let count = 0;
+    for (const { resource, classification } of items) {
+      try {
+        await supabase.from('execution_outputs').insert({
+          user_id: user.id, title: resource.title, content: resource.content || '',
+          output_type: classification.detectedUseCases[0]?.toLowerCase().replace(/[\s\/]+/g, '_') || 'custom',
+          is_strong_example: true, stage: classification.detectedUseCases[0] || null,
+        });
+        setPromoted(prev => new Set(prev).add(resource.id));
+        count++;
+      } catch { /* continue */ }
+    }
+    qc.invalidateQueries({ queryKey: ['resources'] });
+    toast.success(`Promoted ${count} examples — now visible in evidence`);
+  }, [user, grouped.promote_example, promoted, qc]);
+
+  // ── Bulk auto-activate knowledge ─────────────────────────
+
+  const handleBulkAutoActivate = useCallback(async () => {
+    if (!user) return;
+    // Find knowledge items in review_needed that qualify
+    const { data: reviewItems } = await supabase
+      .from('knowledge_items')
+      .select('id, confidence_score, when_to_use, tactic_summary')
+      .eq('user_id', user.id)
+      .eq('status', 'review_needed')
+      .eq('active', false)
+      .limit(50);
+
+    const qualifiers = (reviewItems || []).filter(item =>
+      item.confidence_score >= 0.6 &&
+      item.when_to_use &&
+      item.tactic_summary &&
+      item.tactic_summary.length > 20
+    );
+
+    if (qualifiers.length === 0) { toast.info('No items qualify for auto-activation'); return; }
+
+    let count = 0;
+    for (const item of qualifiers) {
+      const { error } = await supabase
+        .from('knowledge_items')
+        .update({ status: 'active', active: true })
+        .eq('id', item.id);
+      if (!error) count++;
+    }
+    qc.invalidateQueries({ queryKey: ['knowledge-items'] });
+    toast.success(`Auto-activated ${count} high-confidence knowledge items`);
+  }, [user, qc]);
+
+  // ── Guided extraction mode ───────────────────────────────
+
+  const guidedItems = useMemo(() =>
+    grouped.extract_knowledge.filter(i => !promoted.has(i.resource.id)),
+  [grouped.extract_knowledge, promoted]);
+
+  const currentGuidedItem = guidedMode && guidedItems.length > 0 ? guidedItems[Math.min(guidedIndex, guidedItems.length - 1)] : null;
+
+  const handleGuidedExtract = useCallback(() => {
+    if (!currentGuidedItem || !user) return;
+    handlePromote(currentGuidedItem.resource, 'knowledge', currentGuidedItem.classification);
+  }, [currentGuidedItem, user, handlePromote]);
+
+  const handleGuidedSkip = useCallback(() => {
+    setGuidedIndex(prev => prev + 1);
+    if (guidedIndex + 1 >= guidedItems.length) {
+      setGuidedMode(false);
+      toast.info('All items reviewed');
+    }
+  }, [guidedIndex, guidedItems.length]);
+
+  // ── Render ───────────────────────────────────────────────
 
   if (candidates.length === 0) {
     return (
@@ -256,7 +403,16 @@ export function ResourceUpsideQueue() {
   return (
     <div className="space-y-3">
       {/* Canonical summary header */}
-      <SummaryHeader summary={summary} totalCandidates={candidates.length} totalPromoted={promoted.size} />
+      <SummaryHeader
+        summary={summary}
+        totalCandidates={candidates.length}
+        totalPromoted={promoted.size}
+        onBulkTemplates={handleBulkPromoteTemplates}
+        onBulkExamples={handleBulkPromoteExamples}
+        onBulkActivate={handleBulkAutoActivate}
+        onStartGuided={() => { setGuidedMode(true); setGuidedIndex(0); }}
+        guidedAvailable={guidedItems.length}
+      />
 
       {/* Stuck reasons */}
       {summary.topStuckReasons.length > 0 && (
@@ -273,11 +429,23 @@ export function ResourceUpsideQueue() {
         </div>
       )}
 
-      {/* TOP 20 — Highest Upside */}
-      <Top20Section items={top20} promoted={promoted} onPromote={handlePromote} />
+      {/* Guided extraction mode */}
+      {guidedMode && currentGuidedItem && (
+        <GuidedExtractionCard
+          item={currentGuidedItem}
+          index={guidedIndex}
+          total={guidedItems.length}
+          onExtract={handleGuidedExtract}
+          onSkip={handleGuidedSkip}
+          onExit={() => setGuidedMode(false)}
+        />
+      )}
+
+      {/* TOP 25 — Highest Impact */}
+      {!guidedMode && <Top25Section items={top25} promoted={promoted} onPromote={handlePromote} />}
 
       {/* Action buckets */}
-      {BUCKET_ORDER.map(bucket => (
+      {!guidedMode && BUCKET_ORDER.map(bucket => (
         <BucketSection
           key={bucket}
           bucket={bucket}
@@ -299,6 +467,23 @@ export function ResourceUpsideQueue() {
               return { ...prev, selected: next };
             });
           }}
+          onEdit={(idx) => {
+            setExtractionPreview(prev => {
+              if (!prev) return null;
+              return { ...prev, editingIdx: idx, editText: prev.candidates[idx]?.tactic_summary || '' };
+            });
+          }}
+          onSaveEdit={() => {
+            setExtractionPreview(prev => {
+              if (!prev || prev.editingIdx === null) return prev;
+              const updated = [...prev.candidates];
+              updated[prev.editingIdx] = { ...updated[prev.editingIdx], tactic_summary: prev.editText };
+              return { ...prev, candidates: updated, editingIdx: null, editText: '' };
+            });
+          }}
+          onEditTextChange={(text) => {
+            setExtractionPreview(prev => prev ? { ...prev, editText: text } : null);
+          }}
           onSave={handleSaveExtractedKnowledge}
           onClose={() => setExtractionPreview(null)}
           saving={insertKnowledge.isPending}
@@ -310,12 +495,14 @@ export function ResourceUpsideQueue() {
 
 // ── Summary Header ─────────────────────────────────────────
 
-function SummaryHeader({ summary, totalCandidates, totalPromoted }: {
+function SummaryHeader({ summary, totalCandidates, totalPromoted, onBulkTemplates, onBulkExamples, onBulkActivate, onStartGuided, guidedAvailable }: {
   summary: BucketSummary; totalCandidates: number; totalPromoted: number;
+  onBulkTemplates: () => void; onBulkExamples: () => void; onBulkActivate: () => void;
+  onStartGuided: () => void; guidedAvailable: number;
 }) {
   return (
-    <div className="border border-border rounded-lg bg-card p-4">
-      <div className="flex items-center justify-between mb-3">
+    <div className="border border-border rounded-lg bg-card p-4 space-y-3">
+      <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
             <ArrowUpRight className="h-4 w-4 text-primary" />
@@ -326,6 +513,8 @@ function SummaryHeader({ summary, totalCandidates, totalPromoted }: {
           </p>
         </div>
       </div>
+
+      {/* Bucket counts */}
       <div className="grid grid-cols-5 gap-2">
         {BUCKET_ORDER.map(bucket => {
           const cfg = BUCKET_CONFIG[bucket];
@@ -345,13 +534,94 @@ function SummaryHeader({ summary, totalCandidates, totalPromoted }: {
           );
         })}
       </div>
+
+      {/* Quick actions */}
+      <div className="flex flex-wrap gap-1.5">
+        {summary.promote_template > 0 && (
+          <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onBulkTemplates}>
+            <Crown className="h-3 w-3 text-amber-500" />
+            Promote Top 10 Templates
+          </Button>
+        )}
+        {summary.promote_example > 0 && (
+          <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onBulkExamples}>
+            <Star className="h-3 w-3 text-primary" />
+            Promote Top 20 Examples
+          </Button>
+        )}
+        {guidedAvailable > 0 && (
+          <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onStartGuided}>
+            <Play className="h-3 w-3 text-emerald-500" />
+            Guided Extraction ({guidedAvailable})
+          </Button>
+        )}
+        <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onBulkActivate}>
+          <Zap className="h-3 w-3 text-amber-500" />
+          Activate All High-Confidence
+        </Button>
+      </div>
     </div>
   );
 }
 
-// ── Top 20 Section ─────────────────────────────────────────
+// ── Guided Extraction Card ─────────────────────────────────
 
-function Top20Section({ items, promoted, onPromote }: {
+function GuidedExtractionCard({ item, index, total, onExtract, onSkip, onExit }: {
+  item: CandidateItem; index: number; total: number;
+  onExtract: () => void; onSkip: () => void; onExit: () => void;
+}) {
+  const { resource, classification, upside } = item;
+  return (
+    <div className="border-2 border-emerald-500/40 rounded-lg bg-emerald-500/5 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Brain className="h-4 w-4 text-emerald-500" />
+          <span className="text-xs font-semibold text-foreground">Guided Extraction</span>
+          <Badge variant="outline" className="text-[10px]">{index + 1} / {total}</Badge>
+        </div>
+        <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={onExit}>Exit</Button>
+      </div>
+
+      <div className="space-y-1.5">
+        <p className="text-sm font-medium text-foreground">{resource.title}</p>
+        <p className="text-[10px] text-muted-foreground">{classification.reason}</p>
+        {classification.detectedUseCases.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {classification.detectedUseCases.map(uc => (
+              <Badge key={uc} variant="outline" className="text-[9px]">{uc}</Badge>
+            ))}
+            {classification.capabilities.map(cap => (
+              <Badge key={cap} variant="outline" className="text-[9px] border-dashed">{cap.replace(/_/g, ' ')}</Badge>
+            ))}
+          </div>
+        )}
+        <p className="text-[10px] text-muted-foreground">
+          Why it matters: {upside.factors.join(' · ')} ({upside.total}pt)
+        </p>
+
+        {/* Content preview */}
+        {resource.content && (
+          <div className="bg-muted/50 border border-border rounded-md p-2 max-h-32 overflow-y-auto">
+            <p className="text-[10px] text-muted-foreground whitespace-pre-wrap">{resource.content.slice(0, 600)}</p>
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-2">
+        <Button size="sm" className="gap-1 text-xs" onClick={onExtract}>
+          <Brain className="h-3 w-3" /> Extract Knowledge
+        </Button>
+        <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={onSkip}>
+          <SkipForward className="h-3 w-3" /> Skip
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ── Top 25 Section ─────────────────────────────────────────
+
+function Top25Section({ items, promoted, onPromote }: {
   items: CandidateItem[];
   promoted: Set<string>;
   onPromote: (r: Resource, role: 'template' | 'example' | 'knowledge' | 'reference' | 'archive', c: ClassificationResult) => void;
@@ -371,14 +641,14 @@ function Top20Section({ items, promoted, onPromote }: {
       <CollapsibleTrigger className="flex items-center gap-2 w-full text-left py-2.5 px-3 hover:bg-primary/10 transition-colors">
         {open ? <ChevronDown className="h-3.5 w-3.5 text-primary" /> : <ChevronRight className="h-3.5 w-3.5 text-primary" />}
         <TrendingUp className="h-4 w-4 text-primary" />
-        <span className="text-xs font-semibold text-foreground">Highest Upside to Unlock</span>
+        <span className="text-xs font-semibold text-foreground">Highest Impact to Unlock</span>
         <Badge variant="outline" className="text-[10px] ml-auto bg-primary/15 text-primary border-primary/30">
           Top {items.length}
         </Badge>
       </CollapsibleTrigger>
       <CollapsibleContent className="px-3 pb-3 space-y-1.5">
         <p className="text-[10px] text-muted-foreground mb-2">
-          Ranked by multi-use potential, confidence, capability richness, and promotability.
+          Ranked by multi-use potential, capability richness, content depth, and stage relevance.
         </p>
         {items.map(({ resource, classification, upside }, idx) => {
           const isPromoted = promoted.has(resource.id);
@@ -394,10 +664,7 @@ function Top20Section({ items, promoted, onPromote }: {
                 isPromoted ? 'border-status-green/30 bg-status-green/5' : 'border-border bg-card',
               )}
             >
-              {/* Rank */}
-              <span className="text-[10px] font-bold text-muted-foreground w-4 shrink-0 pt-0.5">
-                {idx + 1}
-              </span>
+              <span className="text-[10px] font-bold text-muted-foreground w-4 shrink-0 pt-0.5">{idx + 1}</span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {isPromoted && <CheckCircle2 className="h-3 w-3 text-status-green shrink-0" />}
@@ -406,15 +673,9 @@ function Top20Section({ items, promoted, onPromote }: {
                     <RoleIcon className={cn('h-2.5 w-2.5', roleInfo.color)} />
                     {roleInfo.label}
                   </Badge>
-                  <Badge variant="outline" className="text-[9px] shrink-0">
-                    {upside.total}pt
-                  </Badge>
+                  <Badge variant="outline" className="text-[9px] shrink-0">{upside.total}pt</Badge>
                 </div>
-                {/* Why it matters */}
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  {upside.factors.join(' · ')}
-                </p>
-                {/* Use cases */}
+                <p className="text-[10px] text-muted-foreground mt-0.5">{upside.factors.join(' · ')}</p>
                 {classification.detectedUseCases.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1">
                     {classification.detectedUseCases.map(uc => (
@@ -425,9 +686,7 @@ function Top20Section({ items, promoted, onPromote }: {
               </div>
               {!isPromoted && (
                 <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-6 text-[10px] gap-1 shrink-0"
+                  size="sm" variant="outline" className="h-6 text-[10px] gap-1 shrink-0"
                   onClick={() => onPromote(resource, targetRole, classification)}
                 >
                   <RoleIcon className={cn('h-3 w-3', roleInfo.color)} />
@@ -499,9 +758,7 @@ function BucketSection({
                       <Badge key={uc} variant="outline" className="text-[9px]">{uc}</Badge>
                     ))}
                     {classification.capabilities.map(cap => (
-                      <Badge key={cap} variant="outline" className="text-[9px] border-dashed">
-                        {cap.replace(/_/g, ' ')}
-                      </Badge>
+                      <Badge key={cap} variant="outline" className="text-[9px] border-dashed">{cap.replace(/_/g, ' ')}</Badge>
                     ))}
                   </div>
                 )}
@@ -569,14 +826,22 @@ function BucketSection({
 
 // ── Knowledge Extraction Preview Dialog ────────────────────
 
-function ExtractionPreviewDialog({ preview, onToggle, onSave, onClose, saving }: {
-  preview: { resource: Resource; candidates: KnowledgeItemInsert[]; selected: Set<number> };
+function ExtractionPreviewDialog({ preview, onToggle, onEdit, onSaveEdit, onEditTextChange, onSave, onClose, saving }: {
+  preview: { resource: Resource; candidates: KnowledgeItemInsert[]; selected: Set<number>; editingIdx: number | null; editText: string };
   onToggle: (idx: number) => void;
+  onEdit: (idx: number) => void;
+  onSaveEdit: () => void;
+  onEditTextChange: (text: string) => void;
   onSave: () => void;
   onClose: () => void;
   saving: boolean;
 }) {
   const selectedCount = preview.selected.size;
+  // Quality check
+  const qualityFlags = preview.candidates.map(item => {
+    const summary = item.tactic_summary || '';
+    return summary.length < 20 || /summary|overview|introduction|chapter/i.test(summary);
+  });
 
   return (
     <Dialog open onOpenChange={() => onClose()}>
@@ -588,7 +853,7 @@ function ExtractionPreviewDialog({ preview, onToggle, onSave, onClose, saving }:
           </DialogTitle>
           <DialogDescription className="text-xs">
             From: <span className="font-medium text-foreground">{preview.resource.title}</span>
-            &nbsp;· {preview.candidates.length} candidates found · {selectedCount} selected
+            &nbsp;· {preview.candidates.length} candidates · {selectedCount} selected
           </DialogDescription>
         </DialogHeader>
 
@@ -596,16 +861,19 @@ function ExtractionPreviewDialog({ preview, onToggle, onSave, onClose, saving }:
           {preview.candidates.map((item, idx) => {
             const isSelected = preview.selected.has(idx);
             const confidence = Math.round((item.confidence_score ?? 0) * 100);
+            const isLowQuality = qualityFlags[idx];
+            const isEditing = preview.editingIdx === idx;
+
             return (
               <div
                 key={idx}
                 className={cn(
-                  'flex items-start gap-2 p-3 rounded-md border text-xs transition-colors cursor-pointer',
+                  'flex items-start gap-2 p-3 rounded-md border text-xs transition-colors',
+                  isLowQuality && isSelected ? 'border-status-yellow/40 bg-status-yellow/5' :
                   isSelected ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border bg-muted/30 opacity-60',
                 )}
-                onClick={() => onToggle(idx)}
               >
-                <Checkbox checked={isSelected} className="mt-0.5" />
+                <Checkbox checked={isSelected} className="mt-0.5" onCheckedChange={() => onToggle(idx)} />
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-medium text-foreground">{item.title}</span>
@@ -613,31 +881,61 @@ function ExtractionPreviewDialog({ preview, onToggle, onSave, onClose, saving }:
                     <Badge className={cn('text-[9px]', confidence >= 55 ? 'bg-status-green/15 text-status-green' : 'bg-muted text-muted-foreground')}>
                       {confidence}%
                     </Badge>
+                    {isLowQuality && (
+                      <Badge className="text-[9px] bg-status-yellow/15 text-status-yellow border-status-yellow/30">
+                        LOW QUALITY
+                      </Badge>
+                    )}
                   </div>
-                  {item.tactic_summary && (
-                    <p className="text-[10px] text-muted-foreground">{item.tactic_summary}</p>
-                  )}
-                  <div className="flex gap-3 text-[10px] text-muted-foreground">
-                    {item.when_to_use && <span>📍 {item.when_to_use}</span>}
-                  </div>
-                  {item.example_usage && (
-                    <p className="text-[10px] italic text-muted-foreground border-l-2 border-border pl-2">
-                      {item.example_usage}
-                    </p>
+                  {isEditing ? (
+                    <div className="space-y-1">
+                      <Textarea
+                        value={preview.editText}
+                        onChange={e => onEditTextChange(e.target.value)}
+                        rows={2}
+                        className="text-[10px]"
+                      />
+                      <Button size="sm" variant="outline" className="h-5 text-[9px]" onClick={onSaveEdit}>
+                        Save Edit
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      {item.tactic_summary && (
+                        <p className="text-[10px] text-muted-foreground">{item.tactic_summary}</p>
+                      )}
+                      <div className="flex gap-3 text-[10px] text-muted-foreground">
+                        {item.when_to_use && <span>📍 {item.when_to_use}</span>}
+                      </div>
+                      {item.example_usage && (
+                        <p className="text-[10px] italic text-muted-foreground border-l-2 border-border pl-2">
+                          {item.example_usage}
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
+                {!isEditing && (
+                  <Button size="sm" variant="ghost" className="h-5 w-5 p-0 shrink-0" onClick={() => onEdit(idx)}>
+                    <Edit3 className="h-3 w-3" />
+                  </Button>
+                )}
               </div>
             );
           })}
         </div>
 
         <DialogFooter>
+          <div className="flex items-center gap-2 text-[10px] text-muted-foreground mr-auto">
+            {qualityFlags.filter(Boolean).length > 0 && (
+              <span className="text-status-yellow flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" />
+                {qualityFlags.filter(Boolean).length} low-quality items will be skipped
+              </span>
+            )}
+          </div>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button
-            onClick={onSave}
-            disabled={saving || selectedCount === 0}
-            className="gap-1"
-          >
+          <Button onClick={onSave} disabled={saving || selectedCount === 0} className="gap-1">
             <Brain className="h-3.5 w-3.5" />
             Save {selectedCount} Item{selectedCount !== 1 ? 's' : ''}
           </Button>
