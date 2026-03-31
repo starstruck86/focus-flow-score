@@ -34,7 +34,7 @@ import {
 } from '@/hooks/useResources';
 import {
   getEnrichmentStatusLabel, getEnrichmentStatusColor, getRecommendedAction,
-  type EnrichmentStatus,
+  getResourceOrigin, type EnrichmentStatus,
 } from '@/lib/resourceEligibility';
 import { useClassifyResource, useUploadResource, useAddUrlResource, type ClassificationResult } from '@/hooks/useResourceUpload';
 import { ResourceEditor } from './ResourceEditor';
