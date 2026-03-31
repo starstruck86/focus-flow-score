@@ -36,7 +36,8 @@ import {
 } from '@/lib/resourceClassifier';
 import { extractKnowledgeHeuristic, type ExtractionSource } from '@/lib/knowledgeExtraction';
 import { TrustReviewQueue } from '@/components/knowledge/TrustReviewQueue';
-import { ResourceFailureQueue, type ResourceDiagnosis } from '@/components/knowledge/ResourceFailureQueue';
+import { ResourceFailureQueue } from '@/components/knowledge/ResourceFailureQueue';
+import { usePipelineDiagnoses, useRunPipeline, type PipelineRunResult } from '@/hooks/usePipelineDiagnoses';
 import { useKnowledgeItems as useAllKnowledgeItems } from '@/hooks/useKnowledgeItems';
 import { useResources, type Resource } from '@/hooks/useResources';
 import { useInsertKnowledgeItems, type KnowledgeItemInsert } from '@/hooks/useKnowledgeItems';
@@ -375,51 +376,15 @@ export function ResourceUpsideQueue() {
     toast.success(`Auto-activated ${count} knowledge items — now usable in execution`);
   }, [user, qc]);
 
-  // ── Batch backfill via edge function ─────────────────────
+  // ── Pipeline orchestration ────────────────────────────────
 
-  const [batchRunning, setBatchRunning] = useState(false);
-  const [pipelineResult, setPipelineResult] = useState<{
-    total_resources: number;
-    total_processed: number;
-    already_operationalized: number;
-    batch_size: number;
-    remaining: number;
-    operationalized: number;
-    needs_review: number;
-    reference_only: number;
-    content_missing: number;
-    knowledge_created: number;
-    knowledge_activated: number;
-    templates_created: number;
-    examples_created: number;
-    duplicates_suppressed: number;
-    trust_rejected: number;
-    failure_breakdown: Record<string, number>;
-    trust_failure_breakdown: Record<string, number>;
-    diagnoses: ResourceDiagnosis[];
-  } | null>(null);
+  const { run: runPipeline, abort: abortPipeline, running: batchRunning, result: pipelineResult } = useRunPipeline();
+  const { data: persistedDiagnoses } = usePipelineDiagnoses();
 
-  const handleRunPipeline = useCallback(async (mode: 'standard' | 'full_backlog' = 'standard') => {
+  const handleRunPipeline = useCallback(async (mode: 'standard' | 'full_backlog' | 'run_until_clean' = 'standard') => {
     if (!user) return;
-    setBatchRunning(true);
-    setPipelineResult(null);
-    try {
-      const { data, error } = await supabase.functions.invoke('batch-actionize', {
-        body: { batchSize: mode === 'full_backlog' ? 50 : 15, mode },
-      });
-      if (error) throw error;
-      setPipelineResult(data);
-      qc.invalidateQueries({ queryKey: ['knowledge-items'] });
-      qc.invalidateQueries({ queryKey: ['resources'] });
-      const msg = `Pipeline: ${data.operationalized} operationalized · ${data.needs_review} need review · ${data.knowledge_created} KI · ${data.templates_created} templates`;
-      toast.success(msg);
-    } catch (err) {
-      console.error('Pipeline failed:', err);
-      toast.error('Pipeline failed');
-    } finally {
-      setBatchRunning(false);
-    }
-  }, [user, qc]);
+    await runPipeline(mode);
+  }, [user, runPipeline]);
 
   // ── Guided extraction mode ───────────────────────────────
 
@@ -461,8 +426,10 @@ export function ResourceUpsideQueue() {
         totalCandidates={candidates.length}
         totalPromoted={promoted.size}
         pipelineResult={pipelineResult}
+        persistedDiagnoses={persistedDiagnoses?.diagnoses || []}
         batchRunning={batchRunning}
         onRunPipeline={handleRunPipeline}
+        onAbort={abortPipeline}
         onBulkTemplates={handleBulkPromoteTemplates}
         onBulkExamples={handleBulkPromoteExamples}
         onBulkActivate={handleBulkAutoActivate}
@@ -497,10 +464,11 @@ export function ResourceUpsideQueue() {
         />
       )}
 
-      {/* Resource Failure Queue — from pipeline diagnoses */}
-      {!guidedMode && pipelineResult && pipelineResult.diagnoses.length > 0 && (
-        <ResourceFailureQueue diagnoses={pipelineResult.diagnoses} />
-      )}
+      {/* Resource Failure Queue — from pipeline diagnoses (persisted or live) */}
+      {!guidedMode && (() => {
+        const diagsToShow = pipelineResult?.diagnoses || persistedDiagnoses?.diagnoses || [];
+        return diagsToShow.length > 0 ? <ResourceFailureQueue diagnoses={diagsToShow} /> : null;
+      })()}
 
       {/* Trust Review Queue — extracted but not activated */}
       {!guidedMode && <TrustReviewQueue />}
@@ -580,39 +548,28 @@ const TRUST_GATE_LABELS: Record<string, string> = {
 };
 
 function PipelineDashboard({
-  summary, totalCandidates, totalPromoted, pipelineResult, batchRunning,
-  onRunPipeline, onBulkTemplates, onBulkExamples, onBulkActivate, onStartGuided, guidedAvailable,
+  summary, totalCandidates, totalPromoted, pipelineResult, persistedDiagnoses, batchRunning,
+  onRunPipeline, onAbort, onBulkTemplates, onBulkExamples, onBulkActivate, onStartGuided, guidedAvailable,
 }: {
   summary: BucketSummary;
   totalCandidates: number;
   totalPromoted: number;
-  pipelineResult: {
-    total_resources: number;
-    total_processed: number;
-    already_operationalized: number;
-    remaining: number;
-    operationalized: number;
-    needs_review: number;
-    reference_only: number;
-    content_missing: number;
-    knowledge_created: number;
-    knowledge_activated: number;
-    templates_created: number;
-    examples_created: number;
-    duplicates_suppressed: number;
-    trust_rejected: number;
-    failure_breakdown: Record<string, number>;
-    trust_failure_breakdown: Record<string, number>;
-    diagnoses: any[];
-  } | null;
+  pipelineResult: PipelineRunResult | null;
+  persistedDiagnoses: any[];
   batchRunning: boolean;
-  onRunPipeline: (mode: 'standard' | 'full_backlog') => void;
+  onRunPipeline: (mode: 'standard' | 'full_backlog' | 'run_until_clean') => void;
+  onAbort: () => void;
   onBulkTemplates: () => void;
   onBulkExamples: () => void;
   onBulkActivate: () => void;
   onStartGuided: () => void;
   guidedAvailable: number;
 }) {
+  const r = pipelineResult;
+  const totalRef = r ? (r.reference_supporting + r.reference_needs_judgment + r.reference_low_leverage) : 0;
+  const totalDone = r ? (r.operationalized + r.operationalized_partial + r.already_operationalized) : 0;
+  const convergencePct = r && r.total_resources > 0 ? Math.round((totalDone / r.total_resources) * 100) : null;
+
   return (
     <div className="border border-border rounded-lg bg-card p-4 space-y-3">
       <div className="flex items-center justify-between">
@@ -623,67 +580,79 @@ function PipelineDashboard({
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
             {totalCandidates} classifiable · {totalPromoted} promoted this session
+            {convergencePct !== null && <span className="ml-1 font-medium text-primary">· {convergencePct}% converged</span>}
           </p>
         </div>
       </div>
 
-      {/* Terminal state summary — shown after pipeline run */}
-      {pipelineResult && (
-        <div className="grid grid-cols-4 gap-2">
-          <div className="text-center p-2 rounded-md bg-status-green/10 border border-status-green/20">
-            <CheckCircle2 className="h-4 w-4 mx-auto mb-1 text-status-green" />
-            <p className="text-lg font-bold text-foreground">{pipelineResult.operationalized + pipelineResult.already_operationalized}</p>
-            <p className="text-[9px] text-muted-foreground">Operational</p>
+      {/* Convergence metrics */}
+      {r && (
+        <div className="grid grid-cols-6 gap-1.5">
+          <div className="text-center p-1.5 rounded-md bg-status-green/10 border border-status-green/20">
+            <p className="text-sm font-bold text-foreground">{r.operationalized + r.already_operationalized}</p>
+            <p className="text-[8px] text-muted-foreground leading-tight">Done</p>
           </div>
-          <div className="text-center p-2 rounded-md bg-status-yellow/10 border border-status-yellow/20">
-            <AlertTriangle className="h-4 w-4 mx-auto mb-1 text-status-yellow" />
-            <p className="text-lg font-bold text-foreground">{pipelineResult.needs_review}</p>
-            <p className="text-[9px] text-muted-foreground">Needs Review</p>
+          <div className="text-center p-1.5 rounded-md bg-primary/10 border border-primary/20">
+            <p className="text-sm font-bold text-foreground">{r.operationalized_partial}</p>
+            <p className="text-[8px] text-muted-foreground leading-tight">Partial</p>
           </div>
-          <div className="text-center p-2 rounded-md bg-muted/50 border border-border">
-            <FileText className="h-4 w-4 mx-auto mb-1 text-muted-foreground" />
-            <p className="text-lg font-bold text-foreground">{pipelineResult.reference_only}</p>
-            <p className="text-[9px] text-muted-foreground">Reference</p>
+          <div className="text-center p-1.5 rounded-md bg-status-yellow/10 border border-status-yellow/20">
+            <p className="text-sm font-bold text-foreground">{r.needs_review}</p>
+            <p className="text-[8px] text-muted-foreground leading-tight">Review</p>
           </div>
-          <div className="text-center p-2 rounded-md bg-destructive/10 border border-destructive/20">
-            <AlertTriangle className="h-4 w-4 mx-auto mb-1 text-destructive" />
-            <p className="text-lg font-bold text-foreground">{pipelineResult.content_missing}</p>
-            <p className="text-[9px] text-muted-foreground">Missing</p>
+          <div className="text-center p-1.5 rounded-md bg-muted/50 border border-border">
+            <p className="text-sm font-bold text-foreground">{totalRef}</p>
+            <p className="text-[8px] text-muted-foreground leading-tight">Reference</p>
           </div>
+          <div className="text-center p-1.5 rounded-md bg-destructive/10 border border-destructive/20">
+            <p className="text-sm font-bold text-foreground">{r.content_missing}</p>
+            <p className="text-[8px] text-muted-foreground leading-tight">Missing</p>
+          </div>
+          <div className="text-center p-1.5 rounded-md bg-muted/30 border border-border">
+            <p className="text-sm font-bold text-foreground">{r.remaining}</p>
+            <p className="text-[8px] text-muted-foreground leading-tight">Remaining</p>
+          </div>
+        </div>
+      )}
+
+      {/* Split reference detail */}
+      {r && totalRef > 0 && (
+        <div className="flex gap-2 text-[10px] text-muted-foreground">
+          {r.reference_supporting > 0 && <span>Supporting: {r.reference_supporting}</span>}
+          {r.reference_needs_judgment > 0 && <span>Needs Judgment: {r.reference_needs_judgment}</span>}
+          {r.reference_low_leverage > 0 && <span>Low Leverage: {r.reference_low_leverage}</span>}
         </div>
       )}
 
       {/* Assets created */}
-      {pipelineResult && (
+      {r && (
         <div className="rounded-md bg-muted/50 border border-border p-2.5 text-xs space-y-1">
           <p className="font-medium text-foreground flex items-center gap-1.5">
             <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
-            {pipelineResult.total_processed} processed this run
+            {r.total_processed} processed · {r.iterations_run} iteration{r.iterations_run !== 1 ? 's' : ''}
+            {r.converged && <Badge variant="outline" className="text-[9px] ml-1 bg-status-green/15 text-status-green border-status-green/30">Converged</Badge>}
           </p>
           <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-muted-foreground">
-            <span>Knowledge items: <span className="text-foreground font-medium">{pipelineResult.knowledge_created}</span></span>
-            <span>Auto-activated: <span className="text-foreground font-medium">{pipelineResult.knowledge_activated}</span></span>
-            <span>Templates: <span className="text-foreground font-medium">{pipelineResult.templates_created}</span></span>
-            <span>Examples: <span className="text-foreground font-medium">{pipelineResult.examples_created}</span></span>
-            <span>Duplicates suppressed: <span className="text-foreground font-medium">{pipelineResult.duplicates_suppressed}</span></span>
-            <span>Trust rejected: <span className="text-foreground font-medium">{pipelineResult.trust_rejected}</span></span>
+            <span>Knowledge items: <span className="text-foreground font-medium">{r.knowledge_created}</span></span>
+            <span>Auto-activated: <span className="text-foreground font-medium">{r.knowledge_activated}</span></span>
+            <span>Templates: <span className="text-foreground font-medium">{r.templates_created}</span></span>
+            <span>Examples: <span className="text-foreground font-medium">{r.examples_created}</span></span>
+            <span>Duplicates suppressed: <span className="text-foreground font-medium">{r.duplicates_suppressed}</span></span>
+            <span>Trust rejected: <span className="text-foreground font-medium">{r.trust_rejected}</span></span>
           </div>
-          {pipelineResult.remaining > 0 && (
-            <p className="text-muted-foreground mt-1">{pipelineResult.remaining} remaining — run again to continue</p>
-          )}
         </div>
       )}
 
       {/* Failure breakdown */}
-      {pipelineResult && Object.keys(pipelineResult.failure_breakdown).length > 0 && (
+      {r && Object.keys(r.failure_breakdown).length > 0 && (
         <div className="rounded-md bg-destructive/5 border border-destructive/20 p-2.5 text-xs space-y-1">
           <p className="font-medium text-destructive text-[11px]">Failure Breakdown</p>
           <div className="flex flex-wrap gap-1">
-            {Object.entries(pipelineResult.failure_breakdown)
-              .sort(([,a], [,b]) => b - a)
+            {Object.entries(r.failure_breakdown)
+              .sort(([,a], [,b]) => (b as number) - (a as number))
               .map(([reason, count]) => (
                 <Badge key={reason} variant="outline" className="text-[9px] border-destructive/30 text-destructive">
-                  {FAILURE_LABELS[reason] || reason} ({count})
+                  {FAILURE_LABELS[reason] || reason} ({count as number})
                 </Badge>
               ))}
           </div>
@@ -691,23 +660,23 @@ function PipelineDashboard({
       )}
 
       {/* Trust failure breakdown */}
-      {pipelineResult && Object.keys(pipelineResult.trust_failure_breakdown).length > 0 && (
+      {r && Object.keys(r.trust_failure_breakdown).length > 0 && (
         <div className="rounded-md bg-status-yellow/5 border border-status-yellow/20 p-2.5 text-xs space-y-1">
           <p className="font-medium text-status-yellow text-[11px]">Trust Gate Failures</p>
           <div className="flex flex-wrap gap-1">
-            {Object.entries(pipelineResult.trust_failure_breakdown)
-              .sort(([,a], [,b]) => b - a)
+            {Object.entries(r.trust_failure_breakdown)
+              .sort(([,a], [,b]) => (b as number) - (a as number))
               .map(([gate, count]) => (
                 <Badge key={gate} variant="outline" className="text-[9px] border-status-yellow/30 text-status-yellow">
-                  {TRUST_GATE_LABELS[gate] || gate} ({count})
+                  {TRUST_GATE_LABELS[gate] || gate} ({count as number})
                 </Badge>
               ))}
           </div>
         </div>
       )}
 
-      {/* Pre-pipeline bucket counts (when no pipeline result yet) */}
-      {!pipelineResult && (
+      {/* Pre-pipeline bucket counts */}
+      {!r && (
         <div className="grid grid-cols-5 gap-2">
           {BUCKET_ORDER.map(bucket => {
             const cfg = BUCKET_CONFIG[bucket];
@@ -729,38 +698,54 @@ function PipelineDashboard({
         </div>
       )}
 
+      {/* Persisted diagnosis counts when no live result */}
+      {!r && persistedDiagnoses.length > 0 && (
+        <p className="text-[10px] text-muted-foreground">
+          {persistedDiagnoses.length} diagnoses from previous run
+        </p>
+      )}
+
       {/* Actions */}
       <div className="flex flex-wrap gap-1.5">
-        <Button size="sm" variant="default" className="h-7 text-[10px] gap-1" onClick={() => onRunPipeline('standard')} disabled={batchRunning}>
-          {batchRunning ? <Loader2 className="h-3 w-3 animate-spin" /> : <TrendingUp className="h-3 w-3" />}
-          {batchRunning ? 'Running...' : 'Run Pipeline (15)'}
-        </Button>
-        <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => onRunPipeline('full_backlog')} disabled={batchRunning}>
-          {batchRunning ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-          Full Backlog
-        </Button>
-        {summary.promote_template > 0 && (
-          <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onBulkTemplates}>
-            <Crown className="h-3 w-3 text-amber-500" />
-            Promote Templates
+        {batchRunning ? (
+          <Button size="sm" variant="destructive" className="h-7 text-[10px] gap-1" onClick={onAbort}>
+            Stop
           </Button>
+        ) : (
+          <>
+            <Button size="sm" variant="default" className="h-7 text-[10px] gap-1" onClick={() => onRunPipeline('run_until_clean')}>
+              <Zap className="h-3 w-3" /> Run Until Clean
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => onRunPipeline('standard')}>
+              <TrendingUp className="h-3 w-3" /> Run Batch (15)
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => onRunPipeline('full_backlog')}>
+              Full Backlog
+            </Button>
+          </>
         )}
-        {summary.promote_example > 0 && (
-          <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onBulkExamples}>
-            <Star className="h-3 w-3 text-primary" />
-            Promote Examples
-          </Button>
+        {!batchRunning && (
+          <>
+            {summary.promote_template > 0 && (
+              <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onBulkTemplates}>
+                <Crown className="h-3 w-3 text-amber-500" /> Promote Templates
+              </Button>
+            )}
+            {summary.promote_example > 0 && (
+              <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onBulkExamples}>
+                <Star className="h-3 w-3 text-primary" /> Promote Examples
+              </Button>
+            )}
+            {guidedAvailable > 0 && (
+              <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onStartGuided}>
+                <Play className="h-3 w-3 text-status-green" /> Guided ({guidedAvailable})
+              </Button>
+            )}
+            <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onBulkActivate}>
+              <Zap className="h-3 w-3 text-amber-500" /> Activate All
+            </Button>
+          </>
         )}
-        {guidedAvailable > 0 && (
-          <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onStartGuided}>
-            <Play className="h-3 w-3 text-emerald-500" />
-            Guided ({guidedAvailable})
-          </Button>
-        )}
-        <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onBulkActivate}>
-          <Zap className="h-3 w-3 text-amber-500" />
-          Activate All
-        </Button>
       </div>
     </div>
   );

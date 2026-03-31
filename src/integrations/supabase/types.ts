@@ -2239,6 +2239,63 @@ export type Database = {
         }
         Relationships: []
       }
+      pipeline_diagnoses: {
+        Row: {
+          assets_created: Json
+          created_at: string
+          failure_reasons: string[]
+          human_review_required: boolean
+          id: string
+          most_similar_existing: string | null
+          priority: string
+          recommended_fix: string | null
+          resource_id: string
+          retryable: boolean
+          route: string | null
+          run_id: string
+          terminal_state: string
+          trust_failures: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assets_created?: Json
+          created_at?: string
+          failure_reasons?: string[]
+          human_review_required?: boolean
+          id?: string
+          most_similar_existing?: string | null
+          priority?: string
+          recommended_fix?: string | null
+          resource_id: string
+          retryable?: boolean
+          route?: string | null
+          run_id: string
+          terminal_state?: string
+          trust_failures?: string[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assets_created?: Json
+          created_at?: string
+          failure_reasons?: string[]
+          human_review_required?: boolean
+          id?: string
+          most_similar_existing?: string | null
+          priority?: string
+          recommended_fix?: string | null
+          resource_id?: string
+          retryable?: boolean
+          route?: string | null
+          run_id?: string
+          terminal_state?: string
+          trust_failures?: string[]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       pipeline_hygiene_scans: {
         Row: {
           created_at: string
