@@ -1,14 +1,13 @@
 /**
  * Extraction Method Dispatch
  *
- * Routes each extraction method to a real, distinct code path instead of
- * always calling the same black-box autoOperationalize function.
+ * Routes each extraction method to a REAL, distinct code path.
  *
  * Methods:
- *   edge_fetch        → invoke enrich-resource-content edge function
- *   direct_fetch      → fetch resource URL directly in browser and store content
- *   source_specific   → platform-aware extraction (YouTube transcripts, Zoom, etc.)
- *   transcript_fallback → attempt transcript / transcription pipeline
+ *   edge_fetch        → invoke enrich-resource-content edge function (Firecrawl-backed)
+ *   direct_fetch      → fetch URL directly from browser, parse HTML, store text
+ *   source_specific   → platform-aware extraction (YouTube captions, Zoom, etc.)
+ *   transcript_fallback → pull existing transcript from audio_jobs or mark awaiting
  *   metadata_only     → lightweight extraction from title/description/tags only
  */
 
@@ -26,6 +25,44 @@ export interface MethodResult {
   success: boolean;
   contentLength?: number;
   error?: string;
+  methodUsed?: string;
+  qualityPassed?: boolean;
+}
+
+// ── Quality gate ───────────────────────────────────────────
+
+const MIN_QUALITY_CHARS = 100;
+const JUNK_PATTERNS = [
+  /^<!doctype/i,
+  /^<html/i,
+  /^{"error/i,
+  /^undefined$/,
+  /^null$/,
+  /^not found$/i,
+  /^access denied/i,
+  /^sign in/i,
+  /^please log in/i,
+  /^404/,
+  /^403/,
+];
+
+function passesQualityGate(content: string | null | undefined): { passed: boolean; reason?: string } {
+  if (!content) return { passed: false, reason: 'No content' };
+  const trimmed = content.trim();
+  if (trimmed.length < MIN_QUALITY_CHARS) {
+    return { passed: false, reason: `Too short (${trimmed.length} chars, min ${MIN_QUALITY_CHARS})` };
+  }
+  for (const pattern of JUNK_PATTERNS) {
+    if (pattern.test(trimmed.slice(0, 200))) {
+      return { passed: false, reason: `Junk content detected: ${pattern.source}` };
+    }
+  }
+  // Check for meaningful word count (not just boilerplate)
+  const words = trimmed.split(/\s+/).filter(w => w.length > 2);
+  if (words.length < 15) {
+    return { passed: false, reason: `Too few words (${words.length})` };
+  }
+  return { passed: true };
 }
 
 // ── Public dispatcher ──────────────────────────────────────
@@ -37,20 +74,42 @@ export async function dispatchExtractionMethod(
 ): Promise<MethodResult> {
   log.info('Dispatching extraction', { resourceId, method, sourceType });
 
+  let result: MethodResult;
   switch (method) {
     case 'edge_fetch':
-      return runEdgeFetch(resourceId);
+      result = await runEdgeFetch(resourceId);
+      break;
     case 'direct_fetch':
-      return runDirectFetch(resourceId);
+      result = await runDirectFetch(resourceId);
+      break;
     case 'source_specific':
-      return runSourceSpecific(resourceId, sourceType);
+      result = await runSourceSpecific(resourceId, sourceType);
+      break;
     case 'transcript_fallback':
-      return runTranscriptFallback(resourceId, sourceType);
+      result = await runTranscriptFallback(resourceId);
+      break;
     case 'metadata_only':
-      return runMetadataOnly(resourceId);
+      result = await runMetadataOnly(resourceId);
+      break;
     default:
-      return { success: false, error: `Unknown method: ${method}` };
+      result = { success: false, error: `Unknown method: ${method}` };
   }
+
+  result.methodUsed = method;
+
+  // Apply quality gate on success
+  if (result.success && result.contentLength !== undefined) {
+    const content = await getResourceContent(resourceId);
+    const quality = passesQualityGate(content);
+    result.qualityPassed = quality.passed;
+    if (!quality.passed) {
+      log.warn('Quality gate failed', { resourceId, method, reason: quality.reason });
+      result.success = false;
+      result.error = `Quality gate: ${quality.reason}`;
+    }
+  }
+
+  return result;
 }
 
 // ── Enrichment (separate from extraction) ──────────────────
@@ -58,7 +117,6 @@ export async function dispatchExtractionMethod(
 export async function runEnrichmentOnly(resourceId: string): Promise<MethodResult> {
   log.info('Running enrichment-only', { resourceId });
 
-  // Verify resource has content
   const { data: resource } = await supabase
     .from('resources')
     .select('id, title, content, description, tags, resource_type, content_length')
@@ -74,7 +132,6 @@ export async function runEnrichmentOnly(resourceId: string): Promise<MethodResul
     return { success: false, error: `Insufficient content for enrichment (${contentLen} chars)` };
   }
 
-  // Extract knowledge from existing content
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData?.user?.id;
   if (!userId) return { success: false, error: 'Not authenticated' };
@@ -87,7 +144,7 @@ export async function runEnrichmentOnly(resourceId: string): Promise<MethodResul
     .limit(1);
 
   if ((existingKI?.length ?? 0) > 0) {
-    return { success: true, contentLength: contentLen, error: undefined };
+    return { success: true, contentLength: contentLen };
   }
 
   const source: ExtractionSource = {
@@ -117,6 +174,10 @@ export async function runEnrichmentOnly(resourceId: string): Promise<MethodResul
 
 // ── Method implementations ─────────────────────────────────
 
+/**
+ * Edge Fetch: calls the enrich-resource-content edge function
+ * which uses Firecrawl for web scraping + platform-specific handlers
+ */
 async function runEdgeFetch(resourceId: string): Promise<MethodResult> {
   try {
     const result = await invokeEnrichResource(
@@ -131,21 +192,24 @@ async function runEdgeFetch(resourceId: string): Promise<MethodResult> {
       };
     }
 
-    // Verify content was actually written
     const contentLen = await getResourceContentLength(resourceId);
     return {
-      success: contentLen >= 30,
+      success: contentLen >= MIN_QUALITY_CHARS,
       contentLength: contentLen,
-      error: contentLen < 30 ? 'Edge fetch returned but no content stored' : undefined,
+      error: contentLen < MIN_QUALITY_CHARS ? 'Edge fetch returned but content below quality threshold' : undefined,
     };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Edge fetch failed' };
   }
 }
 
+/**
+ * Direct Fetch: fetches the URL directly from the browser context
+ * (no edge function / no Firecrawl). Useful as a fallback when
+ * the edge function is unreachable or slow.
+ */
 async function runDirectFetch(resourceId: string): Promise<MethodResult> {
   try {
-    // Get resource URL
     const { data: resource } = await supabase
       .from('resources')
       .select('file_url')
@@ -155,73 +219,137 @@ async function runDirectFetch(resourceId: string): Promise<MethodResult> {
     const url = (resource as any)?.file_url;
     if (!url) return { success: false, error: 'No URL available for direct fetch' };
 
-    // Use edge function with direct_fetch hint
+    // Skip non-HTTP URLs
+    if (!url.startsWith('http')) {
+      return { success: false, error: 'URL is not fetchable (non-HTTP)' };
+    }
+
+    // Skip known auth-gated / JS-heavy domains where direct fetch won't work
+    const skipDomains = [
+      /youtube\.com/i, /youtu\.be/i, /zoom\.(us|com)/i,
+      /thinkific\.com/i, /teachable\.com/i, /kajabi\.com/i,
+      /linkedin\.com/i, /facebook\.com/i, /instagram\.com/i,
+    ];
+    if (skipDomains.some(p => p.test(url))) {
+      return { success: false, error: 'Domain requires JS rendering or auth — direct fetch unsuitable' };
+    }
+
+    // Actually fetch the page directly
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; FocusFlowBot/1.0)',
+        'Accept': 'text/html,application/xhtml+xml,text/plain,application/pdf',
+      },
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      return { success: false, error: `Direct fetch HTTP ${response.status}` };
+    }
+
+    const contentType = response.headers.get('content-type') ?? '';
+    // Skip binary content
+    if (contentType.includes('audio/') || contentType.includes('video/') || contentType.includes('image/')) {
+      return { success: false, error: `Direct fetch: binary content type (${contentType})` };
+    }
+
+    const text = await response.text();
+
+    // Parse HTML to extract text content
+    let extractedText = text;
+    if (contentType.includes('html')) {
+      // Strip HTML tags, scripts, styles
+      extractedText = text
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+        .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+        .replace(/<header[\s\S]*?<\/header>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    // Cap at 60k chars
+    const capped = extractedText.slice(0, 60000);
+
+    if (capped.length < MIN_QUALITY_CHARS) {
+      return { success: false, error: `Direct fetch: extracted text too short (${capped.length} chars)` };
+    }
+
+    // Store the content
+    await supabase
+      .from('resources')
+      .update({
+        content: capped,
+        content_length: capped.length,
+        enrichment_status: 'enriched',
+        extraction_method: 'direct_browser_fetch',
+        last_status_change_at: new Date().toISOString(),
+      } as any)
+      .eq('id', resourceId);
+
+    return { success: true, contentLength: capped.length };
+  } catch (err: any) {
+    const msg = err?.message || 'Direct fetch failed';
+    return {
+      success: false,
+      error: msg.includes('abort') ? 'Direct fetch: timeout (30s)' : msg,
+    };
+  }
+}
+
+/**
+ * Source-specific: runs platform-aware extraction via the edge function
+ * with extended timeouts for platforms that need it.
+ */
+async function runSourceSpecific(resourceId: string, sourceType: CanonicalSourceType): Promise<MethodResult> {
+  try {
+    const timeouts: Record<string, number> = {
+      youtube: 90000,
+      zoom: 120000,
+      thinkific: 90000,
+      audio: 120000,
+      video: 120000,
+    };
+
     const result = await invokeEnrichResource(
       { resource_id: resourceId, force: true },
-      { componentName: 'BatchExtraction:DirectFetch', timeoutMs: 60000 },
+      {
+        componentName: `BatchExtraction:SourceSpecific:${sourceType}`,
+        timeoutMs: timeouts[sourceType] ?? 90000,
+      },
     );
 
     if (result.error) {
-      return { success: false, error: `Direct fetch: ${result.error.message}` };
+      return { success: false, error: `Source-specific (${sourceType}): ${result.error.message}` };
     }
 
     const contentLen = await getResourceContentLength(resourceId);
     return {
-      success: contentLen >= 30,
+      success: contentLen >= MIN_QUALITY_CHARS,
       contentLength: contentLen,
-      error: contentLen < 30 ? 'Direct fetch returned but content insufficient' : undefined,
+      error: contentLen < MIN_QUALITY_CHARS ? `Source-specific: content below threshold (${contentLen})` : undefined,
     };
-  } catch (err: any) {
-    return { success: false, error: err?.message || 'Direct fetch failed' };
-  }
-}
-
-async function runSourceSpecific(resourceId: string, sourceType: CanonicalSourceType): Promise<MethodResult> {
-  try {
-    log.info('Source-specific extraction', { resourceId, sourceType });
-
-    // For YouTube: attempt transcript extraction
-    if (sourceType === 'youtube') {
-      return runEdgeFetch(resourceId); // Edge function has YouTube-specific handling
-    }
-
-    // For Zoom: attempt with extended timeout
-    if (sourceType === 'zoom') {
-      const result = await invokeEnrichResource(
-        { resource_id: resourceId, force: true },
-        { componentName: 'BatchExtraction:ZoomSpecific', timeoutMs: 120000 },
-      );
-      if (result.error) return { success: false, error: `Zoom extraction: ${result.error.message}` };
-      const len = await getResourceContentLength(resourceId);
-      return { success: len >= 30, contentLength: len };
-    }
-
-    // For Thinkific: standard enrichment with platform hint
-    if (sourceType === 'thinkific') {
-      const result = await invokeEnrichResource(
-        { resource_id: resourceId, force: true },
-        { componentName: 'BatchExtraction:ThinkificSpecific', timeoutMs: 90000 },
-      );
-      if (result.error) return { success: false, error: `Thinkific extraction: ${result.error.message}` };
-      const len = await getResourceContentLength(resourceId);
-      return { success: len >= 30, contentLength: len };
-    }
-
-    // For PDF/documents: standard enrichment
-    if (sourceType === 'pdf' || sourceType === 'document') {
-      return runEdgeFetch(resourceId);
-    }
-
-    // Default: try edge fetch
-    return runEdgeFetch(resourceId);
   } catch (err: any) {
     return { success: false, error: err?.message || 'Source-specific extraction failed' };
   }
 }
 
-async function runTranscriptFallback(resourceId: string, sourceType: CanonicalSourceType): Promise<MethodResult> {
+/**
+ * Transcript fallback: checks audio_jobs for existing transcripts,
+ * stores them as content, or marks the resource as awaiting_transcription.
+ */
+async function runTranscriptFallback(resourceId: string): Promise<MethodResult> {
   try {
-    // Check if audio_jobs table has a transcript for this resource
     const { data: audioJob } = await supabase
       .from('audio_jobs')
       .select('transcript_text, transcript_word_count, has_transcript')
@@ -231,26 +359,27 @@ async function runTranscriptFallback(resourceId: string, sourceType: CanonicalSo
       .maybeSingle();
 
     if (audioJob?.has_transcript && audioJob?.transcript_text) {
-      // Write transcript as content
-      const { error: updateErr } = await supabase
+      const transcript = audioJob.transcript_text;
+      await supabase
         .from('resources')
         .update({
-          content: audioJob.transcript_text,
-          content_length: audioJob.transcript_text.length,
+          content: transcript,
+          content_length: transcript.length,
           enrichment_status: 'deep_enriched',
+          extraction_method: 'transcript_fallback',
           last_status_change_at: new Date().toISOString(),
         } as any)
         .eq('id', resourceId);
 
-      if (updateErr) return { success: false, error: `Failed to store transcript: ${updateErr.message}` };
-      return { success: true, contentLength: audioJob.transcript_text.length };
+      return { success: true, contentLength: transcript.length };
     }
 
-    // No existing transcript — mark as awaiting transcription
+    // Mark as awaiting transcription
     await supabase
       .from('resources')
       .update({
         enrichment_status: 'awaiting_transcription',
+        next_best_action: 'Upload a transcript (.txt/.vtt/.srt) or wait for transcription to complete',
         last_status_change_at: new Date().toISOString(),
       } as any)
       .eq('id', resourceId);
@@ -261,6 +390,10 @@ async function runTranscriptFallback(resourceId: string, sourceType: CanonicalSo
   }
 }
 
+/**
+ * Metadata-only: lightweight extraction from title/description/tags.
+ * Last resort — creates minimal content from available metadata.
+ */
 async function runMetadataOnly(resourceId: string): Promise<MethodResult> {
   try {
     const { data: resource } = await supabase
@@ -272,23 +405,26 @@ async function runMetadataOnly(resourceId: string): Promise<MethodResult> {
     if (!resource) return { success: false, error: 'Resource not found' };
 
     const r = resource as any;
-    const metadataContent = [
-      r.title,
-      r.description,
-      ...(r.tags ?? []),
-    ].filter(Boolean).join('\n');
+    const parts = [
+      r.title && `Title: ${r.title}`,
+      r.description && `Description: ${r.description}`,
+      r.tags?.length > 0 && `Tags: ${r.tags.join(', ')}`,
+      r.resource_type && `Type: ${r.resource_type}`,
+    ].filter(Boolean);
+
+    const metadataContent = parts.join('\n\n');
 
     if (metadataContent.length < 20) {
       return { success: false, error: 'Insufficient metadata for extraction' };
     }
 
-    // Store metadata as lightweight content
     await supabase
       .from('resources')
       .update({
         content: metadataContent,
         content_length: metadataContent.length,
         enrichment_status: 'enriched',
+        extraction_method: 'metadata_only',
         last_status_change_at: new Date().toISOString(),
       } as any)
       .eq('id', resourceId);
@@ -311,4 +447,14 @@ async function getResourceContentLength(resourceId: string): Promise<number> {
   if (!data) return 0;
   const r = data as any;
   return Math.max(r.content?.length ?? 0, r.content_length ?? 0);
+}
+
+async function getResourceContent(resourceId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('resources')
+    .select('content')
+    .eq('id', resourceId)
+    .single();
+
+  return (data as any)?.content ?? null;
 }

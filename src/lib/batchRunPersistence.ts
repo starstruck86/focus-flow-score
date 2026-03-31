@@ -88,17 +88,28 @@ export async function persistJobRecords(
   batchRunId: string,
   jobs: ResourceJobState[],
 ): Promise<void> {
-  const rows = jobs.map(j => ({
-    batch_run_id: batchRunId,
-    resource_id: j.resourceId,
-    resource_title: j.title,
-    source_type: j.sourceType ?? 'unknown',
-    final_status: j.status,
-    failure_reason: j.failureReason ?? null,
-    attempts: JSON.stringify(j.attempts),
-    started_at: j.attempts[0]?.startedAt ?? null,
-    ended_at: j.attempts[j.attempts.length - 1]?.endedAt ?? null,
-  }));
+  const rows = jobs.map(j => {
+    // Find the successful attempt (or last attempt)
+    const successAttempt = j.attempts.find(a => a.success);
+    const lastAttempt = j.attempts[j.attempts.length - 1];
+    const methodUsed = successAttempt?.method ?? lastAttempt?.method ?? null;
+    const contentLen = successAttempt?.extractedContentLength ?? lastAttempt?.extractedContentLength ?? null;
+
+    return {
+      batch_run_id: batchRunId,
+      resource_id: j.resourceId,
+      resource_title: j.title,
+      source_type: j.sourceType ?? 'unknown',
+      final_status: j.status,
+      failure_reason: j.failureReason ?? null,
+      attempts: JSON.stringify(j.attempts),
+      method_used: methodUsed,
+      content_length_extracted: contentLen,
+      quality_passed: j.status === 'complete' ? true : j.status === 'failed' ? false : null,
+      started_at: j.attempts[0]?.startedAt ?? null,
+      ended_at: j.attempts[j.attempts.length - 1]?.endedAt ?? null,
+    };
+  });
 
   // Insert in chunks of 50
   for (let i = 0; i < rows.length; i += 50) {

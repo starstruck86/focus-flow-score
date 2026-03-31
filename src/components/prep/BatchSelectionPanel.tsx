@@ -446,7 +446,19 @@ function FailureDetail({ job }: { job: ResourceJobState }) {
 
 function PostRunSummary({ progress }: { progress: BatchProgress }) {
   const failedJobs = progress.jobs.filter(j => j.status === 'failed');
-  const needsAttention = progress.jobs.filter(j => j.status === 'needs_attention');
+  const awaitingJobs = progress.jobs.filter(j => j.status === 'awaiting_transcription' || j.status === 'needs_attention');
+
+  // Method distribution
+  const methodCounts = new Map<string, number>();
+  let fallbackCount = 0;
+  for (const job of progress.jobs) {
+    if (job.status === 'complete' && job.attempts.length > 0) {
+      const successAttempt = job.attempts.find(a => a.success);
+      const method = successAttempt?.method ?? job.attempts[job.attempts.length - 1]?.method ?? 'unknown';
+      methodCounts.set(method, (methodCounts.get(method) ?? 0) + 1);
+      if (job.attempts.length > 1) fallbackCount++;
+    }
+  }
 
   return (
     <div className="rounded-lg border border-border bg-card p-3 space-y-2">
@@ -456,10 +468,29 @@ function PostRunSummary({ progress }: { progress: BatchProgress }) {
       
       <div className="text-[10px] space-y-1">
         <p><span className="font-medium">What happened:</span> Processed {progress.totalProcessed} of {progress.totalResources} resources across {progress.totalBatches} batches.</p>
-        <p className="text-emerald-600">{progress.succeeded} extracted successfully</p>
-        {progress.failed > 0 && <p className="text-destructive">{progress.failed} failed — see details below</p>}
-        {progress.skipped > 0 && <p className="text-muted-foreground">{progress.skipped} skipped (already processed or duplicate)</p>}
+        <p className="text-emerald-600">✓ {progress.succeeded} extracted successfully</p>
+        {progress.failed > 0 && <p className="text-destructive">✗ {progress.failed} failed — see details below</p>}
+        {progress.skipped > 0 && <p className="text-muted-foreground">⊘ {progress.skipped} skipped (already processed or duplicate)</p>}
+        {fallbackCount > 0 && <p className="text-amber-600">↻ {fallbackCount} recovered via fallback method</p>}
       </div>
+
+      {/* Method distribution */}
+      {methodCounts.size > 0 && (
+        <div className="text-[9px] text-muted-foreground border-t border-border pt-1.5">
+          <span className="font-medium">Methods used: </span>
+          {Array.from(methodCounts.entries()).map(([m, c]) => `${m} (${c})`).join(', ')}
+        </div>
+      )}
+
+      {/* Awaiting transcription */}
+      {awaitingJobs.length > 0 && (
+        <div className="rounded bg-amber-500/10 border border-amber-500/20 p-2 text-[10px]">
+          <p className="font-medium text-amber-700">⏳ {awaitingJobs.length} resources awaiting transcription</p>
+          <p className="text-muted-foreground mt-0.5">
+            Upload a transcript file (.txt, .vtt, .srt) for these resources, or wait for automatic transcription to complete.
+          </p>
+        </div>
+      )}
 
       {failedJobs.length > 0 && (
         <Collapsible>
@@ -488,11 +519,13 @@ function PostRunSummary({ progress }: { progress: BatchProgress }) {
       {/* Next action recommendation */}
       <div className="text-[10px] border-t border-border pt-2">
         <span className="font-medium">Next:</span>{' '}
-        {progress.failed > 0
-          ? 'Select failed resources and retry with a smaller batch.'
-          : progress.succeeded === progress.totalResources
-            ? 'All resources processed. Review knowledge items for quality.'
-            : 'Review skipped resources for manual attention.'}
+        {awaitingJobs.length > 0
+          ? 'Upload transcripts for awaiting resources, then retry.'
+          : progress.failed > 0
+            ? 'Select failed resources and retry with a smaller batch.'
+            : progress.succeeded === progress.totalResources
+              ? 'All resources processed. Review knowledge items for quality.'
+              : 'Review skipped resources for manual attention.'}
       </div>
     </div>
   );
