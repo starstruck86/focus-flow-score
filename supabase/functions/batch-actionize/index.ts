@@ -434,6 +434,7 @@ Deno.serve(async (req) => {
                   title: resource.title, content: content.slice(0, 12000),
                   description: resource.description, tags: resource.tags,
                   resourceType: resource.resource_type,
+                  strict: strictMode,
                 }),
               }
             );
