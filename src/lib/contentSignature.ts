@@ -98,7 +98,6 @@ export function contentSimilarity(a: string | null | undefined, b: string | null
   const closingSim = diceCoefficient(tokenize(slicesA.closing), tokenize(slicesB.closing));
   const structSim = structuralSimilarity(strA, strB);
 
-  // Weighted combination: opening matters most, structure is tiebreaker
   return openingSim * 0.35 + middleSim * 0.25 + closingSim * 0.25 + structSim * 0.15;
 }
 
@@ -131,7 +130,7 @@ export function isContentDuplicate(
 
 export type ContentRoute = 'template' | 'example' | 'tactic' | 'reference';
 
-const TEMPLATE_STRUCTURE_SIGNALS = [
+export const TEMPLATE_STRUCTURE_SIGNALS = [
   /\[.*?(name|company|title|role|date|amount|product).*?\]/i,
   /\{.*?(name|company|title|role|date|amount|product).*?\}/i,
   /step\s*\d|phase\s*\d|part\s*\d/i,
@@ -141,7 +140,7 @@ const TEMPLATE_STRUCTURE_SIGNALS = [
   /\d+\.\s+[A-Z]/m,
 ];
 
-const EXAMPLE_STRUCTURE_SIGNALS = [
+export const EXAMPLE_STRUCTURE_SIGNALS = [
   /^(hi|hey|hello|dear|good morning|good afternoon)\s/im,
   /we (discussed|talked|agreed|reviewed|covered)/i,
   /thank you for|thanks for|appreciate your/i,
@@ -150,7 +149,7 @@ const EXAMPLE_STRUCTURE_SIGNALS = [
   /next steps?\s*:/i,
 ];
 
-const TACTIC_STRUCTURE_SIGNALS = [
+export const TACTIC_STRUCTURE_SIGNALS = [
   /\bwhen\s+(the|a|your|they|you|it)\b/i,
   /\binstead of\b.*\btry\b/i,
   /\b(respond|handle|counter|address)\s+(by|with|using)\b/i,
@@ -174,22 +173,17 @@ export function routeByContent(content: string): ContentRoute[] {
 
   const routes: ContentRoute[] = [];
 
-  // Template: structural reusability
   const tplHits = TEMPLATE_STRUCTURE_SIGNALS.filter(p => p.test(content)).length;
   if (tplHits >= 2 && content.length >= 200) routes.push('template');
 
-  // Example: reads like real communication
   const exHits = EXAMPLE_STRUCTURE_SIGNALS.filter(p => p.test(content)).length;
   if (exHits >= 2 && content.length >= 150) routes.push('example');
 
-  // Tactic: HARDENED — require stronger evidence of direct actionability
   const tacHits = TACTIC_STRUCTURE_SIGNALS.filter(p => p.test(content)).length;
   const descHits = DESCRIPTIVE_SIGNALS.filter(p => p.test(content)).length;
-  // Require at least 2 tactic signals AND not overwhelmed by descriptive signals
   if (tacHits >= 2 && descHits < tacHits) {
     routes.push('tactic');
   } else if (tacHits >= 3 && content.length >= 200) {
-    // Very strong tactic signal overrides descriptive context
     routes.push('tactic');
   }
 
@@ -244,54 +238,295 @@ export function generateSmartSnippet(
 
 // ── Content Transformation for Promotion ───────────────────
 
-/**
- * Shape raw content into a reusable template body:
- * - Preserve reusable structure (placeholders, steps, sections)
- * - Normalize placeholders to consistent format
- * - Strip commentary and explanation
- * - Keep only reusable body
- */
-export function shapeAsTemplate(content: string): string {
-  let shaped = content;
+// Lines that are clearly meta and should be stripped
+const META_LINE_PATTERNS = [
+  /^(note|comment|explanation|tip|reminder)\s*:/i,
+  /^\/\//,
+  /^\(.*?\)\s*$/,
+  /^(template|email template|draft|version \d+)\s*:?\s*$/i,
+];
 
-  // Normalize placeholders: {company} → [Company], various formats → consistent
-  shaped = shaped.replace(/\{(\w+)\}/g, (_, name) => `[${name.charAt(0).toUpperCase() + name.slice(1)}]`);
+// Lines that must be PRESERVED even if they look meta-ish
+const PRESERVE_LINE_PATTERNS = [
+  /\b(example|e\.g\.|for instance|such as)\b/i,
+  /\b(instruction|constraint|rule|requirement|must|should|always|never)\b/i,
+  /\b(persona|audience|tone|voice|style)\b/i,
+  /\b(when|if|unless|before|after|during)\s+(the|a|you|they)\b/i,
+  /\[.*?(name|company|title|role|date).*?\]/i,
+  /\{.*?(name|company|title|role|date).*?\}/i,
+  /["'""].{5,}["'""]/,
+];
 
-  // Strip commentary lines (lines starting with "Note:", "Comment:", "//", etc.)
-  shaped = shaped.replace(/^(note|comment|explanation|context|background|tip|reminder)\s*:.*$/gim, '');
-  shaped = shaped.replace(/^\/\/.*$/gm, '');
-  shaped = shaped.replace(/^\(.*?\)\s*$/gm, ''); // parenthetical notes on their own line
+function isMetaLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+  // Check if preserved first — preservation wins
+  if (PRESERVE_LINE_PATTERNS.some(p => p.test(trimmed))) return false;
+  return META_LINE_PATTERNS.some(p => p.test(trimmed));
+}
 
-  // Strip meta-headers like "Template:", "Email Template:", "Draft:"
-  shaped = shaped.replace(/^(template|email template|draft|version \d+)\s*:?\s*$/gim, '');
-
-  // Collapse excessive blank lines
-  shaped = shaped.replace(/\n{3,}/g, '\n\n');
-
-  return shaped.trim();
+export interface TransformationResult {
+  shaped: string;
+  removedLines: string[];
+  originalLineCount: number;
+  shapedLineCount: number;
 }
 
 /**
- * Shape raw content into a realistic example:
- * - Preserve narrative flow (greeting → body → CTA → closing)
- * - Remove notes/meta text
- * - Keep opening, body, CTA, closing
+ * Shape raw content into a reusable template body.
+ * Returns both shaped content and removed lines for review.
  */
-export function shapeAsExample(content: string): string {
-  let shaped = content;
+export function shapeAsTemplate(content: string): TransformationResult {
+  const lines = content.split('\n');
+  const kept: string[] = [];
+  const removedLines: string[] = [];
 
-  // Remove meta/notes lines
-  shaped = shaped.replace(/^(note|comment|internal|draft note|meta|context)\s*:.*$/gim, '');
-  shaped = shaped.replace(/^\/\/.*$/gm, '');
-  shaped = shaped.replace(/^\[?(internal|draft|wip|todo)\]?\s*$/gim, '');
-
-  // Remove tracking/version headers
-  shaped = shaped.replace(/^(version|v\d+|last updated|status)\s*:.*$/gim, '');
+  for (const line of lines) {
+    if (isMetaLine(line)) {
+      removedLines.push(line);
+    } else {
+      // Normalize placeholders: {company} → [Company]
+      let shaped = line.replace(/\{(\w+)\}/g, (_, name) =>
+        `[${name.charAt(0).toUpperCase() + name.slice(1)}]`
+      );
+      kept.push(shaped);
+    }
+  }
 
   // Collapse excessive blank lines
-  shaped = shaped.replace(/\n{3,}/g, '\n\n');
+  let result = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 
-  return shaped.trim();
+  return {
+    shaped: result,
+    removedLines,
+    originalLineCount: lines.length,
+    shapedLineCount: result.split('\n').length,
+  };
+}
+
+/**
+ * Shape raw content into a realistic example.
+ * Returns both shaped content and removed lines for review.
+ */
+export function shapeAsExample(content: string): TransformationResult {
+  const lines = content.split('\n');
+  const kept: string[] = [];
+  const removedLines: string[] = [];
+
+  const EXAMPLE_META = [
+    /^(note|comment|internal|draft note|meta|context)\s*:/i,
+    /^\/\//,
+    /^\[?(internal|draft|wip|todo)\]?\s*$/i,
+    /^(version|v\d+|last updated|status)\s*:/i,
+  ];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      kept.push(line);
+      continue;
+    }
+    // Preserve first
+    if (PRESERVE_LINE_PATTERNS.some(p => p.test(trimmed))) {
+      kept.push(line);
+    } else if (EXAMPLE_META.some(p => p.test(trimmed))) {
+      removedLines.push(line);
+    } else {
+      kept.push(line);
+    }
+  }
+
+  let result = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+
+  return {
+    shaped: result,
+    removedLines,
+    originalLineCount: lines.length,
+    shapedLineCount: result.split('\n').length,
+  };
+}
+
+// ── Segment-Level Routing ──────────────────────────────────
+
+export interface ContentSegment {
+  index: number;
+  content: string;
+  heading?: string;
+  route: ContentRoute;
+  confidence: number;
+}
+
+/**
+ * Split content into logical segments (by headings or double-newlines)
+ * and route each independently. Enables multi-asset extraction from one resource.
+ */
+export function segmentAndRoute(content: string): ContentSegment[] {
+  if (!content || content.length < 100) {
+    return [{ index: 0, content, route: routeByContent(content)[0], confidence: 0.5 }];
+  }
+
+  // Split by markdown headings or double-newline paragraphs
+  const headingPattern = /^(#{1,3})\s+(.+)$/gm;
+  const headings: Array<{ index: number; level: number; title: string; pos: number }> = [];
+  let match;
+  while ((match = headingPattern.exec(content)) !== null) {
+    headings.push({ index: headings.length, level: match[1].length, title: match[2], pos: match.index });
+  }
+
+  let rawSegments: Array<{ content: string; heading?: string }>;
+
+  if (headings.length >= 2) {
+    // Split by headings
+    rawSegments = [];
+    for (let i = 0; i < headings.length; i++) {
+      const start = headings[i].pos;
+      const end = i + 1 < headings.length ? headings[i + 1].pos : content.length;
+      const segContent = content.slice(start, end).trim();
+      if (segContent.length >= 50) {
+        rawSegments.push({ content: segContent, heading: headings[i].title });
+      }
+    }
+    // Include any preamble before first heading
+    if (headings[0].pos > 80) {
+      const preamble = content.slice(0, headings[0].pos).trim();
+      if (preamble.length >= 50) {
+        rawSegments.unshift({ content: preamble });
+      }
+    }
+  } else {
+    // Split by double-newlines into paragraphs, then group into segments of ≥150 chars
+    const paragraphs = content.split(/\n{2,}/).filter(p => p.trim().length > 20);
+    if (paragraphs.length <= 2) {
+      return [{ index: 0, content, route: routeByContent(content)[0], confidence: 0.5 }];
+    }
+    rawSegments = [];
+    let buffer = '';
+    for (const para of paragraphs) {
+      buffer += (buffer ? '\n\n' : '') + para;
+      if (buffer.length >= 200) {
+        rawSegments.push({ content: buffer });
+        buffer = '';
+      }
+    }
+    if (buffer.length >= 50) rawSegments.push({ content: buffer });
+  }
+
+  if (rawSegments.length <= 1) {
+    return [{ index: 0, content, route: routeByContent(content)[0], confidence: 0.5 }];
+  }
+
+  return rawSegments.map((seg, i) => {
+    const routes = routeByContent(seg.content);
+    return {
+      index: i,
+      content: seg.content,
+      heading: seg.heading,
+      route: routes[0],
+      confidence: scoreRouteConfidence(seg.content, routes[0]),
+    };
+  });
+}
+
+// ── Role-Specific Candidate Scoring ────────────────────────
+
+/**
+ * Score how well content fits a specific role, beyond simple signal counting.
+ */
+export function scoreRouteConfidence(content: string, route: ContentRoute): number {
+  if (!content) return 0;
+
+  if (route === 'template') {
+    return scoreTemplateCandidate(content);
+  }
+  if (route === 'example') {
+    return scoreExampleCandidate(content);
+  }
+  if (route === 'tactic') {
+    return scoreTacticCandidate(content);
+  }
+  return 0.2; // reference
+}
+
+function scoreTemplateCandidate(content: string): number {
+  let score = 0;
+
+  // Reusable structure: placeholders
+  const placeholderCount = (content.match(/\[.*?\]|\{.*?\}/g) || []).length;
+  score += Math.min(0.3, placeholderCount * 0.08);
+
+  // Clean placeholders (named, not random brackets)
+  const namedPlaceholders = (content.match(/\[(name|company|title|role|date|amount|product|industry|goal)\]/gi) || []).length;
+  score += namedPlaceholders * 0.05;
+
+  // Step/section structure
+  const steps = (content.match(/^(step\s*\d|phase\s*\d|\d+\.)\s/gim) || []).length;
+  score += Math.min(0.2, steps * 0.05);
+
+  // Completeness: has subject line + body or clear sections
+  if (/subject\s*:/i.test(content)) score += 0.1;
+  if (/^[-•*]\s+/m.test(content)) score += 0.05;
+  if (content.length >= 300) score += 0.1;
+  if (content.length >= 600) score += 0.05;
+
+  // Penalize if too short or no structure
+  if (content.length < 150) score *= 0.5;
+
+  return Math.min(1, score);
+}
+
+function scoreExampleCandidate(content: string): number {
+  let score = 0;
+
+  // Realistic narrative: greeting
+  if (/^(hi|hey|hello|dear|good morning)\s/im.test(content)) score += 0.15;
+
+  // Coherence: first-person narrative
+  const firstPerson = (content.match(/\bI\s+(wanted|am|was|have|would|will|could)\b/gi) || []).length;
+  score += Math.min(0.15, firstPerson * 0.05);
+
+  // Real-world context markers
+  if (/we (discussed|talked|agreed|reviewed|covered)/i.test(content)) score += 0.1;
+  if (/thank you|thanks for|appreciate/i.test(content)) score += 0.05;
+
+  // Closing/CTA quality
+  if (/\b(next steps?|follow.?up|action items?)\s*:/i.test(content)) score += 0.15;
+  if (/best regards|sincerely|cheers|thanks,?\s*$/im.test(content)) score += 0.1;
+
+  // Coherent length
+  if (content.length >= 200) score += 0.1;
+  if (content.length >= 400) score += 0.05;
+
+  // Penalize if it reads like a template (has placeholders)
+  const placeholders = (content.match(/\[.*?\]|\{.*?\}/g) || []).length;
+  if (placeholders > 2) score -= 0.15;
+
+  return Math.max(0, Math.min(1, score));
+}
+
+function scoreTacticCandidate(content: string): number {
+  let score = 0;
+
+  // Atomicity: focused, not too long
+  if (content.length >= 50 && content.length <= 500) score += 0.15;
+  if (content.length > 800) score -= 0.1;
+
+  // Specificity: concrete language
+  if (/["'""].{10,}["'""]/m.test(content)) score += 0.15; // talk track
+  if (/\b(exactly|specifically|precisely)\b/i.test(content)) score += 0.05;
+
+  // Actionability: clear instruction
+  if (/\b(ask|say|respond|try|use|frame|pivot|bridge)\b/i.test(content)) score += 0.15;
+  if (/\binstead of\b.*\btry\b/i.test(content)) score += 0.1;
+  if (/\bwhen\s+(the|a|your|they)\b/i.test(content)) score += 0.1;
+
+  // Usable phrasing
+  if (/\b(if|when|before|after|during)\s+(they|the prospect|the buyer|your)\b/i.test(content)) score += 0.1;
+
+  // Penalize descriptive
+  const descHits = DESCRIPTIVE_SIGNALS.filter(p => p.test(content)).length;
+  score -= descHits * 0.08;
+
+  return Math.max(0, Math.min(1, score));
 }
 
 // ── Content Clustering ─────────────────────────────────────
@@ -306,7 +541,7 @@ export interface ContentCluster {
 
 /**
  * Group resources into clusters by content similarity.
- * Each cluster contains resources with pairwise similarity > threshold.
+ * Uses role-specific scoring for best candidate selection.
  */
 export function clusterByContent(
   resources: Array<{ id: string; title: string; content: string }>,
@@ -334,21 +569,20 @@ export function clusterByContent(
     }
 
     if (cluster.members.length > 1) {
-      // Score candidates for each role
+      // Use role-specific scoring for best candidates
       for (const member of cluster.members) {
-        const routes = routeByContent(member.content);
-        const tplHits = TEMPLATE_STRUCTURE_SIGNALS.filter(p => p.test(member.content)).length;
-        const exHits = EXAMPLE_STRUCTURE_SIGNALS.filter(p => p.test(member.content)).length;
-        const tacHits = TACTIC_STRUCTURE_SIGNALS.filter(p => p.test(member.content)).length;
+        const tplScore = scoreTemplateCandidate(member.content);
+        const exScore = scoreExampleCandidate(member.content);
+        const tacScore = scoreTacticCandidate(member.content);
 
-        if (routes.includes('template') && (!cluster.bestTemplate || tplHits > cluster.bestTemplate.score)) {
-          cluster.bestTemplate = { id: member.id, title: member.title, score: tplHits };
+        if (tplScore > 0.2 && (!cluster.bestTemplate || tplScore > cluster.bestTemplate.score)) {
+          cluster.bestTemplate = { id: member.id, title: member.title, score: tplScore };
         }
-        if (routes.includes('example') && (!cluster.bestExample || exHits > cluster.bestExample.score)) {
-          cluster.bestExample = { id: member.id, title: member.title, score: exHits };
+        if (exScore > 0.2 && (!cluster.bestExample || exScore > cluster.bestExample.score)) {
+          cluster.bestExample = { id: member.id, title: member.title, score: exScore };
         }
-        if (routes.includes('tactic') && (!cluster.bestTactic || tacHits > cluster.bestTactic.score)) {
-          cluster.bestTactic = { id: member.id, title: member.title, score: tacHits };
+        if (tacScore > 0.2 && (!cluster.bestTactic || tacScore > cluster.bestTactic.score)) {
+          cluster.bestTactic = { id: member.id, title: member.title, score: tacScore };
         }
       }
 
