@@ -11,7 +11,7 @@ import { createLogger } from '@/lib/logger';
 const log = createLogger('PipelineContract');
 
 // ── Enrichment statuses that indicate "ready for extraction" ──
-export const ENRICHED_STATUSES = ['enriched', 'deep_enriched', 'verified'] as const;
+export const ENRICHED_STATUSES: readonly string[] = ['enriched', 'deep_enriched', 'verified'];
 
 // ── Minimum thresholds ──
 const MIN_CONTENT_FOR_FULL_EXTRACTION = 100;
