@@ -1145,13 +1145,15 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
 
                 <Separator />
 
-                {/* ── Bucket list ── */}
+                {/* ── Bucket list (working queues) ── */}
                 <div className="space-y-0.5">
                   {BUCKET_ORDER.map(key => {
                     const cfg = BUCKET_CONFIG[key];
                     const count = audit.counts[key];
                     if (count === 0) return null;
                     const isExpanded = expandedBucket === key;
+                    const bucketItems = audit.buckets[key];
+                    const allSelected = isExpanded && bucketItems.length > 0 && bucketItems.every(r => selectedIds.has(r.id));
 
                     return (
                       <div key={key}>
@@ -1176,13 +1178,48 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                         </button>
 
                         {isExpanded && (
-                          <div className="ml-4 space-y-1 mb-2">
-                            {audit.buckets[key].slice(0, 25).map(r => (
-                              <ResourceRow key={r.id} resource={r} />
-                            ))}
-                            {count > 25 && (
-                              <p className="text-[10px] text-muted-foreground pl-2">+ {count - 25} more</p>
-                            )}
+                          <div className="space-y-1 mb-2">
+                            {/* Queue action bar */}
+                            <QueueActionBar
+                              activeBucket={key}
+                              selectedIds={selectedIds}
+                              totalInBucket={bucketItems.length}
+                              onClearSelection={clearSelection}
+                              onSelectCount={(n) => selectFromBucket(key, n)}
+                              onSelectAll={() => selectFromBucket(key)}
+                              onAction={handleQueueAction}
+                              progress={queueProgress}
+                              actionLoading={actionLoading}
+                            />
+
+                            {/* Header checkbox row */}
+                            <label className="flex items-center gap-2 px-2 py-1 text-[10px] text-muted-foreground cursor-pointer hover:bg-accent/30 rounded">
+                              <input
+                                type="checkbox"
+                                checked={allSelected}
+                                onChange={() => {
+                                  if (allSelected) {
+                                    clearSelection();
+                                  } else {
+                                    setSelectedIds(new Set(bucketItems.map(r => r.id)));
+                                  }
+                                }}
+                                className="h-3 w-3 rounded border-border accent-primary"
+                              />
+                              <span className="font-medium">Select all {bucketItems.length} in {cfg.label}</span>
+                            </label>
+
+                            {/* Resource rows with checkboxes */}
+                            <div className="ml-1 space-y-1">
+                              {bucketItems.map(r => (
+                                <ResourceRow
+                                  key={r.id}
+                                  resource={r}
+                                  isSelected={selectedIds.has(r.id)}
+                                  onToggleSelect={() => toggleSelection(r.id)}
+                                />
+                              ))}
+                            </div>
                           </div>
                         )}
                       </div>
