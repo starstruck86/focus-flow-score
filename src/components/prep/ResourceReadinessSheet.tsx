@@ -1503,7 +1503,7 @@ function getBottleneckLabel(r: AuditedResource): { text: string; color: string }
 
 // ── Resource row ───────────────────────────────────────────
 
-function ResourceRow({ resource: r }: { resource: AuditedResource }) {
+function ResourceRow({ resource: r, isSelected, onToggleSelect }: { resource: AuditedResource; isSelected?: boolean; onToggleSelect?: () => void }) {
   const tagGroups = groupTagsByDimension(r.tags);
   const bottleneck = getBottleneckLabel(r);
   const canonicalStage = deriveCanonicalStage(
@@ -1524,18 +1524,31 @@ function ResourceRow({ resource: r }: { resource: AuditedResource }) {
   });
 
   return (
-    <div className="p-2 rounded border border-border bg-card text-xs space-y-1.5">
-      {/* Title + bottleneck label + canonical stage badge */}
-      <div className="flex items-start justify-between gap-1.5">
-        <div className="min-w-0 flex-1">
-          <p className="font-medium text-foreground truncate">{r.title}</p>
-          <p className={cn('text-[9px] font-medium', bottleneck.color)}>{bottleneck.text}</p>
-        </div>
-        <div className="flex gap-0.5 shrink-0 flex-wrap justify-end max-w-[45%]">
-          <Badge variant="outline" className={cn("text-[7px] h-3.5 px-1 border-primary/20", STAGE_COLORS[canonicalStage])}>{STAGE_LABELS[canonicalStage]}</Badge>
-          {r.badges.map(b => (
-            <Badge key={b} variant="outline" className="text-[7px] h-3.5 px-1">{b}</Badge>
-          ))}
+    <div className={cn(
+      'p-2 rounded border bg-card text-xs space-y-1.5 transition-colors',
+      isSelected ? 'border-primary/50 bg-primary/5' : 'border-border',
+    )}>
+      {/* Title row with checkbox */}
+      <div className="flex items-start gap-2">
+        {onToggleSelect && (
+          <input
+            type="checkbox"
+            checked={!!isSelected}
+            onChange={onToggleSelect}
+            className="h-3.5 w-3.5 mt-0.5 rounded border-border accent-primary shrink-0 cursor-pointer"
+          />
+        )}
+        <div className="flex items-start justify-between gap-1.5 flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-foreground truncate">{r.title}</p>
+            <p className={cn('text-[9px] font-medium', bottleneck.color)}>{bottleneck.text}</p>
+          </div>
+          <div className="flex gap-0.5 shrink-0 flex-wrap justify-end max-w-[45%]">
+            <Badge variant="outline" className={cn("text-[7px] h-3.5 px-1 border-primary/20", STAGE_COLORS[canonicalStage])}>{STAGE_LABELS[canonicalStage]}</Badge>
+            {r.badges.map(b => (
+              <Badge key={b} variant="outline" className="text-[7px] h-3.5 px-1">{b}</Badge>
+            ))}
+          </div>
         </div>
       </div>
 
