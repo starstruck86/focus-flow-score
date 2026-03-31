@@ -586,15 +586,25 @@ function SummaryHeader({ summary, totalCandidates, totalPromoted, onBulkTemplate
       {/* Batch result */}
       {batchResult && (
         <div className="rounded-md bg-muted/50 border border-border p-2.5 text-xs space-y-0.5">
-          <p className="font-medium text-foreground">
-            Batch: {batchResult.processed} processed → {batchResult.knowledge_created} actions, {batchResult.templates_created} templates
+          <p className="font-medium text-foreground flex items-center gap-1.5">
+            <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+            {batchResult.processed} processed → {batchResult.knowledge_created} tactics ({batchResult.knowledge_activated} trusted) · {batchResult.templates_created} templates · {batchResult.examples_created} examples
           </p>
+          {batchResult.duplicates_suppressed > 0 && (
+            <p className="text-muted-foreground">{batchResult.duplicates_suppressed} duplicates suppressed</p>
+          )}
+          {batchResult.trust_rejected > 0 && (
+            <p className="text-muted-foreground">{batchResult.trust_rejected} saved but not auto-activated (trust gates)</p>
+          )}
           {batchResult.failed > 0 && (
-            <p className="text-destructive">{batchResult.failed} failed (need transformation)</p>
+            <p className="text-destructive">{batchResult.failed} failed</p>
           )}
           {batchResult.remaining > 0 && (
-            <p className="text-muted-foreground">{batchResult.remaining} remaining — run again to continue</p>
+            <p className="text-muted-foreground">{batchResult.remaining} remaining — run again</p>
           )}
+          <p className="text-muted-foreground">
+            Routed: {Object.entries(batchResult.routed).filter(([,v]) => v > 0).map(([k,v]) => `${k} (${v})`).join(' · ')}
+          </p>
         </div>
       )}
 
