@@ -15,8 +15,21 @@ import { supabase } from '@/integrations/supabase/client';
 import { inferTags, mergeTags, type StructuredTag } from './resourceTags';
 import { extractKnowledgeHeuristic, extractKnowledgeLLMFallback, type ExtractionSource } from './knowledgeExtraction';
 import { createLogger } from '@/lib/logger';
+import {
+  isEligibleForExtraction,
+  isContentBacked as contractIsContentBacked,
+  assertEligibilityAlignment,
+  checkRegressionGuard,
+  estimateBatchOutput,
+  type PipelineOutcome,
+  type EligibilityResult,
+  ENRICHED_STATUSES,
+} from './pipelineContract';
 
 const log = createLogger('AutoOperationalize');
+
+// Re-export for consumers
+export { estimateBatchOutput, type PipelineOutcome } from './pipelineContract';
 
 // ── Pipeline Stages ────────────────────────────────────────
 
@@ -73,14 +86,14 @@ export interface AutoOperationalizeResult {
   knowledgeActivated: number;
   operationalized: boolean;
   needsReview: boolean;
+  outcome: PipelineOutcome;
+  extractionTier: 'full' | 'reduced' | 'lightweight' | 'none';
   reason?: string;
 }
 
 // ── Auto-activation thresholds ─────────────────────────────
 
 const AUTO_ACTIVATE_CONFIDENCE = 0.55;
-const MIN_CONTENT_LENGTH = 50; // Lowered: enriched resources should always enter pipeline
-const MIN_CONTENT_FOR_EXTRACTION = 100; // Lowered: attempt extraction even on short content, with lightweight fallback
 const MIN_TACTIC_SUMMARY_LENGTH = 20;
 const ACTIVATION_RULE_VERSION = '2.0';
 
@@ -121,32 +134,28 @@ export async function autoOperationalizeResource(
   const r = resource as any;
   stagesCompleted.push('uploaded');
 
-  // ── STAGE 1: Content Ready ──
-  // Use actual content length if content_length field is stale or missing
-  const actualContentLength = r.content?.length ?? 0;
-  const contentLength = r.content_length ?? actualContentLength;
-  const effectiveLength = Math.max(contentLength, actualContentLength);
-  const isEnriched = ['enriched', 'deep_enriched', 'verified'].includes(r.enrichment_status);
-  const isContentBacked = effectiveLength >= MIN_CONTENT_LENGTH || r.manual_content_present === true || isEnriched;
+  // ── STAGE 1: Content Ready (uses pipeline contract) ──
+  const eligibility = isEligibleForExtraction(r);
 
   // ── Diagnostic logging ──
   log.info('Pipeline start', {
     resourceId,
     title: r.title?.slice(0, 60),
     content_length_field: r.content_length,
-    actual_content_length: actualContentLength,
-    effective_length: effectiveLength,
+    actual_content_length: r.content?.length ?? 0,
     enrichment_status: r.enrichment_status,
     manual_content_present: r.manual_content_present,
-    isEnriched,
-    isContentBacked,
+    eligible: eligibility.eligible,
+    extractionTier: eligibility.extractionTier,
+    eligibilityReason: eligibility.reason,
   });
 
-  if (!isContentBacked) {
-    log.info('Pipeline stopped: not content-backed and not enriched', { resourceId, effectiveLength, enrichment_status: r.enrichment_status });
-    return makeResult(resourceId, r.title, stagesCompleted, 'uploaded', tagsAdded, 0, 0, false, true,
-      `Not content-backed (${effectiveLength} chars, status=${r.enrichment_status}) — needs enrichment or manual input`);
+  if (!eligibility.eligible) {
+    log.info('Pipeline stopped: not eligible', { resourceId, reason: eligibility.reason });
+    return makeResult(resourceId, r.title, stagesCompleted, 'uploaded', tagsAdded, 0, 0, false, true, eligibility.reason, eligibility.extractionTier, 'no_content');
   }
+
+  const effectiveLength = Math.max(r.content?.length ?? 0, r.content_length ?? 0);
   stagesCompleted.push('content_ready');
 
   // ── Clear stale blockers if content-backed ──
@@ -209,7 +218,9 @@ export async function autoOperationalizeResource(
   const existingItems = (existingKI ?? []) as any[];
   const hasExistingKI = existingItems.length > 0;
 
-  if (!hasExistingKI && effectiveLength >= MIN_CONTENT_FOR_EXTRACTION) {
+  // Use tiered extraction based on contract tier
+  const canExtract = !hasExistingKI && (eligibility.extractionTier === 'full' || eligibility.extractionTier === 'lightweight' || eligibility.extractionTier === 'reduced');
+  if (canExtract) {
     // Extract knowledge heuristically
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData?.user?.id;
@@ -382,10 +393,11 @@ export async function autoOperationalizeResource(
 
 /**
  * Run auto-operationalization on multiple resources.
- * Useful for bulk processing after imports or fixes.
+ * Includes mismatch guard and regression guard.
  */
 export async function autoOperationalizeBatch(
   resourceIds: string[],
+  onProgress?: (processed: number, total: number, currentTitle: string) => void,
 ): Promise<AutoOperationalizeResult[]> {
   log.info('Batch auto-operationalize starting', { totalIds: resourceIds.length });
 
@@ -395,23 +407,36 @@ export async function autoOperationalizeBatch(
   }
 
   const results: AutoOperationalizeResult[] = [];
-  let succeeded = 0, needsReview = 0, stopped = 0;
+  const outcomeCounts: Record<PipelineOutcome, number> = {
+    operationalized: 0,
+    partial_extraction: 0,
+    lightweight_extraction: 0,
+    needs_review: 0,
+    no_content: 0,
+    failed: 0,
+  };
 
-  for (const id of resourceIds) {
-    const result = await autoOperationalizeResource(id);
+  for (let i = 0; i < resourceIds.length; i++) {
+    const result = await autoOperationalizeResource(resourceIds[i]);
     results.push(result);
-    if (result.operationalized) succeeded++;
-    else if (result.needsReview) needsReview++;
-    else stopped++;
+    outcomeCounts[result.outcome]++;
+    onProgress?.(i + 1, resourceIds.length, result.resourceTitle || 'Untitled');
   }
+
+  const totalProcessed = results.filter(r => r.outcome !== 'no_content').length;
 
   log.info('Batch auto-operationalize complete', {
     total: resourceIds.length,
-    operationalized: succeeded,
-    needsReview,
-    stoppedEarly: stopped,
-    reasons: results.filter(r => r.reason).map(r => ({ id: r.resourceId, reason: r.reason })).slice(0, 20),
+    processed: totalProcessed,
+    outcomes: outcomeCounts,
+    reasons: results.filter(r => r.reason).map(r => ({ id: r.resourceId, outcome: r.outcome, reason: r.reason })).slice(0, 20),
   });
+
+  // Regression guard
+  checkRegressionGuard(resourceIds.length, totalProcessed, 'autoOperationalizeBatch');
+
+  // Mismatch guard: if we got IDs but processed 0, something is wrong
+  assertEligibilityAlignment(resourceIds.length, totalProcessed, 'autoOperationalizeBatch');
 
   return results;
 }
@@ -446,27 +471,7 @@ async function fetchEligibleResourceIds(
   if (error || !data) return [];
 
   return (data as any[]).filter(r => {
-    const contentLen = r.content_length ?? (r.content?.length ?? 0);
-    const isContentBacked = contentLen >= 200 || r.manual_content_present === true;
-    const isEnriched = ['enriched', 'deep_enriched', 'verified'].includes(r.enrichment_status);
-
-    // Must have some content path
-    if (!isContentBacked && !isEnriched) return false;
-
-    // Junk filter: too short and no enrichment
-    if (contentLen < 50 && !isEnriched && !r.manual_content_present) return false;
-
-    if (mode === 'smart') {
-      // Smart mode: only process resources that likely need work
-      const tags: string[] = r.tags ?? [];
-      const dims = new Set(tags.filter((t: string) => t.includes(':')).map((t: string) => t.split(':')[0]));
-      const hasRequiredTags = dims.has('skill') || dims.has('context');
-
-      // If already has tags and is enriched, it's probably already processed
-      // but we still include it — the pipeline is idempotent
-    }
-
-    return true;
+    return isEligibleForExtraction(r).eligible;
   }).map(r => r.id);
 }
 
@@ -522,14 +527,15 @@ export async function autoOperationalizeAllResources(
  */
 export function derivePipelineStage(resource: {
   content_length?: number | null;
+  content?: string | null;
   manual_content_present?: boolean | null;
   tags?: string[] | null;
   enrichment_status?: string | null;
 }, ki: { total: number; active: number; hasContexts: boolean }): PipelineStage {
-  const contentLength = resource.content_length ?? 0;
-  const isContentBacked = contentLength >= MIN_CONTENT_LENGTH || resource.manual_content_present === true;
+  const isCB = contractIsContentBacked(resource);
 
-  if (!isContentBacked) return 'uploaded';
+  const isCB2 = isCB; // alias used below
+  if (!isCB) return 'uploaded';
 
   const tags = resource.tags ?? [];
   const dims = new Set(tags.filter(t => t.includes(':')).map(t => t.split(':')[0]));
@@ -553,9 +559,24 @@ export interface BatchSummary {
   totalKnowledgeExtracted: number;
   totalKnowledgeActivated: number;
   totalTagsAdded: number;
+  outcomes: Record<PipelineOutcome, number>;
+  failedResources: Array<{ id: string; title: string; outcome: PipelineOutcome; reason?: string }>;
 }
 
 export function summarizeBatchResults(results: AutoOperationalizeResult[]): BatchSummary {
+  const outcomes: Record<PipelineOutcome, number> = {
+    operationalized: 0, partial_extraction: 0, lightweight_extraction: 0,
+    needs_review: 0, no_content: 0, failed: 0,
+  };
+  const failedResources: BatchSummary['failedResources'] = [];
+
+  for (const r of results) {
+    outcomes[r.outcome]++;
+    if (r.outcome === 'failed' || r.outcome === 'no_content' || r.outcome === 'needs_review') {
+      failedResources.push({ id: r.resourceId, title: r.resourceTitle, outcome: r.outcome, reason: r.reason });
+    }
+  }
+
   return {
     total: results.length,
     operationalized: results.filter(r => r.operationalized).length,
@@ -565,6 +586,8 @@ export function summarizeBatchResults(results: AutoOperationalizeResult[]): Batc
     totalKnowledgeExtracted: results.reduce((s, r) => s + r.knowledgeExtracted, 0),
     totalKnowledgeActivated: results.reduce((s, r) => s + r.knowledgeActivated, 0),
     totalTagsAdded: results.reduce((s, r) => s + r.tagsAdded.length, 0),
+    outcomes,
+    failedResources: failedResources.slice(0, 50),
   };
 }
 
@@ -581,7 +604,16 @@ function makeResult(
   operationalized: boolean,
   needsReview: boolean,
   reason?: string,
+  extractionTier: AutoOperationalizeResult['extractionTier'] = 'none',
+  outcome?: PipelineOutcome,
 ): AutoOperationalizeResult {
+  const derivedOutcome: PipelineOutcome = outcome
+    ?? (operationalized ? 'operationalized'
+      : extractionTier === 'lightweight' && knowledgeExtracted > 0 ? 'lightweight_extraction'
+      : knowledgeExtracted > 0 ? 'partial_extraction'
+      : needsReview ? 'needs_review'
+      : 'no_content');
+
   return {
     success: !needsReview,
     resourceId,
@@ -593,6 +625,8 @@ function makeResult(
     knowledgeActivated,
     operationalized,
     needsReview,
+    outcome: derivedOutcome,
+    extractionTier,
     reason,
   };
 }

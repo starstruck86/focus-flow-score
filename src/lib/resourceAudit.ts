@@ -19,6 +19,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { inferTags, mergeTags } from './resourceTags';
+import { isContentBacked as contractIsContentBacked, ENRICHED_STATUSES } from './pipelineContract';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -75,12 +76,12 @@ export interface AuditSummary {
 // ── Constants ──────────────────────────────────────────────
 
 const NOTION_METHODS = ['notion_zip_split', 'notion_zip_page_import', 'notion_zip_database_import', 'notion_zip_page_chunk'];
-const ENRICHED_STATUSES = ['enriched', 'deep_enriched', 'verified'];
 
 // ── Helpers ────────────────────────────────────────────────
 
+/** Delegates to the shared pipeline contract — SINGLE source of truth */
 function isContentBacked(r: any): boolean {
-  return (r.content_length ?? 0) > 200 || r.manual_content_present === true;
+  return contractIsContentBacked(r);
 }
 
 function isNotionDerived(r: any): boolean {

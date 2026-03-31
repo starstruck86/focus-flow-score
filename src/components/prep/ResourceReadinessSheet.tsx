@@ -33,7 +33,7 @@ import {
   type ReadinessBucket,
   type AuditedResource,
 } from '@/lib/resourceAudit';
-import { autoOperationalizeBatch, summarizeBatchResults, getStageLabel, autoOperationalizeAllResources, countEligibleResources, forceExtractAll, getExtractionCoverage, type BackfillSummary, type ForceExtractResult, type ExtractionCoverage, type BlockedExample, type BlockedReason } from '@/lib/autoOperationalize';
+import { autoOperationalizeBatch, summarizeBatchResults, getStageLabel, autoOperationalizeAllResources, countEligibleResources, forceExtractAll, getExtractionCoverage, estimateBatchOutput, type BackfillSummary, type ForceExtractResult, type ExtractionCoverage, type BlockedExample, type BlockedReason, type BatchSummary } from '@/lib/autoOperationalize';
 import { LifecycleSummaryBar } from './LifecycleSummaryBar';
 import { useCanonicalLifecycle, STAGE_LABELS, STAGE_COLORS } from '@/hooks/useCanonicalLifecycle';
 import { deriveCanonicalStage, type LifecycleStage } from '@/lib/canonicalLifecycle';
@@ -222,6 +222,8 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
   const [kiBackfillReport, setKiBackfillReport] = useState<BackfillReport | null>(null);
   const [kiScanReport, setKiScanReport] = useState<BackfillReport | null>(null);
   const [auditError, setAuditError] = useState<string | null>(null);
+  const [autoOpProgress, setAutoOpProgress] = useState<{ processed: number; total: number; current: string } | null>(null);
+  const [lastAutoOpSummary, setLastAutoOpSummary] = useState<BatchSummary | null>(null);
 
   // Canonical lifecycle — SINGLE SOURCE OF TRUTH
   const { summary: lifecycle, refetch: refetchLifecycle } = useCanonicalLifecycle();
@@ -282,14 +284,36 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
           toast.error('No eligible resources found based on current filters');
           return;
         }
-        const results = await autoOperationalizeBatch(ids);
-        const summary = summarizeBatchResults(results);
-        if (summary.operationalized === 0 && summary.totalKnowledgeExtracted === 0) {
-          toast.warning(`0 resources operationalized — ${summary.needsReview} need review. Check audit for details.`);
-        } else {
-          toast.success(`Auto-operationalized: ${summary.operationalized} fully operationalized, ${summary.totalKnowledgeExtracted} extracted, ${summary.totalKnowledgeActivated} activated`);
+        setAutoOpProgress({ processed: 0, total: ids.length, current: 'Starting…' });
+        setLastAutoOpSummary(null);
+        try {
+          const results = await autoOperationalizeBatch(ids, (processed, total, currentTitle) => {
+            setAutoOpProgress({ processed, total, current: currentTitle });
+          });
+          const summary = summarizeBatchResults(results);
+          setLastAutoOpSummary(summary);
+
+          if (summary.operationalized === 0 && summary.totalKnowledgeExtracted === 0) {
+            toast.warning(`0 resources operationalized — ${summary.needsReview} need review. Check audit for details.`);
+          } else {
+            toast.success(
+              `Processed ${summary.total} → ${summary.operationalized} operationalized, ` +
+              `${summary.outcomes.partial_extraction} partial, ` +
+              `${summary.outcomes.lightweight_extraction} lightweight, ` +
+              `${summary.outcomes.needs_review} review, ` +
+              `${summary.totalKnowledgeExtracted} KI extracted`
+            );
+          }
+          if (summary.needsReview > 0) toast.info(`${summary.needsReview} resources need manual review`);
+        } catch (err: any) {
+          if (err?.message?.includes('CRITICAL MISMATCH')) {
+            toast.error('Pipeline eligibility mismatch — UI and execution disagree on what is eligible. Refreshing audit.');
+          } else {
+            toast.error(`Auto-operationalize failed: ${err?.message ?? 'Unknown error'}`);
+          }
+        } finally {
+          setAutoOpProgress(null);
         }
-        if (summary.needsReview > 0) toast.info(`${summary.needsReview} resources need manual review`);
       } else if (type === 'backfillAll' || type === 'backfillSmart') {
         const mode = type === 'backfillAll' ? 'all' : 'smart';
         setBackfillProgress({ processed: 0, total: 0 });
@@ -478,6 +502,21 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                         Auto-Operationalize {audit.counts.ready + audit.counts.extractable_not_operationalized + audit.counts.needs_tagging}
                       </Button>
                     )}
+                    {/* Test mode: run on 5 resources */}
+                    {(audit.counts.ready + audit.counts.extractable_not_operationalized + audit.counts.needs_tagging) > 5 && (
+                      <Button variant="ghost" size="sm" className="h-7 text-[10px] gap-1 text-muted-foreground" disabled={!!actionLoading}
+                        onClick={() => {
+                          const ids = [
+                            ...audit.buckets.extractable_not_operationalized,
+                            ...audit.buckets.needs_tagging,
+                            ...audit.buckets.ready,
+                          ].map(r => r.id).slice(0, 5);
+                          setConfirmAction({ type: 'autoOp', ids });
+                        }}>
+                        <Rocket className="h-3 w-3" />
+                        Test (5)
+                      </Button>
+                    )}
                     {audit.counts.junk_or_low_signal > 0 && (
                       <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-destructive" disabled={!!actionLoading}
                         onClick={() => setConfirmAction({ type: 'delete', ids: audit.buckets.junk_or_low_signal.map(r => r.id) })}>
@@ -486,6 +525,55 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                       </Button>
                     )}
                   </div>
+
+                  {/* ── Auto-Op Progress + Results ── */}
+                  {autoOpProgress && (
+                    <div className="rounded-md border border-primary/20 bg-primary/5 p-2 space-y-1.5">
+                      <div className="flex items-center gap-2 text-[10px]">
+                        <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                        <span className="font-medium text-foreground">
+                          Processing {autoOpProgress.processed} / {autoOpProgress.total}
+                        </span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-1.5">
+                        <div
+                          className="bg-primary h-1.5 rounded-full transition-all"
+                          style={{ width: `${autoOpProgress.total > 0 ? (autoOpProgress.processed / autoOpProgress.total) * 100 : 0}%` }}
+                        />
+                      </div>
+                      <p className="text-[9px] text-muted-foreground truncate">{autoOpProgress.current}</p>
+                    </div>
+                  )}
+
+                  {lastAutoOpSummary && !autoOpProgress && (
+                    <div className="rounded-md border border-primary/20 bg-primary/5 p-2 text-[10px] space-y-1">
+                      <p className="font-medium text-foreground">Last Auto-Operationalize Results</p>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
+                        <span>Total processed:</span><span className="font-medium text-foreground">{lastAutoOpSummary.total}</span>
+                        <span>Operationalized:</span><span className="font-medium text-emerald-600">{lastAutoOpSummary.outcomes.operationalized}</span>
+                        <span>Partial extraction:</span><span className="font-medium text-foreground">{lastAutoOpSummary.outcomes.partial_extraction}</span>
+                        <span>Lightweight:</span><span className="font-medium text-foreground">{lastAutoOpSummary.outcomes.lightweight_extraction}</span>
+                        <span>Needs review:</span><span className={cn('font-medium', lastAutoOpSummary.outcomes.needs_review > 0 ? 'text-amber-500' : 'text-foreground')}>{lastAutoOpSummary.outcomes.needs_review}</span>
+                        <span>No content:</span><span className="font-medium text-muted-foreground">{lastAutoOpSummary.outcomes.no_content}</span>
+                        <span>KI extracted:</span><span className="font-medium text-foreground">{lastAutoOpSummary.totalKnowledgeExtracted}</span>
+                        <span>KI activated:</span><span className="font-medium text-foreground">{lastAutoOpSummary.totalKnowledgeActivated}</span>
+                      </div>
+                      {lastAutoOpSummary.failedResources.length > 0 && (
+                        <details className="mt-1">
+                          <summary className="text-[9px] text-muted-foreground cursor-pointer hover:text-foreground">
+                            {lastAutoOpSummary.failedResources.length} issues (click to expand)
+                          </summary>
+                          <div className="mt-1 max-h-24 overflow-y-auto space-y-0.5">
+                            {lastAutoOpSummary.failedResources.slice(0, 20).map(f => (
+                              <p key={f.id} className="text-[9px] text-muted-foreground truncate">
+                                <span className="font-medium">{f.outcome}</span>: {f.title} — {f.reason}
+                              </p>
+                            ))}
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  )}
 
                   {/* ── Backfill actions ── */}
                   <div className="pt-1.5 border-t border-border/50 space-y-1.5">
@@ -1070,6 +1158,18 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
               <div className="space-y-2 text-sm">
                 {confirmAction?.type === 'delete' ? (
                   <p>These resources have very low content (&lt;50 chars) and no URL. This cannot be undone.</p>
+                ) : confirmAction?.type === 'autoOp' && confirmAction.ids ? (
+                  (() => {
+                    const est = estimateBatchOutput(confirmAction.ids.length);
+                    return (
+                      <>
+                        <p><strong>Processing:</strong> {confirmAction.ids.length} resources</p>
+                        <p><strong>Estimated output:</strong> {est.estimatedKnowledgeItems.min}–{est.estimatedKnowledgeItems.max} knowledge items</p>
+                        <p><strong>Estimated time:</strong> ~{est.estimatedTimeMinutes.min}–{est.estimatedTimeMinutes.max} minutes</p>
+                        <p className="text-muted-foreground"><strong>Will NOT:</strong> {BULK_ACTION_DESCRIPTIONS[confirmAction.type]?.wontDo}</p>
+                      </>
+                    );
+                  })()
                 ) : (
                   <>
                     <p><strong>Affects:</strong> {confirmAction?.ids?.length ?? 'all eligible'} {confirmAction?.ids ? 'resources' : 'knowledge items'}</p>
