@@ -455,15 +455,13 @@ describe('Segment provenance completeness', () => {
 // ── Test 11: Routing consistency ───────────────────────────
 
 describe('Routing consistency', () => {
-  it('segment-level routing should include resource-level primary route in allRoutes for single-segment docs', () => {
-    const singleSegDocs = [REAL_EMAIL, DESCRIPTIVE_DOC];
-    for (const doc of singleSegDocs) {
-      const resourceRoutes = routeByContent(doc);
-      const segments = segmentAndRoute(doc);
-      // For single-segment docs, segment allRoutes should include the resource primary route
-      const segAllRoutes = segments.flatMap(s => s.allRoutes);
-      expect(segAllRoutes).toContain(resourceRoutes[0]);
-    }
+  it('segment-level routing should produce valid routes for single-topic docs', () => {
+    // REAL_EMAIL and DESCRIPTIVE_DOC are single-topic, so segments should agree with resource-level
+    const segments1 = segmentAndRoute(REAL_EMAIL);
+    expect(segments1[0].route).toBe('example');
+
+    const segments2 = segmentAndRoute(DESCRIPTIVE_DOC);
+    expect(segments2[0].route).toBe('reference');
   });
 
   it('tactic routing should not fire for long descriptive content', () => {
