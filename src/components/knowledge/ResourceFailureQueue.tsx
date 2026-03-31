@@ -266,27 +266,41 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
   ): Promise<boolean> => {
     if (!user) return false;
 
-    // Fetch existing assets to check for similarity
+    // Fetch source resource content for content-based comparison
+    const { data: sourceRes } = await supabase
+      .from('resources')
+      .select('content')
+      .eq('id', d.resource_id)
+      .single();
+    const sourceContent = (sourceRes as any)?.content || '';
+
+    // Fetch existing assets with content for content-based dedup
     const table = type === 'template' ? 'execution_templates' : 'execution_outputs';
+    const contentField = type === 'template' ? 'body' : 'content';
     const { data: existing } = await supabase
       .from(table as any)
-      .select('id, title')
+      .select(`id, title, ${contentField}`)
       .eq('user_id', user.id)
       .limit(200);
 
-    if (!existing || existing.length === 0) return true; // no duplicates possible
+    if (!existing || existing.length === 0) return true;
 
     const similar = (existing as any[])
-      .map(e => ({ id: e.id, title: e.title, similarity: titleSimilarity(d.title, e.title) }))
+      .map(e => ({
+        id: e.id,
+        title: e.title,
+        content: (e[contentField] || '').slice(0, 200),
+        similarity: contentSimilarity(sourceContent, e[contentField] || ''),
+      }))
       .filter(e => e.similarity > 0.5)
       .sort((a, b) => b.similarity - a.similarity)
       .slice(0, 5);
 
     if (similar.length > 0) {
       setDupWarning({ diagnosis: d, type, similar });
-      return false; // will proceed after confirmation
+      return false;
     }
-    return true; // no dups found
+    return true;
   }, [user]);
 
   const handlePromoteTemplate = useCallback(async (d: ResourceDiagnosis, skipDupCheck = false) => {
