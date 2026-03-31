@@ -338,23 +338,22 @@ export function ResourceUpsideQueue() {
 
   const handleBulkAutoActivate = useCallback(async () => {
     if (!user) return;
-    // Find knowledge items in review_needed that qualify
     const { data: reviewItems } = await supabase
       .from('knowledge_items')
       .select('id, confidence_score, when_to_use, tactic_summary')
       .eq('user_id', user.id)
-      .eq('status', 'review_needed')
+      .in('status', ['review_needed', 'extracted'])
       .eq('active', false)
-      .limit(50);
+      .limit(200);
 
+    // Lowered threshold: activate anything actionable
     const qualifiers = (reviewItems || []).filter(item =>
-      item.confidence_score >= 0.6 &&
-      item.when_to_use &&
+      item.confidence_score >= 0.4 &&
       item.tactic_summary &&
-      item.tactic_summary.length > 20
+      item.tactic_summary.length > 15
     );
 
-    if (qualifiers.length === 0) { toast.info('No items qualify for auto-activation'); return; }
+    if (qualifiers.length === 0) { toast.info('No items qualify for activation'); return; }
 
     let count = 0;
     for (const item of qualifiers) {
@@ -365,7 +364,36 @@ export function ResourceUpsideQueue() {
       if (!error) count++;
     }
     qc.invalidateQueries({ queryKey: ['knowledge-items'] });
-    toast.success(`Auto-activated ${count} high-confidence knowledge items`);
+    toast.success(`Auto-activated ${count} knowledge items — now usable in execution`);
+  }, [user, qc]);
+
+  // ── Batch backfill via edge function ─────────────────────
+
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchResult, setBatchResult] = useState<{
+    processed: number; knowledge_created: number; templates_created: number;
+    failed: number; remaining: number;
+  } | null>(null);
+
+  const handleBatchBackfill = useCallback(async () => {
+    if (!user) return;
+    setBatchRunning(true);
+    setBatchResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('batch-actionize', {
+        body: { batchSize: 15 },
+      });
+      if (error) throw error;
+      setBatchResult(data);
+      qc.invalidateQueries({ queryKey: ['knowledge-items'] });
+      qc.invalidateQueries({ queryKey: ['resources'] });
+      toast.success(`Processed ${data.processed} resources → ${data.knowledge_created} actions created`);
+    } catch (err) {
+      console.error('Batch backfill failed:', err);
+      toast.error('Batch backfill failed');
+    } finally {
+      setBatchRunning(false);
+    }
   }, [user, qc]);
 
   // ── Guided extraction mode ───────────────────────────────
