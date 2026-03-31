@@ -36,6 +36,7 @@ import {
 } from '@/lib/resourceClassifier';
 import { extractKnowledgeHeuristic, type ExtractionSource } from '@/lib/knowledgeExtraction';
 import { TrustReviewQueue } from '@/components/knowledge/TrustReviewQueue';
+import { ResourceFailureQueue, type ResourceDiagnosis } from '@/components/knowledge/ResourceFailureQueue';
 import { useKnowledgeItems as useAllKnowledgeItems } from '@/hooks/useKnowledgeItems';
 import { useResources, type Resource } from '@/hooks/useResources';
 import { useInsertKnowledgeItems, type KnowledgeItemInsert } from '@/hooks/useKnowledgeItems';
