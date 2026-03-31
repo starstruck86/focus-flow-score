@@ -415,12 +415,25 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                 {/* ── Canonical Lifecycle Summary — SINGLE SOURCE OF TRUTH ── */}
                 <LifecycleSummaryBar summary={lifecycle} />
 
+                {/* ── NEXT BEST ACTION ── */}
+                <NextBestActionPanel audit={audit} actionLoading={actionLoading} onAction={(type, ids) => setConfirmAction({ type, ids })} />
+
                 {/* ── Bucket summary stats ── */}
                 <div className="grid grid-cols-4 gap-1.5">
                   <MiniStat label="Ready to Use" value={audit.counts.operationalized} accent="emerald" />
                   <MiniStat label="Needs Extraction" value={audit.counts.extractable_not_operationalized} accent="blue" />
                   <MiniStat label="Needs Review" value={audit.counts.content_backed_needs_fix} accent="orange" />
                   <MiniStat label="Underutilized" value={underutilizedCount} accent="amber" />
+                </div>
+
+                {/* ── State legend ── */}
+                <div className="rounded-md border border-border bg-muted/20 p-2 text-[9px] text-muted-foreground grid grid-cols-2 gap-x-3 gap-y-0.5">
+                  <span><span className="font-medium text-foreground">Enriched</span> — content/metadata processed</span>
+                  <span><span className="font-medium text-foreground">Eligible</span> — ready for extraction pipeline</span>
+                  <span><span className="font-medium text-foreground">Extracted</span> — knowledge items created</span>
+                  <span><span className="font-medium text-foreground">Activated</span> — KI usable in system</span>
+                  <span><span className="font-medium text-foreground">Needs Review</span> — uncertain extraction result</span>
+                  <span><span className="font-medium text-foreground">No Content</span> — no usable content path</span>
                 </div>
 
                 {/* ── "What should I review first?" ── */}
@@ -433,98 +446,67 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                         <span className="text-foreground">{step}</span>
                       </div>
                     ))}
-                    <p className="text-[9px] text-muted-foreground italic mt-1">
-                      Rescue stranded content → extract value → fix targeting → inspect what works
-                    </p>
                   </div>
                 )}
 
-                {/* ── Validation summary ── */}
-                <div className="rounded-md border border-border bg-muted/30 p-2.5 space-y-1">
-                  <p className="text-[10px] font-medium text-foreground flex items-center gap-1">
-                    <Info className="h-3 w-3" /> Validation
-                  </p>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[10px] text-muted-foreground">
-                    <span>Missing required tags:</span>
-                    <span className={cn('font-medium', audit.validationSummary.missingRequiredTags > 0 ? 'text-amber-600' : 'text-foreground')}>
-                      {audit.validationSummary.missingRequiredTags}
-                    </span>
-                    <span>Active but no contexts:</span>
-                    <span className={cn('font-medium', audit.validationSummary.activeButInconsistent > 0 ? 'text-orange-500' : 'text-foreground')}>
-                      {audit.validationSummary.activeButInconsistent}
-                    </span>
-                    <span>Tag quality issues:</span>
-                    <span className={cn('font-medium', audit.validationSummary.tagQualityIssueCount > 0 ? 'text-amber-500' : 'text-foreground')}>
-                      {audit.validationSummary.tagQualityIssueCount}
-                    </span>
-                    <span>Ready to use:</span>
-                    <span className="font-medium text-emerald-600">{audit.validationSummary.operationalizedCount}</span>
-                  </div>
-                </div>
-
                 <Separator />
 
-                {/* ── Bulk actions with safety context ── */}
+                {/* ── Primary + Secondary actions ── */}
                 <div className="space-y-1.5">
-                  <p className="text-xs font-medium text-foreground">Bulk Actions</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {audit.counts.content_backed_needs_fix > 0 && (
-                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
-                        onClick={() => setConfirmAction({ type: 'fix', ids: audit.buckets.content_backed_needs_fix.map(r => r.id) })}>
-                        {actionLoading === 'fix' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wrench className="h-3 w-3" />}
-                        Fix {audit.counts.content_backed_needs_fix} Content-Backed
-                      </Button>
-                    )}
-                    {audit.counts.needs_tagging > 0 && (
-                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
-                        onClick={() => setConfirmAction({ type: 'tag', ids: audit.buckets.needs_tagging.map(r => r.id) })}>
-                        {actionLoading === 'tag' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Tag className="h-3 w-3" />}
-                        Auto-tag {audit.counts.needs_tagging}
-                      </Button>
-                    )}
-                    <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
-                      onClick={() => setConfirmAction({ type: 'activate' })}>
-                      {actionLoading === 'activate' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-                      Activate High-Confidence
+                  {/* Test mode */}
+                  {(audit.counts.ready + audit.counts.extractable_not_operationalized + audit.counts.needs_tagging) > 5 && (
+                    <Button variant="ghost" size="sm" className="h-7 text-[10px] gap-1 text-muted-foreground" disabled={!!actionLoading}
+                      onClick={() => {
+                        const ids = [
+                          ...audit.buckets.extractable_not_operationalized,
+                          ...audit.buckets.needs_tagging,
+                          ...audit.buckets.ready,
+                        ].map(r => r.id).slice(0, 5);
+                        setConfirmAction({ type: 'autoOp', ids });
+                      }}>
+                      <Rocket className="h-3 w-3" />
+                      Test Extraction (5)
                     </Button>
-                    {/* Auto-Operationalize: targets ready + extractable + needs_tagging */}
-                    {(audit.counts.ready + audit.counts.extractable_not_operationalized + audit.counts.needs_tagging) > 0 && (
-                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 border-primary/30" disabled={!!actionLoading}
-                        onClick={() => {
-                          const ids = [
-                            ...audit.buckets.extractable_not_operationalized,
-                            ...audit.buckets.needs_tagging,
-                            ...audit.buckets.ready,
-                          ].map(r => r.id);
-                          setConfirmAction({ type: 'autoOp', ids });
-                        }}>
-                        {actionLoading === 'autoOp' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Rocket className="h-3 w-3" />}
-                        Auto-Operationalize {audit.counts.ready + audit.counts.extractable_not_operationalized + audit.counts.needs_tagging}
-                      </Button>
-                    )}
-                    {/* Test mode: run on 5 resources */}
-                    {(audit.counts.ready + audit.counts.extractable_not_operationalized + audit.counts.needs_tagging) > 5 && (
-                      <Button variant="ghost" size="sm" className="h-7 text-[10px] gap-1 text-muted-foreground" disabled={!!actionLoading}
-                        onClick={() => {
-                          const ids = [
-                            ...audit.buckets.extractable_not_operationalized,
-                            ...audit.buckets.needs_tagging,
-                            ...audit.buckets.ready,
-                          ].map(r => r.id).slice(0, 5);
-                          setConfirmAction({ type: 'autoOp', ids });
-                        }}>
-                        <Rocket className="h-3 w-3" />
-                        Test (5)
-                      </Button>
-                    )}
-                    {audit.counts.junk_or_low_signal > 0 && (
-                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-destructive" disabled={!!actionLoading}
-                        onClick={() => setConfirmAction({ type: 'delete', ids: audit.buckets.junk_or_low_signal.map(r => r.id) })}>
-                        <Trash2 className="h-3 w-3" />
-                        Delete {audit.counts.junk_or_low_signal} Junk
-                      </Button>
-                    )}
-                  </div>
+                  )}
+
+                  {/* More Actions — collapsible */}
+                  <Collapsible>
+                    <CollapsibleTrigger className="w-full flex items-center justify-between p-1.5 rounded hover:bg-accent/50 text-[10px]">
+                      <span className="font-medium text-muted-foreground">More Actions</span>
+                      <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="flex flex-wrap gap-1.5 pt-1.5">
+                        {audit.counts.content_backed_needs_fix > 0 && (
+                          <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
+                            onClick={() => setConfirmAction({ type: 'fix', ids: audit.buckets.content_backed_needs_fix.map(r => r.id) })}>
+                            {actionLoading === 'fix' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wrench className="h-3 w-3" />}
+                            Fix {audit.counts.content_backed_needs_fix} Content Issues
+                          </Button>
+                        )}
+                        {audit.counts.needs_tagging > 0 && (
+                          <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
+                            onClick={() => setConfirmAction({ type: 'tag', ids: audit.buckets.needs_tagging.map(r => r.id) })}>
+                            {actionLoading === 'tag' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Tag className="h-3 w-3" />}
+                            Auto-tag {audit.counts.needs_tagging}
+                          </Button>
+                        )}
+                        <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
+                          onClick={() => setConfirmAction({ type: 'activate' })}>
+                          {actionLoading === 'activate' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                          Activate Knowledge
+                        </Button>
+                        {audit.counts.junk_or_low_signal > 0 && (
+                          <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-destructive" disabled={!!actionLoading}
+                            onClick={() => setConfirmAction({ type: 'delete', ids: audit.buckets.junk_or_low_signal.map(r => r.id) })}>
+                            <Trash2 className="h-3 w-3" />
+                            Delete {audit.counts.junk_or_low_signal} Junk
+                          </Button>
+                        )}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                </div>
 
                   {/* ── Auto-Op Progress + Results ── */}
                   {autoOpProgress && (
