@@ -474,7 +474,10 @@ function buildContexts(chapter: string, type: string): string[] {
  * LLM-based fallback extraction via edge function.
  * Called when heuristic returns 0 items for content-backed resources.
  */
-export async function extractKnowledgeLLMFallback(source: ExtractionSource): Promise<KnowledgeItemInsert[]> {
+export async function extractKnowledgeLLMFallback(
+  source: ExtractionSource,
+  existingItems: Array<{ title: string; tactic_summary?: string | null }> = []
+): Promise<KnowledgeItemInsert[]> {
   try {
     log.info('Running LLM fallback extraction', { resourceId: source.resourceId, title: source.title });
 
@@ -490,21 +493,27 @@ export async function extractKnowledgeLLMFallback(source: ExtractionSource): Pro
     });
 
     if (result?.data?.items && Array.isArray(result.data.items)) {
-      const items: KnowledgeItemInsert[] = [];
+      const rawItems: KnowledgeItemInsert[] = [];
       for (const item of result.data.items) {
-        // Enforce structure: skip items missing required fields
         if (!item.tactic_summary || item.tactic_summary.length < 20) continue;
         if (!item.when_to_use || item.when_to_use.length < 10) continue;
         if (!item.title) continue;
 
-        const { score: confidence } = scoreActionability({
-          title: item.title,
-          tactic_summary: item.tactic_summary,
-          when_to_use: item.when_to_use,
-          example_usage: item.example_usage,
-        });
+        // Trust validation
+        const trust = validateTrust(
+          {
+            title: item.title,
+            tactic_summary: item.tactic_summary,
+            when_to_use: item.when_to_use,
+            example_usage: item.example_usage,
+            chapter: item.chapter || 'messaging',
+          },
+          existingItems
+        );
 
-        items.push({
+        const autoActivate = trust.passed && trust.overall >= 0.4;
+
+        rawItems.push({
           user_id: source.userId,
           source_resource_id: source.resourceId,
           source_doctrine_id: null,
@@ -520,21 +529,24 @@ export async function extractKnowledgeLLMFallback(source: ExtractionSource): Pro
           when_to_use: item.when_to_use,
           when_not_to_use: item.when_not_to_use || null,
           example_usage: item.example_usage || null,
-          confidence_score: confidence,
-          status: confidence >= 0.4 ? 'active' : 'review_needed',
-          active: confidence >= 0.4,
+          confidence_score: trust.overall,
+          status: autoActivate ? 'active' : (trust.failedGates.length <= 1 ? 'extracted' : 'review_needed'),
+          active: autoActivate,
           user_edited: false,
           tags: [...source.tags, item.knowledge_type || 'skill', item.chapter || 'messaging'],
         });
       }
 
+      // Deduplicate
+      const { kept, duplicates } = deduplicateKnowledgeItems(rawItems, existingItems);
+
       log.info('LLM fallback extraction complete', {
         resourceId: source.resourceId,
-        extracted: items.length,
-        activatable: items.filter(i => (i.confidence_score ?? 0) >= 0.55).length,
+        extracted: kept.length,
+        duplicates_suppressed: duplicates.length,
       });
 
-      return items;
+      return kept;
     }
   } catch (err) {
     log.warn('LLM fallback extraction failed', { resourceId: source.resourceId, error: err });
@@ -546,16 +558,15 @@ export async function extractKnowledgeLLMFallback(source: ExtractionSource): Pro
 /**
  * AI-powered extraction using edge function (legacy compat)
  */
-export async function extractKnowledgeAI(source: ExtractionSource): Promise<KnowledgeItemInsert[]> {
-  // Try heuristic first
-  const heuristicItems = extractKnowledgeHeuristic(source);
-
-  // If heuristic produced results, use them
+export async function extractKnowledgeAI(
+  source: ExtractionSource,
+  existingItems: Array<{ title: string; tactic_summary?: string | null }> = []
+): Promise<KnowledgeItemInsert[]> {
+  const heuristicItems = extractKnowledgeHeuristic(source, existingItems);
   if (heuristicItems.length > 0) return heuristicItems;
 
-  // LLM fallback for content-backed resources with 0 heuristic results
   if ((source.content?.length ?? 0) >= 100) {
-    const llmItems = await extractKnowledgeLLMFallback(source);
+    const llmItems = await extractKnowledgeLLMFallback(source, existingItems);
     if (llmItems.length > 0) return llmItems;
   }
 
