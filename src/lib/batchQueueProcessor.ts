@@ -165,15 +165,19 @@ export async function runBatchQueue(
 
   // De-duplicate: skip resources with active jobs
   if (callbacks.hasActiveJob) {
-    const deduped: ResourceJobState[] = [];
     for (const job of jobs) {
       const hasActive = await callbacks.hasActiveJob(job.resourceId);
       if (hasActive) {
         job.status = 'needs_attention';
         job.failureReason = 'Duplicate: job already active';
       }
-      deduped.push(job);
     }
+  }
+
+  // Count pre-skipped jobs
+  const skippedBeforeStart = jobs.filter(j => j.status === 'needs_attention').length;
+  if (skippedBeforeStart > 0) {
+    log.info('Pre-skipped duplicate jobs', { count: skippedBeforeStart });
   }
 
   const progress: BatchProgress = {

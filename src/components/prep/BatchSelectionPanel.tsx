@@ -3,7 +3,7 @@
  * queue progress, and per-resource status tracking.
  */
 
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -14,7 +14,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { cn } from '@/lib/utils';
 import {
   Play, Square, RefreshCw, Loader2, CheckCircle2, XCircle, Clock,
-  ChevronDown, AlertTriangle, Zap, Filter, RotateCcw,
+  ChevronDown, AlertTriangle, Zap, Filter, RotateCcw, BarChart3,
 } from 'lucide-react';
 import {
   runBatchQueue,
@@ -25,7 +25,13 @@ import {
   type BatchConfig,
   type ExtractionAttempt,
 } from '@/lib/batchQueueProcessor';
-import { autoOperationalizeResource } from '@/lib/autoOperationalize';
+import { dispatchExtractionMethod, runEnrichmentOnly } from '@/lib/extractionMethodDispatch';
+import { normalizeSourceType } from '@/lib/sourceTypeNormalizer';
+import {
+  createBatchRun, finalizeBatchRun, persistJobRecords,
+  hasActiveJobInDB, loadBatchRunHistory, computeBatchMetrics,
+  type BatchRunRecord,
+} from '@/lib/batchRunPersistence';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -50,6 +56,8 @@ interface ResourceItem {
   id: string;
   title: string;
   sourceType?: string;
+  fileUrl?: string;
+  resourceType?: string;
   enrichmentStatus?: string;
   contentLength?: number;
   hasKnowledge?: boolean;
@@ -69,7 +77,14 @@ export function BatchSelectionPanel({ resources, onComplete }: Props) {
   const [progress, setProgress] = useState<BatchProgress | null>(null);
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [showJobs, setShowJobs] = useState(false);
+  const [showMetrics, setShowMetrics] = useState(false);
+  const [metrics, setMetrics] = useState<Awaited<ReturnType<typeof computeBatchMetrics>> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Load metrics on mount
+  useEffect(() => {
+    loadBatchRunHistory(20).then(runs => computeBatchMetrics(runs).then(setMetrics));
+  }, [progress?.isRunning]);
 
   // ── Selection helpers ──────────────────────────────────
 
@@ -121,6 +136,15 @@ export function BatchSelectionPanel({ resources, onComplete }: Props) {
 
   // ── Batch execution ────────────────────────────────────
 
+  // Build a source type lookup for resources
+  const sourceTypeLookup = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof normalizeSourceType>>();
+    for (const r of resources) {
+      map.set(r.id, normalizeSourceType(r.resourceType, r.fileUrl));
+    }
+    return map;
+  }, [resources]);
+
   const runAction = useCallback(async (action: BatchAction) => {
     const selected = resources.filter(r => selectedIds.has(r.id));
     if (selected.length === 0) {
@@ -130,33 +154,26 @@ export function BatchSelectionPanel({ resources, onComplete }: Props) {
 
     const controller = new AbortController();
     abortRef.current = controller;
+    const cfg = { batchSize: 15, maxConcurrency: 3, interBatchDelayMs: 750 };
+
+    // Create persistent batch run record
+    const batchRunId = await createBatchRun(action, selected.length, cfg.batchSize, cfg.maxConcurrency);
 
     try {
-      await runBatchQueue(
-        selected.map(r => ({ id: r.id, title: r.title, sourceType: r.sourceType })),
+      const result = await runBatchQueue(
+        selected.map(r => ({
+          id: r.id,
+          title: r.title,
+          sourceType: sourceTypeLookup.get(r.id) ?? 'unknown',
+        })),
         action,
         {
           extractResource: async (resourceId, method) => {
-            // Use autoOperationalizeResource as the extraction engine
-            try {
-              const result = await autoOperationalizeResource(resourceId);
-              return {
-                success: result.operationalized || result.knowledgeExtracted > 0,
-                contentLength: result.knowledgeExtracted,
-                error: result.reason,
-              };
-            } catch (err: any) {
-              return { success: false, error: err?.message || 'Extraction failed' };
-            }
+            const srcType = sourceTypeLookup.get(resourceId) ?? 'unknown';
+            return dispatchExtractionMethod(resourceId, method, srcType);
           },
           enrichResource: async (resourceId) => {
-            // Enrichment is part of the autoOperationalize flow
-            try {
-              const result = await autoOperationalizeResource(resourceId);
-              return { success: result.success, error: result.reason };
-            } catch (err: any) {
-              return { success: false, error: err?.message };
-            }
+            return runEnrichmentOnly(resourceId);
           },
           hasExtractedContent: async (resourceId) => {
             const { data } = await supabase
@@ -166,11 +183,20 @@ export function BatchSelectionPanel({ resources, onComplete }: Props) {
               .limit(1);
             return (data?.length ?? 0) > 0;
           },
+          hasActiveJob: async (resourceId) => {
+            return hasActiveJobInDB(resourceId);
+          },
           onProgress: (p) => setProgress({ ...p }),
         },
-        { batchSize: 15, maxConcurrency: 3, interBatchDelayMs: 750 },
+        cfg,
         controller.signal,
       );
+
+      // Persist results
+      if (batchRunId) {
+        await finalizeBatchRun(batchRunId, result);
+        await persistJobRecords(batchRunId, result.jobs);
+      }
 
       onComplete?.();
     } catch (err: any) {
@@ -178,7 +204,7 @@ export function BatchSelectionPanel({ resources, onComplete }: Props) {
     } finally {
       abortRef.current = null;
     }
-  }, [selectedIds, resources, onComplete]);
+  }, [selectedIds, resources, onComplete, sourceTypeLookup]);
 
   const cancelBatch = useCallback(() => {
     abortRef.current?.abort();
@@ -337,6 +363,48 @@ export function BatchSelectionPanel({ resources, onComplete }: Props) {
       {/* ── Post-Run Summary ── */}
       {progress && !isRunning && (
         <PostRunSummary progress={progress} />
+      )}
+
+      {/* ── Metrics ── */}
+      {metrics && metrics.totalRuns > 0 && (
+        <Collapsible open={showMetrics} onOpenChange={setShowMetrics}>
+          <CollapsibleTrigger className="w-full flex items-center justify-between p-1.5 rounded hover:bg-accent/50 text-[10px] font-medium text-muted-foreground">
+            <span className="flex items-center gap-1"><BarChart3 className="h-3 w-3" /> Batch Metrics ({metrics.totalRuns} runs)</span>
+            <ChevronDown className={cn('h-3 w-3 transition-transform', showMetrics && 'rotate-180')} />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2 text-[10px]">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div>
+                  <p className="text-muted-foreground">Success Rate</p>
+                  <p className="font-semibold text-foreground">{(metrics.overallSuccessRate * 100).toFixed(1)}%</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Resources Processed</p>
+                  <p className="font-semibold text-foreground">{metrics.totalResources}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Avg Duration</p>
+                  <p className="font-semibold text-foreground">{metrics.avgBatchDurationMs > 0 ? `${(metrics.avgBatchDurationMs / 1000).toFixed(1)}s` : '—'}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Recovered by Fallback</p>
+                  <p className="font-semibold text-foreground">{metrics.recoveredByFallback}</p>
+                </div>
+              </div>
+              {metrics.topFailureReasons.length > 0 && (
+                <div>
+                  <p className="text-muted-foreground font-medium mb-1">Top Failure Reasons</p>
+                  {metrics.topFailureReasons.map((f, i) => (
+                    <p key={i} className="text-destructive text-[9px]">
+                      {f.count}× {f.reason}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       )}
     </div>
   );

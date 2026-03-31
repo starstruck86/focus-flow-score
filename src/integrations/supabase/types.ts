@@ -488,6 +488,104 @@ export type Database = {
         }
         Relationships: []
       }
+      batch_run_jobs: {
+        Row: {
+          attempts: Json | null
+          batch_run_id: string
+          created_at: string
+          ended_at: string | null
+          failure_reason: string | null
+          final_status: string
+          id: string
+          resource_id: string
+          resource_title: string | null
+          source_type: string | null
+          started_at: string | null
+        }
+        Insert: {
+          attempts?: Json | null
+          batch_run_id: string
+          created_at?: string
+          ended_at?: string | null
+          failure_reason?: string | null
+          final_status?: string
+          id?: string
+          resource_id: string
+          resource_title?: string | null
+          source_type?: string | null
+          started_at?: string | null
+        }
+        Update: {
+          attempts?: Json | null
+          batch_run_id?: string
+          created_at?: string
+          ended_at?: string | null
+          failure_reason?: string | null
+          final_status?: string
+          id?: string
+          resource_id?: string
+          resource_title?: string | null
+          source_type?: string | null
+          started_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batch_run_jobs_batch_run_id_fkey"
+            columns: ["batch_run_id"]
+            isOneToOne: false
+            referencedRelation: "batch_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      batch_runs: {
+        Row: {
+          action_type: string
+          batch_size: number
+          cancelled: boolean
+          concurrency: number
+          created_at: string
+          ended_at: string | null
+          failed: number
+          id: string
+          skipped: number
+          started_at: string
+          succeeded: number
+          total_resources: number
+          user_id: string
+        }
+        Insert: {
+          action_type?: string
+          batch_size?: number
+          cancelled?: boolean
+          concurrency?: number
+          created_at?: string
+          ended_at?: string | null
+          failed?: number
+          id?: string
+          skipped?: number
+          started_at?: string
+          succeeded?: number
+          total_resources?: number
+          user_id: string
+        }
+        Update: {
+          action_type?: string
+          batch_size?: number
+          cancelled?: boolean
+          concurrency?: number
+          created_at?: string
+          ended_at?: string | null
+          failed?: number
+          id?: string
+          skipped?: number
+          started_at?: string
+          succeeded?: number
+          total_resources?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       calendar_events: {
         Row: {
           all_day: boolean
