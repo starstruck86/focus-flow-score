@@ -196,7 +196,7 @@ function ManageResourcesDialog({ stageId, stageLabel }: { stageId: string; stage
     queryFn: async () => {
       let q = supabase
         .from('resources')
-        .select('id, title, source_type, content_type')
+        .select('id, title, resource_type')
         .eq('user_id', user!.id)
         .order('title')
         .limit(50);
