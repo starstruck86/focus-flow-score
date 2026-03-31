@@ -2249,6 +2249,10 @@ export type Database = {
           most_similar_existing: string | null
           priority: string
           recommended_fix: string | null
+          resolution_action: string | null
+          resolution_notes: string | null
+          resolution_status: string | null
+          resolved_at: string | null
           resource_id: string
           retryable: boolean
           route: string | null
@@ -2267,6 +2271,10 @@ export type Database = {
           most_similar_existing?: string | null
           priority?: string
           recommended_fix?: string | null
+          resolution_action?: string | null
+          resolution_notes?: string | null
+          resolution_status?: string | null
+          resolved_at?: string | null
           resource_id: string
           retryable?: boolean
           route?: string | null
@@ -2285,6 +2293,10 @@ export type Database = {
           most_similar_existing?: string | null
           priority?: string
           recommended_fix?: string | null
+          resolution_action?: string | null
+          resolution_notes?: string | null
+          resolution_status?: string | null
+          resolved_at?: string | null
           resource_id?: string
           retryable?: boolean
           route?: string | null
@@ -2294,7 +2306,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_diagnoses_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "pipeline_runs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pipeline_hygiene_scans: {
         Row: {
@@ -2330,6 +2350,66 @@ export type Database = {
           scan_date?: string
           summary?: Json
           total_issues?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      pipeline_runs: {
+        Row: {
+          completed_at: string | null
+          converged: boolean | null
+          created_at: string
+          id: string
+          iterations_run: number | null
+          mode: string
+          no_progress_iterations: number | null
+          repeated_failure_resources: number | null
+          stall_reason: string | null
+          stalled_resources: number | null
+          started_at: string
+          status: string
+          summary_json: Json | null
+          total_processed: number | null
+          total_resources: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          converged?: boolean | null
+          created_at?: string
+          id?: string
+          iterations_run?: number | null
+          mode?: string
+          no_progress_iterations?: number | null
+          repeated_failure_resources?: number | null
+          stall_reason?: string | null
+          stalled_resources?: number | null
+          started_at?: string
+          status?: string
+          summary_json?: Json | null
+          total_processed?: number | null
+          total_resources?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          converged?: boolean | null
+          created_at?: string
+          id?: string
+          iterations_run?: number | null
+          mode?: string
+          no_progress_iterations?: number | null
+          repeated_failure_resources?: number | null
+          stall_reason?: string | null
+          stalled_resources?: number | null
+          started_at?: string
+          status?: string
+          summary_json?: Json | null
+          total_processed?: number | null
+          total_resources?: number | null
           updated_at?: string
           user_id?: string
         }
