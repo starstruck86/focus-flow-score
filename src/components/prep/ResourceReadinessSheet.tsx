@@ -570,7 +570,8 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                         </div>
                       </div>
                     )}
-                  </div>
+                  </CollapsibleContent>
+                </Collapsible>
 
                   {/* ── Knowledge Item Remediation ── */}
                   <div className="pt-1.5 border-t border-border/50 space-y-1.5">
