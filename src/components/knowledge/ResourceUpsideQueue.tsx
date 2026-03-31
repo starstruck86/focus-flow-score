@@ -378,7 +378,7 @@ export function ResourceUpsideQueue() {
 
   // ── Pipeline orchestration ────────────────────────────────
 
-  const { run: runPipeline, abort: abortPipeline, running: batchRunning, result: pipelineResult } = useRunPipeline();
+  const { run: runPipeline, abort: abortPipeline, running: batchRunning, result: pipelineResult, rerunResource, rerunStrict } = useRunPipeline();
   const { data: persistedDiagnoses } = usePipelineDiagnoses();
 
   const handleRunPipeline = useCallback(async (mode: 'standard' | 'full_backlog' | 'run_until_clean' = 'standard') => {
