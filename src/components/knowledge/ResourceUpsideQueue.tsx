@@ -467,7 +467,8 @@ export function ResourceUpsideQueue() {
       {/* Resource Failure Queue — from pipeline diagnoses (persisted or live) */}
       {!guidedMode && (() => {
         const diagsToShow = pipelineResult?.diagnoses || persistedDiagnoses?.diagnoses || [];
-        return diagsToShow.length > 0 ? <ResourceFailureQueue diagnoses={diagsToShow} /> : null;
+        const activeRunId = pipelineResult?.run_id || persistedDiagnoses?.runId || null;
+        return diagsToShow.length > 0 ? <ResourceFailureQueue diagnoses={diagsToShow} runId={activeRunId} /> : null;
       })()}
 
       {/* Trust Review Queue — extracted but not activated */}
