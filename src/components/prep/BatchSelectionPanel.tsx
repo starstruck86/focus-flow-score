@@ -56,6 +56,8 @@ interface ResourceItem {
   id: string;
   title: string;
   sourceType?: string;
+  fileUrl?: string;
+  resourceType?: string;
   enrichmentStatus?: string;
   contentLength?: number;
   hasKnowledge?: boolean;
