@@ -489,7 +489,7 @@ export async function getPipelineStats(userId: string): Promise<PipelineStats> {
 
     if (activeKIResources.has(r.id)) {
       completed++;
-    } else if ((r.content_length ?? 0) >= 200) {
+    } else if (['enriched', 'deep_enriched', 'verified'].includes(r.enrichment_status)) {
       ready++;
     }
 
