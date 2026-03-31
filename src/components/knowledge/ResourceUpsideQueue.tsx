@@ -540,7 +540,13 @@ function SummaryHeader({ summary, totalCandidates, totalPromoted, onBulkTemplate
   onBulkTemplates: () => void; onBulkExamples: () => void; onBulkActivate: () => void;
   onStartGuided: () => void; guidedAvailable: number;
   onBatchBackfill: () => void; batchRunning: boolean;
-  batchResult: { processed: number; knowledge_created: number; templates_created: number; failed: number; remaining: number } | null;
+  batchResult: {
+    processed: number; knowledge_created: number; knowledge_activated: number;
+    templates_created: number; examples_created: number;
+    duplicates_suppressed: number; trust_rejected: number;
+    failed: number; remaining: number;
+    routed: Record<string, number>;
+  } | null;
 }) {
   return (
     <div className="border border-border rounded-lg bg-card p-4 space-y-3">
