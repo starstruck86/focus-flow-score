@@ -282,7 +282,10 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
         onContextItemsChange={setContextItems}
       />
 
-      {/* Proactive Guidance */}
+      {/* Keystone & Supporting Resources */}
+      <StageResourcesSection stageId={stage.id} stageLabel={stage.label} />
+
+
       <ProactiveGuidance
         stageId={stage.id}
         persona={persona}
