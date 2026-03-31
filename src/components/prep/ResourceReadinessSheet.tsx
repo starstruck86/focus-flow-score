@@ -531,19 +531,23 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                   <OperatorSummaryPanel summary={lastAutoOpSummary} />
                 )}
 
-                  {/* ── Backfill actions ── */}
-                  <div className="pt-1.5 border-t border-border/50 space-y-1.5">
-                    <p className="text-[10px] font-medium text-muted-foreground">Backfill All Existing Resources</p>
-                    <div className="flex flex-wrap gap-1.5">
+                {/* ── Backfill actions ── */}
+                <Collapsible>
+                  <CollapsibleTrigger className="w-full flex items-center justify-between p-1.5 rounded hover:bg-accent/50 text-[10px]">
+                    <span className="font-medium text-muted-foreground">Full Library Extraction</span>
+                    <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="flex flex-wrap gap-1.5 pt-1.5">
                       <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 border-emerald-500/30" disabled={!!actionLoading}
                         onClick={() => setConfirmAction({ type: 'backfillSmart' })}>
                         {actionLoading === 'backfillSmart' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Rocket className="h-3 w-3 text-emerald-600" />}
-                        Operationalize All Eligible
+                        Extract All Eligible
                       </Button>
                       <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
                         onClick={() => setConfirmAction({ type: 'backfillAll' })}>
                         {actionLoading === 'backfillAll' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Rocket className="h-3 w-3" />}
-                        Operationalize All Resources
+                        Extract All Resources
                       </Button>
                     </div>
                     {backfillProgress && (
