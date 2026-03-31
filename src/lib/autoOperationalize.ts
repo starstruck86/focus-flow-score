@@ -126,7 +126,8 @@ export async function autoOperationalizeResource(
   const actualContentLength = r.content?.length ?? 0;
   const contentLength = r.content_length ?? actualContentLength;
   const effectiveLength = Math.max(contentLength, actualContentLength);
-  const isContentBacked = effectiveLength >= MIN_CONTENT_LENGTH || r.manual_content_present === true;
+  const isEnriched = ['enriched', 'deep_enriched', 'verified'].includes(r.enrichment_status);
+  const isContentBacked = effectiveLength >= MIN_CONTENT_LENGTH || r.manual_content_present === true || isEnriched;
 
   // ── Diagnostic logging ──
   log.info('Pipeline start', {
@@ -137,12 +138,14 @@ export async function autoOperationalizeResource(
     effective_length: effectiveLength,
     enrichment_status: r.enrichment_status,
     manual_content_present: r.manual_content_present,
+    isEnriched,
+    isContentBacked,
   });
 
   if (!isContentBacked) {
-    log.info('Pipeline stopped: content too short', { resourceId, effectiveLength });
+    log.info('Pipeline stopped: not content-backed and not enriched', { resourceId, effectiveLength, enrichment_status: r.enrichment_status });
     return makeResult(resourceId, r.title, stagesCompleted, 'uploaded', tagsAdded, 0, 0, false, true,
-      `Content too short (${effectiveLength} chars) — needs enrichment or manual input`);
+      `Not content-backed (${effectiveLength} chars, status=${r.enrichment_status}) — needs enrichment or manual input`);
   }
   stagesCompleted.push('content_ready');
 
