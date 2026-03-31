@@ -376,11 +376,30 @@ export async function autoOperationalizeResource(
     stagesCompleted.push('operationalized');
   }
 
+  // ── Update resource enrichment_status + last_status_change_at after successful extraction ──
+  const finalStage = stagesCompleted[stagesCompleted.length - 1];
+  if (knowledgeExtracted > 0 || knowledgeActivated > 0 || hasActiveWithContexts) {
+    const statusUpdate: Record<string, any> = {
+      last_status_change_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    // Only upgrade enrichment_status if it's not already deep_enriched or better
+    const currentStatus = r.enrichment_status ?? 'not_enriched';
+    if (!['deep_enriched', 'verified'].includes(currentStatus)) {
+      statusUpdate.enrichment_status = 'deep_enriched';
+    }
+    await supabase.from('resources').update(statusUpdate as any).eq('id', resourceId);
+    log.info('Updated resource status after extraction', {
+      resourceId, finalStage, knowledgeExtracted, knowledgeActivated,
+      enrichment_status: statusUpdate.enrichment_status ?? currentStatus,
+    });
+  }
+
   return makeResult(
     resourceId,
     r.title,
     stagesCompleted,
-    stagesCompleted[stagesCompleted.length - 1],
+    finalStage,
     tagsAdded,
     knowledgeExtracted,
     knowledgeActivated,
