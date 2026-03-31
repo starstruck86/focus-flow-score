@@ -134,32 +134,28 @@ export async function autoOperationalizeResource(
   const r = resource as any;
   stagesCompleted.push('uploaded');
 
-  // ── STAGE 1: Content Ready ──
-  // Use actual content length if content_length field is stale or missing
-  const actualContentLength = r.content?.length ?? 0;
-  const contentLength = r.content_length ?? actualContentLength;
-  const effectiveLength = Math.max(contentLength, actualContentLength);
-  const isEnriched = ['enriched', 'deep_enriched', 'verified'].includes(r.enrichment_status);
-  const isContentBacked = effectiveLength >= MIN_CONTENT_LENGTH || r.manual_content_present === true || isEnriched;
+  // ── STAGE 1: Content Ready (uses pipeline contract) ──
+  const eligibility = isEligibleForExtraction(r);
 
   // ── Diagnostic logging ──
   log.info('Pipeline start', {
     resourceId,
     title: r.title?.slice(0, 60),
     content_length_field: r.content_length,
-    actual_content_length: actualContentLength,
-    effective_length: effectiveLength,
+    actual_content_length: r.content?.length ?? 0,
     enrichment_status: r.enrichment_status,
     manual_content_present: r.manual_content_present,
-    isEnriched,
-    isContentBacked,
+    eligible: eligibility.eligible,
+    extractionTier: eligibility.extractionTier,
+    eligibilityReason: eligibility.reason,
   });
 
-  if (!isContentBacked) {
-    log.info('Pipeline stopped: not content-backed and not enriched', { resourceId, effectiveLength, enrichment_status: r.enrichment_status });
-    return makeResult(resourceId, r.title, stagesCompleted, 'uploaded', tagsAdded, 0, 0, false, true,
-      `Not content-backed (${effectiveLength} chars, status=${r.enrichment_status}) — needs enrichment or manual input`);
+  if (!eligibility.eligible) {
+    log.info('Pipeline stopped: not eligible', { resourceId, reason: eligibility.reason });
+    return makeResult(resourceId, r.title, stagesCompleted, 'uploaded', tagsAdded, 0, 0, false, true, eligibility.extractionTier, 'no_content', eligibility.reason);
   }
+
+  const effectiveLength = Math.max(r.content?.length ?? 0, r.content_length ?? 0);
   stagesCompleted.push('content_ready');
 
   // ── Clear stale blockers if content-backed ──
