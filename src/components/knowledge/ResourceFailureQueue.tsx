@@ -188,6 +188,12 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
     type: 'template' | 'example';
     similar: { id: string; title: string; content: string; similarity: number }[];
   } | null>(null);
+  const [transformPreview, setTransformPreview] = useState<{
+    diagnosis: ResourceDiagnosis;
+    type: 'template' | 'example';
+    originalContent: string;
+    resourceData: any;
+  } | null>(null);
 
   // Fetch smart preview snippets (route-aware)
   useEffect(() => {
