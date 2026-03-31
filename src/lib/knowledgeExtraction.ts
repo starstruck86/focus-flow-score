@@ -12,6 +12,7 @@ import type { KnowledgeItemInsert } from '@/hooks/useKnowledgeItems';
 import { trackedInvoke } from '@/lib/trackedInvoke';
 import { createLogger } from '@/lib/logger';
 import { inferTags, mergeTags } from '@/lib/resourceTags';
+import { validateTrust, deduplicateKnowledgeItems, type TrustValidation } from '@/lib/trustValidation';
 
 const log = createLogger('KnowledgeExtraction');
 
@@ -326,20 +327,22 @@ function extractTacticsFromText(
  * Heuristic extraction — produces ONLY actionable, execution-ready sales tactics.
  * Returns an ExtractionLog alongside the items for auditing.
  */
-export function extractKnowledgeHeuristic(source: ExtractionSource): KnowledgeItemInsert[] {
+export function extractKnowledgeHeuristic(
+  source: ExtractionSource,
+  existingItems: Array<{ title: string; tactic_summary?: string | null }> = []
+): KnowledgeItemInsert[] {
   const { resourceId, userId, title, content, description, tags } = source;
   const text = [title, description, content].filter(Boolean).join('\n');
-  const items: KnowledgeItemInsert[] = [];
+  const rawItems: KnowledgeItemInsert[] = [];
   const rejectedReasons: string[] = [];
 
-  if (text.length < 100) return items;
+  if (text.length < 100) return rawItems;
 
   const competitor = detectCompetitor(text);
   const productArea = detectProductArea(text);
   const isProductKnowledge = PRODUCT_PATTERNS.some(p => p.test(text));
   const lower = text.toLowerCase();
 
-  // For each matching chapter, extract specific tactics (not summaries)
   for (const signal of CHAPTER_SIGNALS) {
     const matches = signal.patterns.filter(p => p.test(lower));
     if (matches.length === 0) continue;
@@ -364,19 +367,32 @@ export function extractKnowledgeHeuristic(source: ExtractionSource): KnowledgeIt
         example_usage: tactic.example_usage,
       });
 
-      // Only create item if it passes actionability minimum
       if (confidence < 0.3) {
         rejectedReasons.push(`${tactic.title}: confidence too low (${(confidence * 100).toFixed(0)}%)`);
         continue;
       }
 
-      // Enforce structure: must have filled fields
       if (!tactic.tactic_summary || tactic.tactic_summary.length < 20) {
         rejectedReasons.push(`${tactic.title}: tactic_summary too short`);
         continue;
       }
 
-      items.push({
+      // Trust validation: 5-gate check
+      const trust = validateTrust(
+        {
+          title: tactic.title,
+          tactic_summary: tactic.tactic_summary,
+          when_to_use: tactic.when_to_use,
+          example_usage: tactic.example_usage,
+          chapter: tactic.chapter,
+        },
+        existingItems
+      );
+
+      // Only auto-activate if ALL gates pass
+      const autoActivate = trust.passed && confidence >= 0.4;
+
+      rawItems.push({
         user_id: userId,
         source_resource_id: resourceId,
         source_doctrine_id: null,
@@ -392,27 +408,31 @@ export function extractKnowledgeHeuristic(source: ExtractionSource): KnowledgeIt
         when_to_use: tactic.when_to_use || null,
         when_not_to_use: tactic.when_not_to_use || null,
         example_usage: tactic.example_usage || null,
-        confidence_score: confidence,
-        status: confidence >= 0.4 ? 'active' : 'review_needed',
-        active: confidence >= 0.4,
+        confidence_score: trust.overall,
+        status: autoActivate ? 'active' : (trust.failedGates.length <= 1 ? 'extracted' : 'review_needed'),
+        active: autoActivate,
         user_edited: false,
         tags: structuredTags,
       });
     }
   }
 
-  // Log extraction results
-  const activatable = items.filter(i => (i.confidence_score ?? 0) >= 0.55);
+  // Deduplicate against existing + intra-batch
+  const { kept, duplicates } = deduplicateKnowledgeItems(rawItems, existingItems);
+  if (duplicates.length > 0) {
+    rejectedReasons.push(`${duplicates.length} duplicates suppressed`);
+  }
+
   log.info('Heuristic extraction complete', {
     resourceId,
     resourceTitle: title,
-    extracted_count: items.length,
-    activatable_count: activatable.length,
+    extracted_count: kept.length,
+    rejected_duplicates: duplicates.length,
     rejected_reasons: rejectedReasons.slice(0, 10),
     used_llm_fallback: false,
   });
 
-  return items;
+  return kept;
 }
 
 /**
@@ -454,7 +474,10 @@ function buildContexts(chapter: string, type: string): string[] {
  * LLM-based fallback extraction via edge function.
  * Called when heuristic returns 0 items for content-backed resources.
  */
-export async function extractKnowledgeLLMFallback(source: ExtractionSource): Promise<KnowledgeItemInsert[]> {
+export async function extractKnowledgeLLMFallback(
+  source: ExtractionSource,
+  existingItems: Array<{ title: string; tactic_summary?: string | null }> = []
+): Promise<KnowledgeItemInsert[]> {
   try {
     log.info('Running LLM fallback extraction', { resourceId: source.resourceId, title: source.title });
 
@@ -470,21 +493,27 @@ export async function extractKnowledgeLLMFallback(source: ExtractionSource): Pro
     });
 
     if (result?.data?.items && Array.isArray(result.data.items)) {
-      const items: KnowledgeItemInsert[] = [];
+      const rawItems: KnowledgeItemInsert[] = [];
       for (const item of result.data.items) {
-        // Enforce structure: skip items missing required fields
         if (!item.tactic_summary || item.tactic_summary.length < 20) continue;
         if (!item.when_to_use || item.when_to_use.length < 10) continue;
         if (!item.title) continue;
 
-        const { score: confidence } = scoreActionability({
-          title: item.title,
-          tactic_summary: item.tactic_summary,
-          when_to_use: item.when_to_use,
-          example_usage: item.example_usage,
-        });
+        // Trust validation
+        const trust = validateTrust(
+          {
+            title: item.title,
+            tactic_summary: item.tactic_summary,
+            when_to_use: item.when_to_use,
+            example_usage: item.example_usage,
+            chapter: item.chapter || 'messaging',
+          },
+          existingItems
+        );
 
-        items.push({
+        const autoActivate = trust.passed && trust.overall >= 0.4;
+
+        rawItems.push({
           user_id: source.userId,
           source_resource_id: source.resourceId,
           source_doctrine_id: null,
@@ -500,21 +529,24 @@ export async function extractKnowledgeLLMFallback(source: ExtractionSource): Pro
           when_to_use: item.when_to_use,
           when_not_to_use: item.when_not_to_use || null,
           example_usage: item.example_usage || null,
-          confidence_score: confidence,
-          status: confidence >= 0.4 ? 'active' : 'review_needed',
-          active: confidence >= 0.4,
+          confidence_score: trust.overall,
+          status: autoActivate ? 'active' : (trust.failedGates.length <= 1 ? 'extracted' : 'review_needed'),
+          active: autoActivate,
           user_edited: false,
           tags: [...source.tags, item.knowledge_type || 'skill', item.chapter || 'messaging'],
         });
       }
 
+      // Deduplicate
+      const { kept, duplicates } = deduplicateKnowledgeItems(rawItems, existingItems);
+
       log.info('LLM fallback extraction complete', {
         resourceId: source.resourceId,
-        extracted: items.length,
-        activatable: items.filter(i => (i.confidence_score ?? 0) >= 0.55).length,
+        extracted: kept.length,
+        duplicates_suppressed: duplicates.length,
       });
 
-      return items;
+      return kept;
     }
   } catch (err) {
     log.warn('LLM fallback extraction failed', { resourceId: source.resourceId, error: err });
@@ -526,16 +558,15 @@ export async function extractKnowledgeLLMFallback(source: ExtractionSource): Pro
 /**
  * AI-powered extraction using edge function (legacy compat)
  */
-export async function extractKnowledgeAI(source: ExtractionSource): Promise<KnowledgeItemInsert[]> {
-  // Try heuristic first
-  const heuristicItems = extractKnowledgeHeuristic(source);
-
-  // If heuristic produced results, use them
+export async function extractKnowledgeAI(
+  source: ExtractionSource,
+  existingItems: Array<{ title: string; tactic_summary?: string | null }> = []
+): Promise<KnowledgeItemInsert[]> {
+  const heuristicItems = extractKnowledgeHeuristic(source, existingItems);
   if (heuristicItems.length > 0) return heuristicItems;
 
-  // LLM fallback for content-backed resources with 0 heuristic results
   if ((source.content?.length ?? 0) >= 100) {
-    const llmItems = await extractKnowledgeLLMFallback(source);
+    const llmItems = await extractKnowledgeLLMFallback(source, existingItems);
     if (llmItems.length > 0) return llmItems;
   }
 

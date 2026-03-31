@@ -35,6 +35,7 @@ import {
   type UpsideScore,
 } from '@/lib/resourceClassifier';
 import { extractKnowledgeHeuristic, type ExtractionSource } from '@/lib/knowledgeExtraction';
+import { useKnowledgeItems as useAllKnowledgeItems } from '@/hooks/useKnowledgeItems';
 import { useResources, type Resource } from '@/hooks/useResources';
 import { useInsertKnowledgeItems, type KnowledgeItemInsert } from '@/hooks/useKnowledgeItems';
 import { useAuth } from '@/contexts/AuthContext';
@@ -123,6 +124,11 @@ export function ResourceUpsideQueue() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const insertKnowledge = useInsertKnowledgeItems();
+  const { data: allKnowledgeItems = [] } = useAllKnowledgeItems();
+  const existingForDedup = useMemo(() =>
+    allKnowledgeItems.map(i => ({ title: i.title, tactic_summary: i.tactic_summary })),
+    [allKnowledgeItems]
+  );
 
   const candidates = useMemo(() =>
     resources.filter(r => {
@@ -221,7 +227,7 @@ export function ResourceUpsideQueue() {
           tags: resource.tags || [],
           resourceType: resource.resource_type,
         };
-        const extracted = extractKnowledgeHeuristic(source);
+        const extracted = extractKnowledgeHeuristic(source, existingForDedup);
         if (extracted.length === 0) {
           toast.info('No actionable tactics found — try manual review');
           return;
@@ -371,8 +377,11 @@ export function ResourceUpsideQueue() {
 
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchResult, setBatchResult] = useState<{
-    processed: number; knowledge_created: number; templates_created: number;
+    processed: number; knowledge_created: number; knowledge_activated: number;
+    templates_created: number; examples_created: number;
+    duplicates_suppressed: number; trust_rejected: number;
     failed: number; remaining: number;
+    routed: Record<string, number>;
   } | null>(null);
 
   const handleBatchBackfill = useCallback(async () => {
@@ -531,7 +540,13 @@ function SummaryHeader({ summary, totalCandidates, totalPromoted, onBulkTemplate
   onBulkTemplates: () => void; onBulkExamples: () => void; onBulkActivate: () => void;
   onStartGuided: () => void; guidedAvailable: number;
   onBatchBackfill: () => void; batchRunning: boolean;
-  batchResult: { processed: number; knowledge_created: number; templates_created: number; failed: number; remaining: number } | null;
+  batchResult: {
+    processed: number; knowledge_created: number; knowledge_activated: number;
+    templates_created: number; examples_created: number;
+    duplicates_suppressed: number; trust_rejected: number;
+    failed: number; remaining: number;
+    routed: Record<string, number>;
+  } | null;
 }) {
   return (
     <div className="border border-border rounded-lg bg-card p-4 space-y-3">
@@ -571,15 +586,25 @@ function SummaryHeader({ summary, totalCandidates, totalPromoted, onBulkTemplate
       {/* Batch result */}
       {batchResult && (
         <div className="rounded-md bg-muted/50 border border-border p-2.5 text-xs space-y-0.5">
-          <p className="font-medium text-foreground">
-            Batch: {batchResult.processed} processed → {batchResult.knowledge_created} actions, {batchResult.templates_created} templates
+          <p className="font-medium text-foreground flex items-center gap-1.5">
+            <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+            {batchResult.processed} processed → {batchResult.knowledge_created} tactics ({batchResult.knowledge_activated} trusted) · {batchResult.templates_created} templates · {batchResult.examples_created} examples
           </p>
+          {batchResult.duplicates_suppressed > 0 && (
+            <p className="text-muted-foreground">{batchResult.duplicates_suppressed} duplicates suppressed</p>
+          )}
+          {batchResult.trust_rejected > 0 && (
+            <p className="text-muted-foreground">{batchResult.trust_rejected} saved but not auto-activated (trust gates)</p>
+          )}
           {batchResult.failed > 0 && (
-            <p className="text-destructive">{batchResult.failed} failed (need transformation)</p>
+            <p className="text-destructive">{batchResult.failed} failed</p>
           )}
           {batchResult.remaining > 0 && (
-            <p className="text-muted-foreground">{batchResult.remaining} remaining — run again to continue</p>
+            <p className="text-muted-foreground">{batchResult.remaining} remaining — run again</p>
           )}
+          <p className="text-muted-foreground">
+            Routed: {Object.entries(batchResult.routed).filter(([,v]) => v > 0).map(([k,v]) => `${k} (${v})`).join(' · ')}
+          </p>
         </div>
       )}
 
