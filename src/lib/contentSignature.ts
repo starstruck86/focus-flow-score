@@ -266,9 +266,43 @@ const HIGH_RISK_PATTERNS = [
   { pattern: /\b(instruction|requirement|must|should|always|never)\b/i, label: 'instruction' },
 ];
 
+// ── Second-pass false-positive filter ──────────────────────
+// Lines that LOOK like they should be preserved (contain "should", "always")
+// but are actually dev/meta noise. Catches comment wrappers, inline dev notes,
+// and draft annotations that survive first-pass preserve rules.
+
+const FALSE_POSITIVE_META_PATTERNS = [
+  // Dev notes that happen to contain instruction-like words
+  /^\/\/\s*(todo|fixme|hack|note|bug|xxx)\b/i,
+  /^#\s*(todo|fixme|note|wip)\b/i,
+  // Comment wrappers: <!-- ... -->, /* ... */
+  /^<!--.*-->$/,
+  /^\/\*.*\*\/$/,
+  // Draft annotations like "[DRAFT]", "[WIP]", "[TODO: ...]"
+  /^\[(draft|wip|todo|fixme|review|placeholder|tbd)\b[^\]]*\]$/i,
+  // Internal status markers
+  /^(status|state|phase|revision|owner|assignee)\s*:/i,
+  // Timestamps / version stamps that look like instructions
+  /^(last (updated|edited|modified)|updated on|created on|v\d+\.\d+)\b/i,
+  // Lines that are ONLY meta keywords with no real content
+  /^(note|comment|reminder|tip|caveat|fyi)\s*:?\s*$/i,
+  // Inline dev notes in parens: "(should update this later)"
+  /^\(.*\b(todo|fixme|later|eventually|placeholder|tbd)\b.*\)$/i,
+];
+
+function isSecondPassMeta(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+  return FALSE_POSITIVE_META_PATTERNS.some(p => p.test(trimmed));
+}
+
 function isMetaLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return false;
+  // Second-pass: if it matches false-positive patterns, strip it
+  // even if it would otherwise be preserved
+  if (isSecondPassMeta(trimmed)) return true;
+  // First-pass preserve check
   if (PRESERVE_LINE_PATTERNS.some(p => p.test(trimmed))) return false;
   return META_LINE_PATTERNS.some(p => p.test(trimmed));
 }
@@ -357,7 +391,10 @@ export function shapeAsExample(content: string): TransformationResult {
       kept.push(lines[i]);
       continue;
     }
-    if (PRESERVE_LINE_PATTERNS.some(p => p.test(trimmed))) {
+    // Second-pass catches false positives
+    if (isSecondPassMeta(trimmed)) {
+      removedLines.push({ line: lines[i], lineNumber: i + 1 });
+    } else if (PRESERVE_LINE_PATTERNS.some(p => p.test(trimmed))) {
       kept.push(lines[i]);
     } else if (EXAMPLE_META.some(p => p.test(trimmed))) {
       removedLines.push({ line: lines[i], lineNumber: i + 1 });
