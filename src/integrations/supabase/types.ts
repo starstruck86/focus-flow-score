@@ -296,6 +296,54 @@ export type Database = {
         }
         Relationships: []
       }
+      asset_provenance: {
+        Row: {
+          asset_id: string
+          asset_type: string
+          created_at: string
+          high_risk_removals: Json | null
+          id: string
+          original_content: string | null
+          removed_lines: Json | null
+          source_char_range: Json | null
+          source_heading: string | null
+          source_resource_id: string
+          source_segment_index: number | null
+          transformed_content: string | null
+          user_id: string
+        }
+        Insert: {
+          asset_id: string
+          asset_type: string
+          created_at?: string
+          high_risk_removals?: Json | null
+          id?: string
+          original_content?: string | null
+          removed_lines?: Json | null
+          source_char_range?: Json | null
+          source_heading?: string | null
+          source_resource_id: string
+          source_segment_index?: number | null
+          transformed_content?: string | null
+          user_id: string
+        }
+        Update: {
+          asset_id?: string
+          asset_type?: string
+          created_at?: string
+          high_risk_removals?: Json | null
+          id?: string
+          original_content?: string | null
+          removed_lines?: Json | null
+          source_char_range?: Json | null
+          source_heading?: string | null
+          source_resource_id?: string
+          source_segment_index?: number | null
+          transformed_content?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       audio_jobs: {
         Row: {
           attempts_count: number
@@ -566,6 +614,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      cluster_resolutions: {
+        Row: {
+          canonical_resource_id: string
+          canonical_role: string
+          cluster_id: string
+          demoted_members: Json
+          id: string
+          reasoning: string
+          resolved_at: string
+          resolved_by: string
+          user_id: string
+        }
+        Insert: {
+          canonical_resource_id: string
+          canonical_role: string
+          cluster_id: string
+          demoted_members?: Json
+          id?: string
+          reasoning: string
+          resolved_at?: string
+          resolved_by: string
+          user_id: string
+        }
+        Update: {
+          canonical_resource_id?: string
+          canonical_role?: string
+          cluster_id?: string
+          demoted_members?: Json
+          id?: string
+          reasoning?: string
+          resolved_at?: string
+          resolved_by?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       coaching_plans: {
         Row: {
