@@ -22,7 +22,7 @@ import {
 import {
   Crown, Star, Brain, FileText, ChevronDown, ChevronRight,
   AlertTriangle, ArrowUpRight, CheckCircle2, Sparkles, TrendingUp,
-  Archive, Zap, Play, SkipForward, Edit3,
+  Archive, Zap, Play, SkipForward, Edit3, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -338,23 +338,22 @@ export function ResourceUpsideQueue() {
 
   const handleBulkAutoActivate = useCallback(async () => {
     if (!user) return;
-    // Find knowledge items in review_needed that qualify
     const { data: reviewItems } = await supabase
       .from('knowledge_items')
       .select('id, confidence_score, when_to_use, tactic_summary')
       .eq('user_id', user.id)
-      .eq('status', 'review_needed')
+      .in('status', ['review_needed', 'extracted'])
       .eq('active', false)
-      .limit(50);
+      .limit(200);
 
+    // Lowered threshold: activate anything actionable
     const qualifiers = (reviewItems || []).filter(item =>
-      item.confidence_score >= 0.6 &&
-      item.when_to_use &&
+      item.confidence_score >= 0.4 &&
       item.tactic_summary &&
-      item.tactic_summary.length > 20
+      item.tactic_summary.length > 15
     );
 
-    if (qualifiers.length === 0) { toast.info('No items qualify for auto-activation'); return; }
+    if (qualifiers.length === 0) { toast.info('No items qualify for activation'); return; }
 
     let count = 0;
     for (const item of qualifiers) {
@@ -365,7 +364,36 @@ export function ResourceUpsideQueue() {
       if (!error) count++;
     }
     qc.invalidateQueries({ queryKey: ['knowledge-items'] });
-    toast.success(`Auto-activated ${count} high-confidence knowledge items`);
+    toast.success(`Auto-activated ${count} knowledge items — now usable in execution`);
+  }, [user, qc]);
+
+  // ── Batch backfill via edge function ─────────────────────
+
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchResult, setBatchResult] = useState<{
+    processed: number; knowledge_created: number; templates_created: number;
+    failed: number; remaining: number;
+  } | null>(null);
+
+  const handleBatchBackfill = useCallback(async () => {
+    if (!user) return;
+    setBatchRunning(true);
+    setBatchResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('batch-actionize', {
+        body: { batchSize: 15 },
+      });
+      if (error) throw error;
+      setBatchResult(data);
+      qc.invalidateQueries({ queryKey: ['knowledge-items'] });
+      qc.invalidateQueries({ queryKey: ['resources'] });
+      toast.success(`Processed ${data.processed} resources → ${data.knowledge_created} actions created`);
+    } catch (err) {
+      console.error('Batch backfill failed:', err);
+      toast.error('Batch backfill failed');
+    } finally {
+      setBatchRunning(false);
+    }
   }, [user, qc]);
 
   // ── Guided extraction mode ───────────────────────────────
@@ -412,6 +440,9 @@ export function ResourceUpsideQueue() {
         onBulkActivate={handleBulkAutoActivate}
         onStartGuided={() => { setGuidedMode(true); setGuidedIndex(0); }}
         guidedAvailable={guidedItems.length}
+        onBatchBackfill={handleBatchBackfill}
+        batchRunning={batchRunning}
+        batchResult={batchResult}
       />
 
       {/* Stuck reasons */}
@@ -495,10 +526,12 @@ export function ResourceUpsideQueue() {
 
 // ── Summary Header ─────────────────────────────────────────
 
-function SummaryHeader({ summary, totalCandidates, totalPromoted, onBulkTemplates, onBulkExamples, onBulkActivate, onStartGuided, guidedAvailable }: {
+function SummaryHeader({ summary, totalCandidates, totalPromoted, onBulkTemplates, onBulkExamples, onBulkActivate, onStartGuided, guidedAvailable, onBatchBackfill, batchRunning, batchResult }: {
   summary: BucketSummary; totalCandidates: number; totalPromoted: number;
   onBulkTemplates: () => void; onBulkExamples: () => void; onBulkActivate: () => void;
   onStartGuided: () => void; guidedAvailable: number;
+  onBatchBackfill: () => void; batchRunning: boolean;
+  batchResult: { processed: number; knowledge_created: number; templates_created: number; failed: number; remaining: number } | null;
 }) {
   return (
     <div className="border border-border rounded-lg bg-card p-4 space-y-3">
@@ -535,29 +568,48 @@ function SummaryHeader({ summary, totalCandidates, totalPromoted, onBulkTemplate
         })}
       </div>
 
+      {/* Batch result */}
+      {batchResult && (
+        <div className="rounded-md bg-muted/50 border border-border p-2.5 text-xs space-y-0.5">
+          <p className="font-medium text-foreground">
+            Batch: {batchResult.processed} processed → {batchResult.knowledge_created} actions, {batchResult.templates_created} templates
+          </p>
+          {batchResult.failed > 0 && (
+            <p className="text-destructive">{batchResult.failed} failed (need transformation)</p>
+          )}
+          {batchResult.remaining > 0 && (
+            <p className="text-muted-foreground">{batchResult.remaining} remaining — run again to continue</p>
+          )}
+        </div>
+      )}
+
       {/* Quick actions */}
       <div className="flex flex-wrap gap-1.5">
+        <Button size="sm" variant="default" className="h-7 text-[10px] gap-1" onClick={onBatchBackfill} disabled={batchRunning}>
+          {batchRunning ? <Loader2 className="h-3 w-3 animate-spin" /> : <TrendingUp className="h-3 w-3" />}
+          {batchRunning ? 'Processing...' : 'Batch Actionize (15)'}
+        </Button>
         {summary.promote_template > 0 && (
           <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onBulkTemplates}>
             <Crown className="h-3 w-3 text-amber-500" />
-            Promote Top 10 Templates
+            Promote Templates
           </Button>
         )}
         {summary.promote_example > 0 && (
           <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onBulkExamples}>
             <Star className="h-3 w-3 text-primary" />
-            Promote Top 20 Examples
+            Promote Examples
           </Button>
         )}
         {guidedAvailable > 0 && (
           <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onStartGuided}>
             <Play className="h-3 w-3 text-emerald-500" />
-            Guided Extraction ({guidedAvailable})
+            Guided ({guidedAvailable})
           </Button>
         )}
         <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={onBulkActivate}>
           <Zap className="h-3 w-3 text-amber-500" />
-          Activate All High-Confidence
+          Activate All
         </Button>
       </div>
     </div>

@@ -393,8 +393,8 @@ export function extractKnowledgeHeuristic(source: ExtractionSource): KnowledgeIt
         when_not_to_use: tactic.when_not_to_use || null,
         example_usage: tactic.example_usage || null,
         confidence_score: confidence,
-        status: confidence >= 0.5 ? 'extracted' : 'review_needed',
-        active: false,
+        status: confidence >= 0.4 ? 'active' : 'review_needed',
+        active: confidence >= 0.4,
         user_edited: false,
         tags: structuredTags,
       });
@@ -501,8 +501,8 @@ export async function extractKnowledgeLLMFallback(source: ExtractionSource): Pro
           when_not_to_use: item.when_not_to_use || null,
           example_usage: item.example_usage || null,
           confidence_score: confidence,
-          status: confidence >= 0.5 ? 'extracted' : 'review_needed',
-          active: false,
+          status: confidence >= 0.4 ? 'active' : 'review_needed',
+          active: confidence >= 0.4,
           user_edited: false,
           tags: [...source.tags, item.knowledge_type || 'skill', item.chapter || 'messaging'],
         });

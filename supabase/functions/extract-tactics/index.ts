@@ -46,33 +46,41 @@ Deno.serve(async (req) => {
       });
     }
 
-    const systemPrompt = `You are a sales enablement expert. Your job is to extract ONLY actionable sales tactics from content.
+    const systemPrompt = `You are a sales execution coach. Extract ACTIONABLE UNITS from content.
+
+Every unit must be something a sales rep can directly:
+- SAY in a conversation
+- ASK a prospect
+- WRITE in an email/doc
+- USE in a deal workflow
 
 RULES:
-- Each tactic must describe a SPECIFIC ACTION a sales rep can take
-- Each tactic must be TESTABLE in a call or roleplay
-- Each tactic must be tied to a MOMENT (when to use it)
-- Phrase as a TACTIC, not a concept or summary
-- If you cannot fill all required fields for a tactic, DO NOT include it
+- Each unit must be a SPECIFIC ACTION, not a concept or summary
+- Each unit must include EXACT PHRASING the rep can use
+- If you cannot provide real words/phrases to say/write, DO NOT include it
+- REJECT anything generic, conceptual, or descriptive-only
 
-BAD examples (do NOT produce these):
-- "Discovery is important for understanding customer needs"
-- "Objection handling helps close deals"
-- "Building rapport creates trust"
+BAD (REJECT these):
+- "Discovery is important" (concept)
+- "Build rapport with prospects" (vague)
+- "Understanding pricing helps close deals" (summary)
 
-GOOD examples:
-- Title: "Ask the impact question after surfacing pain"
-  Tactic: "Once the prospect names a problem, immediately ask 'What happens if you don't solve this in the next 6 months?' to quantify urgency"
-  When to use: "After the prospect admits a pain point during discovery"
+GOOD:
+- title: "Ask the cost-of-inaction question"
+  action_type: "ask"
+  what_to_do: "After prospect names a pain, ask: 'What happens if you don't fix this in 6 months?'"
+  when_to_use: "After prospect admits a specific pain point during discovery"
+  example: "So you mentioned losing 15% of customers at renewal. What happens to your revenue if that continues for another year?"
 
-Return a JSON array of 3-5 tactics with this exact structure:
+Return 3-10 actionable units as a JSON array:
 [{
-  "title": "short actionable title starting with a verb",
-  "tactic_summary": "EXACTLY how to execute this tactic - specific words, sequence, technique",
-  "when_to_use": "specific trigger condition or moment",
-  "when_not_to_use": "when this would backfire or be inappropriate",
-  "example_usage": "realistic talk track or script the rep could say",
-  "why_it_matters": "one sentence on why this works",
+  "title": "short verb-led title",
+  "action_type": "say|ask|write|use",
+  "what_to_do": "EXACTLY what to do — include specific words, phrases, or steps",
+  "when_to_use": "specific trigger moment or context",
+  "when_not_to_use": "when this would backfire",
+  "example": "realistic talk track, email snippet, or exact phrasing",
+  "why_it_matters": "one sentence on impact",
   "chapter": "cold_calling|discovery|objection_handling|negotiation|competitors|personas|messaging|closing|stakeholder_navigation|expansion|demo|follow_up",
   "knowledge_type": "skill|product|competitive",
   "sub_chapter": "optional sub-category"
@@ -80,7 +88,7 @@ Return a JSON array of 3-5 tactics with this exact structure:
 
 Only return the JSON array, no markdown.`;
 
-    const userPrompt = `Extract actionable sales tactics from this ${resourceType || 'document'}:
+    const userPrompt = `Extract actionable units from this ${resourceType || 'document'}:
 
 Title: ${title}
 ${description ? `Description: ${description}` : ''}
@@ -101,7 +109,7 @@ ${content.slice(0, 12000)}`;
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        max_tokens: 2000,
+        max_tokens: 3000,
         temperature: 0.3,
       }),
     });
@@ -135,12 +143,19 @@ ${content.slice(0, 12000)}`;
       items = [];
     }
 
-    // Validate each item has required fields
+    // Validate: must have action-oriented fields
     const validated = (items || []).filter((item: any) =>
       item.title &&
-      item.tactic_summary && item.tactic_summary.length >= 20 &&
-      item.when_to_use && item.when_to_use.length >= 10
-    );
+      item.what_to_do && item.what_to_do.length >= 20 &&
+      item.example && item.example.length >= 15 &&
+      item.when_to_use && item.when_to_use.length >= 10 &&
+      item.action_type
+    ).map((item: any) => ({
+      ...item,
+      // Map to knowledge item format for compatibility
+      tactic_summary: item.what_to_do,
+      example_usage: item.example,
+    }));
 
     return new Response(JSON.stringify({ items: validated }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
