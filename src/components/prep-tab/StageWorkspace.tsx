@@ -286,6 +286,8 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
       {/* Keystone & Supporting Resources */}
       <StageResourcesSection stageId={stage.id} stageLabel={stage.label} />
 
+      {/* Stage Playbook */}
+      <StagePlaybookSection stageId={stage.id} stageLabel={stage.label} />
 
       <ProactiveGuidance
         stageId={stage.id}
