@@ -304,10 +304,20 @@ Deno.serve(async (req) => {
       diagnoses: [] as any[],
     };
 
-    // Filter out already-processed, diagnosed, and resolved resources
-    let unprocessedPool = resources.filter((r: any) =>
-      !processedResourceIds.has(r.id) && !alreadyDiagnosed.has(r.id) && !alreadyResolved.has(r.id)
-    );
+    // Filter pool — if single resource retry, only include that one
+    let unprocessedPool: any[];
+    if (singleResourceId) {
+      // For single-resource retry, clear its previous diagnosis and process it fresh
+      await supabaseAdmin.from('pipeline_diagnoses')
+        .delete()
+        .eq('resource_id', singleResourceId)
+        .eq('user_id', user.id);
+      unprocessedPool = resources.filter((r: any) => r.id === singleResourceId);
+    } else {
+      unprocessedPool = resources.filter((r: any) =>
+        !processedResourceIds.has(r.id) && !alreadyDiagnosed.has(r.id) && !alreadyResolved.has(r.id)
+      );
+    }
 
     // Process one batch
     const batch = mode === 'full_backlog'
