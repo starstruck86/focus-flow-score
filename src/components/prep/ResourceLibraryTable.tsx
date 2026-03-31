@@ -114,22 +114,53 @@ const BLOCKED_TO_BUCKET: Record<string, ReadinessBucket> = {
   none: 'ready',
 };
 
-function getDominantBucket(
+const BUCKET_FRIENDLY_LABEL: Partial<Record<ReadinessBucket, string>> = {
+  extractable_not_operationalized: 'need extraction',
+  operationalized: 'need activation',
+  content_backed_needs_fix: 'need context fix',
+  missing_content: 'need content fix',
+  blocked_incorrectly: 'need review',
+  junk_or_low_signal: 'are low-value / junk',
+  ready: 'are ready',
+  low_quality_extraction: 'need re-extraction',
+  needs_tagging: 'need tagging',
+  orphaned_or_inconsistent: 'need review',
+};
+
+interface SelectionAnalysis {
+  dominant: ReadinessBucket;
+  dominantCount: number;
+  total: number;
+  isMixed: boolean;
+  breakdown: { bucket: ReadinessBucket; count: number; label: string }[];
+}
+
+function analyzeSelection(
   selectedIds: Set<string>,
   lifecycleMap: Map<string, { stage: string; blocked: string }>,
-): ReadinessBucket | null {
+): SelectionAnalysis {
   const counts: Record<string, number> = {};
   for (const id of selectedIds) {
     const lc = lifecycleMap.get(id);
     const bucket = lc ? (BLOCKED_TO_BUCKET[lc.blocked] ?? 'extractable_not_operationalized') : 'extractable_not_operationalized';
     counts[bucket] = (counts[bucket] ?? 0) + 1;
   }
-  let best: string | null = null;
-  let bestCount = 0;
-  for (const [k, v] of Object.entries(counts)) {
-    if (v > bestCount) { best = k; bestCount = v; }
+
+  const entries = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => ({ bucket: k as ReadinessBucket, count: v, label: BUCKET_FRIENDLY_LABEL[k as ReadinessBucket] ?? k }));
+
+  const total = selectedIds.size;
+  let dominant = entries[0]?.bucket ?? 'extractable_not_operationalized';
+  const dominantCount = entries[0]?.count ?? 0;
+  const isMixed = entries.length > 1;
+
+  // Safety: never let destructive be primary unless it's a clear majority (>60%)
+  if (dominant === 'junk_or_low_signal' && dominantCount / total <= 0.6) {
+    dominant = 'extractable_not_operationalized'; // safe fallback
   }
-  return (best as ReadinessBucket) ?? null;
+
+  return { dominant, dominantCount, total, isMixed, breakdown: entries };
 }
 
 
