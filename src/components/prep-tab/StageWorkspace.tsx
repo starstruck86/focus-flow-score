@@ -11,7 +11,6 @@ import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { ContextInputSection } from './ContextInputSection';
 import { WhatActuallyWorks } from './WhatActuallyWorks';
-import { BestAssets } from './BestAssets';
 import { ActionExecutionPanel } from './ActionExecutionPanel';
 import { PrepOutput } from './PrepOutput';
 import { NextStepGuidance } from './NextStepGuidance';
