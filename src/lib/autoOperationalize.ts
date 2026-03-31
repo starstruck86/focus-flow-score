@@ -591,8 +591,18 @@ function makeResult(
   knowledgeActivated: number,
   operationalized: boolean,
   needsReview: boolean,
+  extractionTier: AutoOperationalizeResult['extractionTier'] = 'none',
+  outcome?: PipelineOutcome,
   reason?: string,
 ): AutoOperationalizeResult {
+  // Derive outcome if not provided
+  const derivedOutcome: PipelineOutcome = outcome
+    ?? (operationalized ? 'operationalized'
+      : extractionTier === 'lightweight' && knowledgeExtracted > 0 ? 'lightweight_extraction'
+      : knowledgeExtracted > 0 ? 'partial_extraction'
+      : needsReview ? 'needs_review'
+      : 'no_content');
+
   return {
     success: !needsReview,
     resourceId,
@@ -604,6 +614,8 @@ function makeResult(
     knowledgeActivated,
     operationalized,
     needsReview,
+    outcome: derivedOutcome,
+    extractionTier,
     reason,
   };
 }
