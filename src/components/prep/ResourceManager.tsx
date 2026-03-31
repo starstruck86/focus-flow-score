@@ -757,18 +757,36 @@ export function ResourceManager() {
                   break;
                 case 'extract': {
                   // Run extraction pipeline (knowledge extraction from content-backed resources)
-                  toast.info('Extracting knowledge...');
+                  toast.loading('Extracting knowledge...', { id: 'extract-single' });
                   try {
                     const { autoOperationalizeResource } = await import('@/lib/autoOperationalize');
                     const result = await autoOperationalizeResource(resource.id);
+                    toast.dismiss('extract-single');
                     queryClient.invalidateQueries({ queryKey: ['resources'] });
                     queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
+                    queryClient.invalidateQueries({ queryKey: ['all-resources'] });
+                    console.log('[Extract] Result:', {
+                      resourceId: resource.id,
+                      title: resource.title,
+                      outcome: result.outcome,
+                      knowledgeExtracted: result.knowledgeExtracted,
+                      knowledgeActivated: result.knowledgeActivated,
+                      operationalized: result.operationalized,
+                      stagesCompleted: result.stagesCompleted,
+                    });
                     if (result.operationalized || result.knowledgeExtracted > 0) {
-                      toast.success(`Extracted ${result.knowledgeExtracted} knowledge items`);
+                      toast.success(`Extracted ${result.knowledgeExtracted} knowledge items`, {
+                        description: `${result.knowledgeActivated} auto-activated · Stage: ${result.currentStage}`,
+                        duration: 6000,
+                      });
                     } else {
-                      toast.info(result.reason || 'No knowledge items extracted');
+                      toast.info(result.reason || 'No knowledge items extracted', {
+                        description: `Stage reached: ${result.currentStage}`,
+                      });
                     }
                   } catch (error: any) {
+                    toast.dismiss('extract-single');
+                    console.error('[Extract] Failed:', error);
                     toast.error('Extraction failed', { description: error?.message });
                   }
                   break;
