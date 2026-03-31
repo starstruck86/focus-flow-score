@@ -3,15 +3,18 @@
  */
 
 import { Badge } from '@/components/ui/badge';
-import { FileText, BookOpen, Brain, Paperclip } from 'lucide-react';
+import { FileText, BookOpen, Brain, Paperclip, Zap, MessageSquare } from 'lucide-react';
 import type { RankedResource } from './resourceRanking';
 import type { ContextItem } from './contextTypes';
+import type { ActionizedTactic, ActionizedPrompt } from '@/lib/actionizationEngine';
 
 export interface EvidenceData {
   templates: RankedResource[];
   examples: RankedResource[];
   knowledgeItems: RankedResource[];
   contextItems: ContextItem[];
+  tacticsInjected?: ActionizedTactic[];
+  promptsInjected?: ActionizedPrompt[];
 }
 
 interface Props {
