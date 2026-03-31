@@ -101,7 +101,11 @@ export function SaveActions({ output, subjectLine, actionLabel, accountName }: P
         is_strong_example: true,
         custom_instructions: notes || null,
       }, {
-        onSuccess: () => { toast.success('Saved as Example'); setMode(null); },
+        onSuccess: () => {
+          toast.success('Saved as Example');
+          setMode(null);
+          if (user) trackActionizationFeedback(user.id, { outputId: 'save', tacticsUsed: [], promptsUsed: [], templatesUsed: [], action: 'saved_as_example' });
+        },
         onError: () => toast.error('Save failed'),
       });
     }
