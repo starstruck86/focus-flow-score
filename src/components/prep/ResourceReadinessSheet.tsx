@@ -1057,6 +1057,29 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                     )}
                   </div>
 
+                {/* ── Acceptance Checklist ── */}
+                {(lastAutoOpSummary || lastBackfillResult) && (
+                  <div className="rounded-md border border-border bg-muted/20 p-2 text-[10px] space-y-1">
+                    <p className="font-medium text-foreground text-[11px]">Workflow Checklist</p>
+                    <div className="space-y-0.5">
+                      {[
+                        { label: 'Test batch completed', done: !!lastAutoOpSummary && (lastAutoOpSummary.total <= 5) },
+                        { label: 'Full extraction completed', done: !!lastAutoOpSummary && (lastAutoOpSummary.total > 5) || !!lastBackfillResult },
+                        { label: 'Failures reviewed', done: !!lastAutoOpSummary && lastAutoOpSummary.failedResources.length === 0 },
+                        { label: 'Knowledge activated', done: !!lastAutoOpSummary && lastAutoOpSummary.totalKnowledgeActivated > 0 || !!lastBackfillResult && lastBackfillResult.totalKnowledgeActivated > 0 },
+                      ].map(item => (
+                        <div key={item.label} className="flex items-center gap-1.5">
+                          {item.done
+                            ? <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                            : <div className="h-3 w-3 rounded-full border border-muted-foreground/40 shrink-0" />
+                          }
+                          <span className={cn(item.done ? 'text-foreground' : 'text-muted-foreground')}>{item.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <Separator />
 
                 {/* ── Bucket list ── */}
