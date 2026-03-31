@@ -128,10 +128,10 @@ export function ClusterReviewPanel({ resources, onResolved }: ClusterReviewPanel
       source_segment_index: null,
       source_char_range: null,
       source_heading: null,
-      transformed_content: shapedContent.slice(0, 5000),
+      transformed_content: shapedContent,
       removed_lines: transformResult.removedLines,
       high_risk_removals: transformResult.highRiskRemovals,
-      original_content: member.content.slice(0, 5000),
+      original_content: member.content,
     } as any);
 
     // Mark non-canonical members as reference
