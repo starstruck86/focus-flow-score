@@ -450,8 +450,25 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // STEP 1: Route — CONTENT-BASED (no title in routing)
-        const routes = routeResource(content);
+        // STEP 1: Segment-level routing — split document into chunks,
+        // route each independently, then aggregate routes
+        const segments = segmentContent(content);
+        const aggregatedRoutes = new Set<string>();
+        const segmentProvenance: Array<{ index: number; route: string; charRange: [number, number]; heading?: string }> = [];
+        
+        for (const seg of segments) {
+          const segRoutes = routeResource(seg.content);
+          for (const r of segRoutes) aggregatedRoutes.add(r);
+          segmentProvenance.push({
+            index: seg.index,
+            route: segRoutes[0],
+            charRange: seg.charRange,
+            heading: seg.heading,
+          });
+        }
+        
+        // Use aggregated routes (union of all segment routes)
+        const routes = Array.from(aggregatedRoutes);
         diag.route = routes.join(', ');
 
         if (routes.length === 1 && routes[0] === 'reference') {
@@ -463,7 +480,7 @@ Deno.serve(async (req) => {
           if (typeof results[stateKey] === 'number') (results as any)[stateKey]++;
           results.failure_breakdown['routed_reference_only'] = (results.failure_breakdown['routed_reference_only'] || 0) + 1;
           diagnosisRows.push(diag);
-          results.diagnoses.push({ ...diag, title: resource.title });
+          results.diagnoses.push({ ...diag, title: resource.title, segment_provenance: segmentProvenance });
           results.total_processed++;
           continue;
         }
