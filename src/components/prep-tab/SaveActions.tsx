@@ -38,6 +38,7 @@ interface Props {
 }
 
 export function SaveActions({ output, subjectLine, actionLabel, accountName }: Props) {
+  const { user } = useAuth();
   const [mode, setMode] = useState<SaveMode | null>(null);
   const [name, setName] = useState('');
   const [useCase, setUseCase] = useState('');
