@@ -391,10 +391,6 @@ export function routeResource(resource: {
     { path: 'example_candidate', score: exampleScore, reasons: exampleReasons },
     { path: 'tactic_candidate', score: adjustedTacticScore, reasons: tacticReasons },
   ];
-    { path: 'template_candidate', score: templateScore, reasons: templateReasons },
-    { path: 'example_candidate', score: exampleScore, reasons: exampleReasons },
-    { path: 'tactic_candidate', score: tacticScore, reasons: tacticReasons },
-  ];
 
   scores.sort((a, b) => b.score - a.score);
   const best = scores[0];
