@@ -328,41 +328,38 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    // Support service-role invocation: if the bearer token IS the service role key,
-    // accept user_id from the request body instead of JWT auth
-    const token = authHeader.replace('Bearer ', '');
-    const isServiceRole = token === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    // Parse body early so we can check for user_id
+    const bodyText = await req.text();
+    const body = JSON.parse(bodyText);
 
     let userId: string;
 
-    if (isServiceRole) {
-      // Service role: get user_id from body (parsed below, peek here)
-      const bodyText = await req.text();
-      const bodyJson = JSON.parse(bodyText);
-      if (!bodyJson.user_id) {
-        return new Response(JSON.stringify({ error: 'Service role invocation requires user_id in body' }), {
-          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      userId = bodyJson.user_id;
-      // Store parsed body for later use
-      (req as any).__parsedBody = bodyJson;
-    } else {
-      const supabaseUser = createClient(
-        Deno.env.get('SUPABASE_URL')!,
-        Deno.env.get('SUPABASE_ANON_KEY')!,
-        { global: { headers: { Authorization: authHeader } } },
-      );
-      const { data: { user } } = await supabaseUser.auth.getUser();
-      if (!user) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+    // Try JWT auth first
+    const supabaseUser = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: { user } } = await supabaseUser.auth.getUser();
+    
+    if (user) {
+      userId = user.id;
+    } else if (body.user_id) {
+      // Fallback: service-role or internal invocation with explicit user_id
+      // Validate user exists via admin client
+      const { data: targetUser } = await supabaseAdmin.auth.admin.getUserById(body.user_id);
+      if (!targetUser?.user) {
+        return new Response(JSON.stringify({ error: 'Invalid user_id' }), {
           status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      userId = user.id;
+      userId = body.user_id;
+    } else {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    const body = (req as any).__parsedBody || await req.json();
     const batchSize = Math.min(body.batchSize || 15, 50);
     const mode = body.mode || 'standard';
     const resumeRunId = body.run_id || null;
