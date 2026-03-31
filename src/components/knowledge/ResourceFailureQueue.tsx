@@ -322,10 +322,11 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
       return;
     }
 
+    const shapedBody = shapeAsTemplate(resource.content as string).slice(0, 5000);
     await supabase.from('execution_templates' as any).insert({
       user_id: user.id,
       title: resource.title,
-      body: (resource.content as string).slice(0, 5000),
+      body: shapedBody,
       template_type: 'email',
       output_type: 'custom',
       template_origin: 'promoted_from_resource',
