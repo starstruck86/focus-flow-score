@@ -464,10 +464,11 @@ export function ResourceUpsideQueue() {
         />
       )}
 
-      {/* Resource Failure Queue — from pipeline diagnoses */}
-      {!guidedMode && pipelineResult && pipelineResult.diagnoses.length > 0 && (
-        <ResourceFailureQueue diagnoses={pipelineResult.diagnoses} />
-      )}
+      {/* Resource Failure Queue — from pipeline diagnoses (persisted or live) */}
+      {!guidedMode && (() => {
+        const diagsToShow = pipelineResult?.diagnoses || persistedDiagnoses?.diagnoses || [];
+        return diagsToShow.length > 0 ? <ResourceFailureQueue diagnoses={diagsToShow} /> : null;
+      })()}
 
       {/* Trust Review Queue — extracted but not activated */}
       {!guidedMode && <TrustReviewQueue />}
