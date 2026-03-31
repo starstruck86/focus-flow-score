@@ -76,24 +76,11 @@ function scoreActionability(title: string, summary: string): { score: number; re
 
 // ── Gate 3: Distinctness ───────────────────────────────────
 
-function normalizeForDedup(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+import { contentSimilarity as multiSliceSimilarity } from '@/lib/contentSignature';
 
+// Use multi-slice content similarity everywhere
 function computeSimilarity(a: string, b: string): number {
-  const wordsA = new Set(normalizeForDedup(a).split(' '));
-  const wordsB = new Set(normalizeForDedup(b).split(' '));
-  if (wordsA.size === 0 || wordsB.size === 0) return 0;
-
-  let intersection = 0;
-  for (const w of wordsA) {
-    if (wordsB.has(w)) intersection++;
-  }
-  return (2 * intersection) / (wordsA.size + wordsB.size); // Dice coefficient
+  return multiSliceSimilarity(a, b);
 }
 
 export function scoreDistinctness(
@@ -357,6 +344,14 @@ const TACTIC_STRUCTURE = [
   { pattern: /\b(why|because|this works because)\b/i, weight: 0.1 },
 ];
 
+const DESCRIPTIVE_STRUCTURE = [
+  { pattern: /\b(overview|introduction|background|context|summary)\b/i, weight: 0.15 },
+  { pattern: /\b(in general|generally speaking|typically|usually)\b/i, weight: 0.15 },
+  { pattern: /\b(various|several|many|numerous) (ways|methods|approaches)\b/i, weight: 0.1 },
+  { pattern: /\b(history|evolution|landscape|ecosystem)\b/i, weight: 0.1 },
+  { pattern: /\b(according to|research shows|studies indicate)\b/i, weight: 0.1 },
+];
+
 export function routeResource(resource: {
   title: string;
   content: string | null;
@@ -389,6 +384,7 @@ export function routeResource(resource: {
   }
   if (contentLen < 150) exampleScore *= 0.3;
 
+  // Hardened tactic scoring: penalize descriptive content
   let tacticScore = 0;
   const tacticReasons: string[] = [];
   for (const s of TACTIC_STRUCTURE) {
@@ -399,10 +395,18 @@ export function routeResource(resource: {
   }
   if (contentLen > 300) tacticScore += 0.1;
 
+  let descriptiveScore = 0;
+  for (const s of DESCRIPTIVE_STRUCTURE) {
+    if (s.pattern.test(content)) {
+      descriptiveScore += s.weight;
+    }
+  }
+  const adjustedTacticScore = Math.max(0, tacticScore - descriptiveScore * 0.7);
+  
   const scores: Array<{ path: ResourceOutputPath; score: number; reasons: string[] }> = [
     { path: 'template_candidate', score: templateScore, reasons: templateReasons },
     { path: 'example_candidate', score: exampleScore, reasons: exampleReasons },
-    { path: 'tactic_candidate', score: tacticScore, reasons: tacticReasons },
+    { path: 'tactic_candidate', score: adjustedTacticScore, reasons: tacticReasons },
   ];
 
   scores.sort((a, b) => b.score - a.score);

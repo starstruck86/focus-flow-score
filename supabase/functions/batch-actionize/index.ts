@@ -44,23 +44,54 @@ interface DiagnosisRow {
   route: string;
 }
 
-// ── Content Signature & Similarity (content-first) ─────────
+// ── Multi-Slice Content Similarity (content-first) ─────────
 
-function contentSignature(text: string | null): string {
-  if (!text) return '';
-  return text.slice(0, 500).toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+function normalizeSlice(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function tokenize(text: string): Set<string> {
+  return new Set(normalizeSlice(text).split(' ').filter((w: string) => w.length > 2));
+}
+
+function diceCoeff(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const w of a) { if (b.has(w)) inter++; }
+  return (2 * inter) / (a.size + b.size);
+}
+
+function getSlices(content: string): { opening: string; middle: string; closing: string } {
+  const len = content.length;
+  const sl = Math.min(300, Math.floor(len / 3));
+  return {
+    opening: content.slice(0, sl),
+    middle: content.slice(Math.floor(len / 2) - Math.floor(sl / 2), Math.floor(len / 2) + Math.floor(sl / 2)),
+    closing: content.slice(Math.max(0, len - sl)),
+  };
+}
+
+const STRUCT_MARKERS = [/\[.*?\]/g, /\{.*?\}/g, /^[-•*]\s+/gm, /^\d+\.\s+/gm, /^#{1,3}\s+/gm, /subject\s*:/gi, /agenda\s*:/gi, /step\s*\d/gi];
+
+function structSim(a: string, b: string): number {
+  const extract = (t: string) => {
+    const m: string[] = [];
+    for (const p of STRUCT_MARKERS) { const r = t.match(p); if (r) m.push(...r.map(x => x.toLowerCase().trim())); }
+    return new Set(m);
+  };
+  const sa = extract(a), sb = extract(b);
+  if (sa.size === 0 && sb.size === 0) return 0.5;
+  if (sa.size === 0 || sb.size === 0) return 0.2;
+  return diceCoeff(sa, sb);
 }
 
 function contentSimilarity(a: string | null, b: string | null): number {
-  const sigA = contentSignature(a);
-  const sigB = contentSignature(b);
-  if (!sigA || !sigB) return 0;
-  const wordsA = new Set(sigA.split(' ').filter((w: string) => w.length > 2));
-  const wordsB = new Set(sigB.split(' ').filter((w: string) => w.length > 2));
-  if (wordsA.size === 0 || wordsB.size === 0) return 0;
-  let overlap = 0;
-  for (const w of wordsA) { if (wordsB.has(w)) overlap++; }
-  return (2 * overlap) / (wordsA.size + wordsB.size);
+  if (!a || !b || a.length < 20 || b.length < 20) return 0;
+  const sa = getSlices(a), sb = getSlices(b);
+  return diceCoeff(tokenize(sa.opening), tokenize(sb.opening)) * 0.35
+    + diceCoeff(tokenize(sa.middle), tokenize(sb.middle)) * 0.25
+    + diceCoeff(tokenize(sa.closing), tokenize(sb.closing)) * 0.25
+    + structSim(a, b) * 0.15;
 }
 
 function isContentDuplicate(newContent: string, existingContents: string[], threshold = 0.65): { dup: boolean; similar?: string } {
@@ -154,14 +185,49 @@ const TAC_STRUCTURE = [
   /["'""].{10,}["'""]$/m,
 ];
 
+const DESCRIPTIVE_SIGNALS = [
+  /\b(overview|introduction|background|context|summary)\b/i,
+  /\b(in general|generally speaking|typically|usually|often)\b/i,
+  /\b(various|several|many|numerous) (ways|methods|approaches)\b/i,
+  /\b(history|evolution|landscape|ecosystem|industry)\b/i,
+  /\b(according to|research shows|studies indicate)\b/i,
+];
+
 function routeResource(content: string): string[] {
   if (!content || content.length < 50) return ['reference'];
   const routes: string[] = [];
   if (TPL_STRUCTURE.filter(p => p.test(content)).length >= 2 && content.length >= 200) routes.push('template');
   if (EX_STRUCTURE.filter(p => p.test(content)).length >= 2 && content.length >= 150) routes.push('example');
-  if (TAC_STRUCTURE.filter(p => p.test(content)).length >= 2 || (TAC_STRUCTURE.filter(p => p.test(content)).length >= 1 && content.length >= 300)) routes.push('tactic');
+  // Hardened tactic routing: require stronger evidence, penalize descriptive content
+  const tacHits = TAC_STRUCTURE.filter(p => p.test(content)).length;
+  const descHits = DESCRIPTIVE_SIGNALS.filter(p => p.test(content)).length;
+  if (tacHits >= 2 && descHits < tacHits) routes.push('tactic');
+  else if (tacHits >= 3 && content.length >= 200) routes.push('tactic');
   if (routes.length === 0) routes.push('reference');
   return routes;
+}
+
+// ── Content Transformation ─────────────────────────────────
+
+function shapeAsTemplate(content: string): string {
+  let s = content;
+  s = s.replace(/\{(\w+)\}/g, (_, n: string) => `[${n.charAt(0).toUpperCase() + n.slice(1)}]`);
+  s = s.replace(/^(note|comment|explanation|context|background|tip|reminder)\s*:.*$/gim, '');
+  s = s.replace(/^\/\/.*$/gm, '');
+  s = s.replace(/^\(.*?\)\s*$/gm, '');
+  s = s.replace(/^(template|email template|draft|version \d+)\s*:?\s*$/gim, '');
+  s = s.replace(/\n{3,}/g, '\n\n');
+  return s.trim();
+}
+
+function shapeAsExample(content: string): string {
+  let s = content;
+  s = s.replace(/^(note|comment|internal|draft note|meta|context)\s*:.*$/gim, '');
+  s = s.replace(/^\/\/.*$/gm, '');
+  s = s.replace(/^\[?(internal|draft|wip|todo)\]?\s*$/gim, '');
+  s = s.replace(/^(version|v\d+|last updated|status)\s*:.*$/gim, '');
+  s = s.replace(/\n{3,}/g, '\n\n');
+  return s.trim();
 }
 
 function classifyReferenceType(content: string, contentLen: number): TerminalState {
@@ -420,8 +486,9 @@ Deno.serve(async (req) => {
               results.failure_breakdown['duplicate_template'] = (results.failure_breakdown['duplicate_template'] || 0) + 1;
               if (similar) mostSimilar = similar;
             } else {
+              const shapedBody = shapeAsTemplate(content).slice(0, 5000);
               const { error } = await supabaseAdmin.from('execution_templates').insert({
-                user_id: user.id, title: resource.title, body: content.slice(0, 5000),
+                user_id: user.id, title: resource.title, body: shapedBody,
                 template_type: 'email', output_type: 'custom', source_resource_id: resource.id,
                 tags: resource.tags || [], template_origin: 'promoted_from_resource',
                 status: 'active', created_by_user: false, confidence_score: 0.7,
@@ -449,8 +516,9 @@ Deno.serve(async (req) => {
               results.failure_breakdown['duplicate_example'] = (results.failure_breakdown['duplicate_example'] || 0) + 1;
               if (similar) mostSimilar = similar;
             } else {
+              const shapedContent = shapeAsExample(content).slice(0, 5000);
               const { error } = await supabaseAdmin.from('execution_outputs').insert({
-                user_id: user.id, title: resource.title, content: content.slice(0, 5000),
+                user_id: user.id, title: resource.title, content: shapedContent,
                 output_type: 'custom', is_strong_example: true,
               });
               if (!error) {
