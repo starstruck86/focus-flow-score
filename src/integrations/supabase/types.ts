@@ -492,11 +492,14 @@ export type Database = {
         Row: {
           attempts: Json | null
           batch_run_id: string
+          content_length_extracted: number | null
           created_at: string
           ended_at: string | null
           failure_reason: string | null
           final_status: string
           id: string
+          method_used: string | null
+          quality_passed: boolean | null
           resource_id: string
           resource_title: string | null
           source_type: string | null
@@ -505,11 +508,14 @@ export type Database = {
         Insert: {
           attempts?: Json | null
           batch_run_id: string
+          content_length_extracted?: number | null
           created_at?: string
           ended_at?: string | null
           failure_reason?: string | null
           final_status?: string
           id?: string
+          method_used?: string | null
+          quality_passed?: boolean | null
           resource_id: string
           resource_title?: string | null
           source_type?: string | null
@@ -518,11 +524,14 @@ export type Database = {
         Update: {
           attempts?: Json | null
           batch_run_id?: string
+          content_length_extracted?: number | null
           created_at?: string
           ended_at?: string | null
           failure_reason?: string | null
           final_status?: string
           id?: string
+          method_used?: string | null
+          quality_passed?: boolean | null
           resource_id?: string
           resource_title?: string | null
           source_type?: string | null
