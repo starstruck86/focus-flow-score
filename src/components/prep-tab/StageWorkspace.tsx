@@ -18,6 +18,7 @@ import { PrepOutput } from './PrepOutput';
 import { NextStepGuidance } from './NextStepGuidance';
 import { fetchRankedResources, type RankedResource } from './resourceRanking';
 import { rankActions } from './actionRanking';
+import { fetchActionizedAssets, buildTacticInjection, buildPromptInjection, trackActionizationFeedback, type ActionizedTactic, type ActionizedPrompt } from '@/lib/actionizationEngine';
 import type { ContextItem } from './contextTypes';
 import type { EvidenceData } from './EvidencePanel';
 import type { StageConfig, StageAction } from './stageConfig';
