@@ -1273,7 +1273,7 @@ function OperatorSummaryPanel({ summary }: { summary: BatchSummary }) {
         <div className="grid grid-cols-3 gap-1 pt-1">
           <div className="text-center p-1 rounded bg-emerald-500/10">
             <p className="text-sm font-bold text-emerald-600">{summary.outcomes.operationalized}</p>
-            <p className="text-[8px] text-muted-foreground">Operationalized</p>
+            <p className="text-[8px] text-muted-foreground">Extracted</p>
           </div>
           <div className="text-center p-1 rounded bg-blue-500/10">
             <p className="text-sm font-bold text-blue-500">{summary.outcomes.partial_extraction + summary.outcomes.lightweight_extraction}</p>
