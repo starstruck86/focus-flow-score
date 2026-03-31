@@ -167,15 +167,9 @@ async function reopenResolution(resourceId: string) {
   }
 }
 
-// ── Dedup check ────────────────────────────────────────────
+// ── Content-based dedup & smart snippets ───────────────────
 
-function titleSimilarity(a: string, b: string): number {
-  const w1 = new Set(a.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().split(/\s+/));
-  const w2 = new Set(b.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().split(/\s+/));
-  let overlap = 0;
-  for (const w of w1) { if (w2.has(w)) overlap++; }
-  return w1.size + w2.size > 0 ? (2 * overlap) / (w1.size + w2.size) : 0;
-}
+import { contentSimilarity, generateSmartSnippet } from '@/lib/contentSignature';
 
 // ── Component ──────────────────────────────────────────────
 
