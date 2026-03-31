@@ -471,14 +471,7 @@ async function fetchEligibleResourceIds(
   if (error || !data) return [];
 
   return (data as any[]).filter(r => {
-    // Use the shared pipeline contract
     return isEligibleForExtraction(r).eligible;
-
-      // If already has tags and is enriched, it's probably already processed
-      // but we still include it — the pipeline is idempotent
-    }
-
-    return true;
   }).map(r => r.id);
 }
 
