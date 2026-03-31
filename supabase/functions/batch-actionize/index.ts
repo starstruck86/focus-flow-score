@@ -362,7 +362,7 @@ Deno.serve(async (req) => {
       userId = user.id;
     }
 
-    const body = await req.json();
+    const body = (req as any).__parsedBody || await req.json();
     const batchSize = Math.min(body.batchSize || 15, 50);
     const mode = body.mode || 'standard';
     const resumeRunId = body.run_id || null;
