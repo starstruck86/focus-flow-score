@@ -376,51 +376,15 @@ export function ResourceUpsideQueue() {
     toast.success(`Auto-activated ${count} knowledge items — now usable in execution`);
   }, [user, qc]);
 
-  // ── Batch backfill via edge function ─────────────────────
+  // ── Pipeline orchestration ────────────────────────────────
 
-  const [batchRunning, setBatchRunning] = useState(false);
-  const [pipelineResult, setPipelineResult] = useState<{
-    total_resources: number;
-    total_processed: number;
-    already_operationalized: number;
-    batch_size: number;
-    remaining: number;
-    operationalized: number;
-    needs_review: number;
-    reference_only: number;
-    content_missing: number;
-    knowledge_created: number;
-    knowledge_activated: number;
-    templates_created: number;
-    examples_created: number;
-    duplicates_suppressed: number;
-    trust_rejected: number;
-    failure_breakdown: Record<string, number>;
-    trust_failure_breakdown: Record<string, number>;
-    diagnoses: ResourceDiagnosis[];
-  } | null>(null);
+  const { run: runPipeline, abort: abortPipeline, running: batchRunning, result: pipelineResult } = useRunPipeline();
+  const { data: persistedDiagnoses } = usePipelineDiagnoses();
 
-  const handleRunPipeline = useCallback(async (mode: 'standard' | 'full_backlog' = 'standard') => {
+  const handleRunPipeline = useCallback(async (mode: 'standard' | 'full_backlog' | 'run_until_clean' = 'standard') => {
     if (!user) return;
-    setBatchRunning(true);
-    setPipelineResult(null);
-    try {
-      const { data, error } = await supabase.functions.invoke('batch-actionize', {
-        body: { batchSize: mode === 'full_backlog' ? 50 : 15, mode },
-      });
-      if (error) throw error;
-      setPipelineResult(data);
-      qc.invalidateQueries({ queryKey: ['knowledge-items'] });
-      qc.invalidateQueries({ queryKey: ['resources'] });
-      const msg = `Pipeline: ${data.operationalized} operationalized · ${data.needs_review} need review · ${data.knowledge_created} KI · ${data.templates_created} templates`;
-      toast.success(msg);
-    } catch (err) {
-      console.error('Pipeline failed:', err);
-      toast.error('Pipeline failed');
-    } finally {
-      setBatchRunning(false);
-    }
-  }, [user, qc]);
+    await runPipeline(mode);
+  }, [user, runPipeline]);
 
   // ── Guided extraction mode ───────────────────────────────
 
