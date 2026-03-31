@@ -76,24 +76,11 @@ function scoreActionability(title: string, summary: string): { score: number; re
 
 // ── Gate 3: Distinctness ───────────────────────────────────
 
-function normalizeForDedup(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+import { contentSimilarity as multiSliceSimilarity } from '@/lib/contentSignature';
 
+// Use multi-slice content similarity everywhere
 function computeSimilarity(a: string, b: string): number {
-  const wordsA = new Set(normalizeForDedup(a).split(' '));
-  const wordsB = new Set(normalizeForDedup(b).split(' '));
-  if (wordsA.size === 0 || wordsB.size === 0) return 0;
-
-  let intersection = 0;
-  for (const w of wordsA) {
-    if (wordsB.has(w)) intersection++;
-  }
-  return (2 * intersection) / (wordsA.size + wordsB.size); // Dice coefficient
+  return multiSliceSimilarity(a, b);
 }
 
 export function scoreDistinctness(
