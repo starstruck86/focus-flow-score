@@ -11,7 +11,7 @@
  * - Underutilized resource grouping
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BatchSelectionPanel } from './BatchSelectionPanel';
+import { QueueActionBar, type QueueProgress } from './QueueActionBar';
 import {
   auditResourceReadiness,
   bulkFixContentBacked,
@@ -230,6 +231,35 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
   const [auditError, setAuditError] = useState<string | null>(null);
   const [autoOpProgress, setAutoOpProgress] = useState<{ processed: number; total: number; current: string } | null>(null);
   const [lastAutoOpSummary, setLastAutoOpSummary] = useState<BatchSummary | null>(null);
+
+  // ── Queue selection state ──
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [queueProgress, setQueueProgress] = useState<QueueProgress | null>(null);
+
+  const toggleSelection = useCallback((id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  const selectFromBucket = useCallback((bucket: ReadinessBucket, count?: number) => {
+    if (!audit) return;
+    const items = audit.buckets[bucket];
+    const ids = count ? items.slice(0, count).map(r => r.id) : items.map(r => r.id);
+    setSelectedIds(new Set(ids));
+  }, [audit]);
+
+  // Clear selection when bucket changes
+  useEffect(() => { clearSelection(); }, [expandedBucket, clearSelection]);
+
+  const handleQueueAction = useCallback((actionType: string, ids: string[]) => {
+    setConfirmAction({ type: actionType, ids });
+  }, []);
 
   // Canonical lifecycle — SINGLE SOURCE OF TRUTH
   const { summary: lifecycle, refetch: refetchLifecycle } = useCanonicalLifecycle();
@@ -1115,13 +1145,15 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
 
                 <Separator />
 
-                {/* ── Bucket list ── */}
+                {/* ── Bucket list (working queues) ── */}
                 <div className="space-y-0.5">
                   {BUCKET_ORDER.map(key => {
                     const cfg = BUCKET_CONFIG[key];
                     const count = audit.counts[key];
                     if (count === 0) return null;
                     const isExpanded = expandedBucket === key;
+                    const bucketItems = audit.buckets[key];
+                    const allSelected = isExpanded && bucketItems.length > 0 && bucketItems.every(r => selectedIds.has(r.id));
 
                     return (
                       <div key={key}>
@@ -1146,13 +1178,48 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                         </button>
 
                         {isExpanded && (
-                          <div className="ml-4 space-y-1 mb-2">
-                            {audit.buckets[key].slice(0, 25).map(r => (
-                              <ResourceRow key={r.id} resource={r} />
-                            ))}
-                            {count > 25 && (
-                              <p className="text-[10px] text-muted-foreground pl-2">+ {count - 25} more</p>
-                            )}
+                          <div className="space-y-1 mb-2">
+                            {/* Queue action bar */}
+                            <QueueActionBar
+                              activeBucket={key}
+                              selectedIds={selectedIds}
+                              totalInBucket={bucketItems.length}
+                              onClearSelection={clearSelection}
+                              onSelectCount={(n) => selectFromBucket(key, n)}
+                              onSelectAll={() => selectFromBucket(key)}
+                              onAction={handleQueueAction}
+                              progress={queueProgress}
+                              actionLoading={actionLoading}
+                            />
+
+                            {/* Header checkbox row */}
+                            <label className="flex items-center gap-2 px-2 py-1 text-[10px] text-muted-foreground cursor-pointer hover:bg-accent/30 rounded">
+                              <input
+                                type="checkbox"
+                                checked={allSelected}
+                                onChange={() => {
+                                  if (allSelected) {
+                                    clearSelection();
+                                  } else {
+                                    setSelectedIds(new Set(bucketItems.map(r => r.id)));
+                                  }
+                                }}
+                                className="h-3 w-3 rounded border-border accent-primary"
+                              />
+                              <span className="font-medium">Select all {bucketItems.length} in {cfg.label}</span>
+                            </label>
+
+                            {/* Resource rows with checkboxes */}
+                            <div className="ml-1 space-y-1">
+                              {bucketItems.map(r => (
+                                <ResourceRow
+                                  key={r.id}
+                                  resource={r}
+                                  isSelected={selectedIds.has(r.id)}
+                                  onToggleSelect={() => toggleSelection(r.id)}
+                                />
+                              ))}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1436,7 +1503,7 @@ function getBottleneckLabel(r: AuditedResource): { text: string; color: string }
 
 // ── Resource row ───────────────────────────────────────────
 
-function ResourceRow({ resource: r }: { resource: AuditedResource }) {
+function ResourceRow({ resource: r, isSelected, onToggleSelect }: { resource: AuditedResource; isSelected?: boolean; onToggleSelect?: () => void }) {
   const tagGroups = groupTagsByDimension(r.tags);
   const bottleneck = getBottleneckLabel(r);
   const canonicalStage = deriveCanonicalStage(
@@ -1457,18 +1524,31 @@ function ResourceRow({ resource: r }: { resource: AuditedResource }) {
   });
 
   return (
-    <div className="p-2 rounded border border-border bg-card text-xs space-y-1.5">
-      {/* Title + bottleneck label + canonical stage badge */}
-      <div className="flex items-start justify-between gap-1.5">
-        <div className="min-w-0 flex-1">
-          <p className="font-medium text-foreground truncate">{r.title}</p>
-          <p className={cn('text-[9px] font-medium', bottleneck.color)}>{bottleneck.text}</p>
-        </div>
-        <div className="flex gap-0.5 shrink-0 flex-wrap justify-end max-w-[45%]">
-          <Badge variant="outline" className={cn("text-[7px] h-3.5 px-1 border-primary/20", STAGE_COLORS[canonicalStage])}>{STAGE_LABELS[canonicalStage]}</Badge>
-          {r.badges.map(b => (
-            <Badge key={b} variant="outline" className="text-[7px] h-3.5 px-1">{b}</Badge>
-          ))}
+    <div className={cn(
+      'p-2 rounded border bg-card text-xs space-y-1.5 transition-colors',
+      isSelected ? 'border-primary/50 bg-primary/5' : 'border-border',
+    )}>
+      {/* Title row with checkbox */}
+      <div className="flex items-start gap-2">
+        {onToggleSelect && (
+          <input
+            type="checkbox"
+            checked={!!isSelected}
+            onChange={onToggleSelect}
+            className="h-3.5 w-3.5 mt-0.5 rounded border-border accent-primary shrink-0 cursor-pointer"
+          />
+        )}
+        <div className="flex items-start justify-between gap-1.5 flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-foreground truncate">{r.title}</p>
+            <p className={cn('text-[9px] font-medium', bottleneck.color)}>{bottleneck.text}</p>
+          </div>
+          <div className="flex gap-0.5 shrink-0 flex-wrap justify-end max-w-[45%]">
+            <Badge variant="outline" className={cn("text-[7px] h-3.5 px-1 border-primary/20", STAGE_COLORS[canonicalStage])}>{STAGE_LABELS[canonicalStage]}</Badge>
+            {r.badges.map(b => (
+              <Badge key={b} variant="outline" className="text-[7px] h-3.5 px-1">{b}</Badge>
+            ))}
+          </div>
         </div>
       </div>
 
