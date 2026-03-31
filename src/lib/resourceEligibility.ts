@@ -69,10 +69,26 @@ function normalizeMode(mode: EnrichModeInput): EnrichMode {
 function getEligibilityKey(resource: Resource): string {
   return (resource.file_url ?? '').trim().toLowerCase();
 }
-
-// ── Has valid HTTP source ──────────────────────────────────
+// ── Has valid source (HTTP URL or uploaded file path) ──────
 function hasValidSource(resource: Resource): boolean {
-  return !!resource.file_url && resource.file_url.startsWith('http');
+  if (!resource.file_url) return false;
+  // HTTP/HTTPS URLs
+  if (resource.file_url.startsWith('http')) return true;
+  // Uploaded files stored in Supabase storage (non-URL paths like "userId/timestamp-file.pdf")
+  if (resource.file_url.length > 3 && !resource.file_url.startsWith('[')) return true;
+  return false;
+}
+
+// ── Detect resource origin ─────────────────────────────────
+export type ResourceOrigin = 'uploaded_file' | 'source_url' | 'manual_content' | 'unknown';
+
+export function getResourceOrigin(resource: Resource): ResourceOrigin {
+  const url = resource.file_url;
+  if (!url) return resource.content ? 'manual_content' : 'unknown';
+  if (url.startsWith('http')) return 'source_url';
+  // Storage paths (uploaded files) don't start with http
+  if (url.length > 3 && !url.startsWith('[')) return 'uploaded_file';
+  return resource.content ? 'manual_content' : 'unknown';
 }
 
 // ── Eligibility evaluation ─────────────────────────────────

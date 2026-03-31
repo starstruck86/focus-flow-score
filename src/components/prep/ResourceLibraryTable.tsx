@@ -21,7 +21,7 @@ import {
   Star, BookOpen, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { type EnrichmentStatus } from '@/lib/resourceEligibility';
+import { type EnrichmentStatus, getResourceOrigin } from '@/lib/resourceEligibility';
 import {
   getQualityTierLabel, getQualityTierColor,
 } from '@/lib/resourceQuality';
@@ -965,13 +965,17 @@ export function ResourceLibraryTable({
                               <Eye className="h-3 w-3 mr-1" /> Full Details
                             </Button>
                             {lc?.blocked === 'no_extraction' && (
-                              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); onAction('deep_enrich', resource); }}>
+                              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); onAction('extract', resource); }}>
                                 <Zap className="h-3 w-3 mr-1" /> Run Extraction
                               </Button>
                             )}
                             {lc?.blocked === 'empty_content' && (
-                              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); onAction('deep_enrich', resource); }}>
-                                <RefreshCw className="h-3 w-3 mr-1" /> Re-enrich
+                              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => {
+                                e.stopPropagation();
+                                const origin = getResourceOrigin(resource);
+                                onAction(origin === 'uploaded_file' ? 'reparse_file' : 'deep_enrich', resource);
+                              }}>
+                                <RefreshCw className="h-3 w-3 mr-1" /> {getResourceOrigin(resource) === 'uploaded_file' ? 'Re-parse File' : 'Re-fetch Content'}
                               </Button>
                             )}
                             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); onAction('mark_template', resource); }}>

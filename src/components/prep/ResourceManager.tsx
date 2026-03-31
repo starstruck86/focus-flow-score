@@ -34,7 +34,7 @@ import {
 } from '@/hooks/useResources';
 import {
   getEnrichmentStatusLabel, getEnrichmentStatusColor, getRecommendedAction,
-  type EnrichmentStatus,
+  getResourceOrigin, type EnrichmentStatus,
 } from '@/lib/resourceEligibility';
 import { useClassifyResource, useUploadResource, useAddUrlResource, type ClassificationResult } from '@/hooks/useResourceUpload';
 import { ResourceEditor } from './ResourceEditor';
@@ -755,6 +755,63 @@ export function ResourceManager() {
                   if (resource.file_url) setViewingResource(resource);
                   else setEditingResource(resource);
                   break;
+                case 'extract': {
+                  // Run extraction pipeline (knowledge extraction from content-backed resources)
+                  toast.info('Extracting knowledge...');
+                  try {
+                    const { autoOperationalizeResource } = await import('@/lib/autoOperationalize');
+                    const result = await autoOperationalizeResource(resource.id);
+                    queryClient.invalidateQueries({ queryKey: ['resources'] });
+                    queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
+                    if (result.operationalized || result.knowledgeExtracted > 0) {
+                      toast.success(`Extracted ${result.knowledgeExtracted} knowledge items`);
+                    } else {
+                      toast.info(result.reason || 'No knowledge items extracted');
+                    }
+                  } catch (error: any) {
+                    toast.error('Extraction failed', { description: error?.message });
+                  }
+                  break;
+                }
+                case 'reparse_file': {
+                  // Re-parse uploaded file (PDF/ebook) — re-extract text from storage
+                  const origin = getResourceOrigin(resource);
+                  if (origin !== 'uploaded_file') {
+                    toast.error('This resource is not an uploaded file');
+                    break;
+                  }
+                  toast.info('Re-parsing file...');
+                  try {
+                    // Get signed URL and re-extract
+                    const { data: signedData } = await supabase.storage
+                      .from('resource-files')
+                      .createSignedUrl(resource.file_url!, 3600);
+                    if (!signedData?.signedUrl) {
+                      toast.error('Could not access file in storage');
+                      break;
+                    }
+                    // Fetch the file and re-extract text
+                    const fileRes = await fetch(signedData.signedUrl);
+                    const blob = await fileRes.blob();
+                    const file = new File([blob], resource.title || 'file', { type: blob.type });
+                    const { extractTextFromFile } = await import('@/hooks/useResourceUpload');
+                    const content = await extractTextFromFile(file);
+                    if (content && content.length > 50) {
+                      await supabase.from('resources').update({
+                        content,
+                        enrichment_status: 'deep_enriched' as any,
+                        failure_reason: null,
+                      }).eq('id', resource.id);
+                      queryClient.invalidateQueries({ queryKey: ['resources'] });
+                      toast.success(`Re-parsed: ${content.length} chars extracted`);
+                    } else {
+                      toast.warning('Could not extract meaningful text from file');
+                    }
+                  } catch (error: any) {
+                    toast.error('File re-parse failed', { description: error?.message });
+                  }
+                  break;
+                }
                 case 'deep_enrich':
                 case 're_enrich': {
                   // Route audio resources through the audio orchestrator
