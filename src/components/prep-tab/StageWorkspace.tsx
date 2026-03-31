@@ -9,10 +9,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ChevronDown, ChevronRight, FlaskConical } from 'lucide-react';
 import { ContextInputSection } from './ContextInputSection';
-import { ProactiveGuidance } from './ProactiveGuidance';
 import { WhatActuallyWorks } from './WhatActuallyWorks';
-import { BestAssets } from './BestAssets';
 import { ActionExecutionPanel } from './ActionExecutionPanel';
 import { PrepOutput } from './PrepOutput';
 import { NextStepGuidance } from './NextStepGuidance';
@@ -289,31 +289,6 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
       {/* Stage Playbook */}
       <StagePlaybookSection stageId={stage.id} stageLabel={stage.label} />
 
-      <ProactiveGuidance
-        stageId={stage.id}
-        persona={persona}
-        competitor={competitor}
-        hasContext={contextItems.length > 0}
-        onSelectAction={handleSelectActionById}
-        onChangeStage={onChangeStage}
-      />
-
-      {/* 3. What Actually Works */}
-      <WhatActuallyWorks
-        stageId={stage.id}
-        defaultTactics={stage.defaultTactics}
-        persona={persona}
-        competitor={competitor}
-      />
-
-      {/* 4. Best Assets */}
-      <BestAssets
-        templates={rankedTemplates}
-        examples={rankedExamples}
-        knowledgeItems={rankedKI}
-        isLoading={assetsLoading}
-      />
-
       {/* 5. Execution */}
       {selectedAction && (
         <ActionExecutionPanel
@@ -338,7 +313,10 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
         accountName={accountName}
       />
 
-      {/* 7. Next Step Guidance */}
+      {/* 7. Supporting Evidence */}
+      <EvidenceLayer stageId={stage.id} defaultTactics={stage.defaultTactics} persona={persona} competitor={competitor} />
+
+      {/* 8. Next Step Guidance */}
       <NextStepGuidance
         nextSteps={stage.nextSteps}
         onSelectAction={handleSelectActionById}
@@ -346,5 +324,34 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
         show={!!output}
       />
     </div>
+  );
+}
+
+/** Collapsible secondary evidence wrapper around WhatActuallyWorks */
+function EvidenceLayer({ stageId, defaultTactics, persona, competitor }: {
+  stageId: string;
+  defaultTactics: any[];
+  persona?: string;
+  competitor?: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 px-3 rounded-lg border border-border hover:bg-accent/30 transition-colors">
+        {open ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+        <FlaskConical className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Supporting Evidence</span>
+        <span className="text-[10px] text-muted-foreground ml-1">Raw KIs &amp; tactics</span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-2">
+        <WhatActuallyWorks
+          stageId={stageId}
+          defaultTactics={defaultTactics}
+          persona={persona}
+          competitor={competitor}
+        />
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
