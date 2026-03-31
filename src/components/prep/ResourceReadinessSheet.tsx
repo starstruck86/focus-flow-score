@@ -222,6 +222,8 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
   const [kiBackfillReport, setKiBackfillReport] = useState<BackfillReport | null>(null);
   const [kiScanReport, setKiScanReport] = useState<BackfillReport | null>(null);
   const [auditError, setAuditError] = useState<string | null>(null);
+  const [autoOpProgress, setAutoOpProgress] = useState<{ processed: number; total: number; current: string } | null>(null);
+  const [lastAutoOpSummary, setLastAutoOpSummary] = useState<BatchSummary | null>(null);
 
   // Canonical lifecycle — SINGLE SOURCE OF TRUTH
   const { summary: lifecycle, refetch: refetchLifecycle } = useCanonicalLifecycle();
