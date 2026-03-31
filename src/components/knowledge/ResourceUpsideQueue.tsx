@@ -227,7 +227,7 @@ export function ResourceUpsideQueue() {
           tags: resource.tags || [],
           resourceType: resource.resource_type,
         };
-        const extracted = extractKnowledgeHeuristic(source);
+        const extracted = extractKnowledgeHeuristic(source, existingForDedup);
         if (extracted.length === 0) {
           toast.info('No actionable tactics found — try manual review');
           return;
