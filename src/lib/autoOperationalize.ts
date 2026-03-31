@@ -95,7 +95,6 @@ export interface AutoOperationalizeResult {
 
 const AUTO_ACTIVATE_CONFIDENCE = 0.55;
 const MIN_TACTIC_SUMMARY_LENGTH = 20;
-const MIN_TACTIC_SUMMARY_LENGTH = 20;
 const ACTIVATION_RULE_VERSION = '2.0';
 
 // Vague/generic patterns that indicate low-quality extraction
