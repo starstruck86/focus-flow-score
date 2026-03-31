@@ -101,7 +101,7 @@ export const LifecycleSummaryBar = memo(function LifecycleSummaryBar({ summary: 
                 return (
                   <div key={reason} className="contents">
                     <span>{HUMAN_BLOCKED_LABELS[reason] ?? reason}</span>
-                    <span className="font-medium text-destructive">{count}</span>
+                    <span className="font-medium text-amber-500">{count}</span>
                   </div>
                 );
               })}
