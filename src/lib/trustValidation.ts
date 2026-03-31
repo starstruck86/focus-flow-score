@@ -375,17 +375,22 @@ export function routeResource(resource: {
   }
   if (contentLen < 150) exampleScore *= 0.3;
 
-  let tacticScore = 0;
-  const tacticReasons: string[] = [];
-  for (const s of TACTIC_STRUCTURE) {
+  // Hardened tactic scoring: penalize descriptive content
+  let descriptiveScore = 0;
+  for (const s of DESCRIPTIVE_STRUCTURE) {
     if (s.pattern.test(content)) {
-      tacticScore += s.weight;
-      tacticReasons.push(s.pattern.source.slice(0, 20));
+      descriptiveScore += s.weight;
     }
   }
-  if (contentLen > 300) tacticScore += 0.1;
-
+  // Only count tactic if actionable signals outweigh descriptive ones
+  const adjustedTacticScore = Math.max(0, tacticScore - descriptiveScore * 0.7);
+  if (contentLen > 300 && descriptiveScore < tacticScore) adjustedTacticScore; // keep bonus only if not descriptive
+  
   const scores: Array<{ path: ResourceOutputPath; score: number; reasons: string[] }> = [
+    { path: 'template_candidate', score: templateScore, reasons: templateReasons },
+    { path: 'example_candidate', score: exampleScore, reasons: exampleReasons },
+    { path: 'tactic_candidate', score: adjustedTacticScore, reasons: tacticReasons },
+  ];
     { path: 'template_candidate', score: templateScore, reasons: templateReasons },
     { path: 'example_candidate', score: exampleScore, reasons: exampleReasons },
     { path: 'tactic_candidate', score: tacticScore, reasons: tacticReasons },
