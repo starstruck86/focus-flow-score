@@ -79,8 +79,8 @@ export interface AutoOperationalizeResult {
 // ── Auto-activation thresholds ─────────────────────────────
 
 const AUTO_ACTIVATE_CONFIDENCE = 0.55;
-const MIN_CONTENT_LENGTH = 200;
-const MIN_CONTENT_FOR_EXTRACTION = 300;
+const MIN_CONTENT_LENGTH = 50; // Lowered: enriched resources should always enter pipeline
+const MIN_CONTENT_FOR_EXTRACTION = 100; // Lowered: attempt extraction even on short content, with lightweight fallback
 const MIN_TACTIC_SUMMARY_LENGTH = 20;
 const ACTIVATION_RULE_VERSION = '2.0';
 
