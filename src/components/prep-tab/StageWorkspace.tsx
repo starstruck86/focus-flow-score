@@ -313,7 +313,10 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
         accountName={accountName}
       />
 
-      {/* 7. Next Step Guidance */}
+      {/* 7. Supporting Evidence */}
+      <EvidenceLayer stageId={stage.id} defaultTactics={stage.defaultTactics} persona={persona} competitor={competitor} />
+
+      {/* 8. Next Step Guidance */}
       <NextStepGuidance
         nextSteps={stage.nextSteps}
         onSelectAction={handleSelectActionById}
