@@ -559,9 +559,24 @@ export interface BatchSummary {
   totalKnowledgeExtracted: number;
   totalKnowledgeActivated: number;
   totalTagsAdded: number;
+  outcomes: Record<PipelineOutcome, number>;
+  failedResources: Array<{ id: string; title: string; outcome: PipelineOutcome; reason?: string }>;
 }
 
 export function summarizeBatchResults(results: AutoOperationalizeResult[]): BatchSummary {
+  const outcomes: Record<PipelineOutcome, number> = {
+    operationalized: 0, partial_extraction: 0, lightweight_extraction: 0,
+    needs_review: 0, no_content: 0, failed: 0,
+  };
+  const failedResources: BatchSummary['failedResources'] = [];
+
+  for (const r of results) {
+    outcomes[r.outcome]++;
+    if (r.outcome === 'failed' || r.outcome === 'no_content' || r.outcome === 'needs_review') {
+      failedResources.push({ id: r.resourceId, title: r.resourceTitle, outcome: r.outcome, reason: r.reason });
+    }
+  }
+
   return {
     total: results.length,
     operationalized: results.filter(r => r.operationalized).length,
@@ -571,6 +586,8 @@ export function summarizeBatchResults(results: AutoOperationalizeResult[]): Batc
     totalKnowledgeExtracted: results.reduce((s, r) => s + r.knowledgeExtracted, 0),
     totalKnowledgeActivated: results.reduce((s, r) => s + r.knowledgeActivated, 0),
     totalTagsAdded: results.reduce((s, r) => s + r.tagsAdded.length, 0),
+    outcomes,
+    failedResources: failedResources.slice(0, 50),
   };
 }
 
