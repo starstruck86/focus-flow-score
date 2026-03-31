@@ -93,7 +93,46 @@ const LIFECYCLE_FILTER_ICONS: Record<LifecycleFilter, React.ReactNode> = {
   missing_content: <Inbox className="h-3 w-3" />,
 };
 
-// ── Template status filter ────────────────────────────────
+// ── Lifecycle filter → ReadinessBucket mapping ────────────
+import type { ReadinessBucket } from '@/lib/resourceAudit';
+
+const LIFECYCLE_TO_BUCKET: Partial<Record<LifecycleFilter, ReadinessBucket>> = {
+  needs_extraction: 'extractable_not_operationalized',
+  needs_activation: 'operationalized',
+  needs_context: 'content_backed_needs_fix',
+  needs_review: 'blocked_incorrectly',
+  missing_content: 'missing_content',
+  ready: 'ready',
+};
+
+const BLOCKED_TO_BUCKET: Record<string, ReadinessBucket> = {
+  no_extraction: 'extractable_not_operationalized',
+  no_activation: 'operationalized',
+  missing_contexts: 'content_backed_needs_fix',
+  stale_blocker_state: 'blocked_incorrectly',
+  empty_content: 'missing_content',
+  none: 'ready',
+};
+
+function getDominantBucket(
+  selectedIds: Set<string>,
+  lifecycleMap: Map<string, { stage: string; blocked: string }>,
+): ReadinessBucket | null {
+  const counts: Record<string, number> = {};
+  for (const id of selectedIds) {
+    const lc = lifecycleMap.get(id);
+    const bucket = lc ? (BLOCKED_TO_BUCKET[lc.blocked] ?? 'extractable_not_operationalized') : 'extractable_not_operationalized';
+    counts[bucket] = (counts[bucket] ?? 0) + 1;
+  }
+  let best: string | null = null;
+  let bestCount = 0;
+  for (const [k, v] of Object.entries(counts)) {
+    if (v > bestCount) { best = k; bestCount = v; }
+  }
+  return (best as ReadinessBucket) ?? null;
+}
+
+
 type AssetTypeFilter = 'all_assets' | 'template' | 'example' | 'reference' | 'working_asset' | 'untagged';
 
 const ASSET_TYPE_LABELS: Record<AssetTypeFilter, string> = {
