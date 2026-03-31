@@ -124,6 +124,11 @@ export function ResourceUpsideQueue() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const insertKnowledge = useInsertKnowledgeItems();
+  const { data: allKnowledgeItems = [] } = useAllKnowledgeItems();
+  const existingForDedup = useMemo(() =>
+    allKnowledgeItems.map(i => ({ title: i.title, tactic_summary: i.tactic_summary })),
+    [allKnowledgeItems]
+  );
 
   const candidates = useMemo(() =>
     resources.filter(r => {
