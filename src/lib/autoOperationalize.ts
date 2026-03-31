@@ -533,12 +533,12 @@ export async function autoOperationalizeAllResources(
  */
 export function derivePipelineStage(resource: {
   content_length?: number | null;
+  content?: string | null;
   manual_content_present?: boolean | null;
   tags?: string[] | null;
   enrichment_status?: string | null;
 }, ki: { total: number; active: number; hasContexts: boolean }): PipelineStage {
-  const contentLength = resource.content_length ?? 0;
-  const isContentBacked = contentLength >= MIN_CONTENT_LENGTH || resource.manual_content_present === true;
+  const isCB = contractIsContentBacked(resource);
 
   if (!isContentBacked) return 'uploaded';
 
