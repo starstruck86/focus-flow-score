@@ -152,7 +152,7 @@ export async function autoOperationalizeResource(
 
   if (!eligibility.eligible) {
     log.info('Pipeline stopped: not eligible', { resourceId, reason: eligibility.reason });
-    return makeResult(resourceId, r.title, stagesCompleted, 'uploaded', tagsAdded, 0, 0, false, true, eligibility.extractionTier, 'no_content', eligibility.reason);
+    return makeResult(resourceId, r.title, stagesCompleted, 'uploaded', tagsAdded, 0, 0, false, true, eligibility.reason, eligibility.extractionTier, 'no_content');
   }
 
   const effectiveLength = Math.max(r.content?.length ?? 0, r.content_length ?? 0);
