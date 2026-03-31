@@ -788,7 +788,7 @@ export function clusterByContent(
  */
 export function resolveCluster(
   cluster: ContentCluster,
-  canonicalId: string,
+  canonicalId: string | null,
   canonicalRole: ContentRoute,
   reasoning: string,
 ): ClusterResolution {
@@ -798,7 +798,7 @@ export function resolveCluster(
     canonicalRole,
     reasoning,
     demotedMembers: cluster.members
-      .filter(m => m.id !== canonicalId)
+      .filter(m => canonicalId ? m.id !== canonicalId : true)
       .map(m => ({ id: m.id, duplicateOf: canonicalId })),
   };
 }

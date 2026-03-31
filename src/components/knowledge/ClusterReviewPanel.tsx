@@ -169,16 +169,17 @@ export function ClusterReviewPanel({ resources, onResolved }: ClusterReviewPanel
     await supabase.from('resources')
       .update({ content_classification: 'reference' } as any)
       .in('id', ids);
+    // All-reference: no true canonical
     const resolution = resolveCluster(
-      cluster, ids[0], 'reference',
-      `All ${ids.length} members marked as reference.`
+      cluster, null, 'reference',
+      `All ${ids.length} members marked as reference. No canonical winner.`
     );
 
-    // Persist cluster resolution
+    // Persist cluster resolution with null canonical
     await supabase.from('cluster_resolutions').insert({
       user_id: user.id,
       cluster_id: cluster.id,
-      canonical_resource_id: ids[0],
+      canonical_resource_id: null,
       canonical_role: 'reference',
       reasoning: resolution.reasoning,
       demoted_members: resolution.demotedMembers,
