@@ -138,7 +138,7 @@ const BUCKET_ORDER: ReadinessBucket[] = [
 
 const BULK_ACTION_DESCRIPTIONS: Record<string, { title: string; safe: string; wontDo: string }> = {
   fix: {
-    title: 'Fix Content-Backed Resources',
+    title: 'Fix Content Issues',
     safe: 'Clears stale blocker states on resources that already have valid content (>200 chars). Re-verifies each resource before fixing.',
     wontDo: 'Will not touch resources without content. Will not delete or modify content.',
   },
@@ -153,19 +153,19 @@ const BULK_ACTION_DESCRIPTIONS: Record<string, { title: string; safe: string; wo
     wontDo: 'Will not activate items without contexts. Will not activate low-confidence items.',
   },
   autoOp: {
-    title: 'Auto-Operationalize Ready Resources',
-    safe: 'Runs the full pipeline (tag → extract → activate) on content-backed resources that are not yet operationalized.',
-    wontDo: 'Will not touch junk, missing-content, or already-operationalized resources. Will not auto-activate low-confidence items.',
+    title: 'Extract Knowledge from Ready Resources',
+    safe: 'Runs the full pipeline (tag → extract → activate) on content-backed resources that have no knowledge yet.',
+    wontDo: 'Will not touch junk, missing-content, or already-processed resources. Will not auto-activate low-confidence items.',
   },
   backfillAll: {
-    title: 'Operationalize All Existing Resources',
+    title: 'Extract from All Resources',
     safe: 'Runs the full pipeline on ALL eligible content-backed resources. Idempotent — already-processed resources pass through quickly.',
     wontDo: 'Will not touch junk or missing-content resources. Will not auto-activate low-confidence items. Will not overwrite user-edited knowledge.',
   },
   backfillSmart: {
-    title: 'Operationalize All Eligible (Smart)',
-    safe: 'Only processes resources in fixable/extractable/needs-tagging/ready buckets. Faster and more targeted than full backfill.',
-    wontDo: 'Will not touch junk, missing-content, or already-operationalized resources. Will not auto-activate low-confidence items.',
+    title: 'Extract from All Eligible (Smart)',
+    safe: 'Only processes resources in fixable/extractable/needs-tagging/ready buckets. Faster and more targeted than full extraction.',
+    wontDo: 'Will not touch junk, missing-content, or already-processed resources. Will not auto-activate low-confidence items.',
   },
   forceExtract: {
     title: 'Force Extract All Missing Knowledge',
@@ -196,6 +196,11 @@ const BULK_ACTION_DESCRIPTIONS: Record<string, { title: string; safe: string; wo
     title: 'Full Knowledge Remediation',
     safe: 'Runs the complete backfill: activates qualified items, rewrites weak ones from source, and archives junk.',
     wontDo: 'Will not touch user-edited items. Will not delete — only archives.',
+  },
+  delete: {
+    title: 'Delete Low-Value Resources',
+    safe: 'Permanently removes junk resources with very low content (<50 chars) and no URL.',
+    wontDo: 'Cannot be undone.',
   },
 };
 
