@@ -415,12 +415,25 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                 {/* ── Canonical Lifecycle Summary — SINGLE SOURCE OF TRUTH ── */}
                 <LifecycleSummaryBar summary={lifecycle} />
 
+                {/* ── NEXT BEST ACTION ── */}
+                <NextBestActionPanel audit={audit} actionLoading={actionLoading} onAction={(type, ids) => setConfirmAction({ type, ids })} />
+
                 {/* ── Bucket summary stats ── */}
                 <div className="grid grid-cols-4 gap-1.5">
                   <MiniStat label="Ready to Use" value={audit.counts.operationalized} accent="emerald" />
                   <MiniStat label="Needs Extraction" value={audit.counts.extractable_not_operationalized} accent="blue" />
                   <MiniStat label="Needs Review" value={audit.counts.content_backed_needs_fix} accent="orange" />
                   <MiniStat label="Underutilized" value={underutilizedCount} accent="amber" />
+                </div>
+
+                {/* ── State legend ── */}
+                <div className="rounded-md border border-border bg-muted/20 p-2 text-[9px] text-muted-foreground grid grid-cols-2 gap-x-3 gap-y-0.5">
+                  <span><span className="font-medium text-foreground">Enriched</span> — content/metadata processed</span>
+                  <span><span className="font-medium text-foreground">Eligible</span> — ready for extraction pipeline</span>
+                  <span><span className="font-medium text-foreground">Extracted</span> — knowledge items created</span>
+                  <span><span className="font-medium text-foreground">Activated</span> — KI usable in system</span>
+                  <span><span className="font-medium text-foreground">Needs Review</span> — uncertain extraction result</span>
+                  <span><span className="font-medium text-foreground">No Content</span> — no usable content path</span>
                 </div>
 
                 {/* ── "What should I review first?" ── */}
@@ -433,161 +446,108 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                         <span className="text-foreground">{step}</span>
                       </div>
                     ))}
-                    <p className="text-[9px] text-muted-foreground italic mt-1">
-                      Rescue stranded content → extract value → fix targeting → inspect what works
-                    </p>
                   </div>
                 )}
 
-                {/* ── Validation summary ── */}
-                <div className="rounded-md border border-border bg-muted/30 p-2.5 space-y-1">
-                  <p className="text-[10px] font-medium text-foreground flex items-center gap-1">
-                    <Info className="h-3 w-3" /> Validation
-                  </p>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[10px] text-muted-foreground">
-                    <span>Missing required tags:</span>
-                    <span className={cn('font-medium', audit.validationSummary.missingRequiredTags > 0 ? 'text-amber-600' : 'text-foreground')}>
-                      {audit.validationSummary.missingRequiredTags}
-                    </span>
-                    <span>Active but no contexts:</span>
-                    <span className={cn('font-medium', audit.validationSummary.activeButInconsistent > 0 ? 'text-orange-500' : 'text-foreground')}>
-                      {audit.validationSummary.activeButInconsistent}
-                    </span>
-                    <span>Tag quality issues:</span>
-                    <span className={cn('font-medium', audit.validationSummary.tagQualityIssueCount > 0 ? 'text-amber-500' : 'text-foreground')}>
-                      {audit.validationSummary.tagQualityIssueCount}
-                    </span>
-                    <span>Ready to use:</span>
-                    <span className="font-medium text-emerald-600">{audit.validationSummary.operationalizedCount}</span>
-                  </div>
-                </div>
-
                 <Separator />
 
-                {/* ── Bulk actions with safety context ── */}
+                {/* ── Primary + Secondary actions ── */}
                 <div className="space-y-1.5">
-                  <p className="text-xs font-medium text-foreground">Bulk Actions</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {audit.counts.content_backed_needs_fix > 0 && (
-                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
-                        onClick={() => setConfirmAction({ type: 'fix', ids: audit.buckets.content_backed_needs_fix.map(r => r.id) })}>
-                        {actionLoading === 'fix' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wrench className="h-3 w-3" />}
-                        Fix {audit.counts.content_backed_needs_fix} Content-Backed
-                      </Button>
-                    )}
-                    {audit.counts.needs_tagging > 0 && (
-                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
-                        onClick={() => setConfirmAction({ type: 'tag', ids: audit.buckets.needs_tagging.map(r => r.id) })}>
-                        {actionLoading === 'tag' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Tag className="h-3 w-3" />}
-                        Auto-tag {audit.counts.needs_tagging}
-                      </Button>
-                    )}
-                    <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
-                      onClick={() => setConfirmAction({ type: 'activate' })}>
-                      {actionLoading === 'activate' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-                      Activate High-Confidence
+                  {/* Test mode */}
+                  {(audit.counts.ready + audit.counts.extractable_not_operationalized + audit.counts.needs_tagging) > 5 && (
+                    <Button variant="ghost" size="sm" className="h-7 text-[10px] gap-1 text-muted-foreground" disabled={!!actionLoading}
+                      onClick={() => {
+                        const ids = [
+                          ...audit.buckets.extractable_not_operationalized,
+                          ...audit.buckets.needs_tagging,
+                          ...audit.buckets.ready,
+                        ].map(r => r.id).slice(0, 5);
+                        setConfirmAction({ type: 'autoOp', ids });
+                      }}>
+                      <Rocket className="h-3 w-3" />
+                      Test Extraction (5)
                     </Button>
-                    {/* Auto-Operationalize: targets ready + extractable + needs_tagging */}
-                    {(audit.counts.ready + audit.counts.extractable_not_operationalized + audit.counts.needs_tagging) > 0 && (
-                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 border-primary/30" disabled={!!actionLoading}
-                        onClick={() => {
-                          const ids = [
-                            ...audit.buckets.extractable_not_operationalized,
-                            ...audit.buckets.needs_tagging,
-                            ...audit.buckets.ready,
-                          ].map(r => r.id);
-                          setConfirmAction({ type: 'autoOp', ids });
-                        }}>
-                        {actionLoading === 'autoOp' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Rocket className="h-3 w-3" />}
-                        Auto-Operationalize {audit.counts.ready + audit.counts.extractable_not_operationalized + audit.counts.needs_tagging}
-                      </Button>
-                    )}
-                    {/* Test mode: run on 5 resources */}
-                    {(audit.counts.ready + audit.counts.extractable_not_operationalized + audit.counts.needs_tagging) > 5 && (
-                      <Button variant="ghost" size="sm" className="h-7 text-[10px] gap-1 text-muted-foreground" disabled={!!actionLoading}
-                        onClick={() => {
-                          const ids = [
-                            ...audit.buckets.extractable_not_operationalized,
-                            ...audit.buckets.needs_tagging,
-                            ...audit.buckets.ready,
-                          ].map(r => r.id).slice(0, 5);
-                          setConfirmAction({ type: 'autoOp', ids });
-                        }}>
-                        <Rocket className="h-3 w-3" />
-                        Test (5)
-                      </Button>
-                    )}
-                    {audit.counts.junk_or_low_signal > 0 && (
-                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-destructive" disabled={!!actionLoading}
-                        onClick={() => setConfirmAction({ type: 'delete', ids: audit.buckets.junk_or_low_signal.map(r => r.id) })}>
-                        <Trash2 className="h-3 w-3" />
-                        Delete {audit.counts.junk_or_low_signal} Junk
-                      </Button>
-                    )}
+                  )}
+
+                  {/* More Actions — collapsible */}
+                  <Collapsible>
+                    <CollapsibleTrigger className="w-full flex items-center justify-between p-1.5 rounded hover:bg-accent/50 text-[10px]">
+                      <span className="font-medium text-muted-foreground">More Actions</span>
+                      <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="flex flex-wrap gap-1.5 pt-1.5">
+                        {audit.counts.content_backed_needs_fix > 0 && (
+                          <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
+                            onClick={() => setConfirmAction({ type: 'fix', ids: audit.buckets.content_backed_needs_fix.map(r => r.id) })}>
+                            {actionLoading === 'fix' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wrench className="h-3 w-3" />}
+                            Fix {audit.counts.content_backed_needs_fix} Content Issues
+                          </Button>
+                        )}
+                        {audit.counts.needs_tagging > 0 && (
+                          <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
+                            onClick={() => setConfirmAction({ type: 'tag', ids: audit.buckets.needs_tagging.map(r => r.id) })}>
+                            {actionLoading === 'tag' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Tag className="h-3 w-3" />}
+                            Auto-tag {audit.counts.needs_tagging}
+                          </Button>
+                        )}
+                        <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
+                          onClick={() => setConfirmAction({ type: 'activate' })}>
+                          {actionLoading === 'activate' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                          Activate Knowledge
+                        </Button>
+                        {audit.counts.junk_or_low_signal > 0 && (
+                          <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-destructive" disabled={!!actionLoading}
+                            onClick={() => setConfirmAction({ type: 'delete', ids: audit.buckets.junk_or_low_signal.map(r => r.id) })}>
+                            <Trash2 className="h-3 w-3" />
+                            Delete {audit.counts.junk_or_low_signal} Junk
+                          </Button>
+                        )}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                </div>
+
+                {/* ── Auto-Op Progress + Results ── */}
+                {autoOpProgress && (
+                  <div className="rounded-md border border-primary/20 bg-primary/5 p-2 space-y-1.5">
+                    <div className="flex items-center gap-2 text-[10px]">
+                      <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                      <span className="font-medium text-foreground">
+                        Processing {autoOpProgress.processed} / {autoOpProgress.total}
+                      </span>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-1.5">
+                      <div
+                        className="bg-primary h-1.5 rounded-full transition-all"
+                        style={{ width: `${autoOpProgress.total > 0 ? (autoOpProgress.processed / autoOpProgress.total) * 100 : 0}%` }}
+                      />
+                    </div>
+                    <p className="text-[9px] text-muted-foreground truncate">{autoOpProgress.current}</p>
                   </div>
+                )}
 
-                  {/* ── Auto-Op Progress + Results ── */}
-                  {autoOpProgress && (
-                    <div className="rounded-md border border-primary/20 bg-primary/5 p-2 space-y-1.5">
-                      <div className="flex items-center gap-2 text-[10px]">
-                        <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                        <span className="font-medium text-foreground">
-                          Processing {autoOpProgress.processed} / {autoOpProgress.total}
-                        </span>
-                      </div>
-                      <div className="w-full bg-muted rounded-full h-1.5">
-                        <div
-                          className="bg-primary h-1.5 rounded-full transition-all"
-                          style={{ width: `${autoOpProgress.total > 0 ? (autoOpProgress.processed / autoOpProgress.total) * 100 : 0}%` }}
-                        />
-                      </div>
-                      <p className="text-[9px] text-muted-foreground truncate">{autoOpProgress.current}</p>
-                    </div>
-                  )}
+                {lastAutoOpSummary && !autoOpProgress && (
+                  <OperatorSummaryPanel summary={lastAutoOpSummary} />
+                )}
 
-                  {lastAutoOpSummary && !autoOpProgress && (
-                    <div className="rounded-md border border-primary/20 bg-primary/5 p-2 text-[10px] space-y-1">
-                      <p className="font-medium text-foreground">Last Auto-Operationalize Results</p>
-                      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-muted-foreground">
-                        <span>Total processed:</span><span className="font-medium text-foreground">{lastAutoOpSummary.total}</span>
-                        <span>Operationalized:</span><span className="font-medium text-emerald-600">{lastAutoOpSummary.outcomes.operationalized}</span>
-                        <span>Partial extraction:</span><span className="font-medium text-foreground">{lastAutoOpSummary.outcomes.partial_extraction}</span>
-                        <span>Lightweight:</span><span className="font-medium text-foreground">{lastAutoOpSummary.outcomes.lightweight_extraction}</span>
-                        <span>Needs review:</span><span className={cn('font-medium', lastAutoOpSummary.outcomes.needs_review > 0 ? 'text-amber-500' : 'text-foreground')}>{lastAutoOpSummary.outcomes.needs_review}</span>
-                        <span>No content:</span><span className="font-medium text-muted-foreground">{lastAutoOpSummary.outcomes.no_content}</span>
-                        <span>KI extracted:</span><span className="font-medium text-foreground">{lastAutoOpSummary.totalKnowledgeExtracted}</span>
-                        <span>KI activated:</span><span className="font-medium text-foreground">{lastAutoOpSummary.totalKnowledgeActivated}</span>
-                      </div>
-                      {lastAutoOpSummary.failedResources.length > 0 && (
-                        <details className="mt-1">
-                          <summary className="text-[9px] text-muted-foreground cursor-pointer hover:text-foreground">
-                            {lastAutoOpSummary.failedResources.length} issues (click to expand)
-                          </summary>
-                          <div className="mt-1 max-h-24 overflow-y-auto space-y-0.5">
-                            {lastAutoOpSummary.failedResources.slice(0, 20).map(f => (
-                              <p key={f.id} className="text-[9px] text-muted-foreground truncate">
-                                <span className="font-medium">{f.outcome}</span>: {f.title} — {f.reason}
-                              </p>
-                            ))}
-                          </div>
-                        </details>
-                      )}
-                    </div>
-                  )}
-
-                  {/* ── Backfill actions ── */}
-                  <div className="pt-1.5 border-t border-border/50 space-y-1.5">
-                    <p className="text-[10px] font-medium text-muted-foreground">Backfill All Existing Resources</p>
-                    <div className="flex flex-wrap gap-1.5">
+                {/* ── Backfill actions ── */}
+                <Collapsible>
+                  <CollapsibleTrigger className="w-full flex items-center justify-between p-1.5 rounded hover:bg-accent/50 text-[10px]">
+                    <span className="font-medium text-muted-foreground">Full Library Extraction</span>
+                    <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="flex flex-wrap gap-1.5 pt-1.5">
                       <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 border-emerald-500/30" disabled={!!actionLoading}
                         onClick={() => setConfirmAction({ type: 'backfillSmart' })}>
                         {actionLoading === 'backfillSmart' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Rocket className="h-3 w-3 text-emerald-600" />}
-                        Operationalize All Eligible
+                        Extract All Eligible
                       </Button>
                       <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" disabled={!!actionLoading}
                         onClick={() => setConfirmAction({ type: 'backfillAll' })}>
                         {actionLoading === 'backfillAll' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Rocket className="h-3 w-3" />}
-                        Operationalize All Resources
+                        Extract All Resources
                       </Button>
                     </div>
                     {backfillProgress && (
@@ -610,7 +570,8 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                         </div>
                       </div>
                     )}
-                  </div>
+                  </CollapsibleContent>
+                </Collapsible>
 
                   {/* ── Knowledge Item Remediation ── */}
                   <div className="pt-1.5 border-t border-border/50 space-y-1.5">
@@ -1193,6 +1154,189 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+// ── Next Best Action Panel ─────────────────────────────────
+
+function NextBestActionPanel({ audit, actionLoading, onAction }: {
+  audit: AuditSummary;
+  actionLoading: string | null;
+  onAction: (type: string, ids?: string[]) => void;
+}) {
+  const c = audit.counts;
+  const extractableCount = c.extractable_not_operationalized + c.needs_tagging + c.ready;
+  const fixableCount = c.content_backed_needs_fix;
+  const lowQualityCount = c.low_quality_extraction;
+
+  let ctaLabel: string;
+  let ctaDescription: string;
+  let ctaIcon: React.ReactNode;
+  let ctaAction: () => void;
+  let ctaDisabled = !!actionLoading;
+  let systemClean = false;
+
+  if (extractableCount > 0) {
+    ctaLabel = `Extract Knowledge (${extractableCount})`;
+    ctaDescription = `${extractableCount} resources are enriched and ready for knowledge extraction.`;
+    ctaIcon = <Sparkles className="h-4 w-4" />;
+    ctaAction = () => {
+      const ids = [
+        ...audit.buckets.extractable_not_operationalized,
+        ...audit.buckets.needs_tagging,
+        ...audit.buckets.ready,
+      ].map(r => r.id);
+      onAction('autoOp', ids);
+    };
+  } else if (lowQualityCount > 0) {
+    ctaLabel = `Improve ${lowQualityCount} Weak Extractions`;
+    ctaDescription = `${lowQualityCount} resources have knowledge items but none are usable.`;
+    ctaIcon = <Sparkles className="h-4 w-4" />;
+    ctaAction = () => onAction('kiRewrite');
+  } else if (fixableCount > 0) {
+    ctaLabel = `Fix ${fixableCount} Content Issues`;
+    ctaDescription = `${fixableCount} resources have content but are stuck in a stale state.`;
+    ctaIcon = <Wrench className="h-4 w-4" />;
+    ctaAction = () => onAction('fix', audit.buckets.content_backed_needs_fix.map(r => r.id));
+  } else {
+    systemClean = true;
+    ctaLabel = 'System Clean';
+    ctaDescription = 'No pending extraction, activation, or content issues found.';
+    ctaIcon = <CheckCircle2 className="h-4 w-4" />;
+    ctaAction = () => {};
+    ctaDisabled = true;
+  }
+
+  return (
+    <div className={cn(
+      "rounded-lg border-2 p-3 space-y-2",
+      systemClean ? "border-emerald-500/30 bg-emerald-500/5" : "border-primary/30 bg-primary/5"
+    )}>
+      <div className="flex items-center gap-2">
+        <span className={systemClean ? "text-emerald-600" : "text-primary"}>{ctaIcon}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-foreground">{systemClean ? '✓ System Clean' : 'Next Best Action'}</p>
+          <p className="text-[10px] text-muted-foreground">{ctaDescription}</p>
+        </div>
+      </div>
+      {!systemClean && (
+        <Button size="sm" className="w-full h-8 text-xs gap-1.5" disabled={ctaDisabled} onClick={ctaAction}>
+          {actionLoading === 'autoOp' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : ctaIcon}
+          {ctaLabel}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// ── Operator Summary Panel ─────────────────────────────────
+
+function OperatorSummaryPanel({ summary }: { summary: BatchSummary }) {
+  const totalProcessed = summary.total;
+  const produced = summary.outcomes.operationalized + summary.outcomes.partial_extraction + summary.outcomes.lightweight_extraction;
+  const needsAttention = summary.outcomes.needs_review + summary.outcomes.no_content + summary.outcomes.failed;
+  const [expandedFailure, setExpandedFailure] = useState<string | null>(null);
+
+  let nextAction = '';
+  if (summary.outcomes.operationalized > 0 && summary.totalKnowledgeActivated === 0) {
+    nextAction = `Activate ${summary.totalKnowledgeExtracted} new knowledge items.`;
+  } else if (summary.outcomes.needs_review > 0) {
+    nextAction = `Review ${summary.outcomes.needs_review} resources that need attention.`;
+  } else if (produced > 0) {
+    nextAction = 'Knowledge is ready to use — no further action needed.';
+  } else {
+    nextAction = 'Check resource content quality and re-enrich if needed.';
+  }
+
+  const getFailureAction = (outcome: PipelineOutcome): string => {
+    switch (outcome) {
+      case 'no_content': return 'Add transcript or manual notes';
+      case 'needs_review': return 'Review extraction output';
+      case 'failed': return 'Retry extraction';
+      default: return '';
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-primary/20 bg-card p-3 text-[10px] space-y-2">
+      <p className="text-xs font-semibold text-foreground">Extraction Results</p>
+
+      <div className="rounded-md bg-muted/30 p-2 space-y-1">
+        <p className="font-medium text-foreground">What happened</p>
+        <p className="text-muted-foreground">
+          {totalProcessed} resource{totalProcessed !== 1 ? 's' : ''} processed → {produced} produced usable knowledge, {summary.totalKnowledgeExtracted} KI extracted, {summary.totalKnowledgeActivated} KI activated.
+        </p>
+        <div className="grid grid-cols-3 gap-1 pt-1">
+          <div className="text-center p-1 rounded bg-emerald-500/10">
+            <p className="text-sm font-bold text-emerald-600">{summary.outcomes.operationalized}</p>
+            <p className="text-[8px] text-muted-foreground">Operationalized</p>
+          </div>
+          <div className="text-center p-1 rounded bg-blue-500/10">
+            <p className="text-sm font-bold text-blue-500">{summary.outcomes.partial_extraction + summary.outcomes.lightweight_extraction}</p>
+            <p className="text-[8px] text-muted-foreground">Partial</p>
+          </div>
+          <div className="text-center p-1 rounded bg-amber-500/10">
+            <p className="text-sm font-bold text-amber-500">{needsAttention}</p>
+            <p className="text-[8px] text-muted-foreground">Needs Attention</p>
+          </div>
+        </div>
+      </div>
+
+      {needsAttention > 0 && (
+        <div className="rounded-md bg-amber-500/5 border border-amber-500/20 p-2 space-y-1">
+          <p className="font-medium text-foreground flex items-center gap-1">
+            <AlertTriangle className="h-3 w-3 text-amber-500" /> What needs attention
+          </p>
+          {summary.outcomes.needs_review > 0 && <p className="text-muted-foreground">• {summary.outcomes.needs_review} need manual review</p>}
+          {summary.outcomes.no_content > 0 && <p className="text-muted-foreground">• {summary.outcomes.no_content} had no usable content</p>}
+          {summary.outcomes.failed > 0 && <p className="text-muted-foreground">• {summary.outcomes.failed} failed during extraction</p>}
+        </div>
+      )}
+
+      <div className="rounded-md bg-primary/5 border border-primary/20 p-2">
+        <p className="font-medium text-foreground flex items-center gap-1">
+          <ArrowRight className="h-3 w-3 text-primary" /> Recommended next action
+        </p>
+        <p className="text-muted-foreground">{nextAction}</p>
+      </div>
+
+      {summary.failedResources.length > 0 && (
+        <div className="space-y-0.5">
+          <p className="font-medium text-foreground">{summary.failedResources.length} issue{summary.failedResources.length !== 1 ? 's' : ''}</p>
+          {summary.failedResources.slice(0, 20).map(f => {
+            const isExp = expandedFailure === f.id;
+            return (
+              <div key={f.id} className="border border-border/50 rounded bg-card">
+                <button
+                  onClick={() => setExpandedFailure(isExp ? null : f.id)}
+                  className="w-full flex items-center justify-between p-1.5 text-left hover:bg-accent/30 text-[10px]"
+                >
+                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                    <Badge variant="outline" className={cn("text-[7px] h-3.5 px-1 shrink-0",
+                      f.outcome === 'no_content' ? 'text-muted-foreground' :
+                      f.outcome === 'needs_review' ? 'text-amber-500' : 'text-destructive'
+                    )}>
+                      {f.outcome.replace(/_/g, ' ')}
+                    </Badge>
+                    <span className="truncate text-foreground">{f.title || '(untitled)'}</span>
+                  </div>
+                  {isExp ? <ChevronDown className="h-2.5 w-2.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-2.5 w-2.5 text-muted-foreground shrink-0" />}
+                </button>
+                {isExp && (
+                  <div className="px-1.5 pb-1.5 space-y-0.5 text-[9px]">
+                    <p className="text-muted-foreground"><span className="font-medium">Reason:</span> {f.reason || 'Unknown'}</p>
+                    <p className="text-primary/80 flex items-center gap-0.5">
+                      <ArrowRight className="h-2.5 w-2.5 shrink-0" />
+                      {getFailureAction(f.outcome)}
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
