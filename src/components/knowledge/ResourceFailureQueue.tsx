@@ -596,19 +596,23 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
                 Similar {dupWarning.type === 'template' ? 'Templates' : 'Examples'} Found
               </DialogTitle>
               <DialogDescription className="text-xs">
-                Before creating a new {dupWarning.type} from &ldquo;{dupWarning.diagnosis.title}&rdquo;, review these similar existing assets:
+                Before creating a new {dupWarning.type} from &ldquo;{dupWarning.diagnosis.title}&rdquo;, review these existing assets with similar content:
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {dupWarning.similar.map(s => (
-                <div key={s.id} className="p-2 rounded border border-border bg-muted/30 text-xs flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="font-medium text-foreground truncate">{s.title}</p>
-                    <p className="text-[10px] text-muted-foreground">{Math.round(s.similarity * 100)}% similar</p>
+                <div key={s.id} className="p-2 rounded border border-border bg-muted/30 text-xs space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-medium text-foreground truncate flex-1">{s.title}</p>
+                    <Badge variant="outline" className="text-[9px] shrink-0">
+                      {Math.round(s.similarity * 100)}% content match
+                    </Badge>
                   </div>
-                  <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 shrink-0">
-                    <Eye className="h-3 w-3" /> View
-                  </Button>
+                  {s.content && (
+                    <p className="text-[10px] text-muted-foreground line-clamp-2 italic border-l-2 border-border pl-2">
+                      {s.content}…
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
