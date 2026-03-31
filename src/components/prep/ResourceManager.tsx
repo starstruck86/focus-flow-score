@@ -757,18 +757,36 @@ export function ResourceManager() {
                   break;
                 case 'extract': {
                   // Run extraction pipeline (knowledge extraction from content-backed resources)
-                  toast.info('Extracting knowledge...');
+                  toast.loading('Extracting knowledge...', { id: 'extract-single' });
                   try {
                     const { autoOperationalizeResource } = await import('@/lib/autoOperationalize');
                     const result = await autoOperationalizeResource(resource.id);
+                    toast.dismiss('extract-single');
                     queryClient.invalidateQueries({ queryKey: ['resources'] });
                     queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
+                    queryClient.invalidateQueries({ queryKey: ['all-resources'] });
+                    console.log('[Extract] Result:', {
+                      resourceId: resource.id,
+                      title: resource.title,
+                      outcome: result.outcome,
+                      knowledgeExtracted: result.knowledgeExtracted,
+                      knowledgeActivated: result.knowledgeActivated,
+                      operationalized: result.operationalized,
+                      stagesCompleted: result.stagesCompleted,
+                    });
                     if (result.operationalized || result.knowledgeExtracted > 0) {
-                      toast.success(`Extracted ${result.knowledgeExtracted} knowledge items`);
+                      toast.success(`Extracted ${result.knowledgeExtracted} knowledge items`, {
+                        description: `${result.knowledgeActivated} auto-activated · Stage: ${result.currentStage}`,
+                        duration: 6000,
+                      });
                     } else {
-                      toast.info(result.reason || 'No knowledge items extracted');
+                      toast.info(result.reason || 'No knowledge items extracted', {
+                        description: `Stage reached: ${result.currentStage}`,
+                      });
                     }
                   } catch (error: any) {
+                    toast.dismiss('extract-single');
+                    console.error('[Extract] Failed:', error);
                     toast.error('Extraction failed', { description: error?.message });
                   }
                   break;
@@ -904,6 +922,68 @@ export function ResourceManager() {
                 case 'bulk_enrich':
                   setShowDeepEnrich(true);
                   break;
+                case 'bulk_autoOp':
+                case 'bulk_autoOp_filtered': {
+                  // Batch extraction pipeline for selected or filtered resources
+                  const ids = Array.from(selectedResourceIds);
+                  if (ids.length === 0) {
+                    toast.info('No resources selected');
+                    break;
+                  }
+                  toast.info(`Extracting knowledge from ${ids.length} resource(s)...`);
+                  try {
+                    const { autoOperationalizeBatch } = await import('@/lib/autoOperationalize');
+                    const results = await autoOperationalizeBatch(ids, (processed, total, title) => {
+                      if (processed % 5 === 0 || processed === total) {
+                        toast.loading(`Extracting ${processed}/${total}: ${title}`, { id: 'bulk-extract-progress' });
+                      }
+                    });
+                    toast.dismiss('bulk-extract-progress');
+                    // Invalidate all relevant queries
+                    queryClient.invalidateQueries({ queryKey: ['resources'] });
+                    queryClient.invalidateQueries({ queryKey: ['knowledge-items'] });
+                    queryClient.invalidateQueries({ queryKey: ['all-resources'] });
+                    queryClient.invalidateQueries({ queryKey: ['incoming-queue'] });
+
+                    const succeeded = results.filter(r => r.knowledgeExtracted > 0 || r.operationalized);
+                    const totalKI = results.reduce((s, r) => s + r.knowledgeExtracted, 0);
+                    const totalActivated = results.reduce((s, r) => s + r.knowledgeActivated, 0);
+                    const needsReview = results.filter(r => r.needsReview);
+
+                    if (succeeded.length > 0) {
+                      const previewItems = succeeded.slice(0, 3).map(r => r.resourceTitle).join(', ');
+                      toast.success(`Extracted ${totalKI} knowledge items from ${succeeded.length} resources`, {
+                        description: `${totalActivated} auto-activated · ${needsReview.length} need review\n${previewItems}`,
+                        duration: 8000,
+                      });
+                    } else {
+                      toast.warning('No knowledge items extracted', {
+                        description: `${needsReview.length} need manual review. ${results.filter(r => r.outcome === 'no_content').length} had no content.`,
+                      });
+                    }
+                    setSelectedResourceIds(new Set());
+                  } catch (error: any) {
+                    toast.dismiss('bulk-extract-progress');
+                    toast.error('Batch extraction failed', { description: error?.message });
+                  }
+                  break;
+                }
+                case 'bulk_fix':
+                case 'bulk_fix_filtered': {
+                  // Route to deep enrich for content fixes
+                  setShowDeepEnrich(true);
+                  break;
+                }
+                case 'bulk_activate':
+                case 'bulk_activate_filtered': {
+                  toast.info('Activation runs automatically during extraction');
+                  break;
+                }
+                case 'bulk_tag':
+                case 'bulk_tag_filtered': {
+                  toast.info('Auto-tagging runs automatically during extraction');
+                  break;
+                }
                 case 'inspect_audio':
                   setInspectingAudioResource(resource);
                   break;

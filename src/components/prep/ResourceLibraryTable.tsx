@@ -779,6 +779,25 @@ export function ResourceLibraryTable({
                       <td className="px-3 align-middle">
                         {(() => {
                           const ps = deriveProcessingState(resource, audioJob);
+                          // Lifecycle-aware: if blocked=no_extraction, show Extract action
+                          if (lc?.blocked === 'no_extraction') {
+                            return (
+                              <Badge className={cn('text-[9px] cursor-pointer bg-primary/20 text-primary')}
+                                onClick={e => { e.stopPropagation(); onAction('extract', resource); }}>
+                                Extract
+                              </Badge>
+                            );
+                          }
+                          // Missing content: origin-aware action
+                          if (lc?.blocked === 'empty_content') {
+                            const origin = getResourceOrigin(resource);
+                            return (
+                              <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('READY'))}
+                                onClick={e => { e.stopPropagation(); onAction(origin === 'uploaded_file' ? 'reparse_file' : 'deep_enrich', resource); }}>
+                                {origin === 'uploaded_file' ? 'Re-parse' : 'Re-fetch'}
+                              </Badge>
+                            );
+                          }
                           if (ps.state === 'READY' && resource.file_url?.startsWith('http')) {
                             return (
                               <Badge className={cn('text-[9px] cursor-pointer', getProcessingStateColor('READY'))}
