@@ -266,9 +266,43 @@ const HIGH_RISK_PATTERNS = [
   { pattern: /\b(instruction|requirement|must|should|always|never)\b/i, label: 'instruction' },
 ];
 
+// ── Second-pass false-positive filter ──────────────────────
+// Lines that LOOK like they should be preserved (contain "should", "always")
+// but are actually dev/meta noise. Catches comment wrappers, inline dev notes,
+// and draft annotations that survive first-pass preserve rules.
+
+const FALSE_POSITIVE_META_PATTERNS = [
+  // Dev notes that happen to contain instruction-like words
+  /^\/\/\s*(todo|fixme|hack|note|bug|xxx)\b/i,
+  /^#\s*(todo|fixme|note|wip)\b/i,
+  // Comment wrappers: <!-- ... -->, /* ... */
+  /^<!--.*-->$/,
+  /^\/\*.*\*\/$/,
+  // Draft annotations like "[DRAFT]", "[WIP]", "[TODO: ...]"
+  /^\[(draft|wip|todo|fixme|review|placeholder|tbd)\b[^\]]*\]$/i,
+  // Internal status markers
+  /^(status|state|phase|revision|owner|assignee)\s*:/i,
+  // Timestamps / version stamps that look like instructions
+  /^(last (updated|edited|modified)|updated on|created on|v\d+\.\d+)\b/i,
+  // Lines that are ONLY meta keywords with no real content
+  /^(note|comment|reminder|tip|caveat|fyi)\s*:?\s*$/i,
+  // Inline dev notes in parens: "(should update this later)"
+  /^\(.*\b(todo|fixme|later|eventually|placeholder|tbd)\b.*\)$/i,
+];
+
+function isSecondPassMeta(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+  return FALSE_POSITIVE_META_PATTERNS.some(p => p.test(trimmed));
+}
+
 function isMetaLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return false;
+  // Second-pass: if it matches false-positive patterns, strip it
+  // even if it would otherwise be preserved
+  if (isSecondPassMeta(trimmed)) return true;
+  // First-pass preserve check
   if (PRESERVE_LINE_PATTERNS.some(p => p.test(trimmed))) return false;
   return META_LINE_PATTERNS.some(p => p.test(trimmed));
 }
@@ -357,7 +391,10 @@ export function shapeAsExample(content: string): TransformationResult {
       kept.push(lines[i]);
       continue;
     }
-    if (PRESERVE_LINE_PATTERNS.some(p => p.test(trimmed))) {
+    // Second-pass catches false positives
+    if (isSecondPassMeta(trimmed)) {
+      removedLines.push({ line: lines[i], lineNumber: i + 1 });
+    } else if (PRESERVE_LINE_PATTERNS.some(p => p.test(trimmed))) {
       kept.push(lines[i]);
     } else if (EXAMPLE_META.some(p => p.test(trimmed))) {
       removedLines.push({ line: lines[i], lineNumber: i + 1 });
@@ -453,7 +490,8 @@ export function segmentAndRoute(content: string): ContentSegment[] {
     return [{ index: 0, content, route: routes[0], allRoutes: routes, confidence: 0.5, charRange: [0, content.length] }];
   }
 
-  return rawSegments.map((seg, i) => {
+  // Route each segment
+  let segments: ContentSegment[] = rawSegments.map((seg, i) => {
     const routes = routeByContent(seg.content);
     return {
       index: i,
@@ -465,6 +503,49 @@ export function segmentAndRoute(content: string): ContentSegment[] {
       charRange: [seg.charStart, seg.charEnd] as [number, number],
     };
   });
+
+  // ── Merge adjacent same-route segments if highly related ──
+  segments = mergeAdjacentSegments(segments);
+
+  return segments;
+}
+
+/**
+ * Merge adjacent segments that have the same primary route and high similarity.
+ * Prevents over-fragmentation of mixed docs.
+ */
+function mergeAdjacentSegments(segments: ContentSegment[]): ContentSegment[] {
+  if (segments.length <= 1) return segments;
+
+  const merged: ContentSegment[] = [segments[0]];
+
+  for (let i = 1; i < segments.length; i++) {
+    const prev = merged[merged.length - 1];
+    const curr = segments[i];
+
+    // Merge if same route and content is similar enough
+    const sameRoute = prev.route === curr.route;
+    const sim = sameRoute ? contentSimilarity(prev.content, curr.content) : 0;
+    // Also merge if both are short and same route (likely one logical block)
+    const bothShort = prev.content.length < 300 && curr.content.length < 300;
+
+    if (sameRoute && (sim > 0.4 || bothShort)) {
+      // Merge into prev
+      merged[merged.length - 1] = {
+        index: prev.index,
+        content: prev.content + '\n\n' + curr.content,
+        heading: prev.heading,
+        route: prev.route,
+        allRoutes: [...new Set([...prev.allRoutes, ...curr.allRoutes])],
+        confidence: Math.max(prev.confidence, curr.confidence),
+        charRange: [prev.charRange[0], curr.charRange[1]],
+      };
+    } else {
+      merged.push({ ...curr, index: merged.length });
+    }
+  }
+
+  return merged;
 }
 
 // ── Role-Specific Candidate Scoring ────────────────────────
