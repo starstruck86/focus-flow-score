@@ -257,12 +257,26 @@ const PRESERVE_LINE_PATTERNS = [
   /["'""].{5,}["'""]/,
 ];
 
+// High-risk patterns — warn aggressively if these are removed
+const HIGH_RISK_PATTERNS = [
+  { pattern: /["'""].{5,}["'""]/, label: 'quoted phrasing' },
+  { pattern: /\[.*?\]|\{.*?\}/, label: 'placeholder' },
+  { pattern: /\b(when|if|before|after|unless|during)\s+(the|a|you|they)\b/i, label: 'conditional logic' },
+  { pattern: /\b(persona|audience|tone|voice|style|constraint|rule)\b/i, label: 'persona/constraint' },
+  { pattern: /\b(instruction|requirement|must|should|always|never)\b/i, label: 'instruction' },
+];
+
 function isMetaLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return false;
-  // Check if preserved first — preservation wins
   if (PRESERVE_LINE_PATTERNS.some(p => p.test(trimmed))) return false;
   return META_LINE_PATTERNS.some(p => p.test(trimmed));
+}
+
+export interface HighRiskRemoval {
+  line: string;
+  lineNumber: number;
+  riskLabels: string[];
 }
 
 export interface TransformationResult {
@@ -270,6 +284,24 @@ export interface TransformationResult {
   removedLines: string[];
   originalLineCount: number;
   shapedLineCount: number;
+  highRiskRemovals: HighRiskRemoval[];
+}
+
+/**
+ * Classify removed lines for high-risk warnings.
+ */
+function classifyRemovedLines(removedLines: Array<{ line: string; lineNumber: number }>): HighRiskRemoval[] {
+  const highRisk: HighRiskRemoval[] = [];
+  for (const { line, lineNumber } of removedLines) {
+    const labels: string[] = [];
+    for (const { pattern, label } of HIGH_RISK_PATTERNS) {
+      if (pattern.test(line)) labels.push(label);
+    }
+    if (labels.length > 0) {
+      highRisk.push({ line, lineNumber, riskLabels: labels });
+    }
+  }
+  return highRisk;
 }
 
 /**
@@ -279,28 +311,27 @@ export interface TransformationResult {
 export function shapeAsTemplate(content: string): TransformationResult {
   const lines = content.split('\n');
   const kept: string[] = [];
-  const removedLines: string[] = [];
+  const removedLines: Array<{ line: string; lineNumber: number }> = [];
 
-  for (const line of lines) {
-    if (isMetaLine(line)) {
-      removedLines.push(line);
+  for (let i = 0; i < lines.length; i++) {
+    if (isMetaLine(lines[i])) {
+      removedLines.push({ line: lines[i], lineNumber: i + 1 });
     } else {
-      // Normalize placeholders: {company} → [Company]
-      let shaped = line.replace(/\{(\w+)\}/g, (_, name) =>
+      let shaped = lines[i].replace(/\{(\w+)\}/g, (_, name) =>
         `[${name.charAt(0).toUpperCase() + name.slice(1)}]`
       );
       kept.push(shaped);
     }
   }
 
-  // Collapse excessive blank lines
   let result = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 
   return {
     shaped: result,
-    removedLines,
+    removedLines: removedLines.map(r => r.line),
     originalLineCount: lines.length,
     shapedLineCount: result.split('\n').length,
+    highRiskRemovals: classifyRemovedLines(removedLines),
   };
 }
 
@@ -311,7 +342,7 @@ export function shapeAsTemplate(content: string): TransformationResult {
 export function shapeAsExample(content: string): TransformationResult {
   const lines = content.split('\n');
   const kept: string[] = [];
-  const removedLines: string[] = [];
+  const removedLines: Array<{ line: string; lineNumber: number }> = [];
 
   const EXAMPLE_META = [
     /^(note|comment|internal|draft note|meta|context)\s*:/i,
@@ -320,19 +351,18 @@ export function shapeAsExample(content: string): TransformationResult {
     /^(version|v\d+|last updated|status)\s*:/i,
   ];
 
-  for (const line of lines) {
-    const trimmed = line.trim();
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
     if (!trimmed) {
-      kept.push(line);
+      kept.push(lines[i]);
       continue;
     }
-    // Preserve first
     if (PRESERVE_LINE_PATTERNS.some(p => p.test(trimmed))) {
-      kept.push(line);
+      kept.push(lines[i]);
     } else if (EXAMPLE_META.some(p => p.test(trimmed))) {
-      removedLines.push(line);
+      removedLines.push({ line: lines[i], lineNumber: i + 1 });
     } else {
-      kept.push(line);
+      kept.push(lines[i]);
     }
   }
 
@@ -340,9 +370,10 @@ export function shapeAsExample(content: string): TransformationResult {
 
   return {
     shaped: result,
-    removedLines,
+    removedLines: removedLines.map(r => r.line),
     originalLineCount: lines.length,
     shapedLineCount: result.split('\n').length,
+    highRiskRemovals: classifyRemovedLines(removedLines),
   };
 }
 
