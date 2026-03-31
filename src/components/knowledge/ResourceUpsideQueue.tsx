@@ -426,8 +426,10 @@ export function ResourceUpsideQueue() {
         totalCandidates={candidates.length}
         totalPromoted={promoted.size}
         pipelineResult={pipelineResult}
+        persistedDiagnoses={persistedDiagnoses?.diagnoses || []}
         batchRunning={batchRunning}
         onRunPipeline={handleRunPipeline}
+        onAbort={abortPipeline}
         onBulkTemplates={handleBulkPromoteTemplates}
         onBulkExamples={handleBulkPromoteExamples}
         onBulkActivate={handleBulkAutoActivate}
