@@ -387,11 +387,32 @@ export async function autoOperationalizeResource(
 export async function autoOperationalizeBatch(
   resourceIds: string[],
 ): Promise<AutoOperationalizeResult[]> {
+  log.info('Batch auto-operationalize starting', { totalIds: resourceIds.length });
+
+  if (resourceIds.length === 0) {
+    log.warn('Batch called with 0 resource IDs — nothing to process');
+    return [];
+  }
+
   const results: AutoOperationalizeResult[] = [];
+  let succeeded = 0, needsReview = 0, stopped = 0;
+
   for (const id of resourceIds) {
     const result = await autoOperationalizeResource(id);
     results.push(result);
+    if (result.operationalized) succeeded++;
+    else if (result.needsReview) needsReview++;
+    else stopped++;
   }
+
+  log.info('Batch auto-operationalize complete', {
+    total: resourceIds.length,
+    operationalized: succeeded,
+    needsReview,
+    stoppedEarly: stopped,
+    reasons: results.filter(r => r.reason).map(r => ({ id: r.resourceId, reason: r.reason })).slice(0, 20),
+  });
+
   return results;
 }
 
