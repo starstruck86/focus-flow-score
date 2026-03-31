@@ -257,7 +257,7 @@ export async function runBatchExtraction(config: BatchJobConfig): Promise<BatchJ
   // Apply scope filters
   switch (scope) {
     case 'all_ready':
-      query = query.gte('content_length', 200).not('enrichment_status', 'eq', 'failed');
+      query = query.in('enrichment_status', ['enriched', 'deep_enriched', 'verified']).not('enrichment_status', 'eq', 'failed');
       break;
     case 'top_priority':
       query = query.gte('extraction_priority_score', 50).order('extraction_priority_score', { ascending: false });
@@ -489,7 +489,7 @@ export async function getPipelineStats(userId: string): Promise<PipelineStats> {
 
     if (activeKIResources.has(r.id)) {
       completed++;
-    } else if ((r.content_length ?? 0) >= 200) {
+    } else if (['enriched', 'deep_enriched', 'verified'].includes(r.enrichment_status)) {
       ready++;
     }
 

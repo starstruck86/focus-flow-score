@@ -79,8 +79,8 @@ export interface AutoOperationalizeResult {
 // ── Auto-activation thresholds ─────────────────────────────
 
 const AUTO_ACTIVATE_CONFIDENCE = 0.55;
-const MIN_CONTENT_LENGTH = 200;
-const MIN_CONTENT_FOR_EXTRACTION = 300;
+const MIN_CONTENT_LENGTH = 50; // Lowered: enriched resources should always enter pipeline
+const MIN_CONTENT_FOR_EXTRACTION = 100; // Lowered: attempt extraction even on short content, with lightweight fallback
 const MIN_TACTIC_SUMMARY_LENGTH = 20;
 const ACTIVATION_RULE_VERSION = '2.0';
 
@@ -126,7 +126,8 @@ export async function autoOperationalizeResource(
   const actualContentLength = r.content?.length ?? 0;
   const contentLength = r.content_length ?? actualContentLength;
   const effectiveLength = Math.max(contentLength, actualContentLength);
-  const isContentBacked = effectiveLength >= MIN_CONTENT_LENGTH || r.manual_content_present === true;
+  const isEnriched = ['enriched', 'deep_enriched', 'verified'].includes(r.enrichment_status);
+  const isContentBacked = effectiveLength >= MIN_CONTENT_LENGTH || r.manual_content_present === true || isEnriched;
 
   // ── Diagnostic logging ──
   log.info('Pipeline start', {
@@ -137,12 +138,14 @@ export async function autoOperationalizeResource(
     effective_length: effectiveLength,
     enrichment_status: r.enrichment_status,
     manual_content_present: r.manual_content_present,
+    isEnriched,
+    isContentBacked,
   });
 
   if (!isContentBacked) {
-    log.info('Pipeline stopped: content too short', { resourceId, effectiveLength });
+    log.info('Pipeline stopped: not content-backed and not enriched', { resourceId, effectiveLength, enrichment_status: r.enrichment_status });
     return makeResult(resourceId, r.title, stagesCompleted, 'uploaded', tagsAdded, 0, 0, false, true,
-      `Content too short (${effectiveLength} chars) — needs enrichment or manual input`);
+      `Not content-backed (${effectiveLength} chars, status=${r.enrichment_status}) — needs enrichment or manual input`);
   }
   stagesCompleted.push('content_ready');
 
@@ -384,11 +387,32 @@ export async function autoOperationalizeResource(
 export async function autoOperationalizeBatch(
   resourceIds: string[],
 ): Promise<AutoOperationalizeResult[]> {
+  log.info('Batch auto-operationalize starting', { totalIds: resourceIds.length });
+
+  if (resourceIds.length === 0) {
+    log.warn('Batch called with 0 resource IDs — nothing to process');
+    return [];
+  }
+
   const results: AutoOperationalizeResult[] = [];
+  let succeeded = 0, needsReview = 0, stopped = 0;
+
   for (const id of resourceIds) {
     const result = await autoOperationalizeResource(id);
     results.push(result);
+    if (result.operationalized) succeeded++;
+    else if (result.needsReview) needsReview++;
+    else stopped++;
   }
+
+  log.info('Batch auto-operationalize complete', {
+    total: resourceIds.length,
+    operationalized: succeeded,
+    needsReview,
+    stoppedEarly: stopped,
+    reasons: results.filter(r => r.reason).map(r => ({ id: r.resourceId, reason: r.reason })).slice(0, 20),
+  });
+
   return results;
 }
 

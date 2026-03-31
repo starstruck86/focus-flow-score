@@ -278,9 +278,17 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
         }
         toast.success(`Deleted ${deleted} junk resources`);
       } else if (type === 'autoOp' && ids) {
+        if (ids.length === 0) {
+          toast.error('No eligible resources found based on current filters');
+          return;
+        }
         const results = await autoOperationalizeBatch(ids);
         const summary = summarizeBatchResults(results);
-        toast.success(`Auto-operationalized: ${summary.operationalized} fully operationalized, ${summary.totalKnowledgeExtracted} extracted, ${summary.totalKnowledgeActivated} activated`);
+        if (summary.operationalized === 0 && summary.totalKnowledgeExtracted === 0) {
+          toast.warning(`0 resources operationalized — ${summary.needsReview} need review. Check audit for details.`);
+        } else {
+          toast.success(`Auto-operationalized: ${summary.operationalized} fully operationalized, ${summary.totalKnowledgeExtracted} extracted, ${summary.totalKnowledgeActivated} activated`);
+        }
         if (summary.needsReview > 0) toast.info(`${summary.needsReview} resources need manual review`);
       } else if (type === 'backfillAll' || type === 'backfillSmart') {
         const mode = type === 'backfillAll' ? 'all' : 'smart';
