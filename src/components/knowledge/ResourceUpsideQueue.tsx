@@ -570,6 +570,7 @@ function PipelineDashboard({
   const totalRef = r ? (r.reference_supporting + r.reference_needs_judgment + r.reference_low_leverage) : 0;
   const totalDone = r ? (r.operationalized + r.operationalized_partial + r.already_operationalized) : 0;
   const convergencePct = r && r.total_resources > 0 ? Math.round((totalDone / r.total_resources) * 100) : null;
+  const stallInfo = r?.stall_detected ? r : (persistedDiagnoses as any)?.stallInfo;
 
   return (
     <div className="border border-border rounded-lg bg-card p-4 space-y-3">
