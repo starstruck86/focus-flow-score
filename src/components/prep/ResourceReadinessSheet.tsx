@@ -299,14 +299,14 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
           setLastAutoOpSummary(summary);
 
           if (summary.operationalized === 0 && summary.totalKnowledgeExtracted === 0) {
-            toast.warning(`0 resources operationalized — ${summary.needsReview} need review. Check audit for details.`);
+            toast.warning(`0 resources produced knowledge — ${summary.needsReview} need review. Check audit for details.`);
           } else {
             toast.success(
-              `Processed ${summary.total} → ${summary.operationalized} operationalized, ` +
+              `Processed ${summary.total} → ${summary.operationalized} extracted, ` +
               `${summary.outcomes.partial_extraction} partial, ` +
               `${summary.outcomes.lightweight_extraction} lightweight, ` +
               `${summary.outcomes.needs_review} review, ` +
-              `${summary.totalKnowledgeExtracted} KI extracted`
+              `${summary.totalKnowledgeExtracted} KI created`
             );
           }
           if (summary.needsReview > 0) toast.info(`${summary.needsReview} resources need manual review`);
