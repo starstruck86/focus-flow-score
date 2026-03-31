@@ -3,7 +3,7 @@
  * queue progress, and per-resource status tracking.
  */
 
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -14,7 +14,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { cn } from '@/lib/utils';
 import {
   Play, Square, RefreshCw, Loader2, CheckCircle2, XCircle, Clock,
-  ChevronDown, AlertTriangle, Zap, Filter, RotateCcw,
+  ChevronDown, AlertTriangle, Zap, Filter, RotateCcw, BarChart3,
 } from 'lucide-react';
 import {
   runBatchQueue,
@@ -25,7 +25,13 @@ import {
   type BatchConfig,
   type ExtractionAttempt,
 } from '@/lib/batchQueueProcessor';
-import { autoOperationalizeResource } from '@/lib/autoOperationalize';
+import { dispatchExtractionMethod, runEnrichmentOnly } from '@/lib/extractionMethodDispatch';
+import { normalizeSourceType } from '@/lib/sourceTypeNormalizer';
+import {
+  createBatchRun, finalizeBatchRun, persistJobRecords,
+  hasActiveJobInDB, loadBatchRunHistory, computeBatchMetrics,
+  type BatchRunRecord,
+} from '@/lib/batchRunPersistence';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
