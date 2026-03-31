@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { Sparkles, Wrench, Tag } from 'lucide-react';
+import { PRIMARY_ACTIONS } from '@/components/prep/QueueActionBar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -91,7 +93,46 @@ const LIFECYCLE_FILTER_ICONS: Record<LifecycleFilter, React.ReactNode> = {
   missing_content: <Inbox className="h-3 w-3" />,
 };
 
-// ── Template status filter ────────────────────────────────
+// ── Lifecycle filter → ReadinessBucket mapping ────────────
+import type { ReadinessBucket } from '@/lib/resourceAudit';
+
+const LIFECYCLE_TO_BUCKET: Partial<Record<LifecycleFilter, ReadinessBucket>> = {
+  needs_extraction: 'extractable_not_operationalized',
+  needs_activation: 'operationalized',
+  needs_context: 'content_backed_needs_fix',
+  needs_review: 'blocked_incorrectly',
+  missing_content: 'missing_content',
+  ready: 'ready',
+};
+
+const BLOCKED_TO_BUCKET: Record<string, ReadinessBucket> = {
+  no_extraction: 'extractable_not_operationalized',
+  no_activation: 'operationalized',
+  missing_contexts: 'content_backed_needs_fix',
+  stale_blocker_state: 'blocked_incorrectly',
+  empty_content: 'missing_content',
+  none: 'ready',
+};
+
+function getDominantBucket(
+  selectedIds: Set<string>,
+  lifecycleMap: Map<string, { stage: string; blocked: string }>,
+): ReadinessBucket | null {
+  const counts: Record<string, number> = {};
+  for (const id of selectedIds) {
+    const lc = lifecycleMap.get(id);
+    const bucket = lc ? (BLOCKED_TO_BUCKET[lc.blocked] ?? 'extractable_not_operationalized') : 'extractable_not_operationalized';
+    counts[bucket] = (counts[bucket] ?? 0) + 1;
+  }
+  let best: string | null = null;
+  let bestCount = 0;
+  for (const [k, v] of Object.entries(counts)) {
+    if (v > bestCount) { best = k; bestCount = v; }
+  }
+  return (best as ReadinessBucket) ?? null;
+}
+
+
 type AssetTypeFilter = 'all_assets' | 'template' | 'example' | 'reference' | 'working_asset' | 'untagged';
 
 const ASSET_TYPE_LABELS: Record<AssetTypeFilter, string> = {
@@ -930,50 +971,52 @@ export function ResourceLibraryTable({
         )}
 
         {/* Contextual bulk action for filtered views (no selection needed) */}
-        {!hasSelection && lifecycleFilter !== 'all' && filtered.length > 0 && (
-          <div className="absolute bottom-0 left-0 right-0 z-20 flex items-center gap-3 bg-card/95 backdrop-blur-sm border-t border-border px-4 py-2">
-            <span className="text-sm font-medium">{filtered.length} {LIFECYCLE_FILTER_LABELS[lifecycleFilter]}</span>
-            {(lifecycleFilter === 'needs_extraction' || lifecycleFilter === 'missing_content') && (
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
-                onClick={() => onAction('bulk_enrich_filtered', { id: '' } as Resource)}>
-                <Zap className="h-3 w-3" />
-                Enrich All {filtered.length}
+        {!hasSelection && lifecycleFilter !== 'all' && filtered.length > 0 && (() => {
+          const mapped = LIFECYCLE_TO_BUCKET[lifecycleFilter];
+          const action = mapped ? PRIMARY_ACTIONS[mapped] : null;
+          if (!action) return null;
+          const Icon = action.icon;
+          return (
+            <div className="absolute bottom-0 left-0 right-0 z-20 flex items-center gap-3 bg-card/95 backdrop-blur-sm border-t border-border px-4 py-2">
+              <span className="text-sm font-medium">{filtered.length} {LIFECYCLE_FILTER_LABELS[lifecycleFilter]}</span>
+              <Button size="sm" variant={action.variant === 'destructive' ? 'destructive' : 'outline'} className="h-7 text-xs gap-1"
+                onClick={() => onAction(`bulk_${action.actionType}_filtered`, { id: '' } as Resource)}>
+                <Icon className="h-3 w-3" />
+                {action.label.replace('Selected', `All ${filtered.length}`)}
               </Button>
-            )}
-            {lifecycleFilter === 'needs_activation' && (
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
-                onClick={() => onAction('bulk_activate_filtered', { id: '' } as Resource)}>
-                <CheckCircle2 className="h-3 w-3" />
-                Activate All {filtered.length}
-              </Button>
-            )}
-          </div>
-        )}
+            </div>
+          );
+        })()}
 
-        {/* Sticky bulk action bar — inside the table shell at the bottom */}
-        {hasSelection && (
-          <div className="absolute bottom-0 left-0 right-0 z-20 flex items-center gap-3 bg-card/95 backdrop-blur-sm border-t border-border px-4 py-2">
-            <span className="text-sm font-medium">{selectedIds.size} selected</span>
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
-              onClick={() => onAction('bulk_enrich', { id: '' } as Resource)}>
-              <Zap className="h-3 w-3" />
-              Enrich Selected
-            </Button>
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
-              onClick={() => onAction('bulk_mark_template', { id: '' } as Resource)}>
-              <Star className="h-3 w-3" />
-              Mark as Template
-            </Button>
-            <Button size="sm" variant="destructive" className="h-7 text-xs gap-1"
-              onClick={() => onAction('bulk_delete', { id: '' } as Resource)}>
-              <Trash2 className="h-3 w-3" />
-              Delete
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onToggleSelectAll}>
-              <X className="h-3 w-3 mr-1" /> Clear
-            </Button>
-          </div>
-        )}
+        {/* Sticky bulk action bar — uses queue-driven PRIMARY_ACTIONS */}
+        {hasSelection && (() => {
+          const dominantBucket = getDominantBucket(selectedIds, lifecycleMap);
+          const action = dominantBucket ? PRIMARY_ACTIONS[dominantBucket] : PRIMARY_ACTIONS['extractable_not_operationalized'];
+          const Icon = action.icon;
+          return (
+            <div className="absolute bottom-0 left-0 right-0 z-20 flex items-center gap-3 bg-card/95 backdrop-blur-sm border-t border-border px-4 py-2">
+              <span className="text-sm font-medium">{selectedIds.size} selected</span>
+              <Button size="sm" variant={action.variant === 'destructive' ? 'destructive' : 'default'} className="h-7 text-xs gap-1"
+                onClick={() => onAction(`bulk_${action.actionType}`, { id: '' } as Resource)}>
+                <Icon className="h-3 w-3" />
+                {action.label}
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
+                onClick={() => onAction('bulk_mark_template', { id: '' } as Resource)}>
+                <Star className="h-3 w-3" />
+                Mark as Template
+              </Button>
+              <Button size="sm" variant="destructive" className="h-7 text-xs gap-1"
+                onClick={() => onAction('bulk_delete', { id: '' } as Resource)}>
+                <Trash2 className="h-3 w-3" />
+                Delete
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onToggleSelectAll}>
+                <X className="h-3 w-3 mr-1" /> Clear
+              </Button>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
