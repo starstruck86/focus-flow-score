@@ -359,7 +359,7 @@ Deno.serve(async (req) => {
           status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      userId = user.id;
+      userId = userId;
     }
 
     const body = (req as any).__parsedBody || await req.json();
@@ -376,7 +376,7 @@ Deno.serve(async (req) => {
     } else {
       const { data: runRow, error: runErr } = await supabaseAdmin
         .from('pipeline_runs')
-        .insert({ user_id: user.id, mode, status: 'running' })
+        .insert({ user_id: userId, mode, status: 'running' })
         .select('id')
         .single();
       if (runErr || !runRow) {
@@ -389,9 +389,9 @@ Deno.serve(async (req) => {
 
     // Fetch all existing assets for CONTENT-BASED dedup
     const [existingKI, existingTpl, existingEx] = await Promise.all([
-      supabaseAdmin.from('knowledge_items').select('id, source_resource_id, title, tactic_summary, when_to_use, example_usage').eq('user_id', user.id),
-      supabaseAdmin.from('execution_templates').select('id, title, body').eq('user_id', user.id),
-      supabaseAdmin.from('execution_outputs').select('id, title, content').eq('user_id', user.id).eq('is_strong_example', true),
+      supabaseAdmin.from('knowledge_items').select('id, source_resource_id, title, tactic_summary, when_to_use, example_usage').eq('user_id', userId),
+      supabaseAdmin.from('execution_templates').select('id, title, body').eq('user_id', userId),
+      supabaseAdmin.from('execution_outputs').select('id, title, content').eq('user_id', userId).eq('is_strong_example', true),
     ]);
 
     const processedResourceIds = new Set(
@@ -411,13 +411,13 @@ Deno.serve(async (req) => {
       .from('pipeline_diagnoses')
       .select('resource_id')
       .eq('run_id', runId)
-      .eq('user_id', user.id);
+      .eq('user_id', userId);
     const alreadyDiagnosed = new Set((existingDiagnoses || []).map((d: any) => d.resource_id));
 
     const { data: resolvedDiags } = await supabaseAdmin
       .from('pipeline_diagnoses')
       .select('resource_id')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .neq('resolution_status', 'unresolved');
     const alreadyResolved = new Set((resolvedDiags || []).map((d: any) => d.resource_id));
 
@@ -425,7 +425,7 @@ Deno.serve(async (req) => {
     const { data: allResources } = await supabaseAdmin
       .from('resources')
       .select('id, title, content, description, tags, resource_type, content_length, enrichment_status, failure_reason, manual_input_required, content_status')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .order('content_length', { ascending: false })
       .limit(500);
 
@@ -462,7 +462,7 @@ Deno.serve(async (req) => {
       await supabaseAdmin.from('pipeline_diagnoses')
         .delete()
         .eq('resource_id', singleResourceId)
-        .eq('user_id', user.id);
+        .eq('user_id', userId);
       unprocessedPool = resources.filter((r: any) => r.id === singleResourceId);
     } else {
       unprocessedPool = resources.filter((r: any) =>
@@ -482,7 +482,7 @@ Deno.serve(async (req) => {
       const diag: DiagnosisRow = {
         resource_id: resource.id,
         run_id: runId,
-        user_id: user.id,
+        user_id: userId,
         terminal_state: 'needs_review',
         failure_reasons: [],
         trust_failures: [],
@@ -569,7 +569,7 @@ Deno.serve(async (req) => {
             } else {
               const shapedBody = shapeAsTemplate(content);
               const { data: tplData, error } = await supabaseAdmin.from('execution_templates').insert({
-                user_id: user.id, title: resource.title, body: shapedBody,
+                user_id: userId, title: resource.title, body: shapedBody,
                 template_type: 'email', output_type: 'custom', source_resource_id: resource.id,
                 tags: resource.tags || [], template_origin: 'promoted_from_resource',
                 status: 'active', created_by_user: false, confidence_score: 0.7,
@@ -582,7 +582,7 @@ Deno.serve(async (req) => {
                 // Persist provenance
                 if (tplData) {
                   await supabaseAdmin.from('asset_provenance').insert({
-                    user_id: user.id,
+                    user_id: userId,
                     asset_type: 'template',
                     asset_id: tplData.id,
                     source_resource_id: resource.id,
@@ -614,7 +614,7 @@ Deno.serve(async (req) => {
             } else {
               const shapedContent = shapeAsExample(content);
               const { data: exData, error } = await supabaseAdmin.from('execution_outputs').insert({
-                user_id: user.id, title: resource.title, content: shapedContent,
+                user_id: userId, title: resource.title, content: shapedContent,
                 output_type: 'custom', is_strong_example: true,
               }).select('id').single();
               if (!error) {
@@ -625,7 +625,7 @@ Deno.serve(async (req) => {
                 // Persist provenance
                 if (exData) {
                   await supabaseAdmin.from('asset_provenance').insert({
-                    user_id: user.id,
+                    user_id: userId,
                     asset_type: 'example',
                     asset_id: exData.id,
                     source_resource_id: resource.id,
@@ -693,7 +693,7 @@ Deno.serve(async (req) => {
                   // Find best matching tactic segment for provenance
                   const tacSegment = segmentProvenance.find(s => s.route === 'tactic') || segmentProvenance[0];
                   validItems.push({
-                    user_id: user.id, source_resource_id: resource.id, title: item.title,
+                    user_id: userId, source_resource_id: resource.id, title: item.title,
                     knowledge_type: item.knowledge_type || 'skill', chapter: item.chapter || 'messaging',
                     sub_chapter: item.sub_chapter || null,
                     tactic_summary: item.tactic_summary || item.what_to_do,
@@ -741,7 +741,7 @@ Deno.serve(async (req) => {
                       const provRecords = insertedKIs.map((ki: any) => {
                         const seg = segmentProvenance.find(s => s.index === (ki.source_segment_index ?? 0)) || segmentProvenance[0];
                         return {
-                          user_id: user.id,
+                          user_id: userId,
                           asset_type: 'knowledge',
                           asset_id: ki.id,
                           source_resource_id: resource.id,
