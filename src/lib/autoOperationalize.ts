@@ -540,7 +540,8 @@ export function derivePipelineStage(resource: {
 }, ki: { total: number; active: number; hasContexts: boolean }): PipelineStage {
   const isCB = contractIsContentBacked(resource);
 
-  if (!isContentBacked) return 'uploaded';
+  const isCB2 = isCB; // alias used below
+  if (!isCB) return 'uploaded';
 
   const tags = resource.tags ?? [];
   const dims = new Set(tags.filter(t => t.includes(':')).map(t => t.split(':')[0]));
