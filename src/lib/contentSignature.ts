@@ -490,7 +490,8 @@ export function segmentAndRoute(content: string): ContentSegment[] {
     return [{ index: 0, content, route: routes[0], allRoutes: routes, confidence: 0.5, charRange: [0, content.length] }];
   }
 
-  return rawSegments.map((seg, i) => {
+  // Route each segment
+  let segments = rawSegments.map((seg, i) => {
     const routes = routeByContent(seg.content);
     return {
       index: i,
@@ -502,6 +503,49 @@ export function segmentAndRoute(content: string): ContentSegment[] {
       charRange: [seg.charStart, seg.charEnd] as [number, number],
     };
   });
+
+  // ── Merge adjacent same-route segments if highly related ──
+  segments = mergeAdjacentSegments(segments);
+
+  return segments;
+}
+
+/**
+ * Merge adjacent segments that have the same primary route and high similarity.
+ * Prevents over-fragmentation of mixed docs.
+ */
+function mergeAdjacentSegments(segments: ContentSegment[]): ContentSegment[] {
+  if (segments.length <= 1) return segments;
+
+  const merged: ContentSegment[] = [segments[0]];
+
+  for (let i = 1; i < segments.length; i++) {
+    const prev = merged[merged.length - 1];
+    const curr = segments[i];
+
+    // Merge if same route and content is similar enough
+    const sameRoute = prev.route === curr.route;
+    const sim = sameRoute ? contentSimilarity(prev.content, curr.content) : 0;
+    // Also merge if both are short and same route (likely one logical block)
+    const bothShort = prev.content.length < 300 && curr.content.length < 300;
+
+    if (sameRoute && (sim > 0.4 || bothShort)) {
+      // Merge into prev
+      merged[merged.length - 1] = {
+        index: prev.index,
+        content: prev.content + '\n\n' + curr.content,
+        heading: prev.heading,
+        route: prev.route,
+        allRoutes: [...new Set([...prev.allRoutes, ...curr.allRoutes])],
+        confidence: Math.max(prev.confidence, curr.confidence),
+        charRange: [prev.charRange[0], curr.charRange[1]],
+      };
+    } else {
+      merged.push({ ...curr, index: merged.length });
+    }
+  }
+
+  return merged;
 }
 
 // ── Role-Specific Candidate Scoring ────────────────────────
