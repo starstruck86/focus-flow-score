@@ -440,6 +440,9 @@ export function ResourceUpsideQueue() {
         onBulkActivate={handleBulkAutoActivate}
         onStartGuided={() => { setGuidedMode(true); setGuidedIndex(0); }}
         guidedAvailable={guidedItems.length}
+        onBatchBackfill={handleBatchBackfill}
+        batchRunning={batchRunning}
+        batchResult={batchResult}
       />
 
       {/* Stuck reasons */}
