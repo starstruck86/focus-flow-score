@@ -668,6 +668,8 @@ Deno.serve(async (req) => {
                   }
                   if (item.tactic_summary && item.tactic_summary.length >= 20) allGeneric = false;
 
+                  // Find best matching tactic segment for provenance
+                  const tacSegment = segmentProvenance.find(s => s.route === 'tactic') || segmentProvenance[0];
                   validItems.push({
                     user_id: user.id, source_resource_id: resource.id, title: item.title,
                     knowledge_type: item.knowledge_type || 'skill', chapter: item.chapter || 'messaging',
@@ -681,6 +683,11 @@ Deno.serve(async (req) => {
                     active: validation.passed, user_edited: false,
                     applies_to_contexts: ['dave', 'roleplay', 'prep', 'playbooks'],
                     tags: [...(resource.tags || []), item.knowledge_type || 'skill', item.chapter || 'messaging'],
+                    // Segment provenance for knowledge items
+                    source_segment_index: tacSegment.index,
+                    source_char_range: tacSegment.charRange,
+                    source_heading: tacSegment.heading || null,
+                    source_excerpt: (item.tactic_summary || item.what_to_do || '').slice(0, 500),
                     activation_metadata: !validation.passed ? {
                       failed_gates: validation.failedGates, trust_score: validation.score,
                       most_similar: validation.mostSimilar || null, source_title: resource.title,
