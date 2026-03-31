@@ -108,7 +108,7 @@ export function ClusterReviewPanel({ resources, onResolved }: ClusterReviewPanel
       const { data } = await supabase.from('execution_outputs').insert({
         user_id: user.id,
         title: member.title,
-        content: shapedContent.slice(0, 5000),
+        content: shapedContent,
         output_type: 'custom',
         is_strong_example: true,
       }).select('id').single();

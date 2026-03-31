@@ -707,13 +707,31 @@ Deno.serve(async (req) => {
                 }
 
                 if (validItems.length > 0) {
-                  const { error: insertErr } = await supabaseAdmin.from('knowledge_items').insert(validItems);
+                  const { data: insertedKIs, error: insertErr } = await supabaseAdmin.from('knowledge_items').insert(validItems).select('id, source_resource_id, source_segment_index, source_char_range, source_heading, tactic_summary');
                   if (!insertErr) {
                     diag.assets_created.knowledge_items += validItems.length;
                     diag.assets_created.knowledge_activated += validItems.filter((v: any) => v.active).length;
                     results.knowledge_created += validItems.length;
                     results.knowledge_activated += validItems.filter((v: any) => v.active).length;
                     createdSomething = true;
+                    // Persist provenance for each knowledge item
+                    if (insertedKIs && insertedKIs.length > 0) {
+                      const provRecords = insertedKIs.map((ki: any) => {
+                        const seg = segmentProvenance.find(s => s.index === (ki.source_segment_index ?? 0)) || segmentProvenance[0];
+                        return {
+                          user_id: user.id,
+                          asset_type: 'knowledge',
+                          asset_id: ki.id,
+                          source_resource_id: resource.id,
+                          source_segment_index: ki.source_segment_index,
+                          source_char_range: ki.source_char_range,
+                          source_heading: ki.source_heading,
+                          original_content: seg.content,
+                          transformed_content: ki.tactic_summary || '',
+                        };
+                      });
+                      await supabaseAdmin.from('asset_provenance').insert(provRecords);
+                    }
                   }
                 }
               }
