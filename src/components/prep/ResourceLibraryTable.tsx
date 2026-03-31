@@ -114,22 +114,53 @@ const BLOCKED_TO_BUCKET: Record<string, ReadinessBucket> = {
   none: 'ready',
 };
 
-function getDominantBucket(
+const BUCKET_FRIENDLY_LABEL: Partial<Record<ReadinessBucket, string>> = {
+  extractable_not_operationalized: 'need extraction',
+  operationalized: 'need activation',
+  content_backed_needs_fix: 'need context fix',
+  missing_content: 'need content fix',
+  blocked_incorrectly: 'need review',
+  junk_or_low_signal: 'are low-value / junk',
+  ready: 'are ready',
+  low_quality_extraction: 'need re-extraction',
+  needs_tagging: 'need tagging',
+  orphaned_or_inconsistent: 'need review',
+};
+
+interface SelectionAnalysis {
+  dominant: ReadinessBucket;
+  dominantCount: number;
+  total: number;
+  isMixed: boolean;
+  breakdown: { bucket: ReadinessBucket; count: number; label: string }[];
+}
+
+function analyzeSelection(
   selectedIds: Set<string>,
   lifecycleMap: Map<string, { stage: string; blocked: string }>,
-): ReadinessBucket | null {
+): SelectionAnalysis {
   const counts: Record<string, number> = {};
   for (const id of selectedIds) {
     const lc = lifecycleMap.get(id);
     const bucket = lc ? (BLOCKED_TO_BUCKET[lc.blocked] ?? 'extractable_not_operationalized') : 'extractable_not_operationalized';
     counts[bucket] = (counts[bucket] ?? 0) + 1;
   }
-  let best: string | null = null;
-  let bestCount = 0;
-  for (const [k, v] of Object.entries(counts)) {
-    if (v > bestCount) { best = k; bestCount = v; }
+
+  const entries = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => ({ bucket: k as ReadinessBucket, count: v, label: BUCKET_FRIENDLY_LABEL[k as ReadinessBucket] ?? k }));
+
+  const total = selectedIds.size;
+  let dominant = entries[0]?.bucket ?? 'extractable_not_operationalized';
+  const dominantCount = entries[0]?.count ?? 0;
+  const isMixed = entries.length > 1;
+
+  // Safety: never let destructive be primary unless it's a clear majority (>60%)
+  if (dominant === 'junk_or_low_signal' && dominantCount / total <= 0.6) {
+    dominant = 'extractable_not_operationalized'; // safe fallback
   }
-  return (best as ReadinessBucket) ?? null;
+
+  return { dominant, dominantCount, total, isMixed, breakdown: entries };
 }
 
 
@@ -990,30 +1021,47 @@ export function ResourceLibraryTable({
 
         {/* Sticky bulk action bar — uses queue-driven PRIMARY_ACTIONS */}
         {hasSelection && (() => {
-          const dominantBucket = getDominantBucket(selectedIds, lifecycleMap);
-          const action = dominantBucket ? PRIMARY_ACTIONS[dominantBucket] : PRIMARY_ACTIONS['extractable_not_operationalized'];
+          const analysis = analyzeSelection(selectedIds, lifecycleMap);
+          const action = PRIMARY_ACTIONS[analysis.dominant];
           const Icon = action.icon;
           return (
-            <div className="absolute bottom-0 left-0 right-0 z-20 flex items-center gap-3 bg-card/95 backdrop-blur-sm border-t border-border px-4 py-2">
-              <span className="text-sm font-medium">{selectedIds.size} selected</span>
-              <Button size="sm" variant={action.variant === 'destructive' ? 'destructive' : 'default'} className="h-7 text-xs gap-1"
-                onClick={() => onAction(`bulk_${action.actionType}`, { id: '' } as Resource)}>
-                <Icon className="h-3 w-3" />
-                {action.label}
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
-                onClick={() => onAction('bulk_mark_template', { id: '' } as Resource)}>
-                <Star className="h-3 w-3" />
-                Mark as Template
-              </Button>
-              <Button size="sm" variant="destructive" className="h-7 text-xs gap-1"
-                onClick={() => onAction('bulk_delete', { id: '' } as Resource)}>
-                <Trash2 className="h-3 w-3" />
-                Delete
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onToggleSelectAll}>
-                <X className="h-3 w-3 mr-1" /> Clear
-              </Button>
+            <div className="absolute bottom-0 left-0 right-0 z-20 bg-card/95 backdrop-blur-sm border-t border-border px-4 py-2 space-y-1">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium">{selectedIds.size} selected</span>
+                <Button size="sm" variant={action.variant === 'destructive' ? 'destructive' : 'default'} className="h-7 text-xs gap-1"
+                  onClick={() => onAction(`bulk_${action.actionType}`, { id: '' } as Resource)}>
+                  <Icon className="h-3 w-3" />
+                  {action.label}
+                </Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
+                  onClick={() => onAction('bulk_mark_template', { id: '' } as Resource)}>
+                  <Star className="h-3 w-3" />
+                  Mark as Template
+                </Button>
+                <Button size="sm" variant="destructive" className="h-7 text-xs gap-1"
+                  onClick={() => onAction('bulk_delete', { id: '' } as Resource)}>
+                  <Trash2 className="h-3 w-3" />
+                  Delete
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onToggleSelectAll}>
+                  <X className="h-3 w-3 mr-1" /> Clear
+                </Button>
+              </div>
+              {analysis.isMixed && (
+                <p className="text-[10px] text-muted-foreground leading-tight">
+                  Primary action: <span className="font-medium text-foreground">{analysis.dominantCount} of {analysis.total}</span> {analysis.breakdown[0]?.label}
+                  {analysis.breakdown.length > 1 && (
+                    <span>
+                      {' · '}
+                      {analysis.breakdown.slice(1).map((b, i) => (
+                        <span key={b.bucket}>
+                          {i > 0 && ', '}{b.count} {b.label}
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                </p>
+              )}
             </div>
           );
         })()}
