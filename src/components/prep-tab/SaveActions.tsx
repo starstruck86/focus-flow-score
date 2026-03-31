@@ -13,6 +13,8 @@ import { Save, FileText, Star, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSaveOutput } from '@/hooks/useExecutionOutputs';
 import { useCreateTemplate } from '@/hooks/useExecutionTemplates';
+import { useAuth } from '@/contexts/AuthContext';
+import { trackActionizationFeedback } from '@/lib/actionizationEngine';
 
 const USE_CASES = [
   'Discovery',
@@ -36,6 +38,7 @@ interface Props {
 }
 
 export function SaveActions({ output, subjectLine, actionLabel, accountName }: Props) {
+  const { user } = useAuth();
   const [mode, setMode] = useState<SaveMode | null>(null);
   const [name, setName] = useState('');
   const [useCase, setUseCase] = useState('');
@@ -81,7 +84,11 @@ export function SaveActions({ output, subjectLine, actionLabel, accountName }: P
         use_case: useCase || null,
         tags: useCase ? [useCase.toLowerCase()] : [],
       }, {
-        onSuccess: () => { toast.success('Saved as Template'); setMode(null); },
+        onSuccess: () => {
+          toast.success('Saved as Template');
+          setMode(null);
+          if (user) trackActionizationFeedback(user.id, { outputId: 'save', tacticsUsed: [], promptsUsed: [], templatesUsed: [], action: 'saved_as_template' });
+        },
         onError: () => toast.error('Save failed'),
       });
     } else if (mode === 'example') {
@@ -94,7 +101,11 @@ export function SaveActions({ output, subjectLine, actionLabel, accountName }: P
         is_strong_example: true,
         custom_instructions: notes || null,
       }, {
-        onSuccess: () => { toast.success('Saved as Example'); setMode(null); },
+        onSuccess: () => {
+          toast.success('Saved as Example');
+          setMode(null);
+          if (user) trackActionizationFeedback(user.id, { outputId: 'save', tacticsUsed: [], promptsUsed: [], templatesUsed: [], action: 'saved_as_example' });
+        },
         onError: () => toast.error('Save failed'),
       });
     }

@@ -20,6 +20,8 @@ serve(async (req) => {
       actionPrompt,
       contextText,
       resourceContext,
+      tacticInjection,
+      promptInjection,
       // Legacy / shared fields
       outputType,
       accountName,
@@ -76,6 +78,14 @@ serve(async (req) => {
 
     if (customInstructions) {
       parts.push(`\nAdditional instructions: ${customInstructions}`);
+    }
+
+    if (tacticInjection) {
+      parts.push(tacticInjection);
+    }
+
+    if (promptInjection) {
+      parts.push(promptInjection);
     }
 
     parts.push(
