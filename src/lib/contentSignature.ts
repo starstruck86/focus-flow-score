@@ -424,6 +424,10 @@ export interface ContentSegment {
   allRoutes: ContentRoute[];
   confidence: number;
   charRange: [number, number];
+  /** Populated when this segment was created by merging adjacent segments */
+  mergedFromIndices?: number[];
+  mergeReason?: 'same_route_similarity' | 'same_route_short_segments';
+  mergeSimilarityScore?: number;
 }
 
 /**
