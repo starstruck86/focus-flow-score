@@ -1640,6 +1640,69 @@ export type Database = {
         }
         Relationships: []
       }
+      extraction_pipeline_jobs: {
+        Row: {
+          cancelled_at: string | null
+          completed_at: string | null
+          created_at: string
+          error_summary: Json | null
+          failed_count: number
+          filter_criteria: Json | null
+          id: string
+          job_scope: string
+          job_type: string
+          processed_count: number
+          progress_log: Json | null
+          skipped_count: number
+          started_at: string | null
+          status: string
+          success_count: number
+          total_resources: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_summary?: Json | null
+          failed_count?: number
+          filter_criteria?: Json | null
+          id?: string
+          job_scope?: string
+          job_type?: string
+          processed_count?: number
+          progress_log?: Json | null
+          skipped_count?: number
+          started_at?: string | null
+          status?: string
+          success_count?: number
+          total_resources?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_summary?: Json | null
+          failed_count?: number
+          filter_criteria?: Json | null
+          id?: string
+          job_scope?: string
+          job_type?: string
+          processed_count?: number
+          progress_log?: Json | null
+          skipped_count?: number
+          started_at?: string | null
+          status?: string
+          success_count?: number
+          total_resources?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       holidays: {
         Row: {
           created_at: string
@@ -3333,6 +3396,12 @@ export type Database = {
           advanced_extraction_attempts: number | null
           advanced_extraction_status: string | null
           author_or_speaker: string | null
+          block_auto_fixable: boolean | null
+          block_last_attempt_at: string | null
+          block_next_action: string | null
+          block_reason: string | null
+          block_retry_count: number | null
+          block_terminal: boolean | null
           brain_status: string
           content: string | null
           content_classification: string | null
@@ -3351,6 +3420,8 @@ export type Database = {
           enrichment_version: number
           external_id: string | null
           extraction_method: string | null
+          extraction_priority_factors: Json | null
+          extraction_priority_score: number | null
           failure_count: number
           failure_reason: string | null
           file_url: string | null
@@ -3365,10 +3436,12 @@ export type Database = {
           last_reconciled_at: string | null
           last_recovery_error: string | null
           last_status_change_at: string | null
+          lightweight_extraction: Json | null
           manual_content_present: boolean | null
           manual_input_required: boolean | null
           next_best_action: string | null
           opportunity_id: string | null
+          pipeline_queue: string | null
           platform_status: string | null
           recovery_attempt_count: number | null
           recovery_queue_bucket: string | null
@@ -3394,6 +3467,12 @@ export type Database = {
           advanced_extraction_attempts?: number | null
           advanced_extraction_status?: string | null
           author_or_speaker?: string | null
+          block_auto_fixable?: boolean | null
+          block_last_attempt_at?: string | null
+          block_next_action?: string | null
+          block_reason?: string | null
+          block_retry_count?: number | null
+          block_terminal?: boolean | null
           brain_status?: string
           content?: string | null
           content_classification?: string | null
@@ -3412,6 +3491,8 @@ export type Database = {
           enrichment_version?: number
           external_id?: string | null
           extraction_method?: string | null
+          extraction_priority_factors?: Json | null
+          extraction_priority_score?: number | null
           failure_count?: number
           failure_reason?: string | null
           file_url?: string | null
@@ -3426,10 +3507,12 @@ export type Database = {
           last_reconciled_at?: string | null
           last_recovery_error?: string | null
           last_status_change_at?: string | null
+          lightweight_extraction?: Json | null
           manual_content_present?: boolean | null
           manual_input_required?: boolean | null
           next_best_action?: string | null
           opportunity_id?: string | null
+          pipeline_queue?: string | null
           platform_status?: string | null
           recovery_attempt_count?: number | null
           recovery_queue_bucket?: string | null
@@ -3455,6 +3538,12 @@ export type Database = {
           advanced_extraction_attempts?: number | null
           advanced_extraction_status?: string | null
           author_or_speaker?: string | null
+          block_auto_fixable?: boolean | null
+          block_last_attempt_at?: string | null
+          block_next_action?: string | null
+          block_reason?: string | null
+          block_retry_count?: number | null
+          block_terminal?: boolean | null
           brain_status?: string
           content?: string | null
           content_classification?: string | null
@@ -3473,6 +3562,8 @@ export type Database = {
           enrichment_version?: number
           external_id?: string | null
           extraction_method?: string | null
+          extraction_priority_factors?: Json | null
+          extraction_priority_score?: number | null
           failure_count?: number
           failure_reason?: string | null
           file_url?: string | null
@@ -3487,10 +3578,12 @@ export type Database = {
           last_reconciled_at?: string | null
           last_recovery_error?: string | null
           last_status_change_at?: string | null
+          lightweight_extraction?: Json | null
           manual_content_present?: boolean | null
           manual_input_required?: boolean | null
           next_best_action?: string | null
           opportunity_id?: string | null
+          pipeline_queue?: string | null
           platform_status?: string | null
           recovery_attempt_count?: number | null
           recovery_queue_bucket?: string | null
