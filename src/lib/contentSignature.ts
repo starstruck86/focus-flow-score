@@ -377,26 +377,29 @@ export function shapeAsExample(content: string): TransformationResult {
   };
 }
 
-// ── Segment-Level Routing ──────────────────────────────────
+// ── Segment-Level Routing (First-Class) ────────────────────
 
 export interface ContentSegment {
   index: number;
   content: string;
   heading?: string;
   route: ContentRoute;
+  allRoutes: ContentRoute[];
   confidence: number;
+  charRange: [number, number];
 }
 
 /**
  * Split content into logical segments (by headings or double-newlines)
  * and route each independently. Enables multi-asset extraction from one resource.
+ * Segments are first-class: each carries provenance (charRange, heading, route).
  */
 export function segmentAndRoute(content: string): ContentSegment[] {
   if (!content || content.length < 100) {
-    return [{ index: 0, content, route: routeByContent(content)[0], confidence: 0.5 }];
+    const routes = routeByContent(content);
+    return [{ index: 0, content, route: routes[0], allRoutes: routes, confidence: 0.5, charRange: [0, content?.length || 0] }];
   }
 
-  // Split by markdown headings or double-newline paragraphs
   const headingPattern = /^(#{1,3})\s+(.+)$/gm;
   const headings: Array<{ index: number; level: number; title: string; pos: number }> = [];
   let match;
@@ -404,46 +407,50 @@ export function segmentAndRoute(content: string): ContentSegment[] {
     headings.push({ index: headings.length, level: match[1].length, title: match[2], pos: match.index });
   }
 
-  let rawSegments: Array<{ content: string; heading?: string }>;
+  let rawSegments: Array<{ content: string; heading?: string; charStart: number; charEnd: number }>;
 
   if (headings.length >= 2) {
-    // Split by headings
     rawSegments = [];
     for (let i = 0; i < headings.length; i++) {
       const start = headings[i].pos;
       const end = i + 1 < headings.length ? headings[i + 1].pos : content.length;
       const segContent = content.slice(start, end).trim();
       if (segContent.length >= 50) {
-        rawSegments.push({ content: segContent, heading: headings[i].title });
+        rawSegments.push({ content: segContent, heading: headings[i].title, charStart: start, charEnd: end });
       }
     }
-    // Include any preamble before first heading
     if (headings[0].pos > 80) {
       const preamble = content.slice(0, headings[0].pos).trim();
       if (preamble.length >= 50) {
-        rawSegments.unshift({ content: preamble });
+        rawSegments.unshift({ content: preamble, charStart: 0, charEnd: headings[0].pos });
       }
     }
   } else {
-    // Split by double-newlines into paragraphs, then group into segments of ≥150 chars
     const paragraphs = content.split(/\n{2,}/).filter(p => p.trim().length > 20);
     if (paragraphs.length <= 2) {
-      return [{ index: 0, content, route: routeByContent(content)[0], confidence: 0.5 }];
+      const routes = routeByContent(content);
+      return [{ index: 0, content, route: routes[0], allRoutes: routes, confidence: 0.5, charRange: [0, content.length] }];
     }
     rawSegments = [];
     let buffer = '';
+    let bufStart = 0;
+    let pos = 0;
     for (const para of paragraphs) {
+      const paraStart = content.indexOf(para, pos);
+      if (!buffer) bufStart = paraStart;
       buffer += (buffer ? '\n\n' : '') + para;
+      pos = paraStart + para.length;
       if (buffer.length >= 200) {
-        rawSegments.push({ content: buffer });
+        rawSegments.push({ content: buffer, charStart: bufStart, charEnd: pos });
         buffer = '';
       }
     }
-    if (buffer.length >= 50) rawSegments.push({ content: buffer });
+    if (buffer.length >= 50) rawSegments.push({ content: buffer, charStart: bufStart, charEnd: pos });
   }
 
   if (rawSegments.length <= 1) {
-    return [{ index: 0, content, route: routeByContent(content)[0], confidence: 0.5 }];
+    const routes = routeByContent(content);
+    return [{ index: 0, content, route: routes[0], allRoutes: routes, confidence: 0.5, charRange: [0, content.length] }];
   }
 
   return rawSegments.map((seg, i) => {
@@ -453,7 +460,9 @@ export function segmentAndRoute(content: string): ContentSegment[] {
       content: seg.content,
       heading: seg.heading,
       route: routes[0],
+      allRoutes: routes,
       confidence: scoreRouteConfidence(seg.content, routes[0]),
+      charRange: [seg.charStart, seg.charEnd] as [number, number],
     };
   });
 }
