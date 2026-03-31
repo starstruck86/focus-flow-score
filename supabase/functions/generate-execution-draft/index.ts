@@ -20,6 +20,8 @@ serve(async (req) => {
       actionPrompt,
       contextText,
       resourceContext,
+      tacticInjection,
+      promptInjection,
       // Legacy / shared fields
       outputType,
       accountName,
