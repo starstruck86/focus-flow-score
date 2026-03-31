@@ -1051,7 +1051,6 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                       </Collapsible>
                     )}
                   </div>
-                </div>
 
                 <Separator />
 
@@ -1248,7 +1247,7 @@ function OperatorSummaryPanel({ summary }: { summary: BatchSummary }) {
     nextAction = 'Check resource content quality and re-enrich if needed.';
   }
 
-  const getFailureAction = (outcome: PipelineOutcome): string => {
+  const getFailureAction = (outcome: string): string => {
     switch (outcome) {
       case 'no_content': return 'Add transcript or manual notes';
       case 'needs_review': return 'Review extraction output';
