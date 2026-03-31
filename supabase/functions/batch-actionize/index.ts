@@ -531,6 +531,8 @@ Deno.serve(async (req) => {
         let mostSimilar: string | null = null;
 
         // STEP 2a: Template route — CONTENT-BASED dedup
+        // Find the best template segment for provenance
+        const tplSegment = segmentProvenance.find(s => s.route === 'template') || segmentProvenance[0];
         if (routes.includes('template')) {
           if (contentLen < 200) {
             failureReasons.push('template_incomplete');
@@ -543,18 +545,32 @@ Deno.serve(async (req) => {
               results.failure_breakdown['duplicate_template'] = (results.failure_breakdown['duplicate_template'] || 0) + 1;
               if (similar) mostSimilar = similar;
             } else {
-              const shapedBody = shapeAsTemplate(content).slice(0, 5000);
-              const { error } = await supabaseAdmin.from('execution_templates').insert({
+              const shapedBody = shapeAsTemplate(content);
+              const { data: tplData, error } = await supabaseAdmin.from('execution_templates').insert({
                 user_id: user.id, title: resource.title, body: shapedBody,
                 template_type: 'email', output_type: 'custom', source_resource_id: resource.id,
                 tags: resource.tags || [], template_origin: 'promoted_from_resource',
                 status: 'active', created_by_user: false, confidence_score: 0.7,
-              });
+              }).select('id').single();
               if (!error) {
                 diag.assets_created.templates++;
                 results.templates_created++;
                 existingTplContents.push(content.slice(0, 500));
                 createdSomething = true;
+                // Persist provenance
+                if (tplData) {
+                  await supabaseAdmin.from('asset_provenance').insert({
+                    user_id: user.id,
+                    asset_type: 'template',
+                    asset_id: tplData.id,
+                    source_resource_id: resource.id,
+                    source_segment_index: tplSegment.index,
+                    source_char_range: tplSegment.charRange,
+                    source_heading: tplSegment.heading || null,
+                    original_content: tplSegment.content,
+                    transformed_content: shapedBody,
+                  });
+                }
               }
             }
           }
