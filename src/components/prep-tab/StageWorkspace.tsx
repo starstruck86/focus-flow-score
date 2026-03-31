@@ -130,14 +130,25 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
 
     try {
       const contextText = getContextText();
-      const ranked = await fetchRankedResources({
-        userId: user.id,
-        actionId: selectedAction.id,
-        stage: stage.id,
-        persona: persona || undefined,
-        competitor: competitor || undefined,
-        contextText: contextText || undefined,
-      });
+
+      // Fetch ranked resources AND actionized assets in parallel
+      const [ranked, actionized] = await Promise.all([
+        fetchRankedResources({
+          userId: user.id,
+          actionId: selectedAction.id,
+          stage: stage.id,
+          persona: persona || undefined,
+          competitor: competitor || undefined,
+          contextText: contextText || undefined,
+        }),
+        fetchActionizedAssets({
+          userId: user.id,
+          stage: stage.id,
+          actionId: selectedAction.id,
+          persona: persona || undefined,
+          competitor: competitor || undefined,
+        }),
+      ]);
 
       // Build resource context
       const parts: string[] = [];
@@ -151,11 +162,17 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
         parts.push('KNOWLEDGE:\n' + ranked.knowledgeItems.map(k => `- ${k.title}: ${k.body}`).join('\n'));
       }
 
+      // Build actionized injections
+      const tacticInjection = buildTacticInjection(actionized.tactics);
+      const promptInjection = buildPromptInjection(actionized.prompts);
+
       setEvidence({
         templates: ranked.templates,
         examples: ranked.examples,
         knowledgeItems: ranked.knowledgeItems,
         contextItems,
+        tacticsInjected: actionized.tactics,
+        promptsInjected: actionized.prompts,
       });
 
       const { data, error } = await supabase.functions.invoke('generate-execution-draft', {
@@ -169,6 +186,8 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
           competitor: competitor || undefined,
           contextText: contextText || undefined,
           resourceContext: parts.join('\n\n') || undefined,
+          tacticInjection: tacticInjection || undefined,
+          promptInjection: promptInjection || undefined,
         },
       });
 
@@ -177,6 +196,15 @@ export function StageWorkspace({ stage, onChangeStage }: Props) {
       setSubjectLine(data?.subject_line || '');
       setSources(data?.sources || []);
       toast.success('Output generated');
+
+      // Track feedback for actionization engine
+      trackActionizationFeedback(user.id, {
+        outputId: data?.id || 'generated',
+        tacticsUsed: actionized.tactics.map(t => t.id),
+        promptsUsed: actionized.prompts.map(p => p.id),
+        templatesUsed: actionized.templates.map(t => t.id),
+        action: 'used',
+      });
     } catch (err) {
       console.error('Generation error:', err);
       toast.error('Generation failed — please try again');
