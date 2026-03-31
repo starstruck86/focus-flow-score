@@ -577,6 +577,7 @@ Deno.serve(async (req) => {
         }
 
         // STEP 2b: Example route — CONTENT-BASED dedup
+        const exSegment = segmentProvenance.find(s => s.route === 'example') || segmentProvenance[0];
         if (routes.includes('example')) {
           if (contentLen < 150) {
             failureReasons.push('example_not_strong_enough');
@@ -589,16 +590,30 @@ Deno.serve(async (req) => {
               results.failure_breakdown['duplicate_example'] = (results.failure_breakdown['duplicate_example'] || 0) + 1;
               if (similar) mostSimilar = similar;
             } else {
-              const shapedContent = shapeAsExample(content).slice(0, 5000);
-              const { error } = await supabaseAdmin.from('execution_outputs').insert({
+              const shapedContent = shapeAsExample(content);
+              const { data: exData, error } = await supabaseAdmin.from('execution_outputs').insert({
                 user_id: user.id, title: resource.title, content: shapedContent,
                 output_type: 'custom', is_strong_example: true,
-              });
+              }).select('id').single();
               if (!error) {
                 diag.assets_created.examples++;
                 results.examples_created++;
                 existingExContents.push(content.slice(0, 500));
                 createdSomething = true;
+                // Persist provenance
+                if (exData) {
+                  await supabaseAdmin.from('asset_provenance').insert({
+                    user_id: user.id,
+                    asset_type: 'example',
+                    asset_id: exData.id,
+                    source_resource_id: resource.id,
+                    source_segment_index: exSegment.index,
+                    source_char_range: exSegment.charRange,
+                    source_heading: exSegment.heading || null,
+                    original_content: exSegment.content,
+                    transformed_content: shapedContent,
+                  });
+                }
               }
             }
           }
