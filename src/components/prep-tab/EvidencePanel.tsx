@@ -24,8 +24,8 @@ interface Props {
 export function EvidencePanel({ evidence }: Props) {
   if (!evidence) return null;
 
-  const { templates, examples, knowledgeItems, contextItems } = evidence;
-  const hasAnything = templates.length > 0 || examples.length > 0 || knowledgeItems.length > 0 || contextItems.length > 0;
+  const { templates, examples, knowledgeItems, contextItems, tacticsInjected = [], promptsInjected = [] } = evidence;
+  const hasAnything = templates.length > 0 || examples.length > 0 || knowledgeItems.length > 0 || contextItems.length > 0 || tacticsInjected.length > 0 || promptsInjected.length > 0;
 
   if (!hasAnything) return null;
 
@@ -81,6 +81,37 @@ export function EvidencePanel({ evidence }: Props) {
                 {k.reasons.length > 0 && (
                   <span className="ml-1 text-muted-foreground">· {k.reasons[0]}</span>
                 )}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tacticsInjected.length > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <Zap className="h-3 w-3" /> Tactics Injected ({tacticsInjected.length})
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {tacticsInjected.map(t => (
+              <Badge key={t.id} variant="outline" className="text-[9px] font-normal bg-amber-500/5 border-amber-500/20">
+                {t.statement.slice(0, 60)}{t.statement.length > 60 ? '…' : ''}
+                <span className="ml-1 text-muted-foreground">· {t.source_title}</span>
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {promptsInjected.length > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <MessageSquare className="h-3 w-3" /> Style Guidance ({promptsInjected.length})
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {promptsInjected.map(p => (
+              <Badge key={p.id} variant="outline" className="text-[9px] font-normal bg-primary/5 border-primary/20">
+                {p.title}
               </Badge>
             ))}
           </div>
