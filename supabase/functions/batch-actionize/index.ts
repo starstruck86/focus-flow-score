@@ -327,17 +327,39 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
-    const supabaseUser = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
 
-    const { data: { user } } = await supabaseUser.auth.getUser();
-    if (!user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    // Support service-role invocation: if the bearer token IS the service role key,
+    // accept user_id from the request body instead of JWT auth
+    const token = authHeader.replace('Bearer ', '');
+    const isServiceRole = token === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+    let userId: string;
+
+    if (isServiceRole) {
+      // Service role: get user_id from body (parsed below, peek here)
+      const bodyText = await req.text();
+      const bodyJson = JSON.parse(bodyText);
+      if (!bodyJson.user_id) {
+        return new Response(JSON.stringify({ error: 'Service role invocation requires user_id in body' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      userId = bodyJson.user_id;
+      // Store parsed body for later use
+      (req as any).__parsedBody = bodyJson;
+    } else {
+      const supabaseUser = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: authHeader } } },
+      );
+      const { data: { user } } = await supabaseUser.auth.getUser();
+      if (!user) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      userId = user.id;
     }
 
     const body = await req.json();
