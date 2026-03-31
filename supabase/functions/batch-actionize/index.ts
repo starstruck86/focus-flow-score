@@ -493,7 +493,7 @@ Deno.serve(async (req) => {
         // route each independently, then aggregate routes
         const segments = segmentContent(content);
         const aggregatedRoutes = new Set<string>();
-        const segmentProvenance: Array<{ index: number; route: string; charRange: [number, number]; heading?: string }> = [];
+        const segmentProvenance: Array<{ index: number; route: string; charRange: [number, number]; heading?: string; content: string }> = [];
         
         for (const seg of segments) {
           const segRoutes = routeResource(seg.content);
@@ -503,6 +503,7 @@ Deno.serve(async (req) => {
             route: segRoutes[0],
             charRange: seg.charRange,
             heading: seg.heading,
+            content: seg.content,
           });
         }
         
