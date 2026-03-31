@@ -169,7 +169,7 @@ async function reopenResolution(resourceId: string) {
 
 // ── Content-based dedup & smart snippets ───────────────────
 
-import { contentSimilarity, generateSmartSnippet } from '@/lib/contentSignature';
+import { contentSimilarity, generateSmartSnippet, shapeAsTemplate, shapeAsExample } from '@/lib/contentSignature';
 
 // ── Component ──────────────────────────────────────────────
 
