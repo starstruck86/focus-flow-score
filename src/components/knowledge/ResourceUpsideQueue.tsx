@@ -485,6 +485,9 @@ export function ResourceUpsideQueue() {
       {/* TOP 25 — Highest Impact */}
       {!guidedMode && <Top25Section items={top25} promoted={promoted} onPromote={handlePromote} />}
 
+      {/* Trust Review Queue — extracted but not activated */}
+      {!guidedMode && <TrustReviewQueue />}
+
       {/* Action buckets */}
       {!guidedMode && BUCKET_ORDER.map(bucket => (
         <BucketSection
