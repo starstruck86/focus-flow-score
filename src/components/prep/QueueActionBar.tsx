@@ -28,9 +28,9 @@ const PRIMARY_ACTIONS: Record<ReadinessBucket, QueueAction> = {
   content_backed_needs_fix: { label: 'Fix Selected', icon: Wrench, actionType: 'fix' },
   low_quality_extraction: { label: 'Re-extract Selected', icon: RefreshCw, actionType: 'autoOp' },
   blocked_incorrectly: { label: 'Review Selected', icon: Wrench, actionType: 'fix' },
-  operationalized: { label: 'Enrich Selected', icon: Zap, actionType: 'autoOp' },
+  operationalized: { label: 'Activate Selected', icon: Zap, actionType: 'activate' },
   junk_or_low_signal: { label: 'Delete Selected', icon: Trash2, actionType: 'delete', variant: 'destructive' },
-  missing_content: { label: 'Enrich Selected', icon: Zap, actionType: 'autoOp' },
+  missing_content: { label: 'Fix Content', icon: Wrench, actionType: 'fix' },
   orphaned_or_inconsistent: { label: 'Review Selected', icon: Wrench, actionType: 'fix' },
 };
 
