@@ -378,30 +378,44 @@ export function ResourceUpsideQueue() {
   // ── Batch backfill via edge function ─────────────────────
 
   const [batchRunning, setBatchRunning] = useState(false);
-  const [batchResult, setBatchResult] = useState<{
-    processed: number; knowledge_created: number; knowledge_activated: number;
-    templates_created: number; examples_created: number;
-    duplicates_suppressed: number; trust_rejected: number;
-    failed: number; remaining: number;
-    routed: Record<string, number>;
+  const [pipelineResult, setPipelineResult] = useState<{
+    total_resources: number;
+    total_processed: number;
+    already_operationalized: number;
+    batch_size: number;
+    remaining: number;
+    operationalized: number;
+    needs_review: number;
+    reference_only: number;
+    content_missing: number;
+    knowledge_created: number;
+    knowledge_activated: number;
+    templates_created: number;
+    examples_created: number;
+    duplicates_suppressed: number;
+    trust_rejected: number;
+    failure_breakdown: Record<string, number>;
+    trust_failure_breakdown: Record<string, number>;
+    diagnoses: ResourceDiagnosis[];
   } | null>(null);
 
-  const handleBatchBackfill = useCallback(async () => {
+  const handleRunPipeline = useCallback(async (mode: 'standard' | 'full_backlog' = 'standard') => {
     if (!user) return;
     setBatchRunning(true);
-    setBatchResult(null);
+    setPipelineResult(null);
     try {
       const { data, error } = await supabase.functions.invoke('batch-actionize', {
-        body: { batchSize: 15 },
+        body: { batchSize: mode === 'full_backlog' ? 50 : 15, mode },
       });
       if (error) throw error;
-      setBatchResult(data);
+      setPipelineResult(data);
       qc.invalidateQueries({ queryKey: ['knowledge-items'] });
       qc.invalidateQueries({ queryKey: ['resources'] });
-      toast.success(`Processed ${data.processed} resources → ${data.knowledge_created} actions created`);
+      const msg = `Pipeline: ${data.operationalized} operationalized · ${data.needs_review} need review · ${data.knowledge_created} KI · ${data.templates_created} templates`;
+      toast.success(msg);
     } catch (err) {
-      console.error('Batch backfill failed:', err);
-      toast.error('Batch backfill failed');
+      console.error('Pipeline failed:', err);
+      toast.error('Pipeline failed');
     } finally {
       setBatchRunning(false);
     }
