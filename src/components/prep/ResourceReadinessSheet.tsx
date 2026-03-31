@@ -314,7 +314,7 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
           if (err?.message?.includes('CRITICAL MISMATCH')) {
             toast.error('Pipeline eligibility mismatch — UI and execution disagree on what is eligible. Refreshing audit.');
           } else {
-            toast.error(`Auto-operationalize failed: ${err?.message ?? 'Unknown error'}`);
+            toast.error(`Extraction failed: ${err?.message ?? 'Unknown error'}`);
           }
         } finally {
           setAutoOpProgress(null);
