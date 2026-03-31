@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BatchSelectionPanel } from './BatchSelectionPanel';
+import { QueueActionBar, type QueueProgress } from './QueueActionBar';
 import {
   auditResourceReadiness,
   bulkFixContentBacked,
