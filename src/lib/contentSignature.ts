@@ -424,6 +424,10 @@ export interface ContentSegment {
   allRoutes: ContentRoute[];
   confidence: number;
   charRange: [number, number];
+  /** Populated when this segment was created by merging adjacent segments */
+  mergedFromIndices?: number[];
+  mergeReason?: 'same_route_similarity' | 'same_route_short_segments';
+  mergeSimilarityScore?: number;
 }
 
 /**
@@ -517,7 +521,7 @@ export function segmentAndRoute(content: string): ContentSegment[] {
 function mergeAdjacentSegments(segments: ContentSegment[]): ContentSegment[] {
   if (segments.length <= 1) return segments;
 
-  const merged: ContentSegment[] = [segments[0]];
+  const merged: ContentSegment[] = [{ ...segments[0] }];
 
   for (let i = 1; i < segments.length; i++) {
     const prev = merged[merged.length - 1];
@@ -530,6 +534,10 @@ function mergeAdjacentSegments(segments: ContentSegment[]): ContentSegment[] {
     const bothShort = prev.content.length < 300 && curr.content.length < 300;
 
     if (sameRoute && (sim > 0.4 || bothShort)) {
+      const mergeReason: ContentSegment['mergeReason'] = sim > 0.4
+        ? 'same_route_similarity'
+        : 'same_route_short_segments';
+      const prevIndices = prev.mergedFromIndices || [prev.index];
       // Merge into prev
       merged[merged.length - 1] = {
         index: prev.index,
@@ -539,6 +547,9 @@ function mergeAdjacentSegments(segments: ContentSegment[]): ContentSegment[] {
         allRoutes: [...new Set([...prev.allRoutes, ...curr.allRoutes])],
         confidence: Math.max(prev.confidence, curr.confidence),
         charRange: [prev.charRange[0], curr.charRange[1]],
+        mergedFromIndices: [...prevIndices, curr.index],
+        mergeReason,
+        mergeSimilarityScore: sim > 0 ? sim : undefined,
       };
     } else {
       merged.push({ ...curr, index: merged.length });
@@ -679,10 +690,10 @@ export interface ContentCluster {
 
 export interface ClusterResolution {
   clusterId: string;
-  canonicalResourceId: string;
+  canonicalResourceId: string | null;
   canonicalRole: ContentRoute;
   reasoning: string;
-  demotedMembers: Array<{ id: string; duplicateOf: string }>;
+  demotedMembers: Array<{ id: string; duplicateOf: string | null }>;
 }
 
 function buildCandidateReasoning(content: string, role: ContentRoute, score: number): string {
@@ -777,7 +788,7 @@ export function clusterByContent(
  */
 export function resolveCluster(
   cluster: ContentCluster,
-  canonicalId: string,
+  canonicalId: string | null,
   canonicalRole: ContentRoute,
   reasoning: string,
 ): ClusterResolution {
@@ -787,7 +798,7 @@ export function resolveCluster(
     canonicalRole,
     reasoning,
     demotedMembers: cluster.members
-      .filter(m => m.id !== canonicalId)
+      .filter(m => canonicalId ? m.id !== canonicalId : true)
       .map(m => ({ id: m.id, duplicateOf: canonicalId })),
   };
 }

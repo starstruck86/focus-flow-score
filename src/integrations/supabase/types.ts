@@ -617,7 +617,7 @@ export type Database = {
       }
       cluster_resolutions: {
         Row: {
-          canonical_resource_id: string
+          canonical_resource_id: string | null
           canonical_role: string
           cluster_id: string
           demoted_members: Json
@@ -628,7 +628,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          canonical_resource_id: string
+          canonical_resource_id?: string | null
           canonical_role: string
           cluster_id: string
           demoted_members?: Json
@@ -639,7 +639,7 @@ export type Database = {
           user_id: string
         }
         Update: {
-          canonical_resource_id?: string
+          canonical_resource_id?: string | null
           canonical_role?: string
           cluster_id?: string
           demoted_members?: Json
@@ -1915,8 +1915,12 @@ export type Database = {
           id: string
           knowledge_type: string
           product_area: string | null
+          source_char_range: Json | null
           source_doctrine_id: string | null
+          source_excerpt: string | null
+          source_heading: string | null
           source_resource_id: string | null
+          source_segment_index: number | null
           status: string
           sub_chapter: string | null
           tactic_summary: string | null
@@ -1941,8 +1945,12 @@ export type Database = {
           id?: string
           knowledge_type?: string
           product_area?: string | null
+          source_char_range?: Json | null
           source_doctrine_id?: string | null
+          source_excerpt?: string | null
+          source_heading?: string | null
           source_resource_id?: string | null
+          source_segment_index?: number | null
           status?: string
           sub_chapter?: string | null
           tactic_summary?: string | null
@@ -1967,8 +1975,12 @@ export type Database = {
           id?: string
           knowledge_type?: string
           product_area?: string | null
+          source_char_range?: Json | null
           source_doctrine_id?: string | null
+          source_excerpt?: string | null
+          source_heading?: string | null
           source_resource_id?: string | null
+          source_segment_index?: number | null
           status?: string
           sub_chapter?: string | null
           tactic_summary?: string | null
