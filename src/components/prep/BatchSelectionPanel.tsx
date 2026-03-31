@@ -364,6 +364,48 @@ export function BatchSelectionPanel({ resources, onComplete }: Props) {
       {progress && !isRunning && (
         <PostRunSummary progress={progress} />
       )}
+
+      {/* ── Metrics ── */}
+      {metrics && metrics.totalRuns > 0 && (
+        <Collapsible open={showMetrics} onOpenChange={setShowMetrics}>
+          <CollapsibleTrigger className="w-full flex items-center justify-between p-1.5 rounded hover:bg-accent/50 text-[10px] font-medium text-muted-foreground">
+            <span className="flex items-center gap-1"><BarChart3 className="h-3 w-3" /> Batch Metrics ({metrics.totalRuns} runs)</span>
+            <ChevronDown className={cn('h-3 w-3 transition-transform', showMetrics && 'rotate-180')} />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2 text-[10px]">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div>
+                  <p className="text-muted-foreground">Success Rate</p>
+                  <p className="font-semibold text-foreground">{(metrics.overallSuccessRate * 100).toFixed(1)}%</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Resources Processed</p>
+                  <p className="font-semibold text-foreground">{metrics.totalResources}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Avg Duration</p>
+                  <p className="font-semibold text-foreground">{metrics.avgBatchDurationMs > 0 ? `${(metrics.avgBatchDurationMs / 1000).toFixed(1)}s` : '—'}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Recovered by Fallback</p>
+                  <p className="font-semibold text-foreground">{metrics.recoveredByFallback}</p>
+                </div>
+              </div>
+              {metrics.topFailureReasons.length > 0 && (
+                <div>
+                  <p className="text-muted-foreground font-medium mb-1">Top Failure Reasons</p>
+                  {metrics.topFailureReasons.map((f, i) => (
+                    <p key={i} className="text-destructive text-[9px]">
+                      {f.count}× {f.reason}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
     </div>
   );
 }
