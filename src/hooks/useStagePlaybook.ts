@@ -49,14 +49,15 @@ export function useStagePlaybook(stageId: string) {
         .maybeSingle();
       if (error) throw error;
       if (!data) return null;
+      const d = data as any;
       return {
-        id: data.id,
-        stage_id: data.stage_id,
-        content: data.content as unknown as PlaybookContent,
-        resource_ids: data.resource_ids,
-        keystone_resource_ids: data.keystone_resource_ids,
-        knowledge_item_count: data.knowledge_item_count,
-        generated_at: data.generated_at,
+        id: d.id,
+        stage_id: d.stage_id,
+        content: d.content as PlaybookContent,
+        resource_ids: d.resource_ids,
+        keystone_resource_ids: d.keystone_resource_ids,
+        knowledge_item_count: d.knowledge_item_count,
+        generated_at: d.generated_at,
       } as StagePlaybook;
     },
   });
