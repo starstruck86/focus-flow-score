@@ -19,6 +19,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { inferTags, mergeTags } from './resourceTags';
+import { isContentBacked as contractIsContentBacked, ENRICHED_STATUSES } from './pipelineContract';
 
 // ── Types ──────────────────────────────────────────────────
 
