@@ -569,14 +569,59 @@ function scoreTacticCandidate(content: string): number {
   return Math.max(0, Math.min(1, score));
 }
 
-// ── Content Clustering ─────────────────────────────────────
+// ── Content Clustering (with canonical resolution) ─────────
+
+export interface ClusterMember {
+  id: string;
+  title: string;
+  content: string;
+  similarity: number;
+}
+
+export interface ClusterCandidate {
+  id: string;
+  title: string;
+  score: number;
+  reasoning: string;
+}
 
 export interface ContentCluster {
   id: string;
-  members: Array<{ id: string; title: string; content: string; similarity: number }>;
-  bestTemplate?: { id: string; title: string; score: number };
-  bestExample?: { id: string; title: string; score: number };
-  bestTactic?: { id: string; title: string; score: number };
+  members: ClusterMember[];
+  bestTemplate?: ClusterCandidate;
+  bestExample?: ClusterCandidate;
+  bestTactic?: ClusterCandidate;
+  canonicalId?: string;
+  canonicalRole?: ContentRoute;
+  canonicalReasoning?: string;
+}
+
+export interface ClusterResolution {
+  clusterId: string;
+  canonicalResourceId: string;
+  canonicalRole: ContentRoute;
+  reasoning: string;
+  demotedMembers: Array<{ id: string; duplicateOf: string }>;
+}
+
+function buildCandidateReasoning(content: string, role: ContentRoute, score: number): string {
+  const parts: string[] = [];
+  if (role === 'template') {
+    const ph = (content.match(/\[.*?\]|\{.*?\}/g) || []).length;
+    const steps = (content.match(/^(step\s*\d|phase\s*\d|\d+\.)\s/gim) || []).length;
+    if (ph > 0) parts.push(`${ph} placeholders`);
+    if (steps > 0) parts.push(`${steps} steps`);
+    if (content.length >= 300) parts.push('complete length');
+  } else if (role === 'example') {
+    if (/^(hi|hey|hello|dear)\s/im.test(content)) parts.push('has greeting');
+    if (/next steps?\s*:/i.test(content)) parts.push('has CTA');
+    if (/best regards|sincerely|cheers/im.test(content)) parts.push('has closing');
+  } else if (role === 'tactic') {
+    if (/["'""].{10,}["'""]/m.test(content)) parts.push('has talk track');
+    if (/\bwhen\s+(the|a|your)\b/i.test(content)) parts.push('has trigger');
+    if (content.length <= 500) parts.push('atomic length');
+  }
+  return parts.length > 0 ? `Score ${(score * 100).toFixed(0)}%: ${parts.join(', ')}` : `Score ${(score * 100).toFixed(0)}%`;
 }
 
 /**
@@ -609,21 +654,34 @@ export function clusterByContent(
     }
 
     if (cluster.members.length > 1) {
-      // Use role-specific scoring for best candidates
       for (const member of cluster.members) {
         const tplScore = scoreTemplateCandidate(member.content);
         const exScore = scoreExampleCandidate(member.content);
         const tacScore = scoreTacticCandidate(member.content);
 
         if (tplScore > 0.2 && (!cluster.bestTemplate || tplScore > cluster.bestTemplate.score)) {
-          cluster.bestTemplate = { id: member.id, title: member.title, score: tplScore };
+          cluster.bestTemplate = { id: member.id, title: member.title, score: tplScore, reasoning: buildCandidateReasoning(member.content, 'template', tplScore) };
         }
         if (exScore > 0.2 && (!cluster.bestExample || exScore > cluster.bestExample.score)) {
-          cluster.bestExample = { id: member.id, title: member.title, score: exScore };
+          cluster.bestExample = { id: member.id, title: member.title, score: exScore, reasoning: buildCandidateReasoning(member.content, 'example', exScore) };
         }
         if (tacScore > 0.2 && (!cluster.bestTactic || tacScore > cluster.bestTactic.score)) {
-          cluster.bestTactic = { id: member.id, title: member.title, score: tacScore };
+          cluster.bestTactic = { id: member.id, title: member.title, score: tacScore, reasoning: buildCandidateReasoning(member.content, 'tactic', tacScore) };
         }
+      }
+
+      // Auto-select canonical: highest-scoring candidate across roles
+      const candidates = [
+        cluster.bestTemplate ? { ...cluster.bestTemplate, role: 'template' as ContentRoute } : null,
+        cluster.bestExample ? { ...cluster.bestExample, role: 'example' as ContentRoute } : null,
+        cluster.bestTactic ? { ...cluster.bestTactic, role: 'tactic' as ContentRoute } : null,
+      ].filter(Boolean) as Array<ClusterCandidate & { role: ContentRoute }>;
+
+      if (candidates.length > 0) {
+        const best = candidates.reduce((a, b) => a.score > b.score ? a : b);
+        cluster.canonicalId = best.id;
+        cluster.canonicalRole = best.role;
+        cluster.canonicalReasoning = best.reasoning;
       }
 
       clusters.push(cluster);
@@ -631,4 +689,24 @@ export function clusterByContent(
   }
 
   return clusters;
+}
+
+/**
+ * Build a resolution record for a cluster.
+ */
+export function resolveCluster(
+  cluster: ContentCluster,
+  canonicalId: string,
+  canonicalRole: ContentRoute,
+  reasoning: string,
+): ClusterResolution {
+  return {
+    clusterId: cluster.id,
+    canonicalResourceId: canonicalId,
+    canonicalRole,
+    reasoning,
+    demotedMembers: cluster.members
+      .filter(m => m.id !== canonicalId)
+      .map(m => ({ id: m.id, duplicateOf: canonicalId })),
+  };
 }
