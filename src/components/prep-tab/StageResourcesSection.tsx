@@ -260,9 +260,9 @@ function ManageResourcesDialog({ stageId, stageLabel }: { stageId: string; stage
                   <span className="flex-1 min-w-0 truncate text-foreground">
                     {r.title || 'Untitled'}
                   </span>
-                  {r.content_type && (
+                  {r.resource_type && (
                     <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 shrink-0">
-                      {r.content_type}
+                      {r.resource_type}
                     </Badge>
                   )}
 

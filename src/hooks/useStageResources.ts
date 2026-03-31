@@ -44,7 +44,7 @@ export function useStageResources(stageId: string) {
       const resourceIds = (links as any[]).map((l: any) => l.resource_id);
       const { data: resources } = await supabase
         .from('resources')
-        .select('id, title, source_type, content_type')
+        .select('id, title, resource_type')
         .in('id', resourceIds);
 
       const resourceMap = new Map((resources || []).map(r => [r.id, r]));
@@ -56,8 +56,7 @@ export function useStageResources(stageId: string) {
         is_keystone: l.is_keystone,
         created_at: l.created_at,
         resource_title: resourceMap.get(l.resource_id)?.title || 'Untitled',
-        resource_type: resourceMap.get(l.resource_id)?.content_type || '',
-        resource_source_type: resourceMap.get(l.resource_id)?.source_type || '',
+        resource_type: resourceMap.get(l.resource_id)?.resource_type || '',
       })) as StageResource[];
     },
   });
