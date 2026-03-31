@@ -35,6 +35,7 @@ import {
   type UpsideScore,
 } from '@/lib/resourceClassifier';
 import { extractKnowledgeHeuristic, type ExtractionSource } from '@/lib/knowledgeExtraction';
+import { useKnowledgeItems as useAllKnowledgeItems } from '@/hooks/useKnowledgeItems';
 import { useResources, type Resource } from '@/hooks/useResources';
 import { useInsertKnowledgeItems, type KnowledgeItemInsert } from '@/hooks/useKnowledgeItems';
 import { useAuth } from '@/contexts/AuthContext';
