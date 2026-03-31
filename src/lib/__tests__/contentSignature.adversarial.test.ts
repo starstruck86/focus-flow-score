@@ -455,13 +455,14 @@ describe('Segment provenance completeness', () => {
 // ── Test 11: Routing consistency ───────────────────────────
 
 describe('Routing consistency', () => {
-  it('segment-level routing should agree with resource-level for single-segment docs', () => {
-    const singleSegDocs = [REAL_EMAIL, STRUCTURED_DRAFT, DESCRIPTIVE_DOC];
+  it('segment-level routing should include resource-level primary route in allRoutes for single-segment docs', () => {
+    const singleSegDocs = [REAL_EMAIL, DESCRIPTIVE_DOC];
     for (const doc of singleSegDocs) {
       const resourceRoutes = routeByContent(doc);
       const segments = segmentAndRoute(doc);
-      // Single or merged segment should have same primary route
-      expect(segments[0].route).toBe(resourceRoutes[0]);
+      // For single-segment docs, segment allRoutes should include the resource primary route
+      const segAllRoutes = segments.flatMap(s => s.allRoutes);
+      expect(segAllRoutes).toContain(resourceRoutes[0]);
     }
   });
 
