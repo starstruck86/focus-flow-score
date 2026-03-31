@@ -185,10 +185,10 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
   const [dupWarning, setDupWarning] = useState<{
     diagnosis: ResourceDiagnosis;
     type: 'template' | 'example';
-    similar: { id: string; title: string; similarity: number }[];
+    similar: { id: string; title: string; content: string; similarity: number }[];
   } | null>(null);
 
-  // Fetch content snippets for diagnoses
+  // Fetch smart preview snippets (route-aware)
   useEffect(() => {
     const ids = diagnoses.map(d => d.resource_id).filter(id => !snippets[id]);
     if (ids.length === 0) return;
@@ -201,7 +201,9 @@ export function ResourceFailureQueue({ diagnoses, runId, onRerunResource, onReru
         const newSnippets: Record<string, string> = {};
         for (const r of data) {
           const content = (r as any).content || '';
-          newSnippets[r.id] = content.slice(0, 200).replace(/\n+/g, ' ').trim();
+          const diag = diagnoses.find(d => d.resource_id === r.id);
+          const route = diag?.route?.split(', ')[0] || 'reference';
+          newSnippets[r.id] = generateSmartSnippet(content, route, 200);
         }
         setSnippets(prev => ({ ...prev, ...newSnippets }));
       }
