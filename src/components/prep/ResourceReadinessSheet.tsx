@@ -508,28 +508,28 @@ export function ResourceReadinessSheet({ open, onOpenChange }: Props) {
                   </Collapsible>
                 </div>
 
-                  {/* ── Auto-Op Progress + Results ── */}
-                  {autoOpProgress && (
-                    <div className="rounded-md border border-primary/20 bg-primary/5 p-2 space-y-1.5">
-                      <div className="flex items-center gap-2 text-[10px]">
-                        <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                        <span className="font-medium text-foreground">
-                          Processing {autoOpProgress.processed} / {autoOpProgress.total}
-                        </span>
-                      </div>
-                      <div className="w-full bg-muted rounded-full h-1.5">
-                        <div
-                          className="bg-primary h-1.5 rounded-full transition-all"
-                          style={{ width: `${autoOpProgress.total > 0 ? (autoOpProgress.processed / autoOpProgress.total) * 100 : 0}%` }}
-                        />
-                      </div>
-                      <p className="text-[9px] text-muted-foreground truncate">{autoOpProgress.current}</p>
+                {/* ── Auto-Op Progress + Results ── */}
+                {autoOpProgress && (
+                  <div className="rounded-md border border-primary/20 bg-primary/5 p-2 space-y-1.5">
+                    <div className="flex items-center gap-2 text-[10px]">
+                      <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                      <span className="font-medium text-foreground">
+                        Processing {autoOpProgress.processed} / {autoOpProgress.total}
+                      </span>
                     </div>
-                  )}
+                    <div className="w-full bg-muted rounded-full h-1.5">
+                      <div
+                        className="bg-primary h-1.5 rounded-full transition-all"
+                        style={{ width: `${autoOpProgress.total > 0 ? (autoOpProgress.processed / autoOpProgress.total) * 100 : 0}%` }}
+                      />
+                    </div>
+                    <p className="text-[9px] text-muted-foreground truncate">{autoOpProgress.current}</p>
+                  </div>
+                )}
 
-                  {lastAutoOpSummary && !autoOpProgress && (
-                    <OperatorSummaryPanel summary={lastAutoOpSummary} />
-                  )}
+                {lastAutoOpSummary && !autoOpProgress && (
+                  <OperatorSummaryPanel summary={lastAutoOpSummary} />
+                )}
 
                   {/* ── Backfill actions ── */}
                   <div className="pt-1.5 border-t border-border/50 space-y-1.5">
