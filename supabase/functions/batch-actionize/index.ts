@@ -205,12 +205,26 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const batchSize = Math.min(body.batchSize || 15, 50);
-    const mode = body.mode || 'standard'; // 'standard' | 'full_backlog' | 'run_until_clean'
+    const mode = body.mode || 'standard';
     const resumeRunId = body.run_id || null;
-    const maxIterations = mode === 'run_until_clean' ? 20 : 1;
 
-    // Generate or resume run_id
-    const runId = resumeRunId || crypto.randomUUID();
+    // Create or resume pipeline_run record
+    let runId: string;
+    if (resumeRunId) {
+      runId = resumeRunId;
+    } else {
+      const { data: runRow, error: runErr } = await supabaseAdmin
+        .from('pipeline_runs')
+        .insert({ user_id: user.id, mode, status: 'running' })
+        .select('id')
+        .single();
+      if (runErr || !runRow) {
+        return new Response(JSON.stringify({ error: 'Failed to create pipeline run', details: String(runErr) }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      runId = runRow.id;
+    }
 
     // Fetch all existing assets for dedup
     const [existingKI, existingTpl, existingEx] = await Promise.all([
@@ -232,13 +246,21 @@ Deno.serve(async (req) => {
       (existingEx.data || []).map((e: any) => e.title?.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim()).filter(Boolean)
     );
 
-    // Also check already-diagnosed resources in this run to avoid re-processing on resume
+    // Check already-diagnosed resources in this run (for resume)
     const { data: existingDiagnoses } = await supabaseAdmin
       .from('pipeline_diagnoses')
       .select('resource_id')
       .eq('run_id', runId)
       .eq('user_id', user.id);
     const alreadyDiagnosed = new Set((existingDiagnoses || []).map((d: any) => d.resource_id));
+
+    // Also exclude resources already resolved in prior runs
+    const { data: resolvedDiags } = await supabaseAdmin
+      .from('pipeline_diagnoses')
+      .select('resource_id')
+      .eq('user_id', user.id)
+      .neq('resolution_status', 'unresolved');
+    const alreadyResolved = new Set((resolvedDiags || []).map((d: any) => d.resource_id));
 
     // Fetch all eligible resources
     const { data: allResources } = await supabaseAdmin
@@ -280,299 +302,311 @@ Deno.serve(async (req) => {
       diagnoses: [] as any[],
     };
 
-    // ── Run-until-done loop ────────────────────────────────
-
-    let iteration = 0;
+    // Filter out already-processed, diagnosed, and resolved resources
     let unprocessedPool = resources.filter((r: any) =>
-      !processedResourceIds.has(r.id) && !alreadyDiagnosed.has(r.id)
+      !processedResourceIds.has(r.id) && !alreadyDiagnosed.has(r.id) && !alreadyResolved.has(r.id)
     );
 
-    while (iteration < maxIterations && unprocessedPool.length > 0) {
-      iteration++;
-      const batch = mode === 'run_until_clean'
-        ? unprocessedPool.slice(0, batchSize)
-        : (mode === 'full_backlog' ? unprocessedPool : unprocessedPool.slice(0, batchSize));
+    // Process one batch
+    const batch = mode === 'full_backlog'
+      ? unprocessedPool.slice(0, Math.min(unprocessedPool.length, 50))
+      : unprocessedPool.slice(0, batchSize);
 
-      const diagnosisRows: DiagnosisRow[] = [];
+    const diagnosisRows: DiagnosisRow[] = [];
 
-      for (const resource of batch) {
-        const content = resource.content || '';
-        const contentLen = content.length;
-        const diag: DiagnosisRow = {
-          resource_id: resource.id,
-          run_id: runId,
-          user_id: user.id,
-          terminal_state: 'needs_review',
-          failure_reasons: [],
-          trust_failures: [],
-          recommended_fix: '',
-          retryable: false,
-          priority: 'medium',
-          human_review_required: false,
-          most_similar_existing: null,
-          assets_created: { knowledge_items: 0, knowledge_activated: 0, templates: 0, examples: 0 },
-          route: '',
-        };
+    for (const resource of batch) {
+      const content = resource.content || '';
+      const contentLen = content.length;
+      const diag: DiagnosisRow = {
+        resource_id: resource.id,
+        run_id: runId,
+        user_id: user.id,
+        terminal_state: 'needs_review',
+        failure_reasons: [],
+        trust_failures: [],
+        recommended_fix: '',
+        retryable: false,
+        priority: 'medium',
+        human_review_required: false,
+        most_similar_existing: null,
+        assets_created: { knowledge_items: 0, knowledge_activated: 0, templates: 0, examples: 0 },
+        route: '',
+      };
 
-        // Also keep a client-facing version with title
-        const clientDiag: any = { ...diag, title: resource.title };
+      try {
+        // STEP 0: Content check
+        if (!content || contentLen < 50) {
+          diag.terminal_state = 'content_missing';
+          diag.failure_reasons = ['missing_content'];
+          diag.recommended_fix = getRemediationPath('missing_content');
+          diag.priority = 'low';
+          diag.human_review_required = true;
+          results.content_missing++;
+          results.failure_breakdown['missing_content'] = (results.failure_breakdown['missing_content'] || 0) + 1;
+          diagnosisRows.push(diag);
+          results.diagnoses.push({ ...diag, title: resource.title });
+          results.total_processed++;
+          continue;
+        }
 
-        try {
-          // STEP 0: Content check
-          if (!content || contentLen < 50) {
-            diag.terminal_state = 'content_missing';
-            diag.failure_reasons = ['missing_content'];
-            diag.recommended_fix = getRemediationPath('missing_content');
-            diag.priority = 'low';
-            diag.human_review_required = true;
-            results.content_missing++;
-            results.failure_breakdown['missing_content'] = (results.failure_breakdown['missing_content'] || 0) + 1;
-            diagnosisRows.push(diag);
-            Object.assign(clientDiag, diag);
-            results.diagnoses.push({ ...clientDiag, title: resource.title });
-            results.total_processed++;
-            continue;
-          }
+        // STEP 1: Route
+        const routes = routeResource(content, resource.title);
+        diag.route = routes.join(', ');
 
-          // STEP 1: Route
-          const routes = routeResource(content, resource.title);
-          diag.route = routes.join(', ');
+        if (routes.length === 1 && routes[0] === 'reference') {
+          diag.terminal_state = classifyReferenceType(content, contentLen);
+          diag.failure_reasons = ['routed_reference_only'];
+          diag.recommended_fix = getRemediationPath('routed_reference_only');
+          diag.priority = 'low';
+          const stateKey = diag.terminal_state as keyof typeof results;
+          if (typeof results[stateKey] === 'number') (results as any)[stateKey]++;
+          results.failure_breakdown['routed_reference_only'] = (results.failure_breakdown['routed_reference_only'] || 0) + 1;
+          diagnosisRows.push(diag);
+          results.diagnoses.push({ ...diag, title: resource.title });
+          results.total_processed++;
+          continue;
+        }
 
-          if (routes.length === 1 && routes[0] === 'reference') {
-            diag.terminal_state = classifyReferenceType(content, contentLen);
-            diag.failure_reasons = ['routed_reference_only'];
-            diag.recommended_fix = getRemediationPath('routed_reference_only');
-            diag.priority = 'low';
-            const stateKey = diag.terminal_state as keyof typeof results;
-            if (typeof results[stateKey] === 'number') (results as any)[stateKey]++;
-            results.failure_breakdown['routed_reference_only'] = (results.failure_breakdown['routed_reference_only'] || 0) + 1;
-            diagnosisRows.push(diag);
-            results.diagnoses.push({ ...diag, title: resource.title });
-            results.total_processed++;
-            continue;
-          }
+        let createdSomething = false;
+        const failureReasons: ResourceFailureReason[] = [];
+        const trustFailures: string[] = [];
+        let mostSimilar: string | null = null;
 
-          let createdSomething = false;
-          const failureReasons: ResourceFailureReason[] = [];
-          const trustFailures: string[] = [];
-          let mostSimilar: string | null = null;
-
-          // STEP 2a: Template route
-          if (routes.includes('template')) {
-            if (contentLen < 200) {
-              failureReasons.push('template_incomplete');
-              results.failure_breakdown['template_incomplete'] = (results.failure_breakdown['template_incomplete'] || 0) + 1;
-            } else if (isDuplicate(resource.title, existingTplTitles)) {
-              failureReasons.push('duplicate_template');
-              results.duplicates_suppressed++;
-              results.failure_breakdown['duplicate_template'] = (results.failure_breakdown['duplicate_template'] || 0) + 1;
-            } else {
-              const { error } = await supabaseAdmin.from('execution_templates').insert({
-                user_id: user.id, title: resource.title, body: content.slice(0, 5000),
-                template_type: 'email', output_type: 'custom', source_resource_id: resource.id,
-                tags: resource.tags || [], template_origin: 'promoted_from_resource',
-                status: 'active', created_by_user: false, confidence_score: 0.7,
-              });
-              if (!error) {
-                diag.assets_created.templates++;
-                results.templates_created++;
-                existingTplTitles.add(resource.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim());
-                createdSomething = true;
-              }
+        // STEP 2a: Template route
+        if (routes.includes('template')) {
+          if (contentLen < 200) {
+            failureReasons.push('template_incomplete');
+            results.failure_breakdown['template_incomplete'] = (results.failure_breakdown['template_incomplete'] || 0) + 1;
+          } else if (isDuplicate(resource.title, existingTplTitles)) {
+            failureReasons.push('duplicate_template');
+            results.duplicates_suppressed++;
+            results.failure_breakdown['duplicate_template'] = (results.failure_breakdown['duplicate_template'] || 0) + 1;
+          } else {
+            const { error } = await supabaseAdmin.from('execution_templates').insert({
+              user_id: user.id, title: resource.title, body: content.slice(0, 5000),
+              template_type: 'email', output_type: 'custom', source_resource_id: resource.id,
+              tags: resource.tags || [], template_origin: 'promoted_from_resource',
+              status: 'active', created_by_user: false, confidence_score: 0.7,
+            });
+            if (!error) {
+              diag.assets_created.templates++;
+              results.templates_created++;
+              existingTplTitles.add(resource.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim());
+              createdSomething = true;
             }
           }
+        }
 
-          // STEP 2b: Example route
-          if (routes.includes('example')) {
-            if (contentLen < 150) {
-              failureReasons.push('example_not_strong_enough');
-              results.failure_breakdown['example_not_strong_enough'] = (results.failure_breakdown['example_not_strong_enough'] || 0) + 1;
-            } else if (isDuplicate(resource.title, existingExTitles)) {
-              failureReasons.push('duplicate_example');
-              results.duplicates_suppressed++;
-              results.failure_breakdown['duplicate_example'] = (results.failure_breakdown['duplicate_example'] || 0) + 1;
-            } else {
-              const { error } = await supabaseAdmin.from('execution_outputs').insert({
-                user_id: user.id, title: resource.title, content: content.slice(0, 5000),
-                output_type: 'custom', is_strong_example: true,
-              });
-              if (!error) {
-                diag.assets_created.examples++;
-                results.examples_created++;
-                existingExTitles.add(resource.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim());
-                createdSomething = true;
-              }
+        // STEP 2b: Example route
+        if (routes.includes('example')) {
+          if (contentLen < 150) {
+            failureReasons.push('example_not_strong_enough');
+            results.failure_breakdown['example_not_strong_enough'] = (results.failure_breakdown['example_not_strong_enough'] || 0) + 1;
+          } else if (isDuplicate(resource.title, existingExTitles)) {
+            failureReasons.push('duplicate_example');
+            results.duplicates_suppressed++;
+            results.failure_breakdown['duplicate_example'] = (results.failure_breakdown['duplicate_example'] || 0) + 1;
+          } else {
+            const { error } = await supabaseAdmin.from('execution_outputs').insert({
+              user_id: user.id, title: resource.title, content: content.slice(0, 5000),
+              output_type: 'custom', is_strong_example: true,
+            });
+            if (!error) {
+              diag.assets_created.examples++;
+              results.examples_created++;
+              existingExTitles.add(resource.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim());
+              createdSomething = true;
             }
           }
+        }
 
-          // STEP 2c: Tactic extraction
-          if (routes.includes('tactic')) {
-            try {
-              const extractRes = await fetch(
-                `${Deno.env.get('SUPABASE_URL')}/functions/v1/extract-tactics`,
-                {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
-                  body: JSON.stringify({
-                    title: resource.title, content: content.slice(0, 12000),
-                    description: resource.description, tags: resource.tags,
-                    resourceType: resource.resource_type,
-                  }),
-                }
-              );
-
-              if (!extractRes.ok) {
-                failureReasons.push('extraction_error');
-                diag.retryable = true;
-                results.failure_breakdown['extraction_error'] = (results.failure_breakdown['extraction_error'] || 0) + 1;
-              } else {
-                const extracted = await extractRes.json();
-                const items = extracted.items || [];
-
-                if (items.length === 0) {
-                  failureReasons.push('extraction_returned_zero');
-                  diag.retryable = true;
-                  results.failure_breakdown['extraction_returned_zero'] = (results.failure_breakdown['extraction_returned_zero'] || 0) + 1;
-                } else {
-                  const validItems = [];
-                  let allGeneric = true;
-
-                  for (const item of items) {
-                    const validation = validateItem(item, existingKITitles);
-                    for (const gate of validation.failedGates) {
-                      results.trust_failure_breakdown[gate] = (results.trust_failure_breakdown[gate] || 0) + 1;
-                      if (!trustFailures.includes(gate)) trustFailures.push(gate);
-                    }
-                    if (validation.failedGates.includes('distinctness') && validation.mostSimilar) {
-                      mostSimilar = validation.mostSimilar;
-                    }
-                    if (validation.failedGates.includes('distinctness')) {
-                      results.duplicates_suppressed++;
-                      continue;
-                    }
-                    if (item.tactic_summary && item.tactic_summary.length >= 20) allGeneric = false;
-
-                    validItems.push({
-                      user_id: user.id, source_resource_id: resource.id, title: item.title,
-                      knowledge_type: item.knowledge_type || 'skill', chapter: item.chapter || 'messaging',
-                      sub_chapter: item.sub_chapter || null,
-                      tactic_summary: item.tactic_summary || item.what_to_do,
-                      when_to_use: item.when_to_use, when_not_to_use: item.when_not_to_use || null,
-                      example_usage: item.example_usage || item.example || null,
-                      why_it_matters: item.why_it_matters || null,
-                      confidence_score: validation.score,
-                      status: validation.passed ? 'active' : 'extracted',
-                      active: validation.passed, user_edited: false,
-                      applies_to_contexts: ['dave', 'roleplay', 'prep', 'playbooks'],
-                      tags: [...(resource.tags || []), item.knowledge_type || 'skill', item.chapter || 'messaging'],
-                      activation_metadata: !validation.passed ? {
-                        failed_gates: validation.failedGates, trust_score: validation.score,
-                        most_similar: validation.mostSimilar || null, source_title: resource.title,
-                        remediation: validation.failedGates.map((g: string) =>
-                          getRemediationPath(`trust_failed_${g}` as ResourceFailureReason)
-                        ),
-                      } : null,
-                    });
-                    existingKITitles.add(item.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim());
-                    if (!validation.passed) results.trust_rejected++;
-                  }
-
-                  if (allGeneric && validItems.length > 0) {
-                    failureReasons.push('extraction_too_generic');
-                    results.failure_breakdown['extraction_too_generic'] = (results.failure_breakdown['extraction_too_generic'] || 0) + 1;
-                  }
-
-                  if (validItems.length > 0) {
-                    const { error: insertErr } = await supabaseAdmin.from('knowledge_items').insert(validItems);
-                    if (!insertErr) {
-                      diag.assets_created.knowledge_items += validItems.length;
-                      diag.assets_created.knowledge_activated += validItems.filter((v: any) => v.active).length;
-                      results.knowledge_created += validItems.length;
-                      results.knowledge_activated += validItems.filter((v: any) => v.active).length;
-                      createdSomething = true;
-                    }
-                  }
-                }
+        // STEP 2c: Tactic extraction
+        if (routes.includes('tactic')) {
+          try {
+            const extractRes = await fetch(
+              `${Deno.env.get('SUPABASE_URL')}/functions/v1/extract-tactics`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
+                body: JSON.stringify({
+                  title: resource.title, content: content.slice(0, 12000),
+                  description: resource.description, tags: resource.tags,
+                  resourceType: resource.resource_type,
+                }),
               }
-            } catch {
+            );
+
+            if (!extractRes.ok) {
               failureReasons.push('extraction_error');
               diag.retryable = true;
               results.failure_breakdown['extraction_error'] = (results.failure_breakdown['extraction_error'] || 0) + 1;
+            } else {
+              const extracted = await extractRes.json();
+              const items = extracted.items || [];
+
+              if (items.length === 0) {
+                failureReasons.push('extraction_returned_zero');
+                diag.retryable = true;
+                results.failure_breakdown['extraction_returned_zero'] = (results.failure_breakdown['extraction_returned_zero'] || 0) + 1;
+              } else {
+                const validItems = [];
+                let allGeneric = true;
+
+                for (const item of items) {
+                  const validation = validateItem(item, existingKITitles);
+                  for (const gate of validation.failedGates) {
+                    results.trust_failure_breakdown[gate] = (results.trust_failure_breakdown[gate] || 0) + 1;
+                    if (!trustFailures.includes(gate)) trustFailures.push(gate);
+                  }
+                  if (validation.failedGates.includes('distinctness') && validation.mostSimilar) {
+                    mostSimilar = validation.mostSimilar;
+                  }
+                  if (validation.failedGates.includes('distinctness')) {
+                    results.duplicates_suppressed++;
+                    continue;
+                  }
+                  if (item.tactic_summary && item.tactic_summary.length >= 20) allGeneric = false;
+
+                  validItems.push({
+                    user_id: user.id, source_resource_id: resource.id, title: item.title,
+                    knowledge_type: item.knowledge_type || 'skill', chapter: item.chapter || 'messaging',
+                    sub_chapter: item.sub_chapter || null,
+                    tactic_summary: item.tactic_summary || item.what_to_do,
+                    when_to_use: item.when_to_use, when_not_to_use: item.when_not_to_use || null,
+                    example_usage: item.example_usage || item.example || null,
+                    why_it_matters: item.why_it_matters || null,
+                    confidence_score: validation.score,
+                    status: validation.passed ? 'active' : 'extracted',
+                    active: validation.passed, user_edited: false,
+                    applies_to_contexts: ['dave', 'roleplay', 'prep', 'playbooks'],
+                    tags: [...(resource.tags || []), item.knowledge_type || 'skill', item.chapter || 'messaging'],
+                    activation_metadata: !validation.passed ? {
+                      failed_gates: validation.failedGates, trust_score: validation.score,
+                      most_similar: validation.mostSimilar || null, source_title: resource.title,
+                      remediation: validation.failedGates.map((g: string) =>
+                        getRemediationPath(`trust_failed_${g}` as ResourceFailureReason)
+                      ),
+                    } : null,
+                  });
+                  existingKITitles.add(item.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim());
+                  if (!validation.passed) results.trust_rejected++;
+                }
+
+                if (allGeneric && validItems.length > 0) {
+                  failureReasons.push('extraction_too_generic');
+                  results.failure_breakdown['extraction_too_generic'] = (results.failure_breakdown['extraction_too_generic'] || 0) + 1;
+                }
+
+                if (validItems.length > 0) {
+                  const { error: insertErr } = await supabaseAdmin.from('knowledge_items').insert(validItems);
+                  if (!insertErr) {
+                    diag.assets_created.knowledge_items += validItems.length;
+                    diag.assets_created.knowledge_activated += validItems.filter((v: any) => v.active).length;
+                    results.knowledge_created += validItems.length;
+                    results.knowledge_activated += validItems.filter((v: any) => v.active).length;
+                    createdSomething = true;
+                  }
+                }
+              }
             }
+          } catch {
+            failureReasons.push('extraction_error');
+            diag.retryable = true;
+            results.failure_breakdown['extraction_error'] = (results.failure_breakdown['extraction_error'] || 0) + 1;
           }
-
-          // STEP 6: Terminal state
-          diag.failure_reasons = failureReasons;
-          diag.trust_failures = trustFailures;
-          diag.most_similar_existing = mostSimilar;
-
-          if (createdSomething && failureReasons.length === 0) {
-            diag.terminal_state = 'operationalized';
-            results.operationalized++;
-          } else if (createdSomething && failureReasons.length > 0) {
-            diag.terminal_state = 'operationalized_partial';
-            results.operationalized_partial++;
-          } else if (failureReasons.length > 0) {
-            diag.terminal_state = 'needs_review';
-            diag.human_review_required = failureReasons.some(r =>
-              ['extraction_returned_zero', 'extraction_too_generic', 'template_incomplete', 'example_not_strong_enough'].includes(r)
-            );
-            diag.retryable = failureReasons.some(r =>
-              ['extraction_returned_zero', 'extraction_error', 'extraction_too_generic'].includes(r)
-            );
-            results.needs_review++;
-          } else {
-            diag.terminal_state = classifyReferenceType(content, contentLen);
-            diag.failure_reasons = ['routed_reference_only'];
-            const stateKey = diag.terminal_state as keyof typeof results;
-            if (typeof results[stateKey] === 'number') (results as any)[stateKey]++;
-          }
-
-          diag.recommended_fix = failureReasons.length > 0
-            ? failureReasons.map(r => getRemediationPath(r)).join(' | ')
-            : '';
-          diag.priority = getPriority(failureReasons, contentLen);
-
-          for (const r of failureReasons) {
-            results.failure_breakdown[r] = (results.failure_breakdown[r] || 0) + 1;
-          }
-
-          diagnosisRows.push(diag);
-          results.diagnoses.push({ ...diag, title: resource.title });
-          results.total_processed++;
-
-        } catch (err) {
-          diag.terminal_state = 'needs_review';
-          diag.failure_reasons = ['extraction_error'];
-          diag.recommended_fix = `Error: ${String(err).slice(0, 200)}. ${getRemediationPath('extraction_error')}`;
-          diag.retryable = true;
-          diag.priority = 'medium';
-          results.needs_review++;
-          results.total_processed++;
-          results.failure_breakdown['extraction_error'] = (results.failure_breakdown['extraction_error'] || 0) + 1;
-          diagnosisRows.push(diag);
-          results.diagnoses.push({ ...diag, title: resource.title });
         }
+
+        // STEP 6: Terminal state
+        diag.failure_reasons = failureReasons;
+        diag.trust_failures = trustFailures;
+        diag.most_similar_existing = mostSimilar;
+
+        if (createdSomething && failureReasons.length === 0) {
+          diag.terminal_state = 'operationalized';
+          results.operationalized++;
+        } else if (createdSomething && failureReasons.length > 0) {
+          diag.terminal_state = 'operationalized_partial';
+          results.operationalized_partial++;
+        } else if (failureReasons.length > 0) {
+          diag.terminal_state = 'needs_review';
+          diag.human_review_required = failureReasons.some(r =>
+            ['extraction_returned_zero', 'extraction_too_generic', 'template_incomplete', 'example_not_strong_enough'].includes(r)
+          );
+          diag.retryable = failureReasons.some(r =>
+            ['extraction_returned_zero', 'extraction_error', 'extraction_too_generic'].includes(r)
+          );
+          results.needs_review++;
+        } else {
+          diag.terminal_state = classifyReferenceType(content, contentLen);
+          diag.failure_reasons = ['routed_reference_only'];
+          const stateKey = diag.terminal_state as keyof typeof results;
+          if (typeof results[stateKey] === 'number') (results as any)[stateKey]++;
+        }
+
+        diag.recommended_fix = failureReasons.length > 0
+          ? failureReasons.map(r => getRemediationPath(r)).join(' | ')
+          : '';
+        diag.priority = getPriority(failureReasons, contentLen);
+
+        for (const r of failureReasons) {
+          results.failure_breakdown[r] = (results.failure_breakdown[r] || 0) + 1;
+        }
+
+        diagnosisRows.push(diag);
+        results.diagnoses.push({ ...diag, title: resource.title });
+        results.total_processed++;
+
+      } catch (err) {
+        diag.terminal_state = 'needs_review';
+        diag.failure_reasons = ['extraction_error'];
+        diag.recommended_fix = `Error: ${String(err).slice(0, 200)}. ${getRemediationPath('extraction_error')}`;
+        diag.retryable = true;
+        diag.priority = 'medium';
+        results.needs_review++;
+        results.total_processed++;
+        results.failure_breakdown['extraction_error'] = (results.failure_breakdown['extraction_error'] || 0) + 1;
+        diagnosisRows.push(diag);
+        results.diagnoses.push({ ...diag, title: resource.title });
       }
-
-      // Persist diagnoses batch (upsert by resource_id + run_id)
-      if (diagnosisRows.length > 0) {
-        await supabaseAdmin.from('pipeline_diagnoses').upsert(diagnosisRows, {
-          onConflict: 'resource_id,run_id',
-        });
-      }
-
-      // Remove processed from pool
-      const processedIds = new Set(batch.map((r: any) => r.id));
-      unprocessedPool = unprocessedPool.filter((r: any) => !processedIds.has(r.id));
-      results.iterations_run = iteration;
-
-      // If not run_until_clean, break after first iteration
-      if (mode !== 'run_until_clean') break;
     }
 
-    results.remaining = unprocessedPool.length;
-    results.converged = unprocessedPool.length === 0;
+    // Persist diagnoses batch
+    if (diagnosisRows.length > 0) {
+      await supabaseAdmin.from('pipeline_diagnoses').upsert(diagnosisRows, {
+        onConflict: 'resource_id,run_id',
+      });
+    }
+
+    // Calculate remaining
+    const processedIds = new Set(batch.map((r: any) => r.id));
+    const remainingPool = unprocessedPool.filter((r: any) => !processedIds.has(r.id));
+    results.remaining = remainingPool.length;
+    results.converged = remainingPool.length === 0;
+    results.iterations_run = 1;
+
+    // Update pipeline_run record
+    await supabaseAdmin.from('pipeline_runs').update({
+      total_resources: resources.length,
+      total_processed: results.total_processed,
+      converged: results.converged,
+      iterations_run: results.iterations_run,
+      status: results.converged ? 'completed' : 'running',
+      completed_at: results.converged ? new Date().toISOString() : null,
+      summary_json: {
+        operationalized: results.operationalized,
+        operationalized_partial: results.operationalized_partial,
+        needs_review: results.needs_review,
+        reference_supporting: results.reference_supporting,
+        reference_needs_judgment: results.reference_needs_judgment,
+        reference_low_leverage: results.reference_low_leverage,
+        content_missing: results.content_missing,
+        knowledge_created: results.knowledge_created,
+        templates_created: results.templates_created,
+        examples_created: results.examples_created,
+        duplicates_suppressed: results.duplicates_suppressed,
+        trust_rejected: results.trust_rejected,
+      },
+    }).eq('id', runId);
 
     // Sort diagnoses: needs_review first, then by priority
     const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
