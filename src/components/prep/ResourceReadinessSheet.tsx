@@ -24,6 +24,7 @@ import {
   ChevronDown, ChevronRight, Rocket,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { BatchSelectionPanel } from './BatchSelectionPanel';
 import {
   auditResourceReadiness,
   bulkFixContentBacked,
