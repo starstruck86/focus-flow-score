@@ -493,7 +493,7 @@ Deno.serve(async (req) => {
         // route each independently, then aggregate routes
         const segments = segmentContent(content);
         const aggregatedRoutes = new Set<string>();
-        const segmentProvenance: Array<{ index: number; route: string; charRange: [number, number]; heading?: string }> = [];
+        const segmentProvenance: Array<{ index: number; route: string; charRange: [number, number]; heading?: string; content: string }> = [];
         
         for (const seg of segments) {
           const segRoutes = routeResource(seg.content);
@@ -503,6 +503,7 @@ Deno.serve(async (req) => {
             route: segRoutes[0],
             charRange: seg.charRange,
             heading: seg.heading,
+            content: seg.content,
           });
         }
         
@@ -530,6 +531,8 @@ Deno.serve(async (req) => {
         let mostSimilar: string | null = null;
 
         // STEP 2a: Template route — CONTENT-BASED dedup
+        // Find the best template segment for provenance
+        const tplSegment = segmentProvenance.find(s => s.route === 'template') || segmentProvenance[0];
         if (routes.includes('template')) {
           if (contentLen < 200) {
             failureReasons.push('template_incomplete');
@@ -542,24 +545,39 @@ Deno.serve(async (req) => {
               results.failure_breakdown['duplicate_template'] = (results.failure_breakdown['duplicate_template'] || 0) + 1;
               if (similar) mostSimilar = similar;
             } else {
-              const shapedBody = shapeAsTemplate(content).slice(0, 5000);
-              const { error } = await supabaseAdmin.from('execution_templates').insert({
+              const shapedBody = shapeAsTemplate(content);
+              const { data: tplData, error } = await supabaseAdmin.from('execution_templates').insert({
                 user_id: user.id, title: resource.title, body: shapedBody,
                 template_type: 'email', output_type: 'custom', source_resource_id: resource.id,
                 tags: resource.tags || [], template_origin: 'promoted_from_resource',
                 status: 'active', created_by_user: false, confidence_score: 0.7,
-              });
+              }).select('id').single();
               if (!error) {
                 diag.assets_created.templates++;
                 results.templates_created++;
                 existingTplContents.push(content.slice(0, 500));
                 createdSomething = true;
+                // Persist provenance
+                if (tplData) {
+                  await supabaseAdmin.from('asset_provenance').insert({
+                    user_id: user.id,
+                    asset_type: 'template',
+                    asset_id: tplData.id,
+                    source_resource_id: resource.id,
+                    source_segment_index: tplSegment.index,
+                    source_char_range: tplSegment.charRange,
+                    source_heading: tplSegment.heading || null,
+                    original_content: tplSegment.content,
+                    transformed_content: shapedBody,
+                  });
+                }
               }
             }
           }
         }
 
         // STEP 2b: Example route — CONTENT-BASED dedup
+        const exSegment = segmentProvenance.find(s => s.route === 'example') || segmentProvenance[0];
         if (routes.includes('example')) {
           if (contentLen < 150) {
             failureReasons.push('example_not_strong_enough');
@@ -572,16 +590,30 @@ Deno.serve(async (req) => {
               results.failure_breakdown['duplicate_example'] = (results.failure_breakdown['duplicate_example'] || 0) + 1;
               if (similar) mostSimilar = similar;
             } else {
-              const shapedContent = shapeAsExample(content).slice(0, 5000);
-              const { error } = await supabaseAdmin.from('execution_outputs').insert({
+              const shapedContent = shapeAsExample(content);
+              const { data: exData, error } = await supabaseAdmin.from('execution_outputs').insert({
                 user_id: user.id, title: resource.title, content: shapedContent,
                 output_type: 'custom', is_strong_example: true,
-              });
+              }).select('id').single();
               if (!error) {
                 diag.assets_created.examples++;
                 results.examples_created++;
                 existingExContents.push(content.slice(0, 500));
                 createdSomething = true;
+                // Persist provenance
+                if (exData) {
+                  await supabaseAdmin.from('asset_provenance').insert({
+                    user_id: user.id,
+                    asset_type: 'example',
+                    asset_id: exData.id,
+                    source_resource_id: resource.id,
+                    source_segment_index: exSegment.index,
+                    source_char_range: exSegment.charRange,
+                    source_heading: exSegment.heading || null,
+                    original_content: exSegment.content,
+                    transformed_content: shapedContent,
+                  });
+                }
               }
             }
           }
@@ -636,6 +668,8 @@ Deno.serve(async (req) => {
                   }
                   if (item.tactic_summary && item.tactic_summary.length >= 20) allGeneric = false;
 
+                  // Find best matching tactic segment for provenance
+                  const tacSegment = segmentProvenance.find(s => s.route === 'tactic') || segmentProvenance[0];
                   validItems.push({
                     user_id: user.id, source_resource_id: resource.id, title: item.title,
                     knowledge_type: item.knowledge_type || 'skill', chapter: item.chapter || 'messaging',
@@ -649,6 +683,11 @@ Deno.serve(async (req) => {
                     active: validation.passed, user_edited: false,
                     applies_to_contexts: ['dave', 'roleplay', 'prep', 'playbooks'],
                     tags: [...(resource.tags || []), item.knowledge_type || 'skill', item.chapter || 'messaging'],
+                    // Segment provenance for knowledge items
+                    source_segment_index: tacSegment.index,
+                    source_char_range: tacSegment.charRange,
+                    source_heading: tacSegment.heading || null,
+                    source_excerpt: (item.tactic_summary || item.what_to_do || '').slice(0, 500),
                     activation_metadata: !validation.passed ? {
                       failed_gates: validation.failedGates, trust_score: validation.score,
                       most_similar: validation.mostSimilar || null, source_title: resource.title,
@@ -668,13 +707,31 @@ Deno.serve(async (req) => {
                 }
 
                 if (validItems.length > 0) {
-                  const { error: insertErr } = await supabaseAdmin.from('knowledge_items').insert(validItems);
+                  const { data: insertedKIs, error: insertErr } = await supabaseAdmin.from('knowledge_items').insert(validItems).select('id, source_resource_id, source_segment_index, source_char_range, source_heading, tactic_summary');
                   if (!insertErr) {
                     diag.assets_created.knowledge_items += validItems.length;
                     diag.assets_created.knowledge_activated += validItems.filter((v: any) => v.active).length;
                     results.knowledge_created += validItems.length;
                     results.knowledge_activated += validItems.filter((v: any) => v.active).length;
                     createdSomething = true;
+                    // Persist provenance for each knowledge item
+                    if (insertedKIs && insertedKIs.length > 0) {
+                      const provRecords = insertedKIs.map((ki: any) => {
+                        const seg = segmentProvenance.find(s => s.index === (ki.source_segment_index ?? 0)) || segmentProvenance[0];
+                        return {
+                          user_id: user.id,
+                          asset_type: 'knowledge',
+                          asset_id: ki.id,
+                          source_resource_id: resource.id,
+                          source_segment_index: ki.source_segment_index,
+                          source_char_range: ki.source_char_range,
+                          source_heading: ki.source_heading,
+                          original_content: seg.content,
+                          transformed_content: ki.tactic_summary || '',
+                        };
+                      });
+                      await supabaseAdmin.from('asset_provenance').insert(provRecords);
+                    }
                   }
                 }
               }

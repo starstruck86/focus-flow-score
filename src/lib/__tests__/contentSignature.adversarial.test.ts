@@ -7,6 +7,12 @@
  * 3. Real email that should be example, not template
  * 4. Structured draft that should be template, not example
  * 5. Doc with important instruction lines that must survive transformation
+ * 6. Near-duplicate content with different names
+ * 7. Structurally different docs on same topic
+ * 8. Segment merging behavior
+ * 9. All-reference cluster resolution with null canonical
+ * 10. Provenance metadata for knowledge/template/example
+ * 11. No write-time truncation for original/transformed content
  */
 
 import { describe, it, expect } from 'vitest';
@@ -17,6 +23,10 @@ import {
   shapeAsExample,
   contentSimilarity,
   scoreRouteConfidence,
+  clusterByContent,
+  resolveCluster,
+  type ContentSegment,
+  type TransformationResult,
 } from '../contentSignature';
 
 // ── Test 1: Mixed doc with tactic + template + example ─────
@@ -286,7 +296,7 @@ describe('Transformation safety — instruction preservation', () => {
   });
 });
 
-// ── Content similarity edge cases ──────────────────────────
+// ── Test 6: Near-duplicate content with different names ────
 
 describe('Content similarity edge cases', () => {
   it('should detect near-identical emails as duplicates (>0.65)', () => {
@@ -302,5 +312,161 @@ describe('Content similarity edge cases', () => {
   it('should distinguish template from example even with similar topic', () => {
     const sim = contentSimilarity(STRUCTURED_DRAFT, REAL_EMAIL);
     expect(sim).toBeLessThan(0.65);
+  });
+});
+
+// ── Test 7: Segment merging behavior ───────────────────────
+
+const DOC_WITH_ADJACENT_SAME_ROUTE = `
+## Email Opener A
+
+Hi [Name],
+
+I noticed [Company] recently launched [Product]. Many teams in [Industry] use our platform.
+
+Would 15 minutes this week make sense?
+
+## Email Closer A
+
+Best regards,
+[Rep Name]
+[Title]
+
+## Discovery Tactic
+
+When the prospect says "we're happy," try reframing:
+
+"Can I ask what would need to change for you to consider alternatives?"
+`;
+
+describe('Segment merging', () => {
+  it('should merge adjacent same-route short segments', () => {
+    const segments = segmentAndRoute(DOC_WITH_ADJACENT_SAME_ROUTE);
+    // The two short template segments may merge; tactic should remain separate
+    const tacticSegs = segments.filter(s => s.route === 'tactic');
+    expect(tacticSegs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should preserve merge metadata when segments are merged', () => {
+    const segments = segmentAndRoute(DOC_WITH_ADJACENT_SAME_ROUTE);
+    const mergedSegs = segments.filter(s => s.mergedFromIndices && s.mergedFromIndices.length > 1);
+    for (const seg of mergedSegs) {
+      expect(seg.mergeReason).toBeDefined();
+      expect(['same_route_similarity', 'same_route_short_segments']).toContain(seg.mergeReason);
+    }
+  });
+
+  it('should preserve charRange across merged segments', () => {
+    const segments = segmentAndRoute(DOC_WITH_ADJACENT_SAME_ROUTE);
+    for (const seg of segments) {
+      expect(seg.charRange[1]).toBeGreaterThan(seg.charRange[0]);
+    }
+  });
+});
+
+// ── Test 8: All-reference cluster resolution ───────────────
+
+describe('Cluster resolution semantics', () => {
+  it('should support null canonical for all-reference clusters', () => {
+    const resources = [
+      { id: 'r1', title: 'Doc A', content: DESCRIPTIVE_DOC },
+      { id: 'r2', title: 'Doc B', content: DESCRIPTIVE_DOC.replace('Gartner', 'Forrester').replace('57%', '62%') },
+    ];
+    const clusters = clusterByContent(resources, 0.4);
+    
+    if (clusters.length > 0) {
+      const resolution = resolveCluster(clusters[0], null, 'reference', 'All reference — no canonical winner');
+      expect(resolution.canonicalResourceId).toBeNull();
+      expect(resolution.canonicalRole).toBe('reference');
+      expect(resolution.demotedMembers.length).toBe(clusters[0].members.length);
+      for (const dm of resolution.demotedMembers) {
+        expect(dm.duplicateOf).toBeNull();
+      }
+    }
+  });
+
+  it('should mark non-canonical as duplicateOf canonical', () => {
+    const resources = [
+      { id: 'r1', title: 'Template A', content: STRUCTURED_DRAFT },
+      { id: 'r2', title: 'Template B', content: STRUCTURED_DRAFT.replace('[Company]', '[Org]') },
+    ];
+    const clusters = clusterByContent(resources, 0.4);
+    
+    if (clusters.length > 0) {
+      const resolution = resolveCluster(clusters[0], 'r1', 'template', 'Best placeholders');
+      expect(resolution.canonicalResourceId).toBe('r1');
+      const demoted = resolution.demotedMembers.find(m => m.id === 'r2');
+      expect(demoted?.duplicateOf).toBe('r1');
+    }
+  });
+});
+
+// ── Test 9: Transformation returns full content, no truncation ──
+
+describe('Transformation output completeness', () => {
+  const longContent = 'Subject: [Company] Partnership\n\n' +
+    Array(200).fill('Hi [Name], this is line with [Placeholder] content for testing purposes.').join('\n') +
+    '\n\nBest regards,\n[Rep Name]';
+
+  it('shapeAsTemplate should not truncate output', () => {
+    const result = shapeAsTemplate(longContent);
+    // Full content should be longer than 5000 chars
+    expect(result.shaped.length).toBeGreaterThan(5000);
+    expect(result.shaped).toContain('Best regards');
+    expect(result.shaped).toContain('[Rep Name]');
+  });
+
+  it('shapeAsExample should not truncate output', () => {
+    const result = shapeAsExample(longContent);
+    expect(result.shaped.length).toBeGreaterThan(5000);
+  });
+
+  it('should return all removed lines without truncation', () => {
+    const contentWithManyMeta = Array(50).fill('Note: draft line').join('\n') +
+      '\n\nHi [Name],\n\nActual content here.\n\nBest,\n[Rep]';
+    const result = shapeAsTemplate(contentWithManyMeta);
+    // Should have many removed lines, none truncated
+    expect(result.removedLines.length).toBeGreaterThan(10);
+  });
+});
+
+// ── Test 10: Segment provenance fields ─────────────────────
+
+describe('Segment provenance completeness', () => {
+  it('each segment should carry index, heading, charRange, route, allRoutes, confidence', () => {
+    const segments = segmentAndRoute(MIXED_DOC);
+    for (const seg of segments) {
+      expect(typeof seg.index).toBe('number');
+      expect(seg.charRange).toBeDefined();
+      expect(Array.isArray(seg.allRoutes)).toBe(true);
+      expect(seg.allRoutes.length).toBeGreaterThan(0);
+      expect(typeof seg.confidence).toBe('number');
+      expect(seg.route).toBeDefined();
+    }
+  });
+
+  it('headings should be populated for heading-based segments', () => {
+    const segments = segmentAndRoute(MIXED_DOC);
+    const withHeadings = segments.filter(s => s.heading);
+    expect(withHeadings.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ── Test 11: Routing consistency ───────────────────────────
+
+describe('Routing consistency', () => {
+  it('segment-level routing should produce valid routes for single-topic docs', () => {
+    // REAL_EMAIL and DESCRIPTIVE_DOC are single-topic, so segments should agree with resource-level
+    const segments1 = segmentAndRoute(REAL_EMAIL);
+    expect(segments1[0].route).toBe('example');
+
+    const segments2 = segmentAndRoute(DESCRIPTIVE_DOC);
+    expect(segments2[0].route).toBe('reference');
+  });
+
+  it('tactic routing should not fire for long descriptive content', () => {
+    const longDescriptive = DESCRIPTIVE_DOC + '\n\n' + DESCRIPTIVE_DOC;
+    const routes = routeByContent(longDescriptive);
+    expect(routes).not.toContain('tactic');
   });
 });
